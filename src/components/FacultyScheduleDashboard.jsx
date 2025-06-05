@@ -688,7 +688,7 @@ const FacultyScheduleDashboard = () => {
                         ) : (
                           <div className="text-center py-8 text-gray-500">
                             <div className="text-lg">😞</div>
-                            <div className="mt-2">Everyone has conflicts this day</div>
+                            <div className="mt-2">No availability found for all participants</div>
                           </div>
                         )}
                       </div>

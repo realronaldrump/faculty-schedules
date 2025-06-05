@@ -6,6 +6,7 @@ const FacultyScheduleDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [selectedProfessors, setSelectedProfessors] = useState([]);
   const [meetingDuration, setMeetingDuration] = useState(60);
+  const [bufferTime, setBufferTime] = useState(15);
   const [searchTerm, setSearchTerm] = useState('');
   const [showResults, setShowResults] = useState(false);
   const [activeTab, setActiveTab] = useState('group'); // group, individual, rooms, insights, courses
@@ -143,7 +144,10 @@ const FacultyScheduleDashboard = () => {
           const start = parseTime(item['Start Time']);
           const end = parseTime(item['End Time']);
           if (start !== null && end !== null) {
-            busyPeriods.push({ start, end });
+            busyPeriods.push({ 
+              start: Math.max(0, start - bufferTime), 
+              end: end + bufferTime 
+            });
           }
         });
       });
@@ -156,21 +160,21 @@ const FacultyScheduleDashboard = () => {
       let currentTime = dayStart;
 
       busyPeriods.forEach(period => {
-        if (currentTime < period.start && (period.start - currentTime) >= meetingDuration) {
+        if (currentTime < period.start && (period.start - currentTime) >= (meetingDuration + 2 * bufferTime)) {
           availableSlots.push({
-            start: currentTime,
-            end: period.start,
-            duration: period.start - currentTime
+            start: currentTime + bufferTime,
+            end: period.start - bufferTime,
+            duration: period.start - currentTime - (2 * bufferTime)
           });
         }
         currentTime = Math.max(currentTime, period.end);
       });
 
-      if (currentTime < dayEnd && (dayEnd - currentTime) >= meetingDuration) {
+      if (currentTime < dayEnd && (dayEnd - currentTime) >= (meetingDuration + 2 * bufferTime)) {
         availableSlots.push({
-          start: currentTime,
-          end: dayEnd,
-          duration: dayEnd - currentTime
+          start: currentTime + bufferTime,
+          end: dayEnd - bufferTime,
+          duration: dayEnd - currentTime - (2 * bufferTime)
         });
       }
 
@@ -178,7 +182,7 @@ const FacultyScheduleDashboard = () => {
     });
 
     return availability;
-  }, [scheduleData, selectedProfessors, meetingDuration]);
+  }, [scheduleData, selectedProfessors, meetingDuration, bufferTime]);
 
   // Individual professor availability
   const getIndividualAvailability = (professor) => {
@@ -394,22 +398,46 @@ const FacultyScheduleDashboard = () => {
                   <div className="mb-8">
                     <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                       <Clock className="mr-2 text-blue-500" size={20} />
-                      Step 1: How long is your meeting?
+                      Step 1: Meeting Details
                     </h2>
-                    <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-                      {[30, 60, 90, 120, 150, 180].map(duration => (
-                        <button
-                          key={duration}
-                          onClick={() => setMeetingDuration(duration)}
-                          className={`p-3 rounded-lg border text-center transition-all ${
-                            meetingDuration === duration
-                              ? 'bg-blue-500 text-white border-blue-500 shadow-md'
-                              : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-                          }`}
-                        >
-                          <div className="font-medium">{duration === 60 ? '1 hr' : duration === 120 ? '2 hrs' : `${duration}m`}</div>
-                        </button>
-                      ))}
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Meeting Duration</label>
+                        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+                          {[30, 60, 90, 120, 150, 180].map(duration => (
+                            <button
+                              key={duration}
+                              onClick={() => setMeetingDuration(duration)}
+                              className={`p-3 rounded-lg border text-center transition-all ${
+                                meetingDuration === duration
+                                  ? 'bg-blue-500 text-white border-blue-500 shadow-md'
+                                  : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                              }`}
+                            >
+                              <div className="font-medium">{duration === 60 ? '1 hr' : duration === 120 ? '2 hrs' : `${duration}m`}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Buffer Time (before and after)</label>
+                        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+                          {[0, 5, 10, 15, 20, 30].map(buffer => (
+                            <button
+                              key={buffer}
+                              onClick={() => setBufferTime(buffer)}
+                              className={`p-3 rounded-lg border text-center transition-all ${
+                                bufferTime === buffer
+                                  ? 'bg-green-500 text-white border-green-500 shadow-md'
+                                  : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                              }`}
+                            >
+                              <div className="font-medium">{buffer === 0 ? 'None' : `${buffer}m`}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
 

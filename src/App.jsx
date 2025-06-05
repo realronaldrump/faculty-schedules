@@ -22,8 +22,8 @@ function App() {
       <header className="bg-baylor-green text-white shadow-md">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="text-baylor-gold font-bold text-3xl">BU</div>
-            <h1 className="text-xl md:text-2xl font-serif font-bold">HSD Faculty Schedules</h1>
+            <div className="text-baylor-gold font-bold text-3xl">HSD</div>
+            <h1 className="text-xl md:text-2xl font-serif font-bold">Faculty Schedules</h1>
           </div>
           <div className="flex items-center space-x-4">
             <div className="text-baylor-gold font-serif italic">Fall 2025</div>

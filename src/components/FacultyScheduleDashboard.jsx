@@ -19,7 +19,9 @@ const FacultyScheduleDashboard = () => {
   const activeTabClass = `${tabButtonClass} bg-baylor-green text-white`;
   const inactiveTabClass = `${tabButtonClass} bg-gray-100 text-gray-600 hover:bg-gray-200`;
   const cardClass = "bg-white border border-gray-200 rounded-lg shadow-sm p-4 mb-4";
-  const inputClass = "w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green";
+  const inputClass = "w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900";
+  const selectClass = "w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900 appearance-none cursor-pointer hover:border-baylor-green/50 transition-colors";
+  const timeInputClass = "w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900 cursor-pointer hover:border-baylor-green/50 transition-colors";
   const buttonClass = "px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors";
   const secondaryButtonClass = "px-4 py-2 bg-baylor-gold text-baylor-green font-bold rounded-lg hover:bg-baylor-gold/90 transition-colors";
 
@@ -743,16 +745,23 @@ const FacultyScheduleDashboard = () => {
               {/* Professor Selection */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Select Professor</label>
-                <select
-                  value={selectedIndividual}
-                  onChange={(e) => setSelectedIndividual(e.target.value)}
-                  className={inputClass}
-                >
-                  <option value="">Choose a professor...</option>
-                  {uniqueInstructors.map(instructor => (
-                    <option key={instructor} value={instructor}>{instructor}</option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select
+                    value={selectedIndividual}
+                    onChange={(e) => setSelectedIndividual(e.target.value)}
+                    className={selectClass}
+                  >
+                    <option value="">Choose a professor...</option>
+                    {uniqueInstructors.map(instructor => (
+                      <option key={instructor} value={instructor}>{instructor}</option>
+                    ))}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                    <svg className="w-4 h-4 text-baylor-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
               </div>
 
               {/* Results */}
@@ -830,26 +839,41 @@ const FacultyScheduleDashboard = () => {
               <div className="grid md:grid-cols-2 gap-6 mb-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Day</label>
-                  <select
-                    value={roomSearchDay}
-                    onChange={(e) => setRoomSearchDay(e.target.value)}
-                    className={inputClass}
-                  >
-                    <option value="">Select day...</option>
-                    {Object.entries(dayNames).map(([code, name]) => (
-                      <option key={code} value={code}>{name}</option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={roomSearchDay}
+                      onChange={(e) => setRoomSearchDay(e.target.value)}
+                      className={selectClass}
+                    >
+                      <option value="">Select day...</option>
+                      {Object.entries(dayNames).map(([code, name]) => (
+                        <option key={code} value={code}>{name}</option>
+                      ))}
+                    </select>
+                    <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                      <svg className="w-4 h-4 text-baylor-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
-                  <input
-                    type="time"
-                    value={roomSearchTime}
-                    onChange={(e) => setRoomSearchTime(e.target.value)}
-                    className={inputClass}
-                  />
+                  <div className="relative">
+                    <input
+                      type="time"
+                      value={roomSearchTime}
+                      onChange={(e) => setRoomSearchTime(e.target.value)}
+                      className={timeInputClass}
+                      min="08:00"
+                      max="17:00"
+                      step="1800"
+                    />
+                    <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                      <Clock className="w-4 h-4 text-baylor-green" />
+                    </div>
+                  </div>
                 </div>
               </div>
 

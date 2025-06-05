@@ -107,7 +107,13 @@ const FacultyScheduleDashboard = () => {
 
   // Get unique values for different analyses
   const uniqueInstructors = useMemo(() => 
-    [...new Set(scheduleData.map(item => item.Instructor))].sort()
+    [...new Set(scheduleData.map(item => {
+      // Handle staff-taught courses
+      if (item.Instructor.includes('Staff')) {
+        return 'Staff';
+      }
+      return item.Instructor;
+    }))].sort()
   , [scheduleData]);
 
   const uniqueRooms = useMemo(() => 
@@ -136,6 +142,9 @@ const FacultyScheduleDashboard = () => {
       const busyPeriods = [];
       
       selectedProfessors.forEach(professor => {
+        // Skip staff-taught courses for availability calculation
+        if (professor === 'Staff') return;
+        
         const professorSchedule = scheduleData.filter(item => 
           item.Instructor === professor && item.Day === day
         );
@@ -282,8 +291,15 @@ const FacultyScheduleDashboard = () => {
 
     // Faculty workload
     const facultyWorkload = {};
+    const staffTaughtCourses = new Set();
+    
     scheduleData.forEach(item => {
       const instructor = item.Instructor;
+      if (instructor.includes('Staff')) {
+        staffTaughtCourses.add(item.Course);
+        return; // Skip staff-taught courses in faculty workload
+      }
+      
       if (!facultyWorkload[instructor]) {
         facultyWorkload[instructor] = { courses: 0, totalHours: 0 };
       }
@@ -305,7 +321,11 @@ const FacultyScheduleDashboard = () => {
         const end = parseTime(item['End Time']);
         return start && end ? sum + (end - start) / 60 : sum;
       }, 0);
-      roomUtilization[room] = { classes: roomSchedule.length, hours: totalHours };
+      roomUtilization[room] = { 
+        classes: roomSchedule.length, 
+        hours: totalHours,
+        staffTaughtClasses: roomSchedule.filter(item => item.Instructor.includes('Staff')).length
+      };
     });
 
     return {
@@ -314,6 +334,7 @@ const FacultyScheduleDashboard = () => {
       facultyWorkload,
       roomUtilization,
       totalClasses: scheduleData.length,
+      staffTaughtCourses: staffTaughtCourses.size,
       busiestDay: Object.entries(
         scheduleData.reduce((acc, item) => {
           acc[item.Day] = (acc[item.Day] || 0) + 1;
@@ -492,15 +513,28 @@ const FacultyScheduleDashboard = () => {
                           onClick={() => toggleProfessor(professor)}
                           className={`p-3 text-left rounded-lg border transition-all ${
                             selectedProfessors.includes(professor)
-                              ? 'bg-green-50 border-green-300 text-green-800'
+                              ? professor === 'Staff' 
+                                ? 'bg-yellow-50 border-yellow-300 text-yellow-800'
+                                : 'bg-green-50 border-green-300 text-green-800'
                               : 'bg-white border-gray-200 hover:bg-gray-50'
                           }`}
                         >
                           <div className="flex items-center">
                             <div className={`w-3 h-3 rounded-full mr-3 ${
-                              selectedProfessors.includes(professor) ? 'bg-green-500' : 'bg-gray-300'
+                              selectedProfessors.includes(professor) 
+                                ? professor === 'Staff'
+                                  ? 'bg-yellow-500'
+                                  : 'bg-green-500'
+                                : 'bg-gray-300'
                             }`}></div>
-                            <span className="text-sm font-medium">{professor}</span>
+                            <span className="text-sm font-medium">
+                              {professor}
+                              {professor === 'Staff' && (
+                                <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full">
+                                  Staff
+                                </span>
+                              )}
+                            </span>
                           </div>
                         </button>
                       ))}
@@ -803,6 +837,9 @@ const FacultyScheduleDashboard = () => {
               <div className="bg-white rounded-lg shadow-sm border p-6">
                 <div className="text-2xl font-bold text-green-600">{departmentInsights.totalClasses}</div>
                 <div className="text-gray-600">Total Classes</div>
+                <div className="text-sm text-gray-500 mt-1">
+                  {departmentInsights.staffTaughtCourses} staff-taught
+                </div>
               </div>
               <div className="bg-white rounded-lg shadow-sm border p-6">
                 <div className="text-2xl font-bold text-purple-600">{uniqueRooms.length}</div>
@@ -844,6 +881,30 @@ const FacultyScheduleDashboard = () => {
               </div>
             </div>
 
+            {/* Room Utilization */}
+            <div className="bg-white rounded-xl shadow-sm border p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Room Utilization</h3>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Object.entries(departmentInsights.roomUtilization)
+                  .sort(([,a], [,b]) => b.hours - a.hours)
+                  .slice(0, 9)
+                  .map(([room, data]) => (
+                  <div key={room} className="border border-gray-200 rounded-lg p-4">
+                    <div className="font-medium text-gray-900 text-sm mb-2">{room}</div>
+                    <div className="text-lg font-bold text-blue-600">{data.hours.toFixed(1)}h</div>
+                    <div className="text-sm text-gray-600">
+                      {data.classes} classes/week
+                      {data.staffTaughtClasses > 0 && (
+                        <span className="ml-2 text-yellow-600">
+                          ({data.staffTaughtClasses} staff-taught)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Faculty Workload */}
             <div className="bg-white rounded-xl shadow-sm border p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Faculty Teaching Load</h3>
@@ -869,23 +930,6 @@ const FacultyScheduleDashboard = () => {
                     ))}
                   </tbody>
                 </table>
-              </div>
-            </div>
-
-            {/* Room Utilization */}
-            <div className="bg-white rounded-xl shadow-sm border p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Room Utilization</h3>
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {Object.entries(departmentInsights.roomUtilization)
-                  .sort(([,a], [,b]) => b.hours - a.hours)
-                  .slice(0, 9)
-                  .map(([room, data]) => (
-                  <div key={room} className="border border-gray-200 rounded-lg p-4">
-                    <div className="font-medium text-gray-900 text-sm mb-2">{room}</div>
-                    <div className="text-lg font-bold text-blue-600">{data.hours.toFixed(1)}h</div>
-                    <div className="text-sm text-gray-600">{data.classes} classes/week</div>
-                  </div>
-                ))}
               </div>
             </div>
           </div>

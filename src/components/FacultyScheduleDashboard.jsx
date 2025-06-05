@@ -1,5 +1,58 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Clock, Users, Calendar, X } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Search, Clock, Users, Calendar, X, ChevronDown } from 'lucide-react';
+
+// Custom Dropdown Component
+const CustomDropdown = ({ value, onChange, options, placeholder, className }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedOption = options.find(opt => opt.value === value);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`${className} flex items-center justify-between w-full text-left`}
+      >
+        <span className="block truncate">
+          {selectedOption ? selectedOption.label : placeholder}
+        </span>
+        <ChevronDown className={`w-4 h-4 text-baylor-green transition-transform ${isOpen ? 'transform rotate-180' : ''}`} />
+      </button>
+      
+      {isOpen && (
+        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto">
+          {options.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => {
+                onChange(option.value);
+                setIsOpen(false);
+              }}
+              className={`w-full px-4 py-2 text-left hover:bg-baylor-green/10 transition-colors ${
+                option.value === value ? 'bg-baylor-green text-white' : 'text-gray-900'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const FacultyScheduleDashboard = () => {
   const [scheduleData, setScheduleData] = useState([]);
@@ -745,23 +798,16 @@ const FacultyScheduleDashboard = () => {
               {/* Professor Selection */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Select Professor</label>
-                <div className="relative">
-                  <select
-                    value={selectedIndividual}
-                    onChange={(e) => setSelectedIndividual(e.target.value)}
-                    className={selectClass}
-                  >
-                    <option value="">Choose a professor...</option>
-                    {uniqueInstructors.map(instructor => (
-                      <option key={instructor} value={instructor}>{instructor}</option>
-                    ))}
-                  </select>
-                  <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-                    <svg className="w-4 h-4 text-baylor-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </div>
+                <CustomDropdown
+                  value={selectedIndividual}
+                  onChange={setSelectedIndividual}
+                  options={uniqueInstructors.map(instructor => ({
+                    value: instructor,
+                    label: instructor
+                  }))}
+                  placeholder="Choose a professor..."
+                  className={selectClass}
+                />
               </div>
 
               {/* Results */}
@@ -839,23 +885,16 @@ const FacultyScheduleDashboard = () => {
               <div className="grid md:grid-cols-2 gap-6 mb-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Day</label>
-                  <div className="relative">
-                    <select
-                      value={roomSearchDay}
-                      onChange={(e) => setRoomSearchDay(e.target.value)}
-                      className={selectClass}
-                    >
-                      <option value="">Select day...</option>
-                      {Object.entries(dayNames).map(([code, name]) => (
-                        <option key={code} value={code}>{name}</option>
-                      ))}
-                    </select>
-                    <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-                      <svg className="w-4 h-4 text-baylor-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                  </div>
+                  <CustomDropdown
+                    value={roomSearchDay}
+                    onChange={setRoomSearchDay}
+                    options={Object.entries(dayNames).map(([code, name]) => ({
+                      value: code,
+                      label: name
+                    }))}
+                    placeholder="Select day..."
+                    className={selectClass}
+                  />
                 </div>
                 
                 <div>

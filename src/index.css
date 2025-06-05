@@ -1,3 +1,76 @@
 @tailwind base;
 @tailwind components;
-@tailwind utilities; 
+@tailwind utilities;
+
+/* Custom styles for select dropdowns */
+select {
+  @apply appearance-none;
+}
+
+select option {
+  @apply bg-white text-gray-900 py-2 px-3;
+}
+
+select option:hover {
+  @apply bg-baylor-green/10;
+}
+
+select option:checked {
+  @apply bg-baylor-green text-white;
+}
+
+/* Custom scrollbar for dropdowns */
+select::-webkit-scrollbar {
+  @apply w-2;
+}
+
+select::-webkit-scrollbar-track {
+  @apply bg-gray-100 rounded-full;
+}
+
+select::-webkit-scrollbar-thumb {
+  @apply bg-baylor-green/50 rounded-full hover:bg-baylor-green/70 transition-colors;
+}
+
+/* Custom styles for time input */
+input[type="time"]::-webkit-calendar-picker-indicator {
+  @apply opacity-0 cursor-pointer;
+}
+
+input[type="time"]::-webkit-datetime-edit {
+  @apply text-gray-900;
+}
+
+input[type="time"]::-webkit-datetime-edit-fields-wrapper {
+  @apply text-gray-900;
+}
+
+/* Custom styles for select dropdown container */
+.select-container {
+  @apply relative;
+}
+
+.select-container::after {
+  content: '';
+  @apply absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none;
+}
+
+/* Custom styles for select dropdown arrow */
+.select-arrow {
+  @apply w-4 h-4 text-baylor-green;
+}
+
+/* Custom styles for time input container */
+.time-input-container {
+  @apply relative;
+}
+
+.time-input-container::after {
+  content: '';
+  @apply absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none;
+}
+
+/* Custom styles for time input icon */
+.time-input-icon {
+  @apply w-4 h-4 text-baylor-green;
+} 

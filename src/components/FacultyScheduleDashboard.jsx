@@ -179,7 +179,7 @@ const FacultyScheduleDashboard = () => {
 
       const availableSlots = [];
       const dayStart = 8 * 60; // 8:00 AM
-      const dayEnd = 18 * 60; // 6:00 PM
+      const dayEnd = 17 * 60; // 5:00 PM
       let currentTime = dayStart;
 
       busyPeriods.forEach(period => {
@@ -249,7 +249,7 @@ const FacultyScheduleDashboard = () => {
 
       const availableSlots = [];
       const dayStart = 8 * 60;
-      const dayEnd = 18 * 60;
+      const dayEnd = 17 * 60;
       let currentTime = dayStart;
 
       busyPeriods.forEach(period => {
@@ -303,7 +303,7 @@ const FacultyScheduleDashboard = () => {
 
     // Peak hours analysis (now more accurate as it counts each room's usage)
     const hourCounts = {};
-    for (let hour = 8; hour < 18; hour++) {
+    for (let hour = 8; hour < 17; hour++) {
       hourCounts[hour] = 0;
     }
 
@@ -314,7 +314,7 @@ const FacultyScheduleDashboard = () => {
         const startHour = Math.floor(start / 60);
         const endHour = Math.ceil(end / 60);
         for (let hour = startHour; hour < endHour; hour++) {
-          if (hour >= 8 && hour < 18) {
+          if (hour >= 8 && hour < 17) {
             hourCounts[hour]++;
           }
         }

@@ -13,7 +13,7 @@ function Login({ onLogin }) {
     // Simulate a small delay for better UX
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    if (password === 'baylor2025') {
+    if (password === 'baylor2025-hsd') {
       onLogin(true);
       localStorage.setItem('isAuthenticated', 'true');
     } else {

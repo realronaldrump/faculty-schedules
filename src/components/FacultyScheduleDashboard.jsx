@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Clock, Users, Calendar, X, ChevronDown } from 'lucide-react';
+import { Search, Clock, Users, Calendar, X, ChevronDown, CheckCircle } from 'lucide-react';
 
 // Custom Dropdown Component
 const CustomDropdown = ({ value, onChange, options, placeholder, className }) => {
@@ -33,7 +33,7 @@ const CustomDropdown = ({ value, onChange, options, placeholder, className }) =>
       </button>
       
       {isOpen && (
-        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto">
+        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto">
           {options.map((option) => (
             <button
               key={option.value}
@@ -62,11 +62,18 @@ const FacultyScheduleDashboard = () => {
   const [bufferTime, setBufferTime] = useState(15);
   const [searchTerm, setSearchTerm] = useState('');
   const [showResults, setShowResults] = useState(false);
-  const [activeTab, setActiveTab] = useState('group'); // group, individual, rooms, insights, courses
+  const [activeTab, setActiveTab] = useState('group');
   const [selectedIndividual, setSelectedIndividual] = useState('');
   const [roomSearchDay, setRoomSearchDay] = useState('');
   const [roomSearchTime, setRoomSearchTime] = useState('');
+
+  // State for the room finder modal
+  const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
+  const [selectedSlotForRoomSearch, setSelectedSlotForRoomSearch] = useState(null);
   
+  // **FIX**: Moved useRef to the top level of the component
+  const roomModalRef = useRef(null);
+
   // Baylor theme styles
   const tabButtonClass = "px-4 py-2 font-medium rounded-t-lg";
   const activeTabClass = `${tabButtonClass} bg-baylor-green text-white`;
@@ -78,6 +85,19 @@ const FacultyScheduleDashboard = () => {
   const buttonClass = "px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors";
   const secondaryButtonClass = "px-4 py-2 bg-baylor-gold text-baylor-green font-bold rounded-lg hover:bg-baylor-gold/90 transition-colors";
 
+  // **IMPROVEMENT**: Add effect to handle clicking outside the modal to close it
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (isRoomModalOpen && roomModalRef.current && !roomModalRef.current.contains(event.target)) {
+        setIsRoomModalOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isRoomModalOpen]);
+
   // Load and parse CSV data
   useEffect(() => {
     const loadData = async () => {
@@ -88,8 +108,6 @@ const FacultyScheduleDashboard = () => {
         const lines = csvContent.split('\n').filter(line => line.trim());
         const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
         
-        // Use flatMap to handle rows with multiple rooms (separated by ';')
-        // This "unrolls" the data, creating a separate row for each room in a multi-room class.
         const data = lines.slice(1).flatMap(line => {
           const values = [];
           let current = '';
@@ -113,15 +131,12 @@ const FacultyScheduleDashboard = () => {
             obj[header] = values[index] || '';
           });
 
-          // Split rooms by semicolon and create a distinct record for each.
           const rooms = (obj['Room'] || '').split(';').map(r => r.trim()).filter(Boolean);
           
           if (rooms.length === 0) {
-            // If no room is specified, return the object as is in an array for flatMap
             return [obj];
           }
 
-          // Map each room name to a new object, effectively unrolling the data.
           return rooms.map(room => ({
             ...obj,
             Room: room,
@@ -184,7 +199,6 @@ const FacultyScheduleDashboard = () => {
     'F': 'Friday'
   };
 
-  // Get unique values for different analyses
   const uniqueInstructors = useMemo(() => 
     [...new Set(scheduleData.map(item => {
       if (item.Instructor.includes('Staff')) {
@@ -194,7 +208,6 @@ const FacultyScheduleDashboard = () => {
     }))].sort()
   , [scheduleData]);
 
-  // uniqueRooms is now correctly populated with individual room names due to the data unrolling.
   const uniqueRooms = useMemo(() => 
     [...new Set(scheduleData.map(item => item.Room).filter(Boolean))].sort()
   , [scheduleData]);
@@ -203,14 +216,12 @@ const FacultyScheduleDashboard = () => {
     [...new Set(scheduleData.map(item => item.Course))].sort()
   , [scheduleData]);
 
-  // Filter instructors by search
   const filteredInstructors = useMemo(() => 
     uniqueInstructors.filter(instructor => 
       instructor.toLowerCase().includes(searchTerm.toLowerCase())
     )
   , [uniqueInstructors, searchTerm]);
 
-  // Find common availability
   const commonAvailability = useMemo(() => {
     if (selectedProfessors.length === 0) return {};
 
@@ -242,8 +253,8 @@ const FacultyScheduleDashboard = () => {
       busyPeriods.sort((a, b) => a.start - b.start);
 
       const availableSlots = [];
-      const dayStart = 8 * 60; // 8:00 AM
-      const dayEnd = 17 * 60; // 5:00 PM
+      const dayStart = 8 * 60;
+      const dayEnd = 17 * 60;
       let currentTime = dayStart;
 
       busyPeriods.forEach(period => {
@@ -273,7 +284,6 @@ const FacultyScheduleDashboard = () => {
     return availability;
   }, [scheduleData, selectedProfessors, meetingDuration, bufferTime]);
 
-  // Individual professor availability
   const getIndividualAvailability = (professor) => {
     const availability = {};
     const days = ['M', 'T', 'W', 'R', 'F'];
@@ -291,13 +301,11 @@ const FacultyScheduleDashboard = () => {
         title: item['Course Title']
       })).filter(period => period.start !== null && period.end !== null);
 
-      // Group periods by time/course to combine multi-room entries for cleaner display
       const busyPeriodsGrouped = busyPeriodsRaw.reduce((acc, period) => {
         const key = `${period.start}-${period.end}-${period.course}`;
         if (!acc[key]) {
           acc[key] = { ...period, room: [period.room] };
         } else {
-          // Add room to existing entry if not already present
           if (!acc[key].room.includes(period.room)) {
             acc[key].room.push(period.room);
           }
@@ -307,9 +315,8 @@ const FacultyScheduleDashboard = () => {
 
       const busyPeriods = Object.values(busyPeriodsGrouped).map(p => ({
         ...p,
-        room: p.room.sort().join('; ') // Join rooms back for display
+        room: p.room.sort().join('; ')
       })).sort((a, b) => a.start - b.start);
-
 
       const availableSlots = [];
       const dayStart = 8 * 60;
@@ -340,13 +347,32 @@ const FacultyScheduleDashboard = () => {
 
     return availability;
   };
+  
+  const getRoomAvailabilityForSlot = (day, slot) => {
+    const meetingStart = slot.start;
+    const meetingEnd = meetingStart + meetingDuration;
 
-  // Room availability analysis
+    const busyRooms = new Set();
+    scheduleData.forEach(item => {
+      if (item.Day === day) {
+        const classStart = parseTime(item['Start Time']);
+        const classEnd = parseTime(item['End Time']);
+        
+        if (classStart !== null && classEnd !== null) {
+          if (Math.max(classStart, meetingStart) < Math.min(classEnd, meetingEnd)) {
+            busyRooms.add(item.Room);
+          }
+        }
+      }
+    });
+
+    return uniqueRooms.filter(room => !busyRooms.has(room) && room);
+  };
+
   const getRoomAvailability = (targetDay, targetTime) => {
     const targetMinutes = parseTime(targetTime);
     if (!targetDay || !targetTime || targetMinutes === null) return [];
 
-    // Because data is unrolled, we can simply check which rooms are busy at the target time.
     const busyRooms = new Set(
       scheduleData
         .filter(item => {
@@ -360,12 +386,10 @@ const FacultyScheduleDashboard = () => {
 
     return uniqueRooms.filter(room => !busyRooms.has(room));
   };
-
-  // Department insights
+  
   const departmentInsights = useMemo(() => {
     if (scheduleData.length === 0) return null;
 
-    // Peak hours analysis (now more accurate as it counts each room's usage)
     const hourCounts = {};
     for (let hour = 8; hour < 17; hour++) {
       hourCounts[hour] = 0;
@@ -389,13 +413,11 @@ const FacultyScheduleDashboard = () => {
       count > max.count ? { hour: parseInt(hour), count } : max
     , { hour: 8, count: 0 });
 
-    // --- New Workload, Session, and Utilization Logic ---
     const facultyWorkload = {};
     const staffTaughtCourses = new Set();
     const roomUtilization = {};
-    const processedSessions = new Set(); // Use a Set to avoid double-counting hours for multi-room classes
+    const processedSessions = new Set(); 
 
-    // Initialize room utilization
     uniqueRooms.forEach(room => {
         roomUtilization[room] = { classes: 0, hours: 0, staffTaughtClasses: 0 };
     });
@@ -406,7 +428,6 @@ const FacultyScheduleDashboard = () => {
         const end = parseTime(item['End Time']);
         const duration = (start && end) ? (end - start) / 60 : 0;
 
-        // --- Room Utilization (correctly calculated from unrolled data) ---
         if (roomUtilization[item.Room]) {
             roomUtilization[item.Room].classes++;
             roomUtilization[item.Room].hours += duration;
@@ -415,11 +436,8 @@ const FacultyScheduleDashboard = () => {
             }
         }
 
-        // --- Session & Workload Processing ---
-        // A unique session is defined by instructor, course, day, and time.
         const sessionKey = `${item.Instructor}-${item.Course}-${item.Day}-${item['Start Time']}-${item['End Time']}`;
         
-        // If we've already processed this exact session, skip to avoid inflating workload hours.
         if (processedSessions.has(sessionKey)) {
             return; 
         }
@@ -427,18 +445,16 @@ const FacultyScheduleDashboard = () => {
 
         if (instructor === 'Staff') {
             staffTaughtCourses.add(item.Course);
-            return; // Don't add to faculty workload
+            return;
         }
 
         if (!facultyWorkload[instructor]) {
             facultyWorkload[instructor] = { courseSet: new Set(), totalHours: 0 };
         }
-        // Add course to a Set to count unique courses per instructor
         facultyWorkload[instructor].courseSet.add(item.Course);
         facultyWorkload[instructor].totalHours += duration;
     });
 
-    // Finalize faculty workload by getting the size of the unique course set
     const finalFacultyWorkload = Object.fromEntries(
         Object.entries(facultyWorkload).map(([instructor, data]) => [
             instructor,
@@ -454,7 +470,7 @@ const FacultyScheduleDashboard = () => {
       hourCounts,
       facultyWorkload: finalFacultyWorkload,
       roomUtilization,
-      totalClassSessions: processedSessions.size, // Correct count of unique class meetings
+      totalClassSessions: processedSessions.size,
       staffTaughtCourses: staffTaughtCourses.size,
       busiestDay: Object.entries(
         scheduleData.reduce((acc, item) => {
@@ -475,6 +491,72 @@ const FacultyScheduleDashboard = () => {
 
   const findMeetingTimes = () => {
     setShowResults(true);
+  };
+
+  const handleSlotClick = (dayCode, dayName, slot) => {
+    setSelectedSlotForRoomSearch({ dayCode, dayName, slot });
+    setIsRoomModalOpen(true);
+  };
+  
+  const renderRoomModal = () => {
+    if (!isRoomModalOpen || !selectedSlotForRoomSearch) {
+      return null;
+    }
+
+    const { dayCode, dayName, slot } = selectedSlotForRoomSearch;
+    const availableRooms = getRoomAvailabilityForSlot(dayCode, slot);
+    const meetingStart = slot.start;
+    const meetingEnd = meetingStart + meetingDuration;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 animate-fade-in">
+        <div 
+          ref={roomModalRef}
+          className="bg-white rounded-xl shadow-2xl p-6 max-w-2xl w-full mx-4 transform transition-all"
+        >
+          <div className="flex justify-between items-center mb-4 border-b border-baylor-gold pb-3">
+            <div>
+              <h3 className="text-xl font-serif font-bold text-baylor-green">Available Rooms</h3>
+              <p className="text-md text-gray-700">
+                For <span className="font-semibold">{dayName}</span>, from <span className="font-semibold">{formatMinutesToTime(meetingStart)}</span> to <span className="font-semibold">{formatMinutesToTime(meetingEnd)}</span>
+              </p>
+            </div>
+            <button
+              onClick={() => setIsRoomModalOpen(false)}
+              className="p-2 rounded-full hover:bg-gray-200"
+            >
+              <X size={20} className="text-gray-600" />
+            </button>
+          </div>
+
+          {availableRooms.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto pr-2">
+              {availableRooms.map(room => (
+                <div key={room} className="flex items-center p-3 bg-baylor-green/5 border border-baylor-green/20 rounded-lg">
+                  <CheckCircle className="w-5 h-5 text-baylor-green mr-3" />
+                  <span className="font-medium text-baylor-green">{room}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-500">
+              <div className="text-2xl mb-2">😔</div>
+              <p className="text-lg">No available rooms for this time slot.</p>
+              <p className="text-sm">Try a different time or a shorter meeting duration.</p>
+            </div>
+          )}
+
+          <div className="mt-6 text-right">
+            <button
+              onClick={() => setIsRoomModalOpen(false)}
+              className={secondaryButtonClass}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   if (loading || !departmentInsights) {
@@ -524,7 +606,6 @@ const FacultyScheduleDashboard = () => {
               <div>
                 <div className={cardClass}>
                   
-                  {/* Step 1: Meeting Duration */}
                   <div className="mb-8">
                     <h2 className="text-xl font-serif font-semibold text-baylor-green mb-4 flex items-center border-b border-baylor-gold pb-2">
                       <Clock className="mr-2 text-baylor-gold" size={20} />
@@ -571,14 +652,12 @@ const FacultyScheduleDashboard = () => {
                     </div>
                   </div>
 
-                  {/* Step 2: Professor Selection */}
                   <div className="mb-8">
                     <h2 className="text-xl font-serif font-semibold text-baylor-green mb-4 flex items-center border-b border-baylor-gold pb-2">
                       <Users className="mr-2 text-baylor-gold" size={20} />
                       Step 2: Who needs to attend? ({selectedProfessors.length} selected)
                     </h2>
 
-                    {/* Search */}
                     <div className="mb-4">
                       <div className="relative">
                         <Search className="absolute left-3 top-3 text-baylor-green" size={16} />
@@ -592,7 +671,6 @@ const FacultyScheduleDashboard = () => {
                       </div>
                     </div>
 
-                    {/* Selected Professors */}
                     {selectedProfessors.length > 0 && (
                       <div className="mb-4 p-4 bg-baylor-green/10 rounded-lg border border-baylor-green/20">
                         <div className="flex flex-wrap gap-2">
@@ -614,7 +692,6 @@ const FacultyScheduleDashboard = () => {
                       </div>
                     )}
 
-                    {/* Professor Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
                       {filteredInstructors.map(professor => (
                         <button
@@ -650,7 +727,6 @@ const FacultyScheduleDashboard = () => {
                     </div>
                   </div>
 
-                  {/* Find Button */}
                   <div className="text-center">
                     <button
                       onClick={findMeetingTimes}
@@ -676,13 +752,12 @@ const FacultyScheduleDashboard = () => {
               /* Results Panel */
               <div className="space-y-6">
                 
-                {/* Results Header */}
                 <div className={cardClass}>
                   <div className="flex items-center justify-between">
                     <div>
                       <h2 className="text-xl font-serif font-semibold text-baylor-green mb-2">Meeting Times Found</h2>
                       <p className="text-gray-600 mt-1">
-                        {meetingDuration} minute slots when all {selectedProfessors.length} selected professors are available
+                        Click a time slot to find an available room for your {meetingDuration} minute meeting.
                       </p>
                     </div>
                     <button
@@ -693,7 +768,6 @@ const FacultyScheduleDashboard = () => {
                     </button>
                   </div>
                   
-                  {/* Selected Professors Summary */}
                   <div className="mt-4 p-3 bg-baylor-green/5 rounded-lg border border-baylor-green/20">
                     <div className="flex flex-wrap gap-2">
                       {selectedProfessors.map(professor => (
@@ -705,7 +779,6 @@ const FacultyScheduleDashboard = () => {
                   </div>
                 </div>
 
-                {/* Results Grid */}
                 <div className="grid gap-4">
                   {Object.entries(dayNames).map(([dayCode, dayName]) => {
                     const slots = commonAvailability[dayCode] || [];
@@ -730,14 +803,21 @@ const FacultyScheduleDashboard = () => {
                         {hasSlots ? (
                           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
                             {slots.map((slot, index) => (
-                              <div key={index} className="p-4 bg-baylor-green/5 border border-baylor-green/20 rounded-lg hover:bg-baylor-green/10 transition-colors">
+                              <button
+                                key={index}
+                                onClick={() => handleSlotClick(dayCode, dayName, slot)}
+                                className="w-full text-left p-4 bg-baylor-green/5 border border-baylor-green/20 rounded-lg hover:bg-baylor-green/10 hover:shadow-md transition-all"
+                              >
                                 <div className="font-semibold text-baylor-green text-lg">
                                   {formatMinutesToTime(slot.start)} - {formatMinutesToTime(slot.end)}
                                 </div>
                                 <div className="text-sm text-baylor-green/80 mt-1">
                                   {Math.floor(slot.duration / 60)}h {slot.duration % 60}m window
                                 </div>
-                              </div>
+                                <div className="text-xs text-baylor-gold font-bold mt-2">
+                                  Click to Find a Room →
+                                </div>
+                              </button>
                             ))}
                           </div>
                         ) : (
@@ -751,7 +831,6 @@ const FacultyScheduleDashboard = () => {
                   })}
                 </div>
 
-                {/* Summary */}
                 <div className="bg-baylor-gold/10 border border-baylor-gold/30 rounded-lg p-6">
                   <h3 className="font-serif font-semibold text-baylor-green mb-2 border-b border-baylor-gold/30 pb-2">
                     <span className="flex items-center">
@@ -795,7 +874,6 @@ const FacultyScheduleDashboard = () => {
             <div className={cardClass}>
               <h2 className="text-xl font-serif font-semibold text-baylor-green mb-6 border-b border-baylor-gold pb-2">Individual Professor Availability</h2>
               
-              {/* Professor Selection */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Select Professor</label>
                 <CustomDropdown
@@ -810,7 +888,6 @@ const FacultyScheduleDashboard = () => {
                 />
               </div>
 
-              {/* Results */}
               {selectedIndividual && (
                 <div className="space-y-4">
                   <h3 className="text-lg font-serif font-semibold text-baylor-green border-b border-baylor-gold/50 pb-2">
@@ -952,7 +1029,6 @@ const FacultyScheduleDashboard = () => {
         {activeTab === 'insights' && (
           <div className="space-y-6">
             
-            {/* Overview Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className={`${cardClass} transition-transform hover:scale-105`}>
                 <div className="text-2xl font-bold text-baylor-green">{uniqueInstructors.length}</div>
@@ -977,7 +1053,6 @@ const FacultyScheduleDashboard = () => {
               </div>
             </div>
 
-            {/* Peak Hours Chart */}
             <div className={cardClass}>
               <h3 className="text-lg font-serif font-semibold text-baylor-green mb-4 border-b border-baylor-gold/30 pb-2">Hourly Room Usage</h3>
               <div className="space-y-2">
@@ -1005,7 +1080,6 @@ const FacultyScheduleDashboard = () => {
               </div>
             </div>
 
-            {/* Room Utilization */}
             <div className={cardClass}>
               <h3 className="text-lg font-serif font-semibold text-baylor-green mb-4 border-b border-baylor-gold/30 pb-2">Room Utilization</h3>
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1029,7 +1103,6 @@ const FacultyScheduleDashboard = () => {
               </div>
             </div>
 
-            {/* Faculty Workload */}
             <div className={cardClass}>
               <h3 className="text-lg font-serif font-semibold text-baylor-green mb-4 border-b border-baylor-gold/30 pb-2">Faculty Teaching Load</h3>
               <div className="overflow-x-auto">
@@ -1059,6 +1132,10 @@ const FacultyScheduleDashboard = () => {
           </div>
         )}
       </div>
+
+      {/* **FIX**: Render modal using a helper function to keep the main return clean */}
+      {renderRoomModal()}
+
     </div>
   );
 };

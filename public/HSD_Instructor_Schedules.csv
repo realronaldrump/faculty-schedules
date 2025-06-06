@@ -1,22 +1,22 @@
 Instructor,Course,Course Title,Day,Start Time,End Time,Room
-"Arnold, Amber",NUTR 2351,Nutrition,M,10:10am,11am,Mary Gibbs Jones (FCS) 101
-"Arnold, Amber",NUTR 2351,Nutrition,W,10:10am,11am,Mary Gibbs Jones (FCS) 101
-"Arnold, Amber",NUTR 2351,Nutrition,F,10:10am,11am,Mary Gibbs Jones (FCS) 101
-"Arnold, Amber",NUTR 3351,Nutrition Counseling and Educ,T,3:30pm,4:45pm,Mary Gibbs Jones (FCS) 207
-"Arnold, Amber",NUTR 3351,Nutrition Counseling and Educ,R,3:30pm,4:45pm,Mary Gibbs Jones (FCS) 207
-"Arnold, Amber",NUTR 4352,World Nutrition,T,11am,12:15pm,Mary Gibbs Jones (FCS) 203
-"Arnold, Amber",NUTR 4352,World Nutrition,R,11am,12:15pm,Mary Gibbs Jones (FCS) 203
-"Arnold, Amber",NUTR 5357,Global Aspect Food & Nutrition,T,11am,12:15pm,Mary Gibbs Jones (FCS) 203
-"Arnold, Amber",NUTR 5357,Global Aspect Food & Nutrition,R,11am,12:15pm,Mary Gibbs Jones (FCS) 203
-"Beard, Taylor",NUTR 3435,Food Service Production,T,5pm,6:15pm,Mary Gibbs Jones (FCS) 203
-"Beard, Taylor",NUTR 3435,Food Service Production,R,5pm,6:15pm,Mary Gibbs Jones (FCS) 203
-"Beard, Taylor",NUTR 3435,Food Service Production,W,3:35pm,6:35pm,Mary Gibbs Jones (FCS) 203A
-"Beard, Taylor",NUTR 5360,Resource Mgmt/Nutr & Food Syst,T,5pm,6:15pm,Mary Gibbs Jones (FCS) 203
-"Beard, Taylor",NUTR 5360,Resource Mgmt/Nutr & Food Syst,R,5pm,6:15pm,Mary Gibbs Jones (FCS) 203
-"Boccia, Maria",CFS 3356,Theories of Family Development,T,11am,12:15pm,Mary Gibbs Jones (FCS) 207
-"Boccia, Maria",CFS 3356,Theories of Family Development,R,11am,12:15pm,Mary Gibbs Jones (FCS) 207
-"Boccia, Maria",CFS 5330,Family Science,T,9:30am,10:45am,Mary Gibbs Jones (FCS) 203A
-"Boccia, Maria",CFS 5330,Family Science,R,9:30am,10:45am,Mary Gibbs Jones (FCS) 203A
+"Arnold, Amber",NUTR 2351,Nutrition,M,10:10am,11am,Mary Gibbs Jones 101
+"Arnold, Amber",NUTR 2351,Nutrition,W,10:10am,11am,Mary Gibbs Jones 101
+"Arnold, Amber",NUTR 2351,Nutrition,F,10:10am,11am,Mary Gibbs Jones 101
+"Arnold, Amber",NUTR 3351,Nutrition Counseling and Educ,T,3:30pm,4:45pm,Mary Gibbs Jones 207
+"Arnold, Amber",NUTR 3351,Nutrition Counseling and Educ,R,3:30pm,4:45pm,Mary Gibbs Jones 207
+"Arnold, Amber",NUTR 4352,World Nutrition,T,11am,12:15pm,Mary Gibbs Jones 203
+"Arnold, Amber",NUTR 4352,World Nutrition,R,11am,12:15pm,Mary Gibbs Jones 203
+"Arnold, Amber",NUTR 5357,Global Aspect Food & Nutrition,T,11am,12:15pm,Mary Gibbs Jones 203
+"Arnold, Amber",NUTR 5357,Global Aspect Food & Nutrition,R,11am,12:15pm,Mary Gibbs Jones 203
+"Beard, Taylor",NUTR 3435,Food Service Production,T,5pm,6:15pm,Mary Gibbs Jones 203
+"Beard, Taylor",NUTR 3435,Food Service Production,R,5pm,6:15pm,Mary Gibbs Jones 203
+"Beard, Taylor",NUTR 3435,Food Service Production,W,3:35pm,6:35pm,Mary Gibbs Jones 203A
+"Beard, Taylor",NUTR 5360,Resource Mgmt/Nutr & Food Syst,T,5pm,6:15pm,Mary Gibbs Jones 203
+"Beard, Taylor",NUTR 5360,Resource Mgmt/Nutr & Food Syst,R,5pm,6:15pm,Mary Gibbs Jones 203
+"Boccia, Maria",CFS 3356,Theories of Family Development,T,11am,12:15pm,Mary Gibbs Jones 207
+"Boccia, Maria",CFS 3356,Theories of Family Development,R,11am,12:15pm,Mary Gibbs Jones 207
+"Boccia, Maria",CFS 5330,Family Science,T,9:30am,10:45am,Mary Gibbs Jones 203A
+"Boccia, Maria",CFS 5330,Family Science,R,9:30am,10:45am,Mary Gibbs Jones 203A
 "Brown, Michelle",ID 2325,Building Systems for Interiors,T,9:30am,10:45am,Goebel Building 111
 "Brown, Michelle",ID 2325,Building Systems for Interiors,R,9:30am,10:45am,Goebel Building 111
 "Brown, Michelle",ID 3418,Interior Design Studio I,T,2pm,4:45pm,Goebel Building 109; Goebel Building 113
@@ -29,27 +29,27 @@ Instructor,Course,Course Title,Day,Start Time,End Time,Room
 "Brunson, Rochelle",ADM 3391,Retail Buying I,T,2pm,3:15pm,Goebel Building 111
 "Brunson, Rochelle",ADM 3391,Retail Buying I,R,2pm,3:15pm,Goebel Building 111
 "Brunson, Rochelle",ADM 4190,Pre-Internship Seminar,T,5pm,6:15pm,Goebel Building 111
-"Bubert, Ashley",NUTR 1401,Introduction to Food Science,T,12:30pm,1:45pm,Mary Gibbs Jones (FCS) 101
-"Bubert, Ashley",NUTR 1401,Introduction to Food Science,R,12:30pm,1:45pm,Mary Gibbs Jones (FCS) 101
-"Bubert, Ashley",NUTR 3314,Consumer Nutrition,T,11am,12:15pm,Mary Gibbs Jones (FCS) 101
-"Bubert, Ashley",NUTR 3314,Consumer Nutrition,R,11am,12:15pm,Mary Gibbs Jones (FCS) 101
+"Bubert, Ashley",NUTR 1401,Introduction to Food Science,T,12:30pm,1:45pm,Mary Gibbs Jones 101
+"Bubert, Ashley",NUTR 1401,Introduction to Food Science,R,12:30pm,1:45pm,Mary Gibbs Jones 101
+"Bubert, Ashley",NUTR 3314,Consumer Nutrition,T,11am,12:15pm,Mary Gibbs Jones 101
+"Bubert, Ashley",NUTR 3314,Consumer Nutrition,R,11am,12:15pm,Mary Gibbs Jones 101
 "Burgess, Hillary",ID 1325,Interior Design Graphics,T,11am,1:45pm,Goebel Building 113
 "Burgess, Hillary",ID 1325,Interior Design Graphics,R,11am,1:45pm,Goebel Building 113
 "Burgess, Hillary",ID 2322,Computer-Aided Draft/Des,M,11:15am,2pm,Goebel Building 109
 "Burgess, Hillary",ID 2322,Computer-Aided Draft/Des,W,11:15am,2pm,Goebel Building 109
 "Burgess, Hillary",ID 3418,Interior Design Studio I,T,8am,10:45am,Goebel Building 109; Goebel Building 113
 "Burgess, Hillary",ID 3418,Interior Design Studio I,R,8am,10:45am,Goebel Building 109; Goebel Building 113
-"Cambra, Brian",CFS 2357,Adult Development,T,2pm,3:15pm,Mary Gibbs Jones (FCS) 203
-"Cambra, Brian",CFS 2357,Adult Development,R,2pm,3:15pm,Mary Gibbs Jones (FCS) 203
-"Cambra, Brian",CFS 4359,Parenting Theory and Approach,M,11:15am,12:05pm,Mary Gibbs Jones (FCS) 203
-"Cambra, Brian",CFS 4359,Parenting Theory and Approach,W,11:15am,12:05pm,Mary Gibbs Jones (FCS) 203
-"Cambra, Brian",CFS 4359,Parenting Theory and Approach,F,11:15am,12:05pm,Mary Gibbs Jones (FCS) 203
-"Cambra, Brian",CFS 4359,Parenting Theory and Approach,M,1:25pm,2:15pm,Mary Gibbs Jones (FCS) 203
-"Cambra, Brian",CFS 4359,Parenting Theory and Approach,W,1:25pm,2:15pm,Mary Gibbs Jones (FCS) 203
-"Cambra, Brian",CFS 4359,Parenting Theory and Approach,F,1:25pm,2:15pm,Mary Gibbs Jones (FCS) 203
-"Carroll, Zakhiah",NUTR 3314,Consumer Nutrition,M,9:05am,9:55am,General Assignment Room
-"Carroll, Zakhiah",NUTR 3314,Consumer Nutrition,W,9:05am,9:55am,General Assignment Room
-"Carroll, Zakhiah",NUTR 3314,Consumer Nutrition,F,9:05am,9:55am,General Assignment Room
+"Cambra, Brian",CFS 2357,Adult Development,T,2pm,3:15pm,Mary Gibbs Jones 203
+"Cambra, Brian",CFS 2357,Adult Development,R,2pm,3:15pm,Mary Gibbs Jones 203
+"Cambra, Brian",CFS 4359,Parenting Theory and Approach,M,11:15am,12:05pm,Mary Gibbs Jones 203
+"Cambra, Brian",CFS 4359,Parenting Theory and Approach,W,11:15am,12:05pm,Mary Gibbs Jones 203
+"Cambra, Brian",CFS 4359,Parenting Theory and Approach,F,11:15am,12:05pm,Mary Gibbs Jones 203
+"Cambra, Brian",CFS 4359,Parenting Theory and Approach,M,1:25pm,2:15pm,Mary Gibbs Jones 203
+"Cambra, Brian",CFS 4359,Parenting Theory and Approach,W,1:25pm,2:15pm,Mary Gibbs Jones 203
+"Cambra, Brian",CFS 4359,Parenting Theory and Approach,F,1:25pm,2:15pm,Mary Gibbs Jones 203
+"Carroll, Zakhiah",NUTR 3314,Consumer Nutrition,M,9:05am,9:55am,Online
+"Carroll, Zakhiah",NUTR 3314,Consumer Nutrition,W,9:05am,9:55am,Online
+"Carroll, Zakhiah",NUTR 3314,Consumer Nutrition,F,9:05am,9:55am,Online
 "Crowder, Elizabeth",CFS 3356,Theories of Family Development,M,9:05am,9:55am,Goebel Building 110
 "Crowder, Elizabeth",CFS 3356,Theories of Family Development,W,9:05am,9:55am,Goebel Building 110
 "Crowder, Elizabeth",CFS 3356,Theories of Family Development,F,9:05am,9:55am,Goebel Building 110
@@ -62,72 +62,72 @@ Instructor,Course,Course Title,Day,Start Time,End Time,Room
 "Daniel, Staci",CFS 3324,Child & Fam with Special Needs,R,9:30am,10:45am,Goebel Building 110
 "Davis, Katherine",CFS 2355,Child Development,M,12:30pm,1:45pm,Piper Child Development Cntr 100
 "Davis, Katherine",CFS 2355,Child Development,W,12:30pm,1:45pm,Piper Child Development Cntr 100
-"Davis, Katherine",CFS 3362,Child Life Theory & Practice,M,10:10am,11am,Mary Gibbs Jones (FCS) 207
-"Davis, Katherine",CFS 3362,Child Life Theory & Practice,W,10:10am,11am,Mary Gibbs Jones (FCS) 207
-"Davis, Katherine",CFS 3362,Child Life Theory & Practice,F,10:10am,11am,Mary Gibbs Jones (FCS) 207
+"Davis, Katherine",CFS 3362,Child Life Theory & Practice,M,10:10am,11am,Mary Gibbs Jones 207
+"Davis, Katherine",CFS 3362,Child Life Theory & Practice,W,10:10am,11am,Mary Gibbs Jones 207
+"Davis, Katherine",CFS 3362,Child Life Theory & Practice,F,10:10am,11am,Mary Gibbs Jones 207
 "Dekle, Tina",ADM 2310,Textile Science,F,9:05am,11am,Goebel Building 108
 "Dekle, Tina",ADM 2310,Textile Science,F,12:20pm,2:15pm,Goebel Building 108
-"Divita, Lorynn",ADM 2371,Apparel Quality Analysis,M,12:20pm,1:10pm,Mary Gibbs Jones (FCS) 207
-"Divita, Lorynn",ADM 2371,Apparel Quality Analysis,W,12:20pm,1:10pm,Mary Gibbs Jones (FCS) 207
-"Divita, Lorynn",ADM 2371,Apparel Quality Analysis,F,12:20pm,1:10pm,Mary Gibbs Jones (FCS) 207
-"Divita, Lorynn",ADM 4396,Fashion Trend Analys & Forecas,M,11:15am,12:05pm,Mary Gibbs Jones (FCS) 207
-"Divita, Lorynn",ADM 4396,Fashion Trend Analys & Forecas,W,11:15am,12:05pm,Mary Gibbs Jones (FCS) 207
-"Divita, Lorynn",ADM 4396,Fashion Trend Analys & Forecas,F,11:15am,12:05pm,Mary Gibbs Jones (FCS) 207
-"Dragoo, Sheri",ADM 2373,Intermediate Apparel Studio,T,9:30am,12:15pm,Mary Gibbs Jones (FCS) 211; Mary Gibbs Jones (FCS) 213
-"Dragoo, Sheri",ADM 2373,Intermediate Apparel Studio,R,9:30am,12:15pm,Mary Gibbs Jones (FCS) 211; Mary Gibbs Jones (FCS) 213
-"Fader, Jayne",ADM 3361,Apparel Merchandising Tech,M,8:30am,11am,Mary Gibbs Jones (FCS) 209
-"Fader, Jayne",ADM 3361,Apparel Merchandising Tech,W,8:30am,11am,Mary Gibbs Jones (FCS) 209
-"Fader, Jayne",ADM 3373,Advanced Apparel Studio,M,11:15am,2pm,Mary Gibbs Jones (FCS) 211; Mary Gibbs Jones (FCS) 213
-"Fader, Jayne",ADM 3373,Advanced Apparel Studio,W,11:15am,2pm,Mary Gibbs Jones (FCS) 211; Mary Gibbs Jones (FCS) 213
-"Fader, Jayne",ADM 4363,Apparel Design Technology,T,2pm,4:30pm,Mary Gibbs Jones (FCS) 209
-"Fader, Jayne",ADM 4363,Apparel Design Technology,R,2pm,4:30pm,Mary Gibbs Jones (FCS) 209
-"Frye, Nicky",CFS 3304,Research Methods,T,2pm,3:15pm,Mary Gibbs Jones (FCS) 101
-"Frye, Nicky",CFS 3304,Research Methods,R,2pm,3:15pm,Mary Gibbs Jones (FCS) 101
-"Frye, Nicky",CFS 3304,Research Methods,T,3:30pm,4:45pm,Mary Gibbs Jones (FCS) 101
-"Frye, Nicky",CFS 3304,Research Methods,R,3:30pm,4:45pm,Mary Gibbs Jones (FCS) 101
-"Funderburk, LesLee",NUTR 5350,Dietetic Internship,M,10:10am,11am,Mary Gibbs Jones (FCS) 203A
-"Funderburk, LesLee",NUTR 5370,Res Meth Nutrition Sciences,M,11:15am,2pm,Mary Gibbs Jones (FCS) 203A
-"Gardner, Julie",NUTR 2380,Intro to Food Delivery Systems,M,2:30pm,3:45pm,Mary Gibbs Jones (FCS) 101
-"Gardner, Julie",NUTR 2380,Intro to Food Delivery Systems,W,2:30pm,3:45pm,Mary Gibbs Jones (FCS) 101
-"Gho, Jaesook",CFS 4356,Family:Global Perspective,W,2:30pm,3:45pm,Mary Gibbs Jones (FCS) 207
+"Divita, Lorynn",ADM 2371,Apparel Quality Analysis,M,12:20pm,1:10pm,Mary Gibbs Jones 207
+"Divita, Lorynn",ADM 2371,Apparel Quality Analysis,W,12:20pm,1:10pm,Mary Gibbs Jones 207
+"Divita, Lorynn",ADM 2371,Apparel Quality Analysis,F,12:20pm,1:10pm,Mary Gibbs Jones 207
+"Divita, Lorynn",ADM 4396,Fashion Trend Analys & Forecas,M,11:15am,12:05pm,Mary Gibbs Jones 207
+"Divita, Lorynn",ADM 4396,Fashion Trend Analys & Forecas,W,11:15am,12:05pm,Mary Gibbs Jones 207
+"Divita, Lorynn",ADM 4396,Fashion Trend Analys & Forecas,F,11:15am,12:05pm,Mary Gibbs Jones 207
+"Dragoo, Sheri",ADM 2373,Intermediate Apparel Studio,T,9:30am,12:15pm,Mary Gibbs Jones 211; Mary Gibbs Jones 213
+"Dragoo, Sheri",ADM 2373,Intermediate Apparel Studio,R,9:30am,12:15pm,Mary Gibbs Jones 211; Mary Gibbs Jones 213
+"Fader, Jayne",ADM 3361,Apparel Merchandising Tech,M,8:30am,11am,Mary Gibbs Jones 209
+"Fader, Jayne",ADM 3361,Apparel Merchandising Tech,W,8:30am,11am,Mary Gibbs Jones 209
+"Fader, Jayne",ADM 3373,Advanced Apparel Studio,M,11:15am,2pm,Mary Gibbs Jones 211; Mary Gibbs Jones 213
+"Fader, Jayne",ADM 3373,Advanced Apparel Studio,W,11:15am,2pm,Mary Gibbs Jones 211; Mary Gibbs Jones 213
+"Fader, Jayne",ADM 4363,Apparel Design Technology,T,2pm,4:30pm,Mary Gibbs Jones 209
+"Fader, Jayne",ADM 4363,Apparel Design Technology,R,2pm,4:30pm,Mary Gibbs Jones 209
+"Frye, Nicky",CFS 3304,Research Methods,T,2pm,3:15pm,Mary Gibbs Jones 101
+"Frye, Nicky",CFS 3304,Research Methods,R,2pm,3:15pm,Mary Gibbs Jones 101
+"Frye, Nicky",CFS 3304,Research Methods,T,3:30pm,4:45pm,Mary Gibbs Jones 101
+"Frye, Nicky",CFS 3304,Research Methods,R,3:30pm,4:45pm,Mary Gibbs Jones 101
+"Funderburk, LesLee",NUTR 5350,Dietetic Internship,M,10:10am,11am,Mary Gibbs Jones 203A
+"Funderburk, LesLee",NUTR 5370,Res Meth Nutrition Sciences,M,11:15am,2pm,Mary Gibbs Jones 203A
+"Gardner, Julie",NUTR 2380,Intro to Food Delivery Systems,M,2:30pm,3:45pm,Mary Gibbs Jones 101
+"Gardner, Julie",NUTR 2380,Intro to Food Delivery Systems,W,2:30pm,3:45pm,Mary Gibbs Jones 101
+"Gho, Jaesook",CFS 4356,Family:Global Perspective,W,2:30pm,3:45pm,Mary Gibbs Jones 207
 "Harris, Debra",ID 3317,Lighting for Interiors,T,12:30pm,1:45pm,Goebel Building 111
 "Harris, Debra",ID 3317,Lighting for Interiors,R,12:30pm,1:45pm,Goebel Building 111
 "Harris, Debra",ID 4418,Interior Design Studio III,M,2:30pm,5:15pm,Goebel Building 101; Goebel Building 109
 "Harris, Debra",ID 4418,Interior Design Studio III,W,2:30pm,5:15pm,Goebel Building 101; Goebel Building 109
-"Hassell, Patricia",ADM 1311,Apparel Design Construction,M,8:30am,11am,Mary Gibbs Jones (FCS) 211; Mary Gibbs Jones (FCS) 213
-"Hassell, Patricia",ADM 1311,Apparel Design Construction,W,8:30am,11am,Mary Gibbs Jones (FCS) 211; Mary Gibbs Jones (FCS) 213
-"Hassell, Patricia",ADM 1311,Apparel Design Construction,M,2:30pm,5pm,Mary Gibbs Jones (FCS) 211; Mary Gibbs Jones (FCS) 213
-"Hassell, Patricia",ADM 1311,Apparel Design Construction,W,2:30pm,5pm,Mary Gibbs Jones (FCS) 211; Mary Gibbs Jones (FCS) 213
-"Hassell, Patricia",HSD 1104,New Student Seminar in HSD,W,1:25pm,2:15pm,Mary Gibbs Jones (FCS) 101
-"Hassell, Patricia",HSD 1104,New Student Seminar in HSD,M,1:25pm,2:15pm,Mary Gibbs Jones (FCS) 101
+"Hassell, Patricia",ADM 1311,Apparel Design Construction,M,8:30am,11am,Mary Gibbs Jones 211; Mary Gibbs Jones 213
+"Hassell, Patricia",ADM 1311,Apparel Design Construction,W,8:30am,11am,Mary Gibbs Jones 211; Mary Gibbs Jones 213
+"Hassell, Patricia",ADM 1311,Apparel Design Construction,M,2:30pm,5pm,Mary Gibbs Jones 211; Mary Gibbs Jones 213
+"Hassell, Patricia",ADM 1311,Apparel Design Construction,W,2:30pm,5pm,Mary Gibbs Jones 211; Mary Gibbs Jones 213
+"Hassell, Patricia",HSD 1104,New Student Seminar in HSD,W,1:25pm,2:15pm,Mary Gibbs Jones 101
+"Hassell, Patricia",HSD 1104,New Student Seminar in HSD,M,1:25pm,2:15pm,Mary Gibbs Jones 101
 "Kiefer, Michelle",CFS 3358,Infant & Toddler Development,R,12:30pm,1:45pm,Piper Child Development Cntr 100
-"Kincheloe, Cathy",NUTR 1401,Introduction to Food Science,T,2pm,3:55pm,Mary Gibbs Jones (FCS) 111
-"Kincheloe, Cathy",NUTR 1401,Introduction to Food Science,R,2pm,3:55pm,Mary Gibbs Jones (FCS) 111
-"Kincheloe, Cathy",NUTR 1401,Introduction to Food Science,W,11:15am,1:10pm,Mary Gibbs Jones (FCS) 111
+"Kincheloe, Cathy",NUTR 1401,Introduction to Food Science,T,2pm,3:55pm,Mary Gibbs Jones 111
+"Kincheloe, Cathy",NUTR 1401,Introduction to Food Science,R,2pm,3:55pm,Mary Gibbs Jones 111
+"Kincheloe, Cathy",NUTR 1401,Introduction to Food Science,W,11:15am,1:10pm,Mary Gibbs Jones 111
 "King, Elise",ID 4123,ID Capstone Research,W,10:10am,11am,Goebel Building 111
-"Langlais, Michael",CFS 1315,Dev Indiv/Family Relationships,M,9:05am,9:55am,Mary Gibbs Jones (FCS) 203
-"Langlais, Michael",CFS 1315,Dev Indiv/Family Relationships,W,9:05am,9:55am,Mary Gibbs Jones (FCS) 203
-"Langlais, Michael",CFS 1315,Dev Indiv/Family Relationships,F,9:05am,9:55am,Mary Gibbs Jones (FCS) 203
-"Langlais, Michael",CFS 1315,Dev Indiv/Family Relationships,M,10:10am,11am,Mary Gibbs Jones (FCS) 203
-"Langlais, Michael",CFS 1315,Dev Indiv/Family Relationships,W,10:10am,11am,Mary Gibbs Jones (FCS) 203
-"Langlais, Michael",CFS 1315,Dev Indiv/Family Relationships,F,10:10am,11am,Mary Gibbs Jones (FCS) 203
-"Law, Michelle",NUTR 2351,Nutrition,T,9:30am,10:45am,Mary Gibbs Jones (FCS) 101
-"Law, Michelle",NUTR 2351,Nutrition,R,9:30am,10:45am,Mary Gibbs Jones (FCS) 101
-"Law, Michelle",NUTR 5355,Macronutrients and Metabolism,T,12:30pm,1:45pm,Mary Gibbs Jones (FCS) 203
-"Law, Michelle",NUTR 5355,Macronutrients and Metabolism,R,12:30pm,1:45pm,Mary Gibbs Jones (FCS) 203
+"Langlais, Michael",CFS 1315,Dev Indiv/Family Relationships,M,9:05am,9:55am,Mary Gibbs Jones 203
+"Langlais, Michael",CFS 1315,Dev Indiv/Family Relationships,W,9:05am,9:55am,Mary Gibbs Jones 203
+"Langlais, Michael",CFS 1315,Dev Indiv/Family Relationships,F,9:05am,9:55am,Mary Gibbs Jones 203
+"Langlais, Michael",CFS 1315,Dev Indiv/Family Relationships,M,10:10am,11am,Mary Gibbs Jones 203
+"Langlais, Michael",CFS 1315,Dev Indiv/Family Relationships,W,10:10am,11am,Mary Gibbs Jones 203
+"Langlais, Michael",CFS 1315,Dev Indiv/Family Relationships,F,10:10am,11am,Mary Gibbs Jones 203
+"Law, Michelle",NUTR 2351,Nutrition,T,9:30am,10:45am,Mary Gibbs Jones 101
+"Law, Michelle",NUTR 2351,Nutrition,R,9:30am,10:45am,Mary Gibbs Jones 101
+"Law, Michelle",NUTR 5355,Macronutrients and Metabolism,T,12:30pm,1:45pm,Mary Gibbs Jones 203
+"Law, Michelle",NUTR 5355,Macronutrients and Metabolism,R,12:30pm,1:45pm,Mary Gibbs Jones 203
 "Martinez, Briana",ADM 3340,Digital Retailing Strategies,T,2pm,3:15pm,Goebel Building 110
 "Martinez, Briana",ADM 3340,Digital Retailing Strategies,R,2pm,3:15pm,Goebel Building 110
 "Martinez, Briana",ADM 4391,Retail Buying II,T,3:30pm,4:45pm,Goebel Building 111
 "Martinez, Briana",ADM 4391,Retail Buying II,R,3:30pm,4:45pm,Goebel Building 111
-"McAninch, Nicole",CFS 3354,Family Life Edu & Ethics,R,9:30am,10:45am,Mary Gibbs Jones (FCS) 207
+"McAninch, Nicole",CFS 3354,Family Life Edu & Ethics,R,9:30am,10:45am,Mary Gibbs Jones 207
 "McAninch, Nicole",CFS 4191,Prof Pract Child/Family Study,W,12:20pm,1:10pm,Goebel Building 111
-"Melton, Karen",CFS 4358,Plan/Admin Child & Family,T,9:30am,10:45am,General Assignment Room
-"Melton, Karen",CFS 4363,Middle Child & Adolescent Dev,T,3:30pm,4:45pm,Mary Gibbs Jones (FCS) 203
-"Melton, Karen",CFS 4363,Middle Child & Adolescent Dev,R,3:30pm,4:45pm,Mary Gibbs Jones (FCS) 203
-"Melton, Karen",CFS 5358,Planning & Administration,T,9:30am,10:45am,General Assignment Room
-"Miles, Connie",ADM 3393,Visual Merchandising/Promo,M,2:30pm,5:15pm,Mary Gibbs Jones (FCS) 207
-"Perkins, Keri",NUTR 3314,Consumer Nutrition,T,8am,9:15am,General Assignment Room
-"Perkins, Keri",NUTR 3314,Consumer Nutrition,R,8am,9:15am,General Assignment Room
+"Melton, Karen",CFS 4358,Plan/Admin Child & Family,T,9:30am,10:45am,Online
+"Melton, Karen",CFS 4363,Middle Child & Adolescent Dev,T,3:30pm,4:45pm,Mary Gibbs Jones 203
+"Melton, Karen",CFS 4363,Middle Child & Adolescent Dev,R,3:30pm,4:45pm,Mary Gibbs Jones 203
+"Melton, Karen",CFS 5358,Planning & Administration,T,9:30am,10:45am,Online
+"Miles, Connie",ADM 3393,Visual Merchandising/Promo,M,2:30pm,5:15pm,Mary Gibbs Jones 207
+"Perkins, Keri",NUTR 3314,Consumer Nutrition,T,8am,9:15am,Online
+"Perkins, Keri",NUTR 3314,Consumer Nutrition,R,8am,9:15am,Online
 "Perkins, Keri",NUTR 3314,Consumer Nutrition,T,5pm,6:15pm,Goebel Building 101
 "Perkins, Keri",NUTR 3314,Consumer Nutrition,R,5pm,6:15pm,Goebel Building 101
 "Staff [Primary, 100%]",ADM 4312,Textile Testing and Analysis,W,12:30pm,2:45pm,Goebel Building 108; Goebel Building 110
@@ -137,8 +137,8 @@ Instructor,Course,Course Title,Day,Start Time,End Time,Room
 "Staff [Primary, 100%]",ID 3322,Comp-Aided Draft & Design II,W,8am,10:45am,Goebel Building 109
 "Staff [Primary, 100%]",ID 3322,Comp-Aided Draft & Design II,T,5:15pm,8pm,Goebel Building 109
 "Staff [Primary, 100%]",ID 3322,Comp-Aided Draft & Design II,R,5:15pm,8pm,Goebel Building 109
-"Stull, April",NUTR 4200,Seminar in Nutrition Sciences,M,12:20pm,1:10pm,Mary Gibbs Jones (FCS) 101
-"Stull, April",NUTR 4200,Seminar in Nutrition Sciences,W,12:20pm,1:10pm,Mary Gibbs Jones (FCS) 101
+"Stull, April",NUTR 4200,Seminar in Nutrition Sciences,M,12:20pm,1:10pm,Mary Gibbs Jones 101
+"Stull, April",NUTR 4200,Seminar in Nutrition Sciences,W,12:20pm,1:10pm,Mary Gibbs Jones 101
 "Theriot, Ann",ID 1332,Intro to Interior Design,M,2:30pm,3:45pm,Goebel Building 111
 "Theriot, Ann",ID 1332,Intro to Interior Design,W,2:30pm,3:45pm,Goebel Building 111
 "Theriot, Ann",ID 2375,History of Interiors I,T,11am,12:15pm,Goebel Building 111
@@ -148,27 +148,27 @@ Instructor,Course,Course Title,Day,Start Time,End Time,Room
 "Theriot, Ann",ID 4320,Bus Pract/Proc Interior Design,T,8am,9:15am,Goebel Building 111
 "Theriot, Ann",ID 4320,Bus Pract/Proc Interior Design,R,8am,9:15am,Goebel Building 111
 "Wade, Sarah",CFS 3368,Theory and Principles of Play,T,12:30pm,1:45pm,Piper Child Development Cntr 100
-"Wilfong, Stanley",NUTR 2101,Intro to Prf of Nutr & Diet,W,12:20pm,1:10pm,Mary Gibbs Jones (FCS) 203
-"Wilfong, Stanley",NUTR 2351,Nutrition,M,9:05am,9:55am,Mary Gibbs Jones (FCS) 101
-"Wilfong, Stanley",NUTR 2351,Nutrition,W,9:05am,9:55am,Mary Gibbs Jones (FCS) 101
-"Wilfong, Stanley",NUTR 2351,Nutrition,F,9:05am,9:55am,Mary Gibbs Jones (FCS) 101
-"Wilfong, Stanley",NUTR 3288,Intro - Nutrition Care Process,M,8am,8:50am,Mary Gibbs Jones (FCS) 207
-"Wilfong, Stanley",NUTR 3288,Intro - Nutrition Care Process,W,8am,8:50am,Mary Gibbs Jones (FCS) 207
-"Wilfong, Stanley",NUTR 3388,Intro Med Nutrition Therapy,T,9:30am,10:45am,Mary Gibbs Jones (FCS) 203
-"Wilfong, Stanley",NUTR 3388,Intro Med Nutrition Therapy,R,9:30am,10:45am,Mary Gibbs Jones (FCS) 203
-"Wilfong, Stanley",NUTR 4151,Nutrition Practicum,W,1:25pm,2:15pm,Mary Gibbs Jones (FCS) 203A
-"Yeung, Tai Wai David",ADM 2311,Fashion Illustration,M,2:20pm,4:50pm,Mary Gibbs Jones (FCS) 203
-"Yeung, Tai Wai David",ADM 2311,Fashion Illustration,W,2:20pm,4:50pm,Mary Gibbs Jones (FCS) 203
-"Yeung, Tai Wai David",ADM 4190,Pre-Internship Seminar,T,5pm,6:15pm,Mary Gibbs Jones (FCS) 207
-"Yeung, Tai Wai David",HSD 1104,New Student Seminar in HSD,M,12:20pm,1:10pm,Mary Gibbs Jones (FCS) 203
-"Yeung, Tai Wai David",HSD 1231,Design and Creative Tech,T,9:30am,10:20am,Mary Gibbs Jones (FCS) 209
-"Yeung, Tai Wai David",HSD 1231,Design and Creative Tech,R,9:30am,10:20am,Mary Gibbs Jones (FCS) 209
-"Yeung, Tai Wai David",HSD 1231,Design and Creative Tech,T,11am,11:50am,Mary Gibbs Jones (FCS) 209
-"Yeung, Tai Wai David",HSD 1231,Design and Creative Tech,R,11am,11:50am,Mary Gibbs Jones (FCS) 209
-"Yoo, Jeongju",ADM 1300,Fash Theory & Consump Behav,T,12:30pm,1:45pm,Mary Gibbs Jones (FCS) 207
-"Yoo, Jeongju",ADM 1300,Fash Theory & Consump Behav,R,12:30pm,1:45pm,Mary Gibbs Jones (FCS) 207
-"Yoo, Jeongju",ADM 1341,Apparel Aesthetics,T,2pm,3:15pm,Mary Gibbs Jones (FCS) 207
-"Yoo, Jeongju",ADM 1341,Apparel Aesthetics,R,2pm,3:15pm,Mary Gibbs Jones (FCS) 207
+"Wilfong, Stanley",NUTR 2101,Intro to Prf of Nutr & Diet,W,12:20pm,1:10pm,Mary Gibbs Jones 203
+"Wilfong, Stanley",NUTR 2351,Nutrition,M,9:05am,9:55am,Mary Gibbs Jones 101
+"Wilfong, Stanley",NUTR 2351,Nutrition,W,9:05am,9:55am,Mary Gibbs Jones 101
+"Wilfong, Stanley",NUTR 2351,Nutrition,F,9:05am,9:55am,Mary Gibbs Jones 101
+"Wilfong, Stanley",NUTR 3288,Intro - Nutrition Care Process,M,8am,8:50am,Mary Gibbs Jones 207
+"Wilfong, Stanley",NUTR 3288,Intro - Nutrition Care Process,W,8am,8:50am,Mary Gibbs Jones 207
+"Wilfong, Stanley",NUTR 3388,Intro Med Nutrition Therapy,T,9:30am,10:45am,Mary Gibbs Jones 203
+"Wilfong, Stanley",NUTR 3388,Intro Med Nutrition Therapy,R,9:30am,10:45am,Mary Gibbs Jones 203
+"Wilfong, Stanley",NUTR 4151,Nutrition Practicum,W,1:25pm,2:15pm,Mary Gibbs Jones 203A
+"Yeung, Tai Wai David",ADM 2311,Fashion Illustration,M,2:20pm,4:50pm,Mary Gibbs Jones 203
+"Yeung, Tai Wai David",ADM 2311,Fashion Illustration,W,2:20pm,4:50pm,Mary Gibbs Jones 203
+"Yeung, Tai Wai David",ADM 4190,Pre-Internship Seminar,T,5pm,6:15pm,Mary Gibbs Jones 207
+"Yeung, Tai Wai David",HSD 1104,New Student Seminar in HSD,M,12:20pm,1:10pm,Mary Gibbs Jones 203
+"Yeung, Tai Wai David",HSD 1231,Design and Creative Tech,T,9:30am,10:20am,Mary Gibbs Jones 209
+"Yeung, Tai Wai David",HSD 1231,Design and Creative Tech,R,9:30am,10:20am,Mary Gibbs Jones 209
+"Yeung, Tai Wai David",HSD 1231,Design and Creative Tech,T,11am,11:50am,Mary Gibbs Jones 209
+"Yeung, Tai Wai David",HSD 1231,Design and Creative Tech,R,11am,11:50am,Mary Gibbs Jones 209
+"Yoo, Jeongju",ADM 1300,Fash Theory & Consump Behav,T,12:30pm,1:45pm,Mary Gibbs Jones 207
+"Yoo, Jeongju",ADM 1300,Fash Theory & Consump Behav,R,12:30pm,1:45pm,Mary Gibbs Jones 207
+"Yoo, Jeongju",ADM 1341,Apparel Aesthetics,T,2pm,3:15pm,Mary Gibbs Jones 207
+"Yoo, Jeongju",ADM 1341,Apparel Aesthetics,R,2pm,3:15pm,Mary Gibbs Jones 207
 "da Silva Almeida, Carla Patricia",ID 1325,Interior Design Graphics,T,11am,1:45pm,Goebel Building 114
 "da Silva Almeida, Carla Patricia",ID 1325,Interior Design Graphics,R,11am,1:45pm,Goebel Building 114
 "da Silva Almeida, Carla Patricia",ID 1325,Interior Design Graphics,T,2pm,4:45pm,Goebel Building 114

@@ -46,7 +46,7 @@ function App() {
               className="text-sm text-white hover:text-baylor-gold transition-colors duration-200 flex items-center space-x-1"
             >
               <Settings size={16} className="mr-1" />
-              <span>Systems</span>
+              <span>Baylor Systems</span>
             </button>
             <button
               onClick={handleLogout}

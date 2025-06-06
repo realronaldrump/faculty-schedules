@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import FacultyScheduleDashboard from './components/FacultyScheduleDashboard';
 import SystemsPage from './components/SystemsPage';
 import Login from './components/Login';
+import { Settings } from 'lucide-react';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -41,6 +42,13 @@ function App() {
           <div className="flex items-center space-x-4">
             <div className="text-baylor-gold font-serif italic">Fall 2025</div>
             <button
+              onClick={() => setCurrentPage('systems')}
+              className="text-sm text-white hover:text-baylor-gold transition-colors duration-200 flex items-center space-x-1"
+            >
+              <Settings size={16} className="mr-1" />
+              <span>Systems</span>
+            </button>
+            <button
               onClick={handleLogout}
               className="text-sm text-white hover:text-baylor-gold transition-colors duration-200 flex items-center space-x-1"
             >
@@ -59,7 +67,7 @@ function App() {
             <FacultyScheduleDashboard onNavigate={setCurrentPage} />
           </div>
         ) : (
-          <SystemsPage />
+          <SystemsPage onNavigate={setCurrentPage} />
         )}
       </main>
       

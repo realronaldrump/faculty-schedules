@@ -1,7 +1,7 @@
 import React from 'react';
 import { ArrowLeft } from 'lucide-react';
 
-const SystemsPage = () => {
+const SystemsPage = ({ onNavigate }) => {
   const systems = [
     { name: 'Schedule of Classes', description: 'Official Course Schedule System', url: 'https://www1.baylor.edu/scheduleofclasses/' },
     { name: 'CLSS', description: 'Course Listing and Schedule System', url: 'https://registrar.web.baylor.edu/courses-catalogs/clss-class-scheduling-facultystaff' },
@@ -14,7 +14,7 @@ const SystemsPage = () => {
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8">
         <button 
-          onClick={() => window.history.back()}
+          onClick={() => onNavigate('dashboard')}
           className="flex items-center text-baylor-green hover:text-baylor-gold mb-6 transition-colors"
         >
           <ArrowLeft size={20} className="mr-2" />
@@ -29,8 +29,8 @@ const SystemsPage = () => {
               <a
                 key={system.name}
                 href={system.url}
-                target={system.url !== '#' ? "_blank" : undefined}
-                rel={system.url !== '#' ? "noopener noreferrer" : undefined}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="block p-4 border border-baylor-green/20 rounded-lg hover:bg-baylor-green/5 transition-colors"
               >
                 <div className="flex items-center justify-between">

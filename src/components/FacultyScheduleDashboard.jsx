@@ -53,11 +53,15 @@ const CustomDropdown = ({ value, onChange, options, placeholder, className }) =>
   );
 };
 
-const FacultyScheduleDashboard = () => {
+const FacultyScheduleDashboard = ({ onNavigate }) => {
   // Core State
   const [scheduleData, setScheduleData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('group');
+  const [showWarning, setShowWarning] = useState(() => {
+    const dismissed = localStorage.getItem('insightsWarningDismissed');
+    return dismissed !== 'true';
+  });
 
   // Group Meeting State
   const [selectedProfessors, setSelectedProfessors] = useState([]);
@@ -349,6 +353,11 @@ const FacultyScheduleDashboard = () => {
 
   const handleFacultySort = (key) => setFacultySort(prev => ({ key, direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc' }));
 
+  const handleDismissWarning = () => {
+    setShowWarning(false);
+    localStorage.setItem('insightsWarningDismissed', 'true');
+  };
+
   // Sub-components for rendering
   const SortableHeader = ({ label, sortKey, currentSort, onSort }) => {
     const isActive = currentSort.key === sortKey;
@@ -423,9 +432,26 @@ const FacultyScheduleDashboard = () => {
         )}
         {activeTab === 'insights' && (
           <div className="space-y-6">
-            <div className="bg-baylor-gold/10 border border-baylor-gold/30 rounded-lg p-4 text-baylor-green">
-              <p className="text-sm font-medium">Note: This data (and app!) is still being refined and may not reflect the final schedule. Please verify any critical information with the department.</p>
-            </div>
+            {showWarning && (
+              <div className="bg-baylor-gold/10 border border-baylor-gold/30 rounded-lg p-4 text-baylor-green relative">
+                <button 
+                  onClick={handleDismissWarning}
+                  className="absolute top-2 right-2 p-1 hover:bg-baylor-gold/20 rounded-full transition-colors"
+                  aria-label="Dismiss warning"
+                >
+                  <X size={16} className="text-baylor-green" />
+                </button>
+                <p className="text-sm font-medium pr-6">
+                  Note: This data (and app!) is still being refined and may not reflect the final schedule. Please verify any critical information with the department and official University{' '}
+                  <button 
+                    onClick={() => onNavigate('systems')}
+                    className="text-baylor-gold hover:text-baylor-green underline transition-colors"
+                  >
+                    systems
+                  </button>.
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <button onClick={() => handleDrillDown('facultyList')} className={`${cardClass} text-left transition-transform hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-baylor-gold`}><div className="text-2xl font-bold text-baylor-green">{uniqueInstructors.filter(i => i !== 'Staff').length}</div><div className="text-gray-600 font-serif">Faculty Members</div></button>
               <button onClick={() => handleDrillDown('totalSessions')} className={`${cardClass} text-left transition-transform hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-baylor-gold`}><div className="text-2xl font-bold text-baylor-green">{departmentInsights.totalClassSessions}</div><div className="text-gray-600 font-serif">Weekly Class Sessions</div><div className="text-sm text-baylor-gold mt-1 font-medium">{departmentInsights.staffTaughtCourses} staff-taught</div></button>

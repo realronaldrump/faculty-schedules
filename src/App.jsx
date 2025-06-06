@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import FacultyScheduleDashboard from './components/FacultyScheduleDashboard';
+import SystemsPage from './components/SystemsPage';
 import Login from './components/Login';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [currentPage, setCurrentPage] = useState('dashboard');
 
   useEffect(() => {
     // Check if user is already authenticated
@@ -52,9 +54,13 @@ function App() {
       </header>
       
       <main className="flex-grow bg-gray-50">
-        <div className="container mx-auto px-4 py-6">
-          <FacultyScheduleDashboard />
-        </div>
+        {currentPage === 'dashboard' ? (
+          <div className="container mx-auto px-4 py-6">
+            <FacultyScheduleDashboard onNavigate={setCurrentPage} />
+          </div>
+        ) : (
+          <SystemsPage />
+        )}
       </main>
       
       <footer className="bg-baylor-green text-white py-4">
@@ -66,19 +72,19 @@ function App() {
       {/* Logout Confirmation Modal */}
       {showLogoutConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4 transform transition-all">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Confirm Logout</h3>
-            <p className="text-sm text-gray-500 mb-6">Are you sure you want to log out?</p>
-            <div className="flex justify-end space-x-3">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Confirm Logout</h3>
+            <p className="text-gray-600 mb-6">Are you sure you want to logout?</p>
+            <div className="flex justify-end space-x-4">
               <button
                 onClick={() => setShowLogoutConfirm(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors duration-200"
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmLogout}
-                className="px-4 py-2 text-sm font-medium text-white bg-baylor-green hover:bg-baylor-gold rounded-md transition-colors duration-200"
+                className="px-4 py-2 bg-baylor-green text-white rounded hover:bg-baylor-green/90"
               >
                 Logout
               </button>

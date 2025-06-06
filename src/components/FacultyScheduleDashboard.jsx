@@ -209,7 +209,7 @@ const FacultyScheduleDashboard = () => {
   , [scheduleData]);
 
   const uniqueRooms = useMemo(() => 
-    [...new Set(scheduleData.map(item => item.Room).filter(Boolean))].sort()
+    [...new Set(scheduleData.map(item => item.Room).filter(Boolean))].filter(room => room.toLowerCase() !== 'online').sort()
   , [scheduleData]);
 
   const uniqueCourses = useMemo(() => 
@@ -360,7 +360,9 @@ const FacultyScheduleDashboard = () => {
         
         if (classStart !== null && classEnd !== null) {
           if (Math.max(classStart, meetingStart) < Math.min(classEnd, meetingEnd)) {
-            busyRooms.add(item.Room);
+            if (item.Room.toLowerCase() !== 'online') {
+              busyRooms.add(item.Room);
+            }
           }
         }
       }
@@ -382,6 +384,7 @@ const FacultyScheduleDashboard = () => {
           return start !== null && end !== null && targetMinutes >= start && targetMinutes < end;
         })
         .map(item => item.Room)
+        .filter(room => room.toLowerCase() !== 'online')
     );
 
     return uniqueRooms.filter(room => !busyRooms.has(room));

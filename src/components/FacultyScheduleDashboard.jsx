@@ -1103,7 +1103,6 @@ const FacultyScheduleDashboard = () => {
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {Object.entries(departmentInsights.roomUtilization)
                   .sort(([,a], [,b]) => b.hours - a.hours)
-                  .slice(0, 12)
                   .map(([room, data]) => (
                   <div key={room} className="border border-baylor-green/20 rounded-lg p-4 bg-baylor-green/5 hover:bg-baylor-green/10 transition-all">
                     <div className="font-medium text-baylor-green text-sm mb-2">{room}</div>
@@ -1135,7 +1134,6 @@ const FacultyScheduleDashboard = () => {
                   <tbody className="divide-y divide-baylor-green/10">
                     {Object.entries(departmentInsights.facultyWorkload)
                       .sort(([,a], [,b]) => b.totalHours - a.totalHours)
-                      .slice(0, 10)
                       .map(([instructor, data]) => (
                       <tr key={instructor} className="hover:bg-baylor-green/5 transition-colors">
                         <td className="px-4 py-3 text-sm text-baylor-green font-medium">{instructor}</td>

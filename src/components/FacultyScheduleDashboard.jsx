@@ -393,8 +393,17 @@ const FacultyScheduleDashboard = () => {
   const departmentInsights = useMemo(() => {
     if (scheduleData.length === 0) return null;
 
+    // Find the latest class end time
+    let latestEndTime = 17 * 60; // Default to 5 PM
+    scheduleData.forEach(item => {
+      const end = parseTime(item['End Time']);
+      if (end && end > latestEndTime) {
+        latestEndTime = end;
+      }
+    });
+
     const hourCounts = {};
-    for (let hour = 8; hour < 17; hour++) {
+    for (let hour = 8; hour <= Math.ceil(latestEndTime / 60); hour++) {
       hourCounts[hour] = 0;
     }
 
@@ -405,7 +414,7 @@ const FacultyScheduleDashboard = () => {
         const startHour = Math.floor(start / 60);
         const endHour = Math.ceil(end / 60);
         for (let hour = startHour; hour < endHour; hour++) {
-          if (hour >= 8 && hour < 17) {
+          if (hour >= 8 && hour <= Math.ceil(latestEndTime / 60)) {
             hourCounts[hour]++;
           }
         }
@@ -475,6 +484,7 @@ const FacultyScheduleDashboard = () => {
       roomUtilization,
       totalClassSessions: processedSessions.size,
       staffTaughtCourses: staffTaughtCourses.size,
+      latestEndTime,
       busiestDay: Object.entries(
         scheduleData.reduce((acc, item) => {
           acc[item.Day] = (acc[item.Day] || 0) + 1;
@@ -1057,7 +1067,12 @@ const FacultyScheduleDashboard = () => {
             </div>
 
             <div className={cardClass}>
-              <h3 className="text-lg font-serif font-semibold text-baylor-green mb-4 border-b border-baylor-gold/30 pb-2">Hourly Room Usage</h3>
+              <h3 className="text-lg font-serif font-semibold text-baylor-green mb-4 border-b border-baylor-gold/30 pb-2">
+                Hourly Room Usage
+                <span className="text-sm font-normal text-baylor-green/80 ml-2">
+                  (Showing until {formatMinutesToTime(departmentInsights.latestEndTime)})
+                </span>
+              </h3>
               <div className="space-y-2">
                 {Object.entries(departmentInsights.hourCounts).map(([hour, count]) => {
                   const maxCount = Math.max(...Object.values(departmentInsights.hourCounts));

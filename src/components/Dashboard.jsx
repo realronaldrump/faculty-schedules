@@ -14,39 +14,22 @@ import {
   Settings
 } from 'lucide-react';
 
-const Dashboard = ({ scheduleData, facultyData, editHistory, onNavigate }) => {
-  // Calculate key metrics
+const Dashboard = ({ analytics, editHistory, onNavigate }) => {
+
+  // Metrics are now derived from the centralized 'analytics' prop
   const metrics = useMemo(() => {
-    if (!scheduleData.length) return null;
-
-    const uniqueInstructors = [...new Set(scheduleData.map(item => item.Instructor))];
-    const facultyCount = uniqueInstructors.filter(i => i !== 'Staff').length;
-    const staffTaughtCourses = scheduleData.filter(item => item.Instructor.includes('Staff')).length;
-    const uniqueRooms = [...new Set(scheduleData.map(item => item.Room).filter(Boolean))];
-    const totalSessions = scheduleData.length;
-    const uniqueCourses = [...new Set(scheduleData.map(item => item.Course))].length;
-    
-    // Calculate busiest day
-    const dayStats = {};
-    scheduleData.forEach(item => {
-      dayStats[item.Day] = (dayStats[item.Day] || 0) + 1;
-    });
-    const busiestDay = Object.entries(dayStats).reduce((max, [day, count]) => 
-      count > max.count ? { day, count } : max, { day: '', count: 0 });
-
-    // Recent changes
-    const recentChanges = editHistory.slice(0, 5);
+    if (!analytics) return null;
 
     return {
-      facultyCount,
-      staffTaughtCourses,
-      roomsInUse: uniqueRooms.length,
-      totalSessions,
-      uniqueCourses,
-      busiestDay,
-      recentChanges
+      facultyCount: analytics.facultyCount,
+      staffTaughtCourses: analytics.staffTaughtSessions,
+      roomsInUse: analytics.roomsInUse,
+      totalSessions: analytics.totalSessions,
+      uniqueCourses: analytics.uniqueCourses,
+      busiestDay: analytics.busiestDay,
+      recentChanges: editHistory.slice(0, 5)
     };
-  }, [scheduleData, editHistory]);
+  }, [analytics, editHistory]);
 
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
 

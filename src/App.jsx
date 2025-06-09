@@ -134,6 +134,99 @@ function App() {
     }));
   }, [rawScheduleData, lookupMaps]);
 
+  // Centralized Analytics Calculation
+  const departmentAnalytics = useMemo(() => {
+    if (scheduleData.length === 0) return null;
+
+    const parseTime = (timeStr) => {
+        if (!timeStr) return null;
+        const cleaned = timeStr.toLowerCase().replace(/\s+/g, '');
+        let hour, minute, ampm;
+        if (cleaned.includes(':')) {
+            const parts = cleaned.split(':');
+            hour = parseInt(parts[0]);
+            minute = parseInt(parts[1].replace(/[^\d]/g, ''));
+            ampm = cleaned.includes('pm') ? 'pm' : 'am';
+        } else {
+            const match = cleaned.match(/(\d+)(am|pm)/);
+            if (match) { hour = parseInt(match[1]); minute = 0; ampm = match[2]; } else return null;
+        }
+        if (ampm === 'pm' && hour !== 12) hour += 12;
+        if (ampm === 'am' && hour === 12) hour = 0;
+        return hour * 60 + (minute || 0);
+    };
+
+    const uniqueRoomsList = [...new Set(scheduleData.map(item => item.Room).filter(Boolean))].filter(room => room.toLowerCase() !== 'online').sort();
+    const roomsInUse = uniqueRoomsList.length;
+
+    const allInstructors = [...new Set(scheduleData.map(item => item.Instructor))];
+    const facultyCount = allInstructors.filter(i => i && i !== 'Staff').length;
+
+    const facultyWorkload = {};
+    const roomUtilization = {};
+    uniqueRoomsList.forEach(room => { roomUtilization[room] = { classes: 0, hours: 0, staffTaughtClasses: 0 }; });
+
+    const processedSessions = new Set();
+    const dayStats = {};
+    
+    scheduleData.forEach(item => {
+        const instructor = item.Instructor.includes('Staff') ? 'Staff' : item.Instructor;
+        const start = parseTime(item['Start Time']);
+        const end = parseTime(item['End Time']);
+        const duration = (start !== null && end !== null) ? (end - start) / 60 : 0;
+        
+        if (roomUtilization[item.Room]) {
+            roomUtilization[item.Room].classes++;
+            roomUtilization[item.Room].hours += duration;
+            if (instructor === 'Staff') roomUtilization[item.Room].staffTaughtClasses++;
+        }
+
+        const sessionKey = `${item.Instructor}-${item.Course}-${item.Day}-${item['Start Time']}-${item['End Time']}`;
+        // This logic ensures we count unique class sessions, not just rows in the CSV/DB
+        if (!processedSessions.has(sessionKey)) {
+            processedSessions.add(sessionKey);
+
+            dayStats[item.Day] = (dayStats[item.Day] || 0) + 1;
+
+            if (instructor !== 'Staff') {
+                if (!facultyWorkload[instructor]) {
+                    facultyWorkload[instructor] = { courseSet: new Set(), totalHours: 0 };
+                }
+                facultyWorkload[instructor].courseSet.add(item.Course);
+                facultyWorkload[instructor].totalHours += duration;
+            }
+        }
+    });
+
+    const finalFacultyWorkload = Object.fromEntries(
+        Object.entries(facultyWorkload).map(([instructor, data]) => [
+            instructor,
+            { courses: data.courseSet.size, totalHours: data.totalHours }
+        ])
+    );
+    
+    const totalSessions = processedSessions.size;
+    const staffTaughtSessions = scheduleData.filter(s => s.Instructor.includes('Staff')).length;
+
+    const busiestDay = Object.entries(dayStats).reduce((max, [day, count]) => 
+        count > max.count ? { day, count } : max, { day: '', count: 0 });
+
+    const uniqueCourses = [...new Set(scheduleData.map(item => item.Course))].length;
+
+    return {
+      facultyCount,
+      staffTaughtSessions,
+      roomsInUse,
+      totalSessions,
+      uniqueCourses,
+      busiestDay,
+      facultyWorkload: finalFacultyWorkload,
+      roomUtilization,
+      uniqueRooms: uniqueRoomsList,
+      uniqueInstructors: allInstructors,
+    };
+}, [scheduleData]);
+
   // Directory data with source tracking
   const { facultyDirectoryData, staffDirectoryData } = useMemo(() => {
     const facultyWithSource = rawFaculty.map(f => ({ ...f, sourceCollection: 'faculty' }));
@@ -556,7 +649,7 @@ function App() {
       onRevertChange: handleRevertChange,
       loading,
       onNavigate: setCurrentPage,
-      // Add lookup maps for components that need them
+      analytics: departmentAnalytics,
       lookupMaps
     };
 

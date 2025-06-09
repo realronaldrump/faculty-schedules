@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
 
-const DepartmentInsights = ({ scheduleData, facultyData, onNavigate }) => {
+const DepartmentInsights = ({ scheduleData, facultyData, onNavigate, analytics }) => {
   const [showWarning, setShowWarning] = useState(() => localStorage.getItem('insightsWarningDismissed') !== 'true');
   const [facultySort, setFacultySort] = useState({ key: 'totalHours', direction: 'desc' });
   const [roomSort, setRoomSort] = useState({ key: 'hours', direction: 'desc' });
@@ -22,7 +22,7 @@ const DepartmentInsights = ({ scheduleData, facultyData, onNavigate }) => {
 
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
 
-  // Parse time utility
+  // Utility functions
   const parseTime = (timeStr) => {
     if (!timeStr) return null;
     const cleaned = timeStr.toLowerCase().replace(/\s+/g, '');
@@ -53,74 +53,7 @@ const DepartmentInsights = ({ scheduleData, facultyData, onNavigate }) => {
     return `${displayHour}:${m.toString().padStart(2, '0')} ${ampm}`;
   };
 
-  // Get unique data
-  const uniqueInstructors = useMemo(() => 
-    [...new Set(scheduleData.map(item => item.Instructor.includes('Staff') ? 'Staff' : item.Instructor))].sort(),
-    [scheduleData]
-  );
-
-  const uniqueRooms = useMemo(() => 
-    [...new Set(scheduleData.map(item => item.Room).filter(Boolean))].filter(room => room.toLowerCase() !== 'online').sort(),
-    [scheduleData]
-  );
-
-  // Calculate department insights
-  const departmentInsights = useMemo(() => {
-    if (scheduleData.length === 0) return null;
-    
-    const facultyWorkload = {};
-    const staffTaughtCourses = new Set();
-    const roomUtilization = {};
-    const processedSessions = new Set();
-    
-    uniqueRooms.forEach(room => {
-      roomUtilization[room] = { classes: 0, hours: 0, staffTaughtClasses: 0 };
-    });
-    
-    scheduleData.forEach(item => {
-      const instructor = item.Instructor.includes('Staff') ? 'Staff' : item.Instructor;
-      const start = parseTime(item['Start Time']);
-      const end = parseTime(item['End Time']);
-      const duration = (start && end) ? (end - start) / 60 : 0;
-      
-      if (roomUtilization[item.Room]) {
-        roomUtilization[item.Room].classes++;
-        roomUtilization[item.Room].hours += duration;
-        if (instructor === 'Staff') roomUtilization[item.Room].staffTaughtClasses++;
-      }
-      
-      const sessionKey = `${item.Instructor}-${item.Course}-${item.Day}-${item['Start Time']}-${item['End Time']}`;
-      if (processedSessions.has(sessionKey)) return;
-      processedSessions.add(sessionKey);
-      
-      if (instructor === 'Staff') {
-        staffTaughtCourses.add(item.Course);
-        return;
-      }
-      
-      if (!facultyWorkload[instructor]) {
-        facultyWorkload[instructor] = { courseSet: new Set(), totalHours: 0 };
-      }
-      facultyWorkload[instructor].courseSet.add(item.Course);
-      facultyWorkload[instructor].totalHours += duration;
-    });
-    
-    const finalFacultyWorkload = Object.fromEntries(
-      Object.entries(facultyWorkload).map(([instructor, data]) => [
-        instructor,
-        { courses: data.courseSet.size, totalHours: data.totalHours }
-      ])
-    );
-    
-    return {
-      facultyWorkload: finalFacultyWorkload,
-      roomUtilization,
-      totalClassSessions: processedSessions.size,
-      staffTaughtCourses: staffTaughtCourses.size
-    };
-  }, [scheduleData, uniqueRooms]);
-
-  // Calculate hourly usage
+  // Calculate hourly usage (specific to this component)
   const filteredHourCounts = useMemo(() => {
     const dataToProcess = hourlyUsageDayFilter === 'All' 
       ? scheduleData 
@@ -163,11 +96,11 @@ const DepartmentInsights = ({ scheduleData, facultyData, onNavigate }) => {
     return { hourCounts, latestEndTime, peakHour };
   }, [scheduleData, hourlyUsageDayFilter]);
 
-  // Sort faculty workload
+  // Sort faculty workload from the analytics prop
   const sortedFacultyWorkload = useMemo(() => {
-    if (!departmentInsights) return [];
+    if (!analytics || !analytics.facultyWorkload) return [];
     const { key, direction } = facultySort;
-    return Object.entries(departmentInsights.facultyWorkload).sort(([profA, dataA], [profB, dataB]) => {
+    return Object.entries(analytics.facultyWorkload).sort(([profA, dataA], [profB, dataB]) => {
       let valA, valB;
       if (key === 'name') {
         valA = profA;
@@ -180,13 +113,13 @@ const DepartmentInsights = ({ scheduleData, facultyData, onNavigate }) => {
       if (valA > valB) return direction === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [departmentInsights, facultySort]);
+  }, [analytics, facultySort]);
 
-  // Sort room utilization
+  // Sort room utilization from the analytics prop
   const sortedRoomUtilization = useMemo(() => {
-    if (!departmentInsights) return [];
+    if (!analytics || !analytics.roomUtilization) return [];
     const { key, direction } = roomSort;
-    return Object.entries(departmentInsights.roomUtilization).sort(([roomA, dataA], [roomB, dataB]) => {
+    return Object.entries(analytics.roomUtilization).sort(([roomA, dataA], [roomB, dataB]) => {
       let valA, valB;
       if (key === 'name') {
         valA = roomA;
@@ -199,7 +132,7 @@ const DepartmentInsights = ({ scheduleData, facultyData, onNavigate }) => {
       if (valA > valB) return direction === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [departmentInsights, roomSort]);
+  }, [analytics, roomSort]);
 
   // Event handlers
   const handleFacultySort = (key) => {
@@ -234,7 +167,7 @@ const DepartmentInsights = ({ scheduleData, facultyData, onNavigate }) => {
     );
   };
 
-  if (!departmentInsights) {
+  if (!analytics) {
     return (
       <div className="space-y-6">
         <div>
@@ -298,7 +231,7 @@ const DepartmentInsights = ({ scheduleData, facultyData, onNavigate }) => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Faculty Members</p>
-              <p className="text-3xl font-bold text-baylor-green">{uniqueInstructors.filter(i => i !== 'Staff').length}</p>
+              <p className="text-3xl font-bold text-baylor-green">{analytics.facultyCount}</p>
               <p className="text-sm text-gray-500">Teaching this semester</p>
             </div>
             <div className="p-3 bg-baylor-green/10 rounded-lg">
@@ -311,8 +244,8 @@ const DepartmentInsights = ({ scheduleData, facultyData, onNavigate }) => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Weekly Sessions</p>
-              <p className="text-3xl font-bold text-baylor-green">{departmentInsights.totalClassSessions}</p>
-              <p className="text-sm text-gray-500">{departmentInsights.staffTaughtCourses} staff-taught</p>
+              <p className="text-3xl font-bold text-baylor-green">{analytics.totalSessions}</p>
+              <p className="text-sm text-gray-500">{analytics.staffTaughtSessions} staff-taught</p>
             </div>
             <div className="p-3 bg-baylor-green/10 rounded-lg">
               <BookOpen className="w-6 h-6 text-baylor-green" />
@@ -324,7 +257,7 @@ const DepartmentInsights = ({ scheduleData, facultyData, onNavigate }) => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Classrooms</p>
-              <p className="text-3xl font-bold text-baylor-green">{uniqueRooms.length}</p>
+              <p className="text-3xl font-bold text-baylor-green">{analytics.roomsInUse}</p>
               <p className="text-sm text-gray-500">In active use</p>
             </div>
             <div className="p-3 bg-baylor-green/10 rounded-lg">

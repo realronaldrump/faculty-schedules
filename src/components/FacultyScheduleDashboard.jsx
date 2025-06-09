@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Clock, Users, Calendar, X, ChevronDown, CheckCircle, ArrowUpDown, ChevronsUpDown, BarChart2, Eye, Edit, Save, Trash2, History, RotateCcw } from 'lucide-react';
+import { Search, Clock, Users, Calendar, X, ChevronDown, CheckCircle, ArrowUpDown, ChevronsUpDown, BarChart2, Eye, Edit, Save, Trash2, History, RotateCcw, Filter } from 'lucide-react';
+import MultiSelectDropdown from './MultiSelectDropdown'; // Import the new component
 
-// Custom Dropdown Component
+// Custom Dropdown Component (single select)
 const CustomDropdown = ({ value, onChange, options, placeholder, className }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -75,6 +76,8 @@ const FacultyScheduleDashboard = ({ scheduleData, editHistory, onDataUpdate, onR
   const [editingRowId, setEditingRowId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [historyVisible, setHistoryVisible] = useState(false);
+  const [filters, setFilters] = useState({ instructor: [], day: [], room: [], searchTerm: '' });
+  const [sortConfig, setSortConfig] = useState({ key: 'Instructor', direction: 'ascending' });
 
   // Modal States
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
@@ -273,6 +276,44 @@ const FacultyScheduleDashboard = ({ scheduleData, editHistory, onDataUpdate, onR
     });
   }, [departmentInsights, roomSort]);
 
+  const filteredAndSortedData = useMemo(() => {
+    let data = [...scheduleData];
+    // Apply text search filter
+    if (filters.searchTerm) {
+      const lowercasedFilter = filters.searchTerm.toLowerCase();
+      data = data.filter(item =>
+        (item.Course?.toLowerCase().includes(lowercasedFilter)) ||
+        (item['Course Title']?.toLowerCase().includes(lowercasedFilter))
+      );
+    }
+    // Apply multi-select filters
+    if (filters.instructor.length > 0) data = data.filter(item => filters.instructor.includes(item.Instructor));
+    if (filters.day.length > 0) data = data.filter(item => filters.day.includes(item.Day));
+    if (filters.room.length > 0) data = data.filter(item => filters.room.includes(item.Room));
+
+    // Apply sorting
+    if (sortConfig.key) {
+      data.sort((a, b) => {
+        const aVal = a[sortConfig.key];
+        const bVal = b[sortConfig.key];
+
+        const directionMultiplier = sortConfig.direction === 'ascending' ? 1 : -1;
+
+        // Custom sorting logic for specific columns
+        if (sortConfig.key === 'Day') {
+          const dayOrder = { M: 1, T: 2, W: 3, R: 4, F: 5 };
+          return ( (dayOrder[aVal] || 99) - (dayOrder[bVal] || 99) ) * directionMultiplier;
+        }
+        if (sortConfig.key === 'Start Time' || sortConfig.key === 'End Time') {
+          return ( (parseTime(aVal) || 0) - (parseTime(bVal) || 0) ) * directionMultiplier;
+        }
+        // Default string locale-aware sorting
+        return aVal.localeCompare(bVal) * directionMultiplier;
+      });
+    }
+    return data;
+  }, [scheduleData, filters, sortConfig]);
+
   // Event Handlers
   const toggleProfessor = (professor) => setSelectedProfessors(prev => prev.includes(professor) ? prev.filter(p => p !== professor) : [...prev, professor]);
   const findMeetingTimes = () => setShowResults(true);
@@ -339,16 +380,17 @@ const FacultyScheduleDashboard = ({ scheduleData, editHistory, onDataUpdate, onR
   };
 
   const handleFacultySort = (key) => setFacultySort(prev => ({ key, direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc' }));
-
-  const handleDismissWarning = () => {
-    setShowWarning(false);
-    localStorage.setItem('insightsWarningDismissed', 'true');
-  };
-
+  const handleDismissWarning = () => { setShowWarning(false); localStorage.setItem('insightsWarningDismissed', 'true'); };
   const handleEditClick = (row) => { setEditingRowId(row.id); setEditFormData(row); };
   const handleEditCancel = () => { setEditingRowId(null); setEditFormData({}); };
   const handleEditSave = () => { onDataUpdate(editFormData); setEditingRowId(null); };
   const handleEditFormChange = (e) => setEditFormData({ ...editFormData, [e.target.name]: e.target.value });
+  const handleSort = (key) => {
+    setSortConfig(prev => ({
+        key,
+        direction: prev.key === key && prev.direction === 'ascending' ? 'descending' : 'ascending'
+    }));
+  };
 
   // Sub-components for rendering
   const SortableHeader = ({ label, sortKey, currentSort, onSort }) => {
@@ -391,6 +433,18 @@ const FacultyScheduleDashboard = ({ scheduleData, editHistory, onDataUpdate, onR
       <thead className="sticky top-0 bg-white shadow-sm"><tr>{columns.map(col => <th key={col.key} className="px-4 py-3 text-left font-serif font-semibold text-baylor-green bg-baylor-green/5">{col.label}</th>)}</tr></thead>
       <tbody className="divide-y divide-gray-200">{data.map((row, index) => <tr key={index} className="hover:bg-baylor-green/5">{columns.map(col => <td key={col.key} className="px-4 py-3 text-gray-700">{row[col.key]}</td>)}</tr>)}</tbody>
     </table> : <div className="text-center py-12 text-gray-500"><p className="text-lg">No detailed data to display.</p></div>)}</div><div className="mt-6 text-right flex-shrink-0"><button onClick={() => setIsDrillDownModalOpen(false)} className={secondaryButtonClass}>Close</button></div></div></div>;
+  };
+
+  const DataTableHeader = ({ columnKey, label }) => {
+    const isSorted = sortConfig.key === columnKey;
+    return (
+        <th className="px-2 py-3 text-left font-serif font-semibold text-baylor-green">
+            <button className="flex items-center gap-1" onClick={() => handleSort(columnKey)}>
+                {label}
+                {isSorted ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : <ChevronsUpDown size={14} className="text-gray-400" />}
+            </button>
+        </th>
+    );
   };
   
   if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-gray-600 text-xl">Loading faculty schedules...</div></div>;
@@ -549,6 +603,20 @@ const FacultyScheduleDashboard = ({ scheduleData, editHistory, onDataUpdate, onR
                 {historyVisible ? 'Hide' : 'Show'} Change History ({editHistory.length})
               </button>
             </div>
+            
+            {/* NEW: Filter section */}
+            <div className="p-4 mb-4 bg-gray-50 rounded-lg border">
+                <h3 className="font-serif font-semibold text-baylor-green mb-3 flex items-center"><Filter size={16} className="mr-2"/>Filters</h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <MultiSelectDropdown options={uniqueInstructors} selected={filters.instructor} onChange={(s) => setFilters({...filters, instructor: s})} placeholder="Filter by Instructor..." />
+                    <MultiSelectDropdown options={Object.keys(dayNames)} selected={filters.day} onChange={(s) => setFilters({...filters, day: s})} placeholder="Filter by Day..." />
+                    <MultiSelectDropdown options={uniqueRooms} selected={filters.room} onChange={(s) => setFilters({...filters, room: s})} placeholder="Filter by Room..." />
+                    <div className="relative">
+                        <input type="text" value={filters.searchTerm} onChange={(e) => setFilters({...filters, searchTerm: e.target.value})} className={`${inputClass} pl-10`} placeholder="Search Course/Title..." />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    </div>
+                </div>
+            </div>
 
             {historyVisible && (
               <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
@@ -582,11 +650,18 @@ const FacultyScheduleDashboard = ({ scheduleData, editHistory, onDataUpdate, onR
               <table className="w-full text-sm">
                 <thead className="bg-baylor-green/5">
                   <tr>
-                    {['Instructor', 'Course', 'Course Title', 'Day', 'Start Time', 'End Time', 'Room', ''].map(h => <th key={h} className="px-2 py-3 text-left font-serif font-semibold text-baylor-green">{h}</th>)}
+                    <DataTableHeader columnKey="Instructor" label="Instructor" />
+                    <DataTableHeader columnKey="Course" label="Course" />
+                    <DataTableHeader columnKey="Course Title" label="Course Title" />
+                    <DataTableHeader columnKey="Day" label="Day" />
+                    <DataTableHeader columnKey="Start Time" label="Start Time" />
+                    <DataTableHeader columnKey="End Time" label="End Time" />
+                    <DataTableHeader columnKey="Room" label="Room" />
+                    <th className="px-2 py-3"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {scheduleData.map(row => (
+                  {filteredAndSortedData.map(row => (
                     <tr key={row.id} className="hover:bg-gray-50">
                       {editingRowId === row.id ? (
                         <>

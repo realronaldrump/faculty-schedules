@@ -468,7 +468,7 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
     <div>
       <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-6 border border-gray-200">
         <div className="flex flex-wrap">
-          {[ { id: 'group', label: 'Group Meetings', icon: Users }, { id: 'individual', label: 'Individual Availability', icon: Calendar }, { id: 'rooms', label: 'Room Schedule', icon: Search }, { id: 'insights', label: 'Department Insights', icon: BarChart2 }, { id: 'data', label: 'Data Management', icon: Edit }, { id: 'directory', label: 'Faculty Directory', icon: BookUser } ].map(tab => {
+          {[ { id: 'group', label: 'Group Meetings', icon: Users }, { id: 'individual', label: 'Individual Availability', icon: Calendar }, { id: 'rooms', label: 'Room Schedule', icon: Search }, { id: 'insights', label: 'Department Insights', icon: BarChart2 }, { id: 'data', label: 'Course List', icon: Edit }, { id: 'directory', label: 'Faculty Directory', icon: BookUser } ].map(tab => {
             const Icon = tab.icon;
             return <button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowResults(false); }} className={`${activeTab === tab.id ? activeTabClass : inactiveTabClass} flex-grow`}><Icon className="mr-2 inline-block" size={16} />{tab.label}</button>;
           })}
@@ -607,7 +607,7 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
         {activeTab === 'data' && (
           <div className={cardClass}>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 border-b border-baylor-gold pb-2 gap-4">
-              <h2 className="text-xl font-serif font-semibold text-baylor-green">Manage Schedule Data</h2>
+              <h2 className="text-xl font-serif font-semibold text-baylor-green">Course List</h2>
               <button onClick={() => setHistoryVisible(!historyVisible)} className={`${secondaryButtonClass} text-sm flex items-center`}>
                 <History size={16} className="mr-2" />
                 {historyVisible ? 'Hide' : 'Show'} Change History ({editHistory.length})

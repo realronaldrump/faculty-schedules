@@ -17,3 +17,4 @@ firebase-service-account.json
 # Environment variables
 .env
 .env.*
+import-data.js

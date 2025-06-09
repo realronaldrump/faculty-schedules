@@ -3,22 +3,21 @@ import FacultyScheduleDashboard from './components/FacultyScheduleDashboard';
 import SystemsPage from './components/SystemsPage';
 import Login from './components/Login';
 import { Settings } from 'lucide-react';
-import { db } from './firebase'; // Import the firestore instance
+import { db } from './firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, query, orderBy } from 'firebase/firestore';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
-
+  
   const [scheduleData, setScheduleData] = useState([]);
   const [editHistory, setEditHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Load data from Firestore on initial mount
+  // This effect runs only when `isAuthenticated` changes to true
   useEffect(() => {
     const loadData = async () => {
-      if (!isAuthenticated) return;
       setLoading(true);
       try {
         // Fetch schedule data
@@ -33,15 +32,37 @@ function App() {
         setEditHistory(history);
 
       } catch (error) {
-        console.error("Failed to load data from Firestore:", error);
+        console.error("Firestore Read Error:", error);
+        alert("Could not load data from the database. This is likely a Firestore security rule issue.");
       }
       setLoading(false);
     };
 
-    loadData();
+    if (isAuthenticated) {
+      loadData();
+    } else {
+      // If user logs out, clear data and stop loading
+      setScheduleData([]);
+      setEditHistory([]);
+      setLoading(false);
+    }
   }, [isAuthenticated]);
 
-  // Handler to process a data update and save to Firestore
+  // This effect runs once on initial page load to check for existing login
+  useEffect(() => {
+    const checkAuthStatus = () => {
+      setLoading(true);
+      const auth = localStorage.getItem('isAuthenticated');
+      if (auth === 'true') {
+        setIsAuthenticated(true);
+      } else {
+        setLoading(false);
+      }
+    };
+    checkAuthStatus();
+  }, []);
+  
+
   const handleDataUpdate = async (updatedRow) => {
     const originalRow = scheduleData.find(r => r.id === updatedRow.id);
     const changes = [];
@@ -62,16 +83,13 @@ function App() {
 
     if (changes.length > 0) {
       try {
-        // Update the document in Firestore
         const scheduleDocRef = doc(db, 'schedules', updatedRow.id);
         await updateDoc(scheduleDocRef, updatedRow);
 
-        // Add each change as a new document to the history collection
         for (const change of changes) {
             await addDoc(collection(db, 'history'), change);
         }
 
-        // Optimistically update local state for immediate UI feedback
         const newData = scheduleData.map(row => row.id === updatedRow.id ? updatedRow : row);
         const newHistory = [...changes, ...editHistory];
         setScheduleData(newData);
@@ -83,18 +101,14 @@ function App() {
     }
   };
 
-  // Handler to revert a change
   const handleRevertChange = async (changeToRevert) => {
     const targetRow = scheduleData.find(row => row.id === changeToRevert.rowId);
     if (targetRow) {
       try {
         const revertedData = { [changeToRevert.field]: changeToRevert.oldValue };
-
-        // Update the document in Firestore
         const scheduleDocRef = doc(db, 'schedules', changeToRevert.rowId);
         await updateDoc(scheduleDocRef, revertedData);
         
-        // Log the revert action to history
         const revertHistoryLog = {
             rowId: changeToRevert.rowId,
             instructor: targetRow.Instructor,
@@ -107,7 +121,6 @@ function App() {
         };
         await addDoc(collection(db, 'history'), revertHistoryLog);
         
-        // Optimistically update local state
         const revertedRow = { ...targetRow, ...revertedData };
         const newData = scheduleData.map(row => (row.id === revertedRow.id ? revertedRow : row));
         const newHistory = [revertHistoryLog, ...editHistory];
@@ -121,13 +134,12 @@ function App() {
   };
 
   const handleLogin = (status) => {
-    setIsAuthenticated(status);
     if (status) {
         localStorage.setItem('isAuthenticated', 'true');
+        setIsAuthenticated(true);
     } else {
         localStorage.removeItem('isAuthenticated');
-        setScheduleData([]);
-        setEditHistory([]);
+        setIsAuthenticated(false);
     }
   };
 
@@ -138,13 +150,6 @@ function App() {
     setShowLogoutConfirm(false);
     setCurrentPage('dashboard');
   };
-  
-   useEffect(() => {
-    const auth = localStorage.getItem('isAuthenticated');
-    if (auth === 'true') {
-      setIsAuthenticated(true);
-    }
-  }, []);
 
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;

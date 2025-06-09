@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Edit, Save, X, BookUser, Mail, Phone, Building, Search, ArrowUpDown, Plus } from 'lucide-react';
+import { Edit, Save, X, Users, Mail, Phone, Building, Search, ArrowUpDown, Plus } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
 
 const formatPhoneNumber = (phoneStr) => {
@@ -14,21 +14,21 @@ const formatPhoneNumber = (phoneStr) => {
     return phoneStr;
 };
 
-const FacultyDirectory = ({ facultyData, onUpdate }) => {
+const StaffDirectory = ({ staffData, onUpdate }) => {
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [filterText, setFilterText] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'ascending' });
-  const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
+  const [selectedStaffForCard, setSelectedStaffForCard] = useState(null);
   const [errors, setErrors] = useState({});
   const [isCreating, setIsCreating] = useState(false);
-  const [newFaculty, setNewFaculty] = useState({
+  const [newStaff, setNewStaff] = useState({
     name: '',
     jobTitle: '',
     email: '',
     phone: '',
     office: '',
-    isAdjunct: false
+    isFullTime: true
   });
 
   const validate = (data) => {
@@ -49,10 +49,66 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleEdit = (faculty) => {
+  const handleCreate = () => {
+    setIsCreating(true);
+    setNewStaff({
+      name: '',
+      jobTitle: '',
+      email: '',
+      phone: '',
+      office: '',
+      isFullTime: true
+    });
+    setErrors({});
+  };
+
+  const handleCancelCreate = () => {
+    setIsCreating(false);
+    setNewStaff({
+      name: '',
+      jobTitle: '',
+      email: '',
+      phone: '',
+      office: '',
+      isFullTime: true
+    });
+    setErrors({});
+  };
+
+  const handleCreateChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    let finalValue = type === 'checkbox' ? checked : value;
+    
+    if (name === 'phone') {
+      finalValue = finalValue.replace(/\D/g, '');
+    }
+
+    setNewStaff(prev => ({
+      ...prev,
+      [name]: finalValue
+    }));
+
+    if (Object.keys(errors).length > 0) {
+      validate({ ...newStaff, [name]: finalValue });
+    }
+  };
+
+  const handleCreateSave = () => {
+    if (validate(newStaff)) {
+      const dataToSave = {
+        ...newStaff,
+        phone: (newStaff.phone || '').replace(/\D/g, '')
+      };
+      onUpdate(dataToSave);
+      setIsCreating(false);
+      setErrors({});
+    }
+  };
+
+  const handleEdit = (staff) => {
     setErrors({}); // Clear previous errors
-    setEditingId(faculty.id);
-    setEditFormData(faculty);
+    setEditingId(staff.id);
+    setEditFormData(staff);
   };
 
   const handleCancel = () => {
@@ -104,64 +160,8 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
     setSortConfig({ key, direction });
   };
   
-  const handleCreate = () => {
-    setIsCreating(true);
-    setNewFaculty({
-      name: '',
-      jobTitle: '',
-      email: '',
-      phone: '',
-      office: '',
-      isAdjunct: false
-    });
-    setErrors({});
-  };
-
-  const handleCancelCreate = () => {
-    setIsCreating(false);
-    setNewFaculty({
-      name: '',
-      jobTitle: '',
-      email: '',
-      phone: '',
-      office: '',
-      isAdjunct: false
-    });
-    setErrors({});
-  };
-
-  const handleCreateChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    let finalValue = type === 'checkbox' ? checked : value;
-    
-    if (name === 'phone') {
-      finalValue = finalValue.replace(/\D/g, '');
-    }
-
-    setNewFaculty(prev => ({
-      ...prev,
-      [name]: finalValue
-    }));
-
-    if (Object.keys(errors).length > 0) {
-      validate({ ...newFaculty, [name]: finalValue });
-    }
-  };
-
-  const handleCreateSave = () => {
-    if (validate(newFaculty)) {
-      const dataToSave = {
-        ...newFaculty,
-        phone: (newFaculty.phone || '').replace(/\D/g, '')
-      };
-      onUpdate(dataToSave);
-      setIsCreating(false);
-      setErrors({});
-    }
-  };
-  
   const sortedAndFilteredData = useMemo(() => {
-    let data = [...facultyData];
+    let data = [...staffData];
 
     if (filterText) {
       const lowercasedFilter = filterText.toLowerCase();
@@ -192,7 +192,7 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
     });
 
     return data;
-  }, [facultyData, filterText, sortConfig]);
+  }, [staffData, filterText, sortConfig]);
 
   const SortableHeader = ({ label, columnKey }) => {
     const isSorted = sortConfig.key === columnKey;
@@ -217,8 +217,8 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
     <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
       <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200">
           <h2 className="text-xl font-serif font-semibold text-baylor-green flex items-center">
-            <BookUser className="mr-2 text-baylor-gold" size={20} />
-            Faculty Directory
+            <Users className="mr-2 text-baylor-gold" size={20} />
+            Staff Directory
           </h2>
           <div className="flex items-center gap-4">
               <div className="relative">
@@ -236,7 +236,7 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
                 className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
               >
                 <Plus size={18} />
-                Add Faculty
+                Add Staff
               </button>
           </div>
       </div>
@@ -258,7 +258,7 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
                 <td className="p-2 align-top text-gray-700 font-medium">
                     <input
                       name="name"
-                      value={newFaculty.name}
+                      value={newStaff.name}
                       onChange={handleCreateChange}
                       className={getInputClass('name')}
                       placeholder="Full Name"
@@ -266,19 +266,19 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
                     <div className="flex items-center gap-2 text-xs mt-2">
                        <input
                          type="checkbox"
-                         id="new-adjunct"
-                         name="isAdjunct"
-                         checked={newFaculty.isAdjunct}
+                         id="new-fulltime"
+                         name="isFullTime"
+                         checked={newStaff.isFullTime}
                          onChange={handleCreateChange}
                          className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                        />
-                       <label htmlFor="new-adjunct" className="font-normal">Adjunct</label>
+                       <label htmlFor="new-fulltime" className="font-normal">Full Time</label>
                     </div>
                 </td>
                 <td className="p-2 align-top">
                     <input
                       name="jobTitle"
-                      value={newFaculty.jobTitle}
+                      value={newStaff.jobTitle}
                       onChange={handleCreateChange}
                       className={getInputClass('jobTitle')}
                       placeholder="Job Title"
@@ -287,7 +287,7 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
                 <td className="p-2 align-top">
                   <input
                     name="email"
-                    value={newFaculty.email}
+                    value={newStaff.email}
                     onChange={handleCreateChange}
                     className={getInputClass('email')}
                     placeholder="email@baylor.edu"
@@ -297,7 +297,7 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
                 <td className="p-2 align-top">
                   <input
                     name="phone"
-                    value={newFaculty.phone}
+                    value={newStaff.phone}
                     onChange={handleCreateChange}
                     className={getInputClass('phone')}
                     placeholder="10 digits"
@@ -308,7 +308,7 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
                 <td className="p-2 align-top">
                     <input
                       name="office"
-                      value={newFaculty.office}
+                      value={newStaff.office}
                       onChange={handleCreateChange}
                       className={getInputClass('office')}
                       placeholder="Building & Room"
@@ -322,15 +322,15 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
                 </td>
               </tr>
             )}
-            {sortedAndFilteredData.map(faculty => (
-              <tr key={faculty.id} className="hover:bg-gray-50" >
-                {editingId === faculty.id ? (
+            {sortedAndFilteredData.map(staff => (
+              <tr key={staff.id} className="hover:bg-gray-50" >
+                {editingId === staff.id ? (
                   <>
                     <td className="p-2 align-top text-gray-700 font-medium">
-                        <div className='mb-2'>{faculty.name}</div>
+                        <div className='mb-2'>{staff.name}</div>
                         <div className="flex items-center gap-2 text-xs">
-                           <input type="checkbox" id={`adjunct-${faculty.id}`} name="isAdjunct" checked={!!editFormData.isAdjunct} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
-                           <label htmlFor={`adjunct-${faculty.id}`} className="font-normal">Adjunct</label>
+                           <input type="checkbox" id={`fulltime-${staff.id}`} name="isFullTime" checked={!!editFormData.isFullTime} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+                           <label htmlFor={`fulltime-${staff.id}`} className="font-normal">Full Time</label>
                         </div>
                     </td>
                     <td className="p-2 align-top">
@@ -356,13 +356,13 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
                   </>
                 ) : (
                   <>
-                    <td className="px-4 py-3 text-gray-700 font-medium cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.name}</td>
-                    <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.jobTitle || '-'}</td>
-                    <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.email || '-'}</td>
-                    <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{formatPhoneNumber(faculty.phone)}</td>
-                    <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.office || '-'}</td>
+                    <td className="px-4 py-3 text-gray-700 font-medium cursor-pointer" onClick={() => setSelectedStaffForCard(staff)}>{staff.name}</td>
+                    <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedStaffForCard(staff)}>{staff.jobTitle || '-'}</td>
+                    <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedStaffForCard(staff)}>{staff.email || '-'}</td>
+                    <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedStaffForCard(staff)}>{formatPhoneNumber(staff.phone)}</td>
+                    <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedStaffForCard(staff)}>{staff.office || '-'}</td>
                     <td className="px-4 py-3 text-right">
-                      <button onClick={(e) => { e.stopPropagation(); handleEdit(faculty); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><Edit size={16} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleEdit(staff); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><Edit size={16} /></button>
                     </td>
                   </>
                 )}
@@ -371,9 +371,9 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
           </tbody>
         </table>
       </div>
-      {selectedFacultyForCard && <FacultyContactCard faculty={selectedFacultyForCard} onClose={() => setSelectedFacultyForCard(null)} />}
+      {selectedStaffForCard && <FacultyContactCard faculty={selectedStaffForCard} onClose={() => setSelectedStaffForCard(null)} />}
     </div>
   );
 };
 
-export default FacultyDirectory;
+export default StaffDirectory; 

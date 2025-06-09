@@ -5,6 +5,7 @@ import GroupMeetings from './components/scheduling/GroupMeetings.jsx';
 import IndividualAvailability from './components/scheduling/IndividualAvailability';
 import RoomSchedules from './components/scheduling/RoomSchedules';
 import FacultyDirectory from './components/FacultyDirectory';
+import StaffDirectory from './components/StaffDirectory';
 import DepartmentInsights from './components/analytics/DepartmentInsights.jsx';
 import CourseManagement from './components/analytics/CourseManagement';
 import DataImportPage from './components/DataImportPage';
@@ -22,6 +23,7 @@ function App() {
   
   const [scheduleData, setScheduleData] = useState([]);
   const [facultyData, setFacultyData] = useState([]);
+  const [staffData, setStaffData] = useState([]);
   const [editHistory, setEditHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -48,7 +50,8 @@ function App() {
       label: 'Directory',
       icon: Users,
       children: [
-        { id: 'faculty-directory', label: 'Faculty Directory', path: 'directory/faculty-directory' }
+        { id: 'faculty-directory', label: 'Faculty Directory', path: 'directory/faculty-directory' },
+        { id: 'staff-directory', label: 'Staff Directory', path: 'directory/staff-directory' }
       ]
     },
     {
@@ -103,6 +106,11 @@ function App() {
         }
         setFacultyData(facultyList);
 
+        // Fetch staff data
+        const staffSnapshot = await getDocs(collection(db, 'staff'));
+        const staffList = staffSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        setStaffData(staffList);
+
         // Fetch edit history
         const historyQuery = query(collection(db, "history"), orderBy("timestamp", "desc"));
         const historySnapshot = await getDocs(historyQuery);
@@ -121,6 +129,7 @@ function App() {
     } else {
       setScheduleData([]);
       setFacultyData([]);
+      setStaffData([]);
       setEditHistory([]);
       setLoading(false);
     }
@@ -181,13 +190,41 @@ function App() {
 
   const handleFacultyUpdate = async (updatedFaculty) => {
     try {
-        const facultyDocRef = doc(db, 'faculty', updatedFaculty.id);
-        await updateDoc(facultyDocRef, updatedFaculty);
-        
-        const newData = facultyData.map(faculty => faculty.id === updatedFaculty.id ? updatedFaculty : faculty);
-        setFacultyData(newData);
+        if (updatedFaculty.id) {
+            // Update existing faculty
+            const facultyDocRef = doc(db, 'faculty', updatedFaculty.id);
+            await updateDoc(facultyDocRef, updatedFaculty);
+            
+            const newData = facultyData.map(faculty => faculty.id === updatedFaculty.id ? updatedFaculty : faculty);
+            setFacultyData(newData);
+        } else {
+            // Create new faculty
+            const docRef = await addDoc(collection(db, 'faculty'), updatedFaculty);
+            const newFaculty = { ...updatedFaculty, id: docRef.id };
+            setFacultyData([...facultyData, newFaculty]);
+        }
     } catch (error) {
-        console.error("Error updating faculty member: ", error);
+        console.error("Error updating/creating faculty member: ", error);
+    }
+  };
+
+  const handleStaffUpdate = async (updatedStaff) => {
+    try {
+        if (updatedStaff.id) {
+            // Update existing staff
+            const staffDocRef = doc(db, 'staff', updatedStaff.id);
+            await updateDoc(staffDocRef, updatedStaff);
+            
+            const newData = staffData.map(staff => staff.id === updatedStaff.id ? updatedStaff : staff);
+            setStaffData(newData);
+        } else {
+            // Create new staff
+            const docRef = await addDoc(collection(db, 'staff'), updatedStaff);
+            const newStaff = { ...updatedStaff, id: docRef.id };
+            setStaffData([...staffData, newStaff]);
+        }
+    } catch (error) {
+        console.error("Error updating/creating staff member: ", error);
     }
   };
 
@@ -267,9 +304,11 @@ function App() {
     const commonProps = {
       scheduleData,
       facultyData,
+      staffData,
       editHistory,
       onDataUpdate: handleDataUpdate,
       onFacultyUpdate: handleFacultyUpdate,
+      onStaffUpdate: handleStaffUpdate,
       onRevertChange: handleRevertChange,
       loading,
       onNavigate: setCurrentPage
@@ -286,12 +325,14 @@ function App() {
         return <RoomSchedules {...commonProps} />;
       case 'directory/faculty-directory':
         return <FacultyDirectory facultyData={facultyData} onUpdate={handleFacultyUpdate} />;
+      case 'directory/staff-directory':
+        return <StaffDirectory staffData={staffData} onUpdate={handleStaffUpdate} />;
       case 'analytics/department-insights':
         return <DepartmentInsights {...commonProps} />;
       case 'analytics/course-management':
         return <CourseManagement {...commonProps} />;
       case 'administration/data-import':
-        return <DataImportPage onNavigate={setCurrentPage} facultyData={facultyData} onFacultyUpdate={handleFacultyUpdate} />;
+        return <DataImportPage onNavigate={setCurrentPage} facultyData={facultyData} staffData={staffData} onFacultyUpdate={handleFacultyUpdate} onStaffUpdate={handleStaffUpdate} />;
       case 'administration/baylor-systems':
         return <SystemsPage onNavigate={setCurrentPage} />;
       default:

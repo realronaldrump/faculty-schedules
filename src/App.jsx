@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import FacultyScheduleDashboard from './components/FacultyScheduleDashboard';
 import SystemsPage from './components/SystemsPage';
 import Login from './components/Login';
-import { Settings } from 'lucide-react';
+import { Settings, BookUser } from 'lucide-react';
 import { db } from './firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, query, orderBy } from 'firebase/firestore';
 
@@ -12,6 +12,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState('dashboard');
   
   const [scheduleData, setScheduleData] = useState([]);
+  const [facultyData, setFacultyData] = useState([]);
   const [editHistory, setEditHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -25,6 +26,27 @@ function App() {
         const schedules = scheduleSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
         setScheduleData(schedules);
 
+        // Fetch or create faculty data
+        let facultyList = [];
+        const facultySnapshot = await getDocs(collection(db, 'faculty'));
+        if (facultySnapshot.empty) {
+            // If faculty collection is empty, create it from schedule data
+            const uniqueInstructors = [...new Set(schedules.map(item => item.Instructor))];
+            const facultyToCreate = uniqueInstructors.map(name => ({
+                name,
+                isAdjunct: false,
+                email: '',
+                phone: '',
+            }));
+            for (const faculty of facultyToCreate) {
+                const docRef = await addDoc(collection(db, 'faculty'), faculty);
+                facultyList.push({ ...faculty, id: docRef.id });
+            }
+        } else {
+            facultyList = facultySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        }
+        setFacultyData(facultyList);
+
         // Fetch edit history, ordered by timestamp
         const historyQuery = query(collection(db, "history"), orderBy("timestamp", "desc"));
         const historySnapshot = await getDocs(historyQuery);
@@ -32,8 +54,8 @@ function App() {
         setEditHistory(history);
 
       } catch (error) {
-        console.error("Firestore Read Error:", error);
-        alert("Could not load data from the database. This is likely a Firestore security rule issue.");
+        console.error("Firestore Read/Write Error:", error);
+        alert("Could not load or initialize data from the database. This is likely a Firestore security rule issue.");
       }
       setLoading(false);
     };
@@ -43,6 +65,7 @@ function App() {
     } else {
       // If user logs out, clear data and stop loading
       setScheduleData([]);
+      setFacultyData([]);
       setEditHistory([]);
       setLoading(false);
     }
@@ -98,6 +121,18 @@ function App() {
       } catch (error) {
         console.error("Error updating document: ", error);
       }
+    }
+  };
+
+  const handleFacultyUpdate = async (updatedFaculty) => {
+    try {
+        const facultyDocRef = doc(db, 'faculty', updatedFaculty.id);
+        await updateDoc(facultyDocRef, updatedFaculty);
+        
+        const newData = facultyData.map(faculty => faculty.id === updatedFaculty.id ? updatedFaculty : faculty);
+        setFacultyData(newData);
+    } catch (error) {
+        console.error("Error updating faculty member: ", error);
     }
   };
 
@@ -190,8 +225,10 @@ function App() {
           <div className="container mx-auto px-4 py-6">
             <FacultyScheduleDashboard 
               scheduleData={scheduleData}
+              facultyData={facultyData}
               editHistory={editHistory}
               onDataUpdate={handleDataUpdate}
+              onFacultyUpdate={handleFacultyUpdate}
               onRevertChange={handleRevertChange}
               loading={loading}
               onNavigate={setCurrentPage}

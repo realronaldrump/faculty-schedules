@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Clock, Users, Calendar, X, ChevronDown, CheckCircle, ArrowUpDown, ChevronsUpDown, BarChart2, Eye, Edit, Save, Trash2, History, RotateCcw, Filter } from 'lucide-react';
+import { Search, Clock, Users, Calendar, X, ChevronDown, CheckCircle, ArrowUpDown, ChevronsUpDown, BarChart2, Eye, Edit, Save, Trash2, History, RotateCcw, Filter, BookUser } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown'; // Import the new component
+import FacultyDirectory from './FacultyDirectory';
 
 // Custom Dropdown Component (single select)
 const CustomDropdown = ({ value, onChange, options, placeholder, className }) => {
@@ -54,7 +55,7 @@ const CustomDropdown = ({ value, onChange, options, placeholder, className }) =>
   );
 };
 
-const FacultyScheduleDashboard = ({ scheduleData, editHistory, onDataUpdate, onRevertChange, loading, onNavigate }) => {
+const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDataUpdate, onFacultyUpdate, onRevertChange, loading, onNavigate }) => {
   // Core State
   const [activeTab, setActiveTab] = useState('group');
   const [showWarning, setShowWarning] = useState(() => localStorage.getItem('insightsWarningDismissed') !== 'true');
@@ -314,6 +315,15 @@ const FacultyScheduleDashboard = ({ scheduleData, editHistory, onDataUpdate, onR
     return data;
   }, [scheduleData, filters, sortConfig]);
 
+  const uniqueInstructorsWithDetails = useMemo(() => {
+    const instructorsFromSchedule = [...new Set(scheduleData.map(item => item.Instructor))];
+    const facultyWithDetails = instructorsFromSchedule.map(name => {
+      const details = facultyData.find(f => f.name === name);
+      return details || { id: name, name, isAdjunct: false, email: '', phone: '' };
+    });
+    return facultyWithDetails.sort((a,b) => a.name.localeCompare(b.name));
+  }, [scheduleData, facultyData]);
+
   // Event Handlers
   const toggleProfessor = (professor) => setSelectedProfessors(prev => prev.includes(professor) ? prev.filter(p => p !== professor) : [...prev, professor]);
   const findMeetingTimes = () => setShowResults(true);
@@ -458,7 +468,7 @@ const FacultyScheduleDashboard = ({ scheduleData, editHistory, onDataUpdate, onR
     <div>
       <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-6 border border-gray-200">
         <div className="flex flex-wrap">
-          {[ { id: 'group', label: 'Group Meetings', icon: Users }, { id: 'individual', label: 'Individual Availability', icon: Calendar }, { id: 'rooms', label: 'Room Schedule', icon: Search }, { id: 'insights', label: 'Department Insights', icon: BarChart2 }, { id: 'data', label: 'Data Management', icon: Edit } ].map(tab => {
+          {[ { id: 'group', label: 'Group Meetings', icon: Users }, { id: 'individual', label: 'Individual Availability', icon: Calendar }, { id: 'rooms', label: 'Room Schedule', icon: Search }, { id: 'insights', label: 'Department Insights', icon: BarChart2 }, { id: 'data', label: 'Data Management', icon: Edit }, { id: 'directory', label: 'Faculty Directory', icon: BookUser } ].map(tab => {
             const Icon = tab.icon;
             return <button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowResults(false); }} className={`${activeTab === tab.id ? activeTabClass : inactiveTabClass} flex-grow`}><Icon className="mr-2 inline-block" size={16} />{tab.label}</button>;
           })}
@@ -699,6 +709,9 @@ const FacultyScheduleDashboard = ({ scheduleData, editHistory, onDataUpdate, onR
               </table>
             </div>
           </div>
+        )}
+        {activeTab === 'directory' && (
+            <FacultyDirectory facultyData={uniqueInstructorsWithDetails} onUpdate={onFacultyUpdate} />
         )}
       </div>
 

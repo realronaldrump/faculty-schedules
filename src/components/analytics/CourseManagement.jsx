@@ -1,9 +1,16 @@
 import React, { useState, useMemo } from 'react';
-import { Edit, Save, X, History, RotateCcw, Filter, Search, ChevronsUpDown } from 'lucide-react';
+import { Edit, Save, X, History, RotateCcw, Filter, Search, ChevronsUpDown, Plus, Trash2 } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import FacultyContactCard from '../FacultyContactCard';
 
-const CourseManagement = ({ scheduleData, facultyData, editHistory, onDataUpdate, onRevertChange }) => {
+const CourseManagement = ({ 
+  scheduleData, 
+  facultyData, 
+  editHistory, 
+  onDataUpdate, 
+  onRevertChange, 
+  lookupMaps 
+}) => {
   const [editingRowId, setEditingRowId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [historyVisible, setHistoryVisible] = useState(false);
@@ -11,7 +18,7 @@ const CourseManagement = ({ scheduleData, facultyData, editHistory, onDataUpdate
   const [sortConfig, setSortConfig] = useState({ key: 'Instructor', direction: 'ascending' });
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
 
-  // Get unique values for filters
+  // Get unique values for filters (using display names)
   const uniqueInstructors = useMemo(() => 
     [...new Set(scheduleData.map(item => item.Instructor))].sort(),
     [scheduleData]
@@ -56,7 +63,8 @@ const CourseManagement = ({ scheduleData, facultyData, editHistory, onDataUpdate
       const lowercasedFilter = filters.searchTerm.toLowerCase();
       data = data.filter(item =>
         (item.Course?.toLowerCase().includes(lowercasedFilter)) ||
-        (item['Course Title']?.toLowerCase().includes(lowercasedFilter))
+        (item['Course Title']?.toLowerCase().includes(lowercasedFilter)) ||
+        (item.Instructor?.toLowerCase().includes(lowercasedFilter))
       );
     }
     
@@ -94,10 +102,36 @@ const CourseManagement = ({ scheduleData, facultyData, editHistory, onDataUpdate
     return data;
   }, [scheduleData, filters, sortConfig]);
 
+  // Validation function for schedule data
+  const validateScheduleData = (data) => {
+    const errors = [];
+    
+    if (!data.Course || data.Course.trim() === '') {
+      errors.push('Course code is required');
+    }
+    
+    if (!data.Day || !['M', 'T', 'W', 'R', 'F'].includes(data.Day)) {
+      errors.push('Valid day is required (M, T, W, R, F)');
+    }
+    
+    if (!data['Start Time'] || !data['End Time']) {
+      errors.push('Start time and end time are required');
+    }
+    
+    const startTime = parseTime(data['Start Time']);
+    const endTime = parseTime(data['End Time']);
+    
+    if (startTime && endTime && startTime >= endTime) {
+      errors.push('End time must be after start time');
+    }
+    
+    return errors;
+  };
+
   // Event handlers
   const handleEditClick = (row) => {
     setEditingRowId(row.id);
-    setEditFormData(row);
+    setEditFormData({ ...row });
   };
 
   const handleEditCancel = () => {
@@ -106,12 +140,21 @@ const CourseManagement = ({ scheduleData, facultyData, editHistory, onDataUpdate
   };
 
   const handleEditSave = () => {
+    const errors = validateScheduleData(editFormData);
+    
+    if (errors.length > 0) {
+      alert('Validation errors:\n' + errors.join('\n'));
+      return;
+    }
+    
     onDataUpdate(editFormData);
     setEditingRowId(null);
+    setEditFormData({});
   };
 
   const handleEditFormChange = (e) => {
-    setEditFormData({ ...editFormData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setEditFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSort = (key) => {
@@ -125,6 +168,14 @@ const CourseManagement = ({ scheduleData, facultyData, editHistory, onDataUpdate
     const faculty = facultyData.find(f => f.name === facultyName);
     if (faculty) {
       setSelectedFacultyForCard(faculty);
+    }
+  };
+
+  const handleDeleteSchedule = (scheduleId) => {
+    if (window.confirm('Are you sure you want to delete this schedule entry? This action cannot be undone.')) {
+      // Note: You'll need to implement this in your App.jsx
+      console.log('Delete schedule:', scheduleId);
+      // onDeleteSchedule(scheduleId);
     }
   };
 
@@ -144,12 +195,60 @@ const CourseManagement = ({ scheduleData, facultyData, editHistory, onDataUpdate
     );
   };
 
+  // Get course statistics
+  const courseStats = useMemo(() => {
+    const stats = {
+      totalSessions: scheduleData.length,
+      uniqueCourses: new Set(scheduleData.map(s => s.Course)).size,
+      uniqueInstructors: new Set(scheduleData.map(s => s.Instructor)).size,
+      staffTaughtSessions: scheduleData.filter(s => s.Instructor === 'Staff').length
+    };
+    
+    // Calculate busiest day
+    const dayCount = {};
+    scheduleData.forEach(s => {
+      dayCount[s.Day] = (dayCount[s.Day] || 0) + 1;
+    });
+    
+    const busiestDay = Object.entries(dayCount).reduce((max, [day, count]) => 
+      count > max.count ? { day, count } : max, { day: '', count: 0 });
+    
+    stats.busiestDay = busiestDay;
+    return stats;
+  }, [scheduleData]);
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Course Management</h1>
-        <p className="text-gray-600">View and edit course schedule information</p>
+        <p className="text-gray-600">View, edit, and manage course schedule information</p>
+      </div>
+
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="text-sm text-gray-600">Total Sessions</div>
+          <div className="text-2xl font-bold text-baylor-green">{courseStats.totalSessions}</div>
+          <div className="text-xs text-gray-500">weekly class sessions</div>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="text-sm text-gray-600">Unique Courses</div>
+          <div className="text-2xl font-bold text-baylor-green">{courseStats.uniqueCourses}</div>
+          <div className="text-xs text-gray-500">different course offerings</div>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="text-sm text-gray-600">Active Instructors</div>
+          <div className="text-2xl font-bold text-baylor-green">{courseStats.uniqueInstructors}</div>
+          <div className="text-xs text-gray-500">faculty and staff</div>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="text-sm text-gray-600">Busiest Day</div>
+          <div className="text-2xl font-bold text-baylor-green">
+            {courseStats.busiestDay.day ? dayNames[courseStats.busiestDay.day]?.substring(0, 3) : 'N/A'}
+          </div>
+          <div className="text-xs text-gray-500">{courseStats.busiestDay.count} sessions</div>
+        </div>
       </div>
 
       {/* Main Content Card */}
@@ -162,13 +261,15 @@ const CourseManagement = ({ scheduleData, facultyData, editHistory, onDataUpdate
               {filteredAndSortedData.length} of {scheduleData.length} courses shown
             </p>
           </div>
-          <button
-            onClick={() => setHistoryVisible(!historyVisible)}
-            className="px-4 py-2 bg-baylor-gold text-baylor-green font-bold rounded-lg hover:bg-baylor-gold/90 transition-colors text-sm flex items-center"
-          >
-            <History size={16} className="mr-2" />
-            {historyVisible ? 'Hide' : 'Show'} Change History ({editHistory.length})
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setHistoryVisible(!historyVisible)}
+              className="px-4 py-2 bg-baylor-gold text-baylor-green font-bold rounded-lg hover:bg-baylor-gold/90 transition-colors text-sm flex items-center"
+            >
+              <History size={16} className="mr-2" />
+              {historyVisible ? 'Hide' : 'Show'} History ({editHistory.length})
+            </button>
+          </div>
         </div>
 
         {/* Filters Section */}
@@ -203,7 +304,7 @@ const CourseManagement = ({ scheduleData, facultyData, editHistory, onDataUpdate
                 value={filters.searchTerm}
                 onChange={(e) => setFilters({ ...filters, searchTerm: e.target.value })}
                 className="w-full pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900"
-                placeholder="Search Course/Title..."
+                placeholder="Search Course/Title/Instructor..."
               />
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
             </div>
@@ -243,7 +344,7 @@ const CourseManagement = ({ scheduleData, facultyData, editHistory, onDataUpdate
                       change.isRevert ? 'bg-blue-50 border-blue-200' : 'bg-yellow-50 border-yellow-200'
                     } border`}
                   >
-                    <div>
+                    <div className="flex-1">
                       <p className="font-medium text-gray-800">
                         <button
                           className="font-bold hover:underline"
@@ -300,59 +401,77 @@ const CourseManagement = ({ scheduleData, facultyData, editHistory, onDataUpdate
                     {editingRowId === row.id ? (
                       <>
                         <td className="p-1">
-                          <input
+                          <select
                             name="Instructor"
-                            value={editFormData.Instructor}
+                            value={editFormData.Instructor || ''}
                             onChange={handleEditFormChange}
-                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green"
-                          />
+                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
+                          >
+                            <option value="">Select Instructor</option>
+                            <option value="Staff">Staff</option>
+                            {facultyData.map(faculty => (
+                              <option key={faculty.id} value={faculty.name}>
+                                {faculty.name}
+                              </option>
+                            ))}
+                          </select>
                         </td>
                         <td className="p-1">
                           <input
                             name="Course"
-                            value={editFormData.Course}
+                            value={editFormData.Course || ''}
                             onChange={handleEditFormChange}
-                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green"
+                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
+                            placeholder="Course Code"
                           />
                         </td>
                         <td className="p-1">
                           <input
                             name="Course Title"
-                            value={editFormData['Course Title']}
+                            value={editFormData['Course Title'] || ''}
                             onChange={handleEditFormChange}
-                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green"
+                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
+                            placeholder="Course Title"
                           />
                         </td>
                         <td className="p-1">
-                          <input
+                          <select
                             name="Day"
-                            value={editFormData.Day}
+                            value={editFormData.Day || ''}
                             onChange={handleEditFormChange}
-                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green"
-                          />
+                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
+                          >
+                            <option value="">Day</option>
+                            {Object.entries(dayNames).map(([code, name]) => (
+                              <option key={code} value={code}>{code} - {name}</option>
+                            ))}
+                          </select>
                         </td>
                         <td className="p-1">
                           <input
                             name="Start Time"
-                            value={editFormData['Start Time']}
+                            value={editFormData['Start Time'] || ''}
                             onChange={handleEditFormChange}
-                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green"
+                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
+                            placeholder="e.g., 9:00 AM"
                           />
                         </td>
                         <td className="p-1">
                           <input
                             name="End Time"
-                            value={editFormData['End Time']}
+                            value={editFormData['End Time'] || ''}
                             onChange={handleEditFormChange}
-                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green"
+                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
+                            placeholder="e.g., 10:00 AM"
                           />
                         </td>
                         <td className="p-1">
                           <input
                             name="Room"
-                            value={editFormData.Room}
+                            value={editFormData.Room || ''}
                             onChange={handleEditFormChange}
-                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green"
+                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
+                            placeholder="Room Name"
                           />
                         </td>
                         <td className="p-1 text-center">
@@ -386,18 +505,31 @@ const CourseManagement = ({ scheduleData, facultyData, editHistory, onDataUpdate
                         </td>
                         <td className="px-4 py-3 text-gray-700 font-medium">{row.Course}</td>
                         <td className="px-4 py-3 text-gray-700">{row['Course Title']}</td>
-                        <td className="px-4 py-3 text-gray-700 text-center">{row.Day}</td>
+                        <td className="px-4 py-3 text-gray-700 text-center">
+                          <span className="px-2 py-1 bg-baylor-green/10 text-baylor-green rounded text-xs font-medium">
+                            {row.Day}
+                          </span>
+                        </td>
                         <td className="px-4 py-3 text-gray-700">{row['Start Time']}</td>
                         <td className="px-4 py-3 text-gray-700">{row['End Time']}</td>
                         <td className="px-4 py-3 text-gray-700">{row.Room}</td>
                         <td className="px-4 py-3 text-center">
-                          <button
-                            onClick={() => handleEditClick(row)}
-                            className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"
-                            title="Edit this record"
-                          >
-                            <Edit size={16} />
-                          </button>
+                          <div className="flex gap-1 justify-center">
+                            <button
+                              onClick={() => handleEditClick(row)}
+                              className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"
+                              title="Edit this record"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSchedule(row.id)}
+                              className="p-2 text-red-600 hover:bg-red-100 rounded-full"
+                              title="Delete this record"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </td>
                       </>
                     )}

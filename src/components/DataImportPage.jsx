@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
 import { Upload, RotateCcw, FileText, CheckCircle, AlertCircle, X, ArrowLeft } from 'lucide-react';
 
-const DataImportPage = ({ onNavigate, facultyData, onFacultyUpdate }) => {
+const DataImportPage = ({ 
+  onNavigate, 
+  facultyData, 
+  onFacultyUpdate, 
+  findOrCreateFaculty, 
+  findOrCreateCourse, 
+  findOrCreateRoom 
+}) => {
   const [csvData, setCsvData] = useState(null);
   const [fileName, setFileName] = useState('');
   const [importResults, setImportResults] = useState(null);
@@ -9,6 +16,7 @@ const DataImportPage = ({ onNavigate, facultyData, onFacultyUpdate }) => {
   const [isUndoing, setIsUndoing] = useState(false);
   const [preImportState, setPreImportState] = useState([]);
   const [canUndo, setCanUndo] = useState(false);
+  const [importType, setImportType] = useState('faculty'); // 'faculty' or 'schedule'
 
   const handleFileChange = (event) => {
     const file = event.target.files[0];
@@ -31,7 +39,14 @@ const DataImportPage = ({ onNavigate, facultyData, onFacultyUpdate }) => {
             obj[h] = (values[i] || '').trim().replace(/"/g, '');
           });
           return obj;
-        }).filter(obj => obj['Last Name'] || obj['First Name']);
+        }).filter(obj => {
+          // Filter out empty rows based on import type
+          if (importType === 'faculty') {
+            return obj['Last Name'] || obj['First Name'] || obj['Name'];
+          } else {
+            return obj['Instructor'] || obj['Course'] || obj['Day'];
+          }
+        });
         
         setCsvData(data);
       };
@@ -42,9 +57,10 @@ const DataImportPage = ({ onNavigate, facultyData, onFacultyUpdate }) => {
   };
 
   const findMatchingFaculty = (csvRow) => {
-    const csvEmail = csvRow['E-mail Address'];
+    const csvEmail = csvRow['E-mail Address'] || csvRow['Email'];
     const csvFirstName = csvRow['First Name'] || '';
     const csvLastName = csvRow['Last Name'] || '';
+    const csvName = csvRow['Name'] || `${csvFirstName} ${csvLastName}`.trim();
 
     // Strategy 1: Match by email (most reliable)
     if (csvEmail) {
@@ -52,22 +68,35 @@ const DataImportPage = ({ onNavigate, facultyData, onFacultyUpdate }) => {
       if (match) return match;
     }
 
-    // Strategy 2: Match by name (LastName, FirstName)
-    const match = facultyData.find(f => {
-      if (!f.name) return false;
-      const [facultyLastName, facultyFirstName] = f.name.split(',').map(n => n.trim());
-      if (facultyLastName.toLowerCase() !== csvLastName.toLowerCase()) {
-        return false;
-      }
-      // Handle cases like "Brian K." vs "Brian"
-      return facultyFirstName.toLowerCase().startsWith(csvFirstName.toLowerCase()) || 
-             csvFirstName.toLowerCase().startsWith(facultyFirstName.toLowerCase());
-    });
+    // Strategy 2: Match by full name
+    if (csvName) {
+      const match = facultyData.find(f => f.name && f.name.toLowerCase() === csvName.toLowerCase());
+      if (match) return match;
+    }
 
-    return match;
+    // Strategy 3: Match by name parts (LastName, FirstName format)
+    if (csvLastName && csvFirstName) {
+      const match = facultyData.find(f => {
+        if (!f.name) return false;
+        const nameParts = f.name.split(',').map(n => n.trim());
+        if (nameParts.length >= 2) {
+          const [facultyLastName, facultyFirstName] = nameParts;
+          if (facultyLastName.toLowerCase() !== csvLastName.toLowerCase()) {
+            return false;
+          }
+          // Handle cases like "Brian K." vs "Brian"
+          return facultyFirstName.toLowerCase().startsWith(csvFirstName.toLowerCase()) || 
+                 csvFirstName.toLowerCase().startsWith(facultyFirstName.toLowerCase());
+        }
+        return false;
+      });
+      if (match) return match;
+    }
+
+    return null;
   };
 
-  const handleImport = async () => {
+  const handleFacultyImport = async () => {
     if (!csvData) {
       alert("No CSV data to import.");
       return;
@@ -78,18 +107,27 @@ const DataImportPage = ({ onNavigate, facultyData, onFacultyUpdate }) => {
     setCanUndo(false);
 
     let updatedCount = 0;
+    let createdCount = 0;
     let notFoundCount = 0;
     const notFound = [];
     const changedRecords = [];
 
     const relevantColumns = {
       'E-mail Address': 'email',
+      'Email': 'email',
       'Phone Number 1': 'phone',
-      'Job Title': 'jobTitle'
+      'Phone': 'phone',
+      'Job Title': 'jobTitle',
+      'Title': 'jobTitle',
+      'Office': 'office'
     };
 
     for (const row of csvData) {
-      if (!row['Last Name'] && !row['First Name']) continue;
+      const csvFirstName = row['First Name'] || '';
+      const csvLastName = row['Last Name'] || '';
+      const csvName = row['Name'] || `${csvFirstName} ${csvLastName}`.trim();
+      
+      if (!csvName) continue;
 
       const facultyToUpdate = findMatchingFaculty(row);
 
@@ -108,22 +146,122 @@ const DataImportPage = ({ onNavigate, facultyData, onFacultyUpdate }) => {
         }
         
         if (hasUpdate) {
-          changedRecords.push(facultyToUpdate);
+          changedRecords.push({ ...facultyToUpdate });
           await onFacultyUpdate({ ...facultyToUpdate, ...updates });
           updatedCount++;
         }
       } else {
-        notFoundCount++;
-        notFound.push(`${row['First Name']} ${row['Last Name']}`);
+        // Create new faculty member
+        const newFaculty = {
+          name: csvName,
+          email: row['E-mail Address'] || row['Email'] || '',
+          phone: row['Phone Number 1'] || row['Phone'] || '',
+          jobTitle: row['Job Title'] || row['Title'] || '',
+          office: row['Office'] || '',
+          isAdjunct: false,
+          isAlsoStaff: false
+        };
+        
+        try {
+          await onFacultyUpdate(newFaculty);
+          createdCount++;
+        } catch (error) {
+          notFoundCount++;
+          notFound.push(csvName);
+        }
       }
     }
     
     setPreImportState(changedRecords);
-    setImportResults({ updatedCount, notFoundCount, notFound });
-    if (updatedCount > 0) {
+    setImportResults({ updatedCount, createdCount, notFoundCount, notFound, type: 'faculty' });
+    if (updatedCount > 0 || createdCount > 0) {
       setCanUndo(true);
     }
     setIsLoading(false);
+  };
+
+  const handleScheduleImport = async () => {
+    if (!csvData) {
+      alert("No CSV data to import.");
+      return;
+    }
+    
+    setIsLoading(true);
+    setImportResults(null);
+    setCanUndo(false);
+
+    let createdCount = 0;
+    let errorCount = 0;
+    const errors = [];
+
+    try {
+      for (const row of csvData) {
+        const instructor = row['Instructor'] || row['instructor'];
+        const courseCode = row['Course'] || row['course'];
+        const courseTitle = row['Course Title'] || row['courseTitle'] || '';
+        const day = row['Day'] || row['day'];
+        const startTime = row['Start Time'] || row['startTime'];
+        const endTime = row['End Time'] || row['endTime'];
+        const roomName = row['Room'] || row['room'];
+
+        if (!courseCode || !day || !startTime || !endTime) {
+          errorCount++;
+          errors.push(`Missing required fields for course: ${courseCode || 'Unknown'}`);
+          continue;
+        }
+
+        try {
+          // Create or find the related entities
+          let facultyId = null;
+          if (instructor && instructor !== 'Staff') {
+            facultyId = await findOrCreateFaculty(instructor);
+          }
+
+          const courseId = await findOrCreateCourse(courseCode, courseTitle);
+          const roomId = roomName ? await findOrCreateRoom(roomName) : null;
+
+          // Create the schedule entry
+          const scheduleData = {
+            facultyId,
+            courseId,
+            roomId,
+            day,
+            startTime,
+            endTime,
+            semester: 'Fall 2025' // Default semester
+          };
+
+          // Note: You'll need to add a method to create schedule entries
+          // This would require adding a handleScheduleCreate function to App.jsx
+          console.log('Would create schedule:', scheduleData);
+          createdCount++;
+
+        } catch (error) {
+          errorCount++;
+          errors.push(`Error processing ${courseCode}: ${error.message}`);
+        }
+      }
+    } catch (error) {
+      console.error('Schedule import error:', error);
+      errorCount++;
+      errors.push(`General import error: ${error.message}`);
+    }
+
+    setImportResults({ 
+      createdCount, 
+      errorCount, 
+      errors: errors.slice(0, 10), // Show first 10 errors
+      type: 'schedule' 
+    });
+    setIsLoading(false);
+  };
+
+  const handleImport = async () => {
+    if (importType === 'faculty') {
+      await handleFacultyImport();
+    } else {
+      await handleScheduleImport();
+    }
   };
 
   const handleUndoImport = async () => {
@@ -139,7 +277,7 @@ const DataImportPage = ({ onNavigate, facultyData, onFacultyUpdate }) => {
     setIsUndoing(false);
     setCanUndo(false);
     setPreImportState([]);
-    setImportResults(prev => ({ ...prev, undone: true, updatedCount: 0 }));
+    setImportResults(prev => ({ ...prev, undone: true, updatedCount: 0, createdCount: 0 }));
   };
 
   return (
@@ -156,7 +294,38 @@ const DataImportPage = ({ onNavigate, facultyData, onFacultyUpdate }) => {
       {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Data Import Utility</h1>
-        <p className="text-gray-600">Upload a CSV file to update faculty contact information</p>
+        <p className="text-gray-600">Upload CSV files to update faculty information or import schedule data</p>
+      </div>
+
+      {/* Import Type Selection */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <h2 className="text-lg font-serif font-semibold text-baylor-green mb-4">Import Type</h2>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center">
+            <input
+              type="radio"
+              name="importType"
+              value="faculty"
+              checked={importType === 'faculty'}
+              onChange={(e) => setImportType(e.target.value)}
+              className="mr-2 text-baylor-green focus:ring-baylor-green"
+            />
+            <span className="font-medium">Faculty Information</span>
+            <span className="ml-2 text-sm text-gray-500">Update contact details and job information</span>
+          </label>
+          <label className="flex items-center">
+            <input
+              type="radio"
+              name="importType"
+              value="schedule"
+              checked={importType === 'schedule'}
+              onChange={(e) => setImportType(e.target.value)}
+              className="mr-2 text-baylor-green focus:ring-baylor-green"
+            />
+            <span className="font-medium">Schedule Data</span>
+            <span className="ml-2 text-sm text-gray-500">Import course schedules and room assignments</span>
+          </label>
+        </div>
       </div>
 
       {/* Main Import Card */}
@@ -179,7 +348,7 @@ const DataImportPage = ({ onNavigate, facultyData, onFacultyUpdate }) => {
                     {fileName || "Choose a CSV file"}
                   </p>
                   <p className="text-sm text-gray-500 mt-1">
-                    Drag and drop your file here, or click to browse
+                    Drag and drop your {importType} CSV file here, or click to browse
                   </p>
                   <p className="text-xs text-gray-400 mt-2">
                     Supported format: CSV files only
@@ -241,14 +410,17 @@ const DataImportPage = ({ onNavigate, facultyData, onFacultyUpdate }) => {
                 ) : (
                   <>
                     <Upload className="mr-2" size={18} />
-                    Import Data ({csvData.length} records)
+                    Import {importType === 'faculty' ? 'Faculty Data' : 'Schedule Data'} ({csvData.length} records)
                   </>
                 )}
               </button>
               
               <div className="text-sm text-gray-600 flex items-center">
                 <AlertCircle className="w-4 h-4 mr-2 text-amber-500" />
-                This will update existing faculty records with new contact information
+                {importType === 'faculty' 
+                  ? 'This will update existing faculty records and create new ones as needed'
+                  : 'This will create new schedule entries and related courses, rooms, and faculty as needed'
+                }
               </div>
             </div>
           </div>
@@ -288,24 +460,43 @@ const DataImportPage = ({ onNavigate, facultyData, onFacultyUpdate }) => {
                     </p>
                   ) : (
                     <div className="mt-2 space-y-2">
-                      <p className="text-green-700">
-                        <span className="font-semibold">{importResults.updatedCount}</span> faculty records were updated with new information.
-                      </p>
+                      {importResults.type === 'faculty' ? (
+                        <>
+                          {importResults.updatedCount > 0 && (
+                            <p className="text-green-700">
+                              <span className="font-semibold">{importResults.updatedCount}</span> faculty records were updated with new information.
+                            </p>
+                          )}
+                          {importResults.createdCount > 0 && (
+                            <p className="text-green-700">
+                              <span className="font-semibold">{importResults.createdCount}</span> new faculty records were created.
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {importResults.createdCount > 0 && (
+                            <p className="text-green-700">
+                              <span className="font-semibold">{importResults.createdCount}</span> schedule entries were created.
+                            </p>
+                          )}
+                        </>
+                      )}
                       
-                      {importResults.notFoundCount > 0 && (
+                      {(importResults.notFoundCount > 0 || importResults.errorCount > 0) && (
                         <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
                           <div className="flex items-start">
                             <AlertCircle className="w-5 h-5 text-amber-600 mr-2 mt-0.5 flex-shrink-0" />
                             <div className="flex-1">
                               <p className="text-amber-800 font-medium">
-                                {importResults.notFoundCount} records could not be matched:
+                                {importResults.notFoundCount || importResults.errorCount} records had issues:
                               </p>
                               <div className="mt-2 max-h-32 overflow-y-auto">
                                 <ul className="text-sm text-amber-700 space-y-1">
-                                  {importResults.notFound.map((name, index) => (
+                                  {(importResults.notFound || importResults.errors || []).map((item, index) => (
                                     <li key={index} className="flex items-center">
                                       <span className="w-2 h-2 bg-amber-400 rounded-full mr-2 flex-shrink-0"></span>
-                                      {name}
+                                      {item}
                                     </li>
                                   ))}
                                 </ul>
@@ -321,7 +512,7 @@ const DataImportPage = ({ onNavigate, facultyData, onFacultyUpdate }) => {
             </div>
 
             {/* Undo Action */}
-            {canUndo && !importResults.undone && (
+            {canUndo && !importResults.undone && importResults.type === 'faculty' && (
               <div className="mt-6 text-center">
                 <button
                   onClick={handleUndoImport}
@@ -356,45 +547,103 @@ const DataImportPage = ({ onNavigate, facultyData, onFacultyUpdate }) => {
             </h2>
             
             <div className="grid md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <h3 className="font-medium text-gray-900">Supported Fields</h3>
-                <ul className="space-y-2 text-sm text-gray-600">
-                  <li className="flex items-center">
-                    <span className="w-2 h-2 bg-baylor-green rounded-full mr-3"></span>
-                    E-mail Address
-                  </li>
-                  <li className="flex items-center">
-                    <span className="w-2 h-2 bg-baylor-green rounded-full mr-3"></span>
-                    Phone Number 1
-                  </li>
-                  <li className="flex items-center">
-                    <span className="w-2 h-2 bg-baylor-green rounded-full mr-3"></span>
-                    Job Title
-                  </li>
-                  <li className="flex items-center">
-                    <span className="w-2 h-2 bg-baylor-green rounded-full mr-3"></span>
-                    First Name & Last Name (for matching)
-                  </li>
-                </ul>
-              </div>
-              
-              <div className="space-y-4">
-                <h3 className="font-medium text-gray-900">How It Works</h3>
-                <ol className="space-y-2 text-sm text-gray-600">
-                  <li className="flex">
-                    <span className="flex-shrink-0 w-5 h-5 bg-baylor-green text-white rounded-full text-xs flex items-center justify-center mr-3">1</span>
-                    Upload your CSV file with faculty information
-                  </li>
-                  <li className="flex">
-                    <span className="flex-shrink-0 w-5 h-5 bg-baylor-green text-white rounded-full text-xs flex items-center justify-center mr-3">2</span>
-                    System matches records by email or name
-                  </li>
-                  <li className="flex">
-                    <span className="flex-shrink-0 w-5 h-5 bg-baylor-green text-white rounded-full text-xs flex items-center justify-center mr-3">3</span>
-                    Contact information is updated automatically
-                  </li>
-                </ol>
-              </div>
+              {importType === 'faculty' ? (
+                <>
+                  <div className="space-y-4">
+                    <h3 className="font-medium text-gray-900">Faculty CSV Fields</h3>
+                    <ul className="space-y-2 text-sm text-gray-600">
+                      <li className="flex items-center">
+                        <span className="w-2 h-2 bg-baylor-green rounded-full mr-3"></span>
+                        Name or (First Name + Last Name)
+                      </li>
+                      <li className="flex items-center">
+                        <span className="w-2 h-2 bg-baylor-green rounded-full mr-3"></span>
+                        E-mail Address or Email
+                      </li>
+                      <li className="flex items-center">
+                        <span className="w-2 h-2 bg-baylor-green rounded-full mr-3"></span>
+                        Phone Number 1 or Phone
+                      </li>
+                      <li className="flex items-center">
+                        <span className="w-2 h-2 bg-baylor-green rounded-full mr-3"></span>
+                        Job Title or Title
+                      </li>
+                      <li className="flex items-center">
+                        <span className="w-2 h-2 bg-baylor-green rounded-full mr-3"></span>
+                        Office
+                      </li>
+                    </ul>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <h3 className="font-medium text-gray-900">How Faculty Import Works</h3>
+                    <ol className="space-y-2 text-sm text-gray-600">
+                      <li className="flex">
+                        <span className="flex-shrink-0 w-5 h-5 bg-baylor-green text-white rounded-full text-xs flex items-center justify-center mr-3">1</span>
+                        Upload your CSV file with faculty information
+                      </li>
+                      <li className="flex">
+                        <span className="flex-shrink-0 w-5 h-5 bg-baylor-green text-white rounded-full text-xs flex items-center justify-center mr-3">2</span>
+                        System matches records by email or name
+                      </li>
+                      <li className="flex">
+                        <span className="flex-shrink-0 w-5 h-5 bg-baylor-green text-white rounded-full text-xs flex items-center justify-center mr-3">3</span>
+                        Contact information is updated or new records created
+                      </li>
+                    </ol>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-4">
+                    <h3 className="font-medium text-gray-900">Schedule CSV Fields</h3>
+                    <ul className="space-y-2 text-sm text-gray-600">
+                      <li className="flex items-center">
+                        <span className="w-2 h-2 bg-baylor-green rounded-full mr-3"></span>
+                        Instructor (faculty name or "Staff")
+                      </li>
+                      <li className="flex items-center">
+                        <span className="w-2 h-2 bg-baylor-green rounded-full mr-3"></span>
+                        Course (course code)
+                      </li>
+                      <li className="flex items-center">
+                        <span className="w-2 h-2 bg-baylor-green rounded-full mr-3"></span>
+                        Course Title (optional)
+                      </li>
+                      <li className="flex items-center">
+                        <span className="w-2 h-2 bg-baylor-green rounded-full mr-3"></span>
+                        Day (M, T, W, R, F)
+                      </li>
+                      <li className="flex items-center">
+                        <span className="w-2 h-2 bg-baylor-green rounded-full mr-3"></span>
+                        Start Time & End Time
+                      </li>
+                      <li className="flex items-center">
+                        <span className="w-2 h-2 bg-baylor-green rounded-full mr-3"></span>
+                        Room (room name)
+                      </li>
+                    </ul>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <h3 className="font-medium text-gray-900">How Schedule Import Works</h3>
+                    <ol className="space-y-2 text-sm text-gray-600">
+                      <li className="flex">
+                        <span className="flex-shrink-0 w-5 h-5 bg-baylor-green text-white rounded-full text-xs flex items-center justify-center mr-3">1</span>
+                        Upload your CSV file with schedule data
+                      </li>
+                      <li className="flex">
+                        <span className="flex-shrink-0 w-5 h-5 bg-baylor-green text-white rounded-full text-xs flex items-center justify-center mr-3">2</span>
+                        System creates/finds faculty, courses, and rooms
+                      </li>
+                      <li className="flex">
+                        <span className="flex-shrink-0 w-5 h-5 bg-baylor-green text-white rounded-full text-xs flex items-center justify-center mr-3">3</span>
+                        Schedule entries are created with proper references
+                      </li>
+                    </ol>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}

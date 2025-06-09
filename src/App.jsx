@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import FacultyScheduleDashboard from './components/FacultyScheduleDashboard';
 import SystemsPage from './components/SystemsPage';
 import Login from './components/Login';
-import { Settings, BookUser } from 'lucide-react';
+import DataImportPage from './components/DataImportPage'; // Import new component
+import { Settings, BookUser, Upload } from 'lucide-react'; // Import Upload icon
 import { db } from './firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, query, orderBy } from 'firebase/firestore';
 
@@ -38,6 +39,7 @@ function App() {
                 email: '',
                 phone: '',
                 office: '', // Add office field to new faculty documents
+                jobTitle: '', // Add jobTitle field
             }));
             for (const faculty of facultyToCreate) {
                 const docRef = await addDoc(collection(db, 'faculty'), faculty);
@@ -186,6 +188,28 @@ function App() {
     setShowLogoutConfirm(false);
     setCurrentPage('dashboard');
   };
+  
+  const renderPage = () => {
+      switch(currentPage) {
+          case 'dashboard':
+              return <FacultyScheduleDashboard 
+                        scheduleData={scheduleData}
+                        facultyData={facultyData}
+                        editHistory={editHistory}
+                        onDataUpdate={handleDataUpdate}
+                        onFacultyUpdate={handleFacultyUpdate}
+                        onRevertChange={handleRevertChange}
+                        loading={loading}
+                        onNavigate={setCurrentPage}
+                      />;
+          case 'systems':
+              return <SystemsPage onNavigate={setCurrentPage} />;
+          case 'import':
+              return <DataImportPage onNavigate={setCurrentPage} facultyData={facultyData} onFacultyUpdate={handleFacultyUpdate} />;
+          default:
+              return <FacultyScheduleDashboard onNavigate={setCurrentPage} loading={loading} />;
+      }
+  }
 
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;
@@ -201,6 +225,13 @@ function App() {
           </div>
           <div className="flex items-center space-x-4">
             <div className="text-baylor-gold font-serif italic">Fall 2025</div>
+             <button
+              onClick={() => setCurrentPage('import')}
+              className="text-sm text-white hover:text-baylor-gold transition-colors duration-200 flex items-center space-x-1"
+            >
+              <Upload size={16} className="mr-1" />
+              <span>Import Data</span>
+            </button>
             <button
               onClick={() => setCurrentPage('systems')}
               className="text-sm text-white hover:text-baylor-gold transition-colors duration-200 flex items-center space-x-1"
@@ -222,22 +253,9 @@ function App() {
       </header>
       
       <main className="flex-grow bg-gray-50">
-        {currentPage === 'dashboard' ? (
-          <div className="container mx-auto px-4 py-6">
-            <FacultyScheduleDashboard 
-              scheduleData={scheduleData}
-              facultyData={facultyData}
-              editHistory={editHistory}
-              onDataUpdate={handleDataUpdate}
-              onFacultyUpdate={handleFacultyUpdate}
-              onRevertChange={handleRevertChange}
-              loading={loading}
-              onNavigate={setCurrentPage}
-            />
-          </div>
-        ) : (
-          <SystemsPage onNavigate={setCurrentPage} />
-        )}
+        <div className="container mx-auto px-4 py-6">
+            {renderPage()}
+        </div>
       </main>
       
       <footer className="bg-baylor-green text-white py-4">

@@ -102,6 +102,7 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
       const lowercasedFilter = filterText.toLowerCase();
       data = data.filter(item =>
         item.name?.toLowerCase().includes(lowercasedFilter) ||
+        item.jobTitle?.toLowerCase().includes(lowercasedFilter) ||
         item.email?.toLowerCase().includes(lowercasedFilter) ||
         item.phone?.toLowerCase().includes(lowercasedFilter) ||
         item.office?.toLowerCase().includes(lowercasedFilter)
@@ -170,6 +171,7 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
           <thead>
             <tr className="bg-baylor-green/5">
                 <SortableHeader label="Name" columnKey="name" />
+                <SortableHeader label="Job Title" columnKey="jobTitle" />
                 <SortableHeader label="Email" columnKey="email" />
                 <SortableHeader label="Phone" columnKey="phone" />
                 <SortableHeader label="Office" columnKey="office" />
@@ -187,6 +189,9 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
                            <input type="checkbox" id={`adjunct-${faculty.id}`} name="isAdjunct" checked={!!editFormData.isAdjunct} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
                            <label htmlFor={`adjunct-${faculty.id}`} className="font-normal">Adjunct</label>
                         </div>
+                    </td>
+                    <td className="p-2 align-top">
+                        <input name="jobTitle" value={editFormData.jobTitle || ''} onChange={handleChange} className={getInputClass('jobTitle')} placeholder="Job Title" />
                     </td>
                     <td className="p-2 align-top">
                       <input name="email" value={editFormData.email || ''} onChange={handleChange} className={getInputClass('email')} placeholder="email@baylor.edu" />
@@ -209,6 +214,7 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
                 ) : (
                   <>
                     <td className="px-4 py-3 text-gray-700 font-medium cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.name}</td>
+                    <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.jobTitle || '-'}</td>
                     <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.email || '-'}</td>
                     <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{formatPhoneNumber(faculty.phone)}</td>
                     <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.office || '-'}</td>

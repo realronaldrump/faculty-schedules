@@ -3,84 +3,49 @@ import FacultyScheduleDashboard from './components/FacultyScheduleDashboard';
 import SystemsPage from './components/SystemsPage';
 import Login from './components/Login';
 import { Settings } from 'lucide-react';
+import { db } from './firebase'; // Import the firestore instance
+import { collection, getDocs, doc, updateDoc, addDoc, query, orderBy } from 'firebase/firestore';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
 
-  // State for schedule data and edit history has been lifted here
   const [scheduleData, setScheduleData] = useState([]);
   const [editHistory, setEditHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Helper to parse CSV content
-  const parseCsv = (csvText) => {
-    const lines = csvText.split('\n').filter(line => line.trim());
-    if (lines.length === 0) return [];
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-    return lines.slice(1).map(line => {
-      const values = [];
-      let current = '';
-      let inQuotes = false;
-      for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (char === '"') inQuotes = !inQuotes;
-        else if (char === ',' && !inQuotes) {
-          values.push(current.trim().replace(/"/g, ''));
-          current = '';
-        } else {
-          current += char;
-        }
-      }
-      values.push(current.trim().replace(/"/g, ''));
-      const obj = {};
-      headers.forEach((header, index) => {
-        obj[header] = values[index] || '';
-      });
-      return obj;
-    });
-  };
-
-  // Load data on initial mount from CSV, then check localStorage for edits
+  // Load data from Firestore on initial mount
   useEffect(() => {
     const loadData = async () => {
+      if (!isAuthenticated) return;
       setLoading(true);
       try {
-        const response = await fetch('/HSD_Instructor_Schedules.csv');
-        const csvContent = await response.text();
-        // Assign a unique ID to each row for stable editing
-        const parsedData = parseCsv(csvContent).map((row, index) => ({ ...row, id: index }));
+        // Fetch schedule data
+        const scheduleSnapshot = await getDocs(collection(db, 'schedules'));
+        const schedules = scheduleSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        setScheduleData(schedules);
 
-        const savedData = localStorage.getItem('scheduleData');
-        const savedHistory = localStorage.getItem('editHistory');
+        // Fetch edit history, ordered by timestamp
+        const historyQuery = query(collection(db, "history"), orderBy("timestamp", "desc"));
+        const historySnapshot = await getDocs(historyQuery);
+        const history = historySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        setEditHistory(history);
 
-        setScheduleData(savedData ? JSON.parse(savedData) : parsedData);
-        setEditHistory(savedHistory ? JSON.parse(savedHistory) : []);
       } catch (error) {
-        console.error("Failed to load schedule data:", error);
-        // Fallback to empty array on error
-        setScheduleData([]);
-        setEditHistory([]);
+        console.error("Failed to load data from Firestore:", error);
       }
       setLoading(false);
     };
 
-    const auth = localStorage.getItem('isAuthenticated');
-    if (auth === 'true') {
-      setIsAuthenticated(true);
-      loadData();
-    } else {
-      setLoading(false);
-    }
+    loadData();
   }, [isAuthenticated]);
 
-  // Handler to process a data update
-  const handleDataUpdate = (updatedRow) => {
+  // Handler to process a data update and save to Firestore
+  const handleDataUpdate = async (updatedRow) => {
     const originalRow = scheduleData.find(r => r.id === updatedRow.id);
     const changes = [];
     
-    // Compare original and updated row to create history items
     Object.keys(updatedRow).forEach(key => {
         if (key !== 'id' && originalRow[key] !== updatedRow[key]) {
             changes.push({
@@ -96,58 +61,93 @@ function App() {
     });
 
     if (changes.length > 0) {
-        const newData = scheduleData.map(row => row.id === updatedRow.id ? updatedRow : row);
-        // Prepend new changes to the history
-        const newHistory = [...changes, ...editHistory];
+      try {
+        // Update the document in Firestore
+        const scheduleDocRef = doc(db, 'schedules', updatedRow.id);
+        await updateDoc(scheduleDocRef, updatedRow);
 
+        // Add each change as a new document to the history collection
+        for (const change of changes) {
+            await addDoc(collection(db, 'history'), change);
+        }
+
+        // Optimistically update local state for immediate UI feedback
+        const newData = scheduleData.map(row => row.id === updatedRow.id ? updatedRow : row);
+        const newHistory = [...changes, ...editHistory];
         setScheduleData(newData);
         setEditHistory(newHistory);
-
-        // Persist changes to localStorage
-        localStorage.setItem('scheduleData', JSON.stringify(newData));
-        localStorage.setItem('editHistory', JSON.stringify(newHistory));
+        
+      } catch (error) {
+        console.error("Error updating document: ", error);
+      }
     }
   };
 
-  // Handler to revert a change from the history
-  const handleRevertChange = (changeToRevert, indexToRevert) => {
+  // Handler to revert a change
+  const handleRevertChange = async (changeToRevert) => {
     const targetRow = scheduleData.find(row => row.id === changeToRevert.rowId);
     if (targetRow) {
-        const revertedRow = { ...targetRow, [changeToRevert.field]: changeToRevert.oldValue };
-        const newData = scheduleData.map(row => (row.id === revertedRow.id ? revertedRow : row));
+      try {
+        const revertedData = { [changeToRevert.field]: changeToRevert.oldValue };
+
+        // Update the document in Firestore
+        const scheduleDocRef = doc(db, 'schedules', changeToRevert.rowId);
+        await updateDoc(scheduleDocRef, revertedData);
         
-        // A new history item is created to log the revert action
+        // Log the revert action to history
         const revertHistoryLog = {
-            rowId: revertedRow.id,
-            instructor: revertedRow.Instructor,
-            course: revertedRow.Course,
+            rowId: changeToRevert.rowId,
+            instructor: targetRow.Instructor,
+            course: targetRow.Course,
             field: changeToRevert.field,
-            oldValue: changeToRevert.newValue, // The value we are changing from
-            newValue: changeToRevert.oldValue, // The value we are reverting to
+            oldValue: changeToRevert.newValue,
+            newValue: changeToRevert.oldValue,
             timestamp: new Date().toISOString(),
             isRevert: true,
         };
+        await addDoc(collection(db, 'history'), revertHistoryLog);
+        
+        // Optimistically update local state
+        const revertedRow = { ...targetRow, ...revertedData };
+        const newData = scheduleData.map(row => (row.id === revertedRow.id ? revertedRow : row));
         const newHistory = [revertHistoryLog, ...editHistory];
-
         setScheduleData(newData);
         setEditHistory(newHistory);
-        localStorage.setItem('scheduleData', JSON.stringify(newData));
-        localStorage.setItem('editHistory', JSON.stringify(newHistory));
+
+      } catch (error) {
+        console.error("Error reverting document: ", error);
+      }
     }
   };
 
+  const handleLogin = (status) => {
+    setIsAuthenticated(status);
+    if (status) {
+        localStorage.setItem('isAuthenticated', 'true');
+    } else {
+        localStorage.removeItem('isAuthenticated');
+        setScheduleData([]);
+        setEditHistory([]);
+    }
+  };
 
   const handleLogout = () => setShowLogoutConfirm(true);
 
   const confirmLogout = () => {
-    localStorage.removeItem('isAuthenticated');
-    setIsAuthenticated(false);
+    handleLogin(false);
     setShowLogoutConfirm(false);
     setCurrentPage('dashboard');
   };
+  
+   useEffect(() => {
+    const auth = localStorage.getItem('isAuthenticated');
+    if (auth === 'true') {
+      setIsAuthenticated(true);
+    }
+  }, []);
 
   if (!isAuthenticated) {
-    return <Login onLogin={setIsAuthenticated} />;
+    return <Login onLogin={handleLogin} />;
   }
 
   return (

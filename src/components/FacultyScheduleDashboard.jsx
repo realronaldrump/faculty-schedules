@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Clock, Users, Calendar, X, ChevronDown, CheckCircle, ArrowUpDown, ChevronsUpDown, BarChart2, Eye } from 'lucide-react';
+import { Search, Clock, Users, Calendar, X, ChevronDown, CheckCircle, ArrowUpDown, ChevronsUpDown, BarChart2, Eye, Edit, Save, Trash2, History, RotateCcw } from 'lucide-react';
 
 // Custom Dropdown Component
 const CustomDropdown = ({ value, onChange, options, placeholder, className }) => {
@@ -53,15 +53,10 @@ const CustomDropdown = ({ value, onChange, options, placeholder, className }) =>
   );
 };
 
-const FacultyScheduleDashboard = ({ onNavigate }) => {
+const FacultyScheduleDashboard = ({ scheduleData, editHistory, onDataUpdate, onRevertChange, loading, onNavigate }) => {
   // Core State
-  const [scheduleData, setScheduleData] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('group');
-  const [showWarning, setShowWarning] = useState(() => {
-    const dismissed = localStorage.getItem('insightsWarningDismissed');
-    return dismissed !== 'true';
-  });
+  const [showWarning, setShowWarning] = useState(() => localStorage.getItem('insightsWarningDismissed') !== 'true');
 
   // Group Meeting State
   const [selectedProfessors, setSelectedProfessors] = useState([]);
@@ -73,9 +68,13 @@ const FacultyScheduleDashboard = ({ onNavigate }) => {
   // Individual Availability State
   const [selectedIndividual, setSelectedIndividual] = useState('');
 
-  // Room Finder State
-  const [roomSearchDay, setRoomSearchDay] = useState('M');
-  const [roomSearchTime, setRoomSearchTime] = useState('10:00');
+  // Room Schedule State
+  const [roomScheduleDay, setRoomScheduleDay] = useState('M');
+  
+  // Data Management State
+  const [editingRowId, setEditingRowId] = useState(null);
+  const [editFormData, setEditFormData] = useState({});
+  const [historyVisible, setHistoryVisible] = useState(false);
 
   // Modal States
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
@@ -95,11 +94,11 @@ const FacultyScheduleDashboard = ({ onNavigate }) => {
   const activeTabClass = `${tabButtonClass} bg-baylor-green text-white`;
   const inactiveTabClass = `${tabButtonClass} bg-gray-100 text-gray-600 hover:bg-gray-200`;
   const cardClass = "bg-white border border-gray-200 rounded-lg shadow-sm p-4";
-  const inputClass = "w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900 pl-10";
+  const inputClass = "w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900";
   const selectClass = "w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900 appearance-none cursor-pointer hover:border-baylor-green/50 transition-colors";
-  const timeInputClass = "w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900 cursor-pointer hover:border-baylor-green/50 transition-colors";
   const buttonClass = "px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed";
   const secondaryButtonClass = "px-4 py-2 bg-baylor-gold text-baylor-green font-bold rounded-lg hover:bg-baylor-gold/90 transition-colors";
+  const editInputClass = "w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green";
 
   // Effect to handle clicking outside modals
   useEffect(() => {
@@ -110,35 +109,6 @@ const FacultyScheduleDashboard = ({ onNavigate }) => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isRoomModalOpen, isDrillDownModalOpen]);
-
-  // Load and parse CSV data
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const response = await fetch('/HSD_Instructor_Schedules.csv');
-        const csvContent = await response.text();
-        const lines = csvContent.split('\n').filter(line => line.trim());
-        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-        const data = lines.slice(1).flatMap(line => {
-          const values = []; let current = ''; let inQuotes = false;
-          for (let i = 0; i < line.length; i++) {
-            const char = line[i];
-            if (char === '"') inQuotes = !inQuotes;
-            else if (char === ',' && !inQuotes) { values.push(current.trim().replace(/"/g, '')); current = ''; } 
-            else current += char;
-          }
-          values.push(current.trim().replace(/"/g, ''));
-          const obj = {};
-          headers.forEach((header, index) => { obj[header] = values[index] || ''; });
-          const rooms = (obj['Room'] || '').split(';').map(r => r.trim()).filter(Boolean);
-          return rooms.length === 0 ? [obj] : rooms.map(room => ({ ...obj, Room: room }));
-        });
-        setScheduleData(data);
-        setLoading(false);
-      } catch (error) { console.error('Error loading data:', error); setLoading(false); }
-    };
-    loadData();
-  }, []);
 
   // Utility functions
   const parseTime = (timeStr) => {
@@ -265,6 +235,23 @@ const FacultyScheduleDashboard = ({ onNavigate }) => {
     const peakHour = Object.entries(hourCounts).reduce((max, [h, c]) => c > max.count ? { hour: parseInt(h), count: c } : max, { hour: 8, count: 0 });
     return { hourCounts, latestEndTime, peakHour };
   }, [scheduleData, hourlyUsageDayFilter]);
+
+  const dailyRoomSchedules = useMemo(() => {
+    const schedules = {};
+    uniqueRooms.forEach(room => {
+      schedules[room] = scheduleData
+        .filter(item => item.Room === room && item.Day === roomScheduleDay && item['Start Time'] && item['End Time'])
+        .reduce((acc, item) => { // Deduplicate identical sessions (e.g., cross-listed courses)
+          const key = `${item.Course}-${item['Start Time']}-${item['End Time']}`;
+          if (!acc.some(i => `${i.Course}-${i['Start Time']}-${i['End Time']}` === key)) {
+            acc.push(item);
+          }
+          return acc;
+        }, [])
+        .sort((a, b) => parseTime(a['Start Time']) - parseTime(b['Start Time']));
+    });
+    return schedules;
+  }, [scheduleData, uniqueRooms, roomScheduleDay]);
   
   const sortedFacultyWorkload = useMemo(() => {
     if (!departmentInsights) return [];
@@ -358,6 +345,11 @@ const FacultyScheduleDashboard = ({ onNavigate }) => {
     localStorage.setItem('insightsWarningDismissed', 'true');
   };
 
+  const handleEditClick = (row) => { setEditingRowId(row.id); setEditFormData(row); };
+  const handleEditCancel = () => { setEditingRowId(null); setEditFormData({}); };
+  const handleEditSave = () => { onDataUpdate(editFormData); setEditingRowId(null); };
+  const handleEditFormChange = (e) => setEditFormData({ ...editFormData, [e.target.name]: e.target.value });
+
   // Sub-components for rendering
   const SortableHeader = ({ label, sortKey, currentSort, onSort }) => {
     const isActive = currentSort.key === sortKey;
@@ -400,16 +392,21 @@ const FacultyScheduleDashboard = ({ onNavigate }) => {
       <tbody className="divide-y divide-gray-200">{data.map((row, index) => <tr key={index} className="hover:bg-baylor-green/5">{columns.map(col => <td key={col.key} className="px-4 py-3 text-gray-700">{row[col.key]}</td>)}</tr>)}</tbody>
     </table> : <div className="text-center py-12 text-gray-500"><p className="text-lg">No detailed data to display.</p></div>)}</div><div className="mt-6 text-right flex-shrink-0"><button onClick={() => setIsDrillDownModalOpen(false)} className={secondaryButtonClass}>Close</button></div></div></div>;
   };
+  
+  if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-gray-600 text-xl">Loading faculty schedules...</div></div>;
 
-  if (loading || !departmentInsights) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-gray-600 text-xl">Loading faculty schedules...</div></div>;
+  const dayStart = 8 * 60; // 8:00 AM
+  const dayEnd = 18 * 60; // 6:00 PM
+  const totalMinutes = dayEnd - dayStart;
+  const timeLabels = Array.from({length: (dayEnd - dayStart) / 60 + 1}, (_, i) => dayStart + i * 60);
 
   return (
     <div>
       <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-6 border border-gray-200">
-        <div className="flex">
-          {[ { id: 'group', label: 'Group Meetings', icon: Users }, { id: 'individual', label: 'Individual Availability', icon: Calendar }, { id: 'rooms', label: 'Room Finder', icon: Search }, { id: 'insights', label: 'Department Insights', icon: BarChart2 } ].map(tab => {
+        <div className="flex flex-wrap">
+          {[ { id: 'group', label: 'Group Meetings', icon: Users }, { id: 'individual', label: 'Individual Availability', icon: Calendar }, { id: 'rooms', label: 'Room Schedule', icon: Search }, { id: 'insights', label: 'Department Insights', icon: BarChart2 }, { id: 'data', label: 'Data Management', icon: Edit } ].map(tab => {
             const Icon = tab.icon;
-            return <button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowResults(false); }} className={activeTab === tab.id ? activeTabClass : inactiveTabClass}><Icon className="mr-2 inline-block" size={16} />{tab.label}</button>;
+            return <button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowResults(false); }} className={`${activeTab === tab.id ? activeTabClass : inactiveTabClass} flex-grow`}><Icon className="mr-2 inline-block" size={16} />{tab.label}</button>;
           })}
         </div>
       </div>
@@ -418,7 +415,7 @@ const FacultyScheduleDashboard = ({ onNavigate }) => {
         {activeTab === 'group' && (
           <>{!showResults ? (<div className={cardClass}>
             <div className="mb-8"><h2 className="text-xl font-serif font-semibold text-baylor-green mb-4 flex items-center border-b border-baylor-gold pb-2"><Clock className="mr-2 text-baylor-gold" size={20} />Step 1: Meeting Details</h2><div className="space-y-4"><div><label className="block text-sm font-medium text-gray-700 mb-2">Meeting Duration</label><div className="grid grid-cols-3 md:grid-cols-6 gap-3">{[30, 60, 90, 120, 150, 180].map(d => <button key={d} onClick={() => setMeetingDuration(d)} className={`p-3 rounded-lg border text-center transition-all ${meetingDuration === d ? 'bg-baylor-green text-white border-baylor-green shadow-md' : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'}`}><div className="font-medium">{d === 60 ? '1 hr' : d === 120 ? '2 hrs' : `${d}m`}</div></button>)}</div></div><div><label className="block text-sm font-medium text-gray-700 mb-2">Buffer Time (before and after)</label><div className="grid grid-cols-3 md:grid-cols-6 gap-3">{[0, 5, 10, 15, 20, 30].map(b => <button key={b} onClick={() => setBufferTime(b)} className={`p-3 rounded-lg border text-center transition-all ${bufferTime === b ? 'bg-baylor-gold text-baylor-green font-bold border-baylor-gold shadow-md' : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'}`}><div className="font-medium">{b === 0 ? 'None' : `${b}m`}</div></button>)}</div></div></div></div>
-            <div className="mb-8"><h2 className="text-xl font-serif font-semibold text-baylor-green mb-4 flex items-center border-b border-baylor-gold pb-2"><Users className="mr-2 text-baylor-gold" size={20} />Step 2: Who needs to attend? ({selectedProfessors.length} selected)</h2><div className="mb-4"><div className="relative"><Search className="absolute left-3 top-3 text-baylor-green" size={16} /><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={inputClass} placeholder="Search professors..." /></div></div>{selectedProfessors.length > 0 && <div className="mb-4 p-4 bg-baylor-green/10 rounded-lg border border-baylor-green/20"><div className="flex flex-wrap gap-2">{selectedProfessors.map(p => <span key={p} className="inline-flex items-center px-3 py-1 bg-baylor-green text-white rounded-full text-sm">{p}<button onClick={() => toggleProfessor(p)} className="ml-2 hover:bg-baylor-green/80 rounded-full p-1"><X size={12} /></button></span>)}</div></div>}
+            <div className="mb-8"><h2 className="text-xl font-serif font-semibold text-baylor-green mb-4 flex items-center border-b border-baylor-gold pb-2"><Users className="mr-2 text-baylor-gold" size={20} />Step 2: Who needs to attend? ({selectedProfessors.length} selected)</h2><div className="mb-4"><div className="relative"><Search className="absolute left-3 top-3 text-baylor-green" size={16} /><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`${inputClass} pl-10`} placeholder="Search professors..." /></div></div>{selectedProfessors.length > 0 && <div className="mb-4 p-4 bg-baylor-green/10 rounded-lg border border-baylor-green/20"><div className="flex flex-wrap gap-2">{selectedProfessors.map(p => <span key={p} className="inline-flex items-center px-3 py-1 bg-baylor-green text-white rounded-full text-sm">{p}<button onClick={() => toggleProfessor(p)} className="ml-2 hover:bg-baylor-green/80 rounded-full p-1"><X size={12} /></button></span>)}</div></div>}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">{filteredInstructors.map(p => <div key={p} className={`p-3 rounded-lg border transition-all flex justify-between items-center ${selectedProfessors.includes(p) ? (p === 'Staff' ? 'bg-baylor-gold/20 border-baylor-gold text-baylor-green' : 'bg-baylor-green/10 border-baylor-green text-baylor-green') : 'bg-white border-gray-200'}`}><button onClick={() => toggleProfessor(p)} className="flex items-center flex-grow text-left"><div className={`w-3 h-3 rounded-full mr-3 ${selectedProfessors.includes(p) ? (p === 'Staff' ? 'bg-baylor-gold' : 'bg-baylor-green') : 'bg-gray-300'}`}></div><span className="text-sm font-medium">{p}</span></button>{p !== 'Staff' && <button onClick={(e) => { e.stopPropagation(); handleDrillDown('individualSchedule', p); }} className="p-1 rounded-full hover:bg-baylor-green/20"><Eye size={16} className="text-baylor-green" /></button>}</div>)}</div></div>
             <div className="text-center"><button onClick={findMeetingTimes} disabled={selectedProfessors.length === 0} className={`${buttonClass} px-8 py-3 rounded-lg font-bold text-lg shadow-md`}><span className="flex items-center justify-center"><Calendar className="mr-2" size={18} />Find Available Times</span></button>{selectedProfessors.length === 0 && <p className="text-gray-500 text-sm mt-2">Select at least one faculty member to continue</p>}</div>
           </div>) : (<div className="space-y-6">
@@ -428,7 +425,67 @@ const FacultyScheduleDashboard = ({ onNavigate }) => {
         )}
         {activeTab === 'individual' && (<div className={cardClass}><h2 className="text-xl font-serif font-semibold text-baylor-green mb-6 border-b border-baylor-gold pb-2">Individual Professor Availability</h2><div className="mb-6"><label className="block text-sm font-medium text-gray-700 mb-2">Select Professor</label><CustomDropdown value={selectedIndividual} onChange={setSelectedIndividual} options={uniqueInstructors.map(i => ({ value: i, label: i }))} placeholder="Choose a professor..." className={selectClass} /></div>{selectedIndividual && <div className="space-y-4"><h3 className="text-lg font-serif font-semibold text-baylor-green border-b border-baylor-gold/50 pb-2">{selectedIndividual}'s Schedule & Availability</h3>{Object.entries(dayNames).map(([dayCode, dayName]) => { const dayData = getIndividualAvailability(selectedIndividual)[dayCode]; return (<div key={dayCode} className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm"><h4 className="font-serif font-semibold text-baylor-green mb-3">{dayName}</h4><div className="grid md:grid-cols-2 gap-4"><div><h5 className="text-sm font-medium text-baylor-green mb-2 border-b border-baylor-gold/30 pb-1">Classes & Commitments</h5>{dayData.busyPeriods.length > 0 ? <div className="space-y-2">{dayData.busyPeriods.map((p, i) => <button key={i} onClick={() => handleDrillDown('courseDetails', p.course)} className="w-full text-left bg-baylor-gold/5 border border-baylor-gold/30 rounded-lg p-3 hover:bg-baylor-gold/10 focus:outline-none focus:ring-2 focus:ring-baylor-gold"><div className="font-medium text-baylor-green">{formatMinutesToTime(p.start)} - {formatMinutesToTime(p.end)}</div><div className="text-sm text-baylor-green/80">{p.course} - {p.title}</div><div className="text-xs text-gray-500">{p.room}</div></button>)}</div> : <div className="text-gray-500 text-sm p-3">No scheduled classes</div>}</div><div><h5 className="text-sm font-medium text-baylor-green mb-2 border-b border-baylor-gold/30 pb-1">Available Time Slots</h5>{dayData.availableSlots.length > 0 ? <div className="space-y-2">{dayData.availableSlots.map((s, i) => <div key={i} className="bg-baylor-green/5 border border-baylor-green/20 rounded-lg p-3"><div className="font-medium text-baylor-green">{formatMinutesToTime(s.start)} - {formatMinutesToTime(s.end)}</div><div className="text-sm text-baylor-green/80">{Math.floor(s.duration / 60)}h {s.duration % 60}m available</div></div>)}</div> : <div className="text-gray-500 text-sm p-3">No gaps in schedule</div>}</div></div></div>); })}</div>}</div>
         )}
-        {activeTab === 'rooms' && (<div className={cardClass}><h2 className="text-xl font-serif font-semibold text-baylor-green mb-6 border-b border-baylor-gold pb-2">Room Availability Finder</h2><div className="grid md:grid-cols-2 gap-6 mb-6"><div><label className="block text-sm font-medium text-gray-700 mb-2">Day</label><CustomDropdown value={roomSearchDay} onChange={setRoomSearchDay} options={Object.entries(dayNames).map(([c, n]) => ({ value: c, label: n }))} placeholder="Select day..." className={selectClass} /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">Time</label><div className="relative"><input type="time" value={roomSearchTime} onChange={(e) => setRoomSearchTime(e.target.value)} className={timeInputClass} min="08:00" max="17:00" step="1800" /><div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none"><Clock className="w-4 h-4 text-baylor-green" /></div></div></div></div>{roomSearchDay && roomSearchTime && <div><h3 className="text-lg font-serif font-semibold text-baylor-green mb-4 border-b border-baylor-gold/30 pb-2">Available Rooms - {dayNames[roomSearchDay]} at {roomSearchTime}</h3>{(() => { const availableRooms = uniqueRooms.filter(room => !scheduleData.some(item => item.Day === roomSearchDay && item.Room === room && parseTime(roomSearchTime) >= parseTime(item['Start Time']) && parseTime(roomSearchTime) < parseTime(item['End Time']))); return (<div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">{availableRooms.length > 0 ? availableRooms.map(room => <button key={room} onClick={() => handleDrillDown('room', room, {day: roomSearchDay})} className="w-full text-left bg-baylor-green/5 border border-baylor-green/20 rounded-lg p-4 hover:bg-baylor-green/10 transition-colors focus:outline-none focus:ring-2 focus:ring-baylor-gold"><div className="font-medium text-baylor-green">{room}</div><div className="text-sm text-baylor-green/80 mt-1">Available - Click to see daily schedule</div></button>) : <div className="col-span-full text-center py-8 text-gray-500"><div className="text-lg">🚫</div><div className="mt-2">No rooms available at this time</div></div>}</div>);})()}</div>}</div>
+        {activeTab === 'rooms' && (
+          <div className={cardClass}>
+            <h2 className="text-xl font-serif font-semibold text-baylor-green mb-4 border-b border-baylor-gold pb-2">Room Schedule Matrix</h2>
+            <div className="flex items-center justify-center gap-1 bg-gray-100 p-1 rounded-lg mb-4">
+              {Object.entries(dayNames).map(([dayCode, dayName]) => (
+                <button key={dayCode} onClick={() => setRoomScheduleDay(dayCode)} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors w-full ${roomScheduleDay === dayCode ? 'bg-baylor-green text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>
+                  {dayName}
+                </button>
+              ))}
+            </div>
+            <div className="overflow-x-auto">
+                <div className="relative">
+                    {/* Timeline Header */}
+                    <div className="flex sticky top-0 bg-white z-10 border-b-2 border-baylor-green">
+                        <div className="w-40 flex-shrink-0 font-semibold p-2 text-baylor-green">Room</div>
+                        <div className="flex-grow flex">
+                            {timeLabels.slice(0, -1).map(time => (
+                                <div key={time} style={{width: `${(60 / totalMinutes) * 100}%`}} className="text-center text-xs font-medium p-2 border-l border-gray-200">
+                                    {formatMinutesToTime(time).replace(':00','')}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    {/* Room Rows */}
+                    {uniqueRooms.map(room => (
+                        <div key={room} className="relative flex items-center border-t border-gray-200" style={{ height: '50px' }}>
+                            <div className="w-40 flex-shrink-0 font-medium p-2 text-sm text-baylor-green self-start">{room}</div>
+                            <div className="absolute top-0 left-40 right-0 h-full bg-gray-50/50">
+                                {/* Grid lines */}
+                                {timeLabels.slice(1, -1).map(time => (
+                                    <div key={time} style={{ left: `${((time - dayStart) / totalMinutes) * 100}%` }} className="absolute top-0 bottom-0 w-px bg-gray-200"></div>
+                                ))}
+                                {/* Scheduled Items */}
+                                {dailyRoomSchedules[room].map(item => {
+                                    const start = parseTime(item['Start Time']);
+                                    const end = parseTime(item['End Time']);
+                                    if (start === null || end === null || end <= start) return null;
+
+                                    const left = Math.max(0, ((start - dayStart) / totalMinutes) * 100);
+                                    const width = (((end - start) / totalMinutes) * 100);
+
+                                    if (end < dayStart || start > dayEnd) return null;
+
+                                    return (
+                                        <button
+                                            key={item.id}
+                                            onClick={() => handleDrillDown('courseDetails', item.Course)}
+                                            style={{ position: 'absolute', left: `${left}%`, width: `${width}%`, top: '4px', bottom: '4px' }}
+                                            className="px-2 py-0 overflow-hidden text-left text-white text-xs rounded-md bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green shadow-sm transition-all"
+                                        >
+                                            <div className="font-bold truncate">{item.Course}</div>
+                                            <div className="truncate">{item.Instructor}</div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+          </div>
         )}
         {activeTab === 'insights' && (
           <div className="space-y-6">
@@ -480,6 +537,91 @@ const FacultyScheduleDashboard = ({ onNavigate }) => {
             <div className={`${cardClass} mb-0`}>
               <h3 className="text-lg font-serif font-semibold text-baylor-green mb-4 border-b border-baylor-gold/30 pb-2">Faculty Teaching Load</h3>
               <div className="overflow-x-auto"><table className="w-full"><thead className="bg-baylor-green/5"><tr><SortableHeader label="Professor" sortKey="name" currentSort={facultySort} onSort={handleFacultySort} /><SortableHeader label="Unique Courses" sortKey="courses" currentSort={facultySort} onSort={handleFacultySort} /><SortableHeader label="Weekly Hours" sortKey="totalHours" currentSort={facultySort} onSort={handleFacultySort} /></tr></thead><tbody className="divide-y divide-baylor-green/10">{sortedFacultyWorkload.map(([instructor, data]) => (<tr key={instructor} onClick={() => handleDrillDown('faculty', instructor)} className="hover:bg-baylor-green/5 transition-colors cursor-pointer"><td className="px-4 py-3 text-sm text-baylor-green font-medium">{instructor}</td><td className="px-4 py-3 text-sm text-baylor-green/80 text-center">{data.courses}</td><td className="px-4 py-3 text-sm text-baylor-green/80 font-bold text-center">{data.totalHours.toFixed(1)}</td></tr>))}</tbody></table></div>
+            </div>
+          </div>
+        )}
+        {activeTab === 'data' && (
+          <div className={cardClass}>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 border-b border-baylor-gold pb-2 gap-4">
+              <h2 className="text-xl font-serif font-semibold text-baylor-green">Manage Schedule Data</h2>
+              <button onClick={() => setHistoryVisible(!historyVisible)} className={`${secondaryButtonClass} text-sm flex items-center`}>
+                <History size={16} className="mr-2" />
+                {historyVisible ? 'Hide' : 'Show'} Change History ({editHistory.length})
+              </button>
+            </div>
+
+            {historyVisible && (
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <h3 className="text-lg font-serif font-semibold text-baylor-green mb-3">Change History</h3>
+                {editHistory.length > 0 ? (
+                  <ul className="space-y-3 max-h-96 overflow-y-auto">
+                    {editHistory.map((change, index) => (
+                      <li key={index} className={`p-3 rounded-lg flex items-center justify-between text-sm ${change.isRevert ? 'bg-blue-50 border-blue-200' : 'bg-yellow-50 border-yellow-200'} border`}>
+                        <div>
+                          <p className="font-medium text-gray-800">
+                            <span className="font-bold">{change.instructor}</span>'s <span className="font-bold">{change.course}</span> entry updated.
+                          </p>
+                          <p className="text-gray-600">
+                            Field <span className="font-semibold">{change.field}</span> changed from "{change.oldValue}" to "{change.newValue}".
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">{new Date(change.timestamp).toLocaleString()}</p>
+                        </div>
+                        {!change.isRevert && (
+                          <button onClick={() => onRevertChange(change, index)} className="p-2 rounded-full text-gray-600 hover:bg-gray-200 transition-colors">
+                            <RotateCcw size={16} />
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : <p className="text-gray-500">No changes have been made yet.</p>}
+              </div>
+            )}
+            
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-baylor-green/5">
+                  <tr>
+                    {['Instructor', 'Course', 'Course Title', 'Day', 'Start Time', 'End Time', 'Room', ''].map(h => <th key={h} className="px-2 py-3 text-left font-serif font-semibold text-baylor-green">{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {scheduleData.map(row => (
+                    <tr key={row.id} className="hover:bg-gray-50">
+                      {editingRowId === row.id ? (
+                        <>
+                          <td className="p-1"><input name="Instructor" value={editFormData.Instructor} onChange={handleEditFormChange} className={editInputClass} /></td>
+                          <td className="p-1"><input name="Course" value={editFormData.Course} onChange={handleEditFormChange} className={editInputClass} /></td>
+                          <td className="p-1"><input name="Course Title" value={editFormData['Course Title']} onChange={handleEditFormChange} className={editInputClass} /></td>
+                          <td className="p-1"><input name="Day" value={editFormData.Day} onChange={handleEditFormChange} className={editInputClass} /></td>
+                          <td className="p-1"><input name="Start Time" value={editFormData['Start Time']} onChange={handleEditFormChange} className={editInputClass} /></td>
+                          <td className="p-1"><input name="End Time" value={editFormData['End Time']} onChange={handleEditFormChange} className={editInputClass} /></td>
+                          <td className="p-1"><input name="Room" value={editFormData.Room} onChange={handleEditFormChange} className={editInputClass} /></td>
+                          <td className="p-1 text-right">
+                            <div className="flex gap-2">
+                              <button onClick={handleEditSave} className="p-2 text-green-600 hover:bg-green-100 rounded-full"><Save size={16} /></button>
+                              <button onClick={handleEditCancel} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-2 py-2 text-gray-700">{row.Instructor}</td>
+                          <td className="px-2 py-2 text-gray-700">{row.Course}</td>
+                          <td className="px-2 py-2 text-gray-700">{row['Course Title']}</td>
+                          <td className="px-2 py-2 text-gray-700">{row.Day}</td>
+                          <td className="px-2 py-2 text-gray-700">{row['Start Time']}</td>
+                          <td className="px-2 py-2 text-gray-700">{row['End Time']}</td>
+                          <td className="px-2 py-2 text-gray-700">{row.Room}</td>
+                          <td className="px-2 py-2 text-right">
+                            <button onClick={() => handleEditClick(row)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><Edit size={16} /></button>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

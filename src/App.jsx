@@ -9,22 +9,141 @@ function App() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
 
+  // State for schedule data and edit history has been lifted here
+  const [scheduleData, setScheduleData] = useState([]);
+  const [editHistory, setEditHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Helper to parse CSV content
+  const parseCsv = (csvText) => {
+    const lines = csvText.split('\n').filter(line => line.trim());
+    if (lines.length === 0) return [];
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    return lines.slice(1).map(line => {
+      const values = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') inQuotes = !inQuotes;
+        else if (char === ',' && !inQuotes) {
+          values.push(current.trim().replace(/"/g, ''));
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      values.push(current.trim().replace(/"/g, ''));
+      const obj = {};
+      headers.forEach((header, index) => {
+        obj[header] = values[index] || '';
+      });
+      return obj;
+    });
+  };
+
+  // Load data on initial mount from CSV, then check localStorage for edits
   useEffect(() => {
-    // Check if user is already authenticated
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch('/HSD_Instructor_Schedules.csv');
+        const csvContent = await response.text();
+        // Assign a unique ID to each row for stable editing
+        const parsedData = parseCsv(csvContent).map((row, index) => ({ ...row, id: index }));
+
+        const savedData = localStorage.getItem('scheduleData');
+        const savedHistory = localStorage.getItem('editHistory');
+
+        setScheduleData(savedData ? JSON.parse(savedData) : parsedData);
+        setEditHistory(savedHistory ? JSON.parse(savedHistory) : []);
+      } catch (error) {
+        console.error("Failed to load schedule data:", error);
+        // Fallback to empty array on error
+        setScheduleData([]);
+        setEditHistory([]);
+      }
+      setLoading(false);
+    };
+
     const auth = localStorage.getItem('isAuthenticated');
     if (auth === 'true') {
       setIsAuthenticated(true);
+      loadData();
+    } else {
+      setLoading(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
-  const handleLogout = () => {
-    setShowLogoutConfirm(true);
+  // Handler to process a data update
+  const handleDataUpdate = (updatedRow) => {
+    const originalRow = scheduleData.find(r => r.id === updatedRow.id);
+    const changes = [];
+    
+    // Compare original and updated row to create history items
+    Object.keys(updatedRow).forEach(key => {
+        if (key !== 'id' && originalRow[key] !== updatedRow[key]) {
+            changes.push({
+                rowId: updatedRow.id,
+                instructor: updatedRow.Instructor,
+                course: updatedRow.Course,
+                field: key,
+                oldValue: originalRow[key],
+                newValue: updatedRow[key],
+                timestamp: new Date().toISOString(),
+            });
+        }
+    });
+
+    if (changes.length > 0) {
+        const newData = scheduleData.map(row => row.id === updatedRow.id ? updatedRow : row);
+        // Prepend new changes to the history
+        const newHistory = [...changes, ...editHistory];
+
+        setScheduleData(newData);
+        setEditHistory(newHistory);
+
+        // Persist changes to localStorage
+        localStorage.setItem('scheduleData', JSON.stringify(newData));
+        localStorage.setItem('editHistory', JSON.stringify(newHistory));
+    }
   };
+
+  // Handler to revert a change from the history
+  const handleRevertChange = (changeToRevert, indexToRevert) => {
+    const targetRow = scheduleData.find(row => row.id === changeToRevert.rowId);
+    if (targetRow) {
+        const revertedRow = { ...targetRow, [changeToRevert.field]: changeToRevert.oldValue };
+        const newData = scheduleData.map(row => (row.id === revertedRow.id ? revertedRow : row));
+        
+        // A new history item is created to log the revert action
+        const revertHistoryLog = {
+            rowId: revertedRow.id,
+            instructor: revertedRow.Instructor,
+            course: revertedRow.Course,
+            field: changeToRevert.field,
+            oldValue: changeToRevert.newValue, // The value we are changing from
+            newValue: changeToRevert.oldValue, // The value we are reverting to
+            timestamp: new Date().toISOString(),
+            isRevert: true,
+        };
+        const newHistory = [revertHistoryLog, ...editHistory];
+
+        setScheduleData(newData);
+        setEditHistory(newHistory);
+        localStorage.setItem('scheduleData', JSON.stringify(newData));
+        localStorage.setItem('editHistory', JSON.stringify(newHistory));
+    }
+  };
+
+
+  const handleLogout = () => setShowLogoutConfirm(true);
 
   const confirmLogout = () => {
     localStorage.removeItem('isAuthenticated');
     setIsAuthenticated(false);
     setShowLogoutConfirm(false);
+    setCurrentPage('dashboard');
   };
 
   if (!isAuthenticated) {
@@ -64,7 +183,14 @@ function App() {
       <main className="flex-grow bg-gray-50">
         {currentPage === 'dashboard' ? (
           <div className="container mx-auto px-4 py-6">
-            <FacultyScheduleDashboard onNavigate={setCurrentPage} />
+            <FacultyScheduleDashboard 
+              scheduleData={scheduleData}
+              editHistory={editHistory}
+              onDataUpdate={handleDataUpdate}
+              onRevertChange={handleRevertChange}
+              loading={loading}
+              onNavigate={setCurrentPage}
+            />
           </div>
         ) : (
           <SystemsPage onNavigate={setCurrentPage} />
@@ -77,7 +203,6 @@ function App() {
         </div>
       </footer>
 
-      {/* Logout Confirmation Modal */}
       {showLogoutConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
@@ -104,4 +229,4 @@ function App() {
   );
 }
 
-export default App; 
+export default App;

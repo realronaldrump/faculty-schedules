@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, Clock, Users, Calendar, X, ChevronDown, CheckCircle, ArrowUpDown, ChevronsUpDown, BarChart2, Eye, Edit, Save, Trash2, History, RotateCcw, Filter, BookUser } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown'; // Import the new component
 import FacultyDirectory from './FacultyDirectory';
+import FacultyContactCard from './FacultyContactCard';
 
 // Custom Dropdown Component (single select)
 const CustomDropdown = ({ value, onChange, options, placeholder, className }) => {
@@ -87,6 +88,7 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
   const [isDrillDownModalOpen, setIsDrillDownModalOpen] = useState(false);
   const [drillDownModalContent, setDrillDownModalContent] = useState({ title: '', data: [], columns: [], component: null });
   const drillDownModalRef = useRef(null);
+  const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
 
   // Insights Tab State
   const [facultySort, setFacultySort] = useState({ key: 'totalHours', direction: 'desc' });
@@ -141,19 +143,7 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
 
   // Memoized data derivations
-  const uniqueInstructors = useMemo(() => {
-    const instructors = new Set();
-    scheduleData.forEach(item => {
-      const faculty = facultyData.find(f => f.name === item.Instructor);
-      if (faculty) {
-        instructors.add(faculty.name);
-      } else if (item.Instructor.includes('Staff')) {
-        instructors.add('Adjunct');
-      }
-    });
-    return [...instructors].sort();
-  }, [scheduleData, facultyData]);
-
+  const uniqueInstructors = useMemo(() => [...new Set(scheduleData.map(item => item.Instructor.includes('Staff') ? 'Staff' : item.Instructor))].sort(), [scheduleData]);
   const uniqueRooms = useMemo(() => [...new Set(scheduleData.map(item => item.Room).filter(Boolean))].filter(room => room.toLowerCase() !== 'online').sort(), [scheduleData]);
   const filteredInstructors = useMemo(() => uniqueInstructors.filter(instructor => instructor.toLowerCase().includes(searchTerm.toLowerCase())), [uniqueInstructors, searchTerm]);
   
@@ -164,7 +154,7 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
     days.forEach(day => {
       const busyPeriods = [];
       selectedProfessors.forEach(professor => {
-        if (professor === 'Adjunct') return;
+        if (professor === 'Staff') return;
         scheduleData.filter(item => item.Instructor === professor && item.Day === day).forEach(item => {
           const start = parseTime(item['Start Time']); const end = parseTime(item['End Time']);
           if (start !== null && end !== null) busyPeriods.push({ start: Math.max(0, start - bufferTime), end: end + bufferTime });
@@ -209,29 +199,27 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
   
   const departmentInsights = useMemo(() => {
     if (scheduleData.length === 0) return null;
-    const facultyWorkload = {}; const adjunctTaughtCourses = new Set();
+    const facultyWorkload = {}; const staffTaughtCourses = new Set();
     const roomUtilization = {}; const processedSessions = new Set();
-    uniqueRooms.forEach(room => { roomUtilization[room] = { classes: 0, hours: 0, adjunctTaughtClasses: 0 }; });
+    uniqueRooms.forEach(room => { roomUtilization[room] = { classes: 0, hours: 0, staffTaughtClasses: 0 }; });
     scheduleData.forEach(item => {
-      const faculty = facultyData.find(f => f.name === item.Instructor);
-      const isAdjunct = faculty ? faculty.isAdjunct : item.Instructor.includes('Staff');
-      const instructor = isAdjunct ? 'Adjunct' : item.Instructor;
+      const instructor = item.Instructor.includes('Staff') ? 'Staff' : item.Instructor;
       const start = parseTime(item['Start Time']), end = parseTime(item['End Time']);
       const duration = (start && end) ? (end - start) / 60 : 0;
       if (roomUtilization[item.Room]) {
         roomUtilization[item.Room].classes++; roomUtilization[item.Room].hours += duration;
-        if (isAdjunct) roomUtilization[item.Room].adjunctTaughtClasses++;
+        if (instructor === 'Staff') roomUtilization[item.Room].staffTaughtClasses++;
       }
       const sessionKey = `${item.Instructor}-${item.Course}-${item.Day}-${item['Start Time']}-${item['End Time']}`;
       if (processedSessions.has(sessionKey)) return;
       processedSessions.add(sessionKey);
-      if (isAdjunct) { adjunctTaughtCourses.add(item.Course); return; }
+      if (instructor === 'Staff') { staffTaughtCourses.add(item.Course); return; }
       if (!facultyWorkload[instructor]) facultyWorkload[instructor] = { courseSet: new Set(), totalHours: 0 };
       facultyWorkload[instructor].courseSet.add(item.Course); facultyWorkload[instructor].totalHours += duration;
     });
     const finalFacultyWorkload = Object.fromEntries(Object.entries(facultyWorkload).map(([i, d]) => [i, { courses: d.courseSet.size, totalHours: d.totalHours }]));
-    return { facultyWorkload: finalFacultyWorkload, roomUtilization, totalClassSessions: processedSessions.size, adjunctTaughtCourses: adjunctTaughtCourses.size };
-  }, [scheduleData, uniqueRooms, facultyData]);
+    return { facultyWorkload: finalFacultyWorkload, roomUtilization, totalClassSessions: processedSessions.size, staffTaughtCourses: staffTaughtCourses.size };
+  }, [scheduleData, uniqueRooms]);
 
   const filteredHourCounts = useMemo(() => {
     const dataToProcess = hourlyUsageDayFilter === 'All' ? scheduleData : scheduleData.filter(item => item.Day === hourlyUsageDayFilter);
@@ -343,6 +331,13 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
   const findMeetingTimes = () => setShowResults(true);
   const handleSlotClick = (dayCode, dayName, slot) => { setSelectedSlotForRoomSearch({ dayCode, dayName, slot }); setIsRoomModalOpen(true); };
   
+  const handleShowContactCard = (facultyName) => {
+    const faculty = facultyData.find(f => f.name === facultyName);
+    if (faculty) {
+        setSelectedFacultyForCard(faculty);
+    }
+  };
+
   const handleDrillDown = (type, identifier, context) => {
     let title = '', data = [], columns = [], component = null;
 
@@ -363,7 +358,7 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
         break;
       case 'facultyList':
         title = 'All Faculty Members'; columns = [{ key: 'name', label: 'Name' }];
-        data = uniqueInstructors.filter(i => i !== 'Adjunct').map(name => ({name}));
+        data = uniqueInstructors.filter(i => i !== 'Staff').map(name => ({name}));
         break;
       case 'faculty':
         title = `Teaching Load: ${identifier}`;
@@ -455,7 +450,7 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
     const { title, data, columns, component } = drillDownModalContent;
     return <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 animate-fade-in"><div ref={drillDownModalRef} className="bg-white rounded-xl shadow-2xl p-6 max-w-4xl w-full mx-4 flex flex-col" style={{maxHeight: '90vh'}}><div className="flex justify-between items-center mb-4 border-b border-baylor-gold pb-3 flex-shrink-0"><h3 className="text-xl font-serif font-bold text-baylor-green">{title}</h3><button onClick={() => setIsDrillDownModalOpen(false)} className="p-2 rounded-full hover:bg-gray-200"><X size={20} className="text-gray-600" /></button></div><div className="overflow-y-auto flex-grow pr-2">{component ? component : (data.length > 0 ? <table className="w-full text-sm">
       <thead className="sticky top-0 bg-white shadow-sm"><tr>{columns.map(col => <th key={col.key} className="px-4 py-3 text-left font-serif font-semibold text-baylor-green bg-baylor-green/5">{col.label}</th>)}</tr></thead>
-      <tbody className="divide-y divide-gray-200">{data.map((row, index) => <tr key={index} className="hover:bg-baylor-green/5">{columns.map(col => <td key={col.key} className="px-4 py-3 text-gray-700">{row[col.key]}</td>)}</tr>)}</tbody>
+      <tbody className="divide-y divide-gray-200">{data.map((row, index) => <tr key={index} className="hover:bg-baylor-green/5">{columns.map(col => <td key={col.key} className="px-4 py-3 text-gray-700">{col.key === 'Instructor' && row[col.key] !== 'Staff' ? (<button className="hover:underline" onClick={() => handleShowContactCard(row[col.key])}>{row[col.key]}</button>) : (row[col.key])}</td>)}</tr>)}</tbody>
     </table> : <div className="text-center py-12 text-gray-500"><p className="text-lg">No detailed data to display.</p></div>)}</div><div className="mt-6 text-right flex-shrink-0"><button onClick={() => setIsDrillDownModalOpen(false)} className={secondaryButtonClass}>Close</button></div></div></div>;
   };
 
@@ -493,15 +488,15 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
         {activeTab === 'group' && (
           <>{!showResults ? (<div className={cardClass}>
             <div className="mb-8"><h2 className="text-xl font-serif font-semibold text-baylor-green mb-4 flex items-center border-b border-baylor-gold pb-2"><Clock className="mr-2 text-baylor-gold" size={20} />Step 1: Meeting Details</h2><div className="space-y-4"><div><label className="block text-sm font-medium text-gray-700 mb-2">Meeting Duration</label><div className="grid grid-cols-3 md:grid-cols-6 gap-3">{[30, 60, 90, 120, 150, 180].map(d => <button key={d} onClick={() => setMeetingDuration(d)} className={`p-3 rounded-lg border text-center transition-all ${meetingDuration === d ? 'bg-baylor-green text-white border-baylor-green shadow-md' : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'}`}><div className="font-medium">{d === 60 ? '1 hr' : d === 120 ? '2 hrs' : `${d}m`}</div></button>)}</div></div><div><label className="block text-sm font-medium text-gray-700 mb-2">Buffer Time (before and after)</label><div className="grid grid-cols-3 md:grid-cols-6 gap-3">{[0, 5, 10, 15, 20, 30].map(b => <button key={b} onClick={() => setBufferTime(b)} className={`p-3 rounded-lg border text-center transition-all ${bufferTime === b ? 'bg-baylor-gold text-baylor-green font-bold border-baylor-gold shadow-md' : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'}`}><div className="font-medium">{b === 0 ? 'None' : `${b}m`}</div></button>)}</div></div></div></div>
-            <div className="mb-8"><h2 className="text-xl font-serif font-semibold text-baylor-green mb-4 flex items-center border-b border-baylor-gold pb-2"><Users className="mr-2 text-baylor-gold" size={20} />Step 2: Who needs to attend? ({selectedProfessors.length} selected)</h2><div className="mb-4"><div className="relative"><Search className="absolute left-3 top-3 text-baylor-green" size={16} /><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`${inputClass} pl-10`} placeholder="Search professors..." /></div></div>{selectedProfessors.length > 0 && <div className="mb-4 p-4 bg-baylor-green/10 rounded-lg border border-baylor-green/20"><div className="flex flex-wrap gap-2">{selectedProfessors.map(p => <span key={p} className="inline-flex items-center px-3 py-1 bg-baylor-green text-white rounded-full text-sm">{p}<button onClick={() => toggleProfessor(p)} className="ml-2 hover:bg-baylor-green/80 rounded-full p-1"><X size={12} /></button></span>)}</div></div>}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">{filteredInstructors.map(p => <div key={p} className={`p-3 rounded-lg border transition-all flex justify-between items-center ${selectedProfessors.includes(p) ? (p === 'Adjunct' ? 'bg-baylor-gold/20 border-baylor-gold text-baylor-green' : 'bg-baylor-green/10 border-baylor-green text-baylor-green') : 'bg-white border-gray-200'}`}><button onClick={() => toggleProfessor(p)} className="flex items-center flex-grow text-left"><div className={`w-3 h-3 rounded-full mr-3 ${selectedProfessors.includes(p) ? (p === 'Adjunct' ? 'bg-baylor-gold' : 'bg-baylor-green') : 'bg-gray-300'}`}></div><span className="text-sm font-medium">{p}</span></button>{p !== 'Adjunct' && <button onClick={(e) => { e.stopPropagation(); handleDrillDown('individualSchedule', p); }} className="p-1 rounded-full hover:bg-baylor-green/20"><Eye size={16} className="text-baylor-green" /></button>}</div>)}</div></div>
+            <div className="mb-8"><h2 className="text-xl font-serif font-semibold text-baylor-green mb-4 flex items-center border-b border-baylor-gold pb-2"><Users className="mr-2 text-baylor-gold" size={20} />Step 2: Who needs to attend? ({selectedProfessors.length} selected)</h2><div className="mb-4"><div className="relative"><Search className="absolute left-3 top-3 text-baylor-green" size={16} /><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`${inputClass} pl-10`} placeholder="Search professors..." /></div></div>{selectedProfessors.length > 0 && <div className="mb-4 p-4 bg-baylor-green/10 rounded-lg border border-baylor-green/20"><div className="flex flex-wrap gap-2">{selectedProfessors.map(p => <span key={p} className="inline-flex items-center px-3 py-1 bg-baylor-green text-white rounded-full text-sm"><span className="cursor-pointer hover:underline" onClick={() => handleShowContactCard(p)}>{p}</span><button onClick={() => toggleProfessor(p)} className="ml-2 hover:bg-baylor-green/80 rounded-full p-1"><X size={12} /></button></span>)}</div></div>}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">{filteredInstructors.map(p => <div key={p} className={`p-3 rounded-lg border transition-all flex justify-between items-center ${selectedProfessors.includes(p) ? (p === 'Staff' ? 'bg-baylor-gold/20 border-baylor-gold text-baylor-green' : 'bg-baylor-green/10 border-baylor-green text-baylor-green') : 'bg-white border-gray-200'}`}><button onClick={() => toggleProfessor(p)} className="flex items-center flex-grow text-left"><div className={`w-3 h-3 rounded-full mr-3 ${selectedProfessors.includes(p) ? (p === 'Staff' ? 'bg-baylor-gold' : 'bg-baylor-green') : 'bg-gray-300'}`}></div><span className="text-sm font-medium hover:underline cursor-pointer" onClick={(e) => { e.stopPropagation(); if (p !== 'Staff') handleShowContactCard(p);}}>{p}</span></button>{p !== 'Staff' && <button onClick={(e) => { e.stopPropagation(); handleDrillDown('individualSchedule', p); }} className="p-1 rounded-full hover:bg-baylor-green/20"><Eye size={16} className="text-baylor-green" /></button>}</div>)}</div></div>
             <div className="text-center"><button onClick={findMeetingTimes} disabled={selectedProfessors.length === 0} className={`${buttonClass} px-8 py-3 rounded-lg font-bold text-lg shadow-md`}><span className="flex items-center justify-center"><Calendar className="mr-2" size={18} />Find Available Times</span></button>{selectedProfessors.length === 0 && <p className="text-gray-500 text-sm mt-2">Select at least one faculty member to continue</p>}</div>
           </div>) : (<div className="space-y-6">
             <div className={cardClass}><div className="flex items-center justify-between"><h2 className="text-xl font-serif font-semibold text-baylor-green mb-2">Meeting Times Found</h2><button onClick={() => setShowResults(false)} className={`${buttonClass} flex items-center`}><span className="mr-2">←</span> Back to Setup</button></div><div className="mt-4 p-3 bg-baylor-green/5 rounded-lg border border-baylor-green/20"><div className="flex flex-wrap gap-2">{selectedProfessors.map(p => <span key={p} className="px-3 py-1 bg-white rounded-lg text-sm text-baylor-green border border-baylor-green/30 font-medium">{p}</span>)}</div></div></div>
             <div className="grid gap-4">{Object.entries(dayNames).map(([dayCode, dayName]) => { const slots = commonAvailability[dayCode] || []; return (<div key={dayCode} className={cardClass}><div className="flex items-center justify-between mb-4"><h3 className="text-lg font-serif font-semibold text-baylor-green flex items-center"><Calendar className="mr-2 text-baylor-gold" size={18} />{dayName}</h3><div className="flex items-center gap-2"><button onClick={() => handleDrillDown('groupDaySchedule', null, { professors: selectedProfessors, dayCode })} className="text-xs font-semibold text-baylor-green hover:underline">View Daily Schedules</button><span className={`px-3 py-1 rounded-full text-sm font-medium ${slots.length > 0 ? 'bg-baylor-green/10 text-baylor-green' : 'bg-red-100 text-red-800'}`}>{slots.length > 0 ? `${slots.length} slot${slots.length !== 1 ? 's' : ''}` : 'No availability'}</span></div></div>{slots.length > 0 ? <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">{slots.map((s, i) => <button key={i} onClick={() => handleSlotClick(dayCode, dayName, s)} className="w-full text-left p-4 bg-baylor-green/5 border border-baylor-green/20 rounded-lg hover:bg-baylor-green/10 hover:shadow-md transition-all"><div className="font-semibold text-baylor-green text-lg">{formatMinutesToTime(s.start)} - {formatMinutesToTime(s.end)}</div><div className="text-sm text-baylor-green/80 mt-1">{Math.floor(s.duration / 60)}h {s.duration % 60}m window</div><div className="text-xs text-baylor-gold font-bold mt-2">Click to Find a Room →</div></button>)}</div> : <div className="text-center py-8 text-gray-500"><div className="text-lg">😞</div><div className="mt-2">No availability found for all participants</div></div>}</div>);})}</div>
           </div>)}</>
         )}
-        {activeTab === 'individual' && (<div className={cardClass}><h2 className="text-xl font-serif font-semibold text-baylor-green mb-6 border-b border-baylor-gold pb-2">Individual Professor Availability</h2><div className="mb-6"><label className="block text-sm font-medium text-gray-700 mb-2">Select Professor</label><CustomDropdown value={selectedIndividual} onChange={setSelectedIndividual} options={uniqueInstructors.map(i => ({ value: i, label: i }))} placeholder="Choose a professor..." className={selectClass} /></div>{selectedIndividual && <div className="space-y-4"><h3 className="text-lg font-serif font-semibold text-baylor-green border-b border-baylor-gold/50 pb-2">{selectedIndividual}'s Schedule & Availability</h3>{Object.entries(dayNames).map(([dayCode, dayName]) => { const dayData = getIndividualAvailability(selectedIndividual)[dayCode]; return (<div key={dayCode} className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm"><h4 className="font-serif font-semibold text-baylor-green mb-3">{dayName}</h4><div className="grid md:grid-cols-2 gap-4"><div><h5 className="text-sm font-medium text-baylor-green mb-2 border-b border-baylor-gold/30 pb-1">Classes & Commitments</h5>{dayData.busyPeriods.length > 0 ? <div className="space-y-2">{dayData.busyPeriods.map((p, i) => <button key={i} onClick={() => handleDrillDown('courseDetails', p.course)} className="w-full text-left bg-baylor-gold/5 border border-baylor-gold/30 rounded-lg p-3 hover:bg-baylor-gold/10 focus:outline-none focus:ring-2 focus:ring-baylor-gold"><div className="font-medium text-baylor-green">{formatMinutesToTime(p.start)} - {formatMinutesToTime(p.end)}</div><div className="text-sm text-baylor-green/80">{p.course} - {p.title}</div><div className="text-xs text-gray-500">{p.room}</div></button>)}</div> : <div className="text-gray-500 text-sm p-3">No scheduled classes</div>}</div><div><h5 className="text-sm font-medium text-baylor-green mb-2 border-b border-baylor-gold/30 pb-1">Available Time Slots</h5>{dayData.availableSlots.length > 0 ? <div className="space-y-2">{dayData.availableSlots.map((s, i) => <div key={i} className="bg-baylor-green/5 border border-baylor-green/20 rounded-lg p-3"><div className="font-medium text-baylor-green">{formatMinutesToTime(s.start)} - {formatMinutesToTime(s.end)}</div><div className="text-sm text-baylor-green/80">{Math.floor(s.duration / 60)}h {s.duration % 60}m available</div></div>)}</div> : <div className="text-gray-500 text-sm p-3">No gaps in schedule</div>}</div></div></div>); })}</div>}</div>
+        {activeTab === 'individual' && (<div className={cardClass}><h2 className="text-xl font-serif font-semibold text-baylor-green mb-6 border-b border-baylor-gold pb-2">Individual Professor Availability</h2><div className="mb-6"><label className="block text-sm font-medium text-gray-700 mb-2">Select Professor</label><CustomDropdown value={selectedIndividual} onChange={setSelectedIndividual} options={uniqueInstructors.map(i => ({ value: i, label: i }))} placeholder="Choose a professor..." className={selectClass} /></div>{selectedIndividual && <div className="space-y-4"><h3 className="text-lg font-serif font-semibold text-baylor-green border-b border-baylor-gold/50 pb-2"><button onClick={() => handleShowContactCard(selectedIndividual)} className="hover:underline">{selectedIndividual}</button>'s Schedule & Availability</h3>{Object.entries(dayNames).map(([dayCode, dayName]) => { const dayData = getIndividualAvailability(selectedIndividual)[dayCode]; return (<div key={dayCode} className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm"><h4 className="font-serif font-semibold text-baylor-green mb-3">{dayName}</h4><div className="grid md:grid-cols-2 gap-4"><div><h5 className="text-sm font-medium text-baylor-green mb-2 border-b border-baylor-gold/30 pb-1">Classes & Commitments</h5>{dayData.busyPeriods.length > 0 ? <div className="space-y-2">{dayData.busyPeriods.map((p, i) => <button key={i} onClick={() => handleDrillDown('courseDetails', p.course)} className="w-full text-left bg-baylor-gold/5 border border-baylor-gold/30 rounded-lg p-3 hover:bg-baylor-gold/10 focus:outline-none focus:ring-2 focus:ring-baylor-gold"><div className="font-medium text-baylor-green">{formatMinutesToTime(p.start)} - {formatMinutesToTime(p.end)}</div><div className="text-sm text-baylor-green/80">{p.course} - {p.title}</div><div className="text-xs text-gray-500">{p.room}</div></button>)}</div> : <div className="text-gray-500 text-sm p-3">No scheduled classes</div>}</div><div><h5 className="text-sm font-medium text-baylor-green mb-2 border-b border-baylor-gold/30 pb-1">Available Time Slots</h5>{dayData.availableSlots.length > 0 ? <div className="space-y-2">{dayData.availableSlots.map((s, i) => <div key={i} className="bg-baylor-green/5 border border-baylor-green/20 rounded-lg p-3"><div className="font-medium text-baylor-green">{formatMinutesToTime(s.start)} - {formatMinutesToTime(s.end)}</div><div className="text-sm text-baylor-green/80">{Math.floor(s.duration / 60)}h {s.duration % 60}m available</div></div>)}</div> : <div className="text-gray-500 text-sm p-3">No gaps in schedule</div>}</div></div></div>); })}</div>}</div>
         )}
         {activeTab === 'rooms' && (
           <div className={cardClass}>
@@ -554,7 +549,7 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
                                             className="px-2 py-0 overflow-hidden text-left text-white text-xs rounded-md bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green shadow-sm transition-all"
                                         >
                                             <div className="font-bold truncate">{item.Course}</div>
-                                            <div className="truncate">{item.Instructor}</div>
+                                            <div className="truncate cursor-pointer hover:underline" onClick={(e) => { e.stopPropagation(); handleShowContactCard(item.Instructor); }}>{item.Instructor}</div>
                                         </button>
                                     );
                                 })}
@@ -588,8 +583,8 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
               </div>
             )}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <button onClick={() => handleDrillDown('facultyList')} className={`${cardClass} text-left transition-transform hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-baylor-gold`}><div className="text-2xl font-bold text-baylor-green">{uniqueInstructors.filter(i => i !== 'Adjunct').length}</div><div className="text-gray-600 font-serif">Faculty Members</div></button>
-              <button onClick={() => handleDrillDown('totalSessions')} className={`${cardClass} text-left transition-transform hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-baylor-gold`}><div className="text-2xl font-bold text-baylor-green">{departmentInsights.totalClassSessions}</div><div className="text-gray-600 font-serif">Weekly Class Sessions</div><div className="text-sm text-baylor-gold mt-1 font-medium">{departmentInsights.adjunctTaughtCourses} adjunct-taught</div></button>
+              <button onClick={() => handleDrillDown('facultyList')} className={`${cardClass} text-left transition-transform hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-baylor-gold`}><div className="text-2xl font-bold text-baylor-green">{uniqueInstructors.filter(i => i !== 'Staff').length}</div><div className="text-gray-600 font-serif">Faculty Members</div></button>
+              <button onClick={() => handleDrillDown('totalSessions')} className={`${cardClass} text-left transition-transform hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-baylor-gold`}><div className="text-2xl font-bold text-baylor-green">{departmentInsights.totalClassSessions}</div><div className="text-gray-600 font-serif">Weekly Class Sessions</div><div className="text-sm text-baylor-gold mt-1 font-medium">{departmentInsights.staffTaughtCourses} staff-taught</div></button>
               <button onClick={() => handleDrillDown('roomList')} className={`${cardClass} text-left transition-transform hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-baylor-gold`}><div className="text-2xl font-bold text-baylor-green">{uniqueRooms.length}</div><div className="text-gray-600 font-serif">Classrooms</div></button>
               <div className={`${cardClass}`}><div className="text-2xl font-bold text-baylor-green">{formatMinutesToTime(filteredHourCounts.peakHour.hour * 60)}</div><div className="text-gray-600 font-serif">Peak Hour{hourlyUsageDayFilter !== 'All' && ` (${hourlyUsageDayFilter})`}</div></div>
             </div>
@@ -609,12 +604,12 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
                   <h3 className="text-lg font-serif font-semibold text-baylor-green">Room Utilization</h3>
                   <div className="flex items-center gap-2"><CustomDropdown value={roomSort.key} onChange={(key) => setRoomSort({ ...roomSort, key })} options={[{value: 'name', label: 'Sort by Name'}, {value: 'hours', label: 'Sort by Busiest'}, {value: 'classes', label: 'Sort by Sessions'}]} className="text-sm p-1 border border-gray-300 rounded-md bg-white"/><button onClick={() => setRoomSort(s => ({...s, direction: s.direction === 'asc' ? 'desc' : 'asc'}))} className="p-1.5 border border-gray-300 rounded-md hover:bg-gray-100"><ArrowUpDown size={14} className="text-gray-600" /></button></div>
               </div>
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">{sortedRoomUtilization.map(([room, data]) => (<button key={room} onClick={() => handleDrillDown('room', room)} className="border border-baylor-green/20 rounded-lg p-4 bg-baylor-green/5 hover:bg-baylor-green/10 hover:shadow-md transition-all text-left focus:outline-none focus:ring-2 focus:ring-baylor-gold"><div className="font-medium text-baylor-green text-sm mb-2">{room}</div><div className="text-lg font-bold text-baylor-green">{data.hours.toFixed(1)}h</div><div className="text-sm text-baylor-green/80">{data.classes} sessions/week {data.adjunctTaughtClasses > 0 && <span className="ml-2 text-baylor-gold font-medium">({data.adjunctTaughtClasses} adjunct)</span>}</div></button>))}</div>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">{sortedRoomUtilization.map(([room, data]) => (<button key={room} onClick={() => handleDrillDown('room', room)} className="border border-baylor-green/20 rounded-lg p-4 bg-baylor-green/5 hover:bg-baylor-green/10 hover:shadow-md transition-all text-left focus:outline-none focus:ring-2 focus:ring-baylor-gold"><div className="font-medium text-baylor-green text-sm mb-2">{room}</div><div className="text-lg font-bold text-baylor-green">{data.hours.toFixed(1)}h</div><div className="text-sm text-baylor-green/80">{data.classes} sessions/week {data.staffTaughtClasses > 0 && <span className="ml-2 text-baylor-gold font-medium">({data.staffTaughtClasses} staff)</span>}</div></button>))}</div>
             </div>
 
             <div className={`${cardClass} mb-0`}>
               <h3 className="text-lg font-serif font-semibold text-baylor-green mb-4 border-b border-baylor-gold/30 pb-2">Faculty Teaching Load</h3>
-              <div className="overflow-x-auto"><table className="w-full"><thead className="bg-baylor-green/5"><tr><SortableHeader label="Professor" sortKey="name" currentSort={facultySort} onSort={handleFacultySort} /><SortableHeader label="Unique Courses" sortKey="courses" currentSort={facultySort} onSort={handleFacultySort} /><SortableHeader label="Weekly Hours" sortKey="totalHours" currentSort={facultySort} onSort={handleFacultySort} /></tr></thead><tbody className="divide-y divide-baylor-green/10">{sortedFacultyWorkload.map(([instructor, data]) => (<tr key={instructor} onClick={() => handleDrillDown('faculty', instructor)} className="hover:bg-baylor-green/5 transition-colors cursor-pointer"><td className="px-4 py-3 text-sm text-baylor-green font-medium">{instructor}</td><td className="px-4 py-3 text-sm text-baylor-green/80 text-center">{data.courses}</td><td className="px-4 py-3 text-sm text-baylor-green/80 font-bold text-center">{data.totalHours.toFixed(1)}</td></tr>))}</tbody></table></div>
+              <div className="overflow-x-auto"><table className="w-full"><thead className="bg-baylor-green/5"><tr><SortableHeader label="Professor" sortKey="name" currentSort={facultySort} onSort={handleFacultySort} /><SortableHeader label="Unique Courses" sortKey="courses" currentSort={facultySort} onSort={handleFacultySort} /><SortableHeader label="Weekly Hours" sortKey="totalHours" currentSort={facultySort} onSort={handleFacultySort} /></tr></thead><tbody className="divide-y divide-baylor-green/10">{sortedFacultyWorkload.map(([instructor, data]) => (<tr key={instructor} className="hover:bg-baylor-green/5 transition-colors cursor-pointer"><td className="px-4 py-3 text-sm text-baylor-green font-medium cursor-pointer hover:underline" onClick={(e) => { e.stopPropagation(); handleShowContactCard(instructor);}}>{instructor}</td><td className="px-4 py-3 text-sm text-baylor-green/80 text-center">{data.courses}</td><td className="px-4 py-3 text-sm text-baylor-green/80 font-bold text-center">{data.totalHours.toFixed(1)}</td></tr>))}</tbody></table></div>
             </div>
           </div>
         )}
@@ -705,7 +700,7 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
                         </>
                       ) : (
                         <>
-                          <td className="px-2 py-2 text-gray-700">{row.Instructor}</td>
+                          <td className="px-2 py-2 text-gray-700"><button className="hover:underline" onClick={() => handleShowContactCard(row.Instructor)}>{row.Instructor}</button></td>
                           <td className="px-2 py-2 text-gray-700">{row.Course}</td>
                           <td className="px-2 py-2 text-gray-700">{row['Course Title']}</td>
                           <td className="px-2 py-2 text-gray-700">{row.Day}</td>
@@ -731,6 +726,7 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
 
       {renderRoomModal()}
       {renderDrillDownModal()}
+      {selectedFacultyForCard && <FacultyContactCard faculty={selectedFacultyForCard} onClose={() => setSelectedFacultyForCard(null)} />}
     </div>
   );
 };

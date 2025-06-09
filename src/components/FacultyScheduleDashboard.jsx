@@ -141,7 +141,19 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
 
   // Memoized data derivations
-  const uniqueInstructors = useMemo(() => [...new Set(scheduleData.map(item => item.Instructor.includes('Staff') ? 'Staff' : item.Instructor))].sort(), [scheduleData]);
+  const uniqueInstructors = useMemo(() => {
+    const instructors = new Set();
+    scheduleData.forEach(item => {
+      const faculty = facultyData.find(f => f.name === item.Instructor);
+      if (faculty) {
+        instructors.add(faculty.name);
+      } else if (item.Instructor.includes('Staff')) {
+        instructors.add('Adjunct');
+      }
+    });
+    return [...instructors].sort();
+  }, [scheduleData, facultyData]);
+
   const uniqueRooms = useMemo(() => [...new Set(scheduleData.map(item => item.Room).filter(Boolean))].filter(room => room.toLowerCase() !== 'online').sort(), [scheduleData]);
   const filteredInstructors = useMemo(() => uniqueInstructors.filter(instructor => instructor.toLowerCase().includes(searchTerm.toLowerCase())), [uniqueInstructors, searchTerm]);
   
@@ -152,7 +164,7 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
     days.forEach(day => {
       const busyPeriods = [];
       selectedProfessors.forEach(professor => {
-        if (professor === 'Staff') return;
+        if (professor === 'Adjunct') return;
         scheduleData.filter(item => item.Instructor === professor && item.Day === day).forEach(item => {
           const start = parseTime(item['Start Time']); const end = parseTime(item['End Time']);
           if (start !== null && end !== null) busyPeriods.push({ start: Math.max(0, start - bufferTime), end: end + bufferTime });
@@ -197,27 +209,29 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
   
   const departmentInsights = useMemo(() => {
     if (scheduleData.length === 0) return null;
-    const facultyWorkload = {}; const staffTaughtCourses = new Set();
+    const facultyWorkload = {}; const adjunctTaughtCourses = new Set();
     const roomUtilization = {}; const processedSessions = new Set();
-    uniqueRooms.forEach(room => { roomUtilization[room] = { classes: 0, hours: 0, staffTaughtClasses: 0 }; });
+    uniqueRooms.forEach(room => { roomUtilization[room] = { classes: 0, hours: 0, adjunctTaughtClasses: 0 }; });
     scheduleData.forEach(item => {
-      const instructor = item.Instructor.includes('Staff') ? 'Staff' : item.Instructor;
+      const faculty = facultyData.find(f => f.name === item.Instructor);
+      const isAdjunct = faculty ? faculty.isAdjunct : item.Instructor.includes('Staff');
+      const instructor = isAdjunct ? 'Adjunct' : item.Instructor;
       const start = parseTime(item['Start Time']), end = parseTime(item['End Time']);
       const duration = (start && end) ? (end - start) / 60 : 0;
       if (roomUtilization[item.Room]) {
         roomUtilization[item.Room].classes++; roomUtilization[item.Room].hours += duration;
-        if (instructor === 'Staff') roomUtilization[item.Room].staffTaughtClasses++;
+        if (isAdjunct) roomUtilization[item.Room].adjunctTaughtClasses++;
       }
       const sessionKey = `${item.Instructor}-${item.Course}-${item.Day}-${item['Start Time']}-${item['End Time']}`;
       if (processedSessions.has(sessionKey)) return;
       processedSessions.add(sessionKey);
-      if (instructor === 'Staff') { staffTaughtCourses.add(item.Course); return; }
+      if (isAdjunct) { adjunctTaughtCourses.add(item.Course); return; }
       if (!facultyWorkload[instructor]) facultyWorkload[instructor] = { courseSet: new Set(), totalHours: 0 };
       facultyWorkload[instructor].courseSet.add(item.Course); facultyWorkload[instructor].totalHours += duration;
     });
     const finalFacultyWorkload = Object.fromEntries(Object.entries(facultyWorkload).map(([i, d]) => [i, { courses: d.courseSet.size, totalHours: d.totalHours }]));
-    return { facultyWorkload: finalFacultyWorkload, roomUtilization, totalClassSessions: processedSessions.size, staffTaughtCourses: staffTaughtCourses.size };
-  }, [scheduleData, uniqueRooms]);
+    return { facultyWorkload: finalFacultyWorkload, roomUtilization, totalClassSessions: processedSessions.size, adjunctTaughtCourses: adjunctTaughtCourses.size };
+  }, [scheduleData, uniqueRooms, facultyData]);
 
   const filteredHourCounts = useMemo(() => {
     const dataToProcess = hourlyUsageDayFilter === 'All' ? scheduleData : scheduleData.filter(item => item.Day === hourlyUsageDayFilter);
@@ -349,7 +363,7 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
         break;
       case 'facultyList':
         title = 'All Faculty Members'; columns = [{ key: 'name', label: 'Name' }];
-        data = uniqueInstructors.filter(i => i !== 'Staff').map(name => ({name}));
+        data = uniqueInstructors.filter(i => i !== 'Adjunct').map(name => ({name}));
         break;
       case 'faculty':
         title = `Teaching Load: ${identifier}`;
@@ -480,7 +494,7 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
           <>{!showResults ? (<div className={cardClass}>
             <div className="mb-8"><h2 className="text-xl font-serif font-semibold text-baylor-green mb-4 flex items-center border-b border-baylor-gold pb-2"><Clock className="mr-2 text-baylor-gold" size={20} />Step 1: Meeting Details</h2><div className="space-y-4"><div><label className="block text-sm font-medium text-gray-700 mb-2">Meeting Duration</label><div className="grid grid-cols-3 md:grid-cols-6 gap-3">{[30, 60, 90, 120, 150, 180].map(d => <button key={d} onClick={() => setMeetingDuration(d)} className={`p-3 rounded-lg border text-center transition-all ${meetingDuration === d ? 'bg-baylor-green text-white border-baylor-green shadow-md' : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'}`}><div className="font-medium">{d === 60 ? '1 hr' : d === 120 ? '2 hrs' : `${d}m`}</div></button>)}</div></div><div><label className="block text-sm font-medium text-gray-700 mb-2">Buffer Time (before and after)</label><div className="grid grid-cols-3 md:grid-cols-6 gap-3">{[0, 5, 10, 15, 20, 30].map(b => <button key={b} onClick={() => setBufferTime(b)} className={`p-3 rounded-lg border text-center transition-all ${bufferTime === b ? 'bg-baylor-gold text-baylor-green font-bold border-baylor-gold shadow-md' : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'}`}><div className="font-medium">{b === 0 ? 'None' : `${b}m`}</div></button>)}</div></div></div></div>
             <div className="mb-8"><h2 className="text-xl font-serif font-semibold text-baylor-green mb-4 flex items-center border-b border-baylor-gold pb-2"><Users className="mr-2 text-baylor-gold" size={20} />Step 2: Who needs to attend? ({selectedProfessors.length} selected)</h2><div className="mb-4"><div className="relative"><Search className="absolute left-3 top-3 text-baylor-green" size={16} /><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`${inputClass} pl-10`} placeholder="Search professors..." /></div></div>{selectedProfessors.length > 0 && <div className="mb-4 p-4 bg-baylor-green/10 rounded-lg border border-baylor-green/20"><div className="flex flex-wrap gap-2">{selectedProfessors.map(p => <span key={p} className="inline-flex items-center px-3 py-1 bg-baylor-green text-white rounded-full text-sm">{p}<button onClick={() => toggleProfessor(p)} className="ml-2 hover:bg-baylor-green/80 rounded-full p-1"><X size={12} /></button></span>)}</div></div>}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">{filteredInstructors.map(p => <div key={p} className={`p-3 rounded-lg border transition-all flex justify-between items-center ${selectedProfessors.includes(p) ? (p === 'Staff' ? 'bg-baylor-gold/20 border-baylor-gold text-baylor-green' : 'bg-baylor-green/10 border-baylor-green text-baylor-green') : 'bg-white border-gray-200'}`}><button onClick={() => toggleProfessor(p)} className="flex items-center flex-grow text-left"><div className={`w-3 h-3 rounded-full mr-3 ${selectedProfessors.includes(p) ? (p === 'Staff' ? 'bg-baylor-gold' : 'bg-baylor-green') : 'bg-gray-300'}`}></div><span className="text-sm font-medium">{p}</span></button>{p !== 'Staff' && <button onClick={(e) => { e.stopPropagation(); handleDrillDown('individualSchedule', p); }} className="p-1 rounded-full hover:bg-baylor-green/20"><Eye size={16} className="text-baylor-green" /></button>}</div>)}</div></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">{filteredInstructors.map(p => <div key={p} className={`p-3 rounded-lg border transition-all flex justify-between items-center ${selectedProfessors.includes(p) ? (p === 'Adjunct' ? 'bg-baylor-gold/20 border-baylor-gold text-baylor-green' : 'bg-baylor-green/10 border-baylor-green text-baylor-green') : 'bg-white border-gray-200'}`}><button onClick={() => toggleProfessor(p)} className="flex items-center flex-grow text-left"><div className={`w-3 h-3 rounded-full mr-3 ${selectedProfessors.includes(p) ? (p === 'Adjunct' ? 'bg-baylor-gold' : 'bg-baylor-green') : 'bg-gray-300'}`}></div><span className="text-sm font-medium">{p}</span></button>{p !== 'Adjunct' && <button onClick={(e) => { e.stopPropagation(); handleDrillDown('individualSchedule', p); }} className="p-1 rounded-full hover:bg-baylor-green/20"><Eye size={16} className="text-baylor-green" /></button>}</div>)}</div></div>
             <div className="text-center"><button onClick={findMeetingTimes} disabled={selectedProfessors.length === 0} className={`${buttonClass} px-8 py-3 rounded-lg font-bold text-lg shadow-md`}><span className="flex items-center justify-center"><Calendar className="mr-2" size={18} />Find Available Times</span></button>{selectedProfessors.length === 0 && <p className="text-gray-500 text-sm mt-2">Select at least one faculty member to continue</p>}</div>
           </div>) : (<div className="space-y-6">
             <div className={cardClass}><div className="flex items-center justify-between"><h2 className="text-xl font-serif font-semibold text-baylor-green mb-2">Meeting Times Found</h2><button onClick={() => setShowResults(false)} className={`${buttonClass} flex items-center`}><span className="mr-2">←</span> Back to Setup</button></div><div className="mt-4 p-3 bg-baylor-green/5 rounded-lg border border-baylor-green/20"><div className="flex flex-wrap gap-2">{selectedProfessors.map(p => <span key={p} className="px-3 py-1 bg-white rounded-lg text-sm text-baylor-green border border-baylor-green/30 font-medium">{p}</span>)}</div></div></div>
@@ -574,8 +588,8 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
               </div>
             )}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <button onClick={() => handleDrillDown('facultyList')} className={`${cardClass} text-left transition-transform hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-baylor-gold`}><div className="text-2xl font-bold text-baylor-green">{uniqueInstructors.filter(i => i !== 'Staff').length}</div><div className="text-gray-600 font-serif">Faculty Members</div></button>
-              <button onClick={() => handleDrillDown('totalSessions')} className={`${cardClass} text-left transition-transform hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-baylor-gold`}><div className="text-2xl font-bold text-baylor-green">{departmentInsights.totalClassSessions}</div><div className="text-gray-600 font-serif">Weekly Class Sessions</div><div className="text-sm text-baylor-gold mt-1 font-medium">{departmentInsights.staffTaughtCourses} staff-taught</div></button>
+              <button onClick={() => handleDrillDown('facultyList')} className={`${cardClass} text-left transition-transform hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-baylor-gold`}><div className="text-2xl font-bold text-baylor-green">{uniqueInstructors.filter(i => i !== 'Adjunct').length}</div><div className="text-gray-600 font-serif">Faculty Members</div></button>
+              <button onClick={() => handleDrillDown('totalSessions')} className={`${cardClass} text-left transition-transform hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-baylor-gold`}><div className="text-2xl font-bold text-baylor-green">{departmentInsights.totalClassSessions}</div><div className="text-gray-600 font-serif">Weekly Class Sessions</div><div className="text-sm text-baylor-gold mt-1 font-medium">{departmentInsights.adjunctTaughtCourses} adjunct-taught</div></button>
               <button onClick={() => handleDrillDown('roomList')} className={`${cardClass} text-left transition-transform hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-baylor-gold`}><div className="text-2xl font-bold text-baylor-green">{uniqueRooms.length}</div><div className="text-gray-600 font-serif">Classrooms</div></button>
               <div className={`${cardClass}`}><div className="text-2xl font-bold text-baylor-green">{formatMinutesToTime(filteredHourCounts.peakHour.hour * 60)}</div><div className="text-gray-600 font-serif">Peak Hour{hourlyUsageDayFilter !== 'All' && ` (${hourlyUsageDayFilter})`}</div></div>
             </div>
@@ -595,7 +609,7 @@ const FacultyScheduleDashboard = ({ scheduleData, facultyData, editHistory, onDa
                   <h3 className="text-lg font-serif font-semibold text-baylor-green">Room Utilization</h3>
                   <div className="flex items-center gap-2"><CustomDropdown value={roomSort.key} onChange={(key) => setRoomSort({ ...roomSort, key })} options={[{value: 'name', label: 'Sort by Name'}, {value: 'hours', label: 'Sort by Busiest'}, {value: 'classes', label: 'Sort by Sessions'}]} className="text-sm p-1 border border-gray-300 rounded-md bg-white"/><button onClick={() => setRoomSort(s => ({...s, direction: s.direction === 'asc' ? 'desc' : 'asc'}))} className="p-1.5 border border-gray-300 rounded-md hover:bg-gray-100"><ArrowUpDown size={14} className="text-gray-600" /></button></div>
               </div>
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">{sortedRoomUtilization.map(([room, data]) => (<button key={room} onClick={() => handleDrillDown('room', room)} className="border border-baylor-green/20 rounded-lg p-4 bg-baylor-green/5 hover:bg-baylor-green/10 hover:shadow-md transition-all text-left focus:outline-none focus:ring-2 focus:ring-baylor-gold"><div className="font-medium text-baylor-green text-sm mb-2">{room}</div><div className="text-lg font-bold text-baylor-green">{data.hours.toFixed(1)}h</div><div className="text-sm text-baylor-green/80">{data.classes} sessions/week {data.staffTaughtClasses > 0 && <span className="ml-2 text-baylor-gold font-medium">({data.staffTaughtClasses} staff)</span>}</div></button>))}</div>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">{sortedRoomUtilization.map(([room, data]) => (<button key={room} onClick={() => handleDrillDown('room', room)} className="border border-baylor-green/20 rounded-lg p-4 bg-baylor-green/5 hover:bg-baylor-green/10 hover:shadow-md transition-all text-left focus:outline-none focus:ring-2 focus:ring-baylor-gold"><div className="font-medium text-baylor-green text-sm mb-2">{room}</div><div className="text-lg font-bold text-baylor-green">{data.hours.toFixed(1)}h</div><div className="text-sm text-baylor-green/80">{data.classes} sessions/week {data.adjunctTaughtClasses > 0 && <span className="ml-2 text-baylor-gold font-medium">({data.adjunctTaughtClasses} adjunct)</span>}</div></button>))}</div>
             </div>
 
             <div className={`${cardClass} mb-0`}>

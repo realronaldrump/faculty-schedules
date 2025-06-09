@@ -609,7 +609,7 @@ const FacultyScheduleDashboard = ({ scheduleData, editHistory, onDataUpdate, onR
                 <h3 className="font-serif font-semibold text-baylor-green mb-3 flex items-center"><Filter size={16} className="mr-2"/>Filters</h3>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <MultiSelectDropdown options={uniqueInstructors} selected={filters.instructor} onChange={(s) => setFilters({...filters, instructor: s})} placeholder="Filter by Instructor..." />
-                    <MultiSelectDropdown options={Object.keys(dayNames)} selected={filters.day} onChange={(s) => setFilters({...filters, day: s})} placeholder="Filter by Day..." />
+                    <MultiSelectDropdown options={Object.keys(dayNames)} selected={filters.day} onChange={(s) => setFilters({...filters, day: s})} placeholder="Filter by Day..." displayMap={dayNames} />
                     <MultiSelectDropdown options={uniqueRooms} selected={filters.room} onChange={(s) => setFilters({...filters, room: s})} placeholder="Filter by Room..." />
                     <div className="relative">
                         <input type="text" value={filters.searchTerm} onChange={(e) => setFilters({...filters, searchTerm: e.target.value})} className={`${inputClass} pl-10`} placeholder="Search Course/Title..." />

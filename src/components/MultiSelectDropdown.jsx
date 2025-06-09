@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, X } from 'lucide-react';
 
-const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
+const MultiSelectDropdown = ({ options, selected, onChange, placeholder, displayMap }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -21,6 +21,10 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
     } else {
       onChange([...selected, option]);
     }
+  };
+
+  const getDisplayValue = (option) => {
+    return displayMap ? displayMap[option] || option : option;
   };
 
   return (
@@ -50,7 +54,7 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
                 className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
               />
               <label className="ml-3 text-sm text-gray-900 flex-1 cursor-pointer" onClick={() => handleSelect(option)}>
-                {option}
+                {getDisplayValue(option)}
               </label>
             </div>
           ))}

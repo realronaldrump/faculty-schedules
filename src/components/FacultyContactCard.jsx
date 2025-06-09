@@ -22,7 +22,13 @@ const FacultyContactCard = ({ faculty, onClose }) => (
             <div className="text-center">
                 <h3 className="text-2xl font-serif font-bold text-baylor-green">{faculty.name}</h3>
                 {faculty.jobTitle && <p className="text-md text-gray-600">{faculty.jobTitle}</p>}
-                <p className="text-md text-baylor-gold font-semibold">{faculty.isAdjunct ? 'Adjunct Faculty' : 'Faculty'}</p>
+                <p className="text-md text-baylor-gold font-semibold">
+                    {faculty.sourceCollection === 'staff' 
+                        ? 'Staff'
+                        : faculty.isAdjunct 
+                            ? 'Adjunct Faculty' 
+                            : 'Faculty'}
+                </p>
             </div>
             <div className="mt-6 space-y-4">
                 <div className="flex items-center">

@@ -37,6 +37,7 @@ function App() {
                 isAdjunct: false,
                 email: '',
                 phone: '',
+                office: '', // Add office field to new faculty documents
             }));
             for (const faculty of facultyToCreate) {
                 const docRef = await addDoc(collection(db, 'faculty'), faculty);

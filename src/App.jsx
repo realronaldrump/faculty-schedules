@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import GroupMeetings from './components/scheduling/GroupMeetings.jsx';
@@ -22,8 +22,8 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
   const [scheduleData, setScheduleData] = useState([]);
-  const [facultyData, setFacultyData] = useState([]);
-  const [staffData, setStaffData] = useState([]);
+  const [rawFaculty, setRawFaculty] = useState([]);
+  const [rawStaff, setRawStaff] = useState([]);
   const [editHistory, setEditHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -74,6 +74,23 @@ function App() {
     }
   ];
 
+  const { facultyDirectoryData, staffDirectoryData } = useMemo(() => {
+    const facultyWithSource = rawFaculty.map(f => ({ ...f, sourceCollection: 'faculty' }));
+    const staffWithSource = rawStaff.map(s => ({ ...s, sourceCollection: 'staff' }));
+
+    const facultyDir = [
+        ...facultyWithSource,
+        ...staffWithSource.filter(s => s.isAlsoFaculty)
+    ];
+
+    const staffDir = [
+        ...staffWithSource,
+        ...facultyWithSource.filter(f => f.isAlsoStaff)
+    ];
+
+    return { facultyDirectoryData: facultyDir, staffDirectoryData: staffDir };
+  }, [rawFaculty, rawStaff]);
+
   // Load data effect
   useEffect(() => {
     const loadData = async () => {
@@ -85,37 +102,30 @@ function App() {
         setScheduleData(schedules);
 
         // Fetch or create faculty data
-        let facultyList = [];
         const facultySnapshot = await getDocs(collection(db, 'faculty'));
-        if (facultySnapshot.empty) {
+        if (facultySnapshot.empty && schedules.length > 0) {
             const uniqueInstructors = [...new Set(schedules.map(item => item.Instructor))];
             const facultyToCreate = uniqueInstructors.map(name => ({
-                name,
-                isAdjunct: false,
-                email: '',
-                phone: '',
-                office: '',
-                jobTitle: '',
+                name, isAdjunct: false, email: '', phone: '', office: '', jobTitle: '',
             }));
+            const createdFaculty = [];
             for (const faculty of facultyToCreate) {
                 const docRef = await addDoc(collection(db, 'faculty'), faculty);
-                facultyList.push({ ...faculty, id: docRef.id });
+                createdFaculty.push({ ...faculty, id: docRef.id });
             }
+            setRawFaculty(createdFaculty);
         } else {
-            facultyList = facultySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+            setRawFaculty(facultySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
         }
-        setFacultyData(facultyList);
 
         // Fetch staff data
         const staffSnapshot = await getDocs(collection(db, 'staff'));
-        const staffList = staffSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        setStaffData(staffList);
+        setRawStaff(staffSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
 
         // Fetch edit history
         const historyQuery = query(collection(db, "history"), orderBy("timestamp", "desc"));
         const historySnapshot = await getDocs(historyQuery);
-        const history = historySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        setEditHistory(history);
+        setEditHistory(historySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
 
       } catch (error) {
         console.error("Firestore Read/Write Error:", error);
@@ -128,8 +138,8 @@ function App() {
       loadData();
     } else {
       setScheduleData([]);
-      setFacultyData([]);
-      setStaffData([]);
+      setRawFaculty([]);
+      setRawStaff([]);
       setEditHistory([]);
       setLoading(false);
     }
@@ -152,80 +162,61 @@ function App() {
   // Data update handlers
   const handleDataUpdate = async (updatedRow) => {
     const originalRow = scheduleData.find(r => r.id === updatedRow.id);
-    const changes = [];
-    
-    Object.keys(updatedRow).forEach(key => {
+    const changes = Object.keys(updatedRow).reduce((acc, key) => {
         if (key !== 'id' && originalRow[key] !== updatedRow[key]) {
-            changes.push({
-                rowId: updatedRow.id,
-                instructor: updatedRow.Instructor,
-                course: updatedRow.Course,
-                field: key,
-                oldValue: originalRow[key],
-                newValue: updatedRow[key],
+            acc.push({
+                rowId: updatedRow.id, instructor: updatedRow.Instructor, course: updatedRow.Course,
+                field: key, oldValue: originalRow[key], newValue: updatedRow[key],
                 timestamp: new Date().toISOString(),
             });
         }
-    });
+        return acc;
+    }, []);
 
     if (changes.length > 0) {
       try {
-        const scheduleDocRef = doc(db, 'schedules', updatedRow.id);
-        await updateDoc(scheduleDocRef, updatedRow);
-
+        await updateDoc(doc(db, 'schedules', updatedRow.id), updatedRow);
         for (const change of changes) {
             await addDoc(collection(db, 'history'), change);
         }
-
-        const newData = scheduleData.map(row => row.id === updatedRow.id ? updatedRow : row);
-        const newHistory = [...changes, ...editHistory];
-        setScheduleData(newData);
-        setEditHistory(newHistory);
-        
+        setScheduleData(scheduleData.map(row => row.id === updatedRow.id ? updatedRow : row));
+        setEditHistory(prev => [...changes, ...prev]);
       } catch (error) {
         console.error("Error updating document: ", error);
       }
     }
   };
 
-  const handleFacultyUpdate = async (updatedFaculty) => {
+  const handleFacultyUpdate = async (facultyToUpdate) => {
     try {
-        if (updatedFaculty.id) {
-            // Update existing faculty
-            const facultyDocRef = doc(db, 'faculty', updatedFaculty.id);
-            await updateDoc(facultyDocRef, updatedFaculty);
-            
-            const newData = facultyData.map(faculty => faculty.id === updatedFaculty.id ? updatedFaculty : faculty);
-            setFacultyData(newData);
+        if (facultyToUpdate.id) {
+            const docRef = doc(db, 'faculty', facultyToUpdate.id);
+            await updateDoc(docRef, facultyToUpdate);
+            setRawFaculty(rawFaculty.map(f => f.id === facultyToUpdate.id ? facultyToUpdate : f));
         } else {
-            // Create new faculty
-            const docRef = await addDoc(collection(db, 'faculty'), updatedFaculty);
-            const newFaculty = { ...updatedFaculty, id: docRef.id };
-            setFacultyData([...facultyData, newFaculty]);
+            const docRef = await addDoc(collection(db, 'faculty'), facultyToUpdate);
+            const newFacultyMember = { ...facultyToUpdate, id: docRef.id };
+            setRawFaculty([...rawFaculty, newFacultyMember]);
         }
     } catch (error) {
-        console.error("Error updating/creating faculty member: ", error);
+        console.error("Error updating/creating faculty", error);
     }
   };
 
-  const handleStaffUpdate = async (updatedStaff) => {
-    try {
-        if (updatedStaff.id) {
-            // Update existing staff
-            const staffDocRef = doc(db, 'staff', updatedStaff.id);
-            await updateDoc(staffDocRef, updatedStaff);
-            
-            const newData = staffData.map(staff => staff.id === updatedStaff.id ? updatedStaff : staff);
-            setStaffData(newData);
-        } else {
-            // Create new staff
-            const docRef = await addDoc(collection(db, 'staff'), updatedStaff);
-            const newStaff = { ...updatedStaff, id: docRef.id };
-            setStaffData([...staffData, newStaff]);
-        }
-    } catch (error) {
-        console.error("Error updating/creating staff member: ", error);
-    }
+  const handleStaffUpdate = async (staffToUpdate) => {
+      try {
+          if (staffToUpdate.id) {
+              const staffDocRef = doc(db, 'staff', staffToUpdate.id);
+              await updateDoc(staffDocRef, staffToUpdate);
+              setRawStaff(rawStaff.map(staff => staff.id === staffToUpdate.id ? staffToUpdate : staff));
+          } else {
+              const docRef = await addDoc(collection(db, 'staff'), staffToUpdate);
+              const newStaff = { ...staffToUpdate, id: docRef.id };
+              setRawStaff([...rawStaff, newStaff]);
+          }
+      } catch (error) {
+          console.error("Error updating/creating staff member: ", error);
+      }
   };
 
   const handleRevertChange = async (changeToRevert) => {
@@ -233,27 +224,18 @@ function App() {
     if (targetRow) {
       try {
         const revertedData = { [changeToRevert.field]: changeToRevert.oldValue };
-        const scheduleDocRef = doc(db, 'schedules', changeToRevert.rowId);
-        await updateDoc(scheduleDocRef, revertedData);
+        await updateDoc(doc(db, 'schedules', changeToRevert.rowId), revertedData);
         
         const revertHistoryLog = {
-            rowId: changeToRevert.rowId,
-            instructor: targetRow.Instructor,
-            course: targetRow.Course,
-            field: changeToRevert.field,
-            oldValue: changeToRevert.newValue,
-            newValue: changeToRevert.oldValue,
-            timestamp: new Date().toISOString(),
-            isRevert: true,
+            rowId: changeToRevert.rowId, instructor: targetRow.Instructor, course: targetRow.Course,
+            field: changeToRevert.field, oldValue: changeToRevert.newValue, newValue: changeToRevert.oldValue,
+            timestamp: new Date().toISOString(), isRevert: true,
         };
         await addDoc(collection(db, 'history'), revertHistoryLog);
         
         const revertedRow = { ...targetRow, ...revertedData };
-        const newData = scheduleData.map(row => (row.id === revertedRow.id ? revertedRow : row));
-        const newHistory = [revertHistoryLog, ...editHistory];
-        setScheduleData(newData);
-        setEditHistory(newHistory);
-
+        setScheduleData(scheduleData.map(row => (row.id === revertedRow.id ? revertedRow : row)));
+        setEditHistory([revertHistoryLog, ...editHistory]);
       } catch (error) {
         console.error("Error reverting document: ", error);
       }
@@ -261,13 +243,9 @@ function App() {
   };
 
   const handleLogin = (status) => {
-    if (status) {
-        localStorage.setItem('isAuthenticated', 'true');
-        setIsAuthenticated(true);
-    } else {
-        localStorage.removeItem('isAuthenticated');
-        setIsAuthenticated(false);
-    }
+    localStorage.setItem('isAuthenticated', status ? 'true' : 'false');
+    if (!status) localStorage.removeItem('isAuthenticated');
+    setIsAuthenticated(status);
   };
 
   const handleLogout = () => setShowLogoutConfirm(true);
@@ -281,34 +259,27 @@ function App() {
   // Get current page breadcrumb
   const getCurrentBreadcrumb = () => {
     const pathParts = currentPage.split('/');
-    const breadcrumbs = ['Dashboard'];
+    let breadcrumbs = [];
+    if (currentPage === 'dashboard') return ['Dashboard'];
     
-    if (pathParts.length > 1) {
-      const section = navigationItems.find(item => item.id === pathParts[0]);
-      if (section) {
+    const section = navigationItems.find(item => item.id === pathParts[0]);
+    if (section) {
         breadcrumbs.push(section.label);
-        if (pathParts.length > 2 && section.children) {
-          const subsection = section.children.find(child => child.id === pathParts[1]);
-          if (subsection) {
-            breadcrumbs.push(subsection.label);
-          }
+        if (pathParts.length > 1 && section.children) {
+            const subsection = section.children.find(child => child.path.endsWith(pathParts[1]));
+            if (subsection) breadcrumbs.push(subsection.label);
         }
-      }
     }
-    
-    return breadcrumbs;
+    return ['Dashboard', ...breadcrumbs];
   };
 
   // Render the appropriate page component
   const renderPageContent = () => {
     const commonProps = {
       scheduleData,
-      facultyData,
-      staffData,
+      facultyData: rawFaculty,
       editHistory,
       onDataUpdate: handleDataUpdate,
-      onFacultyUpdate: handleFacultyUpdate,
-      onStaffUpdate: handleStaffUpdate,
       onRevertChange: handleRevertChange,
       loading,
       onNavigate: setCurrentPage
@@ -324,15 +295,27 @@ function App() {
       case 'scheduling/room-schedules':
         return <RoomSchedules {...commonProps} />;
       case 'directory/faculty-directory':
-        return <FacultyDirectory facultyData={facultyData} onUpdate={handleFacultyUpdate} />;
+        return <FacultyDirectory
+          directoryData={facultyDirectoryData}
+          onFacultyUpdate={handleFacultyUpdate}
+          onStaffUpdate={handleStaffUpdate}
+        />;
       case 'directory/staff-directory':
-        return <StaffDirectory staffData={staffData} onUpdate={handleStaffUpdate} />;
+        return <StaffDirectory
+          directoryData={staffDirectoryData}
+          onFacultyUpdate={handleFacultyUpdate}
+          onStaffUpdate={handleStaffUpdate}
+        />;
       case 'analytics/department-insights':
         return <DepartmentInsights {...commonProps} />;
       case 'analytics/course-management':
         return <CourseManagement {...commonProps} />;
       case 'administration/data-import':
-        return <DataImportPage onNavigate={setCurrentPage} facultyData={facultyData} staffData={staffData} onFacultyUpdate={handleFacultyUpdate} onStaffUpdate={handleStaffUpdate} />;
+        return <DataImportPage 
+          onNavigate={setCurrentPage} 
+          facultyData={rawFaculty} 
+          onFacultyUpdate={handleFacultyUpdate} 
+        />;
       case 'administration/baylor-systems':
         return <SystemsPage onNavigate={setCurrentPage} />;
       default:
@@ -346,7 +329,6 @@ function App() {
 
   return (
     <div className="h-screen flex bg-gray-50">
-      {/* Sidebar */}
       <Sidebar 
         navigationItems={navigationItems}
         currentPage={currentPage}
@@ -354,13 +336,9 @@ function App() {
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
-
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top Header */}
         <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
-            {/* Breadcrumb */}
             <div className="flex items-center space-x-2 text-sm text-gray-600">
               {getCurrentBreadcrumb().map((crumb, index) => (
                 <React.Fragment key={index}>
@@ -371,10 +349,7 @@ function App() {
                 </React.Fragment>
               ))}
             </div>
-
-            {/* Header Actions */}
             <div className="flex items-center space-x-4">
-              {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                 <input
@@ -383,13 +358,9 @@ function App() {
                   className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-gray-50 text-sm w-64"
                 />
               </div>
-
-              {/* Notifications */}
               <button className="p-2 text-gray-600 hover:text-baylor-green hover:bg-gray-100 rounded-lg transition-colors">
                 <Bell size={20} />
               </button>
-
-              {/* User Menu */}
               <div className="flex items-center space-x-3">
                 <div className="text-right">
                   <div className="text-sm font-medium text-gray-900">Davis Deaton</div>
@@ -406,7 +377,6 @@ function App() {
           </div>
         </header>
 
-        {/* Main Content */}
         <main className="flex-1 overflow-auto">
           <div className="p-6">
             {loading ? (
@@ -423,7 +393,6 @@ function App() {
         </main>
       </div>
 
-      {/* Logout Confirmation Modal */}
       {showLogoutConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4">

@@ -14,7 +14,7 @@ const formatPhoneNumber = (phoneStr) => {
     return phoneStr;
 };
 
-const StaffDirectory = ({ staffData, onUpdate }) => {
+const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => {
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [filterText, setFilterText] = useState('');
@@ -28,7 +28,8 @@ const StaffDirectory = ({ staffData, onUpdate }) => {
     email: '',
     phone: '',
     office: '',
-    isFullTime: true
+    isFullTime: true,
+    isAlsoFaculty: false,
   });
 
   const validate = (data) => {
@@ -57,7 +58,8 @@ const StaffDirectory = ({ staffData, onUpdate }) => {
       email: '',
       phone: '',
       office: '',
-      isFullTime: true
+      isFullTime: true,
+      isAlsoFaculty: false,
     });
     setErrors({});
   };
@@ -70,27 +72,18 @@ const StaffDirectory = ({ staffData, onUpdate }) => {
       email: '',
       phone: '',
       office: '',
-      isFullTime: true
+      isFullTime: true,
+      isAlsoFaculty: false,
     });
     setErrors({});
   };
 
   const handleCreateChange = (e) => {
     const { name, value, type, checked } = e.target;
-    let finalValue = type === 'checkbox' ? checked : value;
-    
-    if (name === 'phone') {
-      finalValue = finalValue.replace(/\D/g, '');
-    }
-
-    setNewStaff(prev => ({
-      ...prev,
-      [name]: finalValue
-    }));
-
-    if (Object.keys(errors).length > 0) {
-      validate({ ...newStaff, [name]: finalValue });
-    }
+    const finalValue = type === 'checkbox' ? checked : value;
+    const updatedForm = { ...newStaff, [name]: finalValue };
+    setNewStaff(updatedForm);
+    if (Object.keys(errors).length > 0) validate(updatedForm);
   };
 
   const handleCreateSave = () => {
@@ -99,7 +92,7 @@ const StaffDirectory = ({ staffData, onUpdate }) => {
         ...newStaff,
         phone: (newStaff.phone || '').replace(/\D/g, '')
       };
-      onUpdate(dataToSave);
+      onStaffUpdate(dataToSave);
       setIsCreating(false);
       setErrors({});
     }
@@ -119,12 +112,14 @@ const StaffDirectory = ({ staffData, onUpdate }) => {
 
   const handleSave = () => {
     if (validate(editFormData)) {
-        // Clean phone number before saving
-        const dataToSave = {
-            ...editFormData,
-            phone: (editFormData.phone || '').replace(/\D/g, '')
-        };
-        onUpdate(dataToSave);
+        const { sourceCollection, ...dataToSave } = editFormData;
+        const cleanedData = { ...dataToSave, phone: (dataToSave.phone || '').replace(/\D/g, '') };
+
+        if (sourceCollection === 'faculty') {
+            onFacultyUpdate(cleanedData);
+        } else {
+            onStaffUpdate(cleanedData);
+        }
         setEditingId(null);
         setErrors({});
     }
@@ -161,7 +156,7 @@ const StaffDirectory = ({ staffData, onUpdate }) => {
   };
   
   const sortedAndFilteredData = useMemo(() => {
-    let data = [...staffData];
+    let data = [...directoryData];
 
     if (filterText) {
       const lowercasedFilter = filterText.toLowerCase();
@@ -192,7 +187,7 @@ const StaffDirectory = ({ staffData, onUpdate }) => {
     });
 
     return data;
-  }, [staffData, filterText, sortConfig]);
+  }, [directoryData, filterText, sortConfig]);
 
   const SortableHeader = ({ label, columnKey }) => {
     const isSorted = sortConfig.key === columnKey;
@@ -263,6 +258,7 @@ const StaffDirectory = ({ staffData, onUpdate }) => {
                       className={getInputClass('name')}
                       placeholder="Full Name"
                     />
+                    {errors.name && <p className="text-red-600 text-xs mt-1">{errors.name}</p>}
                     <div className="flex items-center gap-2 text-xs mt-2">
                        <input
                          type="checkbox"
@@ -273,6 +269,17 @@ const StaffDirectory = ({ staffData, onUpdate }) => {
                          className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                        />
                        <label htmlFor="new-fulltime" className="font-normal">Full Time</label>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs mt-1">
+                       <input
+                         type="checkbox"
+                         id="new-isAlsoFaculty"
+                         name="isAlsoFaculty"
+                         checked={newStaff.isAlsoFaculty}
+                         onChange={handleCreateChange}
+                         className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                       />
+                       <label htmlFor="new-isAlsoFaculty" className="font-normal">Also a faculty member</label>
                     </div>
                 </td>
                 <td className="p-2 align-top">
@@ -323,7 +330,7 @@ const StaffDirectory = ({ staffData, onUpdate }) => {
               </tr>
             )}
             {sortedAndFilteredData.map(staff => (
-              <tr key={staff.id} className="hover:bg-gray-50" >
+              <tr key={`${staff.sourceCollection}-${staff.id}`} className="hover:bg-gray-50" >
                 {editingId === staff.id ? (
                   <>
                     <td className="p-2 align-top text-gray-700 font-medium">
@@ -331,6 +338,10 @@ const StaffDirectory = ({ staffData, onUpdate }) => {
                         <div className="flex items-center gap-2 text-xs">
                            <input type="checkbox" id={`fulltime-${staff.id}`} name="isFullTime" checked={!!editFormData.isFullTime} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
                            <label htmlFor={`fulltime-${staff.id}`} className="font-normal">Full Time</label>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs mt-1">
+                           <input type="checkbox" id={`isAlsoFaculty-${staff.id}`} name="isAlsoFaculty" checked={!!editFormData.isAlsoFaculty} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+                           <label htmlFor={`isAlsoFaculty-${staff.id}`} className="font-normal">Also a faculty member</label>
                         </div>
                     </td>
                     <td className="p-2 align-top">

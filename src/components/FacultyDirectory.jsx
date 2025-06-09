@@ -14,7 +14,7 @@ const formatPhoneNumber = (phoneStr) => {
     return phoneStr;
 };
 
-const FacultyDirectory = ({ facultyData, onUpdate }) => {
+const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => {
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [filterText, setFilterText] = useState('');
@@ -28,7 +28,8 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
     email: '',
     phone: '',
     office: '',
-    isAdjunct: false
+    isAdjunct: false,
+    isAlsoStaff: false,
   });
 
   const validate = (data) => {
@@ -63,12 +64,14 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
 
   const handleSave = () => {
     if (validate(editFormData)) {
-        // Clean phone number before saving
-        const dataToSave = {
-            ...editFormData,
-            phone: (editFormData.phone || '').replace(/\D/g, '')
-        };
-        onUpdate(dataToSave);
+        const { sourceCollection, ...dataToSave } = editFormData;
+        const cleanedData = { ...dataToSave, phone: (dataToSave.phone || '').replace(/\D/g, '') };
+
+        if (sourceCollection === 'staff') {
+            onStaffUpdate(cleanedData);
+        } else {
+            onFacultyUpdate(cleanedData);
+        }
         setEditingId(null);
         setErrors({});
     }
@@ -112,7 +115,8 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
       email: '',
       phone: '',
       office: '',
-      isAdjunct: false
+      isAdjunct: false,
+      isAlsoStaff: false,
     });
     setErrors({});
   };
@@ -125,7 +129,8 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
       email: '',
       phone: '',
       office: '',
-      isAdjunct: false
+      isAdjunct: false,
+      isAlsoStaff: false,
     });
     setErrors({});
   };
@@ -154,14 +159,14 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
         ...newFaculty,
         phone: (newFaculty.phone || '').replace(/\D/g, '')
       };
-      onUpdate(dataToSave);
+      onFacultyUpdate(dataToSave);
       setIsCreating(false);
       setErrors({});
     }
   };
   
   const sortedAndFilteredData = useMemo(() => {
-    let data = [...facultyData];
+    let data = [...directoryData];
 
     if (filterText) {
       const lowercasedFilter = filterText.toLowerCase();
@@ -192,7 +197,7 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
     });
 
     return data;
-  }, [facultyData, filterText, sortConfig]);
+  }, [directoryData, filterText, sortConfig]);
 
   const SortableHeader = ({ label, columnKey }) => {
     const isSorted = sortConfig.key === columnKey;
@@ -274,6 +279,10 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
                        />
                        <label htmlFor="new-adjunct" className="font-normal">Adjunct</label>
                     </div>
+                    <div className="flex items-center gap-2 text-xs mt-1">
+                       <input type="checkbox" id="new-isAlsoStaff" name="isAlsoStaff" checked={newFaculty.isAlsoStaff} onChange={handleCreateChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+                       <label htmlFor="new-isAlsoStaff" className="font-normal">Also a staff member</label>
+                    </div>
                 </td>
                 <td className="p-2 align-top">
                     <input
@@ -323,7 +332,7 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
               </tr>
             )}
             {sortedAndFilteredData.map(faculty => (
-              <tr key={faculty.id} className="hover:bg-gray-50" >
+              <tr key={`${faculty.sourceCollection}-${faculty.id}`} className="hover:bg-gray-50" >
                 {editingId === faculty.id ? (
                   <>
                     <td className="p-2 align-top text-gray-700 font-medium">
@@ -331,6 +340,10 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
                         <div className="flex items-center gap-2 text-xs">
                            <input type="checkbox" id={`adjunct-${faculty.id}`} name="isAdjunct" checked={!!editFormData.isAdjunct} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
                            <label htmlFor={`adjunct-${faculty.id}`} className="font-normal">Adjunct</label>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs mt-1">
+                           <input type="checkbox" id={`isAlsoStaff-${faculty.id}`} name="isAlsoStaff" checked={!!editFormData.isAlsoStaff} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+                           <label htmlFor={`isAlsoStaff-${faculty.id}`} className="font-normal">Also a staff member</label>
                         </div>
                     </td>
                     <td className="p-2 align-top">

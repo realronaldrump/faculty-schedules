@@ -14,7 +14,7 @@ const formatPhoneNumber = (phoneStr) => {
 };
 
 const FacultyContactCard = ({ faculty, onClose }) => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fade-in" onClick={onClose}>
         <div className="bg-white rounded-lg shadow-xl p-8 max-w-sm w-full mx-4 relative" onClick={e => e.stopPropagation()}>
             <button onClick={onClose} className="absolute top-2 right-2 p-2 text-gray-500 hover:bg-gray-100 rounded-full">
                 <X size={20} />
@@ -26,7 +26,7 @@ const FacultyContactCard = ({ faculty, onClose }) => (
             <div className="mt-6 space-y-4">
                 <div className="flex items-center">
                     <Mail size={18} className="text-baylor-green mr-4" />
-                    <span className="text-gray-700">{faculty.email || 'Not specified'}</span>
+                    <a href={`mailto:${faculty.email}`} className="text-gray-700 hover:underline">{faculty.email || 'Not specified'}</a>
                 </div>
                 <div className="flex items-center">
                     <Phone size={18} className="text-baylor-green mr-4" />
@@ -41,15 +41,34 @@ const FacultyContactCard = ({ faculty, onClose }) => (
     </div>
 );
 
-
 const FacultyDirectory = ({ facultyData, onUpdate }) => {
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [filterText, setFilterText] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'ascending' });
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
+  const [errors, setErrors] = useState({});
+
+  const validate = (data) => {
+    const newErrors = {};
+    
+    // Email validation
+    if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+        newErrors.email = 'Please enter a valid email address.';
+    }
+
+    // Phone validation
+    const phoneDigits = (data.phone || '').replace(/\D/g, '');
+    if (data.phone && phoneDigits.length !== 10) {
+        newErrors.phone = 'Phone number must contain exactly 10 digits.';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleEdit = (faculty) => {
+    setErrors({}); // Clear previous errors
     setEditingId(faculty.id);
     setEditFormData(faculty);
   };
@@ -57,19 +76,42 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
   const handleCancel = () => {
     setEditingId(null);
     setEditFormData({});
+    setErrors({});
   };
 
   const handleSave = () => {
-    onUpdate(editFormData);
-    setEditingId(null);
+    if (validate(editFormData)) {
+        // Clean phone number before saving
+        const dataToSave = {
+            ...editFormData,
+            phone: (editFormData.phone || '').replace(/\D/g, '')
+        };
+        onUpdate(dataToSave);
+        setEditingId(null);
+        setErrors({});
+    }
   };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setEditFormData({
-      ...editFormData,
-      [name]: type === 'checkbox' ? checked : value,
-    });
+    let finalValue = type === 'checkbox' ? checked : value;
+    
+    // Allow only numbers for phone input
+    if (name === 'phone') {
+        finalValue = finalValue.replace(/\D/g, '');
+    }
+
+    const newFormData = {
+        ...editFormData,
+        [name]: finalValue,
+    };
+    
+    setEditFormData(newFormData);
+
+    // Live validation
+    if (Object.keys(errors).length > 0) {
+        validate(newFormData);
+    }
   };
   
   const handleSort = (key) => {
@@ -94,10 +136,17 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
     }
 
     data.sort((a, b) => {
-      if (a[sortConfig.key] < b[sortConfig.key]) {
+      const valA = a[sortConfig.key];
+      const valB = b[sortConfig.key];
+
+      if (typeof valA === 'boolean') {
+          return (valA === valB) ? 0 : valA ? -1 : 1;
+      }
+
+      if (valA < valB) {
         return sortConfig.direction === 'ascending' ? -1 : 1;
       }
-      if (a[sortConfig.key] > b[sortConfig.key]) {
+      if (valA > valB) {
         return sortConfig.direction === 'ascending' ? 1 : -1;
       }
       return 0;
@@ -120,10 +169,15 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
     );
   };
 
+  const getInputClass = (fieldName) => {
+      const baseClass = "w-full p-1 border rounded bg-baylor-gold/10";
+      return errors[fieldName] ? `${baseClass} border-red-500` : `${baseClass} border-baylor-gold`;
+  };
+
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
-      <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-serif font-semibold text-baylor-green flex items-center border-b border-baylor-gold pb-2">
+      <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200">
+          <h2 className="text-xl font-serif font-semibold text-baylor-green flex items-center">
             <BookUser className="mr-2 text-baylor-gold" size={20} />
             Faculty Directory
           </h2>
@@ -152,23 +206,25 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
           </thead>
           <tbody className="divide-y divide-gray-200">
             {sortedAndFilteredData.map(faculty => (
-              <tr key={faculty.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => editingId !== faculty.id && setSelectedFacultyForCard(faculty)}>
+              <tr key={faculty.id} className="hover:bg-gray-50" >
                 {editingId === faculty.id ? (
                   <>
-                    <td className="p-2 text-gray-700 font-medium">{faculty.name}</td>
-                    <td className="p-2">
+                    <td className="p-2 align-top text-gray-700 font-medium">{faculty.name}</td>
+                    <td className="p-2 align-top">
                       <input type="checkbox" name="isAdjunct" checked={!!editFormData.isAdjunct} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
                     </td>
-                    <td className="p-2">
-                      <input name="email" value={editFormData.email || ''} onChange={handleChange} className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10" placeholder="email@baylor.edu" />
+                    <td className="p-2 align-top">
+                      <input name="email" value={editFormData.email || ''} onChange={handleChange} className={getInputClass('email')} placeholder="email@baylor.edu" />
+                      {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
                     </td>
-                    <td className="p-2">
-                      <input name="phone" value={editFormData.phone || ''} onChange={handleChange} className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10" placeholder="10 digits" />
+                    <td className="p-2 align-top">
+                      <input name="phone" value={editFormData.phone || ''} onChange={handleChange} className={getInputClass('phone')} placeholder="10 digits" maxLength="10" />
+                      {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
                     </td>
-                    <td className="p-2">
-                        <input name="office" value={editFormData.office || ''} onChange={handleChange} className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10" placeholder="Building & Room" />
+                    <td className="p-2 align-top">
+                        <input name="office" value={editFormData.office || ''} onChange={handleChange} className={getInputClass('office')} placeholder="Building & Room" />
                     </td>
-                    <td className="p-2 text-right">
+                    <td className="p-2 align-top text-right">
                       <div className="flex gap-2">
                         <button onClick={handleSave} className="p-2 text-green-600 hover:bg-green-100 rounded-full"><Save size={16} /></button>
                         <button onClick={handleCancel} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
@@ -177,11 +233,11 @@ const FacultyDirectory = ({ facultyData, onUpdate }) => {
                   </>
                 ) : (
                   <>
-                    <td className="px-4 py-3 text-gray-700 font-medium">{faculty.name}</td>
-                    <td className="px-4 py-3 text-gray-700">{faculty.isAdjunct ? 'Yes' : 'No'}</td>
-                    <td className="px-4 py-3 text-gray-700">{faculty.email || '-'}</td>
-                    <td className="px-4 py-3 text-gray-700">{formatPhoneNumber(faculty.phone)}</td>
-                    <td className="px-4 py-3 text-gray-700">{faculty.office || '-'}</td>
+                    <td className="px-4 py-3 text-gray-700 font-medium cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.name}</td>
+                    <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.isAdjunct ? 'Yes' : 'No'}</td>
+                    <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.email || '-'}</td>
+                    <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{formatPhoneNumber(faculty.phone)}</td>
+                    <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.office || '-'}</td>
                     <td className="px-4 py-3 text-right">
                       <button onClick={(e) => { e.stopPropagation(); handleEdit(faculty); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><Edit size={16} /></button>
                     </td>

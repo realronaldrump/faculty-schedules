@@ -1,9 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import FacultyScheduleDashboard from './components/FacultyScheduleDashboard';
+import Sidebar from './components/Sidebar';
+import Dashboard from './components/Dashboard';
+import GroupMeetings from './components/scheduling/GroupMeetings.jsx';
+import IndividualAvailability from './components/scheduling/IndividualAvailability';
+import RoomSchedules from './components/scheduling/RoomSchedules';
+import FacultyDirectory from './components/FacultyDirectory';
+import DepartmentInsights from './components/analytics/DepartmentInsights.jsx';
+import CourseManagement from './components/analytics/CourseManagement';
+import DataImportPage from './components/DataImportPage';
 import SystemsPage from './components/SystemsPage';
 import Login from './components/Login';
-import DataImportPage from './components/DataImportPage'; // Import new component
-import { Settings, BookUser, Upload } from 'lucide-react'; // Import Upload icon
+import { Home, Calendar, Users, BarChart3, Settings, Bell, Search, User } from 'lucide-react';
 import { db } from './firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, query, orderBy } from 'firebase/firestore';
 
@@ -11,13 +18,60 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
   const [scheduleData, setScheduleData] = useState([]);
   const [facultyData, setFacultyData] = useState([]);
   const [editHistory, setEditHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // This effect runs only when `isAuthenticated` changes to true
+  // Navigation structure for the new UI
+  const navigationItems = [
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      icon: Home,
+      path: 'dashboard'
+    },
+    {
+      id: 'scheduling',
+      label: 'Scheduling',
+      icon: Calendar,
+      children: [
+        { id: 'group-meetings', label: 'Group Meetings', path: 'scheduling/group-meetings' },
+        { id: 'individual-availability', label: 'Individual Availability', path: 'scheduling/individual-availability' },
+        { id: 'room-schedules', label: 'Room Schedules', path: 'scheduling/room-schedules' }
+      ]
+    },
+    {
+      id: 'directory',
+      label: 'Directory',
+      icon: Users,
+      children: [
+        { id: 'faculty-directory', label: 'Faculty Directory', path: 'directory/faculty-directory' }
+      ]
+    },
+    {
+      id: 'analytics',
+      label: 'Data & Analytics',
+      icon: BarChart3,
+      children: [
+        { id: 'department-insights', label: 'Department Insights', path: 'analytics/department-insights' },
+        { id: 'course-management', label: 'Course Management', path: 'analytics/course-management' }
+      ]
+    },
+    {
+      id: 'administration',
+      label: 'Administration',
+      icon: Settings,
+      children: [
+        { id: 'data-import', label: 'Data Import', path: 'administration/data-import' },
+        { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' }
+      ]
+    }
+  ];
+
+  // Load data effect
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
@@ -31,15 +85,14 @@ function App() {
         let facultyList = [];
         const facultySnapshot = await getDocs(collection(db, 'faculty'));
         if (facultySnapshot.empty) {
-            // If faculty collection is empty, create it from schedule data
             const uniqueInstructors = [...new Set(schedules.map(item => item.Instructor))];
             const facultyToCreate = uniqueInstructors.map(name => ({
                 name,
                 isAdjunct: false,
                 email: '',
                 phone: '',
-                office: '', // Add office field to new faculty documents
-                jobTitle: '', // Add jobTitle field
+                office: '',
+                jobTitle: '',
             }));
             for (const faculty of facultyToCreate) {
                 const docRef = await addDoc(collection(db, 'faculty'), faculty);
@@ -50,7 +103,7 @@ function App() {
         }
         setFacultyData(facultyList);
 
-        // Fetch edit history, ordered by timestamp
+        // Fetch edit history
         const historyQuery = query(collection(db, "history"), orderBy("timestamp", "desc"));
         const historySnapshot = await getDocs(historyQuery);
         const history = historySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
@@ -66,7 +119,6 @@ function App() {
     if (isAuthenticated) {
       loadData();
     } else {
-      // If user logs out, clear data and stop loading
       setScheduleData([]);
       setFacultyData([]);
       setEditHistory([]);
@@ -74,7 +126,7 @@ function App() {
     }
   }, [isAuthenticated]);
 
-  // This effect runs once on initial page load to check for existing login
+  // Check auth status on load
   useEffect(() => {
     const checkAuthStatus = () => {
       setLoading(true);
@@ -87,8 +139,8 @@ function App() {
     };
     checkAuthStatus();
   }, []);
-  
 
+  // Data update handlers
   const handleDataUpdate = async (updatedRow) => {
     const originalRow = scheduleData.find(r => r.id === updatedRow.id);
     const changes = [];
@@ -188,97 +240,164 @@ function App() {
     setShowLogoutConfirm(false);
     setCurrentPage('dashboard');
   };
-  
-  const renderPage = () => {
-      switch(currentPage) {
-          case 'dashboard':
-              return <FacultyScheduleDashboard 
-                        scheduleData={scheduleData}
-                        facultyData={facultyData}
-                        editHistory={editHistory}
-                        onDataUpdate={handleDataUpdate}
-                        onFacultyUpdate={handleFacultyUpdate}
-                        onRevertChange={handleRevertChange}
-                        loading={loading}
-                        onNavigate={setCurrentPage}
-                      />;
-          case 'systems':
-              return <SystemsPage onNavigate={setCurrentPage} />;
-          case 'import':
-              return <DataImportPage onNavigate={setCurrentPage} facultyData={facultyData} onFacultyUpdate={handleFacultyUpdate} />;
-          default:
-              return <FacultyScheduleDashboard onNavigate={setCurrentPage} loading={loading} />;
+
+  // Get current page breadcrumb
+  const getCurrentBreadcrumb = () => {
+    const pathParts = currentPage.split('/');
+    const breadcrumbs = ['Dashboard'];
+    
+    if (pathParts.length > 1) {
+      const section = navigationItems.find(item => item.id === pathParts[0]);
+      if (section) {
+        breadcrumbs.push(section.label);
+        if (pathParts.length > 2 && section.children) {
+          const subsection = section.children.find(child => child.id === pathParts[1]);
+          if (subsection) {
+            breadcrumbs.push(subsection.label);
+          }
+        }
       }
-  }
+    }
+    
+    return breadcrumbs;
+  };
+
+  // Render the appropriate page component
+  const renderPageContent = () => {
+    const commonProps = {
+      scheduleData,
+      facultyData,
+      editHistory,
+      onDataUpdate: handleDataUpdate,
+      onFacultyUpdate: handleFacultyUpdate,
+      onRevertChange: handleRevertChange,
+      loading,
+      onNavigate: setCurrentPage
+    };
+
+    switch(currentPage) {
+      case 'dashboard':
+        return <Dashboard {...commonProps} />;
+      case 'scheduling/group-meetings':
+        return <GroupMeetings {...commonProps} />;
+      case 'scheduling/individual-availability':
+        return <IndividualAvailability {...commonProps} />;
+      case 'scheduling/room-schedules':
+        return <RoomSchedules {...commonProps} />;
+      case 'directory/faculty-directory':
+        return <FacultyDirectory facultyData={facultyData} onUpdate={handleFacultyUpdate} />;
+      case 'analytics/department-insights':
+        return <DepartmentInsights {...commonProps} />;
+      case 'analytics/course-management':
+        return <CourseManagement {...commonProps} />;
+      case 'administration/data-import':
+        return <DataImportPage onNavigate={setCurrentPage} facultyData={facultyData} onFacultyUpdate={handleFacultyUpdate} />;
+      case 'administration/baylor-systems':
+        return <SystemsPage onNavigate={setCurrentPage} />;
+      default:
+        return <Dashboard {...commonProps} />;
+    }
+  };
 
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="bg-baylor-green text-white shadow-md">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="text-baylor-gold font-bold text-3xl">HSD</div>
-            <h1 className="text-xl md:text-2xl font-serif font-bold">Faculty Schedules</h1>
-          </div>
-          <div className="flex items-center space-x-4">
-            <div className="text-baylor-gold font-serif italic">Fall 2025</div>
-             <button
-              onClick={() => setCurrentPage('import')}
-              className="text-sm text-white hover:text-baylor-gold transition-colors duration-200 flex items-center space-x-1"
-            >
-              <Upload size={16} className="mr-1" />
-              <span>Import Data</span>
-            </button>
-            <button
-              onClick={() => setCurrentPage('systems')}
-              className="text-sm text-white hover:text-baylor-gold transition-colors duration-200 flex items-center space-x-1"
-            >
-              <Settings size={16} className="mr-1" />
-              <span>Baylor Systems</span>
-            </button>
-            <button
-              onClick={handleLogout}
-              className="text-sm text-white hover:text-baylor-gold transition-colors duration-200 flex items-center space-x-1"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V4a1 1 0 00-1-1H3zm11 4a1 1 0 10-2 0v4a1 1 0 102 0V7zm-3 1a1 1 0 10-2 0v3a1 1 0 102 0V8zM8 9a1 1 0 00-2 0v3a1 1 0 102 0V9z" clipRule="evenodd" />
-              </svg>
-              <span>Logout</span>
-            </button>
-          </div>
-        </div>
-      </header>
-      
-      <main className="flex-grow bg-gray-50">
-        <div className="container mx-auto px-4 py-6">
-            {renderPage()}
-        </div>
-      </main>
-      
-      <footer className="bg-baylor-green text-white py-4">
-        <div className="container mx-auto px-4 text-center">
-          <p className="text-sm"> Baylor University Human Sciences and Design</p>
-        </div>
-      </footer>
+    <div className="h-screen flex bg-gray-50">
+      {/* Sidebar */}
+      <Sidebar 
+        navigationItems={navigationItems}
+        currentPage={currentPage}
+        onNavigate={setCurrentPage}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+      />
 
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top Header */}
+        <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            {/* Breadcrumb */}
+            <div className="flex items-center space-x-2 text-sm text-gray-600">
+              {getCurrentBreadcrumb().map((crumb, index) => (
+                <React.Fragment key={index}>
+                  {index > 0 && <span>/</span>}
+                  <span className={index === getCurrentBreadcrumb().length - 1 ? 'text-baylor-green font-medium' : 'hover:text-baylor-green cursor-pointer'}>
+                    {crumb}
+                  </span>
+                </React.Fragment>
+              ))}
+            </div>
+
+            {/* Header Actions */}
+            <div className="flex items-center space-x-4">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-gray-50 text-sm w-64"
+                />
+              </div>
+
+              {/* Notifications */}
+              <button className="p-2 text-gray-600 hover:text-baylor-green hover:bg-gray-100 rounded-lg transition-colors">
+                <Bell size={20} />
+              </button>
+
+              {/* User Menu */}
+              <div className="flex items-center space-x-3">
+                <div className="text-right">
+                  <div className="text-sm font-medium text-gray-900">Davis Deaton</div>
+                  <div className="text-xs text-gray-500">Human Sciences & Design</div>
+                </div>
+                <button 
+                  onClick={handleLogout}
+                  className="p-2 text-gray-600 hover:text-baylor-green hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <User size={20} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Main Content */}
+        <main className="flex-1 overflow-auto">
+          <div className="p-6">
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-baylor-green mx-auto mb-4"></div>
+                  <p className="text-gray-600">Loading...</p>
+                </div>
+              </div>
+            ) : (
+              renderPageContent()
+            )}
+          </div>
+        </main>
+      </div>
+
+      {/* Logout Confirmation Modal */}
       {showLogoutConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4">
             <h3 className="text-lg font-bold text-gray-900 mb-4">Confirm Logout</h3>
             <p className="text-gray-600 mb-6">Are you sure you want to logout?</p>
             <div className="flex justify-end space-x-4">
               <button
                 onClick={() => setShowLogoutConfirm(false)}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmLogout}
-                className="px-4 py-2 bg-baylor-green text-white rounded hover:bg-baylor-green/90"
+                className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 font-medium"
               >
                 Logout
               </button>

@@ -2,16 +2,211 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  /* Custom scrollbar styles */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #f3f4f6;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+  }
+
+  /* Baylor theme scrollbar for specific areas */
+  .baylor-scrollbar::-webkit-scrollbar-thumb {
+    background: #154734;
+  }
+
+  .baylor-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #0f3a2a;
+  }
+
+  /* Custom selection color */
+  ::selection {
+    background: #154734;
+    color: white;
+  }
+
+  /* Focus styles for better accessibility */
+  *:focus {
+    outline: 2px solid #154734;
+    outline-offset: 2px;
+  }
+
+  /* Remove outline for mouse users */
+  *:focus:not(:focus-visible) {
+    outline: none;
+  }
+}
+
 @layer utilities {
+  /* Animation utilities */
   .animate-fade-in {
     animation: fadeIn 0.5s ease-in-out;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  .animate-slide-down {
+    animation: slideDown 0.3s ease-out;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.2s ease-out;
   }
 
   .animate-shake {
     animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
   }
+
+  /* Glass morphism effect */
+  .glass {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  /* Gradient utilities */
+  .gradient-baylor {
+    background: linear-gradient(135deg, #154734 0%, #1a5a42 100%);
+  }
+
+  .gradient-gold {
+    background: linear-gradient(135deg, #FFB81C 0%, #E6A316 100%);
+  }
+
+  /* Shadow utilities */
+  .shadow-baylor {
+    box-shadow: 0 4px 6px -1px rgba(21, 71, 52, 0.1), 0 2px 4px -1px rgba(21, 71, 52, 0.06);
+  }
+
+  .shadow-gold {
+    box-shadow: 0 4px 6px -1px rgba(255, 184, 28, 0.1), 0 2px 4px -1px rgba(255, 184, 28, 0.06);
+  }
+
+  /* Text utilities */
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Interactive states */
+  .interactive-scale {
+    transition: transform 0.2s ease-in-out;
+  }
+
+  .interactive-scale:hover {
+    transform: scale(1.02);
+  }
+
+  .interactive-scale:active {
+    transform: scale(0.98);
+  }
+
+  /* Card styles */
+  .card-hover {
+    transition: all 0.2s ease-in-out;
+  }
+
+  .card-hover:hover {
+    box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    transform: translateY(-1px);
+  }
+
+  /* Button styles */
+  .btn-primary {
+    @apply px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors font-medium;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 transition-colors font-medium;
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2 text-baylor-green hover:bg-baylor-green/10 rounded-lg transition-colors font-medium;
+  }
+
+  /* Form styles */
+  .form-input {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900 transition-colors;
+  }
+
+  .form-select {
+    @apply form-input appearance-none cursor-pointer;
+  }
+
+  /* Sidebar specific styles */
+  .sidebar-transition {
+    transition: width 0.3s ease-in-out, padding 0.3s ease-in-out;
+  }
+
+  /* Loading states */
+  .loading-shimmer {
+    background: linear-gradient(
+      90deg,
+      #f3f4f6 25%,
+      #e5e7eb 50%,
+      #f3f4f6 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+
+  /* Status indicators */
+  .status-online {
+    @apply w-3 h-3 bg-green-400 rounded-full border-2 border-white;
+  }
+
+  .status-busy {
+    @apply w-3 h-3 bg-red-400 rounded-full border-2 border-white;
+  }
+
+  .status-away {
+    @apply w-3 h-3 bg-yellow-400 rounded-full border-2 border-white;
+  }
+
+  /* Table styles */
+  .table-hover tbody tr {
+    @apply hover:bg-gray-50 transition-colors;
+  }
+
+  .table-striped tbody tr:nth-child(even) {
+    @apply bg-gray-50;
+  }
+
+  /* Modal backdrop */
+  .modal-backdrop {
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+  }
+
+  /* Tooltip styles */
+  .tooltip {
+    @apply absolute z-50 px-2 py-1 text-xs text-white bg-gray-900 rounded shadow-lg pointer-events-none;
+  }
+
+  .tooltip::before {
+    content: '';
+    @apply absolute w-0 h-0 border-4 border-transparent border-t-gray-900;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+  }
 }
 
+/* Keyframe animations */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -20,6 +215,39 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
@@ -38,112 +266,272 @@
   }
 }
 
-/* Custom scrollbar styles */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
 
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 4px;
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
-::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 4px;
+/* Responsive utilities */
+@layer utilities {
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Custom spacing for timeline views */
+  .timeline-spacing {
+    padding-left: calc(2rem + 1px);
+    border-left: 2px solid #e5e7eb;
+  }
+
+  .timeline-spacing::before {
+    content: '';
+    position: absolute;
+    left: -6px;
+    top: 0.75rem;
+    width: 10px;
+    height: 10px;
+    background: #154734;
+    border-radius: 50%;
+    border: 2px solid white;
+  }
+
+  /* Print styles */
+  @media print {
+    .no-print {
+      display: none !important;
+    }
+    
+    .print-only {
+      display: block !important;
+    }
+    
+    body {
+      font-size: 12pt;
+      line-height: 1.4;
+      color: black;
+    }
+    
+    .bg-baylor-green {
+      background: transparent !important;
+      color: black !important;
+    }
+    
+    .text-white {
+      color: black !important;
+    }
+  }
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #666;
+/* Component-specific styles */
+
+/* Sidebar styles */
+.sidebar {
+  @apply bg-white border-r border-gray-200 transition-all duration-300 flex flex-col;
 }
 
-/* Smooth transitions for all interactive elements */
-button, a, input, select {
-  transition: all 0.2s ease-in-out;
+.sidebar-collapsed {
+  @apply w-16;
 }
 
-/* Focus styles for better accessibility */
-*:focus {
-  outline: 2px solid #1a4d2e;
-  outline-offset: 2px;
+.sidebar-expanded {
+  @apply w-64;
 }
 
-/* Custom selection color */
-::selection {
-  background: #1a4d2e;
-  color: white;
+/* Navigation item styles */
+.nav-item {
+  @apply flex items-center px-3 py-2.5 text-left rounded-lg transition-all duration-200;
 }
 
-/* Custom styles for select dropdowns */
-select {
-  @apply appearance-none;
+.nav-item-active {
+  @apply bg-baylor-green text-white shadow-sm;
 }
 
-select option {
-  @apply bg-white text-gray-900 py-2 px-3;
+.nav-item-inactive {
+  @apply text-gray-700 hover:bg-gray-100 hover:text-baylor-green;
 }
 
-select option:hover {
-  @apply bg-baylor-green/10;
+.nav-sub-item {
+  @apply w-full flex items-center px-3 py-2 text-left text-sm rounded-lg transition-all duration-200;
 }
 
-select option:checked {
-  @apply bg-baylor-green text-white;
+.nav-sub-item-active {
+  @apply bg-baylor-gold/10 text-baylor-green font-medium border-l-2 border-baylor-gold -ml-6 pl-6;
 }
 
-/* Custom scrollbar for dropdowns */
-select::-webkit-scrollbar {
-  @apply w-2;
+.nav-sub-item-inactive {
+  @apply text-gray-600 hover:bg-gray-50 hover:text-baylor-green;
 }
 
-select::-webkit-scrollbar-track {
-  @apply bg-gray-100 rounded-full;
+/* Dashboard card styles */
+.dashboard-card {
+  @apply bg-white rounded-xl shadow-sm border border-gray-200 p-6;
 }
 
-select::-webkit-scrollbar-thumb {
-  @apply bg-baylor-green/50 rounded-full hover:bg-baylor-green/70 transition-colors;
+.metric-card {
+  @apply dashboard-card;
 }
 
-/* Custom styles for time input */
-input[type="time"]::-webkit-calendar-picker-indicator {
-  @apply opacity-0 cursor-pointer;
+.quick-action-card {
+  @apply dashboard-card cursor-pointer;
 }
 
-input[type="time"]::-webkit-datetime-edit {
-  @apply text-gray-900;
+/* Form styles */
+.form-group {
+  @apply space-y-2;
 }
 
-input[type="time"]::-webkit-datetime-edit-fields-wrapper {
-  @apply text-gray-900;
+.form-label {
+  @apply block text-sm font-medium text-gray-700;
 }
 
-/* Custom styles for select dropdown container */
-.select-container {
-  @apply relative;
+.form-error {
+  @apply text-red-600 text-sm mt-1;
 }
 
-.select-container::after {
-  content: '';
-  @apply absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none;
+.form-help {
+  @apply text-gray-500 text-sm mt-1;
 }
 
-/* Custom styles for select dropdown arrow */
-.select-arrow {
-  @apply w-4 h-4 text-baylor-green;
+/* Table styles */
+.data-table {
+  @apply w-full text-sm;
 }
 
-/* Custom styles for time input container */
-.time-input-container {
-  @apply relative;
+.data-table thead {
+  @apply bg-baylor-green/5;
 }
 
-.time-input-container::after {
-  content: '';
-  @apply absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none;
+.data-table th {
+  @apply px-4 py-3 text-left font-serif font-semibold text-baylor-green;
 }
 
-/* Custom styles for time input icon */
-.time-input-icon {
-  @apply w-4 h-4 text-baylor-green;
-} 
+.data-table td {
+  @apply px-4 py-3 text-gray-700;
+}
+
+.data-table tbody tr {
+  @apply border-t border-gray-200 hover:bg-gray-50 transition-colors;
+}
+
+/* Modal styles */
+.modal-overlay {
+  @apply fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-4;
+}
+
+.modal-content {
+  @apply bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4 animate-scale-in;
+}
+
+.modal-large {
+  @apply max-w-4xl;
+}
+
+/* Timeline styles */
+.timeline-container {
+  @apply relative overflow-x-auto bg-white rounded-lg border border-gray-200;
+}
+
+.timeline-header {
+  @apply flex sticky top-0 bg-white z-10 border-b-2 border-baylor-green;
+}
+
+.timeline-row {
+  @apply relative flex items-center border-t border-gray-200 hover:bg-gray-50;
+}
+
+.timeline-item {
+  @apply px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green shadow-sm transition-all cursor-pointer;
+}
+
+/* Filter styles */
+.filter-container {
+  @apply p-4 bg-gray-50 rounded-lg border;
+}
+
+.filter-grid {
+  @apply grid grid-cols-1 md:grid-cols-4 gap-4;
+}
+
+/* Status badge styles */
+.status-badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.status-success {
+  @apply bg-green-100 text-green-800;
+}
+
+.status-warning {
+  @apply bg-yellow-100 text-yellow-800;
+}
+
+.status-error {
+  @apply bg-red-100 text-red-800;
+}
+
+.status-info {
+  @apply bg-blue-100 text-blue-800;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .sidebar-expanded {
+    @apply w-full;
+  }
+  
+  .modal-content {
+    @apply m-4;
+  }
+  
+  .filter-grid {
+    @apply grid-cols-1;
+  }
+  
+  .timeline-container {
+    @apply text-xs;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .nav-item-active {
+    @apply border border-white;
+  }
+  
+  .timeline-item {
+    @apply border border-white;
+  }
+  
+  .status-badge {
+    @apply border border-current;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -349,7 +349,7 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
           <p className="flex items-center">
             <span className="mr-2">⚠️</span>
-            Data is currently being imported. Some records may be missing or incomplete, and inaccuracies may exist.
+            Data is currently being imported. Some records may be missing or incomplete, and inaccuracies, duplications, and other issues may exist.
           </p>
         </div>
 

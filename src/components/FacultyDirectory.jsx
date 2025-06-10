@@ -345,6 +345,14 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
             </div>
         </div>
 
+        {/* Data Import Caution */}
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+          <p className="flex items-center">
+            <span className="mr-2">⚠️</span>
+            Data is currently being imported. Some records may be missing or incomplete, and inaccuracies may exist.
+          </p>
+        </div>
+
         {/* Change History */}
         {showHistory && changeHistory.length > 0 && (
           <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">

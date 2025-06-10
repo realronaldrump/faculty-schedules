@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import { Upload, RotateCcw, FileText, CheckCircle, AlertCircle, X, ArrowLeft } from 'lucide-react';
+import { collection, addDoc, getDocs, query, where } from 'firebase/firestore';
+import { db } from '../firebase';
 
 const DataImportPage = ({ 
   onNavigate, 
   facultyData, 
-  onFacultyUpdate, 
-  findOrCreateFaculty, 
-  findOrCreateCourse, 
-  findOrCreateRoom 
+  onFacultyUpdate
 }) => {
   const [csvData, setCsvData] = useState(null);
   const [fileName, setFileName] = useState('');
@@ -108,8 +107,8 @@ const DataImportPage = ({
 
     let updatedCount = 0;
     let createdCount = 0;
-    let notFoundCount = 0;
-    const notFound = [];
+    let skippedCount = 0;
+    const skipped = [];
     const changedRecords = [];
 
     const relevantColumns = {
@@ -122,12 +121,33 @@ const DataImportPage = ({
       'Office': 'office'
     };
 
+    // Check for duplicates in CSV itself
+    const csvEmailMap = new Map();
+    const csvNameMap = new Map();
+    
     for (const row of csvData) {
       const csvFirstName = row['First Name'] || '';
       const csvLastName = row['Last Name'] || '';
       const csvName = row['Name'] || `${csvFirstName} ${csvLastName}`.trim();
+      const csvEmail = row['E-mail Address'] || row['Email'] || '';
       
       if (!csvName) continue;
+
+      // Check for duplicates in CSV
+      if (csvEmail && csvEmailMap.has(csvEmail.toLowerCase())) {
+        skippedCount++;
+        skipped.push(`${csvName} (duplicate email in CSV: ${csvEmail})`);
+        continue;
+      }
+      
+      if (csvNameMap.has(csvName.toLowerCase())) {
+        skippedCount++;
+        skipped.push(`${csvName} (duplicate name in CSV)`);
+        continue;
+      }
+
+      if (csvEmail) csvEmailMap.set(csvEmail.toLowerCase(), true);
+      csvNameMap.set(csvName.toLowerCase(), true);
 
       const facultyToUpdate = findMatchingFaculty(row);
 
@@ -149,12 +169,15 @@ const DataImportPage = ({
           changedRecords.push({ ...facultyToUpdate });
           await onFacultyUpdate({ ...facultyToUpdate, ...updates });
           updatedCount++;
+        } else {
+          skippedCount++;
+          skipped.push(`${csvName} (no changes needed)`);
         }
       } else {
         // Create new faculty member
         const newFaculty = {
           name: csvName,
-          email: row['E-mail Address'] || row['Email'] || '',
+          email: csvEmail,
           phone: row['Phone Number 1'] || row['Phone'] || '',
           jobTitle: row['Job Title'] || row['Title'] || '',
           office: row['Office'] || '',
@@ -166,14 +189,14 @@ const DataImportPage = ({
           await onFacultyUpdate(newFaculty);
           createdCount++;
         } catch (error) {
-          notFoundCount++;
-          notFound.push(csvName);
+          skippedCount++;
+          skipped.push(`${csvName} (error: ${error.message})`);
         }
       }
     }
     
     setPreImportState(changedRecords);
-    setImportResults({ updatedCount, createdCount, notFoundCount, notFound, type: 'faculty' });
+    setImportResults({ updatedCount, createdCount, skippedCount, skipped, type: 'faculty' });
     if (updatedCount > 0 || createdCount > 0) {
       setCanUndo(true);
     }
@@ -211,29 +234,19 @@ const DataImportPage = ({
         }
 
         try {
-          // Create or find the related entities
-          let facultyId = null;
-          if (instructor && instructor !== 'Staff') {
-            facultyId = await findOrCreateFaculty(instructor);
-          }
-
-          const courseId = await findOrCreateCourse(courseCode, courseTitle);
-          const roomId = roomName ? await findOrCreateRoom(roomName) : null;
-
-          // Create the schedule entry
+          // Create the schedule entry with simple structure
           const scheduleData = {
-            facultyId,
-            courseId,
-            roomId,
-            day,
-            startTime,
-            endTime,
-            semester: 'Fall 2025' // Default semester
+            Instructor: instructor || 'Staff',
+            Course: courseCode,
+            'Course Title': courseTitle,
+            Day: day,
+            'Start Time': startTime,
+            'End Time': endTime,
+            Room: roomName || '',
+            semester: 'Fall 2025'
           };
 
-          // Note: You'll need to add a method to create schedule entries
-          // This would require adding a handleScheduleCreate function to App.jsx
-          console.log('Would create schedule:', scheduleData);
+          await addDoc(collection(db, 'schedules'), scheduleData);
           createdCount++;
 
         } catch (error) {
@@ -419,7 +432,7 @@ const DataImportPage = ({
                 <AlertCircle className="w-4 h-4 mr-2 text-amber-500" />
                 {importType === 'faculty' 
                   ? 'This will update existing faculty records and create new ones as needed'
-                  : 'This will create new schedule entries and related courses, rooms, and faculty as needed'
+                  : 'This will create new schedule entries'
                 }
               </div>
             </div>
@@ -472,6 +485,11 @@ const DataImportPage = ({
                               <span className="font-semibold">{importResults.createdCount}</span> new faculty records were created.
                             </p>
                           )}
+                          {importResults.skippedCount > 0 && (
+                            <p className="text-yellow-700">
+                              <span className="font-semibold">{importResults.skippedCount}</span> records were skipped.
+                            </p>
+                          )}
                         </>
                       ) : (
                         <>
@@ -483,17 +501,17 @@ const DataImportPage = ({
                         </>
                       )}
                       
-                      {(importResults.notFoundCount > 0 || importResults.errorCount > 0) && (
+                      {(importResults.skippedCount > 0 || importResults.errorCount > 0) && (
                         <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
                           <div className="flex items-start">
                             <AlertCircle className="w-5 h-5 text-amber-600 mr-2 mt-0.5 flex-shrink-0" />
                             <div className="flex-1">
                               <p className="text-amber-800 font-medium">
-                                {importResults.notFoundCount || importResults.errorCount} records had issues:
+                                {importResults.skippedCount || importResults.errorCount} records had issues:
                               </p>
                               <div className="mt-2 max-h-32 overflow-y-auto">
                                 <ul className="text-sm text-amber-700 space-y-1">
-                                  {(importResults.notFound || importResults.errors || []).map((item, index) => (
+                                  {(importResults.skipped || importResults.errors || []).map((item, index) => (
                                     <li key={index} className="flex items-center">
                                       <span className="w-2 h-2 bg-amber-400 rounded-full mr-2 flex-shrink-0"></span>
                                       {item}
@@ -634,11 +652,11 @@ const DataImportPage = ({
                       </li>
                       <li className="flex">
                         <span className="flex-shrink-0 w-5 h-5 bg-baylor-green text-white rounded-full text-xs flex items-center justify-center mr-3">2</span>
-                        System creates/finds faculty, courses, and rooms
+                        System creates schedule entries with the provided data
                       </li>
                       <li className="flex">
                         <span className="flex-shrink-0 w-5 h-5 bg-baylor-green text-white rounded-full text-xs flex items-center justify-center mr-3">3</span>
-                        Schedule entries are created with proper references
+                        Data is available immediately in the application
                       </li>
                     </ol>
                   </div>

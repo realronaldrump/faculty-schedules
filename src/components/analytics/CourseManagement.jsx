@@ -8,8 +8,7 @@ const CourseManagement = ({
   facultyData, 
   editHistory, 
   onDataUpdate, 
-  onRevertChange, 
-  lookupMaps 
+  onRevertChange
 }) => {
   const [editingRowId, setEditingRowId] = useState(null);
   const [editFormData, setEditFormData] = useState({});

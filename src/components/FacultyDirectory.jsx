@@ -32,6 +32,34 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
     isAlsoStaff: false,
   });
 
+  // Remove duplicates from directoryData and ensure unique entries
+  const uniqueDirectoryData = useMemo(() => {
+    if (!directoryData || !Array.isArray(directoryData)) return [];
+    
+    const uniqueMap = new Map();
+    
+    directoryData.forEach(faculty => {
+      // Create a unique key based on name and email
+      const key = `${faculty.name?.toLowerCase()}-${(faculty.email || 'no-email').toLowerCase()}`;
+      
+      // Only add if not already in map, or if this one has more complete data
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, faculty);
+      } else {
+        const existing = uniqueMap.get(key);
+        // Keep the one with more complete data (more fields filled)
+        const existingFields = Object.values(existing).filter(v => v && v !== '').length;
+        const newFields = Object.values(faculty).filter(v => v && v !== '').length;
+        
+        if (newFields > existingFields) {
+          uniqueMap.set(key, faculty);
+        }
+      }
+    });
+    
+    return Array.from(uniqueMap.values());
+  }, [directoryData]);
+
   const validate = (data) => {
     const newErrors = {};
     
@@ -166,7 +194,7 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
   };
   
   const sortedAndFilteredData = useMemo(() => {
-    let data = [...directoryData];
+    let data = [...uniqueDirectoryData];
 
     if (filterText) {
       const lowercasedFilter = filterText.toLowerCase();
@@ -197,7 +225,7 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
     });
 
     return data;
-  }, [directoryData, filterText, sortConfig]);
+  }, [uniqueDirectoryData, filterText, sortConfig]);
 
   const SortableHeader = ({ label, columnKey }) => {
     const isSorted = sortConfig.key === columnKey;
@@ -223,7 +251,7 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
       <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200">
           <h2 className="text-xl font-serif font-semibold text-baylor-green flex items-center">
             <BookUser className="mr-2 text-baylor-gold" size={20} />
-            Faculty Directory
+            Faculty Directory ({sortedAndFilteredData.length} members)
           </h2>
           <div className="flex items-center gap-4">
               <div className="relative">
@@ -331,19 +359,19 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
                 </td>
               </tr>
             )}
-            {sortedAndFilteredData.map(faculty => (
-              <tr key={`${faculty.sourceCollection}-${faculty.id}`} className="hover:bg-gray-50" >
+            {sortedAndFilteredData.map((faculty, index) => (
+              <tr key={`faculty-${faculty.id || index}-${faculty.name}`} className="hover:bg-gray-50" >
                 {editingId === faculty.id ? (
                   <>
                     <td className="p-2 align-top text-gray-700 font-medium">
                         <div className='mb-2'>{faculty.name}</div>
                         <div className="flex items-center gap-2 text-xs">
-                           <input type="checkbox" id={`adjunct-${faculty.id}`} name="isAdjunct" checked={!!editFormData.isAdjunct} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
-                           <label htmlFor={`adjunct-${faculty.id}`} className="font-normal">Adjunct</label>
+                           <input type="checkbox" id={`adjunct-${faculty.id || index}`} name="isAdjunct" checked={!!editFormData.isAdjunct} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+                           <label htmlFor={`adjunct-${faculty.id || index}`} className="font-normal">Adjunct</label>
                         </div>
                         <div className="flex items-center gap-2 text-xs mt-1">
-                           <input type="checkbox" id={`isAlsoStaff-${faculty.id}`} name="isAlsoStaff" checked={!!editFormData.isAlsoStaff} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
-                           <label htmlFor={`isAlsoStaff-${faculty.id}`} className="font-normal">Also a staff member</label>
+                           <input type="checkbox" id={`isAlsoStaff-${faculty.id || index}`} name="isAlsoStaff" checked={!!editFormData.isAlsoStaff} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+                           <label htmlFor={`isAlsoStaff-${faculty.id || index}`} className="font-normal">Also a staff member</label>
                         </div>
                     </td>
                     <td className="p-2 align-top">
@@ -369,7 +397,15 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
                   </>
                 ) : (
                   <>
-                    <td className="px-4 py-3 text-gray-700 font-medium cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.name}</td>
+                    <td className="px-4 py-3 text-gray-700 font-medium cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
+                      <div>{faculty.name}</div>
+                      {faculty.sourceCollection === 'staff' && (
+                        <div className="text-xs text-baylor-gold font-medium">Also Staff</div>
+                      )}
+                      {faculty.isAdjunct && (
+                        <div className="text-xs text-blue-600 font-medium">Adjunct</div>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.jobTitle || '-'}</td>
                     <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.email || '-'}</td>
                     <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{formatPhoneNumber(faculty.phone)}</td>

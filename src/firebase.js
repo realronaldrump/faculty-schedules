@@ -82,10 +82,7 @@ export const firestoreUtils = {
       console.error('❌ Could not enable online mode:', error);
       return false;
     }
-  },
-
-  // Check connection status
-  isOffline: false // This would need to be managed by your app state
+  }
 };
 
 // Error handling utilities
@@ -143,120 +140,8 @@ export const firebaseErrorHandler = {
 export const COLLECTIONS = {
   FACULTY: 'faculty',
   STAFF: 'staff',
-  COURSES: 'courses',
-  ROOMS: 'rooms',
   SCHEDULES: 'schedules',
-  HISTORY: 'history',
-  USER_SETTINGS: 'user_settings',
-  SYSTEM: 'system',
-  BACKUPS: 'backups'
-};
-
-// Common query builders
-export const queryBuilders = {
-  // Get documents with pagination
-  paginated: (collectionRef, orderByField = 'createdAt', limit = 25, startAfter = null) => {
-    let q = query(collectionRef, orderBy(orderByField), limit(limit));
-    if (startAfter) {
-      q = query(q, startAfter(startAfter));
-    }
-    return q;
-  },
-
-  // Get documents by field value
-  byField: (collectionRef, field, value) => {
-    return query(collectionRef, where(field, '==', value));
-  },
-
-  // Get documents in date range
-  byDateRange: (collectionRef, dateField, startDate, endDate) => {
-    return query(
-      collectionRef,
-      where(dateField, '>=', startDate),
-      where(dateField, '<=', endDate),
-      orderBy(dateField)
-    );
-  }
-};
-
-// Batch operation utilities
-export const batchUtils = {
-  // Maximum operations per batch
-  MAX_BATCH_SIZE: 500,
-
-  // Create a new batch
-  createBatch() {
-    return writeBatch(db);
-  },
-
-  // Execute operations in batches
-  async executeBatches(operations) {
-    const batches = [];
-    let currentBatch = this.createBatch();
-    let operationCount = 0;
-
-    for (const operation of operations) {
-      operation(currentBatch);
-      operationCount++;
-
-      if (operationCount >= this.MAX_BATCH_SIZE) {
-        batches.push(currentBatch);
-        currentBatch = this.createBatch();
-        operationCount = 0;
-      }
-    }
-
-    // Add the last batch if it has operations
-    if (operationCount > 0) {
-      batches.push(currentBatch);
-    }
-
-    // Execute all batches
-    const results = [];
-    for (let i = 0; i < batches.length; i++) {
-      try {
-        await batches[i].commit();
-        results.push({ batch: i + 1, success: true });
-      } catch (error) {
-        results.push({ 
-          batch: i + 1, 
-          success: false, 
-          error: firebaseErrorHandler.parseError(error) 
-        });
-      }
-    }
-
-    return results;
-  }
-};
-
-// Real-time listener utilities
-export const realtimeUtils = {
-  // Create a listener with error handling
-  createListener(query, onSnapshot, onError = null) {
-    return query.onSnapshot(
-      onSnapshot,
-      (error) => {
-        const parsed = firebaseErrorHandler.handleError(error, 'real-time listener');
-        if (onError) {
-          onError(parsed);
-        }
-      }
-    );
-  },
-
-  // Listener for a single document
-  listenToDocument(docRef, onSnapshot, onError = null) {
-    return docRef.onSnapshot(
-      onSnapshot,
-      (error) => {
-        const parsed = firebaseErrorHandler.handleError(error, 'document listener');
-        if (onError) {
-          onError(parsed);
-        }
-      }
-    );
-  }
+  HISTORY: 'history'
 };
 
 // Data validation utilities

@@ -10,6 +10,7 @@ import DepartmentInsights from './components/analytics/DepartmentInsights.jsx';
 import CourseManagement from './components/analytics/CourseManagement';
 import DataImportPage from './components/DataImportPage';
 import SystemsPage from './components/SystemsPage';
+import DatabaseCleanup from './components/DatabaseCleanup';
 import Login from './components/Login';
 import { Home, Calendar, Users, BarChart3, Settings, Bell, Search, User } from 'lucide-react';
 import { db } from './firebase';
@@ -70,6 +71,7 @@ function App() {
       icon: Settings,
       children: [
         { id: 'data-import', label: 'Data Import', path: 'administration/data-import' },
+        { id: 'database-cleanup', label: 'Database Cleanup', path: 'administration/database-cleanup' },
         { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' }
       ]
     }
@@ -452,6 +454,8 @@ function App() {
           facultyData={rawFaculty} 
           onFacultyUpdate={handleFacultyUpdate}
         />;
+      case 'administration/database-cleanup':
+        return <DatabaseCleanup onNavigate={setCurrentPage} />;
       case 'administration/baylor-systems':
         return <SystemsPage onNavigate={setCurrentPage} />;
       default:

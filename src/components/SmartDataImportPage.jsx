@@ -329,6 +329,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification }) => {
           roles: personRoles.selectedRoles,
           isAdjunct: personRoles.isAdjunct,
           isFullTime: !personRoles.isAdjunct, // All adjuncts are part-time
+          isTenured: personRoles.isTenured || false,
           hasNoPhone: personRoles.hasNoPhone,
           hasNoOffice: personRoles.hasNoOffice
         });

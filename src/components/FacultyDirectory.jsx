@@ -30,6 +30,7 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFac
     phone: '',
     office: '',
     isAdjunct: false,
+    isTenured: false,
     isAlsoStaff: false,
     hasNoPhone: false,
     hasNoOffice: false,
@@ -263,6 +264,7 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFac
       phone: '',
       office: '',
       isAdjunct: false,
+      isTenured: false,
       isAlsoStaff: false,
       hasNoPhone: false,
       hasNoOffice: false,
@@ -279,6 +281,7 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFac
       phone: '',
       office: '',
       isAdjunct: false,
+      isTenured: false,
       isAlsoStaff: false,
       hasNoPhone: false,
       hasNoOffice: false,
@@ -529,6 +532,17 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFac
                          <label htmlFor="new-adjunct" className="font-normal">Adjunct</label>
                       </div>
                       <div className="flex items-center gap-2 text-xs mt-1">
+                         <input
+                           type="checkbox"
+                           id="new-isTenured"
+                           name="isTenured"
+                           checked={newFaculty.isTenured}
+                           onChange={handleCreateChange}
+                           className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-600"
+                         />
+                         <label htmlFor="new-isTenured" className="font-normal">Tenured</label>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs mt-1">
                          <input type="checkbox" id="new-isAlsoStaff" name="isAlsoStaff" checked={newFaculty.isAlsoStaff} onChange={handleCreateChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
                          <label htmlFor="new-isAlsoStaff" className="font-normal">Also a staff member</label>
                       </div>
@@ -621,6 +635,17 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFac
                              <label htmlFor={`adjunct-${faculty.id || index}`} className="font-normal">Adjunct</label>
                           </div>
                           <div className="flex items-center gap-2 text-xs mt-1">
+                             <input
+                               type="checkbox"
+                               id={`isTenured-${faculty.id || index}`}
+                               name="isTenured"
+                               checked={!!editFormData.isTenured}
+                               onChange={handleChange}
+                               className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-600"
+                             />
+                             <label htmlFor={`isTenured-${faculty.id || index}`} className="font-normal">Tenured</label>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs mt-1">
                              <input type="checkbox" id={`isAlsoStaff-${faculty.id || index}`} name="isAlsoStaff" checked={!!editFormData.isAlsoStaff} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
                              <label htmlFor={`isAlsoStaff-${faculty.id || index}`} className="font-normal">Also a staff member</label>
                           </div>
@@ -698,6 +723,9 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFac
                         )}
                         {faculty.isAdjunct && (
                           <div className="text-xs text-blue-600 font-medium">Adjunct</div>
+                        )}
+                        {faculty.isTenured && (
+                          <div className="text-xs text-purple-600 font-medium">Tenured</div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.jobTitle || '-'}</td>

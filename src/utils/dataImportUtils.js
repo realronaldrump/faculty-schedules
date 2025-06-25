@@ -23,6 +23,7 @@ export const createPersonModel = ({
   roles = [],
   isAdjunct = false,
   isFullTime = true,
+  isTenured = false,
   hasNoPhone = false,
   hasNoOffice = false,
   createdAt = new Date().toISOString(),
@@ -39,6 +40,7 @@ export const createPersonModel = ({
   roles: Array.isArray(roles) ? roles : [],
   isAdjunct,
   isFullTime,
+  isTenured: roles.includes('faculty') ? isTenured : false, // Only faculty can be tenured
   hasNoPhone,
   hasNoOffice,
   createdAt,

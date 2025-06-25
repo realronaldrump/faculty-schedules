@@ -517,6 +517,7 @@ function App() {
             roles: roles,
             isAdjunct: facultyToUpdate.isAdjunct || false,
             isFullTime: !facultyToUpdate.isAdjunct,
+            isTenured: roles.includes('faculty') ? (facultyToUpdate.isTenured || false) : false, // Only faculty can be tenured
             hasNoPhone: facultyToUpdate.hasNoPhone || false,
             hasNoOffice: facultyToUpdate.hasNoOffice || false,
             updatedAt: new Date().toISOString()
@@ -569,6 +570,7 @@ function App() {
               office: staffToUpdate.office || '',
               roles: roles,
               isFullTime: staffToUpdate.isFullTime !== false,
+              isTenured: roles.includes('faculty') ? (staffToUpdate.isTenured || false) : false, // Only faculty can be tenured
               hasNoPhone: staffToUpdate.hasNoPhone || false,
               hasNoOffice: staffToUpdate.hasNoOffice || false,
               updatedAt: new Date().toISOString()

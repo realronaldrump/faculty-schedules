@@ -11,6 +11,7 @@ const EmailLists = ({ facultyData, staffData }) => {
     facultyOnly: false,
     staffOnly: false,
     adjunctOnly: false,
+    tenuredOnly: false,
     hasEmail: true
   });
   const [showFilters, setShowFilters] = useState(false);
@@ -146,6 +147,11 @@ const EmailLists = ({ facultyData, staffData }) => {
     // Adjunct filter
     if (filters.adjunctOnly) {
       filtered = filtered.filter(person => person.isAdjunct);
+    }
+
+    // Tenured filter (only applies to faculty)
+    if (filters.tenuredOnly) {
+      filtered = filtered.filter(person => person.isTenured && (person.roleType === 'faculty' || person.roleType === 'both'));
     }
 
     // Has email filter
@@ -290,6 +296,7 @@ const EmailLists = ({ facultyData, staffData }) => {
       facultyOnly: false,
       staffOnly: false,
       adjunctOnly: false,
+      tenuredOnly: false,
       hasEmail: true
     });
     setSearchTerm('');
@@ -344,7 +351,7 @@ const EmailLists = ({ facultyData, staffData }) => {
           </button>
 
           {/* Clear Filters */}
-          {(searchTerm || filters.programs.length > 0 || filters.jobTitles.length > 0 || filters.facultyOnly || filters.staffOnly || filters.adjunctOnly || !filters.hasEmail) && (
+          {(searchTerm || filters.programs.length > 0 || filters.jobTitles.length > 0 || filters.facultyOnly || filters.staffOnly || filters.adjunctOnly || filters.tenuredOnly || !filters.hasEmail) && (
             <button
               onClick={clearFilters}
               className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-800"
@@ -407,6 +414,15 @@ const EmailLists = ({ facultyData, staffData }) => {
                     className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                   />
                   <span className="ml-2 text-sm text-gray-700">Adjunct only</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={filters.tenuredOnly}
+                    onChange={(e) => setFilters(prev => ({ ...prev, tenuredOnly: e.target.checked }))}
+                    className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-600"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Tenured only</span>
                 </label>
                 <label className="flex items-center">
                   <input

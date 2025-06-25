@@ -67,6 +67,7 @@ export const adaptPeopleToFaculty = (people) => {
       jobTitle: person.jobTitle,
       office: person.office,
       isAdjunct: person.isAdjunct,
+      isTenured: person.isTenured || false,
       isAlsoStaff: person.roles.includes('staff'),
       ...person // Include any additional fields
     }));
@@ -89,6 +90,7 @@ export const adaptPeopleToStaff = (people) => {
       jobTitle: person.jobTitle,
       office: person.office,
       isFullTime: person.isFullTime,
+      isTenured: person.roles.includes('faculty') ? (person.isTenured || false) : false, // Only display tenure for dual-role staff
       isAlsoFaculty: person.roles.includes('faculty'),
       ...person // Include any additional fields
     }));

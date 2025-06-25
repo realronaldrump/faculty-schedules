@@ -84,13 +84,17 @@ const EmailLists = ({ facultyData, staffData }) => {
     const jobTitles = new Set();
 
     combinedDirectoryData.forEach(person => {
-      // Extract program from jobTitle (assuming format like "Program - College")
-      // For now, we'll use the same logic as departments until programs are implemented
-      if (person.jobTitle) {
+      // Extract program from faculty program field or fallback to jobTitle parsing
+      if (person.program && person.program.name) {
+        programs.add(person.program.name);
+      } else if (person.jobTitle) {
         const parts = person.jobTitle.split(' - ');
         if (parts.length > 1) {
           programs.add(parts[0].trim());
         }
+      }
+      
+      if (person.jobTitle) {
         jobTitles.add(person.jobTitle);
       }
     });
@@ -120,10 +124,17 @@ const EmailLists = ({ facultyData, staffData }) => {
     // Program filter
     if (filters.programs.length > 0) {
       filtered = filtered.filter(person => {
-        if (!person.jobTitle) return false;
-        const parts = person.jobTitle.split(' - ');
-        const program = parts.length > 1 ? parts[0].trim() : '';
-        return filters.programs.includes(program);
+        // Check faculty program field first
+        if (person.program && person.program.name) {
+          return filters.programs.includes(person.program.name);
+        }
+        // Fallback to jobTitle parsing for staff or faculty without program data
+        if (person.jobTitle) {
+          const parts = person.jobTitle.split(' - ');
+          const program = parts.length > 1 ? parts[0].trim() : '';
+          return filters.programs.includes(program);
+        }
+        return false;
       });
     }
 
@@ -237,7 +248,10 @@ const EmailLists = ({ facultyData, staffData }) => {
     // Create formatted text list
     const textList = peopleData
       .filter(person => person.email)
-      .map(person => `${person.name} - ${person.email} - ${person.jobTitle || 'No Title'} - ${person.office || 'No Office'} - ${person.role}`)
+      .map(person => {
+        const program = person.program && person.program.name ? person.program.name : 'No Program';
+        return `${person.name} - ${person.email} - ${person.jobTitle || 'No Title'} - ${program} - ${person.office || 'No Office'} - ${person.role}`;
+      })
       .join('\n');
     
     copyToClipboard(textList);
@@ -263,11 +277,12 @@ const EmailLists = ({ facultyData, staffData }) => {
       return;
     }
 
-    const csvHeaders = ['Name', 'Email', 'Job Title', 'Office', 'Phone', 'Role'];
+    const csvHeaders = ['Name', 'Email', 'Job Title', 'Program', 'Office', 'Phone', 'Role'];
     const csvData = selectedData.map(person => [
       person.name || '',
       person.email || '',
       person.jobTitle || '',
+      person.program && person.program.name ? person.program.name : '',
       person.office || '',
       person.phone || '',
       person.role || ''
@@ -550,6 +565,9 @@ const EmailLists = ({ facultyData, staffData }) => {
                           {person.jobTitle || 'No title'} • {person.role}
                         </p>
                         <p className="text-sm text-gray-500">
+                          {person.program && person.program.name ? (
+                            <span className="text-baylor-green font-medium">{person.program.name} • </span>
+                          ) : null}
                           {person.office || 'No office'}
                         </p>
                       </div>

@@ -335,14 +335,14 @@ function App() {
 
   // Directory data from normalized people collection
   const { facultyDirectoryData, staffDirectoryData } = useMemo(() => {
-    const facultyDir = adaptPeopleToFaculty(rawPeople);
+    const facultyDir = adaptPeopleToFaculty(rawPeople, scheduleData);
     const staffDir = adaptPeopleToStaff(rawPeople);
     
     return { 
       facultyDirectoryData: facultyDir, 
       staffDirectoryData: staffDir 
     };
-  }, [rawPeople]);
+  }, [rawPeople, scheduleData]);
 
   // Load normalized relational data
   useEffect(() => {

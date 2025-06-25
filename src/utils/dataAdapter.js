@@ -6,6 +6,60 @@
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 
+// ==================== PROGRAM DETERMINATION ====================
+
+/**
+ * Program mapping based on course code prefixes
+ */
+const PROGRAM_MAPPING = {
+  'ADM': 'Apparel Design & Manufacturing',
+  'CFS': 'Child & Family Studies', 
+  'NUTR': 'Nutrition',
+  'ID': 'Interior Design'
+};
+
+/**
+ * Determine faculty program based on course codes they teach
+ */
+export const determineFacultyProgram = (scheduleData, facultyName) => {
+  if (!scheduleData || !facultyName || facultyName === 'Staff') {
+    return null;
+  }
+  
+  // Find all courses taught by this faculty member
+  const facultyCourses = scheduleData.filter(schedule => {
+    const instructorName = schedule.instructor ? 
+      `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim() :
+      (schedule.instructorName || schedule.Instructor || '');
+    
+    return instructorName === facultyName;
+  });
+  
+  // Extract course code prefixes
+  const prefixes = new Set();
+  facultyCourses.forEach(schedule => {
+    const courseCode = schedule.courseCode || schedule.Course || '';
+    const match = courseCode.match(/^([A-Z]{2,4})\s*\d/);
+    if (match) {
+      prefixes.add(match[1]);
+    }
+  });
+  
+  // Determine program based on prefixes
+  // Since each faculty member should only teach in one program, 
+  // we take the first valid program we find
+  for (const prefix of prefixes) {
+    if (PROGRAM_MAPPING[prefix]) {
+      return {
+        code: prefix,
+        name: PROGRAM_MAPPING[prefix]
+      };
+    }
+  }
+  
+  return null;
+};
+
 // ==================== DATA FETCHING ====================
 
 /**
@@ -53,24 +107,30 @@ export const fetchSchedulesWithInstructors = async () => {
 /**
  * Convert normalized people data to faculty format for components
  */
-export const adaptPeopleToFaculty = (people) => {
+export const adaptPeopleToFaculty = (people, scheduleData = []) => {
   return people
     .filter(person => person.roles.includes('faculty'))
-    .map(person => ({
-      id: person.id,
-      name: `${person.firstName} ${person.lastName}`.trim(),
-      firstName: person.firstName,
-      lastName: person.lastName,
-      title: person.title,
-      email: person.email,
-      phone: person.phone,
-      jobTitle: person.jobTitle,
-      office: person.office,
-      isAdjunct: person.isAdjunct,
-      isTenured: person.isTenured || false,
-      isAlsoStaff: person.roles.includes('staff'),
-      ...person // Include any additional fields
-    }));
+    .map(person => {
+      const facultyName = `${person.firstName} ${person.lastName}`.trim();
+      const program = determineFacultyProgram(scheduleData, facultyName);
+      
+      return {
+        id: person.id,
+        name: facultyName,
+        firstName: person.firstName,
+        lastName: person.lastName,
+        title: person.title,
+        email: person.email,
+        phone: person.phone,
+        jobTitle: person.jobTitle,
+        office: person.office,
+        isAdjunct: person.isAdjunct,
+        isTenured: person.isTenured || false,
+        isAlsoStaff: person.roles.includes('staff'),
+        program: program,
+        ...person // Include any additional fields
+      };
+    });
 };
 
 /**
@@ -305,8 +365,6 @@ export const isNormalizedDataAvailable = async () => {
   }
 };
 
-
-
 export default {
   fetchPeople,
   fetchSchedulesWithInstructors,
@@ -318,5 +376,6 @@ export default {
   generateAnalyticsFromNormalizedData,
   getFullName,
   getInstructorDisplayName,
-  isNormalizedDataAvailable
+  isNormalizedDataAvailable,
+  determineFacultyProgram
 }; 

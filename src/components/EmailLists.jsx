@@ -9,6 +9,7 @@ const EmailLists = ({ facultyData, staffData }) => {
     // Multi-select filters with include/exclude
     programs: { include: [], exclude: [] },
     jobTitles: { include: [], exclude: [] },
+    buildings: { include: [], exclude: [] },
     // Role filters - simplified to radio buttons
     roleFilter: 'all', // 'all', 'faculty', 'staff', 'both'
     // Boolean filters with include/exclude options
@@ -21,6 +22,49 @@ const EmailLists = ({ facultyData, staffData }) => {
   const [activeFilterPreset, setActiveFilterPreset] = useState('');
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
 
+  // Helper function to extract building name from office location
+  const extractBuildingName = (officeLocation) => {
+    if (!officeLocation || officeLocation.trim() === '') {
+      return 'No Building';
+    }
+
+    const office = officeLocation.trim();
+    
+    // Handle common building name patterns
+    const buildingKeywords = ['BUILDING', 'HALL', 'GYMNASIUM', 'TOWER', 'CENTER', 'COMPLEX'];
+    
+    // Check if office contains building keywords
+    for (const keyword of buildingKeywords) {
+      const keywordIndex = office.toUpperCase().indexOf(keyword);
+      if (keywordIndex !== -1) {
+        // Include everything up to and including the keyword
+        const endIndex = keywordIndex + keyword.length;
+        return office.substring(0, endIndex).trim();
+      }
+    }
+    
+    // If no building keywords found, try to extract building name before room numbers
+    // Look for patterns where building name ends before standalone numbers
+    const match = office.match(/^([A-Za-z\s]+?)(\s+\d+.*)?$/);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+    
+    // Handle special cases like "801 WASHINGTON TOWER" where number is part of building name
+    // If it starts with a number followed by words, keep it all as building name
+    const startsWithNumber = office.match(/^\d+\s+[A-Za-z]/);
+    if (startsWithNumber) {
+      // Look for room-like patterns at the end
+      const roomPattern = office.match(/^(.+?)(\s+\d{2,4}(\s+\d+)*)$/);
+      if (roomPattern) {
+        return roomPattern[1].trim();
+      }
+      return office; // Keep whole thing if no clear room pattern
+    }
+    
+    return office; // Fallback: return the whole office location
+  };
+
   // Filter presets for common use cases
   const filterPresets = {
     'all-faculty': {
@@ -28,6 +72,7 @@ const EmailLists = ({ facultyData, staffData }) => {
       filters: {
         programs: { include: [], exclude: [] },
         jobTitles: { include: [], exclude: [] },
+        buildings: { include: [], exclude: [] },
         roleFilter: 'faculty',
         adjunct: 'all',
         tenured: 'all',
@@ -39,6 +84,7 @@ const EmailLists = ({ facultyData, staffData }) => {
       filters: {
         programs: { include: [], exclude: [] },
         jobTitles: { include: [], exclude: [] },
+        buildings: { include: [], exclude: [] },
         roleFilter: 'faculty',
         adjunct: 'all',
         tenured: 'include',
@@ -50,6 +96,7 @@ const EmailLists = ({ facultyData, staffData }) => {
       filters: {
         programs: { include: [], exclude: [] },
         jobTitles: { include: [], exclude: [] },
+        buildings: { include: [], exclude: [] },
         roleFilter: 'faculty',
         adjunct: 'include',
         tenured: 'all',
@@ -61,6 +108,7 @@ const EmailLists = ({ facultyData, staffData }) => {
       filters: {
         programs: { include: [], exclude: [] },
         jobTitles: { include: [], exclude: [] },
+        buildings: { include: [], exclude: [] },
         roleFilter: 'staff',
         adjunct: 'all',
         tenured: 'all',
@@ -133,6 +181,7 @@ const EmailLists = ({ facultyData, staffData }) => {
   const filterOptions = useMemo(() => {
     const programs = new Set();
     const jobTitles = new Set();
+    const buildings = new Set();
 
     combinedDirectoryData.forEach(person => {
       // Extract program from faculty program field or fallback to jobTitle parsing
@@ -148,11 +197,20 @@ const EmailLists = ({ facultyData, staffData }) => {
       if (person.jobTitle) {
         jobTitles.add(person.jobTitle);
       }
+
+      // Extract building name from office location
+      if (person.office) {
+        const buildingName = extractBuildingName(person.office);
+        buildings.add(buildingName);
+      } else {
+        buildings.add('No Building');
+      }
     });
 
     return {
       programs: Array.from(programs).sort(),
-      jobTitles: Array.from(jobTitles).sort()
+      jobTitles: Array.from(jobTitles).sort(),
+      buildings: Array.from(buildings).sort()
     };
   }, [combinedDirectoryData]);
 
@@ -204,6 +262,20 @@ const EmailLists = ({ facultyData, staffData }) => {
         const includeMatch = filters.jobTitles.include.length === 0 || filters.jobTitles.include.includes(jobTitle);
         // Apply exclude filter
         const excludeMatch = filters.jobTitles.exclude.length === 0 || !filters.jobTitles.exclude.includes(jobTitle);
+        
+        return includeMatch && excludeMatch;
+      });
+    }
+
+    // Building filter (include/exclude)
+    if (filters.buildings.include.length > 0 || filters.buildings.exclude.length > 0) {
+      filtered = filtered.filter(person => {
+        const buildingName = person.office ? extractBuildingName(person.office) : 'No Building';
+        
+        // Apply include filter
+        const includeMatch = filters.buildings.include.length === 0 || filters.buildings.include.includes(buildingName);
+        // Apply exclude filter
+        const excludeMatch = filters.buildings.exclude.length === 0 || !filters.buildings.exclude.includes(buildingName);
         
         return includeMatch && excludeMatch;
       });
@@ -383,6 +455,7 @@ const EmailLists = ({ facultyData, staffData }) => {
     setFilters({
       programs: { include: [], exclude: [] },
       jobTitles: { include: [], exclude: [] },
+      buildings: { include: [], exclude: [] },
       roleFilter: 'all',
       adjunct: 'all',
       tenured: 'all',
@@ -413,6 +486,8 @@ const EmailLists = ({ facultyData, staffData }) => {
     if (filters.programs.exclude.length > 0) count++;
     if (filters.jobTitles.include.length > 0) count++;
     if (filters.jobTitles.exclude.length > 0) count++;
+    if (filters.buildings.include.length > 0) count++;
+    if (filters.buildings.exclude.length > 0) count++;
     if (filters.roleFilter !== 'all') count++;
     if (filters.adjunct !== 'all') count++;
     if (filters.tenured !== 'all') count++;
@@ -566,6 +641,38 @@ const EmailLists = ({ facultyData, staffData }) => {
                     jobTitles: { ...prev.jobTitles, exclude: selected }
                   }))}
                   placeholder="Select job titles to exclude..."
+                />
+              </div>
+            </div>
+
+            {/* Buildings Filter */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Include Buildings
+                </label>
+                <MultiSelectDropdown
+                  options={filterOptions.buildings}
+                  selected={filters.buildings.include}
+                  onChange={(selected) => setFilters(prev => ({ 
+                    ...prev, 
+                    buildings: { ...prev.buildings, include: selected }
+                  }))}
+                  placeholder="Select buildings to include..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Exclude Buildings
+                </label>
+                <MultiSelectDropdown
+                  options={filterOptions.buildings}
+                  selected={filters.buildings.exclude}
+                  onChange={(selected) => setFilters(prev => ({ 
+                    ...prev, 
+                    buildings: { ...prev.buildings, exclude: selected }
+                  }))}
+                  placeholder="Select buildings to exclude..."
                 />
               </div>
             </div>

@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard';
 import GroupMeetings from './components/scheduling/GroupMeetings.jsx';
 import IndividualAvailability from './components/scheduling/IndividualAvailability';
 import RoomSchedules from './components/scheduling/RoomSchedules';
+import FacultySchedules from './components/FacultySchedules';
 import FacultyDirectory from './components/FacultyDirectory';
 import StaffDirectory from './components/StaffDirectory';
 import DepartmentInsights from './components/analytics/DepartmentInsights.jsx';
@@ -68,6 +69,7 @@ function App() {
       label: 'Scheduling',
       icon: Calendar,
       children: [
+        { id: 'faculty-schedules', label: 'Faculty Schedules', path: 'scheduling/faculty-schedules' },
         { id: 'group-meetings', label: 'Group Meetings', path: 'scheduling/group-meetings' },
         { id: 'individual-availability', label: 'Individual Availability', path: 'scheduling/individual-availability' },
         { id: 'room-schedules', label: 'Room Schedules', path: 'scheduling/room-schedules' }
@@ -717,6 +719,8 @@ function App() {
     switch(currentPage) {
       case 'dashboard':
         return <Dashboard {...commonProps} />;
+      case 'scheduling/faculty-schedules':
+        return <FacultySchedules {...commonProps} />;
       case 'scheduling/group-meetings':
         return <GroupMeetings {...commonProps} />;
       case 'scheduling/individual-availability':

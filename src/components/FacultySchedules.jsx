@@ -1,0 +1,386 @@
+import React, { useState, useMemo } from 'react';
+import { User, Calendar, Clock, Search, ChevronDown, ChevronsUpDown, Grid, List, Plus, X, Eye, Info, Building, BookOpen, Users } from 'lucide-react';
+import FacultyContactCard from './FacultyContactCard';
+
+const FacultySchedules = ({ scheduleData, facultyData }) => {
+  const [selectedFaculty, setSelectedFaculty] = useState([]);
+  const [viewMode, setViewMode] = useState('timeline');
+  const [selectedDay, setSelectedDay] = useState('M');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
+  const [selectedCourse, setSelectedCourse] = useState(null);
+
+  const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
+
+  // Utility functions
+  const parseTime = (timeStr) => {
+    if (!timeStr) return null;
+    const cleaned = timeStr.toLowerCase().replace(/\s+/g, '');
+    let hour, minute, ampm;
+    if (cleaned.includes(':')) {
+      const parts = cleaned.split(':');
+      hour = parseInt(parts[0]);
+      minute = parseInt(parts[1].replace(/[^\d]/g, ''));
+      ampm = cleaned.includes('pm') ? 'pm' : 'am';
+    } else {
+      const match = cleaned.match(/(\d+)(am|pm)/);
+      if (match) {
+        hour = parseInt(match[1]);
+        minute = 0;
+        ampm = match[2];
+      } else return null;
+    }
+    if (ampm === 'pm' && hour !== 12) hour += 12;
+    if (ampm === 'am' && hour === 12) hour = 0;
+    return hour * 60 + (minute || 0);
+  };
+
+  const formatMinutesToTime = (minutes) => {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return `${displayHour}:${m.toString().padStart(2, '0')} ${ampm}`;
+  };
+
+  // Get unique instructors
+  const uniqueInstructors = useMemo(() => 
+    [...new Set(scheduleData.map(item => {
+      if (item.instructor) {
+        return `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim();
+      }
+      return item.Instructor || item.instructorName || '';
+    }))].filter(i => i !== 'Staff' && i !== '').sort(),
+    [scheduleData]
+  );
+
+  const filteredInstructors = useMemo(() => 
+    uniqueInstructors.filter(instructor => 
+      instructor.toLowerCase().includes(searchTerm.toLowerCase())
+    ),
+    [uniqueInstructors, searchTerm]
+  );
+
+  // Get schedule data for selected faculty
+  const getFacultyScheduleData = (facultyName, day) => {
+    const facultySchedule = scheduleData.filter(item => {
+      const instructorName = item.instructor ? 
+        `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim() :
+        (item.Instructor || item.instructorName || '');
+      
+      if (item.meetingPatterns) {
+        return instructorName === facultyName && 
+               item.meetingPatterns.some(pattern => pattern.day === day);
+      }
+      
+      return instructorName === facultyName && item.Day === day;
+    });
+
+    const courses = facultySchedule
+      .flatMap(item => {
+        if (item.meetingPatterns) {
+          return item.meetingPatterns
+            .filter(pattern => pattern.day === day)
+            .map(pattern => ({
+              id: `${item.id}-${pattern.day}`,
+              start: parseTime(pattern.startTime),
+              end: parseTime(pattern.endTime),
+              course: item.courseCode || item.Course,
+              title: item.courseTitle || item['Course Title'],
+              room: item.room ? (item.room.displayName || item.room.name) : (item.roomName || item.Room),
+              section: item.section || item.Section,
+              credits: item.credits || item.Credits,
+              term: item.term || item.Term,
+              rawData: item
+            }));
+        }
+        
+        return [{
+          id: item.id || `${item.Course}-${item['Start Time']}-${item['End Time']}`,
+          start: parseTime(item['Start Time']),
+          end: parseTime(item['End Time']),
+          course: item.Course,
+          title: item['Course Title'],
+          room: item.Room,
+          section: item.Section,
+          credits: item.Credits,
+          term: item.Term,
+          rawData: item
+        }];
+      })
+      .filter(course => course.start !== null && course.end !== null)
+      .sort((a, b) => a.start - b.start);
+
+    return courses;
+  };
+
+  // Timeline View
+  const TimelineView = () => {
+    const dayStart = 8 * 60;
+    const dayEnd = 18 * 60;
+    const totalMinutes = dayEnd - dayStart;
+    const timeLabels = Array.from({length: (dayEnd - dayStart) / 60 + 1}, (_, i) => dayStart + i * 60);
+
+    return (
+      <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
+        <div className="relative min-w-[800px]">
+          <div className="flex sticky top-0 bg-white z-10 border-b-2 border-baylor-green">
+            <div className="w-48 flex-shrink-0 font-serif font-semibold p-3 text-baylor-green border-r border-gray-200">
+              Faculty Member
+            </div>
+            <div className="flex-grow flex">
+              {timeLabels.slice(0, -1).map(time => (
+                <div 
+                  key={time} 
+                  style={{width: `${(60 / totalMinutes) * 100}%`}} 
+                  className="text-center text-xs font-medium p-2 border-l border-gray-200 text-baylor-green"
+                >
+                  {formatMinutesToTime(time).replace(':00','')}
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {selectedFaculty.map(facultyName => {
+            const courses = getFacultyScheduleData(facultyName, selectedDay);
+            
+            return (
+              <div key={facultyName} className="flex border-b border-gray-100 hover:bg-gray-50/50">
+                <div className="w-48 flex-shrink-0 p-4 border-r border-gray-200 bg-gray-50/30">
+                  <button
+                    onClick={() => {
+                      const faculty = facultyData.find(f => f.name === facultyName);
+                      if (faculty) setSelectedFacultyForCard(faculty);
+                    }}
+                    className="font-semibold text-baylor-green hover:underline text-left"
+                  >
+                    {facultyName}
+                  </button>
+                  <button
+                    onClick={() => setSelectedFaculty(prev => prev.filter(f => f !== facultyName))}
+                    className="ml-2 text-gray-400 hover:text-red-500"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div className="flex-grow relative h-20">
+                  {courses.map(course => {
+                    const left = Math.max(0, ((course.start - dayStart) / totalMinutes) * 100);
+                    const width = (((course.end - course.start) / totalMinutes) * 100);
+
+                    if (course.end < dayStart || course.start > dayEnd) return null;
+
+                    return (
+                      <div
+                        key={course.id}
+                        style={{ 
+                          position: 'absolute', 
+                          left: `${left}%`, 
+                          width: `${width}%`, 
+                          top: '8px', 
+                          bottom: '8px' 
+                        }}
+                        className="px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green shadow-sm transition-all cursor-pointer"
+                        onClick={() => setSelectedCourse({ ...course, facultyName })}
+                        title={`${course.course} - ${course.title}\n${formatMinutesToTime(course.start)} - ${formatMinutesToTime(course.end)}\nRoom: ${course.room}`}
+                      >
+                        <div className="font-bold truncate">{course.course}</div>
+                        <div className="text-xs opacity-75 truncate">{course.room}</div>
+                      </div>
+                    );
+                  })}
+                  
+                  {courses.length === 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">
+                      No classes scheduled
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Faculty Schedules</h1>
+        <p className="text-gray-600">Compare interactive schedules across faculty members</p>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Add Faculty to Compare</label>
+            <div className="relative">
+              <button
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900 flex items-center justify-between"
+              >
+                <span>Add faculty member...</span>
+                <ChevronsUpDown className="w-5 h-5 text-baylor-green" />
+              </button>
+              
+              {isDropdownOpen && (
+                <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-hidden">
+                  <div className="p-2 border-b border-gray-200">
+                    <input
+                      type="text"
+                      placeholder="Search faculty..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-baylor-green focus:border-baylor-green text-sm"
+                    />
+                  </div>
+                  
+                  <div className="max-h-48 overflow-auto">
+                    {filteredInstructors
+                      .filter(instructor => !selectedFaculty.includes(instructor))
+                      .map((instructor) => (
+                        <button
+                          key={instructor}
+                          onClick={() => {
+                            setSelectedFaculty(prev => [...prev, instructor]);
+                            setIsDropdownOpen(false);
+                            setSearchTerm('');
+                          }}
+                          className="w-full text-left px-3 py-2 hover:bg-baylor-green/10 transition-colors text-sm"
+                        >
+                          {instructor}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Select Day</label>
+            <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+              {Object.entries(dayNames).map(([dayCode, dayName]) => (
+                <button
+                  key={dayCode}
+                  onClick={() => setSelectedDay(dayCode)}
+                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors flex-1 ${
+                    selectedDay === dayCode 
+                      ? 'bg-baylor-green text-white shadow' 
+                      : 'text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {dayName.slice(0, 3)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {selectedFaculty.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="flex items-center space-x-2 flex-wrap">
+              <span className="text-sm font-medium text-gray-700">Comparing:</span>
+              {selectedFaculty.map(facultyName => (
+                <div key={facultyName} className="flex items-center bg-baylor-green/10 text-baylor-green px-3 py-1 rounded-full text-sm">
+                  <span>{facultyName}</span>
+                  <button
+                    onClick={() => setSelectedFaculty(prev => prev.filter(f => f !== facultyName))}
+                    className="ml-2 hover:text-red-500 transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div>
+        {selectedFaculty.length > 0 ? (
+          <>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-serif font-semibold text-baylor-green">
+                {dayNames[selectedDay]} Schedules
+              </h2>
+            </div>
+            
+            <TimelineView />
+          </>
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+            <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Select Faculty to Compare</h3>
+            <p className="text-gray-600">
+              Choose one or more faculty members to view and compare their schedules.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {selectedCourse && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full mx-4">
+            <div className="bg-baylor-green text-white p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-bold">{selectedCourse.course}</h3>
+                  <p className="text-baylor-gold text-lg">{selectedCourse.title}</p>
+                </div>
+                <button
+                  onClick={() => setSelectedCourse(null)}
+                  className="text-white hover:text-baylor-gold"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h4 className="font-semibold text-baylor-green mb-2">Schedule</h4>
+                  <div className="text-sm space-y-1">
+                    <div>Day: {dayNames[selectedDay]}</div>
+                    <div>Time: {formatMinutesToTime(selectedCourse.start)} - {formatMinutesToTime(selectedCourse.end)}</div>
+                    <div>Room: {selectedCourse.room}</div>
+                  </div>
+                </div>
+                <div>
+                  <h4 className="font-semibold text-baylor-green mb-2">Course Info</h4>
+                  <div className="text-sm space-y-1">
+                    <div>Section: {selectedCourse.section}</div>
+                    <div>Credits: {selectedCourse.credits}</div>
+                    <div>Instructor: {selectedCourse.facultyName}</div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="border-t pt-4">
+                <button
+                  onClick={() => setSelectedCourse(null)}
+                  className="btn-primary"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedFacultyForCard && (
+        <FacultyContactCard
+          faculty={selectedFacultyForCard}
+          onClose={() => setSelectedFacultyForCard(null)}
+        />
+      )}
+    </div>
+  );
+};
+
+export default FacultySchedules; 

@@ -1,22 +1,73 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Copy } from 'lucide-react';
+import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Copy, Plus, Minus, Settings } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown';
 
 const EmailLists = ({ facultyData, staffData }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeople, setSelectedPeople] = useState([]);
   const [filters, setFilters] = useState({
-    programs: [],
-    jobTitles: [],
-    facultyOnly: false,
-    staffOnly: false,
-    adjunctOnly: false,
-    tenuredOnly: false,
+    // Multi-select filters with include/exclude
+    programs: { include: [], exclude: [] },
+    jobTitles: { include: [], exclude: [] },
+    // Role filters - simplified to radio buttons
+    roleFilter: 'all', // 'all', 'faculty', 'staff', 'both'
+    // Boolean filters with include/exclude options
+    adjunct: 'all', // 'all', 'include', 'exclude'
+    tenured: 'all', // 'all', 'include', 'exclude'
+    // Email filter
     hasEmail: true
   });
   const [showFilters, setShowFilters] = useState(false);
-  const [exportFormat, setExportFormat] = useState('outlook'); // 'outlook', 'gmail', 'text'
+  const [activeFilterPreset, setActiveFilterPreset] = useState('');
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
+
+  // Filter presets for common use cases
+  const filterPresets = {
+    'all-faculty': {
+      name: 'All Faculty',
+      filters: {
+        programs: { include: [], exclude: [] },
+        jobTitles: { include: [], exclude: [] },
+        roleFilter: 'faculty',
+        adjunct: 'all',
+        tenured: 'all',
+        hasEmail: true
+      }
+    },
+    'tenured-faculty': {
+      name: 'Tenured Faculty',
+      filters: {
+        programs: { include: [], exclude: [] },
+        jobTitles: { include: [], exclude: [] },
+        roleFilter: 'faculty',
+        adjunct: 'all',
+        tenured: 'include',
+        hasEmail: true
+      }
+    },
+    'adjunct-faculty': {
+      name: 'Adjunct Faculty',
+      filters: {
+        programs: { include: [], exclude: [] },
+        jobTitles: { include: [], exclude: [] },
+        roleFilter: 'faculty',
+        adjunct: 'include',
+        tenured: 'all',
+        hasEmail: true
+      }
+    },
+    'all-staff': {
+      name: 'All Staff',
+      filters: {
+        programs: { include: [], exclude: [] },
+        jobTitles: { include: [], exclude: [] },
+        roleFilter: 'staff',
+        adjunct: 'all',
+        tenured: 'all',
+        hasEmail: true
+      }
+    }
+  };
 
   // Combine faculty and staff data, removing duplicates
   const combinedDirectoryData = useMemo(() => {
@@ -121,48 +172,81 @@ const EmailLists = ({ facultyData, staffData }) => {
       );
     }
 
-    // Program filter
-    if (filters.programs.length > 0) {
+    // Program filter (include/exclude)
+    if (filters.programs.include.length > 0 || filters.programs.exclude.length > 0) {
       filtered = filtered.filter(person => {
+        let programName = '';
+        
         // Check faculty program field first
         if (person.program && person.program.name) {
-          return filters.programs.includes(person.program.name);
-        }
-        // Fallback to jobTitle parsing for staff or faculty without program data
-        if (person.jobTitle) {
+          programName = person.program.name;
+        } else if (person.jobTitle) {
+          // Fallback to jobTitle parsing for staff or faculty without program data
           const parts = person.jobTitle.split(' - ');
-          const program = parts.length > 1 ? parts[0].trim() : '';
-          return filters.programs.includes(program);
+          programName = parts.length > 1 ? parts[0].trim() : '';
         }
-        return false;
+        
+        // Apply include filter
+        const includeMatch = filters.programs.include.length === 0 || filters.programs.include.includes(programName);
+        // Apply exclude filter
+        const excludeMatch = filters.programs.exclude.length === 0 || !filters.programs.exclude.includes(programName);
+        
+        return includeMatch && excludeMatch;
       });
     }
 
-    // Job title filter
-    if (filters.jobTitles.length > 0) {
-      filtered = filtered.filter(person => 
-        person.jobTitle && filters.jobTitles.includes(person.jobTitle)
-      );
+    // Job title filter (include/exclude)
+    if (filters.jobTitles.include.length > 0 || filters.jobTitles.exclude.length > 0) {
+      filtered = filtered.filter(person => {
+        const jobTitle = person.jobTitle || '';
+        
+        // Apply include filter
+        const includeMatch = filters.jobTitles.include.length === 0 || filters.jobTitles.include.includes(jobTitle);
+        // Apply exclude filter
+        const excludeMatch = filters.jobTitles.exclude.length === 0 || !filters.jobTitles.exclude.includes(jobTitle);
+        
+        return includeMatch && excludeMatch;
+      });
     }
 
-    // Faculty only filter
-    if (filters.facultyOnly) {
-      filtered = filtered.filter(person => person.roleType === 'faculty' || person.roleType === 'both');
-    }
-
-    // Staff only filter
-    if (filters.staffOnly) {
-      filtered = filtered.filter(person => person.roleType === 'staff' || person.roleType === 'both');
+    // Role filter
+    if (filters.roleFilter !== 'all') {
+      filtered = filtered.filter(person => {
+        switch (filters.roleFilter) {
+          case 'faculty':
+            return person.roleType === 'faculty' || person.roleType === 'both';
+          case 'staff':
+            return person.roleType === 'staff' || person.roleType === 'both';
+          case 'both':
+            return person.roleType === 'both';
+          default:
+            return true;
+        }
+      });
     }
 
     // Adjunct filter
-    if (filters.adjunctOnly) {
-      filtered = filtered.filter(person => person.isAdjunct);
+    if (filters.adjunct !== 'all') {
+      filtered = filtered.filter(person => {
+        if (filters.adjunct === 'include') {
+          return person.isAdjunct;
+        } else if (filters.adjunct === 'exclude') {
+          return !person.isAdjunct;
+        }
+        return true;
+      });
     }
 
-    // Tenured filter (only applies to faculty)
-    if (filters.tenuredOnly) {
-      filtered = filtered.filter(person => person.isTenured && (person.roleType === 'faculty' || person.roleType === 'both'));
+    // Tenured filter
+    if (filters.tenured !== 'all') {
+      filtered = filtered.filter(person => {
+        if (filters.tenured === 'include') {
+          return person.isTenured && (person.roleType === 'faculty' || person.roleType === 'both');
+        } else if (filters.tenured === 'exclude') {
+          return !person.isTenured || (person.roleType !== 'faculty' && person.roleType !== 'both');
+        }
+        return true;
+      });
     }
 
     // Has email filter
@@ -202,62 +286,55 @@ const EmailLists = ({ facultyData, staffData }) => {
     const selectedData = getSelectedPeopleData();
     
     if (selectedData.length === 0) {
-      showNotification('Please select people first', 'error');
+      showNotification('Please select at least one person to generate an email list', 'error');
       return;
     }
 
+    let emailString = '';
+    
     switch (format) {
       case 'outlook':
-        return generateOutlookFormat(selectedData);
+        emailString = generateOutlookFormat(selectedData);
+        break;
       case 'gmail':
-        return generateGmailFormat(selectedData);
+        emailString = generateGmailFormat(selectedData);
+        break;
       case 'text':
-        return generateTextFormat(selectedData);
+        emailString = generateTextFormat(selectedData);
+        break;
       default:
-        return generateOutlookFormat(selectedData);
+        emailString = generateTextFormat(selectedData);
     }
+    
+    copyToClipboard(emailString);
+    showNotification(`${format.charAt(0).toUpperCase() + format.slice(1)} email list copied to clipboard with ${selectedData.length} contacts`);
   };
 
   const generateOutlookFormat = (peopleData) => {
-    // Create comma-separated email list for Outlook
     const emails = peopleData
-      .filter(person => person.email)
-      .map(person => `${person.name} <${person.email}>`)
+      .filter(person => person.email && person.email.trim() !== '')
+      .map(person => `"${person.name}" <${person.email}>`)
       .join('; ');
-    
-    copyToClipboard(emails);
-    showNotification(`${peopleData.length} contacts copied in Outlook format`);
     
     return emails;
   };
 
   const generateGmailFormat = (peopleData) => {
-    // Create comma-separated email list for Gmail
     const emails = peopleData
-      .filter(person => person.email)
+      .filter(person => person.email && person.email.trim() !== '')
       .map(person => person.email)
       .join(', ');
-    
-    copyToClipboard(emails);
-    showNotification(`${peopleData.length} contacts copied in Gmail format`);
     
     return emails;
   };
 
   const generateTextFormat = (peopleData) => {
-    // Create formatted text list
-    const textList = peopleData
-      .filter(person => person.email)
-      .map(person => {
-        const program = person.program && person.program.name ? person.program.name : 'No Program';
-        return `${person.name} - ${person.email} - ${person.jobTitle || 'No Title'} - ${program} - ${person.office || 'No Office'} - ${person.role}`;
-      })
+    const emailList = peopleData
+      .filter(person => person.email && person.email.trim() !== '')
+      .map(person => `${person.name} - ${person.email}`)
       .join('\n');
     
-    copyToClipboard(textList);
-    showNotification(`${peopleData.length} contacts copied as formatted text`);
-    
-    return textList;
+    return emailList;
   };
 
   const copyToClipboard = async (text) => {
@@ -273,28 +350,26 @@ const EmailLists = ({ facultyData, staffData }) => {
     const selectedData = getSelectedPeopleData();
     
     if (selectedData.length === 0) {
-      showNotification('Please select people first', 'error');
+      showNotification('Please select at least one person to download CSV', 'error');
       return;
     }
 
-    const csvHeaders = ['Name', 'Email', 'Job Title', 'Program', 'Office', 'Phone', 'Role'];
-    const csvData = selectedData.map(person => [
-      person.name || '',
-      person.email || '',
-      person.jobTitle || '',
-      person.program && person.program.name ? person.program.name : '',
-      person.office || '',
-      person.phone || '',
-      person.role || ''
-    ]);
-
+    const headers = ['Name', 'Email', 'Job Title', 'Role', 'Program', 'Office', 'Phone'];
     const csvContent = [
-      csvHeaders.join(','),
-      ...csvData.map(row => row.map(field => `"${field}"`).join(','))
+      headers.join(','),
+      ...selectedData.map(person => [
+        `"${person.name || ''}"`,
+        `"${person.email || ''}"`,
+        `"${person.jobTitle || ''}"`,
+        `"${person.role || ''}"`,
+        `"${person.program?.name || ''}"`,
+        `"${person.office || ''}"`,
+        `"${person.phone || ''}"`
+      ].join(','))
     ].join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = `directory-email-list-${new Date().toISOString().split('T')[0]}.csv`;
@@ -306,16 +381,44 @@ const EmailLists = ({ facultyData, staffData }) => {
 
   const clearFilters = () => {
     setFilters({
-      programs: [],
-      jobTitles: [],
-      facultyOnly: false,
-      staffOnly: false,
-      adjunctOnly: false,
-      tenuredOnly: false,
+      programs: { include: [], exclude: [] },
+      jobTitles: { include: [], exclude: [] },
+      roleFilter: 'all',
+      adjunct: 'all',
+      tenured: 'all',
       hasEmail: true
     });
     setSearchTerm('');
+    setActiveFilterPreset('');
   };
+
+  const applyFilterPreset = (presetKey) => {
+    if (presetKey === '') {
+      clearFilters();
+      setActiveFilterPreset('');
+      return;
+    }
+    
+    const preset = filterPresets[presetKey];
+    if (preset) {
+      setFilters(preset.filters);
+      setActiveFilterPreset(presetKey);
+    }
+  };
+
+  // Count active filters
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.programs.include.length > 0) count++;
+    if (filters.programs.exclude.length > 0) count++;
+    if (filters.jobTitles.include.length > 0) count++;
+    if (filters.jobTitles.exclude.length > 0) count++;
+    if (filters.roleFilter !== 'all') count++;
+    if (filters.adjunct !== 'all') count++;
+    if (filters.tenured !== 'all') count++;
+    if (!filters.hasEmail) count++;
+    return count;
+  }, [filters]);
 
   const isAllSelected = selectedPeople.length === filteredData.length && filteredData.length > 0;
   const isPartiallySelected = selectedPeople.length > 0 && selectedPeople.length < filteredData.length;
@@ -330,11 +433,19 @@ const EmailLists = ({ facultyData, staffData }) => {
             Filter and select faculty and staff to create email lists for Outlook or other email clients
           </p>
         </div>
-        <div className="flex items-center space-x-2">
-          <Users className="w-5 h-5 text-gray-500" />
-          <span className="text-sm text-gray-600">
-            {selectedPeople.length} of {filteredData.length} selected
-          </span>
+        <div className="flex items-center space-x-4">
+          {activeFilterCount > 0 && (
+            <div className="flex items-center text-sm text-baylor-green">
+              <Filter className="w-4 h-4 mr-1" />
+              <span className="font-medium">{activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active</span>
+            </div>
+          )}
+          <div className="flex items-center space-x-2">
+            <Users className="w-5 h-5 text-gray-500" />
+            <span className="text-sm text-gray-600">
+              {selectedPeople.length} of {filteredData.length} selected
+            </span>
+          </div>
         </div>
       </div>
 
@@ -353,6 +464,21 @@ const EmailLists = ({ facultyData, staffData }) => {
             />
           </div>
           
+          {/* Filter Presets */}
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-600 whitespace-nowrap">Quick filters:</span>
+            <select
+              value={activeFilterPreset}
+              onChange={(e) => applyFilterPreset(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+            >
+              <option value="">Custom filters</option>
+              {Object.entries(filterPresets).map(([key, preset]) => (
+                <option key={key} value={key}>{preset.name}</option>
+              ))}
+            </select>
+          </div>
+          
           {/* Filter Toggle */}
           <button
             onClick={() => setShowFilters(!showFilters)}
@@ -360,94 +486,150 @@ const EmailLists = ({ facultyData, staffData }) => {
               showFilters ? 'bg-baylor-green text-white border-baylor-green' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
             }`}
           >
-            <Filter className="w-4 h-4 mr-2" />
-            Filters
+            <Settings className="w-4 h-4 mr-2" />
+            Advanced Filters
             <ChevronDown className={`w-4 h-4 ml-2 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
           </button>
 
           {/* Clear Filters */}
-          {(searchTerm || filters.programs.length > 0 || filters.jobTitles.length > 0 || filters.facultyOnly || filters.staffOnly || filters.adjunctOnly || filters.tenuredOnly || !filters.hasEmail) && (
+          {(searchTerm || activeFilterCount > 0) && (
             <button
               onClick={clearFilters}
-              className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-800"
+              className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
             >
               <X className="w-4 h-4 mr-1" />
-              Clear
+              Clear All
             </button>
           )}
         </div>
 
         {/* Expanded Filters */}
         {showFilters && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gray-200">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Programs</label>
-              <MultiSelectDropdown
-                options={filterOptions.programs}
-                selected={filters.programs}
-                onChange={(selected) => setFilters(prev => ({ ...prev, programs: selected }))}
-                placeholder="Select programs..."
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Job Titles</label>
-              <MultiSelectDropdown
-                options={filterOptions.jobTitles}
-                selected={filters.jobTitles}
-                onChange={(selected) => setFilters(prev => ({ ...prev, jobTitles: selected }))}
-                placeholder="Select job titles..."
-              />
+          <div className="pt-4 border-t border-gray-200 space-y-6">
+            {/* Programs Filter */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Include Programs
+                </label>
+                <MultiSelectDropdown
+                  options={filterOptions.programs}
+                  selected={filters.programs.include}
+                  onChange={(selected) => setFilters(prev => ({ 
+                    ...prev, 
+                    programs: { ...prev.programs, include: selected }
+                  }))}
+                  placeholder="Select programs to include..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Exclude Programs
+                </label>
+                <MultiSelectDropdown
+                  options={filterOptions.programs}
+                  selected={filters.programs.exclude}
+                  onChange={(selected) => setFilters(prev => ({ 
+                    ...prev, 
+                    programs: { ...prev.programs, exclude: selected }
+                  }))}
+                  placeholder="Select programs to exclude..."
+                />
+              </div>
             </div>
 
-            <div className="space-y-3">
-              <label className="block text-sm font-medium text-gray-700">Filter Options</label>
-              <div className="space-y-2">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={filters.facultyOnly}
-                    onChange={(e) => setFilters(prev => ({ ...prev, facultyOnly: e.target.checked }))}
-                    className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                  />
-                  <span className="ml-2 text-sm text-gray-700">Faculty only</span>
+            {/* Job Titles Filter */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Include Job Titles
                 </label>
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={filters.staffOnly}
-                    onChange={(e) => setFilters(prev => ({ ...prev, staffOnly: e.target.checked }))}
-                    className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                  />
-                  <span className="ml-2 text-sm text-gray-700">Staff only</span>
+                <MultiSelectDropdown
+                  options={filterOptions.jobTitles}
+                  selected={filters.jobTitles.include}
+                  onChange={(selected) => setFilters(prev => ({ 
+                    ...prev, 
+                    jobTitles: { ...prev.jobTitles, include: selected }
+                  }))}
+                  placeholder="Select job titles to include..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Exclude Job Titles
                 </label>
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={filters.adjunctOnly}
-                    onChange={(e) => setFilters(prev => ({ ...prev, adjunctOnly: e.target.checked }))}
-                    className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                  />
-                  <span className="ml-2 text-sm text-gray-700">Adjunct only</span>
+                <MultiSelectDropdown
+                  options={filterOptions.jobTitles}
+                  selected={filters.jobTitles.exclude}
+                  onChange={(selected) => setFilters(prev => ({ 
+                    ...prev, 
+                    jobTitles: { ...prev.jobTitles, exclude: selected }
+                  }))}
+                  placeholder="Select job titles to exclude..."
+                />
+              </div>
+            </div>
+
+            {/* Role and Status Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Role Type
                 </label>
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={filters.tenuredOnly}
-                    onChange={(e) => setFilters(prev => ({ ...prev, tenuredOnly: e.target.checked }))}
-                    className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-600"
-                  />
-                  <span className="ml-2 text-sm text-gray-700">Tenured only</span>
+                <select
+                  value={filters.roleFilter}
+                  onChange={(e) => setFilters(prev => ({ ...prev, roleFilter: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                >
+                  <option value="all">All Roles</option>
+                  <option value="faculty">Faculty Only</option>
+                  <option value="staff">Staff Only</option>
+                  <option value="both">Faculty & Staff</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Adjunct Status
                 </label>
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={filters.hasEmail}
-                    onChange={(e) => setFilters(prev => ({ ...prev, hasEmail: e.target.checked }))}
-                    className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                  />
-                  <span className="ml-2 text-sm text-gray-700">Has email address</span>
+                <select
+                  value={filters.adjunct}
+                  onChange={(e) => setFilters(prev => ({ ...prev, adjunct: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                >
+                  <option value="all">All</option>
+                  <option value="include">Adjunct Only</option>
+                  <option value="exclude">Exclude Adjunct</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tenure Status
                 </label>
+                <select
+                  value={filters.tenured}
+                  onChange={(e) => setFilters(prev => ({ ...prev, tenured: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                >
+                  <option value="all">All</option>
+                  <option value="include">Tenured Only</option>
+                  <option value="exclude">Exclude Tenured</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email Requirement
+                </label>
+                <select
+                  value={filters.hasEmail ? 'yes' : 'no'}
+                  onChange={(e) => setFilters(prev => ({ ...prev, hasEmail: e.target.value === 'yes' }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                >
+                  <option value="yes">Has Email</option>
+                  <option value="no">Include No Email</option>
+                </select>
               </div>
             </div>
           </div>
@@ -536,6 +718,7 @@ const EmailLists = ({ facultyData, staffData }) => {
             <div className="p-8 text-center text-gray-500">
               <Users className="w-12 h-12 mx-auto mb-4 text-gray-300" />
               <p>No people match your current filters.</p>
+              <p className="text-sm mt-2">Try adjusting your search or filter criteria.</p>
             </div>
           ) : (
             <div className="divide-y divide-gray-200">

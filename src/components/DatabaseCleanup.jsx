@@ -6,36 +6,28 @@ import { db } from '../firebase';
 const DatabaseCleanup = ({ onNavigate }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [duplicates, setDuplicates] = useState({ faculty: [], staff: [] });
+  const [duplicates, setDuplicates] = useState({ people: [] });
   const [results, setResults] = useState(null);
-  const [selectedCollection, setSelectedCollection] = useState('faculty');
+
 
   const analyzeDatabase = async () => {
     setIsAnalyzing(true);
-    setDuplicates({ faculty: [], staff: [] });
+    setDuplicates({ people: [] });
 
     try {
-      console.log('🔍 Analyzing database for duplicates...');
+      console.log('🔍 Analyzing normalized database for duplicates...');
       
-      // Analyze faculty duplicates
-      const facultySnapshot = await getDocs(collection(db, 'faculty'));
-      const facultyData = facultySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Analyze people collection for duplicates
+      const peopleSnapshot = await getDocs(collection(db, 'people'));
+      const peopleData = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       
-      const facultyDuplicates = findDuplicates(facultyData);
-      
-      // Analyze staff duplicates
-      const staffSnapshot = await getDocs(collection(db, 'staff'));
-      const staffData = staffSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      const staffDuplicates = findDuplicates(staffData);
+      const peopleDuplicates = findDuplicates(peopleData);
 
       setDuplicates({
-        faculty: facultyDuplicates,
-        staff: staffDuplicates
+        people: peopleDuplicates
       });
 
-      console.log(`Found ${facultyDuplicates.length} faculty duplicate groups`);
-      console.log(`Found ${staffDuplicates.length} staff duplicate groups`);
+      console.log(`Found ${peopleDuplicates.length} people duplicate groups`);
 
     } catch (error) {
       console.error('Error analyzing database:', error);
@@ -53,6 +45,10 @@ const DatabaseCleanup = ({ onNavigate }) => {
       const emailKey = person.email ? `email:${person.email.toLowerCase()}` : null;
       const nameKey = person.name ? `name:${person.name.toLowerCase().trim()}` : null;
       
+      // Create full name for comparison
+      const fullName = `${person.firstName || ''} ${person.lastName || ''}`.trim();
+      const fullNameKey = fullName ? `fullName:${fullName.toLowerCase()}` : null;
+      
       // Group by email first (most reliable)
       if (emailKey && person.email.trim() !== '') {
         if (!groups.has(emailKey)) {
@@ -60,20 +56,21 @@ const DatabaseCleanup = ({ onNavigate }) => {
         }
         groups.get(emailKey).push(person);
       }
-      // Then group by name for those without email or with different emails
-      else if (nameKey) {
-        if (!groups.has(nameKey)) {
-          groups.set(nameKey, []);
+      // Then group by full name for those without email or with different emails
+      else if (fullNameKey) {
+        if (!groups.has(fullNameKey)) {
+          groups.set(fullNameKey, []);
         }
-        groups.get(nameKey).push(person);
+        groups.get(fullNameKey).push(person);
       }
     });
 
-    // Also check for name duplicates even if emails exist but are different
+    // Also check for full name duplicates even if emails exist but are different
     const nameGroups = new Map();
     data.forEach(person => {
-      if (person.name) {
-        const nameKey = person.name.toLowerCase().trim();
+      const fullName = `${person.firstName || ''} ${person.lastName || ''}`.trim();
+      if (fullName) {
+        const nameKey = fullName.toLowerCase();
         if (!nameGroups.has(nameKey)) {
           nameGroups.set(nameKey, []);
         }
@@ -84,7 +81,7 @@ const DatabaseCleanup = ({ onNavigate }) => {
     // Merge both groupings
     nameGroups.forEach((people, key) => {
       if (people.length > 1) {
-        const nameKey = `name:${key}`;
+        const nameKey = `fullName:${key}`;
         if (!groups.has(nameKey)) {
           groups.set(nameKey, people);
         }
@@ -104,17 +101,15 @@ const DatabaseCleanup = ({ onNavigate }) => {
       let totalDeleted = 0;
       const errors = [];
 
-      for (const collection of ['faculty', 'staff']) {
-        const duplicateGroups = duplicates[collection];
-        
-        for (const group of duplicateGroups) {
-          try {
-            const result = await mergeDuplicateGroup(group, collection);
-            totalMerged += result.merged;
-            totalDeleted += result.deleted;
-          } catch (error) {
-            errors.push(`Error merging ${collection} group: ${error.message}`);
-          }
+      const duplicateGroups = duplicates.people;
+      
+      for (const group of duplicateGroups) {
+        try {
+          const result = await mergeDuplicateGroup(group, 'people');
+          totalMerged += result.merged;
+          totalDeleted += result.deleted;
+        } catch (error) {
+          errors.push(`Error merging people group: ${error.message}`);
         }
       }
 
@@ -209,9 +204,11 @@ const DatabaseCleanup = ({ onNavigate }) => {
         {group.map((person, i) => (
           <div key={person.id} className="flex items-center justify-between p-2 bg-white rounded border">
             <div className="flex-1">
-              <div className="font-medium">{person.name || 'No name'}</div>
+              <div className="font-medium">
+                {`${person.firstName || ''} ${person.lastName || ''}`.trim() || 'No name'}
+              </div>
               <div className="text-sm text-gray-600">
-                {person.email || 'No email'} • {person.jobTitle || 'No title'}
+                {person.email || 'No email'} • {person.jobTitle || 'No title'} • {person.roles?.join(', ') || 'No roles'}
               </div>
               <div className="text-xs text-gray-500">
                 ID: {person.id} • Fields: {Object.values(person).filter(v => v && v !== '').length}
@@ -232,9 +229,8 @@ const DatabaseCleanup = ({ onNavigate }) => {
     analyzeDatabase();
   }, []);
 
-  const totalDuplicateGroups = duplicates.faculty.length + duplicates.staff.length;
-  const totalDuplicateRecords = duplicates.faculty.reduce((sum, group) => sum + group.length, 0) + 
-                                duplicates.staff.reduce((sum, group) => sum + group.length, 0);
+  const totalDuplicateGroups = duplicates.people.length;
+  const totalDuplicateRecords = duplicates.people.reduce((sum, group) => sum + group.length, 0);
 
   return (
     <div className="space-y-6">
@@ -274,18 +270,14 @@ const DatabaseCleanup = ({ onNavigate }) => {
         </div>
 
         {/* Summary Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-gray-50 rounded-lg p-4">
             <div className="text-sm text-gray-600">Total Duplicate Groups</div>
             <div className="text-2xl font-bold text-gray-900">{totalDuplicateGroups}</div>
           </div>
-          <div className="bg-amber-50 rounded-lg p-4">
-            <div className="text-sm text-gray-600">Faculty Duplicates</div>
-            <div className="text-2xl font-bold text-amber-800">{duplicates.faculty.length}</div>
-          </div>
           <div className="bg-blue-50 rounded-lg p-4">
-            <div className="text-sm text-gray-600">Staff Duplicates</div>
-            <div className="text-2xl font-bold text-blue-800">{duplicates.staff.length}</div>
+            <div className="text-sm text-gray-600">People Duplicates</div>
+            <div className="text-2xl font-bold text-blue-800">{duplicates.people.length}</div>
           </div>
           <div className="bg-red-50 rounded-lg p-4">
             <div className="text-sm text-gray-600">Records to Clean</div>
@@ -383,45 +375,25 @@ const DatabaseCleanup = ({ onNavigate }) => {
       {totalDuplicateGroups > 0 && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-serif font-semibold text-baylor-green">Duplicate Groups</h3>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setSelectedCollection('faculty')}
-                className={`px-3 py-1 rounded text-sm ${
-                  selectedCollection === 'faculty' 
-                    ? 'bg-baylor-green text-white' 
-                    : 'bg-gray-200 text-gray-700'
-                }`}
-              >
-                Faculty ({duplicates.faculty.length})
-              </button>
-              <button
-                onClick={() => setSelectedCollection('staff')}
-                className={`px-3 py-1 rounded text-sm ${
-                  selectedCollection === 'staff' 
-                    ? 'bg-baylor-green text-white' 
-                    : 'bg-gray-200 text-gray-700'
-                }`}
-              >
-                Staff ({duplicates.staff.length})
-              </button>
-            </div>
+            <h3 className="text-lg font-serif font-semibold text-baylor-green">
+              Duplicate Groups ({duplicates.people.length})
+            </h3>
           </div>
 
           <div className="space-y-4 max-h-96 overflow-y-auto">
-            {duplicates[selectedCollection].map((group, index) => (
+            {duplicates.people.map((group, index) => (
               <DuplicateGroup
-                key={`${selectedCollection}-${index}`}
+                key={`people-${index}`}
                 group={group}
                 index={index}
-                collection={selectedCollection}
+                collection="people"
               />
             ))}
             
-            {duplicates[selectedCollection].length === 0 && (
+            {duplicates.people.length === 0 && (
               <div className="text-center py-8 text-gray-500">
                 <Users className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                <p>No {selectedCollection} duplicates found</p>
+                <p>No people duplicates found</p>
               </div>
             )}
           </div>

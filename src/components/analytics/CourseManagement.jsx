@@ -19,12 +19,12 @@ const CourseManagement = ({
 
   // Get unique values for filters (using display names)
   const uniqueInstructors = useMemo(() => 
-    [...new Set(scheduleData.map(item => item.Instructor))].sort(),
+    [...new Set(scheduleData.filter(item => item && item.Instructor).map(item => item.Instructor))].sort(),
     [scheduleData]
   );
 
   const uniqueRooms = useMemo(() => 
-    [...new Set(scheduleData.map(item => item.Room).filter(Boolean))].sort(),
+    [...new Set(scheduleData.filter(item => item && item.Room).map(item => item.Room))].sort(),
     [scheduleData]
   );
 
@@ -69,13 +69,13 @@ const CourseManagement = ({
     
     // Apply multi-select filters
     if (filters.instructor.length > 0) {
-      data = data.filter(item => filters.instructor.includes(item.Instructor));
+      data = data.filter(item => item && item.Instructor && filters.instructor.includes(item.Instructor));
     }
     if (filters.day.length > 0) {
-      data = data.filter(item => filters.day.includes(item.Day));
+      data = data.filter(item => item && item.Day && filters.day.includes(item.Day));
     }
     if (filters.room.length > 0) {
-      data = data.filter(item => filters.room.includes(item.Room));
+      data = data.filter(item => item && item.Room && filters.room.includes(item.Room));
     }
 
     // Apply sorting
@@ -93,8 +93,10 @@ const CourseManagement = ({
         if (sortConfig.key === 'Start Time' || sortConfig.key === 'End Time') {
           return ((parseTime(aVal) || 0) - (parseTime(bVal) || 0)) * directionMultiplier;
         }
-        // Default string locale-aware sorting
-        return aVal.localeCompare(bVal) * directionMultiplier;
+        // Default string locale-aware sorting with null checks
+        const aString = (aVal || '').toString();
+        const bString = (bVal || '').toString();
+        return aString.localeCompare(bString) * directionMultiplier;
       });
     }
     
@@ -198,15 +200,17 @@ const CourseManagement = ({
   const courseStats = useMemo(() => {
     const stats = {
       totalSessions: scheduleData.length,
-      uniqueCourses: new Set(scheduleData.map(s => s.Course)).size,
-      uniqueInstructors: new Set(scheduleData.map(s => s.Instructor)).size,
-      staffTaughtSessions: scheduleData.filter(s => s.Instructor === 'Staff').length
+      uniqueCourses: new Set(scheduleData.filter(s => s && s.Course).map(s => s.Course)).size,
+      uniqueInstructors: new Set(scheduleData.filter(s => s && s.Instructor).map(s => s.Instructor)).size,
+      staffTaughtSessions: scheduleData.filter(s => s && s.Instructor === 'Staff').length
     };
     
     // Calculate busiest day
     const dayCount = {};
     scheduleData.forEach(s => {
-      dayCount[s.Day] = (dayCount[s.Day] || 0) + 1;
+      if (s && s.Day) {
+        dayCount[s.Day] = (dayCount[s.Day] || 0) + 1;
+      }
     });
     
     const busiestDay = Object.entries(dayCount).reduce((max, [day, count]) => 

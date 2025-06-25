@@ -8,13 +8,17 @@ import FacultyDirectory from './components/FacultyDirectory';
 import StaffDirectory from './components/StaffDirectory';
 import DepartmentInsights from './components/analytics/DepartmentInsights.jsx';
 import CourseManagement from './components/analytics/CourseManagement';
-import DataImportPage from './components/DataImportPage';
+// Legacy import removed - using smart import only
+import SmartDataImportPage from './components/SmartDataImportPage';
 import SystemsPage from './components/SystemsPage';
 import DatabaseCleanup from './components/DatabaseCleanup';
 import Login from './components/Login';
+import Notification from './components/Notification';
 import { Home, Calendar, Users, BarChart3, Settings, Bell, Search, User } from 'lucide-react';
 import { db } from './firebase';
-import { collection, getDocs, doc, updateDoc, addDoc, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
+import { adaptPeopleToFaculty, adaptPeopleToStaff } from './utils/dataAdapter';
+import { fetchSchedulesWithRelationalData } from './utils/dataImportUtils';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -24,10 +28,31 @@ function App() {
   
   // Raw data from Firebase
   const [rawScheduleData, setRawScheduleData] = useState([]);
-  const [rawFaculty, setRawFaculty] = useState([]);
-  const [rawStaff, setRawStaff] = useState([]);
+  const [rawPeople, setRawPeople] = useState([]);
   const [editHistory, setEditHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Notification state
+  const [notification, setNotification] = useState({
+    show: false,
+    type: 'success',
+    title: '',
+    message: ''
+  });
+
+  // Notification helper functions
+  const showNotification = (type, title, message) => {
+    setNotification({
+      show: true,
+      type,
+      title,
+      message
+    });
+  };
+
+  const hideNotification = () => {
+    setNotification(prev => ({ ...prev, show: false }));
+  };
 
   // Navigation structure
   const navigationItems = [
@@ -70,15 +95,106 @@ function App() {
       label: 'Administration',
       icon: Settings,
       children: [
-        { id: 'data-import', label: 'Data Import', path: 'administration/data-import' },
+        { id: 'smart-import', label: 'Data Import', path: 'administration/smart-import' },
         { id: 'database-cleanup', label: 'Database Cleanup', path: 'administration/database-cleanup' },
         { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' }
       ]
     }
   ];
 
-  // Simple schedule data for easy component consumption
-  const scheduleData = rawScheduleData;
+  // Adapt relational data to flat structure for component compatibility
+  const scheduleData = useMemo(() => {
+    if (!rawScheduleData || rawScheduleData.length === 0) return [];
+    
+    // Convert normalized relational data to flat structure
+    const flattenedData = [];
+    
+    rawScheduleData.forEach(schedule => {
+      // Skip invalid schedules
+      if (!schedule || !schedule.id) {
+        console.warn('⚠️ Skipping invalid schedule:', schedule);
+        return;
+      }
+      
+      // Handle meeting patterns - create one row per meeting pattern
+      if (schedule.meetingPatterns && Array.isArray(schedule.meetingPatterns) && schedule.meetingPatterns.length > 0) {
+        schedule.meetingPatterns.forEach((pattern, index) => {
+          if (!pattern) return; // Skip null patterns
+          
+          flattenedData.push({
+            id: `${schedule.id}-${index}`, // Truly unique ID using array index
+            originalId: schedule.id, // Keep reference to original schedule
+            
+            // Legacy field names for component compatibility
+            Course: schedule.courseCode || '',
+            'Course Title': schedule.courseTitle || '',
+            Instructor: schedule.instructor ? 
+              `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim() :
+              (schedule.instructorName || 'Staff'),
+            Day: pattern.day || '',
+            'Start Time': pattern.startTime || '',
+            'End Time': pattern.endTime || '',
+            Room: schedule.room ? (schedule.room.displayName || schedule.room.name) : (schedule.roomName || ''),
+            Term: schedule.term || '',
+            Credits: schedule.credits || '',
+            Section: schedule.section || '',
+            
+            // Keep relational data available
+            instructor: schedule.instructor,
+            room: schedule.room,
+            instructorId: schedule.instructorId,
+            roomId: schedule.roomId,
+            courseCode: schedule.courseCode,
+            courseTitle: schedule.courseTitle,
+            instructorName: schedule.instructorName,
+            roomName: schedule.roomName,
+            meetingPatterns: schedule.meetingPatterns
+          });
+        });
+      } else {
+        // Handle schedules without meeting patterns (legacy or incomplete data)
+        // console.log(`⚠️ Schedule ${schedule.id} has no meeting patterns, using fallback structure`);
+        flattenedData.push({
+          id: schedule.id,
+          originalId: schedule.id,
+          
+          // Legacy field names with comprehensive fallbacks
+          Course: schedule.courseCode || schedule.Course || '',
+          'Course Title': schedule.courseTitle || schedule['Course Title'] || '',
+          Instructor: schedule.instructor ? 
+            `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim() :
+            (schedule.instructorName || schedule.Instructor || 'Staff'),
+          Day: schedule.Day || '',
+          'Start Time': schedule['Start Time'] || '',
+          'End Time': schedule['End Time'] || '',
+          Room: schedule.room ? (schedule.room.displayName || schedule.room.name) : (schedule.roomName || schedule.Room || ''),
+          Term: schedule.term || schedule.Term || '',
+          Credits: schedule.credits || schedule.Credits || '',
+          Section: schedule.section || schedule.Section || '',
+          
+          // Keep relational data
+          instructor: schedule.instructor,
+          room: schedule.room,
+          instructorId: schedule.instructorId,
+          roomId: schedule.roomId,
+          courseCode: schedule.courseCode,
+          courseTitle: schedule.courseTitle,
+          instructorName: schedule.instructorName,
+          roomName: schedule.roomName,
+          meetingPatterns: schedule.meetingPatterns
+        });
+      }
+    });
+    
+    console.log(`📊 Converted ${rawScheduleData.length} schedules to ${flattenedData.length} flattened records`);
+    
+    // Debug: Show sample flattened record
+    if (flattenedData.length > 0) {
+      console.log('📊 Sample flattened record:', flattenedData[0]);
+    }
+    
+    return flattenedData;
+  }, [rawScheduleData]);
 
   // Centralized Analytics Calculation
   const departmentAnalytics = useMemo(() => {
@@ -102,10 +218,19 @@ function App() {
         return hour * 60 + (minute || 0);
     };
 
-    const uniqueRoomsList = [...new Set(scheduleData.map(item => item.Room).filter(Boolean))].filter(room => room.toLowerCase() !== 'online').sort();
+    const uniqueRoomsList = [...new Set(scheduleData.map(item => (item.roomName || item.Room || '').trim()).filter(Boolean))].filter(room => room.toLowerCase() !== 'online').sort();
     const roomsInUse = uniqueRoomsList.length;
 
-    const allInstructors = [...new Set(scheduleData.map(item => item.Instructor))];
+    // Get unique instructors - prefer relational data
+    const allInstructors = [...new Set(scheduleData.map(item => {
+      if (item.instructor) {
+        // Use relational instructor data
+        return `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim();
+      } else {
+        // Fallback for backward compatibility
+        return item.instructorName || item.Instructor || '';
+      }
+    }).filter(Boolean))];
     const facultyCount = allInstructors.filter(i => i && i !== 'Staff').length;
 
     const facultyWorkload = {};
@@ -116,28 +241,57 @@ function App() {
     const dayStats = {};
     
     scheduleData.forEach(item => {
-        const instructor = item.Instructor.includes('Staff') ? 'Staff' : item.Instructor;
-        const start = parseTime(item['Start Time']);
-        const end = parseTime(item['End Time']);
+        // Extract instructor name from relational data
+        const instructorName = item.instructor ? 
+          `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim() :
+          (item.instructorName || item.Instructor || '');
+        const course = item.courseCode || item.Course || '';
+        const room = item.room ? item.room.displayName : (item.roomName || item.Room || '');
+        
+        // For normalized data, we need to extract times from meeting patterns
+        let startTime = '';
+        let endTime = '';
+        let day = '';
+        
+        if (item.meetingPatterns && item.meetingPatterns.length > 0) {
+            // Use first meeting pattern for analytics
+            const firstPattern = item.meetingPatterns[0];
+            startTime = firstPattern.startTime || '';
+            endTime = firstPattern.endTime || '';
+            day = firstPattern.day || '';
+        } else {
+            // Fallback for direct time fields
+            startTime = item['Start Time'] || '';
+            endTime = item['End Time'] || '';
+            day = item.Day || '';
+        }
+        
+        const instructor = instructorName && instructorName.includes('Staff') ? 'Staff' : instructorName;
+        const start = parseTime(startTime);
+        const end = parseTime(endTime);
         const duration = (start !== null && end !== null) ? (end - start) / 60 : 0;
         
-        if (roomUtilization[item.Room]) {
-            roomUtilization[item.Room].classes++;
-            roomUtilization[item.Room].hours += duration;
-            if (instructor === 'Staff') roomUtilization[item.Room].staffTaughtClasses++;
+        if (room && roomUtilization[room]) {
+            roomUtilization[room].classes++;
+            roomUtilization[room].hours += duration;
+            if (instructor === 'Staff') roomUtilization[room].staffTaughtClasses++;
         }
 
-        const sessionKey = `${item.Instructor}-${item.Course}-${item.Day}-${item['Start Time']}-${item['End Time']}`;
+        const sessionKey = `${instructorName}-${course}-${day}-${startTime}-${endTime}`;
         if (!processedSessions.has(sessionKey)) {
             processedSessions.add(sessionKey);
 
-            dayStats[item.Day] = (dayStats[item.Day] || 0) + 1;
+            if (day) {
+                dayStats[day] = (dayStats[day] || 0) + 1;
+            }
 
-            if (instructor !== 'Staff') {
+            if (instructor && instructor !== 'Staff') {
                 if (!facultyWorkload[instructor]) {
                     facultyWorkload[instructor] = { courseSet: new Set(), totalHours: 0 };
                 }
-                facultyWorkload[instructor].courseSet.add(item.Course);
+                if (course) {
+                    facultyWorkload[instructor].courseSet.add(course);
+                }
                 facultyWorkload[instructor].totalHours += duration;
             }
         }
@@ -151,12 +305,17 @@ function App() {
     );
     
     const totalSessions = processedSessions.size;
-    const staffTaughtSessions = scheduleData.filter(s => s.Instructor.includes('Staff')).length;
+    const staffTaughtSessions = scheduleData.filter(s => {
+      const instructor = s.instructor ? 
+        `${s.instructor.firstName || ''} ${s.instructor.lastName || ''}`.trim() :
+        (s.instructorName || s.Instructor || '');
+      return instructor.includes('Staff');
+    }).length;
 
     const busiestDay = Object.entries(dayStats).reduce((max, [day, count]) => 
         count > max.count ? { day, count } : max, { day: '', count: 0 });
 
-    const uniqueCourses = [...new Set(scheduleData.map(item => item.Course))].length;
+    const uniqueCourses = [...new Set(scheduleData.map(item => item.courseCode || item.Course || '').filter(Boolean))].length;
 
     return {
       facultyCount,
@@ -172,83 +331,42 @@ function App() {
     };
 }, [scheduleData]);
 
-  // Directory data - FIXED to prevent duplicates
+  // Directory data from normalized people collection
   const { facultyDirectoryData, staffDirectoryData } = useMemo(() => {
-    // Remove duplicates by creating unique maps based on name and email
-    const facultyMap = new Map();
-    const staffMap = new Map();
-
-    // Process faculty first
-    rawFaculty.forEach(f => {
-      const key = `${f.name}-${f.email || 'no-email'}`;
-      if (!facultyMap.has(key)) {
-        facultyMap.set(key, { ...f, sourceCollection: 'faculty' });
-      }
-    });
-
-    // Process staff
-    rawStaff.forEach(s => {
-      const key = `${s.name}-${s.email || 'no-email'}`;
-      if (!staffMap.has(key)) {
-        staffMap.set(key, { ...s, sourceCollection: 'staff' });
-      }
-    });
-
-    // Create faculty directory (faculty + staff who are also faculty)
-    const facultyDir = Array.from(facultyMap.values());
-    Array.from(staffMap.values()).forEach(staff => {
-      if (staff.isAlsoFaculty) {
-        const key = `${staff.name}-${staff.email || 'no-email'}`;
-        const existsInFaculty = facultyDir.some(f => 
-          `${f.name}-${f.email || 'no-email'}` === key
-        );
-        if (!existsInFaculty) {
-          facultyDir.push(staff);
-        }
-      }
-    });
-
-    // Create staff directory (staff + faculty who are also staff)
-    const staffDir = Array.from(staffMap.values());
-    Array.from(facultyMap.values()).forEach(faculty => {
-      if (faculty.isAlsoStaff) {
-        const key = `${faculty.name}-${faculty.email || 'no-email'}`;
-        const existsInStaff = staffDir.some(s => 
-          `${s.name}-${s.email || 'no-email'}` === key
-        );
-        if (!existsInStaff) {
-          staffDir.push(faculty);
-        }
-      }
-    });
-
+    const facultyDir = adaptPeopleToFaculty(rawPeople);
+    const staffDir = adaptPeopleToStaff(rawPeople);
+    
     return { 
       facultyDirectoryData: facultyDir, 
       staffDirectoryData: staffDir 
     };
-  }, [rawFaculty, rawStaff]);
+  }, [rawPeople]);
 
-  // Load data effect - SIMPLIFIED
+  // Load normalized relational data
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       try {
-        const [scheduleSnapshot, facultySnapshot, staffSnapshot, historySnapshot] = await Promise.all([
-          getDocs(collection(db, 'schedules')),
-          getDocs(collection(db, 'faculty')),
-          getDocs(collection(db, 'staff')),
+        console.log('📊 Loading normalized relational data...');
+        const [relationalData, historySnapshot] = await Promise.all([
+          fetchSchedulesWithRelationalData(),
           getDocs(query(collection(db, 'history'), orderBy('timestamp', 'desc')))
         ]);
 
-        const schedules = scheduleSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        const faculty = facultySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        const staff = staffSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
         const history = historySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
 
-        setRawScheduleData(schedules);
-        setRawFaculty(faculty);
-        setRawStaff(staff);
+        setRawScheduleData(relationalData.schedules); // Schedules with populated instructor/room data
+        setRawPeople(relationalData.people);
         setEditHistory(history);
+        
+        console.log(`✅ Loaded ${relationalData.schedules.length} schedules with relational data`);
+        console.log(`📋 People linked: ${relationalData.schedules.filter(s => s.instructor).length} schedules have instructor data`);
+        console.log(`🏛️ Rooms linked: ${relationalData.schedules.filter(s => s.room).length} schedules have room data`);
+        
+        // Debug: Show sample schedule structure
+        if (relationalData.schedules.length > 0) {
+          console.log('📋 Sample schedule structure:', relationalData.schedules[0]);
+        }
 
       } catch (error) {
         console.error("Firestore Read/Write Error:", error);
@@ -261,8 +379,7 @@ function App() {
       loadData();
     } else {
       setRawScheduleData([]);
-      setRawFaculty([]);
-      setRawStaff([]);
+      setRawPeople([]);
       setEditHistory([]);
       setLoading(false);
     }
@@ -282,19 +399,63 @@ function App() {
     checkAuthStatus();
   }, []);
 
-  // Data update handlers - SIMPLIFIED
+  // Data update handlers - ENHANCED for relational structure
   const handleDataUpdate = async (updatedRow) => {
-    const originalRow = rawScheduleData.find(r => r.id === updatedRow.id);
+    console.log('🔧 Starting data update for row:', updatedRow);
     
-    // Track changes for history
+    // Find the original schedule record using originalId for flattened data
+    const scheduleId = updatedRow.originalId || updatedRow.id;
+    const originalSchedule = rawScheduleData.find(r => r.id === scheduleId);
+    
+    if (!originalSchedule) {
+      console.error('❌ Could not find original schedule for update:', scheduleId);
+      alert('Could not find the original schedule record. Please refresh the page.');
+      return;
+    }
+    
+    console.log('📋 Found original schedule:', originalSchedule);
+
+    // Convert flat update back to normalized structure
+    const normalizedUpdate = {
+      ...originalSchedule,
+      courseCode: updatedRow.Course || originalSchedule.courseCode,
+      courseTitle: updatedRow['Course Title'] || originalSchedule.courseTitle,
+      instructorName: updatedRow.Instructor || originalSchedule.instructorName,
+      roomName: updatedRow.Room || originalSchedule.roomName,
+      term: updatedRow.Term || originalSchedule.term,
+      credits: updatedRow.Credits || originalSchedule.credits,
+      section: updatedRow.Section || originalSchedule.section,
+      updatedAt: new Date().toISOString()
+    };
+
+    // Handle meeting pattern updates
+    if (originalSchedule.meetingPatterns && originalSchedule.meetingPatterns.length > 0) {
+      // Update the specific meeting pattern if this is a flattened row
+      const patternIndex = originalSchedule.meetingPatterns.findIndex(p => 
+        p.day === updatedRow.Day && p.startTime === updatedRow['Start Time']
+      );
+      
+      if (patternIndex >= 0) {
+        normalizedUpdate.meetingPatterns = [...originalSchedule.meetingPatterns];
+        normalizedUpdate.meetingPatterns[patternIndex] = {
+          ...normalizedUpdate.meetingPatterns[patternIndex],
+          day: updatedRow.Day,
+          startTime: updatedRow['Start Time'],
+          endTime: updatedRow['End Time']
+        };
+      }
+    }
+    
+    // Track changes for history (use flattened format for display)
+    const flatOriginal = scheduleData.find(s => s.id === updatedRow.id);
     const changes = Object.keys(updatedRow).reduce((acc, key) => {
-        if (key !== 'id' && originalRow[key] !== updatedRow[key]) {
+        if (key !== 'id' && key !== 'originalId' && flatOriginal && flatOriginal[key] !== updatedRow[key]) {
             acc.push({
-                rowId: updatedRow.id,
+                rowId: scheduleId,
                 instructor: updatedRow.Instructor,
                 course: updatedRow.Course,
                 field: key,
-                oldValue: originalRow[key],
+                oldValue: flatOriginal[key],
                 newValue: updatedRow[key],
                 timestamp: new Date().toISOString(),
             });
@@ -304,30 +465,75 @@ function App() {
 
     if (changes.length > 0) {
       try {
-        await updateDoc(doc(db, 'schedules', updatedRow.id), updatedRow);
+        // Update the normalized schedule in the database
+        await updateDoc(doc(db, 'schedules', scheduleId), normalizedUpdate);
         
+        // Log changes to history
         for (const change of changes) {
             await addDoc(collection(db, 'history'), change);
         }
         
-        setRawScheduleData(rawScheduleData.map(row => row.id === updatedRow.id ? updatedRow : row));
+        // Update the raw schedule data
+        setRawScheduleData(rawScheduleData.map(row => 
+          row.id === scheduleId ? normalizedUpdate : row
+        ));
         setEditHistory(prev => [...changes, ...prev]);
+        
+        console.log('✅ Schedule updated successfully');
       } catch (error) {
         console.error("Error updating document: ", error);
+        alert("Failed to update schedule. Please try again.");
       }
     }
   };
 
   const handleFacultyUpdate = async (facultyToUpdate) => {
     try {
+        // Get existing person data to preserve existing roles
+        const existingPerson = facultyToUpdate.id ? rawPeople.find(p => p.id === facultyToUpdate.id) : null;
+        
+        // Build roles array properly
+        let roles = ['faculty']; // Faculty is always included when updating from faculty directory
+        if (facultyToUpdate.isAlsoStaff) {
+            if (!roles.includes('staff')) {
+                roles.push('staff');
+            }
+        } else if (existingPerson?.roles?.includes('staff')) {
+            // If they were previously marked as staff but isAlsoStaff is now false, remove staff role
+            roles = roles.filter(role => role !== 'staff');
+        }
+
+        // Convert faculty data to people format
+        const personData = {
+            firstName: facultyToUpdate.firstName || facultyToUpdate.name?.split(' ')[0] || '',
+            lastName: facultyToUpdate.lastName || facultyToUpdate.name?.split(' ').slice(1).join(' ') || '',
+            title: facultyToUpdate.title || '',
+            email: facultyToUpdate.email || '',
+            phone: facultyToUpdate.phone || '',
+            jobTitle: facultyToUpdate.jobTitle || '',
+            office: facultyToUpdate.office || '',
+            roles: roles,
+            isAdjunct: facultyToUpdate.isAdjunct || false,
+            isFullTime: !facultyToUpdate.isAdjunct,
+            hasNoPhone: facultyToUpdate.hasNoPhone || false,
+            hasNoOffice: facultyToUpdate.hasNoOffice || false,
+            updatedAt: new Date().toISOString()
+        };
+
+        console.log('🔧 Updating faculty with roles:', roles);
+        console.log('📋 Person data being saved:', personData);
+
         if (facultyToUpdate.id) {
-            const docRef = doc(db, 'faculty', facultyToUpdate.id);
-            await updateDoc(docRef, facultyToUpdate);
-            setRawFaculty(rawFaculty.map(f => f.id === facultyToUpdate.id ? facultyToUpdate : f));
+            const docRef = doc(db, 'people', facultyToUpdate.id);
+            await updateDoc(docRef, personData);
+            const updatedPerson = { ...personData, id: facultyToUpdate.id };
+            setRawPeople(rawPeople.map(p => p.id === facultyToUpdate.id ? updatedPerson : p));
+            console.log('✅ Faculty updated in state:', updatedPerson);
         } else {
-            const docRef = await addDoc(collection(db, 'faculty'), facultyToUpdate);
-            const newFacultyMember = { ...facultyToUpdate, id: docRef.id };
-            setRawFaculty([...rawFaculty, newFacultyMember]);
+            const docRef = await addDoc(collection(db, 'people'), { ...personData, createdAt: new Date().toISOString() });
+            const newPerson = { ...personData, id: docRef.id };
+            setRawPeople([...rawPeople, newPerson]);
+            console.log('✅ New faculty created:', newPerson);
         }
     } catch (error) {
         console.error("Error updating/creating faculty", error);
@@ -336,17 +542,97 @@ function App() {
 
   const handleStaffUpdate = async (staffToUpdate) => {
       try {
+          // Get existing person data to preserve existing roles
+          const existingPerson = staffToUpdate.id ? rawPeople.find(p => p.id === staffToUpdate.id) : null;
+          
+          // Build roles array properly
+          let roles = ['staff']; // Staff is always included when updating from staff directory
+          if (staffToUpdate.isAlsoFaculty) {
+              if (!roles.includes('faculty')) {
+                  roles.push('faculty');
+              }
+          } else if (existingPerson?.roles?.includes('faculty')) {
+              // If they were previously marked as faculty but isAlsoFaculty is now false, remove faculty role
+              roles = roles.filter(role => role !== 'faculty');
+          }
+
+          // Convert staff data to people format
+          const personData = {
+              firstName: staffToUpdate.firstName || staffToUpdate.name?.split(' ')[0] || '',
+              lastName: staffToUpdate.lastName || staffToUpdate.name?.split(' ').slice(1).join(' ') || '',
+              title: staffToUpdate.title || '',
+              email: staffToUpdate.email || '',
+              phone: staffToUpdate.phone || '',
+              jobTitle: staffToUpdate.jobTitle || '',
+              office: staffToUpdate.office || '',
+              roles: roles,
+              isFullTime: staffToUpdate.isFullTime !== false,
+              hasNoPhone: staffToUpdate.hasNoPhone || false,
+              hasNoOffice: staffToUpdate.hasNoOffice || false,
+              updatedAt: new Date().toISOString()
+          };
+
+          console.log('🔧 Updating staff with roles:', roles);
+          console.log('📋 Person data being saved:', personData);
+
           if (staffToUpdate.id) {
-              const staffDocRef = doc(db, 'staff', staffToUpdate.id);
-              await updateDoc(staffDocRef, staffToUpdate);
-              setRawStaff(rawStaff.map(staff => staff.id === staffToUpdate.id ? staffToUpdate : staff));
+              const docRef = doc(db, 'people', staffToUpdate.id);
+              await updateDoc(docRef, personData);
+              const updatedPerson = { ...personData, id: staffToUpdate.id };
+              setRawPeople(rawPeople.map(p => p.id === staffToUpdate.id ? updatedPerson : p));
+              console.log('✅ Staff updated in state:', updatedPerson);
           } else {
-              const docRef = await addDoc(collection(db, 'staff'), staffToUpdate);
-              const newStaff = { ...staffToUpdate, id: docRef.id };
-              setRawStaff([...rawStaff, newStaff]);
+              const docRef = await addDoc(collection(db, 'people'), { ...personData, createdAt: new Date().toISOString() });
+              const newPerson = { ...personData, id: docRef.id };
+              setRawPeople([...rawPeople, newPerson]);
+              console.log('✅ New staff created:', newPerson);
           }
       } catch (error) {
           console.error("Error updating/creating staff member: ", error);
+      }
+  };
+
+  const handleFacultyDelete = async (facultyToDelete) => {
+    try {
+        // Delete from people collection
+        await deleteDoc(doc(db, 'people', facultyToDelete.id));
+        setRawPeople(rawPeople.filter(p => p.id !== facultyToDelete.id));
+        
+        showNotification(
+          'success', 
+          'Faculty Deleted',
+          `${facultyToDelete.name} has been successfully removed from the directory.`
+        );
+    } catch (error) {
+        console.error("Error deleting faculty", error);
+        showNotification(
+          'error',
+          'Delete Failed',
+          'Failed to delete faculty member. Please try again.'
+        );
+        throw error;
+    }
+  };
+
+  const handleStaffDelete = async (staffToDelete) => {
+      try {
+          // Delete from people collection
+          await deleteDoc(doc(db, 'people', staffToDelete.id));
+          setRawPeople(rawPeople.filter(p => p.id !== staffToDelete.id));
+          
+          showNotification(
+            'success',
+            'Staff Deleted',
+            `${staffToDelete.name} has been successfully removed from the directory.`
+          );
+      } catch (error) {
+          console.error("Error deleting staff member: ", error);
+          showNotification(
+            'error',
+            'Delete Failed',
+            'Failed to delete staff member. Please try again.'
+          );
+          throw error;
       }
   };
 
@@ -414,13 +700,14 @@ function App() {
   const renderPageContent = () => {
     const commonProps = {
       scheduleData,
-      facultyData: rawFaculty,
+      facultyData: facultyDirectoryData,
       editHistory,
       onDataUpdate: handleDataUpdate,
       onRevertChange: handleRevertChange,
       loading,
       onNavigate: setCurrentPage,
-      analytics: departmentAnalytics
+      analytics: departmentAnalytics,
+      showNotification
     };
 
     switch(currentPage) {
@@ -437,23 +724,21 @@ function App() {
           directoryData={facultyDirectoryData}
           onFacultyUpdate={handleFacultyUpdate}
           onStaffUpdate={handleStaffUpdate}
+          onFacultyDelete={handleFacultyDelete}
         />;
       case 'directory/staff-directory':
         return <StaffDirectory
           directoryData={staffDirectoryData}
           onFacultyUpdate={handleFacultyUpdate}
           onStaffUpdate={handleStaffUpdate}
+          onStaffDelete={handleStaffDelete}
         />;
       case 'analytics/department-insights':
         return <DepartmentInsights {...commonProps} />;
       case 'analytics/course-management':
         return <CourseManagement {...commonProps} />;
-      case 'administration/data-import':
-        return <DataImportPage 
-          onNavigate={setCurrentPage} 
-          facultyData={rawFaculty} 
-          onFacultyUpdate={handleFacultyUpdate}
-        />;
+      case 'administration/smart-import':
+        return <SmartDataImportPage onNavigate={setCurrentPage} showNotification={showNotification} />;
       case 'administration/database-cleanup':
         return <DatabaseCleanup onNavigate={setCurrentPage} />;
       case 'administration/baylor-systems':
@@ -555,6 +840,15 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Global Notification System */}
+      <Notification
+        type={notification.type}
+        title={notification.title}
+        message={notification.message}
+        show={notification.show}
+        onClose={hideNotification}
+      />
     </div>
   );
 }

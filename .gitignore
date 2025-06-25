@@ -18,3 +18,5 @@ firebase-service-account.json
 .env
 .env.*
 import-data.js
+data-samples/CLSS-export-sample.csv
+data-samples/directory-export.csv

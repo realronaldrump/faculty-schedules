@@ -5,13 +5,13 @@ import { getAuth, connectAuthEmulator } from "firebase/auth";
 
 // Firebase configuration
 const firebaseConfig = {
-    apiKey: "AIzaSyDryC4uMuNiSCZQbzfhJ1ojQdEkf5NyWlo",
-    authDomain: "faculty-schedules.firebaseapp.com",
-    projectId: "faculty-schedules",
-    storageBucket: "faculty-schedules.firebasestorage.app",
-    messagingSenderId: "333819937822",
-    appId: "1:333819937822:web:00624640dd9c3228035a0f",
-    measurementId: "G-4MGCPSBD84"
+  apiKey: "AIzaSyAhfG2PP_ewf0tC_lSwN8ca5wlWQV-_lPM",
+  authDomain: "faculty-schedules-be0e9.firebaseapp.com",
+  projectId: "faculty-schedules-be0e9",
+  storageBucket: "faculty-schedules-be0e9.firebasestorage.app",
+  messagingSenderId: "714558284379",
+  appId: "1:714558284379:web:44a476b2058b8a950e557e",
+  measurementId: "G-PHSBFLLYSL"
 };
 
 // Initialize Firebase
@@ -138,9 +138,9 @@ export const firebaseErrorHandler = {
 
 // Collection names for consistency
 export const COLLECTIONS = {
-  FACULTY: 'faculty',
-  STAFF: 'staff',
+  PEOPLE: 'people',
   SCHEDULES: 'schedules',
+  ROOMS: 'rooms',
   HISTORY: 'history'
 };
 

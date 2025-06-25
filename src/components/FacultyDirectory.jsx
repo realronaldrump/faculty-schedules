@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Edit, Save, X, BookUser, Mail, Phone, Building, Search, ArrowUpDown, Plus, RotateCcw, History } from 'lucide-react';
+import { Edit, Save, X, BookUser, Mail, Phone, PhoneOff, Building, BuildingIcon, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2 } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
 
 const formatPhoneNumber = (phoneStr) => {
@@ -14,11 +14,12 @@ const formatPhoneNumber = (phoneStr) => {
     return phoneStr;
 };
 
-const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => {
+const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFacultyDelete }) => {
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [filterText, setFilterText] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'ascending' });
+  const [nameSort, setNameSort] = useState('firstName'); // 'firstName' or 'lastName'
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [errors, setErrors] = useState({});
   const [isCreating, setIsCreating] = useState(false);
@@ -30,11 +31,17 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
     office: '',
     isAdjunct: false,
     isAlsoStaff: false,
+    hasNoPhone: false,
+    hasNoOffice: false,
   });
 
   // Undo functionality
   const [changeHistory, setChangeHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
+
+  // Delete confirmation
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [facultyToDelete, setFacultyToDelete] = useState(null);
 
   // Remove duplicates from directoryData and ensure unique entries
   const uniqueDirectoryData = useMemo(() => {
@@ -100,11 +107,9 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
     try {
       if (change.action === 'update') {
         // Restore original data
-        const { sourceCollection } = change.originalData;
         const dataToRestore = { ...change.originalData };
-        delete dataToRestore.sourceCollection;
 
-        if (sourceCollection === 'staff') {
+        if (dataToRestore.isAlsoStaff) {
           await onStaffUpdate(dataToRestore);
         } else {
           await onFacultyUpdate(dataToRestore);
@@ -139,18 +144,16 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
   const handleSave = async () => {
     if (validate(editFormData)) {
         const originalData = uniqueDirectoryData.find(f => f.id === editingId);
-        const { sourceCollection, ...dataToSave } = editFormData;
+        const dataToSave = { ...editFormData };
         const cleanedData = { ...dataToSave, phone: (dataToSave.phone || '').replace(/\D/g, '') };
 
         // Track the change before saving
         trackChange(originalData, cleanedData, 'update');
 
         try {
-          if (sourceCollection === 'staff') {
-              await onStaffUpdate(cleanedData);
-          } else {
-              await onFacultyUpdate(cleanedData);
-          }
+          // Always use onFacultyUpdate when editing from faculty directory
+          // The handler will manage dual roles properly
+          await onFacultyUpdate(cleanedData);
           
           setEditingId(null);
           setErrors({});
@@ -183,6 +186,42 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
         validate(newFormData);
     }
   };
+
+  const toggleEditPhoneState = () => {
+    const newHasNoPhone = !editFormData.hasNoPhone;
+    setEditFormData({
+      ...editFormData,
+      hasNoPhone: newHasNoPhone,
+      phone: newHasNoPhone ? '' : editFormData.phone // Clear phone if marking as no phone
+    });
+  };
+
+  const toggleEditOfficeState = () => {
+    const newHasNoOffice = !editFormData.hasNoOffice;
+    setEditFormData({
+      ...editFormData,
+      hasNoOffice: newHasNoOffice,
+      office: newHasNoOffice ? '' : editFormData.office // Clear office if marking as no office
+    });
+  };
+
+  const toggleCreatePhoneState = () => {
+    const newHasNoPhone = !newFaculty.hasNoPhone;
+    setNewFaculty({
+      ...newFaculty,
+      hasNoPhone: newHasNoPhone,
+      phone: newHasNoPhone ? '' : newFaculty.phone
+    });
+  };
+
+  const toggleCreateOfficeState = () => {
+    const newHasNoOffice = !newFaculty.hasNoOffice;
+    setNewFaculty({
+      ...newFaculty,
+      hasNoOffice: newHasNoOffice,
+      office: newHasNoOffice ? '' : newFaculty.office
+    });
+  };
   
   const handleSort = (key) => {
     let direction = 'ascending';
@@ -192,6 +231,29 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
     setSortConfig({ key, direction });
   };
   
+  const handleDelete = (faculty) => {
+    setFacultyToDelete(faculty);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (facultyToDelete && onFacultyDelete) {
+      try {
+        await onFacultyDelete(facultyToDelete);
+        setShowDeleteConfirm(false);
+        setFacultyToDelete(null);
+      } catch (error) {
+        console.error('Error deleting faculty:', error);
+        alert('Error deleting faculty: ' + error.message);
+      }
+    }
+  };
+
+  const cancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setFacultyToDelete(null);
+  };
+
   const handleCreate = () => {
     setIsCreating(true);
     setNewFaculty({
@@ -202,6 +264,8 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
       office: '',
       isAdjunct: false,
       isAlsoStaff: false,
+      hasNoPhone: false,
+      hasNoOffice: false,
     });
     setErrors({});
   };
@@ -216,6 +280,8 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
       office: '',
       isAdjunct: false,
       isAlsoStaff: false,
+      hasNoPhone: false,
+      hasNoOffice: false,
     });
     setErrors({});
   };
@@ -269,8 +335,25 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
     }
 
     data.sort((a, b) => {
-      const valA = a[sortConfig.key];
-      const valB = b[sortConfig.key];
+      let valA, valB;
+      
+      if (sortConfig.key === 'name') {
+        // Handle special name sorting based on user preference
+        if (nameSort === 'firstName') {
+          // Extract first name for sorting (part before first space)
+          valA = (a.firstName || a.name?.split(' ')[0] || '').toLowerCase();
+          valB = (b.firstName || b.name?.split(' ')[0] || '').toLowerCase();
+        } else {
+          // Extract last name for sorting (part after last space)
+          const aNameParts = (a.lastName || a.name || '').split(' ');
+          const bNameParts = (b.lastName || b.name || '').split(' ');
+          valA = (a.lastName || aNameParts[aNameParts.length - 1] || '').toLowerCase();
+          valB = (b.lastName || bNameParts[bNameParts.length - 1] || '').toLowerCase();
+        }
+      } else {
+        valA = a[sortConfig.key];
+        valB = b[sortConfig.key];
+      }
 
       if (typeof valA === 'boolean') {
           return (valA === valB) ? 0 : valA ? -1 : 1;
@@ -286,7 +369,7 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
     });
 
     return data;
-  }, [uniqueDirectoryData, filterText, sortConfig]);
+  }, [uniqueDirectoryData, filterText, sortConfig, nameSort]);
 
   const SortableHeader = ({ label, columnKey }) => {
     const isSorted = sortConfig.key === columnKey;
@@ -316,6 +399,34 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
               Faculty Directory ({sortedAndFilteredData.length} members)
             </h2>
             <div className="flex items-center gap-4">
+                {/* Name Sort Options */}
+                {sortConfig.key === 'name' && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-gray-600">Sort by:</span>
+                    <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                      <button
+                        onClick={() => setNameSort('firstName')}
+                        className={`px-3 py-1 text-xs ${
+                          nameSort === 'firstName' 
+                            ? 'bg-baylor-green text-white' 
+                            : 'bg-white text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        First Name
+                      </button>
+                      <button
+                        onClick={() => setNameSort('lastName')}
+                        className={`px-3 py-1 text-xs ${
+                          nameSort === 'lastName' 
+                            ? 'bg-baylor-green text-white' 
+                            : 'bg-white text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        Last Name
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                     <input 
@@ -442,24 +553,54 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
                     {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
                   </td>
                   <td className="p-2 align-top">
-                    <input
-                      name="phone"
-                      value={newFaculty.phone}
-                      onChange={handleCreateChange}
-                      className={getInputClass('phone')}
-                      placeholder="10 digits"
-                      maxLength="10"
-                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        name="phone"
+                        value={newFaculty.phone}
+                        onChange={handleCreateChange}
+                        className={getInputClass('phone')}
+                        placeholder="10 digits"
+                        maxLength="10"
+                        disabled={newFaculty.hasNoPhone}
+                      />
+                      <button
+                        type="button"
+                        onClick={toggleCreatePhoneState}
+                        className={`p-1 rounded transition-colors ${
+                          newFaculty.hasNoPhone 
+                            ? 'text-red-600 bg-red-100 hover:bg-red-200' 
+                            : 'text-gray-400 hover:bg-gray-100'
+                        }`}
+                        title={newFaculty.hasNoPhone ? 'Has no phone number' : 'Has phone number'}
+                      >
+                        {newFaculty.hasNoPhone ? <PhoneOff size={16} /> : <Phone size={16} />}
+                      </button>
+                    </div>
                     {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
                   </td>
                   <td className="p-2 align-top">
+                    <div className="flex items-center gap-2">
                       <input
                         name="office"
                         value={newFaculty.office}
                         onChange={handleCreateChange}
                         className={getInputClass('office')}
                         placeholder="Building & Room"
+                        disabled={newFaculty.hasNoOffice}
                       />
+                      <button
+                        type="button"
+                        onClick={toggleCreateOfficeState}
+                        className={`p-1 rounded transition-colors ${
+                          newFaculty.hasNoOffice 
+                            ? 'text-red-600 bg-red-100 hover:bg-red-200' 
+                            : 'text-gray-400 hover:bg-gray-100'
+                        }`}
+                        title={newFaculty.hasNoOffice ? 'Has no office' : 'Has office'}
+                      >
+                        {newFaculty.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
+                      </button>
+                    </div>
                   </td>
                   <td className="p-2 align-top text-right">
                     <div className="flex gap-2">
@@ -492,11 +633,54 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
                         {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
                       </td>
                       <td className="p-2 align-top">
-                        <input name="phone" value={editFormData.phone || ''} onChange={handleChange} className={getInputClass('phone')} placeholder="10 digits" maxLength="10" />
+                        <div className="flex items-center gap-2">
+                          <input 
+                            name="phone" 
+                            value={editFormData.phone || ''} 
+                            onChange={handleChange} 
+                            className={getInputClass('phone')} 
+                            placeholder="10 digits" 
+                            maxLength="10"
+                            disabled={editFormData.hasNoPhone}
+                          />
+                          <button
+                            type="button"
+                            onClick={toggleEditPhoneState}
+                            className={`p-1 rounded transition-colors ${
+                              editFormData.hasNoPhone 
+                                ? 'text-red-600 bg-red-100 hover:bg-red-200' 
+                                : 'text-gray-400 hover:bg-gray-100'
+                            }`}
+                            title={editFormData.hasNoPhone ? 'Has no phone number' : 'Has phone number'}
+                          >
+                            {editFormData.hasNoPhone ? <PhoneOff size={16} /> : <Phone size={16} />}
+                          </button>
+                        </div>
                         {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
                       </td>
                       <td className="p-2 align-top">
-                          <input name="office" value={editFormData.office || ''} onChange={handleChange} className={getInputClass('office')} placeholder="Building & Room" />
+                        <div className="flex items-center gap-2">
+                          <input 
+                            name="office" 
+                            value={editFormData.office || ''} 
+                            onChange={handleChange} 
+                            className={getInputClass('office')} 
+                            placeholder="Building & Room"
+                            disabled={editFormData.hasNoOffice}
+                          />
+                          <button
+                            type="button"
+                            onClick={toggleEditOfficeState}
+                            className={`p-1 rounded transition-colors ${
+                              editFormData.hasNoOffice 
+                                ? 'text-red-600 bg-red-100 hover:bg-red-200' 
+                                : 'text-gray-400 hover:bg-gray-100'
+                            }`}
+                            title={editFormData.hasNoOffice ? 'Has no office' : 'Has office'}
+                          >
+                            {editFormData.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
+                          </button>
+                        </div>
                       </td>
                       <td className="p-2 align-top text-right">
                         <div className="flex gap-2">
@@ -509,7 +693,7 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
                     <>
                       <td className="px-4 py-3 text-gray-700 font-medium cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
                         <div>{faculty.name}</div>
-                        {faculty.sourceCollection === 'staff' && (
+                        {faculty.isAlsoStaff && (
                           <div className="text-xs text-baylor-gold font-medium">Also Staff</div>
                         )}
                         {faculty.isAdjunct && (
@@ -518,10 +702,35 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
                       </td>
                       <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.jobTitle || '-'}</td>
                       <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.email || '-'}</td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{formatPhoneNumber(faculty.phone)}</td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.office || '-'}</td>
+                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
+                        <div className="flex items-center gap-2">
+                          {faculty.hasNoPhone ? (
+                            <span className="flex items-center gap-1 text-gray-500">
+                              <PhoneOff size={14} />
+                              No phone
+                            </span>
+                          ) : (
+                            formatPhoneNumber(faculty.phone)
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
+                        <div className="flex items-center gap-2">
+                          {faculty.hasNoOffice ? (
+                            <span className="flex items-center gap-1 text-gray-500">
+                              <BuildingIcon size={14} className="opacity-50" />
+                              No office
+                            </span>
+                          ) : (
+                            faculty.office || '-'
+                          )}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-right">
-                        <button onClick={(e) => { e.stopPropagation(); handleEdit(faculty); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><Edit size={16} /></button>
+                        <div className="flex gap-1 justify-end">
+                          <button onClick={(e) => { e.stopPropagation(); handleEdit(faculty); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><Edit size={16} /></button>
+                          <button onClick={(e) => { e.stopPropagation(); handleDelete(faculty); }} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><Trash2 size={16} /></button>
+                        </div>
                       </td>
                     </>
                   )}
@@ -531,6 +740,33 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate }) => 
           </table>
         </div>
         {selectedFacultyForCard && <FacultyContactCard faculty={selectedFacultyForCard} onClose={() => setSelectedFacultyForCard(null)} />}
+        
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Confirm Delete</h3>
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to delete <strong>{facultyToDelete?.name}</strong>? This action cannot be undone.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={cancelDelete}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+                >
+                  <Trash2 size={16} />
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -41,9 +41,14 @@ const IndividualAvailability = ({ scheduleData, facultyData }) => {
     return `${displayHour}:${m.toString().padStart(2, '0')} ${ampm}`;
   };
 
-  // Get unique instructors
+  // Get unique instructors - use relational data when available
   const uniqueInstructors = useMemo(() => 
-    [...new Set(scheduleData.map(item => item.Instructor))].filter(i => i !== 'Staff').sort(),
+    [...new Set(scheduleData.map(item => {
+      if (item.instructor) {
+        return `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim();
+      }
+      return item.Instructor || item.instructorName || '';
+    }))].filter(i => i !== 'Staff').sort(),
     [scheduleData]
   );
 
@@ -60,19 +65,46 @@ const IndividualAvailability = ({ scheduleData, facultyData }) => {
     const availability = {};
     
     ['M', 'T', 'W', 'R', 'F'].forEach(day => {
-      const professorSchedule = scheduleData.filter(
-        item => item.Instructor === professor && item.Day === day
-      );
+      const professorSchedule = scheduleData.filter(item => {
+        const instructorName = item.instructor ? 
+          `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim() :
+          (item.Instructor || item.instructorName || '');
+        
+        // For normalized data, check meeting patterns for the day
+        if (item.meetingPatterns) {
+          return instructorName === professor && 
+                 item.meetingPatterns.some(pattern => pattern.day === day);
+        }
+        
+        // Fallback to direct day field
+        return instructorName === professor && item.Day === day;
+      });
       
-      const busyPeriodsRaw = professorSchedule
-        .map(item => ({
-          start: parseTime(item['Start Time']),
-          end: parseTime(item['End Time']),
-          course: item.Course,
-          room: item.Room,
-          title: item['Course Title']
-        }))
-        .filter(period => period.start !== null && period.end !== null);
+              const busyPeriodsRaw = professorSchedule
+          .flatMap(item => {
+            // Handle normalized data with meeting patterns
+            if (item.meetingPatterns) {
+              return item.meetingPatterns
+                .filter(pattern => pattern.day === day)
+                .map(pattern => ({
+                  start: parseTime(pattern.startTime),
+                  end: parseTime(pattern.endTime),
+                  course: item.courseCode,
+                  room: item.room ? item.room.displayName : item.roomName,
+                  title: item.courseTitle
+                }));
+            }
+            
+            // Fallback to direct fields
+            return [{
+              start: parseTime(item['Start Time']),
+              end: parseTime(item['End Time']),
+              course: item.Course,
+              room: item.Room,
+              title: item['Course Title']
+            }];
+          })
+          .filter(period => period.start !== null && period.end !== null);
 
       // Group identical time periods (cross-listed courses)
       const busyPeriodsGrouped = busyPeriodsRaw.reduce((acc, period) => {

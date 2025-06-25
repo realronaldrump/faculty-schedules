@@ -12,6 +12,7 @@ import CourseManagement from './components/analytics/CourseManagement';
 import SmartDataImportPage from './components/SmartDataImportPage';
 import SystemsPage from './components/SystemsPage';
 import DatabaseCleanup from './components/DatabaseCleanup';
+import EmailLists from './components/EmailLists';
 import Login from './components/Login';
 import Notification from './components/Notification';
 import { Home, Calendar, Users, BarChart3, Settings, Bell, Search, User } from 'lucide-react';
@@ -78,7 +79,8 @@ function App() {
       icon: Users,
       children: [
         { id: 'faculty-directory', label: 'Faculty Directory', path: 'directory/faculty-directory' },
-        { id: 'staff-directory', label: 'Staff Directory', path: 'directory/staff-directory' }
+        { id: 'staff-directory', label: 'Staff Directory', path: 'directory/staff-directory' },
+        { id: 'email-lists', label: 'Email Lists', path: 'directory/email-lists' }
       ]
     },
     {
@@ -732,6 +734,11 @@ function App() {
           onFacultyUpdate={handleFacultyUpdate}
           onStaffUpdate={handleStaffUpdate}
           onStaffDelete={handleStaffDelete}
+        />;
+      case 'directory/email-lists':
+        return <EmailLists
+          facultyData={facultyDirectoryData}
+          staffData={staffDirectoryData}
         />;
       case 'analytics/department-insights':
         return <DepartmentInsights {...commonProps} />;

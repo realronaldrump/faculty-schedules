@@ -202,7 +202,12 @@ const CourseManagement = ({
       totalSessions: scheduleData.length,
       uniqueCourses: new Set(scheduleData.filter(s => s && s.Course).map(s => s.Course)).size,
       uniqueInstructors: new Set(scheduleData.filter(s => s && s.Instructor).map(s => s.Instructor)).size,
-      staffTaughtSessions: scheduleData.filter(s => s && s.Instructor === 'Staff').length
+      adjunctTaughtSessions: scheduleData.filter(s => {
+        if (!s || !s.Instructor) return false;
+        // This would need faculty data to check if instructor is adjunct
+        // For now, return 0 since this logic should be handled in the main analytics
+        return false;
+      }).length
     };
     
     // Calculate busiest day

@@ -22,7 +22,7 @@ const PROGRAM_MAPPING = {
  * Determine faculty program based on course codes they teach
  */
 export const determineFacultyProgram = (scheduleData, facultyName) => {
-  if (!scheduleData || !facultyName || facultyName === 'Staff') {
+  if (!scheduleData || !facultyName) {
     return null;
   }
   
@@ -227,8 +227,9 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
       if (!processedSessions.has(sessionKey)) {
         processedSessions.add(sessionKey);
         
-        // Faculty workload
-        if (schedule.instructorId && schedule.instructorName !== 'Staff') {
+        // Faculty workload (excluding adjunct faculty for workload tracking)
+        const instructor = people.find(p => p.id === schedule.instructorId);
+        if (schedule.instructorId && !instructor?.isAdjunct) {
           if (!facultyWorkload[schedule.instructorName]) {
             facultyWorkload[schedule.instructorName] = { 
               courseSet: new Set(), 
@@ -249,7 +250,7 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
             roomUtilization[schedule.roomName] = { 
               classes: 0, 
               hours: 0, 
-              staffTaughtClasses: 0 
+              adjunctTaughtClasses: 0 
             };
           }
           
@@ -258,8 +259,10 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
           const duration = calculateDuration(pattern.startTime, pattern.endTime);
           roomUtilization[schedule.roomName].hours += duration;
           
-          if (schedule.instructorName === 'Staff') {
-            roomUtilization[schedule.roomName].staffTaughtClasses++;
+          // Check if instructor is adjunct faculty
+          const instructor = people.find(p => p.id === schedule.instructorId);
+          if (instructor?.isAdjunct) {
+            roomUtilization[schedule.roomName].adjunctTaughtClasses++;
           }
         }
         
@@ -283,7 +286,10 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
   const facultyPeople = people.filter(p => p.roles.includes('faculty'));
   const uniqueRooms = Object.keys(roomUtilization);
   const totalSessions = processedSessions.size;
-  const staffTaughtSessions = schedulesWithInstructors.filter(s => s.instructorName === 'Staff').length;
+  const adjunctTaughtSessions = schedulesWithInstructors.filter(s => {
+    const instructor = people.find(p => p.id === s.instructorId);
+    return instructor?.isAdjunct;
+  }).length;
   const uniqueCourses = [...new Set(schedulesWithInstructors.map(s => s.courseCode))].length;
   
   const busiestDay = Object.entries(dayStats).reduce(
@@ -293,7 +299,7 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
   
   return {
     facultyCount: facultyPeople.length,
-    staffTaughtSessions,
+    adjunctTaughtSessions,
     roomsInUse: uniqueRooms.length,
     totalSessions,
     uniqueCourses,
@@ -301,7 +307,7 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
     facultyWorkload: finalFacultyWorkload,
     roomUtilization,
     uniqueRooms,
-    uniqueInstructors: [...new Set(schedulesWithInstructors.map(s => s.instructorName))].filter(i => i !== 'Staff'),
+    uniqueInstructors: [...new Set(schedulesWithInstructors.map(s => s.instructorName))].filter(Boolean),
   };
 };
 

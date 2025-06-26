@@ -59,7 +59,7 @@ const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
 
   // Get unique instructors
   const uniqueInstructors = useMemo(() => 
-    [...new Set(scheduleData.map(item => item.Instructor.includes('Staff') ? 'Staff' : item.Instructor))].sort(),
+    [...new Set(scheduleData.map(item => item.Instructor).filter(Boolean))].sort(),
     [scheduleData]
   );
 
@@ -82,7 +82,7 @@ const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
     days.forEach(day => {
       const busyPeriods = [];
       selectedProfessors.forEach(professor => {
-        if (professor === 'Staff') return;
+        // Include all professors in scheduling analysis
         scheduleData.filter(item => item.Instructor === professor && item.Day === day).forEach(item => {
           const start = parseTime(item['Start Time']);
           const end = parseTime(item['End Time']);
@@ -286,12 +286,12 @@ const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
                 <div className="flex flex-wrap gap-2">
                   {selectedProfessors.map(professor => (
                     <span key={professor} className="inline-flex items-center px-3 py-1 bg-baylor-green text-white rounded-full text-sm">
-                      <button
-                        className="cursor-pointer hover:underline"
-                        onClick={() => professor !== 'Staff' && handleShowContactCard(professor)}
-                      >
-                        {professor}
-                      </button>
+                                          <button
+                      className="cursor-pointer hover:underline"
+                      onClick={() => handleShowContactCard(professor)}
+                    >
+                      {professor}
+                    </button>
                       <button
                         onClick={() => toggleProfessor(professor)}
                         className="ml-2 hover:bg-baylor-green/80 rounded-full p-1"
@@ -311,9 +311,7 @@ const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
                   key={professor}
                   className={`p-3 rounded-lg border transition-all flex justify-between items-center ${
                     selectedProfessors.includes(professor)
-                      ? professor === 'Staff'
-                        ? 'bg-baylor-gold/20 border-baylor-gold text-baylor-green'
-                        : 'bg-baylor-green/10 border-baylor-green text-baylor-green'
+                      ? 'bg-baylor-green/10 border-baylor-green text-baylor-green'
                       : 'bg-white border-gray-200'
                   }`}
                 >
@@ -321,9 +319,7 @@ const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
                     <div
                       className={`w-3 h-3 rounded-full mr-3 ${
                         selectedProfessors.includes(professor)
-                          ? professor === 'Staff'
-                            ? 'bg-baylor-gold'
-                            : 'bg-baylor-green'
+                          ? 'bg-baylor-green'
                           : 'bg-gray-300'
                       }`}
                     ></div>
@@ -331,23 +327,21 @@ const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
                       className="text-sm font-medium hover:underline cursor-pointer"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (professor !== 'Staff') handleShowContactCard(professor);
+                        handleShowContactCard(professor);
                       }}
                     >
                       {professor}
                     </span>
                   </button>
-                  {professor !== 'Staff' && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Could navigate to individual schedule view
-                      }}
-                      className="p-1 rounded-full hover:bg-baylor-green/20"
-                    >
-                      <Eye size={16} className="text-baylor-green" />
-                    </button>
-                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Could navigate to individual schedule view
+                    }}
+                    className="p-1 rounded-full hover:bg-baylor-green/20"
+                  >
+                    <Eye size={16} className="text-baylor-green" />
+                  </button>
                 </div>
               ))}
             </div>

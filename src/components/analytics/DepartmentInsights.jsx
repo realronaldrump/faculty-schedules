@@ -245,7 +245,7 @@ const DepartmentInsights = ({ scheduleData, facultyData, onNavigate, analytics }
             <div>
               <p className="text-sm font-medium text-gray-600">Weekly Sessions</p>
               <p className="text-3xl font-bold text-baylor-green">{analytics.totalSessions}</p>
-              <p className="text-sm text-gray-500">{analytics.staffTaughtSessions} staff-taught</p>
+              <p className="text-sm text-gray-500">{analytics.adjunctTaughtSessions} adjunct-taught</p>
             </div>
             <div className="p-3 bg-baylor-green/10 rounded-lg">
               <BookOpen className="w-6 h-6 text-baylor-green" />
@@ -412,9 +412,9 @@ const DepartmentInsights = ({ scheduleData, facultyData, onNavigate, analytics }
               <div className="text-2xl font-bold text-baylor-green">{data.hours.toFixed(1)}h</div>
               <div className="text-sm text-baylor-green/80">
                 {data.classes} sessions/week
-                {data.staffTaughtClasses > 0 && (
+                {data.adjunctTaughtClasses > 0 && (
                   <span className="ml-2 text-baylor-gold font-medium">
-                    ({data.staffTaughtClasses} staff)
+                    ({data.adjunctTaughtClasses} adjunct)
                   </span>
                 )}
               </div>

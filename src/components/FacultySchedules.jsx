@@ -51,7 +51,7 @@ const FacultySchedules = ({ scheduleData, facultyData }) => {
         return `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim();
       }
       return item.Instructor || item.instructorName || '';
-    }))].filter(i => i !== 'Staff' && i !== '').sort(),
+    }))].filter(i => i !== '').sort(),
     [scheduleData]
   );
 

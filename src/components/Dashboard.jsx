@@ -22,7 +22,7 @@ const Dashboard = ({ analytics, editHistory, onNavigate }) => {
 
     return {
       facultyCount: analytics.facultyCount,
-      staffTaughtCourses: analytics.staffTaughtSessions,
+      adjunctTaughtCourses: analytics.adjunctTaughtSessions,
       roomsInUse: analytics.roomsInUse,
       totalSessions: analytics.totalSessions,
       uniqueCourses: analytics.uniqueCourses,
@@ -152,7 +152,7 @@ const Dashboard = ({ analytics, editHistory, onNavigate }) => {
         <MetricCard
           title="Weekly Sessions"
           value={metrics.totalSessions}
-          subtitle={`${metrics.staffTaughtCourses} staff-taught`}
+          subtitle={`${metrics.adjunctTaughtCourses} adjunct-taught`}
           icon={BookOpen}
           onClick={() => onNavigate('analytics/course-management')}
         />
@@ -225,8 +225,8 @@ const Dashboard = ({ analytics, editHistory, onNavigate }) => {
               <span className="font-semibold text-baylor-green">{metrics.uniqueCourses}</span>
             </div>
             <div className="flex items-center justify-between py-2">
-              <span className="text-sm text-gray-600">Staff-Taught Sessions</span>
-              <span className="font-semibold text-baylor-green">{metrics.staffTaughtCourses}</span>
+              <span className="text-sm text-gray-600">Adjunct-Taught Sessions</span>
+              <span className="font-semibold text-baylor-green">{metrics.adjunctTaughtCourses}</span>
             </div>
             <div className="flex items-center justify-between py-2">
               <span className="text-sm text-gray-600">Faculty Utilization</span>

@@ -203,6 +203,17 @@ function App() {
     return flattenedData;
   }, [rawScheduleData]);
 
+  // Directory data from normalized people collection
+  const { facultyDirectoryData, staffDirectoryData } = useMemo(() => {
+    const facultyDir = adaptPeopleToFaculty(rawPeople, scheduleData);
+    const staffDir = adaptPeopleToStaff(rawPeople);
+    
+    return { 
+      facultyDirectoryData: facultyDir, 
+      staffDirectoryData: staffDir 
+    };
+  }, [rawPeople, scheduleData]);
+
   // Centralized Analytics Calculation
   const departmentAnalytics = useMemo(() => {
     if (scheduleData.length === 0) return null;
@@ -238,11 +249,18 @@ function App() {
         return item.instructorName || item.Instructor || '';
       }
     }).filter(Boolean))];
-    const facultyCount = allInstructors.filter(i => i && i !== 'Staff').length;
+    // Count non-adjunct faculty (regular faculty members)
+    const facultyCount = allInstructors.filter(i => {
+      if (!i) return false;
+      const faculty = facultyDirectoryData.find(f => 
+        `${f.firstName} ${f.lastName}`.trim() === i
+      );
+      return !faculty?.isAdjunct; // Count only non-adjunct faculty
+    }).length;
 
     const facultyWorkload = {};
     const roomUtilization = {};
-    uniqueRoomsList.forEach(room => { roomUtilization[room] = { classes: 0, hours: 0, staffTaughtClasses: 0 }; });
+            uniqueRoomsList.forEach(room => { roomUtilization[room] = { classes: 0, hours: 0, adjunctTaughtClasses: 0 }; });
 
     const processedSessions = new Set();
     const dayStats = {};
@@ -273,7 +291,12 @@ function App() {
             day = item.Day || '';
         }
         
-        const instructor = instructorName && instructorName.includes('Staff') ? 'Staff' : instructorName;
+        // Check if instructor is adjunct faculty
+        const faculty = facultyDirectoryData.find(f => 
+            `${f.firstName} ${f.lastName}`.trim() === instructorName
+        );
+        const isAdjunctInstructor = faculty?.isAdjunct || false;
+        
         const start = parseTime(startTime);
         const end = parseTime(endTime);
         const duration = (start !== null && end !== null) ? (end - start) / 60 : 0;
@@ -281,7 +304,7 @@ function App() {
         if (room && roomUtilization[room]) {
             roomUtilization[room].classes++;
             roomUtilization[room].hours += duration;
-            if (instructor === 'Staff') roomUtilization[room].staffTaughtClasses++;
+            if (isAdjunctInstructor) roomUtilization[room].adjunctTaughtClasses++;
         }
 
         const sessionKey = `${instructorName}-${course}-${day}-${startTime}-${endTime}`;
@@ -292,14 +315,14 @@ function App() {
                 dayStats[day] = (dayStats[day] || 0) + 1;
             }
 
-            if (instructor && instructor !== 'Staff') {
-                if (!facultyWorkload[instructor]) {
-                    facultyWorkload[instructor] = { courseSet: new Set(), totalHours: 0 };
+            if (instructorName && !isAdjunctInstructor) {
+                if (!facultyWorkload[instructorName]) {
+                    facultyWorkload[instructorName] = { courseSet: new Set(), totalHours: 0 };
                 }
                 if (course) {
-                    facultyWorkload[instructor].courseSet.add(course);
+                    facultyWorkload[instructorName].courseSet.add(course);
                 }
-                facultyWorkload[instructor].totalHours += duration;
+                facultyWorkload[instructorName].totalHours += duration;
             }
         }
     });
@@ -312,11 +335,16 @@ function App() {
     );
     
     const totalSessions = processedSessions.size;
-    const staffTaughtSessions = scheduleData.filter(s => {
-      const instructor = s.instructor ? 
+    const adjunctTaughtSessions = scheduleData.filter(s => {
+      const instructorName = s.instructor ? 
         `${s.instructor.firstName || ''} ${s.instructor.lastName || ''}`.trim() :
         (s.instructorName || s.Instructor || '');
-      return instructor.includes('Staff');
+      
+      // Find if this instructor is marked as adjunct faculty
+      const faculty = facultyDirectoryData.find(f => 
+        `${f.firstName} ${f.lastName}`.trim() === instructorName
+      );
+      return faculty?.isAdjunct;
     }).length;
 
     const busiestDay = Object.entries(dayStats).reduce((max, [day, count]) => 
@@ -326,7 +354,7 @@ function App() {
 
     return {
       facultyCount,
-      staffTaughtSessions,
+      adjunctTaughtSessions,
       roomsInUse,
       totalSessions,
       uniqueCourses,
@@ -336,18 +364,7 @@ function App() {
       uniqueRooms: uniqueRoomsList,
       uniqueInstructors: allInstructors,
     };
-}, [scheduleData]);
-
-  // Directory data from normalized people collection
-  const { facultyDirectoryData, staffDirectoryData } = useMemo(() => {
-    const facultyDir = adaptPeopleToFaculty(rawPeople, scheduleData);
-    const staffDir = adaptPeopleToStaff(rawPeople);
-    
-    return { 
-      facultyDirectoryData: facultyDir, 
-      staffDirectoryData: staffDir 
-    };
-  }, [rawPeople, scheduleData]);
+}, [scheduleData, facultyDirectoryData]);
 
   // Load normalized relational data
   useEffect(() => {

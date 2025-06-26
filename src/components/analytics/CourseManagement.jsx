@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Edit, Save, X, History, RotateCcw, Filter, Search, ChevronsUpDown, Plus, Trash2 } from 'lucide-react';
+import { Edit, Save, X, History, RotateCcw, Filter, Search, ChevronsUpDown, Plus, Trash2, ChevronDown, Settings } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import FacultyContactCard from '../FacultyContactCard';
 
@@ -13,7 +13,24 @@ const CourseManagement = ({
   const [editingRowId, setEditingRowId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [historyVisible, setHistoryVisible] = useState(false);
-  const [filters, setFilters] = useState({ instructor: [], day: [], room: [], searchTerm: '' });
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [filters, setFilters] = useState({ 
+    // Basic filters
+    instructor: [], 
+    day: [], 
+    room: [], 
+    searchTerm: '',
+    // Advanced filters 
+    programs: { include: [], exclude: [] },
+    courseTypes: [],
+    terms: [],
+    buildings: { include: [], exclude: [] },
+    adjunct: 'all', // 'all', 'include', 'exclude'
+    tenured: 'all', // 'all', 'include', 'exclude'
+    credits: 'all', // 'all', '1', '2', '3', '4+'
+    timeOfDay: 'all' // 'all', 'morning', 'afternoon', 'evening'
+  });
+  const [activeFilterPreset, setActiveFilterPreset] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'Instructor', direction: 'ascending' });
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
 
@@ -28,9 +45,106 @@ const CourseManagement = ({
     [scheduleData]
   );
 
+  // Extract unique filter options
+  const filterOptions = useMemo(() => {
+    const programs = new Set();
+    const courseTypes = new Set();
+    const terms = new Set();
+    const buildings = new Set();
+
+    scheduleData.forEach(item => {
+      // Extract program from faculty data if available
+      if (item.Instructor && facultyData) {
+        const faculty = facultyData.find(f => f.name === item.Instructor);
+        if (faculty?.program?.name) {
+          programs.add(faculty.program.name);
+        }
+      }
+
+      // Extract course type from course code (e.g., "ADM" from "ADM 3330")
+      if (item.Course) {
+        const match = item.Course.match(/^([A-Z]{2,4})/);
+        if (match) {
+          courseTypes.add(match[1]);
+        }
+      }
+
+      // Extract terms
+      if (item.Term) {
+        terms.add(item.Term);
+      }
+
+      // Extract building from room name
+      if (item.Room) {
+        const buildingMatch = item.Room.match(/^([A-Z]+)/);
+        if (buildingMatch) {
+          buildings.add(buildingMatch[1]);
+        } else {
+          buildings.add('Other');
+        }
+      }
+    });
+
+    return {
+      programs: Array.from(programs).sort(),
+      courseTypes: Array.from(courseTypes).sort(),
+      terms: Array.from(terms).sort(),
+      buildings: Array.from(buildings).sort()
+    };
+  }, [scheduleData, facultyData]);
+
+  // Filter presets for common use cases
+  const filterPresets = {
+    'all-courses': {
+      name: 'All Courses',
+      filters: {
+        instructor: [], day: [], room: [], searchTerm: '',
+        programs: { include: [], exclude: [] },
+        courseTypes: [], terms: [], buildings: { include: [], exclude: [] },
+        adjunct: 'all', tenured: 'all', credits: 'all', timeOfDay: 'all'
+      }
+    },
+    'adjunct-courses': {
+      name: 'Adjunct-Taught',
+      filters: {
+        instructor: [], day: [], room: [], searchTerm: '',
+        programs: { include: [], exclude: [] },
+        courseTypes: [], terms: [], buildings: { include: [], exclude: [] },
+        adjunct: 'include', tenured: 'all', credits: 'all', timeOfDay: 'all'
+      }
+    },
+    'tenured-courses': {
+      name: 'Tenured Faculty',
+      filters: {
+        instructor: [], day: [], room: [], searchTerm: '',
+        programs: { include: [], exclude: [] },
+        courseTypes: [], terms: [], buildings: { include: [], exclude: [] },
+        adjunct: 'exclude', tenured: 'include', credits: 'all', timeOfDay: 'all'
+      }
+    },
+    'morning-classes': {
+      name: 'Morning Classes',
+      filters: {
+        instructor: [], day: [], room: [], searchTerm: '',
+        programs: { include: [], exclude: [] },
+        courseTypes: [], terms: [], buildings: { include: [], exclude: [] },
+        adjunct: 'all', tenured: 'all', credits: 'all', timeOfDay: 'morning'
+      }
+    },
+    'high-credit': {
+      name: 'High Credit Hours',
+      filters: {
+        instructor: [], day: [], room: [], searchTerm: '',
+        programs: { include: [], exclude: [] },
+        courseTypes: [], terms: [], buildings: { include: [], exclude: [] },
+        adjunct: 'all', tenured: 'all', credits: '4+', timeOfDay: 'all'
+      }
+    }
+  };
+
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
 
-  // Parse time for sorting
+  // Parse time for sorting and filtering
   const parseTime = (timeStr) => {
     if (!timeStr) return null;
     const cleaned = timeStr.toLowerCase().replace(/\s+/g, '');
@@ -53,6 +167,15 @@ const CourseManagement = ({
     return hour * 60 + (minute || 0);
   };
 
+  // Helper function to get time of day
+  const getTimeOfDay = (timeStr) => {
+    const minutes = parseTime(timeStr);
+    if (!minutes) return 'unknown';
+    if (minutes < 12 * 60) return 'morning'; // Before noon
+    if (minutes < 17 * 60) return 'afternoon'; // Before 5 PM
+    return 'evening'; // After 5 PM
+  };
+
   // Filter and sort data
   const filteredAndSortedData = useMemo(() => {
     let data = [...scheduleData];
@@ -63,11 +186,12 @@ const CourseManagement = ({
       data = data.filter(item =>
         (item.Course?.toLowerCase().includes(lowercasedFilter)) ||
         (item['Course Title']?.toLowerCase().includes(lowercasedFilter)) ||
-        (item.Instructor?.toLowerCase().includes(lowercasedFilter))
+        (item.Instructor?.toLowerCase().includes(lowercasedFilter)) ||
+        (item.Room?.toLowerCase().includes(lowercasedFilter))
       );
     }
     
-    // Apply multi-select filters
+    // Apply basic multi-select filters
     if (filters.instructor.length > 0) {
       data = data.filter(item => item && item.Instructor && filters.instructor.includes(item.Instructor));
     }
@@ -76,6 +200,100 @@ const CourseManagement = ({
     }
     if (filters.room.length > 0) {
       data = data.filter(item => item && item.Room && filters.room.includes(item.Room));
+    }
+
+    // Apply program filters
+    if (filters.programs.include.length > 0 || filters.programs.exclude.length > 0) {
+      data = data.filter(item => {
+        if (!item.Instructor || !facultyData) return true;
+        
+        const faculty = facultyData.find(f => f.name === item.Instructor);
+        const programName = faculty?.program?.name || '';
+        
+        const includeMatch = filters.programs.include.length === 0 || filters.programs.include.includes(programName);
+        const excludeMatch = filters.programs.exclude.length === 0 || !filters.programs.exclude.includes(programName);
+        
+        return includeMatch && excludeMatch;
+      });
+    }
+
+    // Apply course type filters
+    if (filters.courseTypes.length > 0) {
+      data = data.filter(item => {
+        if (!item.Course) return false;
+        const match = item.Course.match(/^([A-Z]{2,4})/);
+        return match && filters.courseTypes.includes(match[1]);
+      });
+    }
+
+    // Apply term filters
+    if (filters.terms.length > 0) {
+      data = data.filter(item => item && item.Term && filters.terms.includes(item.Term));
+    }
+
+    // Apply building filters
+    if (filters.buildings.include.length > 0 || filters.buildings.exclude.length > 0) {
+      data = data.filter(item => {
+        if (!item.Room) return true;
+        
+        const buildingMatch = item.Room.match(/^([A-Z]+)/);
+        const buildingName = buildingMatch ? buildingMatch[1] : 'Other';
+        
+        const includeMatch = filters.buildings.include.length === 0 || filters.buildings.include.includes(buildingName);
+        const excludeMatch = filters.buildings.exclude.length === 0 || !filters.buildings.exclude.includes(buildingName);
+        
+        return includeMatch && excludeMatch;
+      });
+    }
+
+    // Apply adjunct filter
+    if (filters.adjunct !== 'all') {
+      data = data.filter(item => {
+        if (!item.Instructor || !facultyData) return true;
+        
+        const faculty = facultyData.find(f => f.name === item.Instructor);
+        if (filters.adjunct === 'include') {
+          return faculty?.isAdjunct;
+        } else if (filters.adjunct === 'exclude') {
+          return !faculty?.isAdjunct;
+        }
+        return true;
+      });
+    }
+
+    // Apply tenured filter
+    if (filters.tenured !== 'all') {
+      data = data.filter(item => {
+        if (!item.Instructor || !facultyData) return true;
+        
+        const faculty = facultyData.find(f => f.name === item.Instructor);
+        if (filters.tenured === 'include') {
+          return faculty?.isTenured;
+        } else if (filters.tenured === 'exclude') {
+          return !faculty?.isTenured;
+        }
+        return true;
+      });
+    }
+
+    // Apply credits filter
+    if (filters.credits !== 'all') {
+      data = data.filter(item => {
+        if (!item.Credits) return false;
+        const credits = parseInt(item.Credits);
+        if (filters.credits === '4+') {
+          return credits >= 4;
+        }
+        return credits.toString() === filters.credits;
+      });
+    }
+
+    // Apply time of day filter
+    if (filters.timeOfDay !== 'all') {
+      data = data.filter(item => {
+        const timeCategory = getTimeOfDay(item['Start Time']);
+        return timeCategory === filters.timeOfDay;
+      });
     }
 
     // Apply sorting
@@ -101,7 +319,7 @@ const CourseManagement = ({
     }
     
     return data;
-  }, [scheduleData, filters, sortConfig]);
+  }, [scheduleData, filters, sortConfig, facultyData]);
 
   // Validation function for schedule data
   const validateScheduleData = (data) => {
@@ -179,6 +397,51 @@ const CourseManagement = ({
       // onDeleteSchedule(scheduleId);
     }
   };
+
+  // Filter preset handlers
+  const applyFilterPreset = (presetKey) => {
+    if (presetKey === '') {
+      clearFilters();
+      setActiveFilterPreset('');
+      return;
+    }
+    
+    const preset = filterPresets[presetKey];
+    if (preset) {
+      setFilters(preset.filters);
+      setActiveFilterPreset(presetKey);
+    }
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      instructor: [], day: [], room: [], searchTerm: '',
+      programs: { include: [], exclude: [] },
+      courseTypes: [], terms: [], buildings: { include: [], exclude: [] },
+      adjunct: 'all', tenured: 'all', credits: 'all', timeOfDay: 'all'
+    });
+    setActiveFilterPreset('');
+  };
+
+  // Count active filters
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.instructor.length > 0) count++;
+    if (filters.day.length > 0) count++;
+    if (filters.room.length > 0) count++;
+    if (filters.programs.include.length > 0) count++;
+    if (filters.programs.exclude.length > 0) count++;
+    if (filters.courseTypes.length > 0) count++;
+    if (filters.terms.length > 0) count++;
+    if (filters.buildings.include.length > 0) count++;
+    if (filters.buildings.exclude.length > 0) count++;
+    if (filters.adjunct !== 'all') count++;
+    if (filters.tenured !== 'all') count++;
+    if (filters.credits !== 'all') count++;
+    if (filters.timeOfDay !== 'all') count++;
+    if (filters.searchTerm) count++;
+    return count;
+  }, [filters]);
 
   const DataTableHeader = ({ columnKey, label }) => {
     const isSorted = sortConfig.key === columnKey;
@@ -282,11 +545,66 @@ const CourseManagement = ({
 
         {/* Filters Section */}
         <div className="p-4 mb-6 bg-gray-50 rounded-lg border">
-          <h3 className="font-serif font-semibold text-baylor-green mb-3 flex items-center">
-            <Filter size={16} className="mr-2" />
-            Filters & Search
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-serif font-semibold text-baylor-green flex items-center">
+              <Filter size={16} className="mr-2" />
+              Filters & Search
+              {activeFilterCount > 0 && (
+                <span className="ml-2 px-2 py-1 bg-baylor-green text-white text-xs rounded-full">
+                  {activeFilterCount}
+                </span>
+              )}
+            </h3>
+            <div className="flex items-center space-x-2">
+              {/* Filter Presets */}
+              <select
+                value={activeFilterPreset}
+                onChange={(e) => applyFilterPreset(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+              >
+                <option value="">Quick filters...</option>
+                {Object.entries(filterPresets).map(([key, preset]) => (
+                  <option key={key} value={key}>{preset.name}</option>
+                ))}
+              </select>
+              
+              {/* Advanced Filters Toggle */}
+              <button
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className={`flex items-center px-3 py-2 border rounded-lg transition-colors ${
+                  showAdvancedFilters ? 'bg-baylor-green text-white border-baylor-green' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <Settings className="w-4 h-4 mr-2" />
+                Advanced
+                <ChevronDown className={`w-4 h-4 ml-2 transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} />
+              </button>
+              
+              {/* Clear Filters */}
+              {activeFilterCount > 0 && (
+                <button
+                  onClick={clearFilters}
+                  className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Clear All
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Basic Filters - Always Visible */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <div className="relative">
+              <input
+                type="text"
+                value={filters.searchTerm}
+                onChange={(e) => setFilters({ ...filters, searchTerm: e.target.value })}
+                className="w-full pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900"
+                placeholder="Search courses, instructors, rooms..."
+              />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+            </div>
             <MultiSelectDropdown
               options={uniqueInstructors}
               selected={filters.instructor}
@@ -306,35 +624,178 @@ const CourseManagement = ({
               onChange={(selected) => setFilters({ ...filters, room: selected })}
               placeholder="Filter by Room..."
             />
-            <div className="relative">
-              <input
-                type="text"
-                value={filters.searchTerm}
-                onChange={(e) => setFilters({ ...filters, searchTerm: e.target.value })}
-                className="w-full pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900"
-                placeholder="Search Course/Title/Instructor..."
-              />
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-            </div>
           </div>
-          
-          {/* Clear Filters */}
-          {(filters.instructor.length > 0 || filters.day.length > 0 || filters.room.length > 0 || filters.searchTerm) && (
-            <div className="mt-3 flex items-center justify-between">
-              <div className="text-sm text-gray-600">
-                Active filters: {[
-                  filters.instructor.length > 0 && `${filters.instructor.length} instructors`,
-                  filters.day.length > 0 && `${filters.day.length} days`,
-                  filters.room.length > 0 && `${filters.room.length} rooms`,
-                  filters.searchTerm && 'text search'
-                ].filter(Boolean).join(', ')}
+
+          {/* Advanced Filters - Collapsible */}
+          {showAdvancedFilters && (
+            <div className="pt-4 border-t border-gray-200 space-y-6">
+              {/* Program Filters */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Include Programs
+                  </label>
+                  <MultiSelectDropdown
+                    options={filterOptions.programs}
+                    selected={filters.programs.include}
+                    onChange={(selected) => setFilters(prev => ({ 
+                      ...prev, 
+                      programs: { ...prev.programs, include: selected }
+                    }))}
+                    placeholder="Select programs to include..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Exclude Programs
+                  </label>
+                  <MultiSelectDropdown
+                    options={filterOptions.programs}
+                    selected={filters.programs.exclude}
+                    onChange={(selected) => setFilters(prev => ({ 
+                      ...prev, 
+                      programs: { ...prev.programs, exclude: selected }
+                    }))}
+                    placeholder="Select programs to exclude..."
+                  />
+                </div>
               </div>
-              <button
-                onClick={() => setFilters({ instructor: [], day: [], room: [], searchTerm: '' })}
-                className="text-sm text-baylor-green hover:text-baylor-green/80 font-medium"
-              >
-                Clear all filters
-              </button>
+
+              {/* Course Types and Terms */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Course Types
+                  </label>
+                  <MultiSelectDropdown
+                    options={filterOptions.courseTypes}
+                    selected={filters.courseTypes}
+                    onChange={(selected) => setFilters(prev => ({ ...prev, courseTypes: selected }))}
+                    placeholder="Select course types (ADM, CFS, etc.)..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Terms
+                  </label>
+                  <MultiSelectDropdown
+                    options={filterOptions.terms}
+                    selected={filters.terms}
+                    onChange={(selected) => setFilters(prev => ({ ...prev, terms: selected }))}
+                    placeholder="Select terms..."
+                  />
+                </div>
+              </div>
+
+              {/* Buildings */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Include Buildings
+                  </label>
+                  <MultiSelectDropdown
+                    options={filterOptions.buildings}
+                    selected={filters.buildings.include}
+                    onChange={(selected) => setFilters(prev => ({ 
+                      ...prev, 
+                      buildings: { ...prev.buildings, include: selected }
+                    }))}
+                    placeholder="Select buildings to include..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Exclude Buildings
+                  </label>
+                  <MultiSelectDropdown
+                    options={filterOptions.buildings}
+                    selected={filters.buildings.exclude}
+                    onChange={(selected) => setFilters(prev => ({ 
+                      ...prev, 
+                      buildings: { ...prev.buildings, exclude: selected }
+                    }))}
+                    placeholder="Select buildings to exclude..."
+                  />
+                </div>
+              </div>
+
+              {/* Faculty and Course Attributes */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Adjunct Status
+                  </label>
+                  <select
+                    value={filters.adjunct}
+                    onChange={(e) => setFilters(prev => ({ ...prev, adjunct: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  >
+                    <option value="all">All Faculty</option>
+                    <option value="include">Adjunct Only</option>
+                    <option value="exclude">Exclude Adjunct</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tenure Status
+                  </label>
+                  <select
+                    value={filters.tenured}
+                    onChange={(e) => setFilters(prev => ({ ...prev, tenured: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  >
+                    <option value="all">All Faculty</option>
+                    <option value="include">Tenured Only</option>
+                    <option value="exclude">Exclude Tenured</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Credit Hours
+                  </label>
+                  <select
+                    value={filters.credits}
+                    onChange={(e) => setFilters(prev => ({ ...prev, credits: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  >
+                    <option value="all">All Credits</option>
+                    <option value="1">1 Credit</option>
+                    <option value="2">2 Credits</option>
+                    <option value="3">3 Credits</option>
+                    <option value="4+">4+ Credits</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Time of Day
+                  </label>
+                  <select
+                    value={filters.timeOfDay}
+                    onChange={(e) => setFilters(prev => ({ ...prev, timeOfDay: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  >
+                    <option value="all">All Times</option>
+                    <option value="morning">Morning (Before 12pm)</option>
+                    <option value="afternoon">Afternoon (12pm-5pm)</option>
+                    <option value="evening">Evening (After 5pm)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Filter Summary */}
+          {activeFilterCount > 0 && (
+            <div className="mt-4 pt-3 border-t border-gray-200">
+              <div className="text-sm text-gray-600">
+                <span className="font-medium">{filteredAndSortedData.length}</span> of <span className="font-medium">{scheduleData.length}</span> courses shown
+                {activeFilterCount > 0 && (
+                  <span className="ml-2">• {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active</span>
+                )}
+              </div>
             </div>
           )}
         </div>

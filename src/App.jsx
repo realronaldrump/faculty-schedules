@@ -15,6 +15,7 @@ import SmartDataImportPage from './components/SmartDataImportPage';
 import SystemsPage from './components/SystemsPage';
 import DatabaseCleanup from './components/DatabaseCleanup';
 import EmailLists from './components/EmailLists';
+import BuildingDirectory from './components/BuildingDirectory';
 import Login from './components/Login';
 import Notification from './components/Notification';
 import { Home, Calendar, Users, BarChart3, Settings, Bell, Search, User } from 'lucide-react';
@@ -82,6 +83,7 @@ function App() {
       icon: Users,
       children: [
         { id: 'department-management', label: 'Program Management', path: 'directory/department-management' },
+        { id: 'building-directory', label: 'Building Directory', path: 'directory/building-directory' },
         { id: 'faculty-directory', label: 'Faculty Directory', path: 'directory/faculty-directory' },
         { id: 'staff-directory', label: 'Staff Directory', path: 'directory/staff-directory' },
         { id: 'email-lists', label: 'Email Lists', path: 'directory/email-lists' }
@@ -741,6 +743,12 @@ function App() {
           directoryData={facultyDirectoryData}
           onFacultyUpdate={handleFacultyUpdate}
           onStaffUpdate={handleStaffUpdate}
+          showNotification={showNotification}
+        />;
+      case 'directory/building-directory':
+        return <BuildingDirectory
+          directoryData={facultyDirectoryData}
+          staffData={staffDirectoryData}
           showNotification={showNotification}
         />;
       case 'directory/faculty-directory':

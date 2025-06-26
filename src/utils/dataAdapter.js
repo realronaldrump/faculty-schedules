@@ -112,7 +112,19 @@ export const adaptPeopleToFaculty = (people, scheduleData = []) => {
     .filter(person => person.roles.includes('faculty'))
     .map(person => {
       const facultyName = `${person.firstName} ${person.lastName}`.trim();
-      const program = determineFacultyProgram(scheduleData, facultyName);
+      
+      // Single source of truth for program: prioritize programOverride, fallback to schedule-derived program
+      let program = null;
+      if (person.programOverride && person.programOverride.trim() !== '') {
+        // Use manual program override as the authoritative source
+        program = {
+          name: person.programOverride.trim(),
+          isOverride: true
+        };
+      } else {
+        // Fall back to determining program from schedule data
+        program = determineFacultyProgram(scheduleData, facultyName);
+      }
       
       return {
         id: person.id,
@@ -124,9 +136,13 @@ export const adaptPeopleToFaculty = (people, scheduleData = []) => {
         phone: person.phone,
         jobTitle: person.jobTitle,
         office: person.office,
+        department: person.department || 'Human Sciences and Design', // Default department
+        programOverride: person.programOverride || '', // Manual program assignment
+        updProgram: person.updProgram || '', // Which program they're UPD for
         isAdjunct: person.isAdjunct,
         isTenured: person.isTenured || false,
         isAlsoStaff: person.roles.includes('staff'),
+        isUPD: person.isUPD || false,
         program: program,
         ...person // Include any additional fields
       };

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Copy, Plus, Minus, Settings } from 'lucide-react';
+import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Copy, Plus, Minus, Settings, UserCog } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown';
 
 const EmailLists = ({ facultyData, staffData }) => {
@@ -15,6 +15,7 @@ const EmailLists = ({ facultyData, staffData }) => {
     // Boolean filters with include/exclude options
     adjunct: 'all', // 'all', 'include', 'exclude'
     tenured: 'all', // 'all', 'include', 'exclude'
+    upd: 'all', // 'all', 'include', 'exclude' - NEW UPD filter
     // Email filter
     hasEmail: true
   });
@@ -76,6 +77,7 @@ const EmailLists = ({ facultyData, staffData }) => {
         roleFilter: 'faculty',
         adjunct: 'all',
         tenured: 'all',
+        upd: 'all',
         hasEmail: true
       }
     },
@@ -88,6 +90,7 @@ const EmailLists = ({ facultyData, staffData }) => {
         roleFilter: 'faculty',
         adjunct: 'all',
         tenured: 'include',
+        upd: 'all',
         hasEmail: true
       }
     },
@@ -100,6 +103,20 @@ const EmailLists = ({ facultyData, staffData }) => {
         roleFilter: 'faculty',
         adjunct: 'include',
         tenured: 'all',
+        upd: 'all',
+        hasEmail: true
+      }
+    },
+    'upd-faculty': {
+      name: 'UPD Faculty',
+      filters: {
+        programs: { include: [], exclude: [] },
+        jobTitles: { include: [], exclude: [] },
+        buildings: { include: [], exclude: [] },
+        roleFilter: 'faculty',
+        adjunct: 'all',
+        tenured: 'all',
+        upd: 'include',
         hasEmail: true
       }
     },
@@ -112,6 +129,7 @@ const EmailLists = ({ facultyData, staffData }) => {
         roleFilter: 'staff',
         adjunct: 'all',
         tenured: 'all',
+        upd: 'all',
         hasEmail: true
       }
     }
@@ -321,6 +339,18 @@ const EmailLists = ({ facultyData, staffData }) => {
       });
     }
 
+    // UPD filter
+    if (filters.upd !== 'all') {
+      filtered = filtered.filter(person => {
+        if (filters.upd === 'include') {
+          return person.isUPD;
+        } else if (filters.upd === 'exclude') {
+          return !person.isUPD;
+        }
+        return true;
+      });
+    }
+
     // Has email filter
     if (filters.hasEmail) {
       filtered = filtered.filter(person => person.email && person.email.trim() !== '');
@@ -459,6 +489,7 @@ const EmailLists = ({ facultyData, staffData }) => {
       roleFilter: 'all',
       adjunct: 'all',
       tenured: 'all',
+      upd: 'all',
       hasEmail: true
     });
     setSearchTerm('');
@@ -491,6 +522,7 @@ const EmailLists = ({ facultyData, staffData }) => {
     if (filters.roleFilter !== 'all') count++;
     if (filters.adjunct !== 'all') count++;
     if (filters.tenured !== 'all') count++;
+    if (filters.upd !== 'all') count++;
     if (!filters.hasEmail) count++;
     return count;
   }, [filters]);
@@ -678,7 +710,7 @@ const EmailLists = ({ facultyData, staffData }) => {
             </div>
 
             {/* Role and Status Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Role Type
@@ -722,6 +754,21 @@ const EmailLists = ({ facultyData, staffData }) => {
                   <option value="all">All</option>
                   <option value="include">Tenured Only</option>
                   <option value="exclude">Exclude Tenured</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  UPD Status
+                </label>
+                <select
+                  value={filters.upd}
+                  onChange={(e) => setFilters(prev => ({ ...prev, upd: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                >
+                  <option value="all">All</option>
+                  <option value="include">UPD Only</option>
+                  <option value="exclude">Exclude UPD</option>
                 </select>
               </div>
 
@@ -851,8 +898,14 @@ const EmailLists = ({ facultyData, staffData }) => {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-gray-600 flex items-center justify-end gap-2">
                           {person.jobTitle || 'No title'} • {person.role}
+                          {person.isUPD && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                              <UserCog size={10} className="mr-1" />
+                              UPD
+                            </span>
+                          )}
                         </p>
                         <p className="text-sm text-gray-500">
                           {person.program && person.program.name ? (

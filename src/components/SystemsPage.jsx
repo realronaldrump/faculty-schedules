@@ -21,7 +21,7 @@ const SystemsPage = ({ onNavigate }) => {
     },
     { 
       name: 'ChairSIS', 
-      description: 'Department Management and Administrative System',
+      description: 'Program Management and Administrative System',
       url: 'https://www1.baylor.edu/ChairSIS/',
       icon: Settings,
       category: 'Administrative',
@@ -150,7 +150,7 @@ const SystemsPage = ({ onNavigate }) => {
             <Settings className="w-6 h-6 text-baylor-green" />
           </div>
           <h3 className="font-semibold text-gray-900 mb-2">Administrative</h3>
-          <p className="text-sm text-gray-600">Department management and administrative tools</p>
+                          <p className="text-sm text-gray-600">Program management and administrative tools</p>
         </div>
         
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 text-center">

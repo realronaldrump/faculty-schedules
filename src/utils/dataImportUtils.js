@@ -24,6 +24,9 @@ export const createPersonModel = ({
   isAdjunct = false,
   isFullTime = true,
   isTenured = false,
+  isUPD = false,
+  programOverride = '',
+  updProgram = '',
   hasNoPhone = false,
   hasNoOffice = false,
   createdAt = new Date().toISOString(),
@@ -41,6 +44,9 @@ export const createPersonModel = ({
   isAdjunct,
   isFullTime,
   isTenured: roles.includes('faculty') ? isTenured : false, // Only faculty can be tenured
+  isUPD: roles.includes('faculty') ? isUPD : false, // Only faculty can be UPD
+  programOverride: programOverride.trim(), // Manual program assignment
+  updProgram: updProgram.trim(), // Which program they're UPD for
   hasNoPhone,
   hasNoOffice,
   createdAt,

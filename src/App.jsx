@@ -7,6 +7,7 @@ import RoomSchedules from './components/scheduling/RoomSchedules';
 import FacultySchedules from './components/FacultySchedules';
 import FacultyDirectory from './components/FacultyDirectory';
 import StaffDirectory from './components/StaffDirectory';
+import ProgramManagement from './components/ProgramManagement';
 import DepartmentInsights from './components/analytics/DepartmentInsights.jsx';
 import CourseManagement from './components/analytics/CourseManagement';
 // Legacy import removed - using smart import only
@@ -80,6 +81,7 @@ function App() {
       label: 'Directory',
       icon: Users,
       children: [
+        { id: 'department-management', label: 'Program Management', path: 'directory/department-management' },
         { id: 'faculty-directory', label: 'Faculty Directory', path: 'directory/faculty-directory' },
         { id: 'staff-directory', label: 'Staff Directory', path: 'directory/staff-directory' },
         { id: 'email-lists', label: 'Email Lists', path: 'directory/email-lists' }
@@ -516,10 +518,14 @@ function App() {
             phone: facultyToUpdate.phone || '',
             jobTitle: facultyToUpdate.jobTitle || '',
             office: facultyToUpdate.office || '',
+            department: facultyToUpdate.department || '', // Add department field
+            programOverride: facultyToUpdate.programOverride || '', // Add program override field
+            updProgram: facultyToUpdate.updProgram || '', // Add UPD program field
             roles: roles,
             isAdjunct: facultyToUpdate.isAdjunct || false,
             isFullTime: !facultyToUpdate.isAdjunct,
             isTenured: roles.includes('faculty') ? (facultyToUpdate.isTenured || false) : false, // Only faculty can be tenured
+            isUPD: roles.includes('faculty') ? (facultyToUpdate.isUPD || false) : false, // Add UPD field
             hasNoPhone: facultyToUpdate.hasNoPhone || false,
             hasNoOffice: facultyToUpdate.hasNoOffice || false,
             updatedAt: new Date().toISOString()
@@ -542,6 +548,7 @@ function App() {
         }
     } catch (error) {
         console.error("Error updating/creating faculty", error);
+        throw error; // Re-throw so the calling component can handle it
     }
   };
 
@@ -570,9 +577,11 @@ function App() {
               phone: staffToUpdate.phone || '',
               jobTitle: staffToUpdate.jobTitle || '',
               office: staffToUpdate.office || '',
+              department: staffToUpdate.department || '', // Add department field
               roles: roles,
               isFullTime: staffToUpdate.isFullTime !== false,
               isTenured: roles.includes('faculty') ? (staffToUpdate.isTenured || false) : false, // Only faculty can be tenured
+              isUPD: roles.includes('faculty') ? (staffToUpdate.isUPD || false) : false, // Add UPD field
               hasNoPhone: staffToUpdate.hasNoPhone || false,
               hasNoOffice: staffToUpdate.hasNoOffice || false,
               updatedAt: new Date().toISOString()
@@ -727,6 +736,13 @@ function App() {
         return <IndividualAvailability {...commonProps} />;
       case 'scheduling/room-schedules':
         return <RoomSchedules {...commonProps} />;
+      case 'directory/department-management':
+        return <ProgramManagement
+          directoryData={facultyDirectoryData}
+          onFacultyUpdate={handleFacultyUpdate}
+          onStaffUpdate={handleStaffUpdate}
+          showNotification={showNotification}
+        />;
       case 'directory/faculty-directory':
         return <FacultyDirectory
           directoryData={facultyDirectoryData}

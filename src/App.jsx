@@ -13,7 +13,7 @@ import CourseManagement from './components/analytics/CourseManagement';
 // Legacy import removed - using smart import only
 import SmartDataImportPage from './components/SmartDataImportPage';
 import SystemsPage from './components/SystemsPage';
-import DatabaseCleanup from './components/DatabaseCleanup';
+
 import EmailLists from './components/EmailLists';
 import BuildingDirectory from './components/BuildingDirectory';
 import Login from './components/Login';
@@ -104,7 +104,6 @@ function App() {
       icon: Settings,
       children: [
         { id: 'smart-import', label: 'Data Import', path: 'administration/smart-import' },
-        { id: 'database-cleanup', label: 'Database Cleanup', path: 'administration/database-cleanup' },
         { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' }
       ]
     }
@@ -776,8 +775,6 @@ function App() {
         return <CourseManagement {...commonProps} />;
       case 'administration/smart-import':
         return <SmartDataImportPage onNavigate={setCurrentPage} showNotification={showNotification} />;
-      case 'administration/database-cleanup':
-        return <DatabaseCleanup onNavigate={setCurrentPage} />;
       case 'administration/baylor-systems':
         return <SystemsPage onNavigate={setCurrentPage} />;
       default:

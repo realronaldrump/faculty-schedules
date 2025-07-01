@@ -59,8 +59,7 @@ export const comprehensiveDuplicateDetection = async () => {
       crossCollection: crossCollectionIssues,
       summary: {
         totalDuplicates: peopleDuplicates.length + schedulesDuplicates.length + roomsDuplicates.length,
-        totalIssues: peopleDuplicates.length + schedulesDuplicates.length + roomsDuplicates.length + crossCollectionIssues.length,
-        estimatedStorageSavings: calculateStorageSavings(peopleDuplicates, schedulesDuplicates, roomsDuplicates)
+        totalIssues: peopleDuplicates.length + schedulesDuplicates.length + roomsDuplicates.length + crossCollectionIssues.length
       }
     };
 
@@ -575,22 +574,7 @@ const calculateNameSimilarity = (person1, person2) => {
   return maxLength === 0 ? 1.0 : 1.0 - (matrix[name1.length][name2.length] / maxLength);
 };
 
-/**
- * Calculate estimated storage savings from deduplication
- */
-const calculateStorageSavings = (peopleDuplicates, schedulesDuplicates, roomsDuplicates) => {
-  const peopleSavings = peopleDuplicates.length * 1024; // ~1KB per person record
-  const schedulesSavings = schedulesDuplicates.length * 512; // ~512B per schedule record
-  const roomsSavings = roomsDuplicates.length * 256; // ~256B per room record
-  
-  const totalBytes = peopleSavings + schedulesSavings + roomsSavings;
-  
-  return {
-    bytes: totalBytes,
-    kilobytes: Math.round(totalBytes / 1024),
-    megabytes: Math.round(totalBytes / (1024 * 1024) * 100) / 100
-  };
-};
+// Storage savings calculation removed - not relevant for small datasets
 
 /**
  * Generate comprehensive data hygiene report
@@ -608,11 +592,7 @@ export const generateDataHygieneReport = async () => {
       crossCollection: duplicateResults.crossCollection
     },
     recommendations: generateRecommendations(duplicateResults),
-    estimatedImpact: {
-      storageSavings: duplicateResults.summary.estimatedStorageSavings,
-      dataQualityImprovement: calculateDataQualityScore(duplicateResults),
-      maintenanceReduction: estimateMaintenanceReduction(duplicateResults)
-    }
+    dataQualityScore: calculateDataQualityScore(duplicateResults)
   };
 };
 
@@ -627,38 +607,38 @@ const generateRecommendations = (results) => {
       priority: 'high',
       action: 'Merge duplicate people records',
       count: results.people.duplicateCount,
-      impact: 'Eliminate confusion and improve data consistency',
-      estimatedTime: '30-60 minutes'
+      description: 'You have people listed multiple times. Merging them will create one accurate record for each person.',
+      benefit: 'Eliminates confusion when looking up faculty and staff'
     });
   }
   
   if (results.schedules.duplicateCount > 0) {
     recommendations.push({
-      priority: 'medium',
+      priority: 'medium', 
       action: 'Merge duplicate schedule records',
       count: results.schedules.duplicateCount,
-      impact: 'Improve schedule accuracy and reduce maintenance',
-      estimatedTime: '15-30 minutes'
+      description: 'Some courses appear to be scheduled multiple times. Merging removes the duplicates.',
+      benefit: 'Accurate course schedules without duplicates'
     });
   }
   
   if (results.rooms.duplicateCount > 0) {
     recommendations.push({
       priority: 'low',
-      action: 'Merge duplicate room records',
+      action: 'Merge duplicate room records', 
       count: results.rooms.duplicateCount,
-      impact: 'Standardize room references',
-      estimatedTime: '10-20 minutes'
+      description: 'Some rooms are listed multiple times with slight variations in name.',
+      benefit: 'Consistent room names across all schedules'
     });
   }
   
   if (results.crossCollection.length > 0) {
     recommendations.push({
       priority: 'high',
-      action: 'Fix cross-collection relationship issues',
-      count: results.crossCollection.length,
-      impact: 'Ensure data integrity and prevent errors',
-      estimatedTime: '45-90 minutes'
+      action: 'Fix broken connections',
+      count: results.crossCollection.length, 
+      description: 'Some schedules reference people or rooms that no longer exist in the system.',
+      benefit: 'Ensures all schedule data is properly connected'
     });
   }
   
@@ -678,17 +658,7 @@ const calculateDataQualityScore = (results) => {
   return Math.round(qualityScore);
 };
 
-/**
- * Estimate maintenance reduction
- */
-const estimateMaintenanceReduction = (results) => {
-  const totalDuplicates = results.summary.totalDuplicates;
-  return {
-    percentage: Math.min(50, totalDuplicates * 2), // Up to 50% reduction
-    hoursPerMonth: Math.round(totalDuplicates * 0.5), // ~30 minutes per duplicate
-    description: 'Reduced time spent resolving data conflicts and inconsistencies'
-  };
-};
+// Maintenance reduction estimates removed - too speculative
 
 export default {
   comprehensiveDuplicateDetection,

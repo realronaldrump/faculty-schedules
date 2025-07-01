@@ -5,7 +5,7 @@ import { previewImportChanges, commitTransaction } from '../utils/importTransact
 import ImportPreviewModal from './ImportPreviewModal';
 import ImportHistoryModal from './ImportHistoryModal';
 import DataDeduplicationManager from './DataDeduplicationManager';
-import ComprehensiveDataHygieneManager from './ComprehensiveDataHygieneManager';
+
 import { collection, getDocs, doc, updateDoc, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -593,13 +593,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
           </div>
         </div>
         <div className="flex items-center space-x-3">
-          <button
-            onClick={() => setShowComprehensiveHygiene(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-          >
-            <Shield className="w-4 h-4" />
-            <span className="text-sm font-medium">Data Hygiene</span>
-          </button>
+
           <button
             onClick={() => setShowHistoryModal(true)}
             className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
@@ -1342,25 +1336,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
         />
       )}
 
-      {/* Comprehensive Data Hygiene Modal */}
-      {showComprehensiveHygiene && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-7xl w-full max-h-[95vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-serif font-bold text-baylor-green">Comprehensive Data Hygiene</h2>
-                <button
-                  onClick={() => setShowComprehensiveHygiene(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-              <ComprehensiveDataHygieneManager />
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 };

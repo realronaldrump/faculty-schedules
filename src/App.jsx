@@ -14,7 +14,7 @@ import CourseManagement from './components/analytics/CourseManagement';
 // Legacy import removed - using smart import only
 import SmartDataImportPage from './components/SmartDataImportPage';
 import SystemsPage from './components/SystemsPage';
-import ComprehensiveDataHygieneManager from './components/ComprehensiveDataHygieneManager';
+import DataHygieneManager from './components/DataHygieneManager';
 
 import EmailLists from './components/EmailLists';
 import BuildingDirectory from './components/BuildingDirectory';
@@ -927,7 +927,7 @@ function App() {
           }}
         />;
       case 'administration/data-hygiene':
-        return <ComprehensiveDataHygieneManager />;
+        return <DataHygieneManager />;
       case 'administration/baylor-systems':
         return <SystemsPage onNavigate={setCurrentPage} />;
       default:

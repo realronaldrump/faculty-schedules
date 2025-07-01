@@ -5,90 +5,67 @@
 
 import { collection, addDoc, getDocs, query, where, doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
+import { standardizePerson, standardizeSchedule, validateAndCleanBeforeSave } from './dataHygiene';
 
 // ==================== CORE DATA MODELS ====================
 
 /**
  * Unified Person Model (Single Source of Truth)
  */
-export const createPersonModel = ({
-  firstName = '',
-  lastName = '',
-  title = '',
-  email = '',
-  phone = '',
-  jobTitle = '',
-  department = '',
-  office = '',
-  roles = [],
-  isAdjunct = false,
-  isFullTime = true,
-  isTenured = false,
-  isUPD = false,
-  programOverride = '',
-  updProgram = '',
-  hasNoPhone = false,
-  hasNoOffice = false,
-  createdAt = new Date().toISOString(),
-  updatedAt = new Date().toISOString()
-}) => ({
-  firstName: firstName.trim(),
-  lastName: lastName.trim(),
-  title: title.trim(),
-  email: email.toLowerCase().trim(),
-  phone: hasNoPhone ? '' : phone.replace(/\D/g, ''),
-  jobTitle: jobTitle.trim(),
-  department: department.trim(),
-  office: hasNoOffice ? '' : office.trim(),
-  roles: Array.isArray(roles) ? roles : [],
-  isAdjunct,
-  isFullTime,
-  isTenured: roles.includes('faculty') ? isTenured : false, // Only faculty can be tenured
-  isUPD: roles.includes('faculty') ? isUPD : false, // Only faculty can be UPD
-  programOverride: programOverride.trim(), // Manual program assignment
-  updProgram: updProgram.trim(), // Which program they're UPD for
-  hasNoPhone,
-  hasNoOffice,
-  createdAt,
-  updatedAt
-});
+export const createPersonModel = (rawData) => {
+  // Create basic person model
+  const person = {
+    firstName: (rawData.firstName || '').trim(),
+    lastName: (rawData.lastName || '').trim(),
+    title: (rawData.title || '').trim(),
+    email: (rawData.email || '').toLowerCase().trim(),
+    phone: rawData.hasNoPhone ? '' : (rawData.phone || '').replace(/\D/g, ''),
+    jobTitle: (rawData.jobTitle || '').trim(),
+    department: (rawData.department || '').trim(),
+    office: rawData.hasNoOffice ? '' : (rawData.office || '').trim(),
+    roles: Array.isArray(rawData.roles) ? rawData.roles : [],
+    isAdjunct: rawData.isAdjunct || false,
+    isFullTime: rawData.isFullTime !== undefined ? rawData.isFullTime : true,
+    isTenured: rawData.roles?.includes('faculty') ? (rawData.isTenured || false) : false,
+    isUPD: rawData.roles?.includes('faculty') ? (rawData.isUPD || false) : false,
+    programOverride: (rawData.programOverride || '').trim(),
+    updProgram: (rawData.updProgram || '').trim(),
+    hasNoPhone: rawData.hasNoPhone || false,
+    hasNoOffice: rawData.hasNoOffice || false,
+    createdAt: rawData.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  
+  // Apply data hygiene standardization
+  return standardizePerson(person);
+};
 
 /**
  * Schedule Model with ID-based references
  */
-export const createScheduleModel = ({
-  instructorId = '',
-  instructorName = '', // Keep for display/backup
-  courseCode = '',
-  courseTitle = '',
-  section = '',
-  meetingPatterns = [],
-  roomId = null,
-  roomName = '',
-  term = '',
-  academicYear = '',
-  credits = 0,
-  scheduleType = 'Class Instruction',
-  status = 'Active',
-  createdAt = new Date().toISOString(),
-  updatedAt = new Date().toISOString()
-}) => ({
-  instructorId,
-  instructorName,
-  courseCode: courseCode.trim(),
-  courseTitle: courseTitle.trim(),
-  section: section.trim(),
-  meetingPatterns: Array.isArray(meetingPatterns) ? meetingPatterns : [],
-  roomId,
-  roomName: roomName.trim(),
-  term: term.trim(),
-  academicYear: academicYear.trim(),
-  credits: parseInt(credits) || 0,
-  scheduleType: scheduleType.trim(),
-  status: status.trim(),
-  createdAt,
-  updatedAt
-});
+export const createScheduleModel = (rawData) => {
+  // Create basic schedule model
+  const schedule = {
+    instructorId: rawData.instructorId || '',
+    instructorName: (rawData.instructorName || '').trim(),
+    courseCode: (rawData.courseCode || '').trim(),
+    courseTitle: (rawData.courseTitle || '').trim(),
+    section: (rawData.section || '').trim(),
+    meetingPatterns: Array.isArray(rawData.meetingPatterns) ? rawData.meetingPatterns : [],
+    roomId: rawData.roomId || null,
+    roomName: (rawData.roomName || '').trim(),
+    term: (rawData.term || '').trim(),
+    academicYear: (rawData.academicYear || '').trim(),
+    credits: parseInt(rawData.credits) || 0,
+    scheduleType: (rawData.scheduleType || 'Class Instruction').trim(),
+    status: (rawData.status || 'Active').trim(),
+    createdAt: rawData.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  
+  // Apply data hygiene standardization
+  return standardizeSchedule(schedule);
+};
 
 /**
  * Meeting Pattern Model
@@ -795,20 +772,46 @@ export const processScheduleImport = async (csvData) => {
 const findBestInstructorMatch = async (instructorInfo, existingPeople) => {
   const { firstName, lastName, title } = instructorInfo;
   
-  // Strategy 1: Exact first + last name match (highest confidence)
-  if (firstName && lastName) {
-    const exactMatch = existingPeople.find(p => 
-      p.firstName && p.lastName &&
-      p.firstName.toLowerCase() === firstName.toLowerCase() &&
-      p.lastName.toLowerCase() === lastName.toLowerCase()
-    );
+  // Normalize names for comparison (remove middle initials, common variations)
+  const normalizeNameForMatching = (name) => {
+    if (!name) return '';
+    return name.toLowerCase()
+      .replace(/\b[a-z]\.\s*/g, '') // Remove middle initials like "A.", "B."
+      .replace(/\s+/g, ' ') // Normalize spaces
+      .trim();
+  };
+  
+  const normalizedFirstName = normalizeNameForMatching(firstName);
+  const normalizedLastName = normalizeNameForMatching(lastName);
+  
+  // Strategy 1: Exact normalized name match (highest confidence)
+  if (normalizedFirstName && normalizedLastName) {
+    const exactMatch = existingPeople.find(p => {
+      const existingFirst = normalizeNameForMatching(p.firstName);
+      const existingLast = normalizeNameForMatching(p.lastName);
+      return existingFirst === normalizedFirstName && existingLast === normalizedLastName;
+    });
+    
     if (exactMatch) {
-      console.log(`🎯 Exact name match: ${firstName} ${lastName} → ${exactMatch.id}`);
+      console.log(`🎯 Normalized exact match: "${firstName} ${lastName}" → "${exactMatch.firstName} ${exactMatch.lastName}" (${exactMatch.id})`);
       return { person: exactMatch, confidence: 'high' };
     }
   }
   
-  // Strategy 2: Last name + first initial match (medium confidence)
+  // Strategy 2: Original exact match (for perfect matches)
+  if (firstName && lastName) {
+    const perfectMatch = existingPeople.find(p => 
+      p.firstName && p.lastName &&
+      p.firstName.toLowerCase() === firstName.toLowerCase() &&
+      p.lastName.toLowerCase() === lastName.toLowerCase()
+    );
+    if (perfectMatch) {
+      console.log(`✨ Perfect exact match: ${firstName} ${lastName} → ${perfectMatch.id}`);
+      return { person: perfectMatch, confidence: 'high' };
+    }
+  }
+  
+  // Strategy 3: Last name + first initial match (medium confidence)
   if (firstName && lastName) {
     const firstInitial = firstName.charAt(0).toLowerCase();
     const initialMatch = existingPeople.find(p => 
@@ -822,24 +825,48 @@ const findBestInstructorMatch = async (instructorInfo, existingPeople) => {
     }
   }
   
-  // Strategy 3: Similar name match with title consideration
+  // Strategy 4: Fuzzy name similarity (for cases like "Bob" vs "Robert")
+  if (normalizedFirstName && normalizedLastName) {
+    const fuzzyMatches = existingPeople.filter(p => {
+      if (!p.firstName || !p.lastName) return false;
+      
+      const existingFirst = normalizeNameForMatching(p.firstName);
+      const existingLast = normalizeNameForMatching(p.lastName);
+      
+      // Must have exact last name match
+      if (existingLast !== normalizedLastName) return false;
+      
+      // Check for common first name variations
+      const firstNameSimilarity = calculateNameSimilarity(normalizedFirstName, existingFirst);
+      return firstNameSimilarity >= 0.8; // 80% similarity threshold
+    });
+    
+    if (fuzzyMatches.length === 1) {
+      const match = fuzzyMatches[0];
+      console.log(`🔍 Fuzzy match: "${firstName} ${lastName}" → "${match.firstName} ${match.lastName}" (${match.id})`);
+      return { person: match, confidence: 'medium' };
+    }
+  }
+  
+  // Strategy 5: Unique last name match (for cases where last name is uncommon)
   if (lastName) {
-    const similarMatches = existingPeople.filter(p => 
+    const lastNameMatches = existingPeople.filter(p => 
       p.lastName && p.lastName.toLowerCase() === lastName.toLowerCase()
     );
     
-    if (similarMatches.length === 1) {
-      console.log(`👤 Unique last name match: ${lastName} → ${similarMatches[0].firstName} ${similarMatches[0].lastName}`);
-      return { person: similarMatches[0], confidence: 'medium' };
+    if (lastNameMatches.length === 1) {
+      const match = lastNameMatches[0];
+      console.log(`👤 Unique last name match: ${lastName} → ${match.firstName} ${match.lastName} (${match.id})`);
+      return { person: match, confidence: 'medium' };
     }
     
     // If multiple matches, try to disambiguate with title
-    if (title && similarMatches.length > 1) {
-      const titleMatch = similarMatches.find(p => 
+    if (title && lastNameMatches.length > 1) {
+      const titleMatch = lastNameMatches.find(p => 
         p.title && p.title.toLowerCase().includes(title.toLowerCase())
       );
       if (titleMatch) {
-        console.log(`🎓 Title-disambiguated match: ${title} ${lastName} → ${titleMatch.firstName} ${titleMatch.lastName}`);
+        console.log(`🎓 Title-disambiguated match: ${title} ${lastName} → ${titleMatch.firstName} ${titleMatch.lastName} (${titleMatch.id})`);
         return { person: titleMatch, confidence: 'medium' };
       }
     }
@@ -847,6 +874,86 @@ const findBestInstructorMatch = async (instructorInfo, existingPeople) => {
   
   console.log(`❓ No match found for: ${firstName} ${lastName}`);
   return null;
+};
+
+/**
+ * Calculate similarity between two name strings
+ * Returns a value between 0 and 1 (1 = identical)
+ */
+const calculateNameSimilarity = (name1, name2) => {
+  if (!name1 || !name2) return 0;
+  
+  const n1 = name1.toLowerCase().trim();
+  const n2 = name2.toLowerCase().trim();
+  
+  // Exact match
+  if (n1 === n2) return 1;
+  
+  // Check for common nickname mappings
+  const nicknames = {
+    'bob': 'robert',
+    'bobby': 'robert',
+    'rob': 'robert',
+    'robbie': 'robert',
+    'bill': 'william', 
+    'billy': 'william',
+    'will': 'william',
+    'willie': 'william',
+    'jim': 'james',
+    'jimmy': 'james',
+    'jamie': 'james',
+    'mike': 'michael',
+    'mickey': 'michael',
+    'mick': 'michael',
+    'dave': 'david',
+    'davey': 'david',
+    'steve': 'steven',
+    'stevie': 'steven',
+    'chris': 'christopher',
+    'matt': 'matthew',
+    'dan': 'daniel',
+    'danny': 'daniel',
+    'tom': 'thomas',
+    'tommy': 'thomas',
+    'joe': 'joseph',
+    'joey': 'joseph',
+    'tony': 'anthony',
+    'liz': 'elizabeth',
+    'beth': 'elizabeth',
+    'betty': 'elizabeth',
+    'sue': 'susan',
+    'susie': 'susan',
+    'katie': 'katherine',
+    'kate': 'katherine',
+    'kathy': 'katherine',
+    'patty': 'patricia',
+    'pat': 'patricia',
+    'trish': 'patricia',
+    'nick': 'nicholas',
+    'andy': 'andrew',
+    'alex': 'alexander'
+  };
+  
+  // Check both directions of nickname mapping
+  if (nicknames[n1] === n2 || nicknames[n2] === n1) return 0.9;
+  if (Object.values(nicknames).includes(n1) && nicknames[n2] === n1) return 0.9;
+  if (Object.values(nicknames).includes(n2) && nicknames[n1] === n2) return 0.9;
+  
+  // Check if one name starts with the other (e.g., "Ben" vs "Benjamin")
+  if (n1.startsWith(n2) || n2.startsWith(n1)) {
+    const minLength = Math.min(n1.length, n2.length);
+    const maxLength = Math.max(n1.length, n2.length);
+    return minLength / maxLength;
+  }
+  
+  // Simple character similarity (Levenshtein-like)
+  const maxLen = Math.max(n1.length, n2.length);
+  let matches = 0;
+  for (let i = 0; i < Math.min(n1.length, n2.length); i++) {
+    if (n1[i] === n2[i]) matches++;
+  }
+  
+  return matches / maxLen;
 };
 
 /**

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Menu, X } from 'lucide-react';
 
-const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggleCollapse }) => {
+const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggleCollapse, selectedSemester }) => {
   const [expandedSections, setExpandedSections] = useState(['scheduling', 'analytics']); // Default expanded sections
 
   const toggleSection = (sectionId) => {
@@ -33,7 +33,7 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
               </div>
               <div>
                 <h1 className="text-lg font-bold text-baylor-green">HSD Dashboard</h1>
-                <p className="text-xs text-gray-500">Fall 2025</p>
+                <p className="text-xs text-gray-500">{selectedSemester || 'Fall 2025'}</p>
               </div>
             </div>
           )}

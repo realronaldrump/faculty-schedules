@@ -888,6 +888,18 @@ export const parseCLSSCSV = (csvText) => {
   const lines = csvText.split('\n');
   let headerRowIndex = -1;
   let scheduleData = [];
+  let detectedSemester = null;
+  
+  // Extract semester from the first line (e.g., "Fall 2025")
+  if (lines.length > 0) {
+    const firstLine = lines[0].trim().replace(/"/g, '');
+    // Check if first line looks like a semester (e.g., "Fall 2025", "Spring 2024")
+    const semesterPattern = /^(Fall|Spring|Summer|Winter)\s+\d{4}$/i;
+    if (semesterPattern.test(firstLine)) {
+      detectedSemester = firstLine;
+      console.log('🎓 Detected semester from first line:', detectedSemester);
+    }
+  }
   
   // Find the actual header row (contains column definitions)
   for (let i = 0; i < lines.length; i++) {
@@ -930,6 +942,11 @@ export const parseCLSSCSV = (csvText) => {
       rowData[header] = (values[index] || '').replace(/"/g, '').trim();
     });
     
+    // Add the detected semester to each row if we found one
+    if (detectedSemester) {
+      rowData['Term'] = detectedSemester;
+    }
+    
     // Only include rows that have meaningful schedule data
     if (isValidScheduleRow(rowData)) {
       scheduleData.push(rowData);
@@ -937,6 +954,7 @@ export const parseCLSSCSV = (csvText) => {
   }
   
   console.log('✅ CLSS CSV parsing complete. Found', scheduleData.length, 'schedule records');
+  console.log('🎓 All records tagged with semester:', detectedSemester);
   return scheduleData;
 };
 

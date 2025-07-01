@@ -14,7 +14,7 @@ import {
   Settings
 } from 'lucide-react';
 
-const Dashboard = ({ analytics, editHistory, onNavigate }) => {
+const Dashboard = ({ analytics, editHistory, onNavigate, selectedSemester }) => {
 
   // Metrics are now derived from the centralized 'analytics' prop
   const metrics = useMemo(() => {
@@ -136,7 +136,7 @@ const Dashboard = ({ analytics, editHistory, onNavigate }) => {
         <p className="text-baylor-gold text-lg">A central dashboard for managing faculty schedules and resources and various other HSD Admin tasks</p>
         <div className="flex items-center mt-4 text-baylor-gold/80">
           <Calendar className="w-5 h-5 mr-2" />
-          <span>Fall 2025 Semester</span>
+          <span>{selectedSemester || 'Fall 2025'} Semester</span>
         </div>
       </div>
 

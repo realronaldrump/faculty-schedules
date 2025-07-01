@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Upload, FileText, Users, Calendar, AlertCircle, CheckCircle, X, RotateCcw, Database, Trash2, UserCheck, UserX, Phone, PhoneOff, Building, BuildingIcon } from 'lucide-react';
+import { ArrowLeft, Upload, FileText, Users, Calendar, AlertCircle, CheckCircle, X, RotateCcw, Database, Trash2, UserCheck, UserX, Phone, PhoneOff, Building, BuildingIcon, History, Eye } from 'lucide-react';
 import { processDirectoryImport, processScheduleImport, cleanDirectoryData, determineRoles, createPersonModel, findMatchingPerson, parseCLSSCSV } from '../utils/dataImportUtils';
+import { previewImportChanges, commitTransaction } from '../utils/importTransactionUtils';
+import ImportPreviewModal from './ImportPreviewModal';
+import ImportHistoryModal from './ImportHistoryModal';
 import { collection, getDocs, doc, updateDoc, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
-const SmartDataImportPage = ({ onNavigate, showNotification }) => {
+const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, availableSemesters, onSemesterDataImported }) => {
   const [csvData, setCsvData] = useState(null);
   const [fileName, setFileName] = useState('');
   const [importType, setImportType] = useState('directory');
@@ -14,6 +17,44 @@ const SmartDataImportPage = ({ onNavigate, showNotification }) => {
   const [showRoleAssignment, setShowRoleAssignment] = useState(false);
   const [processedPeople, setProcessedPeople] = useState([]);
   const [nameSort, setNameSort] = useState('firstName'); // 'firstName' or 'lastName'
+  const [semesterWarning, setSemesterWarning] = useState(null);
+  
+  // New preview and rollback states
+  const [previewTransaction, setPreviewTransaction] = useState(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [isCommitting, setIsCommitting] = useState(false);
+
+  // Check for semester mismatches in schedule data
+  const checkSemesterMismatch = (data) => {
+    if (!data || !Array.isArray(data) || data.length === 0) return null;
+    
+    // Extract terms from the data
+    const detectedTerms = new Set();
+    data.forEach(row => {
+      if (row.Term && row.Term.trim()) {
+        detectedTerms.add(row.Term.trim());
+      }
+    });
+    
+    const detectedTermsList = Array.from(detectedTerms);
+    
+    if (detectedTermsList.length === 0) return null;
+    
+    // Check if any detected terms don't match the selected semester
+    const mismatchedTerms = detectedTermsList.filter(term => term !== selectedSemester);
+    
+    if (mismatchedTerms.length > 0) {
+      return {
+        detectedTerms: detectedTermsList,
+        selectedSemester: selectedSemester,
+        mismatchedTerms: mismatchedTerms,
+        isNewSemester: detectedTermsList.every(term => !availableSemesters.includes(term))
+      };
+    }
+    
+    return null;
+  };
 
   const handleFileChange = (event) => {
     const file = event.target.files[0];
@@ -35,6 +76,10 @@ const SmartDataImportPage = ({ onNavigate, showNotification }) => {
             console.log('✅ CLSS parsing complete:', clssData.length, 'records');
             setCsvData(clssData);
             setPreviewData(clssData.slice(0, 5));
+            
+            // Check for semester mismatches
+            const semesterMismatch = checkSemesterMismatch(clssData);
+            setSemesterWarning(semesterMismatch);
             
             // Auto-select schedule import type for CLSS data
             setImportType('schedule');
@@ -142,7 +187,21 @@ const SmartDataImportPage = ({ onNavigate, showNotification }) => {
     setIsLoading(true);
 
     try {
-      if (importType === 'directory') {
+      if (importType === 'schedule') {
+        // For schedule imports, extract the semester from the CSV data itself
+        let csvSemester = selectedSemester; // fallback to selected semester
+        
+        // Try to get semester from the first row of CSV data
+        if (csvData.length > 0 && csvData[0].Term) {
+          csvSemester = csvData[0].Term;
+          console.log('🎓 Using semester from CSV data:', csvSemester);
+        }
+        
+        // For schedule imports, use the new preview system
+        const transaction = await previewImportChanges(csvData, importType, csvSemester);
+        setPreviewTransaction(transaction);
+        setShowPreviewModal(true);
+      } else if (importType === 'directory') {
         // Process and prepare data for role assignment
         const { cleanedData, issues } = cleanDirectoryData(csvData);
         
@@ -220,6 +279,11 @@ const SmartDataImportPage = ({ onNavigate, showNotification }) => {
         // For schedules, import directly
         const results = await processScheduleImport(csvData);
         setImportResults(results);
+        
+        // If we imported new semester data, notify parent to refresh
+        if (onSemesterDataImported && results.created > 0) {
+          onSemesterDataImported();
+        }
         
         if (showNotification) {
           if (results.errors.length > 0) {
@@ -426,6 +490,59 @@ const SmartDataImportPage = ({ onNavigate, showNotification }) => {
     setShowRoleAssignment(false);
     setProcessedPeople([]);
     setNameSort('firstName');
+    setSemesterWarning(null);
+    setPreviewTransaction(null);
+    setShowPreviewModal(false);
+  };
+
+  // Handle committing the preview transaction
+  const handleCommitTransaction = async (transactionId, selectedChanges = null) => {
+    setIsCommitting(true);
+    
+    try {
+      const result = await commitTransaction(transactionId, selectedChanges);
+      
+      // Close the preview modal
+      setShowPreviewModal(false);
+      setPreviewTransaction(null);
+      
+      // Show success notification
+      if (showNotification) {
+        const stats = result.getSummary().stats;
+        const totalChanges = stats.totalChanges;
+        showNotification('success', `Successfully imported ${totalChanges} changes`);
+      }
+      
+      // If we imported new semester data, notify parent to refresh
+      if (onSemesterDataImported && result.getSummary().stats.schedulesAdded > 0) {
+        console.log('🔄 Notifying parent of new semester data:', result.getSummary().semester);
+        onSemesterDataImported();
+      }
+      
+      // Refresh the data display
+      handleDataRefresh();
+      
+    } catch (error) {
+      console.error('Error committing transaction:', error);
+      if (showNotification) {
+        showNotification('error', 'Import failed: ' + error.message);
+      }
+    }
+    
+    setIsCommitting(false);
+  };
+
+  // Handle canceling the preview
+  const handleCancelPreview = () => {
+    setShowPreviewModal(false);
+    setPreviewTransaction(null);
+  };
+
+  // Handle data refresh after rollback
+  const handleDataRefresh = () => {
+    if (onSemesterDataImported) {
+      onSemesterDataImported();
+    }
   };
 
   return (
@@ -442,12 +559,21 @@ const SmartDataImportPage = ({ onNavigate, showNotification }) => {
           </button>
           <div>
             <h1 className="text-2xl font-serif font-bold text-baylor-green">Data Import</h1>
-            <p className="text-gray-600">Normalized data model with intelligent processing & individual role assignment</p>
+            <p className="text-gray-600">Preview changes, selective import, and complete rollback capabilities</p>
           </div>
         </div>
-        <div className="flex items-center space-x-2 px-4 py-2 bg-green-50 rounded-lg">
-          <Database className="w-5 h-5 text-green-600" />
-          <span className="text-sm text-green-800 font-medium">Unified People Collection</span>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={() => setShowHistoryModal(true)}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            <History className="w-4 h-4" />
+            <span className="text-sm font-medium">Import History</span>
+          </button>
+          <div className="flex items-center space-x-2 px-4 py-2 bg-green-50 rounded-lg">
+            <Database className="w-5 h-5 text-green-600" />
+            <span className="text-sm text-green-800 font-medium">Unified People Collection</span>
+          </div>
         </div>
       </div>
 
@@ -457,18 +583,22 @@ const SmartDataImportPage = ({ onNavigate, showNotification }) => {
           <CheckCircle className="w-5 h-5 mr-2" />
           Smart Import Benefits
         </h2>
-        <div className="grid md:grid-cols-3 gap-4 text-sm">
+        <div className="grid md:grid-cols-4 gap-4 text-sm">
           <div>
-            <h3 className="font-medium text-blue-800 mb-2">🎯 Single Source of Truth</h3>
-            <p className="text-blue-700">Unified `people` collection eliminates faculty/staff duplication</p>
+            <h3 className="font-medium text-blue-800 mb-2">🔍 Preview First</h3>
+            <p className="text-blue-700">Review all changes before applying to database</p>
           </div>
           <div>
-            <h3 className="font-medium text-blue-800 mb-2">🔗 ID-Based References</h3>
-            <p className="text-blue-700">Schedules reference people by stable IDs, not mutable names</p>
+            <h3 className="font-medium text-blue-800 mb-2">✅ Selective Import</h3>
+            <p className="text-blue-700">Choose exactly which changes to apply</p>
           </div>
           <div>
-            <h3 className="font-medium text-blue-800 mb-2">🧠 Intelligent Matching</h3>
-            <p className="text-blue-700">Smart algorithms prevent duplicates and merge data</p>
+            <h3 className="font-medium text-blue-800 mb-2">🔄 Complete Rollback</h3>
+            <p className="text-blue-700">Undo entire imports as if they never happened</p>
+          </div>
+          <div>
+            <h3 className="font-medium text-blue-800 mb-2">🎯 Zero Data Loss</h3>
+            <p className="text-blue-700">Safe imports with full transaction history</p>
           </div>
         </div>
       </div>
@@ -645,6 +775,51 @@ const SmartDataImportPage = ({ onNavigate, showNotification }) => {
         </div>
       )}
 
+      {/* Semester Warning */}
+      {semesterWarning && (
+        <div className="mb-8">
+          <div className={`p-4 rounded-lg border-l-4 ${
+            semesterWarning.isNewSemester 
+              ? 'bg-blue-50 border-blue-400' 
+              : 'bg-yellow-50 border-yellow-400'
+          }`}>
+            <div className="flex items-start">
+              <div className={`flex-shrink-0 w-5 h-5 mt-0.5 ${
+                semesterWarning.isNewSemester ? 'text-blue-400' : 'text-yellow-400'
+              }`}>
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div className="ml-3">
+                <h3 className={`text-sm font-medium ${
+                  semesterWarning.isNewSemester ? 'text-blue-800' : 'text-yellow-800'
+                }`}>
+                  {semesterWarning.isNewSemester ? 'New Semester Detected' : 'Semester Mismatch Warning'}
+                </h3>
+                <div className={`mt-2 text-sm ${
+                  semesterWarning.isNewSemester ? 'text-blue-700' : 'text-yellow-700'
+                }`}>
+                  {semesterWarning.isNewSemester ? (
+                    <div>
+                      <p>This data contains a new semester: <strong>{semesterWarning.detectedTerms.join(', ')}</strong></p>
+                      <p className="mt-1">After importing, you'll be able to switch between semesters using the semester selector in the header.</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p>
+                        You're currently viewing <strong>{semesterWarning.selectedSemester}</strong>, but this data contains: <strong>{semesterWarning.mismatchedTerms.join(', ')}</strong>
+                      </p>
+                      <p className="mt-1">
+                        After importing, make sure to switch to the correct semester using the selector in the header to view this data.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Import Actions */}
       {csvData && validateImportType() && (
         <div className="mb-8">
@@ -662,8 +837,8 @@ const SmartDataImportPage = ({ onNavigate, showNotification }) => {
                 </>
               ) : (
                 <>
-                  <Upload className="mr-2" size={18} />
-                  {importType === 'directory' ? 'Review & Assign Roles' : 'Import'} ({csvData.length} records)
+                  {importType === 'schedule' ? <Eye className="mr-2" size={18} /> : <Upload className="mr-2" size={18} />}
+                  {importType === 'directory' ? 'Review & Assign Roles' : 'Preview Changes'} ({csvData.length} records)
                 </>
               )}
             </button>
@@ -1037,6 +1212,26 @@ const SmartDataImportPage = ({ onNavigate, showNotification }) => {
           </div>
         </div>
       </div>
+
+      {/* Import Preview Modal */}
+      {showPreviewModal && previewTransaction && (
+        <ImportPreviewModal
+          transaction={previewTransaction}
+          onClose={handleCancelPreview}
+          onCommit={handleCommitTransaction}
+          onCancel={handleCancelPreview}
+          isCommitting={isCommitting}
+        />
+      )}
+
+      {/* Import History Modal */}
+      {showHistoryModal && (
+        <ImportHistoryModal
+          onClose={() => setShowHistoryModal(false)}
+          showNotification={showNotification}
+          onDataRefresh={handleDataRefresh}
+        />
+      )}
     </div>
   );
 };

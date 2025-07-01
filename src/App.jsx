@@ -19,7 +19,7 @@ import EmailLists from './components/EmailLists';
 import BuildingDirectory from './components/BuildingDirectory';
 import Login from './components/Login';
 import Notification from './components/Notification';
-import { Home, Calendar, Users, BarChart3, Settings, Bell, Search, User } from 'lucide-react';
+import { Home, Calendar, Users, BarChart3, Settings, Bell, Search, User, ChevronDown } from 'lucide-react';
 import { db } from './firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
 import { adaptPeopleToFaculty, adaptPeopleToStaff } from './utils/dataAdapter';
@@ -30,6 +30,11 @@ function App() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+  // Semester Selection State
+  const [selectedSemester, setSelectedSemester] = useState('Fall 2025');
+  const [availableSemesters, setAvailableSemesters] = useState(['Fall 2025']);
+  const [showSemesterDropdown, setShowSemesterDropdown] = useState(false);
   
   // Raw data from Firebase
   const [rawScheduleData, setRawScheduleData] = useState([]);
@@ -58,6 +63,46 @@ function App() {
   const hideNotification = () => {
     setNotification(prev => ({ ...prev, show: false }));
   };
+
+  // Extract available semesters from schedule data
+  const updateAvailableSemesters = (scheduleData) => {
+    const semesters = new Set();
+    scheduleData.forEach(schedule => {
+      if (schedule.term && schedule.term.trim()) {
+        semesters.add(schedule.term.trim());
+      }
+    });
+    
+    const semesterList = Array.from(semesters).sort((a, b) => {
+      // Custom sort to put most recent semester first
+      // Assumes format like "Fall 2025", "Spring 2026", etc.
+      const [aTermType, aYear] = a.split(' ');
+      const [bTermType, bYear] = b.split(' ');
+      
+      if (aYear !== bYear) {
+        return parseInt(bYear) - parseInt(aYear); // Newer years first
+      }
+      
+      // For same year, order: Fall > Summer > Spring
+      const termOrder = { 'Fall': 3, 'Summer': 2, 'Spring': 1 };
+      return (termOrder[bTermType] || 0) - (termOrder[aTermType] || 0);
+    });
+    
+    setAvailableSemesters(semesterList.length > 0 ? semesterList : ['Fall 2025']);
+    
+    // Auto-select the first (most recent) semester if current selection isn't available
+    if (semesterList.length > 0 && !semesterList.includes(selectedSemester)) {
+      setSelectedSemester(semesterList[0]);
+    }
+  };
+
+  // Filter schedule data by selected semester
+  const semesterFilteredScheduleData = useMemo(() => {
+    return rawScheduleData.filter(schedule => 
+      schedule.term === selectedSemester || 
+      (!schedule.term && selectedSemester === 'Fall 2025') // Fallback for legacy data
+    );
+  }, [rawScheduleData, selectedSemester]);
 
   // Navigation structure
   const navigationItems = [
@@ -113,12 +158,12 @@ function App() {
 
   // Adapt relational data to flat structure for component compatibility
   const scheduleData = useMemo(() => {
-    if (!rawScheduleData || rawScheduleData.length === 0) return [];
+    if (!semesterFilteredScheduleData || semesterFilteredScheduleData.length === 0) return [];
     
     // Convert normalized relational data to flat structure
     const flattenedData = [];
     
-    rawScheduleData.forEach(schedule => {
+    semesterFilteredScheduleData.forEach(schedule => {
       // Skip invalid schedules
       if (!schedule || !schedule.id) {
         console.warn('⚠️ Skipping invalid schedule:', schedule);
@@ -195,7 +240,7 @@ function App() {
       }
     });
     
-    console.log(`📊 Converted ${rawScheduleData.length} schedules to ${flattenedData.length} flattened records`);
+    console.log(`📊 Converted ${semesterFilteredScheduleData.length} schedules to ${flattenedData.length} flattened records`);
     
     // Debug: Show sample flattened record
     if (flattenedData.length > 0) {
@@ -203,7 +248,7 @@ function App() {
     }
     
     return flattenedData;
-  }, [rawScheduleData]);
+  }, [semesterFilteredScheduleData]);
 
   // Directory data from normalized people collection
   const { facultyDirectoryData, staffDirectoryData } = useMemo(() => {
@@ -368,6 +413,18 @@ function App() {
     };
 }, [scheduleData, facultyDirectoryData]);
 
+  // Close semester dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showSemesterDropdown && !event.target.closest('.semester-dropdown-container')) {
+        setShowSemesterDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSemesterDropdown]);
+
   // Load normalized relational data
   useEffect(() => {
     const loadData = async () => {
@@ -384,6 +441,9 @@ function App() {
         setRawScheduleData(relationalData.schedules); // Schedules with populated instructor/room data
         setRawPeople(relationalData.people);
         setEditHistory(history);
+        
+        // Update available semesters based on loaded schedule data
+        updateAvailableSemesters(relationalData.schedules);
         
         console.log(`✅ Loaded ${relationalData.schedules.length} schedules with relational data`);
         console.log(`📋 People linked: ${relationalData.schedules.filter(s => s.instructor).length} schedules have instructor data`);
@@ -742,7 +802,9 @@ function App() {
       loading,
       onNavigate: setCurrentPage,
       analytics: departmentAnalytics,
-      showNotification
+      showNotification,
+      selectedSemester,
+      availableSemesters
     };
 
     switch(currentPage) {
@@ -803,7 +865,26 @@ function App() {
       case 'analytics/course-management':
         return <CourseManagement {...commonProps} />;
       case 'administration/smart-import':
-        return <SmartDataImportPage onNavigate={setCurrentPage} showNotification={showNotification} />;
+        return <SmartDataImportPage 
+          onNavigate={setCurrentPage} 
+          showNotification={showNotification}
+          selectedSemester={selectedSemester}
+          availableSemesters={availableSemesters}
+          onSemesterDataImported={() => {
+            // Refresh data after import to update available semesters
+            const loadData = async () => {
+              try {
+                const relationalData = await fetchSchedulesWithRelationalData();
+                setRawScheduleData(relationalData.schedules);
+                setRawPeople(relationalData.people);
+                updateAvailableSemesters(relationalData.schedules);
+              } catch (error) {
+                console.error('Error refreshing data after import:', error);
+              }
+            };
+            loadData();
+          }}
+        />;
       case 'administration/baylor-systems':
         return <SystemsPage onNavigate={setCurrentPage} />;
       default:
@@ -823,6 +904,7 @@ function App() {
         onNavigate={setCurrentPage}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        selectedSemester={selectedSemester}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
@@ -837,6 +919,47 @@ function App() {
                 </React.Fragment>
               ))}
             </div>
+            
+            {/* Semester Selector */}
+            <div className="flex items-center space-x-4">
+              <div className="relative semester-dropdown-container">
+                <button
+                  onClick={() => setShowSemesterDropdown(!showSemesterDropdown)}
+                  className="flex items-center space-x-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors font-medium"
+                >
+                  <Calendar className="w-4 h-4" />
+                  <span>{selectedSemester}</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${showSemesterDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {showSemesterDropdown && (
+                  <div className="absolute top-full left-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                    <div className="py-2">
+                      <div className="px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide border-b border-gray-100">
+                        Available Semesters
+                      </div>
+                      {availableSemesters.map((semester) => (
+                        <button
+                          key={semester}
+                          onClick={() => {
+                            setSelectedSemester(semester);
+                            setShowSemesterDropdown(false);
+                          }}
+                          className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${
+                            semester === selectedSemester 
+                              ? 'bg-baylor-green/10 text-baylor-green font-medium' 
+                              : 'text-gray-700'
+                          }`}
+                        >
+                          {semester}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            
             <div className="flex items-center space-x-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />

@@ -25,11 +25,16 @@ const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
     loadTransactions();
   }, []);
 
-  const loadTransactions = () => {
-    const allTransactions = getImportTransactions();
-    // Sort by timestamp, most recent first
-    const sorted = allTransactions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    setTransactions(sorted);
+  const loadTransactions = async () => {
+    try {
+      const allTransactions = await getImportTransactions();
+      // Sort by timestamp, most recent first
+      const sorted = allTransactions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      setTransactions(sorted);
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+      setTransactions([]);
+    }
   };
 
   const handleRollback = async (transactionId) => {
@@ -37,7 +42,7 @@ const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
     try {
       await rollbackTransaction(transactionId);
       showNotification('success', 'Import Rolled Back', 'All changes have been successfully reversed');
-      loadTransactions();
+      await loadTransactions();
       onDataRefresh?.();
       setShowConfirmRollback(null);
     } catch (error) {
@@ -48,10 +53,10 @@ const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
     }
   };
 
-  const handleDeleteTransaction = (transactionId) => {
+  const handleDeleteTransaction = async (transactionId) => {
     try {
-      deleteTransaction(transactionId);
-      loadTransactions();
+      await deleteTransaction(transactionId);
+      await loadTransactions();
       showNotification('success', 'Transaction Deleted', 'Import record has been removed');
     } catch (error) {
       console.error('Error deleting transaction:', error);

@@ -1,4 +1,4 @@
-import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, writeBatch, query, orderBy, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
 // Import transaction model for tracking changes
@@ -35,6 +35,9 @@ export class ImportTransaction {
       roomsAdded: 0,
       peopleModified: 0
     };
+    // Add metadata for database storage
+    this.createdBy = 'system'; // Could be enhanced with user info
+    this.lastModified = new Date().toISOString();
   }
 
   // Add a change to the transaction
@@ -51,6 +54,7 @@ export class ImportTransaction {
 
     this.changes[collection][action === 'add' ? 'added' : action === 'modify' ? 'modified' : 'deleted'].push(change);
     this.updateStats();
+    this.lastModified = new Date().toISOString();
     return change.id;
   }
 
@@ -71,6 +75,7 @@ export class ImportTransaction {
       roomsAdded: this.changes.rooms.added.length,
       peopleModified: this.changes.people.modified.length
     };
+    this.lastModified = new Date().toISOString();
   }
 
   // Get summary of changes
@@ -82,7 +87,9 @@ export class ImportTransaction {
       semester: this.semester,
       timestamp: this.timestamp,
       status: this.status,
-      stats: this.stats
+      stats: this.stats,
+      createdBy: this.createdBy,
+      lastModified: this.lastModified
     };
   }
 
@@ -111,6 +118,29 @@ export class ImportTransaction {
     // Sort chronologically
     return allChanges.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   }
+
+  // Convert to database format
+  toFirestore() {
+    return {
+      id: this.id,
+      type: this.type,
+      description: this.description,
+      semester: this.semester,
+      timestamp: this.timestamp,
+      status: this.status,
+      changes: this.changes,
+      originalData: this.originalData,
+      stats: this.stats,
+      createdBy: this.createdBy,
+      lastModified: this.lastModified
+    };
+  }
+
+  // Create from database format
+  static fromFirestore(data) {
+    const transaction = Object.assign(new ImportTransaction(), data);
+    return transaction;
+  }
 }
 
 // Preview import changes without committing to database
@@ -135,10 +165,8 @@ export const previewImportChanges = async (csvData, importType, selectedSemester
       await previewDirectoryChanges(csvData, transaction, existingPeopleData);
     }
 
-    // Store transaction in localStorage for management
-    const existingTransactions = JSON.parse(localStorage.getItem('importTransactions') || '[]');
-    existingTransactions.push(transaction);
-    localStorage.setItem('importTransactions', JSON.stringify(existingTransactions));
+    // Store transaction in database for cross-browser access
+    await saveTransactionToDatabase(transaction);
 
     return transaction;
   } catch (error) {
@@ -415,7 +443,7 @@ const normalizeTime = (timeStr) => {
 
 // Commit transaction changes to database
 export const commitTransaction = async (transactionId, selectedChanges = null) => {
-  const transactions = getImportTransactions();
+  const transactions = await getImportTransactions();
   const transaction = transactions.find(t => t.id === transactionId);
   
   if (!transaction) {
@@ -514,7 +542,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null) =
     await batch.commit();
     
     transaction.status = 'committed';
-    updateTransactionInStorage(transaction);
+    await updateTransactionInStorage(transaction);
     
     console.log(`✅ Transaction committed with ${changesToApply.length} changes`);
     console.log(`👤 Created ${newPeopleIds.size} new people`);
@@ -529,7 +557,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null) =
 
 // Rollback committed transaction
 export const rollbackTransaction = async (transactionId) => {
-  const transactions = getImportTransactions();
+  const transactions = await getImportTransactions();
   const transaction = transactions.find(t => t.id === transactionId);
   
   if (!transaction) {
@@ -561,7 +589,7 @@ export const rollbackTransaction = async (transactionId) => {
     await batch.commit();
     
     transaction.status = 'rolled_back';
-    updateTransactionInStorage(transaction);
+    await updateTransactionInStorage(transaction);
     
     return transaction;
   } catch (error) {
@@ -570,27 +598,65 @@ export const rollbackTransaction = async (transactionId) => {
   }
 };
 
-// Utility functions
-const updateTransactionInStorage = (updatedTransaction) => {
-  const transactions = JSON.parse(localStorage.getItem('importTransactions') || '[]');
-  const index = transactions.findIndex(t => t.id === updatedTransaction.id);
-  if (index !== -1) {
-    transactions[index] = updatedTransaction;
-    localStorage.setItem('importTransactions', JSON.stringify(transactions));
+// Database-backed utility functions
+
+// Save transaction to database
+const saveTransactionToDatabase = async (transaction) => {
+  try {
+    // Use the transaction's ID as the document ID for consistent access
+    const transactionRef = doc(db, 'importTransactions', transaction.id);
+    const transactionData = transaction.toFirestore();
+    
+    // Use setDoc which can both create and update documents
+    await setDoc(transactionRef, transactionData, { merge: true });
+    console.log(`💾 Saved transaction ${transaction.id} to database`);
+  } catch (error) {
+    console.error('Error saving transaction to database:', error);
+    throw error;
   }
 };
 
-export const getImportTransactions = () => {
-  const transactions = JSON.parse(localStorage.getItem('importTransactions') || '[]');
-  // Reconstruct ImportTransaction objects with methods
-  return transactions.map(transactionData => {
-    const transaction = Object.assign(new ImportTransaction(), transactionData);
-    return transaction;
-  });
+// Update transaction in database
+const updateTransactionInStorage = async (updatedTransaction) => {
+  try {
+    await saveTransactionToDatabase(updatedTransaction);
+  } catch (error) {
+    console.error('Error updating transaction in database:', error);
+    throw error;
+  }
 };
 
-export const deleteTransaction = (transactionId) => {
-  const transactions = JSON.parse(localStorage.getItem('importTransactions') || '[]');
-  const filteredTransactions = transactions.filter(t => t.id !== transactionId);
-  localStorage.setItem('importTransactions', JSON.stringify(filteredTransactions));
+// Get all import transactions from database
+export const getImportTransactions = async () => {
+  try {
+    const transactionsQuery = query(
+      collection(db, 'importTransactions'), 
+      orderBy('timestamp', 'desc')
+    );
+    const snapshot = await getDocs(transactionsQuery);
+    
+    // Reconstruct ImportTransaction objects with methods
+    const transactions = snapshot.docs.map(doc => {
+      const data = { id: doc.id, ...doc.data() };
+      return ImportTransaction.fromFirestore(data);
+    });
+    
+    console.log(`📋 Loaded ${transactions.length} transactions from database`);
+    return transactions;
+  } catch (error) {
+    console.error('Error loading transactions from database:', error);
+    // Fallback to empty array if database read fails
+    return [];
+  }
+};
+
+// Delete transaction from database
+export const deleteTransaction = async (transactionId) => {
+  try {
+    await deleteDoc(doc(db, 'importTransactions', transactionId));
+    console.log(`🗑️ Deleted transaction ${transactionId} from database`);
+  } catch (error) {
+    console.error('Error deleting transaction from database:', error);
+    throw error;
+  }
 }; 

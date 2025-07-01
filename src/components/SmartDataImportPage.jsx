@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Upload, FileText, Users, Calendar, AlertCircle, CheckCircle, X, RotateCcw, Database, Trash2, UserCheck, UserX, Phone, PhoneOff, Building, BuildingIcon, History, Eye } from 'lucide-react';
+import { ArrowLeft, Upload, FileText, Users, Calendar, AlertCircle, CheckCircle, X, RotateCcw, Database, Trash2, UserCheck, UserX, Phone, PhoneOff, Building, BuildingIcon, History, Eye, Shield } from 'lucide-react';
 import { processDirectoryImport, processScheduleImport, cleanDirectoryData, determineRoles, createPersonModel, findMatchingPerson, parseCLSSCSV } from '../utils/dataImportUtils';
 import { previewImportChanges, commitTransaction } from '../utils/importTransactionUtils';
 import ImportPreviewModal from './ImportPreviewModal';
 import ImportHistoryModal from './ImportHistoryModal';
+import DataDeduplicationManager from './DataDeduplicationManager';
+import ComprehensiveDataHygieneManager from './ComprehensiveDataHygieneManager';
 import { collection, getDocs, doc, updateDoc, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -24,6 +26,10 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
+  
+  // Data deduplication states
+  const [showDeduplication, setShowDeduplication] = useState(false);
+  const [deduplicatedData, setDeduplicatedData] = useState(null);
 
   // Check for semester mismatches in schedule data
   const checkSemesterMismatch = (data) => {
@@ -545,6 +551,30 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
     }
   };
 
+  // Handle deduplication processing
+  const handleDataProcessed = (cleanData) => {
+    console.log('✅ Deduplication complete:', cleanData);
+    setDeduplicatedData(cleanData);
+    setShowDeduplication(false);
+    
+    if (showNotification) {
+      const totalEntities = Object.values(cleanData).reduce((sum, arr) => sum + arr.length, 0);
+      showNotification('success', `Data deduplication complete! Processed ${totalEntities} entities.`);
+    }
+  };
+
+  const startDeduplication = () => {
+    if (!csvData || csvData.length === 0) {
+      alert('Please upload and process CLSS export data first');
+      return;
+    }
+    if (importType !== 'schedule') {
+      alert('Data deduplication is only available for CLSS schedule imports');
+      return;
+    }
+    setShowDeduplication(true);
+  };
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       {/* Header */}
@@ -563,6 +593,13 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
           </div>
         </div>
         <div className="flex items-center space-x-3">
+          <button
+            onClick={() => setShowComprehensiveHygiene(true)}
+            className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            <Shield className="w-4 h-4" />
+            <span className="text-sm font-medium">Data Hygiene</span>
+          </button>
           <button
             onClick={() => setShowHistoryModal(true)}
             className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
@@ -842,6 +879,16 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
                 </>
               )}
             </button>
+            
+            {importType === 'schedule' && csvData && (
+              <button
+                onClick={startDeduplication}
+                className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+              >
+                <Database className="mr-2" size={18} />
+                Detect Duplicates
+              </button>
+            )}
             
             <button
               onClick={resetImport}
@@ -1213,6 +1260,68 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
         </div>
       </div>
 
+      {/* Data Deduplication Manager */}
+      {showDeduplication && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-serif font-bold text-baylor-green">Data Deduplication Analysis</h2>
+                <button
+                  onClick={() => setShowDeduplication(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              <DataDeduplicationManager
+                rawData={csvData}
+                onDataProcessed={handleDataProcessed}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Deduplication Results Display */}
+      {deduplicatedData && (
+        <div className="mb-8">
+          <h2 className="text-lg font-serif font-semibold text-baylor-green mb-4">Deduplication Results</h2>
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-center">
+              <div>
+                <div className="text-2xl font-bold text-blue-600">{deduplicatedData.professors?.length || 0}</div>
+                <div className="text-sm text-gray-600">Professors</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-green-600">{deduplicatedData.courses?.length || 0}</div>
+                <div className="text-sm text-gray-600">Courses</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-purple-600">{deduplicatedData.sections?.length || 0}</div>
+                <div className="text-sm text-gray-600">Sections</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-orange-600">{deduplicatedData.departments?.length || 0}</div>
+                <div className="text-sm text-gray-600">Departments</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-cyan-600">{deduplicatedData.rooms?.length || 0}</div>
+                <div className="text-sm text-gray-600">Rooms</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-pink-600">{deduplicatedData.terms?.length || 0}</div>
+                <div className="text-sm text-gray-600">Terms</div>
+              </div>
+            </div>
+            <div className="mt-4 p-4 bg-green-50 rounded-lg">
+              <p className="text-green-800 font-medium">✅ Data has been processed and duplicates removed!</p>
+              <p className="text-green-700 text-sm mt-1">You can now proceed with the import or run additional analysis.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Import Preview Modal */}
       {showPreviewModal && previewTransaction && (
         <ImportPreviewModal
@@ -1231,6 +1340,26 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
           showNotification={showNotification}
           onDataRefresh={handleDataRefresh}
         />
+      )}
+
+      {/* Comprehensive Data Hygiene Modal */}
+      {showComprehensiveHygiene && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-7xl w-full max-h-[95vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-serif font-bold text-baylor-green">Comprehensive Data Hygiene</h2>
+                <button
+                  onClick={() => setShowComprehensiveHygiene(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              <ComprehensiveDataHygieneManager />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

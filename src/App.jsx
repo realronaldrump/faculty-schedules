@@ -14,6 +14,7 @@ import CourseManagement from './components/analytics/CourseManagement';
 // Legacy import removed - using smart import only
 import SmartDataImportPage from './components/SmartDataImportPage';
 import SystemsPage from './components/SystemsPage';
+import ComprehensiveDataHygieneManager from './components/ComprehensiveDataHygieneManager';
 
 import EmailLists from './components/EmailLists';
 import BuildingDirectory from './components/BuildingDirectory';
@@ -24,6 +25,7 @@ import { db } from './firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
 import { adaptPeopleToFaculty, adaptPeopleToStaff } from './utils/dataAdapter';
 import { fetchSchedulesWithRelationalData } from './utils/dataImportUtils';
+import { autoMigrateIfNeeded } from './utils/importTransactionMigration';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -170,6 +172,7 @@ function App() {
       icon: Settings,
       children: [
         { id: 'smart-import', label: 'Data Import', path: 'administration/smart-import' },
+        { id: 'data-hygiene', label: 'Data Hygiene', path: 'administration/data-hygiene' },
         { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' }
       ]
     }
@@ -450,6 +453,15 @@ function App() {
       setLoading(true);
       try {
         console.log('📊 Loading normalized relational data...');
+        
+        // Auto-migrate localStorage import transactions to database if needed
+        try {
+          await autoMigrateIfNeeded();
+        } catch (migrationError) {
+          console.warn('⚠️ Import transaction migration failed:', migrationError);
+          // Don't block app loading if migration fails
+        }
+        
         const [relationalData, historySnapshot] = await Promise.all([
           fetchSchedulesWithRelationalData(),
           getDocs(query(collection(db, 'history'), orderBy('timestamp', 'desc')))
@@ -914,6 +926,8 @@ function App() {
             loadData();
           }}
         />;
+      case 'administration/data-hygiene':
+        return <ComprehensiveDataHygieneManager />;
       case 'administration/baylor-systems':
         return <SystemsPage onNavigate={setCurrentPage} />;
       default:

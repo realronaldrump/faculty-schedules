@@ -109,7 +109,15 @@ export const fetchSchedulesWithInstructors = async () => {
  */
 export const adaptPeopleToFaculty = (people, scheduleData = []) => {
   return people
-    .filter(person => person.roles.includes('faculty'))
+    .filter(person => {
+      // Handle both array and object formats for roles
+      if (Array.isArray(person.roles)) {
+        return person.roles.includes('faculty');
+      } else if (typeof person.roles === 'object' && person.roles !== null) {
+        return person.roles.faculty === true;
+      }
+      return false;
+    })
     .map(person => {
       const facultyName = `${person.firstName} ${person.lastName}`.trim();
       
@@ -126,6 +134,16 @@ export const adaptPeopleToFaculty = (people, scheduleData = []) => {
         program = determineFacultyProgram(scheduleData, facultyName);
       }
       
+      // Helper function to check if person has role (handles both formats)
+      const hasRole = (role) => {
+        if (Array.isArray(person.roles)) {
+          return person.roles.includes(role);
+        } else if (typeof person.roles === 'object' && person.roles !== null) {
+          return person.roles[role] === true;
+        }
+        return false;
+      };
+      
       return {
         id: person.id,
         name: facultyName,
@@ -141,7 +159,7 @@ export const adaptPeopleToFaculty = (people, scheduleData = []) => {
         updProgram: person.updProgram || '', // Which program they're UPD for
         isAdjunct: person.isAdjunct,
         isTenured: person.isTenured || false,
-        isAlsoStaff: person.roles.includes('staff'),
+        isAlsoStaff: hasRole('staff'),
         isUPD: person.isUPD || false,
         program: program,
         ...person // Include any additional fields
@@ -154,22 +172,42 @@ export const adaptPeopleToFaculty = (people, scheduleData = []) => {
  */
 export const adaptPeopleToStaff = (people) => {
   return people
-    .filter(person => person.roles.includes('staff'))
-    .map(person => ({
-      id: person.id,
-      name: `${person.firstName} ${person.lastName}`.trim(),
-      firstName: person.firstName,
-      lastName: person.lastName,
-      title: person.title,
-      email: person.email,
-      phone: person.phone,
-      jobTitle: person.jobTitle,
-      office: person.office,
-      isFullTime: person.isFullTime,
-      isTenured: person.roles.includes('faculty') ? (person.isTenured || false) : false, // Only display tenure for dual-role staff
-      isAlsoFaculty: person.roles.includes('faculty'),
-      ...person // Include any additional fields
-    }));
+    .filter(person => {
+      // Handle both array and object formats for roles
+      if (Array.isArray(person.roles)) {
+        return person.roles.includes('staff');
+      } else if (typeof person.roles === 'object' && person.roles !== null) {
+        return person.roles.staff === true;
+      }
+      return false;
+    })
+    .map(person => {
+      // Helper function to check if person has role (handles both formats)
+      const hasRole = (role) => {
+        if (Array.isArray(person.roles)) {
+          return person.roles.includes(role);
+        } else if (typeof person.roles === 'object' && person.roles !== null) {
+          return person.roles[role] === true;
+        }
+        return false;
+      };
+      
+      return {
+        id: person.id,
+        name: `${person.firstName} ${person.lastName}`.trim(),
+        firstName: person.firstName,
+        lastName: person.lastName,
+        title: person.title,
+        email: person.email,
+        phone: person.phone,
+        jobTitle: person.jobTitle,
+        office: person.office,
+        isFullTime: person.isFullTime,
+        isTenured: hasRole('faculty') ? (person.isTenured || false) : false, // Only display tenure for dual-role staff
+        isAlsoFaculty: hasRole('faculty'),
+        ...person // Include any additional fields
+      };
+    });
 };
 
 // ==================== SEARCH AND FILTERING ====================
@@ -191,11 +229,23 @@ export const searchPeople = (people, searchTerm) => {
 };
 
 /**
+ * Helper function to check if person has role (handles both formats)
+ */
+const hasRole = (person, role) => {
+  if (Array.isArray(person.roles)) {
+    return person.roles.includes(role);
+  } else if (typeof person.roles === 'object' && person.roles !== null) {
+    return person.roles[role] === true;
+  }
+  return false;
+};
+
+/**
  * Filter people by role
  */
 export const filterPeopleByRole = (people, role) => {
   if (!role) return people;
-  return people.filter(person => person.roles.includes(role));
+  return people.filter(person => hasRole(person, role));
 };
 
 /**
@@ -203,7 +253,7 @@ export const filterPeopleByRole = (people, role) => {
  */
 export const getDualRolePeople = (people) => {
   return people.filter(person => 
-    person.roles.includes('faculty') && person.roles.includes('staff')
+    hasRole(person, 'faculty') && hasRole(person, 'staff')
   );
 };
 
@@ -283,7 +333,7 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
   );
   
   // Calculate additional metrics
-  const facultyPeople = people.filter(p => p.roles.includes('faculty'));
+  const facultyPeople = people.filter(p => hasRole(p, 'faculty'));
   const uniqueRooms = Object.keys(roomUtilization);
   const totalSessions = processedSessions.size;
   const adjunctTaughtSessions = schedulesWithInstructors.filter(s => {

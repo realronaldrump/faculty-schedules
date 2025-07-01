@@ -89,19 +89,26 @@ export class ImportTransaction {
   // Get all changes in a flat list for UI display
   getAllChanges() {
     const allChanges = [];
-    
+
+    const actionMap = {
+      'added': 'add',
+      'modified': 'modify',
+      'deleted': 'delete'
+    };
+
     ['schedules', 'people', 'rooms'].forEach(collection => {
-      ['added', 'modified', 'deleted'].forEach(action => {
-        this.changes[collection][action].forEach(change => {
+      ['added', 'modified', 'deleted'].forEach(actionKey => {
+        this.changes[collection][actionKey].forEach(change => {
           allChanges.push({
             ...change,
             collection,
-            action: action.replace('d', '').replace('ied', 'y') // 'added' -> 'add', 'modified' -> 'modify'
+            action: actionMap[actionKey]
           });
         });
       });
     });
 
+    // Sort chronologically
     return allChanges.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   }
 }
@@ -184,7 +191,7 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
         firstName,
         lastName,
         email: '',
-        roles: { faculty: true, adjunct: true },
+        roles: ['faculty', 'adjunct'],
         contactInfo: { phone: '', office: '' },
         isActive: true
       };
@@ -287,7 +294,7 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople) => 
       firstName,
       lastName,
       email,
-      roles: { faculty: true, staff: false, adjunct: false },
+      roles: ['faculty'], // Use array format - default to faculty for directory imports
       contactInfo: {
         phone: row['Phone'] || '',
         office: row['Office'] || ''

@@ -88,11 +88,23 @@ function App() {
       return (termOrder[bTermType] || 0) - (termOrder[aTermType] || 0);
     });
     
+    console.log('🎓 Available semesters updated:', semesterList);
+    
+    const previousSemesters = availableSemesters;
     setAvailableSemesters(semesterList.length > 0 ? semesterList : ['Fall 2025']);
     
     // Auto-select the first (most recent) semester if current selection isn't available
     if (semesterList.length > 0 && !semesterList.includes(selectedSemester)) {
+      console.log(`🎓 Auto-selecting most recent semester: ${semesterList[0]}`);
       setSelectedSemester(semesterList[0]);
+    }
+    
+    // If we have new semesters that weren't in the previous list, auto-select the newest one
+    const newSemesters = semesterList.filter(semester => !previousSemesters.includes(semester));
+    if (newSemesters.length > 0) {
+      const newestSemester = newSemesters[0]; // Already sorted, so first is newest
+      console.log(`🎓 Auto-selecting newly imported semester: ${newestSemester}`);
+      setSelectedSemester(newestSemester);
     }
   };
 
@@ -874,12 +886,22 @@ function App() {
             // Refresh data after import to update available semesters
             const loadData = async () => {
               try {
+                console.log('🔄 Refreshing data after import...');
                 const relationalData = await fetchSchedulesWithRelationalData();
                 setRawScheduleData(relationalData.schedules);
                 setRawPeople(relationalData.people);
+                
+                // Update available semesters
                 updateAvailableSemesters(relationalData.schedules);
+                
+                console.log('✅ Data refresh complete after import');
+                
+                // Show success notification for data refresh
+                showNotification('success', 'Data Refreshed', 'Schedule data has been updated with the new import');
+                
               } catch (error) {
                 console.error('Error refreshing data after import:', error);
+                showNotification('error', 'Refresh Failed', 'Could not refresh data after import');
               }
             };
             loadData();

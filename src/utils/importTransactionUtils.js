@@ -144,6 +144,7 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
   // Create maps for quick lookup
   const peopleMap = new Map();
   const roomsMap = new Map();
+  const scheduleMap = new Map();
   
   existingPeople.forEach(person => {
     const key = `${person.firstName?.toLowerCase()} ${person.lastName?.toLowerCase()}`.trim();
@@ -153,6 +154,12 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
   existingRooms.forEach(room => {
     const key = room.name?.toLowerCase() || room.displayName?.toLowerCase();
     if (key) roomsMap.set(key, room);
+  });
+
+  // Create map of existing schedules to avoid duplicates
+  existingSchedules.forEach(schedule => {
+    const key = `${schedule.courseCode}-${schedule.section}-${schedule.term}`;
+    scheduleMap.set(key, schedule);
   });
 
   // Process each schedule entry
@@ -169,6 +176,7 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
 
     const instructorKey = `${firstName.toLowerCase()} ${lastName.toLowerCase()}`.trim();
     let instructor = peopleMap.get(instructorKey);
+    let instructorId = null;
 
     // Check if we need to add a new instructor
     if (!instructor && firstName && lastName) {
@@ -183,12 +191,17 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
       transaction.addChange('people', 'add', newInstructor);
       instructor = newInstructor;
       peopleMap.set(instructorKey, instructor);
+      // For new instructors, ID will be set when committed
+    } else if (instructor) {
+      // Use existing instructor's ID
+      instructorId = instructor.id;
     }
 
     // Extract room information
     const roomName = row.Room || '';
     const roomKey = roomName.toLowerCase();
     let room = roomsMap.get(roomKey);
+    let roomId = null;
 
     // Check if we need to add a new room
     if (!room && roomName && roomName !== 'No Room Needed' && !roomName.includes('ONLINE')) {
@@ -203,26 +216,47 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
       transaction.addChange('rooms', 'add', newRoom);
       room = newRoom;
       roomsMap.set(roomKey, room);
+      // For new rooms, ID will be set when committed
+    } else if (room) {
+      // Use existing room's ID
+      roomId = room.id;
+    }
+
+    // Create schedule key for duplicate detection
+    const courseCode = row.Course || '';
+    const section = row.Section || '';
+    const term = row.Term || '';
+    const scheduleKey = `${courseCode}-${section}-${term}`;
+
+    // Check for duplicate schedules
+    const existingSchedule = scheduleMap.get(scheduleKey);
+    if (existingSchedule) {
+      console.log(`⚠️ Skipping duplicate schedule: ${scheduleKey}`);
+      continue; // Skip duplicate schedule
     }
 
     // Create schedule entry
     const scheduleData = {
-      courseCode: row.Course || '',
+      courseCode,
       courseTitle: row['Course Title'] || '',
-      section: row.Section || '',
+      section,
       credits: row.Credits || '',
-      term: row.Term || '',
-      academicYear: extractAcademicYear(row.Term || ''),
-      instructorId: instructor?.id || null,
+      term,
+      academicYear: extractAcademicYear(term),
+      instructorId: instructorId,
       instructorName: instructorName,
-      roomId: room?.id || null,
+      roomId: roomId,
       roomName: roomName,
       meetingPatterns: parseMeetingPatterns(row),
-      instructor: instructor,
-      room: room
+      scheduleType: row['Schedule Type'] || 'Class Instruction',
+      status: row.Status || 'Active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     transaction.addChange('schedules', 'add', scheduleData);
+    // Add to our local map to prevent duplicates within this import
+    scheduleMap.set(scheduleKey, scheduleData);
   }
 };
 
@@ -284,30 +318,92 @@ const extractAcademicYear = (term) => {
 };
 
 const parseMeetingPatterns = (row) => {
-  const dayTime = row['Meeting Pattern'] || row.Day || '';
+  const meetingPattern = row['Meeting Pattern'] || row['Meetings'] || '';
   const patterns = [];
   
-  if (dayTime && dayTime !== 'Does Not Meet') {
-    // Simple parsing - can be enhanced
-    const parts = dayTime.split(' ');
-    if (parts.length >= 2) {
-      const days = parts[0];
-      const times = parts.slice(1).join(' ');
-      const [startTime, endTime] = times.split('-');
+  if (meetingPattern && meetingPattern !== 'Does Not Meet') {
+    // Handle CLSS format like "TR 12:30pm-1:45pm" or "MW 8:30am-11am"
+    const timePattern = /([MTWRF]+)\s+(\d{1,2}:\d{2}(?:am|pm)?)\s*-\s*(\d{1,2}:\d{2}(?:am|pm)?)/i;
+    const match = meetingPattern.match(timePattern);
+    
+    if (match) {
+      const [, daysStr, startTime, endTime] = match;
       
-      for (const day of days) {
-        if (['M', 'T', 'W', 'R', 'F'].includes(day)) {
+      // Parse individual days
+      const dayMap = { 'M': 'M', 'T': 'T', 'W': 'W', 'R': 'R', 'F': 'F' };
+      for (let i = 0; i < daysStr.length; i++) {
+        const day = dayMap[daysStr[i]];
+        if (day) {
           patterns.push({
             day,
-            startTime: startTime?.trim(),
-            endTime: endTime?.trim()
+            startTime: normalizeTime(startTime),
+            endTime: normalizeTime(endTime),
+            startDate: null,
+            endDate: null
           });
+        }
+      }
+    } else {
+      // Fallback: try simple parsing
+      const parts = meetingPattern.split(' ');
+      if (parts.length >= 2) {
+        const days = parts[0];
+        const times = parts.slice(1).join(' ');
+        const timeParts = times.split('-');
+        
+        if (timeParts.length === 2) {
+          const [startTime, endTime] = timeParts;
+          
+          for (const char of days) {
+            if (['M', 'T', 'W', 'R', 'F'].includes(char)) {
+              patterns.push({
+                day: char,
+                startTime: normalizeTime(startTime?.trim()),
+                endTime: normalizeTime(endTime?.trim()),
+                startDate: null,
+                endDate: null
+              });
+            }
+          }
         }
       }
     }
   }
   
   return patterns;
+};
+
+// Helper function to normalize time format
+const normalizeTime = (timeStr) => {
+  if (!timeStr) return '';
+  
+  // Handle formats like "12:30pm", "8:30am", "8am", "17:00"
+  const cleaned = timeStr.toLowerCase().trim();
+  
+  // If already in 24-hour format, convert to 12-hour
+  if (/^\d{1,2}:\d{2}$/.test(cleaned)) {
+    const [hour, minute] = cleaned.split(':').map(Number);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+    return `${displayHour}:${minute.toString().padStart(2, '0')} ${ampm}`;
+  }
+  
+  // If already has am/pm, standardize format
+  if (/\d{1,2}:\d{2}(am|pm)/i.test(cleaned)) {
+    return cleaned.replace(/(\d{1,2}:\d{2})(am|pm)/i, (match, time, ampm) => {
+      const [hour, minute] = time.split(':').map(Number);
+      return `${hour}:${minute.toString().padStart(2, '0')} ${ampm.toUpperCase()}`;
+    });
+  }
+  
+  // Handle formats like "8am", "12pm"
+  if (/^\d{1,2}(am|pm)$/i.test(cleaned)) {
+    return cleaned.replace(/(\d{1,2})(am|pm)/i, (match, hour, ampm) => {
+      return `${hour}:00 ${ampm.toUpperCase()}`;
+    });
+  }
+  
+  return timeStr; // Return as-is if can't parse
 };
 
 // Commit transaction changes to database
@@ -328,19 +424,83 @@ export const commitTransaction = async (transactionId, selectedChanges = null) =
     transaction.getAllChanges().filter(change => selectedChanges.includes(change.id)) :
     transaction.getAllChanges();
 
+  // Maps to track newly created IDs
+  const newPeopleIds = new Map(); // firstName+lastName -> documentId
+  const newRoomIds = new Map(); // roomName -> documentId
+
   try {
+    // First pass: Create people and rooms, collect their IDs
     for (const change of changesToApply) {
-      if (change.action === 'add') {
-        const docRef = doc(collection(db, change.collection));
+      if (change.collection === 'people' && change.action === 'add') {
+        const docRef = doc(collection(db, 'people'));
         batch.set(docRef, change.newData);
         change.documentId = docRef.id;
-      } else if (change.action === 'modify') {
-        batch.update(doc(db, change.collection, change.originalData.id), change.newData);
-        change.documentId = change.originalData.id;
-      } else if (change.action === 'delete') {
-        batch.delete(doc(db, change.collection, change.originalData.id));
-        change.documentId = change.originalData.id;
+        
+        // Map name to ID for schedule linking
+        const nameKey = `${change.newData.firstName?.toLowerCase()} ${change.newData.lastName?.toLowerCase()}`.trim();
+        newPeopleIds.set(nameKey, docRef.id);
+        
+        console.log(`👤 Created person mapping: ${nameKey} -> ${docRef.id}`);
+        
+      } else if (change.collection === 'rooms' && change.action === 'add') {
+        const docRef = doc(collection(db, 'rooms'));
+        batch.set(docRef, change.newData);
+        change.documentId = docRef.id;
+        
+        // Map room name to ID for schedule linking
+        const roomKey = change.newData.name?.toLowerCase() || change.newData.displayName?.toLowerCase();
+        if (roomKey) {
+          newRoomIds.set(roomKey, docRef.id);
+          console.log(`🏛️ Created room mapping: ${roomKey} -> ${docRef.id}`);
+        }
       }
+    }
+
+    // Second pass: Create schedules with proper relational IDs
+    for (const change of changesToApply) {
+      if (change.collection === 'schedules' && change.action === 'add') {
+        const scheduleData = { ...change.newData };
+        
+        // Update instructor ID if this references a newly created person
+        if (!scheduleData.instructorId && scheduleData.instructorName) {
+          // Parse instructor name to match against newly created people
+          const instructorParts = scheduleData.instructorName.split(',').map(p => p.trim());
+          if (instructorParts.length >= 2) {
+            const lastName = instructorParts[0];
+            const firstName = instructorParts[1].split('(')[0].trim();
+            const nameKey = `${firstName.toLowerCase()} ${lastName.toLowerCase()}`.trim();
+            
+            if (newPeopleIds.has(nameKey)) {
+              scheduleData.instructorId = newPeopleIds.get(nameKey);
+              console.log(`🔗 Linked schedule to instructor: ${nameKey} -> ${scheduleData.instructorId}`);
+            }
+          }
+        }
+        
+        // Update room ID if this references a newly created room
+        if (!scheduleData.roomId && scheduleData.roomName) {
+          const roomKey = scheduleData.roomName.toLowerCase();
+          if (newRoomIds.has(roomKey)) {
+            scheduleData.roomId = newRoomIds.get(roomKey);
+            console.log(`🔗 Linked schedule to room: ${roomKey} -> ${scheduleData.roomId}`);
+          }
+        }
+        
+        const docRef = doc(collection(db, 'schedules'));
+        batch.set(docRef, scheduleData);
+        change.documentId = docRef.id;
+        
+      } else if (change.collection !== 'people' && change.collection !== 'rooms') {
+        // Handle other types of changes (modify, delete)
+        if (change.action === 'modify') {
+          batch.update(doc(db, change.collection, change.originalData.id), change.newData);
+          change.documentId = change.originalData.id;
+        } else if (change.action === 'delete') {
+          batch.delete(doc(db, change.collection, change.originalData.id));
+          change.documentId = change.originalData.id;
+        }
+      }
+      
       change.applied = true;
     }
 
@@ -348,6 +508,10 @@ export const commitTransaction = async (transactionId, selectedChanges = null) =
     
     transaction.status = 'committed';
     updateTransactionInStorage(transaction);
+    
+    console.log(`✅ Transaction committed with ${changesToApply.length} changes`);
+    console.log(`👤 Created ${newPeopleIds.size} new people`);
+    console.log(`🏛️ Created ${newRoomIds.size} new rooms`);
     
     return transaction;
   } catch (error) {

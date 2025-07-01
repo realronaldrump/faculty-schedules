@@ -31,8 +31,10 @@ function App() {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
-  // Semester Selection State
-  const [selectedSemester, setSelectedSemester] = useState('Fall 2025');
+  // Semester Selection State with localStorage persistence
+  const [selectedSemester, setSelectedSemester] = useState(() => {
+    return localStorage.getItem('selectedSemester') || 'Fall 2025';
+  });
   const [availableSemesters, setAvailableSemesters] = useState(['Fall 2025']);
   const [showSemesterDropdown, setShowSemesterDropdown] = useState(false);
   
@@ -64,6 +66,11 @@ function App() {
     setNotification(prev => ({ ...prev, show: false }));
   };
 
+  // Persist selected semester to localStorage
+  useEffect(() => {
+    localStorage.setItem('selectedSemester', selectedSemester);
+  }, [selectedSemester]);
+
   // Extract available semesters from schedule data
   const updateAvailableSemesters = (scheduleData) => {
     const semesters = new Set();
@@ -93,26 +100,26 @@ function App() {
     const previousSemesters = availableSemesters;
     setAvailableSemesters(semesterList.length > 0 ? semesterList : ['Fall 2025']);
     
-    // Auto-select the first (most recent) semester if current selection isn't available
+    // Only auto-select if current selection isn't available
     if (semesterList.length > 0 && !semesterList.includes(selectedSemester)) {
       console.log(`🎓 Auto-selecting most recent semester: ${semesterList[0]}`);
       setSelectedSemester(semesterList[0]);
+      return; // Exit early to avoid double-selection
     }
     
     // If we have new semesters that weren't in the previous list, auto-select the newest one
     const newSemesters = semesterList.filter(semester => !previousSemesters.includes(semester));
-    if (newSemesters.length > 0) {
+    if (newSemesters.length > 0 && previousSemesters.length > 0) { // Only if we already had semesters
       const newestSemester = newSemesters[0]; // Already sorted, so first is newest
       console.log(`🎓 Auto-selecting newly imported semester: ${newestSemester}`);
       setSelectedSemester(newestSemester);
     }
   };
 
-  // Filter schedule data by selected semester
+  // Filter schedule data by selected semester (removed problematic fallback)
   const semesterFilteredScheduleData = useMemo(() => {
     return rawScheduleData.filter(schedule => 
-      schedule.term === selectedSemester || 
-      (!schedule.term && selectedSemester === 'Fall 2025') // Fallback for legacy data
+      schedule.term === selectedSemester
     );
   }, [rawScheduleData, selectedSemester]);
 

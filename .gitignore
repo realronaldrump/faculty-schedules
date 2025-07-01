@@ -20,3 +20,4 @@ firebase-service-account.json
 import-data.js
 data-samples/CLSS-export-sample.csv
 data-samples/directory-export.csv
+data-samples/export.csv

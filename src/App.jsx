@@ -7,6 +7,7 @@ import RoomSchedules from './components/scheduling/RoomSchedules';
 import FacultySchedules from './components/FacultySchedules';
 import FacultyDirectory from './components/FacultyDirectory';
 import StaffDirectory from './components/StaffDirectory';
+import AdjunctDirectory from './components/AdjunctDirectory';
 import ProgramManagement from './components/ProgramManagement';
 import DepartmentInsights from './components/analytics/DepartmentInsights.jsx';
 import CourseManagement from './components/analytics/CourseManagement';
@@ -85,6 +86,7 @@ function App() {
         { id: 'department-management', label: 'Program Management', path: 'directory/department-management' },
         { id: 'building-directory', label: 'Building Directory', path: 'directory/building-directory' },
         { id: 'faculty-directory', label: 'Faculty Directory', path: 'directory/faculty-directory' },
+        { id: 'adjunct-directory', label: 'Adjunct Directory', path: 'directory/adjunct-directory' },
         { id: 'staff-directory', label: 'Staff Directory', path: 'directory/staff-directory' },
         { id: 'email-lists', label: 'Email Lists', path: 'directory/email-lists' }
       ]
@@ -770,6 +772,15 @@ function App() {
       case 'directory/faculty-directory':
         return <FacultyDirectory
           directoryData={facultyDirectoryData}
+          scheduleData={scheduleData}
+          onFacultyUpdate={handleFacultyUpdate}
+          onStaffUpdate={handleStaffUpdate}
+          onFacultyDelete={handleFacultyDelete}
+        />;
+      case 'directory/adjunct-directory':
+        return <AdjunctDirectory
+          directoryData={facultyDirectoryData}
+          scheduleData={scheduleData}
           onFacultyUpdate={handleFacultyUpdate}
           onStaffUpdate={handleStaffUpdate}
           onFacultyDelete={handleFacultyDelete}
@@ -785,6 +796,7 @@ function App() {
         return <EmailLists
           facultyData={facultyDirectoryData}
           staffData={staffDirectoryData}
+          scheduleData={scheduleData}
         />;
       case 'analytics/department-insights':
         return <DepartmentInsights {...commonProps} />;

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Edit, Save, X, Users, Mail, Phone, PhoneOff, Building, BuildingIcon, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, Filter, UserCog } from 'lucide-react';
+import { Edit, Save, X, BookUser, Mail, Phone, PhoneOff, Building, BuildingIcon, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, BookOpen, Filter, UserCog } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
 import MultiSelectDropdown from './MultiSelectDropdown';
 
@@ -15,25 +15,25 @@ const formatPhoneNumber = (phoneStr) => {
     return phoneStr;
 };
 
-const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaffDelete }) => {
+const AdjunctDirectory = ({ directoryData, scheduleData = [], onFacultyUpdate, onStaffUpdate, onFacultyDelete }) => {
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [filterText, setFilterText] = useState('');
-  const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'ascending' });
-  const [nameSort, setNameSort] = useState('firstName'); // 'firstName' or 'lastName'
-  const [selectedStaffForCard, setSelectedStaffForCard] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: 'courseCount', direction: 'descending' });
+  const [nameSort, setNameSort] = useState('firstName');
+  const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [errors, setErrors] = useState({});
-  const [isCreating, setIsCreating] = useState(false);
-  const [newStaff, setNewStaff] = useState({
-    name: '',
-    jobTitle: '',
-    email: '',
-    phone: '',
-    office: '',
-    isFullTime: true,
-    isAlsoFaculty: false,
-    hasNoPhone: false,
-    hasNoOffice: false,
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Filter state
+  const [filters, setFilters] = useState({
+    programs: { include: [], exclude: [] },
+    jobTitles: { include: [], exclude: [] },
+    buildings: { include: [], exclude: [] },
+    tenured: 'all',
+    upd: 'all',
+    hasEmail: true,
+    courseCount: 'all' // 'all', 'with-courses', 'without-courses'
   });
 
   // Undo functionality
@@ -42,285 +42,8 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
 
   // Delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [staffToDelete, setStaffToDelete] = useState(null);
+  const [facultyToDelete, setFacultyToDelete] = useState(null);
 
-  // Advanced filters
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({
-    jobTitles: { include: [], exclude: [] },
-    buildings: { include: [], exclude: [] },
-    isFullTime: 'all', // 'all', 'full-time', 'part-time'
-    isAlsoFaculty: 'all', // 'all', 'include', 'exclude'
-    hasEmail: true
-  });
-
-  // Remove duplicates from directoryData and ensure unique entries
-  const uniqueDirectoryData = useMemo(() => {
-    if (!directoryData || !Array.isArray(directoryData)) return [];
-    
-    const uniqueMap = new Map();
-    
-    directoryData.forEach(staff => {
-      // Create a unique key based on name and email
-      const key = `${staff.name?.toLowerCase()}-${(staff.email || 'no-email').toLowerCase()}`;
-      
-      // Only add if not already in map, or if this one has more complete data
-      if (!uniqueMap.has(key)) {
-        uniqueMap.set(key, staff);
-      } else {
-        const existing = uniqueMap.get(key);
-        // Keep the one with more complete data (more fields filled)
-        const existingFields = Object.values(existing).filter(v => v && v !== '').length;
-        const newFields = Object.values(staff).filter(v => v && v !== '').length;
-        
-        if (newFields > existingFields) {
-          uniqueMap.set(key, staff);
-        }
-      }
-    });
-    
-    return Array.from(uniqueMap.values());
-  }, [directoryData]);
-
-  const validate = (data) => {
-    const newErrors = {};
-    
-    // Email validation
-    if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
-        newErrors.email = 'Please enter a valid email address.';
-    }
-
-    // Phone validation
-    const phoneDigits = (data.phone || '').replace(/\D/g, '');
-    if (data.phone && phoneDigits.length !== 10) {
-        newErrors.phone = 'Phone number must contain exactly 10 digits.';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const trackChange = (originalData, updatedData, action) => {
-    const change = {
-      id: Date.now(),
-      timestamp: new Date().toISOString(),
-      action,
-      originalData: { ...originalData },
-      updatedData: { ...updatedData },
-      staffId: originalData.id || updatedData.id,
-      staffName: originalData.name || updatedData.name
-    };
-    
-    setChangeHistory(prev => [change, ...prev.slice(0, 19)]); // Keep last 20 changes
-  };
-
-  const undoChange = async (change) => {
-    try {
-      if (change.action === 'update') {
-        // Restore original data
-        const dataToRestore = { ...change.originalData };
-
-        if (dataToRestore.isAlsoFaculty) {
-          await onFacultyUpdate(dataToRestore);
-        } else {
-          await onStaffUpdate(dataToRestore);
-        }
-
-        // Remove this change from history
-        setChangeHistory(prev => prev.filter(c => c.id !== change.id));
-        
-        console.log('Change undone successfully');
-      } else if (change.action === 'create') {
-        // This would require a delete function - for now just log
-        console.log('Cannot undo create action - delete functionality not implemented');
-      }
-    } catch (error) {
-      console.error('Error undoing change:', error);
-      alert('Error undoing change: ' + error.message);
-    }
-  };
-
-  const handleDelete = (staff) => {
-    setStaffToDelete(staff);
-    setShowDeleteConfirm(true);
-  };
-
-  const confirmDelete = async () => {
-    if (staffToDelete && onStaffDelete) {
-      try {
-        await onStaffDelete(staffToDelete);
-        setShowDeleteConfirm(false);
-        setStaffToDelete(null);
-      } catch (error) {
-        console.error('Error deleting staff:', error);
-        alert('Error deleting staff: ' + error.message);
-      }
-    }
-  };
-
-  const cancelDelete = () => {
-    setShowDeleteConfirm(false);
-    setStaffToDelete(null);
-  };
-
-  const handleCreate = () => {
-    setIsCreating(true);
-    setNewStaff({
-      name: '',
-      jobTitle: '',
-      email: '',
-      phone: '',
-      office: '',
-      isFullTime: true,
-      isAlsoFaculty: false,
-      hasNoPhone: false,
-      hasNoOffice: false,
-    });
-    setErrors({});
-  };
-
-  const handleCancelCreate = () => {
-    setIsCreating(false);
-    setNewStaff({
-      name: '',
-      jobTitle: '',
-      email: '',
-      phone: '',
-      office: '',
-      isFullTime: true,
-      isAlsoFaculty: false,
-      hasNoPhone: false,
-      hasNoOffice: false,
-    });
-    setErrors({});
-  };
-
-  const handleCreateChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    const finalValue = type === 'checkbox' ? checked : value;
-    const updatedForm = { ...newStaff, [name]: finalValue };
-    setNewStaff(updatedForm);
-    if (Object.keys(errors).length > 0) validate(updatedForm);
-  };
-
-  const handleCreateSave = async () => {
-    if (validate(newStaff)) {
-      const dataToSave = {
-        ...newStaff,
-        phone: (newStaff.phone || '').replace(/\D/g, '')
-      };
-      
-      // Track the creation
-      trackChange({}, dataToSave, 'create');
-      
-      await onStaffUpdate(dataToSave);
-      setIsCreating(false);
-      setErrors({});
-    }
-  };
-
-  const handleEdit = (staff) => {
-    setErrors({}); // Clear previous errors
-    setEditingId(staff.id);
-    setEditFormData(staff);
-  };
-
-  const handleCancel = () => {
-    setEditingId(null);
-    setEditFormData({});
-    setErrors({});
-  };
-
-  const handleSave = async () => {
-    if (validate(editFormData)) {
-        const originalData = uniqueDirectoryData.find(s => s.id === editingId);
-        const dataToSave = { ...editFormData };
-        const cleanedData = { ...dataToSave, phone: (dataToSave.phone || '').replace(/\D/g, '') };
-
-        // Track the change before saving
-        trackChange(originalData, cleanedData, 'update');
-
-        try {
-          // Always use onStaffUpdate when editing from staff directory  
-          // The handler will manage dual roles properly
-          await onStaffUpdate(cleanedData);
-          
-          setEditingId(null);
-          setErrors({});
-        } catch (error) {
-          // Remove the change from history if save failed
-          setChangeHistory(prev => prev.slice(1));
-          throw error;
-        }
-    }
-  };
-
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    let finalValue = type === 'checkbox' ? checked : value;
-    
-    // Allow only numbers for phone input
-    if (name === 'phone') {
-        finalValue = finalValue.replace(/\D/g, '');
-    }
-
-    const newFormData = {
-        ...editFormData,
-        [name]: finalValue,
-    };
-    
-    setEditFormData(newFormData);
-
-    // Live validation
-    if (Object.keys(errors).length > 0) {
-        validate(newFormData);
-    }
-  };
-
-  const toggleEditPhoneState = () => {
-    const newHasNoPhone = !editFormData.hasNoPhone;
-    setEditFormData({
-      ...editFormData,
-      hasNoPhone: newHasNoPhone,
-      phone: newHasNoPhone ? '' : editFormData.phone
-    });
-  };
-
-  const toggleEditOfficeState = () => {
-    const newHasNoOffice = !editFormData.hasNoOffice;
-    setEditFormData({
-      ...editFormData,
-      hasNoOffice: newHasNoOffice,
-      office: newHasNoOffice ? '' : editFormData.office
-    });
-  };
-
-  const toggleCreatePhoneState = () => {
-    const newHasNoPhone = !newStaff.hasNoPhone;
-    setNewStaff({
-      ...newStaff,
-      hasNoPhone: newHasNoPhone,
-      phone: newHasNoPhone ? '' : newStaff.phone
-    });
-  };
-
-  const toggleCreateOfficeState = () => {
-    const newHasNoOffice = !newStaff.hasNoOffice;
-    setNewStaff({
-      ...newStaff,
-      hasNoOffice: newHasNoOffice,
-      office: newHasNoOffice ? '' : newStaff.office
-    });
-  };
-  
-  const handleSort = (key) => {
-    let direction = 'ascending';
-    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
-    }
-    setSortConfig({ key, direction });
-  };
-  
   // Helper function to extract building name from office location
   const extractBuildingName = (officeLocation) => {
     if (!officeLocation || officeLocation.trim() === '') {
@@ -364,12 +87,83 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
     return office; // Fallback: return the whole office location
   };
 
+  // Calculate course counts for adjunct faculty and filter to only adjunct
+  const adjunctWithCourseCounts = useMemo(() => {
+    if (!directoryData || !Array.isArray(directoryData)) return [];
+    
+    return directoryData
+      .filter(faculty => faculty.isAdjunct) // Only adjunct faculty
+      .map(faculty => {
+        const facultyName = faculty.name;
+        const facultyCourses = scheduleData.filter(schedule => {
+          const instructorName = schedule.instructor ? 
+            `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim() :
+            (schedule.instructorName || schedule.Instructor || '');
+          
+          return instructorName === facultyName;
+        });
+        
+        // Get unique courses (by course code)
+        const uniqueCourses = [...new Set(facultyCourses.map(schedule => 
+          schedule.courseCode || schedule.Course || ''
+        ))].filter(courseCode => courseCode.trim() !== '');
+        
+        return {
+          ...faculty,
+          courseCount: uniqueCourses.length,
+          courses: facultyCourses.map(schedule => ({
+            courseCode: schedule.courseCode || schedule.Course || '',
+            courseTitle: schedule.courseTitle || schedule['Course Title'] || '',
+            section: schedule.section || schedule.Section || '',
+            term: schedule.term || schedule.Term || '',
+            credits: schedule.credits || schedule.Credits || ''
+          }))
+        };
+      });
+  }, [directoryData, scheduleData]);
+
+  // Remove duplicates
+  const uniqueDirectoryData = useMemo(() => {
+    if (!adjunctWithCourseCounts || !Array.isArray(adjunctWithCourseCounts)) return [];
+    
+    const uniqueMap = new Map();
+    
+    adjunctWithCourseCounts.forEach(faculty => {
+      const key = `${faculty.name?.toLowerCase()}-${(faculty.email || 'no-email').toLowerCase()}`;
+      
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, faculty);
+      } else {
+        const existing = uniqueMap.get(key);
+        const existingFields = Object.values(existing).filter(v => v && v !== '').length;
+        const newFields = Object.values(faculty).filter(v => v && v !== '').length;
+        
+        if (newFields > existingFields) {
+          uniqueMap.set(key, faculty);
+        }
+      }
+    });
+    
+    return Array.from(uniqueMap.values());
+  }, [adjunctWithCourseCounts]);
+
   // Extract unique values for filter options
   const filterOptions = useMemo(() => {
+    const programs = new Set();
     const jobTitles = new Set();
     const buildings = new Set();
 
     uniqueDirectoryData.forEach(person => {
+      // Extract program from faculty program field or fallback to jobTitle parsing
+      if (person.program && person.program.name) {
+        programs.add(person.program.name);
+      } else if (person.jobTitle) {
+        const parts = person.jobTitle.split(' - ');
+        if (parts.length > 1) {
+          programs.add(parts[0].trim());
+        }
+      }
+      
       if (person.jobTitle) {
         jobTitles.add(person.jobTitle);
       }
@@ -384,11 +178,13 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
     });
 
     return {
+      programs: Array.from(programs).sort(),
       jobTitles: Array.from(jobTitles).sort(),
       buildings: Array.from(buildings).sort()
     };
   }, [uniqueDirectoryData]);
 
+  // Apply filters to data
   const sortedAndFilteredData = useMemo(() => {
     let data = [...uniqueDirectoryData];
 
@@ -401,6 +197,25 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
         person.jobTitle?.toLowerCase().includes(term) ||
         person.office?.toLowerCase().includes(term)
       );
+    }
+
+    // Program filter (include/exclude)
+    if (filters.programs.include.length > 0 || filters.programs.exclude.length > 0) {
+      data = data.filter(person => {
+        let programName = '';
+        
+        if (person.program && person.program.name) {
+          programName = person.program.name;
+        } else if (person.jobTitle) {
+          const parts = person.jobTitle.split(' - ');
+          programName = parts.length > 1 ? parts[0].trim() : '';
+        }
+        
+        const includeMatch = filters.programs.include.length === 0 || filters.programs.include.includes(programName);
+        const excludeMatch = filters.programs.exclude.length === 0 || !filters.programs.exclude.includes(programName);
+        
+        return includeMatch && excludeMatch;
+      });
     }
 
     // Job title filter (include/exclude)
@@ -427,25 +242,25 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
       });
     }
 
-    // Full-time filter
-    if (filters.isFullTime !== 'all') {
+    // Tenured filter
+    if (filters.tenured !== 'all') {
       data = data.filter(person => {
-        if (filters.isFullTime === 'full-time') {
-          return person.isFullTime;
-        } else if (filters.isFullTime === 'part-time') {
-          return !person.isFullTime;
+        if (filters.tenured === 'include') {
+          return person.isTenured;
+        } else if (filters.tenured === 'exclude') {
+          return !person.isTenured;
         }
         return true;
       });
     }
 
-    // Also Faculty filter
-    if (filters.isAlsoFaculty !== 'all') {
+    // UPD filter
+    if (filters.upd !== 'all') {
       data = data.filter(person => {
-        if (filters.isAlsoFaculty === 'include') {
-          return person.isAlsoFaculty;
-        } else if (filters.isAlsoFaculty === 'exclude') {
-          return !person.isAlsoFaculty;
+        if (filters.upd === 'include') {
+          return person.isUPD;
+        } else if (filters.upd === 'exclude') {
+          return !person.isUPD;
         }
         return true;
       });
@@ -454,6 +269,13 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
     // Has email filter
     if (filters.hasEmail) {
       data = data.filter(person => person.email && person.email.trim() !== '');
+    }
+
+    // Course count filter
+    if (filters.courseCount === 'with-courses') {
+      data = data.filter(person => person.courseCount > 0);
+    } else if (filters.courseCount === 'without-courses') {
+      data = data.filter(person => person.courseCount === 0);
     }
 
     // Sorting
@@ -470,6 +292,12 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
           valA = (a.lastName || aNameParts[aNameParts.length - 1] || '').toLowerCase();
           valB = (b.lastName || bNameParts[bNameParts.length - 1] || '').toLowerCase();
         }
+      } else if (sortConfig.key === 'program') {
+        valA = (a.program && a.program.name ? a.program.name : '').toLowerCase();
+        valB = (b.program && b.program.name ? b.program.name : '').toLowerCase();
+      } else if (sortConfig.key === 'courseCount') {
+        valA = a.courseCount || 0;
+        valB = b.courseCount || 0;
       } else {
         valA = a[sortConfig.key];
         valB = b[sortConfig.key];
@@ -491,13 +319,162 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
     return data;
   }, [uniqueDirectoryData, filterText, filters, sortConfig, nameSort]);
 
+  const validate = (data) => {
+    const newErrors = {};
+    
+    if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+        newErrors.email = 'Please enter a valid email address.';
+    }
+
+    const phoneDigits = (data.phone || '').replace(/\D/g, '');
+    if (data.phone && phoneDigits.length !== 10) {
+        newErrors.phone = 'Phone number must contain exactly 10 digits.';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const trackChange = (originalData, updatedData, action) => {
+    const change = {
+      id: Date.now(),
+      timestamp: new Date().toISOString(),
+      action,
+      originalData: { ...originalData },
+      updatedData: { ...updatedData },
+      facultyId: originalData.id || updatedData.id,
+      facultyName: originalData.name || updatedData.name
+    };
+    
+    setChangeHistory(prev => [change, ...prev.slice(0, 19)]);
+  };
+
+  const undoChange = async (change) => {
+    try {
+      if (change.action === 'update') {
+        const dataToRestore = { ...change.originalData };
+
+        if (dataToRestore.isAlsoStaff) {
+          await onStaffUpdate(dataToRestore);
+        } else {
+          await onFacultyUpdate(dataToRestore);
+        }
+
+        setChangeHistory(prev => prev.filter(c => c.id !== change.id));
+        console.log('Change undone successfully');
+      }
+    } catch (error) {
+      console.error('Error undoing change:', error);
+      alert('Error undoing change: ' + error.message);
+    }
+  };
+
+  const handleEdit = (faculty) => {
+    setErrors({});
+    setEditingId(faculty.id);
+    setEditFormData(faculty);
+  };
+
+  const handleCancel = () => {
+    setEditingId(null);
+    setEditFormData({});
+    setErrors({});
+  };
+
+  const handleSave = async () => {
+    if (validate(editFormData)) {
+        const originalData = uniqueDirectoryData.find(f => f.id === editingId);
+        const dataToSave = { ...editFormData };
+        const cleanedData = { ...dataToSave, phone: (dataToSave.phone || '').replace(/\D/g, '') };
+
+        trackChange(originalData, cleanedData, 'update');
+
+        try {
+          await onFacultyUpdate(cleanedData);
+          setEditingId(null);
+          setErrors({});
+        } catch (error) {
+          setChangeHistory(prev => prev.slice(1));
+          throw error;
+        }
+    }
+  };
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    let finalValue = type === 'checkbox' ? checked : value;
+    
+    if (name === 'phone') {
+        finalValue = finalValue.replace(/\D/g, '');
+    }
+
+    const newFormData = {
+        ...editFormData,
+        [name]: finalValue,
+    };
+    
+    setEditFormData(newFormData);
+
+    if (Object.keys(errors).length > 0) {
+        validate(newFormData);
+    }
+  };
+
+  const toggleEditPhoneState = () => {
+    const newHasNoPhone = !editFormData.hasNoPhone;
+    setEditFormData({
+      ...editFormData,
+      hasNoPhone: newHasNoPhone,
+      phone: newHasNoPhone ? '' : editFormData.phone
+    });
+  };
+
+  const toggleEditOfficeState = () => {
+    const newHasNoOffice = !editFormData.hasNoOffice;
+    setEditFormData({
+      ...editFormData,
+      hasNoOffice: newHasNoOffice,
+      office: newHasNoOffice ? '' : editFormData.office
+    });
+  };
+
+  const handleSort = (key) => {
+    setSortConfig(prevConfig => ({
+      key,
+      direction: prevConfig.key === key && prevConfig.direction === 'ascending' ? 'descending' : 'ascending'
+    }));
+  };
+
+  const handleDelete = (faculty) => {
+    setFacultyToDelete(faculty);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    try {
+      await onFacultyDelete(facultyToDelete);
+      setShowDeleteConfirm(false);
+      setFacultyToDelete(null);
+    } catch (error) {
+      console.error('Error deleting faculty:', error);
+      alert('Error deleting faculty: ' + error.message);
+    }
+  };
+
+  const cancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setFacultyToDelete(null);
+  };
+
   const clearFilters = () => {
     setFilters({
+      programs: { include: [], exclude: [] },
       jobTitles: { include: [], exclude: [] },
       buildings: { include: [], exclude: [] },
-      isFullTime: 'all',
-      isAlsoFaculty: 'all',
-      hasEmail: true
+      tenured: 'all',
+      upd: 'all',
+      hasEmail: true,
+      courseCount: 'all'
     });
     setFilterText('');
   };
@@ -526,8 +503,8 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
         <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200">
             <h2 className="text-xl font-serif font-semibold text-baylor-green flex items-center">
-              <Users className="mr-2 text-baylor-gold" size={20} />
-              Staff Directory ({sortedAndFilteredData.length} members)
+              <BookUser className="mr-2 text-baylor-gold" size={20} />
+              Adjunct Faculty Directory ({sortedAndFilteredData.length} members)
             </h2>
             <div className="flex items-center gap-4">
                 {/* Name Sort Options */}
@@ -588,13 +565,6 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                     Changes ({changeHistory.length})
                   </button>
                 )}
-                <button
-                  onClick={handleCreate}
-                  className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
-                >
-                  <Plus size={18} />
-                  Add Staff
-                </button>
             </div>
         </div>
 
@@ -612,6 +582,38 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
             </div>
             
             <div className="space-y-4">
+              {/* Programs Filter */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Include Programs
+                  </label>
+                  <MultiSelectDropdown
+                    options={filterOptions.programs}
+                    selected={filters.programs.include}
+                    onChange={(selected) => setFilters(prev => ({ 
+                      ...prev, 
+                      programs: { ...prev.programs, include: selected }
+                    }))}
+                    placeholder="Select programs to include..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Exclude Programs
+                  </label>
+                  <MultiSelectDropdown
+                    options={filterOptions.programs}
+                    selected={filters.programs.exclude}
+                    onChange={(selected) => setFilters(prev => ({ 
+                      ...prev, 
+                      programs: { ...prev.programs, exclude: selected }
+                    }))}
+                    placeholder="Select programs to exclude..."
+                  />
+                </div>
+              </div>
+
               {/* Job Titles Filter */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -677,34 +679,34 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
               </div>
 
               {/* Status Filters */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Employment Status
+                    Tenure Status
                   </label>
                   <select
-                    value={filters.isFullTime}
-                    onChange={(e) => setFilters(prev => ({ ...prev, isFullTime: e.target.value }))}
+                    value={filters.tenured}
+                    onChange={(e) => setFilters(prev => ({ ...prev, tenured: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
                   >
                     <option value="all">All</option>
-                    <option value="full-time">Full-time Only</option>
-                    <option value="part-time">Part-time Only</option>
+                    <option value="include">Tenured Only</option>
+                    <option value="exclude">Exclude Tenured</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Faculty Status
+                    UPD Status
                   </label>
                   <select
-                    value={filters.isAlsoFaculty}
-                    onChange={(e) => setFilters(prev => ({ ...prev, isAlsoFaculty: e.target.value }))}
+                    value={filters.upd}
+                    onChange={(e) => setFilters(prev => ({ ...prev, upd: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
                   >
                     <option value="all">All</option>
-                    <option value="include">Also Faculty</option>
-                    <option value="exclude">Staff Only</option>
+                    <option value="include">UPD Only</option>
+                    <option value="exclude">Exclude UPD</option>
                   </select>
                 </div>
 
@@ -721,10 +723,33 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                     <option value="no">Include No Email</option>
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Course Status
+                  </label>
+                  <select
+                    value={filters.courseCount}
+                    onChange={(e) => setFilters(prev => ({ ...prev, courseCount: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  >
+                    <option value="all">All</option>
+                    <option value="with-courses">Teaching Courses</option>
+                    <option value="without-courses">Not Teaching</option>
+                  </select>
+                </div>
               </div>
             </div>
           </div>
         )}
+
+        {/* Data Import Caution */}
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+          <p className="flex items-center">
+            <span className="mr-2">⚠️</span>
+            Data is currently being imported. Some records may be missing or incomplete, and inaccuracies, duplications, and other issues may exist.
+          </p>
+        </div>
 
         {/* Change History */}
         {showHistory && changeHistory.length > 0 && (
@@ -735,7 +760,7 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                 <div key={change.id} className="flex items-center justify-between p-3 bg-white rounded border">
                   <div className="flex-1">
                     <div className="font-medium text-sm">
-                      {change.action === 'create' ? 'Created' : 'Updated'} {change.staffName}
+                      {change.action === 'create' ? 'Created' : 'Updated'} {change.facultyName}
                     </div>
                     <div className="text-xs text-gray-500">
                       {new Date(change.timestamp).toLocaleString()}
@@ -761,138 +786,45 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
             <thead>
               <tr className="bg-baylor-green/5">
                   <SortableHeader label="Name" columnKey="name" />
+                  <SortableHeader label="Program" columnKey="program" />
                   <SortableHeader label="Job Title" columnKey="jobTitle" />
                   <SortableHeader label="Email" columnKey="email" />
                   <SortableHeader label="Phone" columnKey="phone" />
                   <SortableHeader label="Office" columnKey="office" />
+                  <SortableHeader label="Courses" columnKey="courseCount" />
                   <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {isCreating && (
-                <tr className="bg-baylor-gold/5">
-                  <td className="p-2 align-top text-gray-700 font-medium">
-                      <input
-                        name="name"
-                        value={newStaff.name}
-                        onChange={handleCreateChange}
-                        className={getInputClass('name')}
-                        placeholder="Full Name"
-                      />
-                      {errors.name && <p className="text-red-600 text-xs mt-1">{errors.name}</p>}
-                      <div className="flex items-center gap-2 text-xs mt-2">
-                         <input
-                           type="checkbox"
-                           id="new-fulltime"
-                           name="isFullTime"
-                           checked={newStaff.isFullTime}
-                           onChange={handleCreateChange}
-                           className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                         />
-                         <label htmlFor="new-fulltime" className="font-normal">Full Time</label>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs mt-1">
-                         <input
-                           type="checkbox"
-                           id="new-isAlsoFaculty"
-                           name="isAlsoFaculty"
-                           checked={newStaff.isAlsoFaculty}
-                           onChange={handleCreateChange}
-                           className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                         />
-                         <label htmlFor="new-isAlsoFaculty" className="font-normal">Also a faculty member</label>
-                      </div>
-                  </td>
-                  <td className="p-2 align-top">
-                      <input
-                        name="jobTitle"
-                        value={newStaff.jobTitle}
-                        onChange={handleCreateChange}
-                        className={getInputClass('jobTitle')}
-                        placeholder="Job Title"
-                      />
-                  </td>
-                  <td className="p-2 align-top">
-                    <input
-                      name="email"
-                      value={newStaff.email}
-                      onChange={handleCreateChange}
-                      className={getInputClass('email')}
-                      placeholder="email@baylor.edu"
-                    />
-                    {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
-                  </td>
-                  <td className="p-2 align-top">
-                    <div className="flex items-center gap-2">
-                      <input
-                        name="phone"
-                        value={newStaff.phone}
-                        onChange={handleCreateChange}
-                        className={getInputClass('phone')}
-                        placeholder="10 digits"
-                        maxLength="10"
-                        disabled={newStaff.hasNoPhone}
-                      />
-                      <button
-                        type="button"
-                        onClick={toggleCreatePhoneState}
-                        className={`p-1 rounded transition-colors ${
-                          newStaff.hasNoPhone 
-                            ? 'text-red-600 bg-red-100 hover:bg-red-200' 
-                            : 'text-gray-400 hover:bg-gray-100'
-                        }`}
-                        title={newStaff.hasNoPhone ? 'Has no phone number' : 'Has phone number'}
-                      >
-                        {newStaff.hasNoPhone ? <PhoneOff size={16} /> : <Phone size={16} />}
-                      </button>
-                    </div>
-                    {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
-                  </td>
-                  <td className="p-2 align-top">
-                    <div className="flex items-center gap-2">
-                      <input
-                        name="office"
-                        value={newStaff.office}
-                        onChange={handleCreateChange}
-                        className={getInputClass('office')}
-                        placeholder="Building & Room"
-                        disabled={newStaff.hasNoOffice}
-                      />
-                      <button
-                        type="button"
-                        onClick={toggleCreateOfficeState}
-                        className={`p-1 rounded transition-colors ${
-                          newStaff.hasNoOffice 
-                            ? 'text-red-600 bg-red-100 hover:bg-red-200' 
-                            : 'text-gray-400 hover:bg-gray-100'
-                        }`}
-                        title={newStaff.hasNoOffice ? 'Has no office' : 'Has office'}
-                      >
-                        {newStaff.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
-                      </button>
-                    </div>
-                  </td>
-                  <td className="p-2 align-top text-right">
-                    <div className="flex gap-2">
-                      <button onClick={handleCreateSave} className="p-2 text-green-600 hover:bg-green-100 rounded-full"><Save size={16} /></button>
-                      <button onClick={handleCancelCreate} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {sortedAndFilteredData.map((staff, index) => (
-                <tr key={`staff-${staff.id || index}-${staff.name}`} className="hover:bg-gray-50" >
-                  {editingId === staff.id ? (
+              {sortedAndFilteredData.map((faculty, index) => (
+                <tr key={`faculty-${faculty.id || index}-${faculty.name}`} className="hover:bg-gray-50" >
+                  {editingId === faculty.id ? (
                     <>
                       <td className="p-2 align-top text-gray-700 font-medium">
-                          <div className='mb-2'>{staff.name}</div>
+                          <div className='mb-2'>{faculty.name}</div>
                           <div className="flex items-center gap-2 text-xs">
-                             <input type="checkbox" id={`fulltime-${staff.id || index}`} name="isFullTime" checked={!!editFormData.isFullTime} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
-                             <label htmlFor={`fulltime-${staff.id || index}`} className="font-normal">Full Time</label>
+                             <input type="checkbox" id={`adjunct-${faculty.id || index}`} name="isAdjunct" checked={!!editFormData.isAdjunct} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+                             <label htmlFor={`adjunct-${faculty.id || index}`} className="font-normal">Adjunct</label>
                           </div>
                           <div className="flex items-center gap-2 text-xs mt-1">
-                             <input type="checkbox" id={`isAlsoFaculty-${staff.id || index}`} name="isAlsoFaculty" checked={!!editFormData.isAlsoFaculty} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
-                             <label htmlFor={`isAlsoFaculty-${staff.id || index}`} className="font-normal">Also a faculty member</label>
+                             <input
+                               type="checkbox"
+                               id={`isTenured-${faculty.id || index}`}
+                               name="isTenured"
+                               checked={!!editFormData.isTenured}
+                               onChange={handleChange}
+                               className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-600"
+                             />
+                             <label htmlFor={`isTenured-${faculty.id || index}`} className="font-normal">Tenured</label>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs mt-1">
+                             <input type="checkbox" id={`isAlsoStaff-${faculty.id || index}`} name="isAlsoStaff" checked={!!editFormData.isAlsoStaff} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+                             <label htmlFor={`isAlsoStaff-${faculty.id || index}`} className="font-normal">Also a staff member</label>
+                          </div>
+                      </td>
+                      <td className="p-2 align-top">
+                          <div className="text-sm text-gray-600">
+                            {faculty.program ? faculty.program.name : 'No Program'}
                           </div>
                       </td>
                       <td className="p-2 align-top">
@@ -952,6 +884,11 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                           </button>
                         </div>
                       </td>
+                      <td className="p-2 align-top">
+                        <div className="text-sm text-gray-600">
+                          {faculty.courseCount || 0}
+                        </div>
+                      </td>
                       <td className="p-2 align-top text-right">
                         <div className="flex gap-2">
                           <button onClick={handleSave} className="p-2 text-green-600 hover:bg-green-100 rounded-full"><Save size={16} /></button>
@@ -961,45 +898,66 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                     </>
                   ) : (
                     <>
-                      <td className="px-4 py-3 text-gray-700 font-medium cursor-pointer" onClick={() => setSelectedStaffForCard(staff)}>
-                        <div>{staff.name}</div>
-                        {staff.isAlsoFaculty && (
-                          <div className="text-xs text-baylor-gold font-medium">Also Faculty</div>
+                      <td className="px-4 py-3 text-gray-700 font-medium cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
+                        <div>{faculty.name}</div>
+                        {faculty.program && (
+                          <div className="text-xs text-baylor-green font-medium">{faculty.program.name}</div>
                         )}
-                        {staff.isFullTime === false && (
-                          <div className="text-xs text-blue-600 font-medium">Part Time</div>
+                        <div className="text-xs text-blue-600 font-medium">Adjunct</div>
+                        {faculty.isAlsoStaff && (
+                          <div className="text-xs text-baylor-gold font-medium">Also Staff</div>
+                        )}
+                        {faculty.isTenured && (
+                          <div className="text-xs text-purple-600 font-medium">Tenured</div>
+                        )}
+                        {faculty.isUPD && (
+                          <div className="text-xs text-amber-600 font-medium flex items-center gap-1">
+                            <UserCog size={12} />
+                            UPD
+                          </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedStaffForCard(staff)}>{staff.jobTitle || '-'}</td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedStaffForCard(staff)}>{staff.email || '-'}</td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedStaffForCard(staff)}>
+                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
+                        {faculty.program ? faculty.program.name : '-'}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.jobTitle || '-'}</td>
+                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.email || '-'}</td>
+                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
                         <div className="flex items-center gap-2">
-                          {staff.hasNoPhone ? (
+                          {faculty.hasNoPhone ? (
                             <span className="flex items-center gap-1 text-gray-500">
                               <PhoneOff size={14} />
                               No phone
                             </span>
                           ) : (
-                            formatPhoneNumber(staff.phone)
+                            formatPhoneNumber(faculty.phone)
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedStaffForCard(staff)}>
+                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
                         <div className="flex items-center gap-2">
-                          {staff.hasNoOffice ? (
+                          {faculty.hasNoOffice ? (
                             <span className="flex items-center gap-1 text-gray-500">
                               <BuildingIcon size={14} className="opacity-50" />
                               No office
                             </span>
                           ) : (
-                            staff.office || '-'
+                            faculty.office || '-'
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
+                        <div className="flex items-center gap-2">
+                          <span>{faculty.courseCount}</span>
+                          {faculty.courseCount > 0 && (
+                            <BookOpen size={14} className="text-baylor-green" />
                           )}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex gap-1 justify-end">
-                          <button onClick={(e) => { e.stopPropagation(); handleEdit(staff); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><Edit size={16} /></button>
-                          <button onClick={(e) => { e.stopPropagation(); handleDelete(staff); }} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><Trash2 size={16} /></button>
+                          <button onClick={(e) => { e.stopPropagation(); handleEdit(faculty); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><Edit size={16} /></button>
+                          <button onClick={(e) => { e.stopPropagation(); handleDelete(faculty); }} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><Trash2 size={16} /></button>
                         </div>
                       </td>
                     </>
@@ -1009,7 +967,7 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
             </tbody>
           </table>
         </div>
-        {selectedStaffForCard && <FacultyContactCard faculty={selectedStaffForCard} onClose={() => setSelectedStaffForCard(null)} />}
+        {selectedFacultyForCard && <FacultyContactCard faculty={selectedFacultyForCard} onClose={() => setSelectedFacultyForCard(null)} />}
         
         {/* Delete Confirmation Modal */}
         {showDeleteConfirm && (
@@ -1017,7 +975,7 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
             <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Confirm Delete</h3>
               <p className="text-gray-600 mb-6">
-                Are you sure you want to delete <strong>{staffToDelete?.name}</strong>? This action cannot be undone.
+                Are you sure you want to delete <strong>{facultyToDelete?.name}</strong>? This action cannot be undone.
               </p>
               <div className="flex gap-3 justify-end">
                 <button
@@ -1042,4 +1000,4 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
   );
 };
 
-export default StaffDirectory;
+export default AdjunctDirectory;

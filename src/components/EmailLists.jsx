@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Copy, Plus, Minus, Settings, UserCog } from 'lucide-react';
+import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Copy, Plus, Minus, Settings, UserCog, BookOpen } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown';
 
-const EmailLists = ({ facultyData, staffData }) => {
+const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeople, setSelectedPeople] = useState([]);
   const [filters, setFilters] = useState({
@@ -22,6 +22,7 @@ const EmailLists = ({ facultyData, staffData }) => {
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilterPreset, setActiveFilterPreset] = useState('');
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
+  const [showOnlyWithCourses, setShowOnlyWithCourses] = useState(false);
 
   // Helper function to extract building name from office location
   const extractBuildingName = (officeLocation) => {
@@ -135,17 +136,40 @@ const EmailLists = ({ facultyData, staffData }) => {
     }
   };
 
-  // Combine faculty and staff data, removing duplicates
+  // Combine faculty and staff data, removing duplicates and calculating course counts
   const combinedDirectoryData = useMemo(() => {
     const allPeople = [];
     
-    // Add faculty data with role indicator
+    // Add faculty data with role indicator and course count calculation
     if (facultyData && Array.isArray(facultyData)) {
       facultyData.forEach(person => {
+        // Calculate course count for faculty
+        const facultyName = person.name;
+        const facultyCourses = scheduleData.filter(schedule => {
+          const instructorName = schedule.instructor ? 
+            `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim() :
+            (schedule.instructorName || schedule.Instructor || '');
+          
+          return instructorName === facultyName;
+        });
+        
+        // Get unique courses (by course code)
+        const uniqueCourses = [...new Set(facultyCourses.map(schedule => 
+          schedule.courseCode || schedule.Course || ''
+        ))].filter(courseCode => courseCode.trim() !== '');
+        
         allPeople.push({
           ...person,
           role: 'Faculty',
-          roleType: 'faculty'
+          roleType: 'faculty',
+          courseCount: uniqueCourses.length,
+          courses: facultyCourses.map(schedule => ({
+            courseCode: schedule.courseCode || schedule.Course || '',
+            courseTitle: schedule.courseTitle || schedule['Course Title'] || '',
+            section: schedule.section || schedule.Section || '',
+            term: schedule.term || schedule.Term || '',
+            credits: schedule.credits || schedule.Credits || ''
+          }))
         });
       });
     }
@@ -156,7 +180,9 @@ const EmailLists = ({ facultyData, staffData }) => {
         allPeople.push({
           ...person,
           role: 'Staff',
-          roleType: 'staff'
+          roleType: 'staff',
+          courseCount: 0, // Staff don't teach courses
+          courses: []
         });
       });
     }
@@ -178,7 +204,9 @@ const EmailLists = ({ facultyData, staffData }) => {
             role: 'Faculty & Staff',
             roleType: 'both',
             isAlsoStaff: true,
-            isAlsoFaculty: true
+            isAlsoFaculty: true,
+            courseCount: Math.max(existing.courseCount || 0, person.courseCount || 0),
+            courses: [...(existing.courses || []), ...(person.courses || [])]
           });
         } else {
           // Keep the one with more complete data
@@ -193,7 +221,7 @@ const EmailLists = ({ facultyData, staffData }) => {
     });
     
     return Array.from(uniqueMap.values());
-  }, [facultyData, staffData]);
+  }, [facultyData, staffData, scheduleData]);
 
   // Extract unique values for filter options
   const filterOptions = useMemo(() => {
@@ -356,8 +384,18 @@ const EmailLists = ({ facultyData, staffData }) => {
       filtered = filtered.filter(person => person.email && person.email.trim() !== '');
     }
 
+    // Remove the automatic exclusion. Instead, use the filter state:
+    if (showOnlyWithCourses) {
+      filtered = filtered.filter(person => {
+        if (person.roleType === 'faculty' || person.roleType === 'both') {
+          return person.courseCount > 0;
+        }
+        return true; // Keep staff members
+      });
+    }
+
     return filtered;
-  }, [combinedDirectoryData, searchTerm, filters]);
+  }, [combinedDirectoryData, searchTerm, filters, showOnlyWithCourses]);
 
   const showNotification = (message, type = 'success') => {
     setNotification({ show: true, message, type });
@@ -842,7 +880,17 @@ const EmailLists = ({ facultyData, staffData }) => {
 
       {/* People List */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+        {/* Course count filter UI */}
+        <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={showOnlyWithCourses}
+              onChange={e => setShowOnlyWithCourses(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+            />
+            Only show faculty with at least 1 course
+          </label>
           <div className="flex items-center justify-between">
             <label className="flex items-center">
               <input
@@ -858,7 +906,6 @@ const EmailLists = ({ facultyData, staffData }) => {
                 Select All ({filteredData.length} people)
               </span>
             </label>
-            
             {selectedPeople.length > 0 && (
               <span className="text-sm text-baylor-green font-medium">
                 {selectedPeople.length} selected
@@ -904,6 +951,12 @@ const EmailLists = ({ facultyData, staffData }) => {
                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
                               <UserCog size={10} className="mr-1" />
                               UPD
+                            </span>
+                          )}
+                          {(person.roleType === 'faculty' || person.roleType === 'both') && person.courseCount > 0 && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-baylor-green/10 text-baylor-green">
+                              <BookOpen size={10} className="mr-1" />
+                              {person.courseCount} course{person.courseCount !== 1 ? 's' : ''}
                             </span>
                           )}
                         </p>

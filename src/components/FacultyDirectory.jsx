@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Edit, Save, X, BookUser, Mail, Phone, PhoneOff, Building, BuildingIcon, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2 } from 'lucide-react';
+import { Edit, Save, X, BookUser, Mail, Phone, PhoneOff, Building, BuildingIcon, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, BookOpen, Filter, UserCog } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
+import MultiSelectDropdown from './MultiSelectDropdown';
 
 const formatPhoneNumber = (phoneStr) => {
     if (!phoneStr) return '-';
@@ -14,11 +15,11 @@ const formatPhoneNumber = (phoneStr) => {
     return phoneStr;
 };
 
-const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFacultyDelete }) => {
+const FacultyDirectory = ({ directoryData, scheduleData = [], onFacultyUpdate, onStaffUpdate, onFacultyDelete }) => {
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [filterText, setFilterText] = useState('');
-  const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'ascending' });
+  const [sortConfig, setSortConfig] = useState({ key: 'courseCount', direction: 'descending' }); // Default sort by course count
   const [nameSort, setNameSort] = useState('firstName'); // 'firstName' or 'lastName'
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [errors, setErrors] = useState({});
@@ -44,13 +45,106 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFac
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [facultyToDelete, setFacultyToDelete] = useState(null);
 
+  // Course count filter
+  const [showOnlyWithCourses, setShowOnlyWithCourses] = useState(false);
+
+  // Advanced filters
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    programs: { include: [], exclude: [] },
+    jobTitles: { include: [], exclude: [] },
+    buildings: { include: [], exclude: [] },
+    adjunct: 'all', // 'all', 'include', 'exclude'
+    tenured: 'all',
+    upd: 'all',
+    hasEmail: true,
+    courseCount: 'all', // 'all', 'with-courses', 'without-courses'
+    isAlsoStaff: 'all' // 'all', 'include', 'exclude'
+  });
+
+  // Helper function to extract building name from office location
+  const extractBuildingName = (officeLocation) => {
+    if (!officeLocation || officeLocation.trim() === '') {
+      return 'No Building';
+    }
+
+    const office = officeLocation.trim();
+    
+    // Handle common building name patterns
+    const buildingKeywords = ['BUILDING', 'HALL', 'GYMNASIUM', 'TOWER', 'CENTER', 'COMPLEX'];
+    
+    // Check if office contains building keywords
+    for (const keyword of buildingKeywords) {
+      const keywordIndex = office.toUpperCase().indexOf(keyword);
+      if (keywordIndex !== -1) {
+        // Include everything up to and including the keyword
+        const endIndex = keywordIndex + keyword.length;
+        return office.substring(0, endIndex).trim();
+      }
+    }
+    
+    // If no building keywords found, try to extract building name before room numbers
+    // Look for patterns where building name ends before standalone numbers
+    const match = office.match(/^([A-Za-z\s]+?)(\s+\d+.*)?$/);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+    
+    // Handle special cases like "801 WASHINGTON TOWER" where number is part of building name
+    // If it starts with a number followed by words, keep it all as building name
+    const startsWithNumber = office.match(/^\d+\s+[A-Za-z]/);
+    if (startsWithNumber) {
+      // Look for room-like patterns at the end
+      const roomPattern = office.match(/^(.+?)(\s+\d{2,4}(\s+\d+)*)$/);
+      if (roomPattern) {
+        return roomPattern[1].trim();
+      }
+      return office; // Keep whole thing if no clear room pattern
+    }
+    
+    return office; // Fallback: return the whole office location
+  };
+
+  // Calculate course counts for each faculty member
+  const facultyWithCourseCounts = useMemo(() => {
+    if (!directoryData || !Array.isArray(directoryData)) return [];
+    
+    return directoryData.map(faculty => {
+      const facultyName = faculty.name;
+      const facultyCourses = scheduleData.filter(schedule => {
+        const instructorName = schedule.instructor ? 
+          `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim() :
+          (schedule.instructorName || schedule.Instructor || '');
+        
+        return instructorName === facultyName;
+      });
+      
+      // Get unique courses (by course code)
+      const uniqueCourses = [...new Set(facultyCourses.map(schedule => 
+        schedule.courseCode || schedule.Course || ''
+      ))].filter(courseCode => courseCode.trim() !== '');
+      
+      return {
+        ...faculty,
+        courseCount: uniqueCourses.length,
+        courses: facultyCourses.map(schedule => ({
+          courseCode: schedule.courseCode || schedule.Course || '',
+          courseTitle: schedule.courseTitle || schedule['Course Title'] || '',
+          section: schedule.section || schedule.Section || '',
+          term: schedule.term || schedule.Term || '',
+          credits: schedule.credits || schedule.Credits || ''
+        }))
+      };
+    });
+  }, [directoryData, scheduleData]);
+
   // Remove duplicates from directoryData and ensure unique entries
   const uniqueDirectoryData = useMemo(() => {
-    if (!directoryData || !Array.isArray(directoryData)) return [];
+    if (!facultyWithCourseCounts || !Array.isArray(facultyWithCourseCounts)) return [];
     
     const uniqueMap = new Map();
     
-    directoryData.forEach(faculty => {
+    facultyWithCourseCounts.forEach(faculty => {
       // Create a unique key based on name and email
       const key = `${faculty.name?.toLowerCase()}-${(faculty.email || 'no-email').toLowerCase()}`;
       
@@ -70,7 +164,212 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFac
     });
     
     return Array.from(uniqueMap.values());
-  }, [directoryData]);
+  }, [facultyWithCourseCounts]);
+
+  // Extract unique values for filter options
+  const filterOptions = useMemo(() => {
+    const programs = new Set();
+    const jobTitles = new Set();
+    const buildings = new Set();
+
+    uniqueDirectoryData.forEach(person => {
+      // Extract program from faculty program field or fallback to jobTitle parsing
+      if (person.program && person.program.name) {
+        programs.add(person.program.name);
+      } else if (person.jobTitle) {
+        const parts = person.jobTitle.split(' - ');
+        if (parts.length > 1) {
+          programs.add(parts[0].trim());
+        }
+      }
+      
+      if (person.jobTitle) {
+        jobTitles.add(person.jobTitle);
+      }
+
+      // Extract building name from office location
+      if (person.office) {
+        const buildingName = extractBuildingName(person.office);
+        buildings.add(buildingName);
+      } else {
+        buildings.add('No Building');
+      }
+    });
+
+    return {
+      programs: Array.from(programs).sort(),
+      jobTitles: Array.from(jobTitles).sort(),
+      buildings: Array.from(buildings).sort()
+    };
+  }, [uniqueDirectoryData]);
+
+  const sortedAndFilteredData = useMemo(() => {
+    let data = [...uniqueDirectoryData];
+
+    // Search term filter
+    if (filterText) {
+      const term = filterText.toLowerCase();
+      data = data.filter(person => 
+        person.name?.toLowerCase().includes(term) ||
+        person.email?.toLowerCase().includes(term) ||
+        person.jobTitle?.toLowerCase().includes(term) ||
+        person.office?.toLowerCase().includes(term)
+      );
+    }
+
+    // Program filter (include/exclude)
+    if (filters.programs.include.length > 0 || filters.programs.exclude.length > 0) {
+      data = data.filter(person => {
+        let programName = '';
+        
+        if (person.program && person.program.name) {
+          programName = person.program.name;
+        } else if (person.jobTitle) {
+          const parts = person.jobTitle.split(' - ');
+          programName = parts.length > 1 ? parts[0].trim() : '';
+        }
+        
+        const includeMatch = filters.programs.include.length === 0 || filters.programs.include.includes(programName);
+        const excludeMatch = filters.programs.exclude.length === 0 || !filters.programs.exclude.includes(programName);
+        
+        return includeMatch && excludeMatch;
+      });
+    }
+
+    // Job title filter (include/exclude)
+    if (filters.jobTitles.include.length > 0 || filters.jobTitles.exclude.length > 0) {
+      data = data.filter(person => {
+        const jobTitle = person.jobTitle || '';
+        
+        const includeMatch = filters.jobTitles.include.length === 0 || filters.jobTitles.include.includes(jobTitle);
+        const excludeMatch = filters.jobTitles.exclude.length === 0 || !filters.jobTitles.exclude.includes(jobTitle);
+        
+        return includeMatch && excludeMatch;
+      });
+    }
+
+    // Building filter (include/exclude)
+    if (filters.buildings.include.length > 0 || filters.buildings.exclude.length > 0) {
+      data = data.filter(person => {
+        const buildingName = person.office ? extractBuildingName(person.office) : 'No Building';
+        
+        const includeMatch = filters.buildings.include.length === 0 || filters.buildings.include.includes(buildingName);
+        const excludeMatch = filters.buildings.exclude.length === 0 || !filters.buildings.exclude.includes(buildingName);
+        
+        return includeMatch && excludeMatch;
+      });
+    }
+
+    // Adjunct filter
+    if (filters.adjunct !== 'all') {
+      data = data.filter(person => {
+        if (filters.adjunct === 'include') {
+          return person.isAdjunct;
+        } else if (filters.adjunct === 'exclude') {
+          return !person.isAdjunct;
+        }
+        return true;
+      });
+    }
+
+    // Tenured filter
+    if (filters.tenured !== 'all') {
+      data = data.filter(person => {
+        if (filters.tenured === 'include') {
+          return person.isTenured;
+        } else if (filters.tenured === 'exclude') {
+          return !person.isTenured;
+        }
+        return true;
+      });
+    }
+
+    // UPD filter
+    if (filters.upd !== 'all') {
+      data = data.filter(person => {
+        if (filters.upd === 'include') {
+          return person.isUPD;
+        } else if (filters.upd === 'exclude') {
+          return !person.isUPD;
+        }
+        return true;
+      });
+    }
+
+    // Also Staff filter
+    if (filters.isAlsoStaff !== 'all') {
+      data = data.filter(person => {
+        if (filters.isAlsoStaff === 'include') {
+          return person.isAlsoStaff;
+        } else if (filters.isAlsoStaff === 'exclude') {
+          return !person.isAlsoStaff;
+        }
+        return true;
+      });
+    }
+
+    // Has email filter
+    if (filters.hasEmail) {
+      data = data.filter(person => person.email && person.email.trim() !== '');
+    }
+
+    // Course count filter (legacy support for the checkbox)
+    if (showOnlyWithCourses) {
+      data = data.filter(faculty => faculty.courseCount > 0);
+    }
+
+    // Course count filter (advanced filter)
+    if (filters.courseCount === 'with-courses') {
+      data = data.filter(person => person.courseCount > 0);
+    } else if (filters.courseCount === 'without-courses') {
+      data = data.filter(person => person.courseCount === 0);
+    }
+
+    // Sorting
+    data.sort((a, b) => {
+      let valA, valB;
+      
+      if (sortConfig.key === 'name') {
+        // Handle special name sorting based on user preference
+        if (nameSort === 'firstName') {
+          // Extract first name for sorting (part before first space)
+          valA = (a.firstName || a.name?.split(' ')[0] || '').toLowerCase();
+          valB = (b.firstName || b.name?.split(' ')[0] || '').toLowerCase();
+        } else {
+          // Extract last name for sorting (part after last space)
+          const aNameParts = (a.lastName || a.name || '').split(' ');
+          const bNameParts = (b.lastName || b.name || '').split(' ');
+          valA = (a.lastName || aNameParts[aNameParts.length - 1] || '').toLowerCase();
+          valB = (b.lastName || bNameParts[bNameParts.length - 1] || '').toLowerCase();
+        }
+      } else if (sortConfig.key === 'program') {
+        // Handle program sorting
+        valA = (a.program && a.program.name ? a.program.name : '').toLowerCase();
+        valB = (b.program && b.program.name ? b.program.name : '').toLowerCase();
+      } else if (sortConfig.key === 'courseCount') {
+        // Handle course count sorting
+        valA = a.courseCount || 0;
+        valB = b.courseCount || 0;
+      } else {
+        valA = a[sortConfig.key];
+        valB = b[sortConfig.key];
+      }
+
+      if (typeof valA === 'boolean') {
+          return (valA === valB) ? 0 : valA ? -1 : 1;
+      }
+
+      if (valA < valB) {
+        return sortConfig.direction === 'ascending' ? -1 : 1;
+      }
+      if (valA > valB) {
+        return sortConfig.direction === 'ascending' ? 1 : -1;
+      }
+      return 0;
+    });
+
+    return data;
+  }, [uniqueDirectoryData, filterText, filters, sortConfig, nameSort, showOnlyWithCourses]);
 
   const validate = (data) => {
     const newErrors = {};
@@ -323,60 +622,21 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFac
     }
   };
   
-  const sortedAndFilteredData = useMemo(() => {
-    let data = [...uniqueDirectoryData];
-
-    if (filterText) {
-      const lowercasedFilter = filterText.toLowerCase();
-      data = data.filter(item =>
-        item.name?.toLowerCase().includes(lowercasedFilter) ||
-        item.jobTitle?.toLowerCase().includes(lowercasedFilter) ||
-        item.email?.toLowerCase().includes(lowercasedFilter) ||
-        item.phone?.toLowerCase().includes(lowercasedFilter) ||
-        item.office?.toLowerCase().includes(lowercasedFilter)
-      );
-    }
-
-    data.sort((a, b) => {
-      let valA, valB;
-      
-      if (sortConfig.key === 'name') {
-        // Handle special name sorting based on user preference
-        if (nameSort === 'firstName') {
-          // Extract first name for sorting (part before first space)
-          valA = (a.firstName || a.name?.split(' ')[0] || '').toLowerCase();
-          valB = (b.firstName || b.name?.split(' ')[0] || '').toLowerCase();
-        } else {
-          // Extract last name for sorting (part after last space)
-          const aNameParts = (a.lastName || a.name || '').split(' ');
-          const bNameParts = (b.lastName || b.name || '').split(' ');
-          valA = (a.lastName || aNameParts[aNameParts.length - 1] || '').toLowerCase();
-          valB = (b.lastName || bNameParts[bNameParts.length - 1] || '').toLowerCase();
-        }
-      } else if (sortConfig.key === 'program') {
-        // Handle program sorting
-        valA = (a.program && a.program.name ? a.program.name : '').toLowerCase();
-        valB = (b.program && b.program.name ? b.program.name : '').toLowerCase();
-      } else {
-        valA = a[sortConfig.key];
-        valB = b[sortConfig.key];
-      }
-
-      if (typeof valA === 'boolean') {
-          return (valA === valB) ? 0 : valA ? -1 : 1;
-      }
-
-      if (valA < valB) {
-        return sortConfig.direction === 'ascending' ? -1 : 1;
-      }
-      if (valA > valB) {
-        return sortConfig.direction === 'ascending' ? 1 : -1;
-      }
-      return 0;
+  const clearFilters = () => {
+    setFilters({
+      programs: { include: [], exclude: [] },
+      jobTitles: { include: [], exclude: [] },
+      buildings: { include: [], exclude: [] },
+      adjunct: 'all',
+      tenured: 'all',
+      upd: 'all',
+      hasEmail: true,
+      courseCount: 'all',
+      isAlsoStaff: 'all'
     });
-
-    return data;
-  }, [uniqueDirectoryData, filterText, sortConfig, nameSort]);
+    setFilterText('');
+    setShowOnlyWithCourses(false);
+  };
 
   const SortableHeader = ({ label, columnKey }) => {
     const isSorted = sortConfig.key === columnKey;
@@ -406,6 +666,16 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFac
               Faculty Directory ({sortedAndFilteredData.length} members)
             </h2>
             <div className="flex items-center gap-4">
+                {/* Course count filter UI */}
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={showOnlyWithCourses}
+                    onChange={e => setShowOnlyWithCourses(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                  />
+                  Only show faculty with at least 1 course
+                </label>
                 {/* Name Sort Options */}
                 {sortConfig.key === 'name' && (
                   <div className="flex items-center gap-2 text-sm">
@@ -444,6 +714,17 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFac
                         className="w-full pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
                     />
                 </div>
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                    showFilters 
+                      ? 'bg-baylor-green text-white' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <Filter size={16} />
+                  Filters
+                </button>
                 {changeHistory.length > 0 && (
                   <button
                     onClick={() => setShowHistory(!showHistory)}
@@ -462,6 +743,211 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFac
                 </button>
             </div>
         </div>
+
+        {/* Advanced Filters */}
+        {showFilters && (
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-medium text-gray-900">Advanced Filters</h3>
+              <button
+                onClick={clearFilters}
+                className="text-sm text-baylor-green hover:text-baylor-green/80 font-medium"
+              >
+                Clear All Filters
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              {/* Programs Filter */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Include Programs
+                  </label>
+                  <MultiSelectDropdown
+                    options={filterOptions.programs}
+                    selected={filters.programs.include}
+                    onChange={(selected) => setFilters(prev => ({ 
+                      ...prev, 
+                      programs: { ...prev.programs, include: selected }
+                    }))}
+                    placeholder="Select programs to include..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Exclude Programs
+                  </label>
+                  <MultiSelectDropdown
+                    options={filterOptions.programs}
+                    selected={filters.programs.exclude}
+                    onChange={(selected) => setFilters(prev => ({ 
+                      ...prev, 
+                      programs: { ...prev.programs, exclude: selected }
+                    }))}
+                    placeholder="Select programs to exclude..."
+                  />
+                </div>
+              </div>
+
+              {/* Job Titles Filter */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Include Job Titles
+                  </label>
+                  <MultiSelectDropdown
+                    options={filterOptions.jobTitles}
+                    selected={filters.jobTitles.include}
+                    onChange={(selected) => setFilters(prev => ({ 
+                      ...prev, 
+                      jobTitles: { ...prev.jobTitles, include: selected }
+                    }))}
+                    placeholder="Select job titles to include..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Exclude Job Titles
+                  </label>
+                  <MultiSelectDropdown
+                    options={filterOptions.jobTitles}
+                    selected={filters.jobTitles.exclude}
+                    onChange={(selected) => setFilters(prev => ({ 
+                      ...prev, 
+                      jobTitles: { ...prev.jobTitles, exclude: selected }
+                    }))}
+                    placeholder="Select job titles to exclude..."
+                  />
+                </div>
+              </div>
+
+              {/* Buildings Filter */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Include Buildings
+                  </label>
+                  <MultiSelectDropdown
+                    options={filterOptions.buildings}
+                    selected={filters.buildings.include}
+                    onChange={(selected) => setFilters(prev => ({ 
+                      ...prev, 
+                      buildings: { ...prev.buildings, include: selected }
+                    }))}
+                    placeholder="Select buildings to include..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Exclude Buildings
+                  </label>
+                  <MultiSelectDropdown
+                    options={filterOptions.buildings}
+                    selected={filters.buildings.exclude}
+                    onChange={(selected) => setFilters(prev => ({ 
+                      ...prev, 
+                      buildings: { ...prev.buildings, exclude: selected }
+                    }))}
+                    placeholder="Select buildings to exclude..."
+                  />
+                </div>
+              </div>
+
+              {/* Status Filters */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Adjunct Status
+                  </label>
+                  <select
+                    value={filters.adjunct}
+                    onChange={(e) => setFilters(prev => ({ ...prev, adjunct: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  >
+                    <option value="all">All</option>
+                    <option value="include">Adjunct Only</option>
+                    <option value="exclude">Exclude Adjunct</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tenure Status
+                  </label>
+                  <select
+                    value={filters.tenured}
+                    onChange={(e) => setFilters(prev => ({ ...prev, tenured: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  >
+                    <option value="all">All</option>
+                    <option value="include">Tenured Only</option>
+                    <option value="exclude">Exclude Tenured</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    UPD Status
+                  </label>
+                  <select
+                    value={filters.upd}
+                    onChange={(e) => setFilters(prev => ({ ...prev, upd: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  >
+                    <option value="all">All</option>
+                    <option value="include">UPD Only</option>
+                    <option value="exclude">Exclude UPD</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Staff Status
+                  </label>
+                  <select
+                    value={filters.isAlsoStaff}
+                    onChange={(e) => setFilters(prev => ({ ...prev, isAlsoStaff: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  >
+                    <option value="all">All</option>
+                    <option value="include">Also Staff</option>
+                    <option value="exclude">Faculty Only</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email Requirement
+                  </label>
+                  <select
+                    value={filters.hasEmail ? 'yes' : 'no'}
+                    onChange={(e) => setFilters(prev => ({ ...prev, hasEmail: e.target.value === 'yes' }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  >
+                    <option value="yes">Has Email</option>
+                    <option value="no">Include No Email</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Course Status
+                  </label>
+                  <select
+                    value={filters.courseCount}
+                    onChange={(e) => setFilters(prev => ({ ...prev, courseCount: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  >
+                    <option value="all">All</option>
+                    <option value="with-courses">Teaching Courses</option>
+                    <option value="without-courses">Not Teaching</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Data Import Caution */}
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
@@ -511,6 +997,7 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFac
                   <SortableHeader label="Email" columnKey="email" />
                   <SortableHeader label="Phone" columnKey="phone" />
                   <SortableHeader label="Office" columnKey="office" />
+                  <SortableHeader label="Courses" columnKey="courseCount" />
                   <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -626,6 +1113,11 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFac
                       </button>
                     </div>
                   </td>
+                  <td className="p-2 align-top">
+                    <div className="text-sm text-gray-500 italic">
+                      Will be calculated from courses
+                    </div>
+                  </td>
                   <td className="p-2 align-top text-right">
                     <div className="flex gap-2">
                       <button onClick={handleCreateSave} className="p-2 text-green-600 hover:bg-green-100 rounded-full"><Save size={16} /></button>
@@ -722,6 +1214,11 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFac
                           </button>
                         </div>
                       </td>
+                                              <td className="p-2 align-top">
+                          <div className="text-sm text-gray-600">
+                            {faculty.courseCount || 0}
+                          </div>
+                        </td>
                       <td className="p-2 align-top text-right">
                         <div className="flex gap-2">
                           <button onClick={handleSave} className="p-2 text-green-600 hover:bg-green-100 rounded-full"><Save size={16} /></button>
@@ -774,6 +1271,9 @@ const FacultyDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onFac
                             faculty.office || '-'
                           )}
                         </div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
+                        {faculty.courseCount}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex gap-1 justify-end">

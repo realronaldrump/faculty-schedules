@@ -57,7 +57,7 @@ const ProgramManagement = ({
   const programData = useMemo(() => {
     if (!facultyData || !Array.isArray(facultyData)) return {};
 
-    const programs = {};
+    const programGroups = {};
     
     // Filter out adjuncts if the toggle is off
     const facultyToProcess = showAdjuncts ? facultyData : facultyData.filter(f => !f.isAdjunct);
@@ -70,8 +70,8 @@ const ProgramManagement = ({
         programName = faculty.program.name;
       }
 
-      if (!programs[programName]) {
-        programs[programName] = {
+      if (!programGroups[programName]) {
+        programGroups[programName] = {
           name: programName,
           faculty: [],
           upd: null,
@@ -79,19 +79,19 @@ const ProgramManagement = ({
         };
       }
 
-      programs[programName].faculty.push(faculty);
+      programGroups[programName].faculty.push(faculty);
 
       // Check if this faculty member is marked as UPD
       if (faculty.isUPD) {
         // Check if this program has this faculty as UPD
         const programInfo = programs.find(p => p.id === faculty.programId);
         if (programInfo && programInfo.updId === faculty.id) {
-          programs[programName].upd = faculty;
+          programGroups[programName].upd = faculty;
         }
       }
     });
 
-    return programs;
+    return programGroups;
   }, [facultyData, showAdjuncts]);
 
   const programList = Object.keys(programData).sort();

@@ -644,103 +644,148 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
   return (
     <div className="p-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={() => onNavigate('dashboard')}
-            className="flex items-center text-baylor-green hover:text-baylor-green/80 transition-colors"
-          >
-            <ArrowLeft className="mr-2" size={20} />
-            Back to Dashboard
-          </button>
-          <div>
-            <h1 className="text-2xl font-serif font-bold text-baylor-green">Data Import</h1>
-            <p className="text-gray-600">Preview changes, selective import, and complete rollback capabilities</p>
+      <div className="border-b border-gray-200 pb-6 mb-8">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-6">
+            <button
+              onClick={() => onNavigate('dashboard')}
+              className="flex items-center text-baylor-green hover:text-baylor-green/80 transition-colors font-medium"
+            >
+              <ArrowLeft className="mr-2" size={20} />
+              Dashboard
+            </button>
+            <div className="border-l border-gray-300 pl-6">
+              <h1 className="text-3xl font-bold text-baylor-green mb-2">Data Import Management</h1>
+              <p className="text-gray-600 text-lg">Advanced import capabilities with preview, selective application, and rollback protection</p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center space-x-3">
-
-          <button
-            onClick={() => setShowHistoryModal(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            <History className="w-4 h-4" />
-            <span className="text-sm font-medium">Import History</span>
-          </button>
-          <div className="flex items-center space-x-2 px-4 py-2 bg-green-50 rounded-lg">
-            <Database className="w-5 h-5 text-green-600" />
-            <span className="text-sm text-green-800 font-medium">Unified People Collection</span>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setShowHistoryModal(true)}
+              className="flex items-center space-x-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
+            >
+              <History className="w-4 h-4" />
+              <span className="font-medium">Import History</span>
+            </button>
+            <div className="flex items-center space-x-2 px-4 py-2.5 bg-baylor-green/10 border border-baylor-green/20 rounded-lg">
+              <Database className="w-4 h-4 text-baylor-green" />
+              <span className="text-sm text-baylor-green font-semibold">Unified Data Model</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Benefits Overview */}
-      <div className="bg-baylor-green/5 border border-baylor-green/20 rounded-lg p-6 mb-8">
-        <h2 className="text-lg font-semibold text-baylor-green mb-4 flex items-center">
-          <CheckCircle className="w-5 h-5 mr-2" />
-          Smart Import Benefits
-        </h2>
-        <div className="grid md:grid-cols-4 gap-4 text-sm">
-          <div>
-            <h3 className="font-medium text-baylor-green mb-2">🔍 Preview First</h3>
-            <p className="text-baylor-green/80">Review all changes before applying to database</p>
+      {/* Features Overview */}
+      <div className="bg-gradient-to-r from-baylor-green/5 to-baylor-gold/5 border border-baylor-green/20 rounded-xl p-8 mb-8 shadow-sm">
+        <div className="flex items-center mb-6">
+          <div className="bg-baylor-green/10 p-3 rounded-lg mr-4">
+            <Shield className="w-6 h-6 text-baylor-green" />
           </div>
           <div>
-            <h3 className="font-medium text-baylor-green mb-2">✅ Selective Import</h3>
-            <p className="text-baylor-green/80">Choose exactly which changes to apply</p>
+            <h2 className="text-xl font-bold text-baylor-green">Smart Import System</h2>
+            <p className="text-baylor-green/70">Enterprise-grade data management with comprehensive safeguards</p>
           </div>
-          <div>
-            <h3 className="font-medium text-baylor-green mb-2">🔄 Complete Rollback</h3>
-            <p className="text-baylor-green/80">Undo entire imports as if they never happened</p>
+        </div>
+        <div className="grid md:grid-cols-4 gap-6">
+          <div className="bg-white/80 rounded-lg p-4 border border-gray-100">
+            <div className="flex items-center mb-3">
+              <Eye className="w-5 h-5 text-baylor-green mr-2" />
+              <h3 className="font-semibold text-baylor-green">Preview Changes</h3>
+            </div>
+            <p className="text-gray-700 text-sm">Review all modifications before database commitment</p>
           </div>
-          <div>
-            <h3 className="font-medium text-baylor-green mb-2">🎯 Zero Data Loss</h3>
-            <p className="text-baylor-green/80">Safe imports with full transaction history</p>
+          <div className="bg-white/80 rounded-lg p-4 border border-gray-100">
+            <div className="flex items-center mb-3">
+              <CheckCircle className="w-5 h-5 text-baylor-green mr-2" />
+              <h3 className="font-semibold text-baylor-green">Selective Import</h3>
+            </div>
+            <p className="text-gray-700 text-sm">Apply only the changes you approve</p>
+          </div>
+          <div className="bg-white/80 rounded-lg p-4 border border-gray-100">
+            <div className="flex items-center mb-3">
+              <RotateCcw className="w-5 h-5 text-baylor-green mr-2" />
+              <h3 className="font-semibold text-baylor-green">Complete Rollback</h3>
+            </div>
+            <p className="text-gray-700 text-sm">Reverse entire imports with transaction history</p>
+          </div>
+          <div className="bg-white/80 rounded-lg p-4 border border-gray-100">
+            <div className="flex items-center mb-3">
+              <Database className="w-5 h-5 text-baylor-green mr-2" />
+              <h3 className="font-semibold text-baylor-green">Data Integrity</h3>
+            </div>
+            <p className="text-gray-700 text-sm">Zero data loss with comprehensive audit trails</p>
           </div>
         </div>
       </div>
 
       {/* Import Type Selection */}
       <div className="mb-8">
-        <h2 className="text-lg font-serif font-semibold text-baylor-green mb-4">Import Type</h2>
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="mb-6">
+          <h2 className="text-xl font-bold text-baylor-green mb-2">Select Import Type</h2>
+          <p className="text-gray-600">Choose the type of data you want to import into the system</p>
+        </div>
+        <div className="grid md:grid-cols-2 gap-6">
           <div 
-            className={`border-2 rounded-lg p-6 cursor-pointer transition-all ${
+            className={`border-2 rounded-xl p-8 cursor-pointer transition-all shadow-sm hover:shadow-md ${
               importType === 'directory' 
-                ? 'border-baylor-green bg-green-50' 
-                : 'border-gray-200 hover:border-gray-300'
+                ? 'border-baylor-green bg-baylor-green/5 shadow-md' 
+                : 'border-gray-200 hover:border-baylor-green/50 bg-white'
             }`}
             onClick={() => setImportType('directory')}
           >
-            <div className="flex items-center mb-3">
-              <Users className="w-6 h-6 mr-3 text-baylor-green" />
-              <h3 className="font-semibold">Directory Import</h3>
+            <div className="flex items-center mb-4">
+              <div className={`p-3 rounded-lg mr-4 ${
+                importType === 'directory' ? 'bg-baylor-green/10' : 'bg-gray-100'
+              }`}>
+                <Users className={`w-7 h-7 ${
+                  importType === 'directory' ? 'text-baylor-green' : 'text-gray-600'
+                }`} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Directory Import</h3>
+                <p className="text-sm text-gray-500">Personnel Management</p>
+              </div>
             </div>
-            <p className="text-sm text-gray-600 mb-3">
-              Import personnel data to create/update unified people records
+            <p className="text-gray-700 mb-4 leading-relaxed">
+              Import personnel data to create and update unified people records with role assignments and contact information.
             </p>
-            <div className="text-xs text-gray-500">
-              <strong>Expected columns:</strong> Title, First Name, Last Name, E-mail Address, Job Title, Department, Office Location, Business Phone
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="text-xs font-semibold text-gray-700 mb-1">Required Columns:</div>
+              <div className="text-xs text-gray-600">
+                Title, First Name, Last Name, E-mail Address, Job Title, Department, Office Location, Business Phone
+              </div>
             </div>
           </div>
 
           <div 
-            className={`border-2 rounded-lg p-6 cursor-pointer transition-all ${
+            className={`border-2 rounded-xl p-8 cursor-pointer transition-all shadow-sm hover:shadow-md ${
               importType === 'schedule' 
-                ? 'border-baylor-green bg-green-50' 
-                : 'border-gray-200 hover:border-gray-300'
+                ? 'border-baylor-green bg-baylor-green/5 shadow-md' 
+                : 'border-gray-200 hover:border-baylor-green/50 bg-white'
             }`}
             onClick={() => setImportType('schedule')}
           >
-            <div className="flex items-center mb-3">
-              <Calendar className="w-6 h-6 mr-3 text-baylor-green" />
-              <h3 className="font-semibold">CLSS Schedule Import</h3>
+            <div className="flex items-center mb-4">
+              <div className={`p-3 rounded-lg mr-4 ${
+                importType === 'schedule' ? 'bg-baylor-green/10' : 'bg-gray-100'
+              }`}>
+                <Calendar className={`w-7 h-7 ${
+                  importType === 'schedule' ? 'text-baylor-green' : 'text-gray-600'
+                }`} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">CLSS Schedule Import</h3>
+                <p className="text-sm text-gray-500">Course Management</p>
+              </div>
             </div>
-            <p className="text-sm text-gray-600 mb-3">
-              Import course schedules with automatic instructor matching
+            <p className="text-gray-700 mb-4 leading-relaxed">
+              Import course schedules from CLSS exports with automatic instructor matching and schedule optimization.
             </p>
-            <div className="text-xs text-gray-500">
-              <strong>Expected columns:</strong> Instructor, Course, Course Title, Section #, Meeting Pattern, Room, Term, Credit Hrs
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="text-xs font-semibold text-gray-700 mb-1">Required Columns:</div>
+              <div className="text-xs text-gray-600">
+                Instructor, Course, Course Title, Section #, Meeting Pattern, Room, Term, Credit Hrs
+              </div>
             </div>
           </div>
         </div>
@@ -748,13 +793,18 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
 
       {/* File Upload */}
       <div className="mb-8">
-        <h2 className="text-lg font-serif font-semibold text-baylor-green mb-4">Upload CSV File</h2>
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-          <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+        <div className="mb-6">
+          <h2 className="text-xl font-bold text-baylor-green mb-2">Upload Data File</h2>
+          <p className="text-gray-600">Select a CSV file to import into the system</p>
+        </div>
+        <div className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center bg-gray-50/50 hover:bg-gray-50 transition-colors">
+          <div className="bg-white rounded-lg p-4 inline-block mb-4 shadow-sm">
+            <Upload className="w-8 h-8 text-baylor-green mx-auto" />
+          </div>
           <div>
             <label className="cursor-pointer">
-              <span className="text-lg font-medium text-gray-700">
-                Choose CSV file
+              <span className="text-xl font-semibold text-gray-700 hover:text-baylor-green transition-colors">
+                Select CSV File
               </span>
               <input
                 type="file"
@@ -763,12 +813,13 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
                 className="hidden"
               />
             </label>
-            <p className="text-gray-500 mt-2">or drag and drop your CSV file here</p>
+            <p className="text-gray-500 mt-3">Supported format: CSV files (.csv)</p>
+            <p className="text-sm text-gray-400 mt-1">Maximum file size: 10MB</p>
           </div>
           {fileName && (
-            <div className="mt-4 flex items-center justify-center text-sm text-green-600">
-              <CheckCircle className="w-4 h-4 mr-2" />
-              {fileName}
+            <div className="mt-6 inline-flex items-center px-4 py-2 bg-green-50 border border-green-200 rounded-lg text-green-700">
+              <CheckCircle className="w-5 h-5 mr-2" />
+              <span className="font-medium">{fileName}</span>
             </div>
           )}
         </div>
@@ -823,7 +874,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
                         <td className="py-2 px-3 text-gray-800 max-w-32 truncate">{row['Last Name']}</td>
                         <td className="py-2 px-3 text-gray-800 max-w-32 truncate">{row['E-mail Address']}</td>
                         <td className="py-2 px-3 text-gray-800 max-w-32 truncate font-medium">
-                          {row['Job Title'] || <span className="text-red-500">EMPTY!</span>}
+                          {row['Job Title'] || <span className="text-red-500 text-xs">Not specified</span>}
                         </td>
                         <td className="py-2 px-3 text-gray-800 max-w-32 truncate">{row['Department']}</td>
                         <td className="py-2 px-3 text-gray-800 max-w-32 truncate text-gray-500">
@@ -854,21 +905,21 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
           </div>
           
           {/* Validation Status */}
-          <div className="mt-4 flex items-center">
+          <div className="mt-4">
             {validateImportType() ? (
-              <>
-                <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
-                <span className="text-green-700 font-medium">
-                  ✓ CSV format is compatible with {importType} import
+              <div className="flex items-center p-3 bg-green-50 border border-green-200 rounded-lg">
+                <CheckCircle className="w-5 h-5 text-green-600 mr-3 flex-shrink-0" />
+                <span className="text-green-800 font-medium">
+                  CSV format is compatible with {importType} import
                 </span>
-              </>
+              </div>
             ) : (
-              <>
-                <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
-                <span className="text-red-700 font-medium">
-                  ⚠ CSV format doesn't match expected {importType} headers
+              <div className="flex items-center p-3 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="w-5 h-5 text-red-600 mr-3 flex-shrink-0" />
+                <span className="text-red-800 font-medium">
+                  CSV format doesn't match expected {importType} headers
                 </span>
-              </>
+              </div>
             )}
           </div>
         </div>
@@ -922,47 +973,57 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
       {/* Import Actions */}
       {csvData && validateImportType() && (
         <div className="mb-8">
-          <h2 className="text-lg font-serif font-semibold text-baylor-green mb-4">Import Actions</h2>
-          <div className="flex flex-col sm:flex-row gap-4 items-start">
-            <button
-              onClick={handleProcessData}
-              disabled={isLoading}
-              className="px-6 py-3 bg-baylor-green text-white font-semibold rounded-lg hover:bg-baylor-green/90 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
-            >
-              {isLoading ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                  Processing...
-                </>
-              ) : (
-                <>
-                  {importType === 'schedule' ? <Eye className="mr-2" size={18} /> : <Upload className="mr-2" size={18} />}
-                  {importType === 'directory' ? 'Review & Assign Roles' : 'Preview Changes'} ({csvData.length} records)
-                </>
-              )}
-            </button>
-            
-            {importType === 'schedule' && csvData && (
-              <button
-                onClick={startDeduplication}
-                className="px-6 py-3 bg-baylor-green text-white font-semibold rounded-lg hover:bg-baylor-green/90 transition-colors flex items-center"
-              >
-                <Database className="mr-2" size={18} />
-                Detect Duplicates
-              </button>
-            )}
-            
-            <button
-              onClick={resetImport}
-              className="px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center"
-            >
-              <RotateCcw className="mr-2" size={16} />
-              Reset
-            </button>
-            
-            <div className="text-sm text-gray-600 flex items-center">
-              <AlertCircle className="w-4 h-4 mr-2 text-amber-500" />
-              Smart processing with duplicate detection and intelligent matching
+          <div className="mb-6">
+            <h2 className="text-xl font-bold text-baylor-green mb-2">Import Processing</h2>
+            <p className="text-gray-600">Process your data with advanced validation and preview capabilities</p>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+            <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={handleProcessData}
+                  disabled={isLoading}
+                  className="px-8 py-3 bg-baylor-green text-white font-semibold rounded-lg hover:bg-baylor-green/90 transition-all disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center shadow-sm hover:shadow-md"
+                >
+                  {isLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      {importType === 'schedule' ? <Eye className="mr-3" size={18} /> : <Upload className="mr-3" size={18} />}
+                      {importType === 'directory' ? 'Review & Assign Roles' : 'Preview Changes'}
+                      <span className="ml-2 px-2 py-1 bg-white/20 rounded text-sm">
+                        {csvData.length} records
+                      </span>
+                    </>
+                  )}
+                </button>
+                
+                {importType === 'schedule' && csvData && (
+                  <button
+                    onClick={startDeduplication}
+                    className="px-6 py-3 bg-baylor-gold text-baylor-green font-semibold rounded-lg hover:bg-baylor-gold/90 transition-all flex items-center shadow-sm hover:shadow-md"
+                  >
+                    <Database className="mr-2" size={18} />
+                    Detect Duplicates
+                  </button>
+                )}
+                
+                <button
+                  onClick={resetImport}
+                  className="px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all flex items-center"
+                >
+                  <RotateCcw className="mr-2" size={16} />
+                  Reset
+                </button>
+              </div>
+              
+              <div className="flex items-center text-sm text-gray-600 bg-blue-50 px-4 py-2 rounded-lg border border-blue-200">
+                <Shield className="w-4 h-4 mr-2 text-blue-600" />
+                <span className="font-medium">Smart processing with duplicate detection and intelligent matching</span>
+              </div>
             </div>
           </div>
         </div>
@@ -970,14 +1031,19 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
 
       {/* CRN Data Management */}
       <div className="mb-8">
-        <h2 className="text-lg font-serif font-semibold text-baylor-green mb-4">CRN Data Management</h2>
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+        <div className="mb-6">
+          <h2 className="text-xl font-bold text-baylor-green mb-2">CRN Data Management</h2>
+          <p className="text-gray-600">Analyze and maintain course reference number data integrity</p>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 mb-6">
           <div className="flex items-start">
-            <Settings className="w-5 h-5 text-yellow-600 mr-3 mt-0.5 flex-shrink-0" />
-            <div className="text-sm">
-              <p className="text-yellow-800 font-medium mb-1">Data Hygiene & Migration</p>
-              <p className="text-yellow-700">
-                Analyze and backfill missing CRN data for existing schedule records. This helps ensure data consistency across your application.
+            <div className="bg-amber-100 p-2 rounded-lg mr-4 flex-shrink-0">
+              <Settings className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="text-amber-900 font-semibold mb-2">Data Hygiene & Migration Tools</h3>
+              <p className="text-amber-800">
+                Analyze CRN coverage across schedule records and perform intelligent backfill operations to ensure data consistency and completeness.
               </p>
             </div>
           </div>
@@ -1069,10 +1135,13 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
             </div>
             
             {crnAnalysis.duplicateCRNs.length > 0 && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded">
-                <h4 className="text-sm font-medium text-red-800 mb-2">⚠️ Duplicate CRNs Found</h4>
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center mb-2">
+                  <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+                  <h4 className="font-semibold text-red-800">Duplicate CRNs Detected</h4>
+                </div>
                 <div className="text-sm text-red-700">
-                  {crnAnalysis.duplicateCRNs.length} CRN(s) are used by multiple records. This may indicate data integrity issues.
+                  {crnAnalysis.duplicateCRNs.length} CRN(s) are used by multiple records. This may indicate data integrity issues that require attention.
                 </div>
               </div>
             )}
@@ -1133,14 +1202,16 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
             </div>
           </div>
           
-                  <div className="bg-baylor-green/5 border border-baylor-green/20 rounded-lg p-4 mb-4">
+                  <div className="bg-baylor-green/5 border border-baylor-green/20 rounded-xl p-6 mb-6">
           <div className="flex items-start">
-            <AlertCircle className="w-5 h-5 text-baylor-green mr-3 mt-0.5 flex-shrink-0" />
-            <div className="text-sm">
-              <p className="text-baylor-green font-medium mb-1">Enhanced Import Controls</p>
+            <div className="bg-baylor-green/10 p-2 rounded-lg mr-4 flex-shrink-0">
+              <Settings className="w-5 h-5 text-baylor-green" />
+            </div>
+            <div>
+              <h3 className="text-baylor-green font-semibold mb-2">Advanced Import Configuration</h3>
               <p className="text-baylor-green/80">
-                  Remove people from import, assign roles, mark adjunct status, and specify missing contact info. 
-                  Exact duplicates with no new data are automatically excluded.
+                Configure individual records before import: manage inclusion status, assign roles, set adjunct classification, and handle missing contact information. 
+                Duplicate records with no new data are automatically filtered out.
                 </p>
               </div>
             </div>
@@ -1272,13 +1343,17 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
                                 {person.issues.slice(0, 2).map((issue, idx) => (
                                   <div 
                                     key={idx} 
-                                    className={`text-xs px-2 py-1 rounded ${
+                                    className={`text-xs px-2 py-1 rounded flex items-center ${
                                       issue.fixed 
                                         ? 'bg-green-100 text-green-800' 
                                         : 'bg-red-100 text-red-800'
                                     }`}
                                   >
-                                    {issue.fixed ? '✓' : '⚠'} {issue.issue.substring(0, 30)}...
+                                    {issue.fixed ? 
+                                      <CheckCircle className="w-3 h-3 mr-1" /> : 
+                                      <AlertCircle className="w-3 h-3 mr-1" />
+                                    } 
+                                    {issue.issue.substring(0, 30)}...
                                   </div>
                                 ))}
                               </div>
@@ -1422,29 +1497,73 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
         </div>
       )}
 
-      {/* Help Section */}
-      <div className="bg-gray-50 rounded-lg p-6">
-        <h2 className="text-lg font-serif font-semibold text-baylor-green mb-4">Data Model Overview</h2>
-        <div className="grid md:grid-cols-2 gap-6 text-sm">
-          <div>
-            <h3 className="font-medium text-gray-900 mb-2">People Collection</h3>
-            <ul className="space-y-1 text-gray-600">
-              <li>• Unified storage for all personnel</li>
-              <li>• Automatic role determination (faculty/staff)</li>
-              <li>• Email-based deduplication</li>
-              <li>• Name parsing and normalization</li>
-              <li>• Job title classification</li>
-            </ul>
+      {/* System Overview */}
+      <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-8 border border-gray-200">
+        <div className="flex items-center mb-6">
+          <div className="bg-baylor-green/10 p-3 rounded-lg mr-4">
+            <Database className="w-6 h-6 text-baylor-green" />
           </div>
           <div>
-            <h3 className="font-medium text-gray-900 mb-2">Schedules Collection</h3>
-            <ul className="space-y-1 text-gray-600">
-              <li>• ID-based instructor references</li>
-              <li>• Structured meeting patterns</li>
-              <li>• Complex time parsing (TR 2pm-3:15pm)</li>
-              <li>• Automatic instructor matching/creation</li>
-              <li>• Duplicate schedule prevention</li>
-            </ul>
+            <h2 className="text-xl font-bold text-baylor-green">System Architecture</h2>
+            <p className="text-gray-600">Understanding the unified data model and import capabilities</p>
+          </div>
+        </div>
+        <div className="grid md:grid-cols-2 gap-8">
+          <div className="bg-white rounded-lg p-6 border border-gray-200">
+            <div className="flex items-center mb-4">
+              <Users className="w-5 h-5 text-baylor-green mr-2" />
+              <h3 className="font-bold text-gray-900">People Collection</h3>
+            </div>
+            <div className="space-y-3 text-sm text-gray-700">
+              <div className="flex items-start">
+                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
+                <span>Unified storage for all personnel data</span>
+              </div>
+              <div className="flex items-start">
+                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
+                <span>Intelligent role determination (faculty/staff)</span>
+              </div>
+              <div className="flex items-start">
+                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
+                <span>Email-based duplicate detection</span>
+              </div>
+              <div className="flex items-start">
+                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
+                <span>Automated name parsing and normalization</span>
+              </div>
+              <div className="flex items-start">
+                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
+                <span>Job title classification system</span>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-lg p-6 border border-gray-200">
+            <div className="flex items-center mb-4">
+              <Calendar className="w-5 h-5 text-baylor-green mr-2" />
+              <h3 className="font-bold text-gray-900">Schedules Collection</h3>
+            </div>
+            <div className="space-y-3 text-sm text-gray-700">
+              <div className="flex items-start">
+                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
+                <span>ID-based instructor references</span>
+              </div>
+              <div className="flex items-start">
+                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
+                <span>Structured meeting pattern parsing</span>
+              </div>
+              <div className="flex items-start">
+                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
+                <span>Complex time format support</span>
+              </div>
+              <div className="flex items-start">
+                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
+                <span>Automatic instructor matching</span>
+              </div>
+              <div className="flex items-start">
+                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
+                <span>Duplicate schedule prevention</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1503,9 +1622,12 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
                 <div className="text-sm text-gray-600">Terms</div>
               </div>
             </div>
-            <div className="mt-4 p-4 bg-green-50 rounded-lg">
-              <p className="text-green-800 font-medium">✅ Data has been processed and duplicates removed!</p>
-              <p className="text-green-700 text-sm mt-1">You can now proceed with the import or run additional analysis.</p>
+            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex items-center">
+                <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
+                <p className="text-green-800 font-semibold">Data processing completed successfully</p>
+              </div>
+              <p className="text-green-700 text-sm mt-2">Duplicates have been identified and removed. You can now proceed with the import or run additional analysis.</p>
             </div>
           </div>
         </div>

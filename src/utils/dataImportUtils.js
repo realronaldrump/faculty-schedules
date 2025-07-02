@@ -4,8 +4,45 @@
  */
 
 import { collection, addDoc, getDocs, query, where, doc, updateDoc, writeBatch } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, COLLECTIONS } from '../firebase';
 import { standardizePerson, standardizeSchedule, validateAndCleanBeforeSave } from './dataHygiene';
+
+// ==================== PROGRAM MAPPING ====================
+
+/**
+ * Program mapping based on course code prefixes
+ */
+const PROGRAM_MAPPING = {
+  'ADM': 'apparel',
+  'CFS': 'child-family-studies', 
+  'NUTR': 'nutrition',
+  'ID': 'interior-design'
+};
+
+/**
+ * Determine program ID from course data
+ */
+const determineProgramIdFromCourses = (courses) => {
+  const prefixes = new Set();
+  
+  // Extract course code prefixes
+  courses.forEach(course => {
+    const courseCode = course.courseCode || course.Course || '';
+    const match = courseCode.match(/^([A-Z]{2,4})\s*\d/);
+    if (match) {
+      prefixes.add(match[1]);
+    }
+  });
+  
+  // Return the first valid program ID we find
+  for (const prefix of prefixes) {
+    if (PROGRAM_MAPPING[prefix]) {
+      return PROGRAM_MAPPING[prefix];
+    }
+  }
+  
+  return null;
+};
 
 // ==================== CORE DATA MODELS ====================
 
@@ -28,8 +65,7 @@ export const createPersonModel = (rawData) => {
     isFullTime: rawData.isFullTime !== undefined ? rawData.isFullTime : true,
     isTenured: rawData.roles?.includes('faculty') ? (rawData.isTenured || false) : false,
     isUPD: rawData.roles?.includes('faculty') ? (rawData.isUPD || false) : false,
-    programOverride: (rawData.programOverride || '').trim(),
-    updProgram: (rawData.updProgram || '').trim(),
+    programId: rawData.programId || null, // Reference to programs collection
     hasNoPhone: rawData.hasNoPhone || false,
     hasNoOffice: rawData.hasNoOffice || false,
     createdAt: rawData.createdAt || new Date().toISOString(),
@@ -669,7 +705,25 @@ export const processScheduleImport = async (csvData) => {
             results.peopleUpdated++;
             console.log(`✅ Added faculty role to ${match.person.firstName} ${match.person.lastName}`);
           }
+          
+          // Determine and set program based on course data if not already set
+          if (!match.person.programId) {
+            const programId = determineProgramIdFromCourses([{ courseCode }]);
+            if (programId) {
+              await updateDoc(doc(db, 'people', match.person.id), { 
+                programId: programId,
+                updatedAt: new Date().toISOString()
+              });
+              
+              // Update our local copy
+              match.person.programId = programId;
+              console.log(`🎯 Assigned ${programId} program to ${match.person.firstName} ${match.person.lastName} based on course ${courseCode}`);
+            }
+          }
         } else {
+          // Determine program based on course before creating new person
+          const programId = determineProgramIdFromCourses([{ courseCode }]);
+          
           // Create new person for instructor with enhanced data
           const newPerson = createPersonModel({
             firstName: instructorInfo.firstName,
@@ -678,7 +732,8 @@ export const processScheduleImport = async (csvData) => {
             roles: ['faculty'],
             isAdjunct: true,
             department: 'Human Sciences & Design', // Default from CLSS context
-            jobTitle: 'Instructor' // Default
+            jobTitle: 'Instructor', // Default
+            programId: programId // Set program based on course
           });
           
           const docRef = await addDoc(collection(db, 'people'), newPerson);
@@ -686,7 +741,7 @@ export const processScheduleImport = async (csvData) => {
           instructorData = { ...newPerson, id: docRef.id };
           existingPeople.push(instructorData);
           results.peopleCreated++;
-          console.log(`➕ Created new instructor: ${instructorInfo.firstName} ${instructorInfo.lastName}`);
+          console.log(`➕ Created new instructor: ${instructorInfo.firstName} ${instructorInfo.lastName}${programId ? ` (${programId} program)` : ''}`);
         }
       }
       

@@ -6,60 +6,6 @@
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 
-// ==================== PROGRAM DETERMINATION ====================
-
-/**
- * Program mapping based on course code prefixes
- */
-const PROGRAM_MAPPING = {
-  'ADM': 'Apparel Design & Manufacturing',
-  'CFS': 'Child & Family Studies', 
-  'NUTR': 'Nutrition',
-  'ID': 'Interior Design'
-};
-
-/**
- * Determine faculty program based on course codes they teach
- */
-export const determineFacultyProgram = (scheduleData, facultyName) => {
-  if (!scheduleData || !facultyName) {
-    return null;
-  }
-  
-  // Find all courses taught by this faculty member
-  const facultyCourses = scheduleData.filter(schedule => {
-    const instructorName = schedule.instructor ? 
-      `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim() :
-      (schedule.instructorName || schedule.Instructor || '');
-    
-    return instructorName === facultyName;
-  });
-  
-  // Extract course code prefixes
-  const prefixes = new Set();
-  facultyCourses.forEach(schedule => {
-    const courseCode = schedule.courseCode || schedule.Course || '';
-    const match = courseCode.match(/^([A-Z]{2,4})\s*\d/);
-    if (match) {
-      prefixes.add(match[1]);
-    }
-  });
-  
-  // Determine program based on prefixes
-  // Since each faculty member should only teach in one program, 
-  // we take the first valid program we find
-  for (const prefix of prefixes) {
-    if (PROGRAM_MAPPING[prefix]) {
-      return {
-        code: prefix,
-        name: PROGRAM_MAPPING[prefix]
-      };
-    }
-  }
-  
-  return null;
-};
-
 // ==================== DATA FETCHING ====================
 
 /**
@@ -71,6 +17,19 @@ export const fetchPeople = async () => {
     return peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
     console.error('Error fetching people:', error);
+    return [];
+  }
+};
+
+/**
+ * Fetch all programs from the programs collection
+ */
+export const fetchPrograms = async () => {
+  try {
+    const programsSnapshot = await getDocs(collection(db, COLLECTIONS.PROGRAMS));
+    return programsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error('Error fetching programs:', error);
     return [];
   }
 };
@@ -107,7 +66,10 @@ export const fetchSchedulesWithInstructors = async () => {
 /**
  * Convert normalized people data to faculty format for components
  */
-export const adaptPeopleToFaculty = (people, scheduleData = []) => {
+export const adaptPeopleToFaculty = (people, scheduleData = [], programs = []) => {
+  // Create lookup map for programs
+  const programsMap = new Map(programs.map(program => [program.id, program]));
+  
   return people
     .filter(person => {
       // Handle both array and object formats for roles
@@ -121,17 +83,15 @@ export const adaptPeopleToFaculty = (people, scheduleData = []) => {
     .map(person => {
       const facultyName = `${person.firstName} ${person.lastName}`.trim();
       
-      // Single source of truth for program: prioritize programOverride, fallback to schedule-derived program
+      // Single source of truth for program: use programId to lookup program
       let program = null;
-      if (person.programOverride && person.programOverride.trim() !== '') {
-        // Use manual program override as the authoritative source
+      if (person.programId && programsMap.has(person.programId)) {
+        const programData = programsMap.get(person.programId);
         program = {
-          name: person.programOverride.trim(),
-          isOverride: true
+          id: programData.id,
+          name: programData.name,
+          code: programData.code
         };
-      } else {
-        // Fall back to determining program from schedule data
-        program = determineFacultyProgram(scheduleData, facultyName);
       }
       
       // Helper function to check if person has role (handles both formats)
@@ -155,8 +115,7 @@ export const adaptPeopleToFaculty = (people, scheduleData = []) => {
         jobTitle: person.jobTitle,
         office: person.office,
         department: person.department || 'Human Sciences and Design', // Default department
-        programOverride: person.programOverride || '', // Manual program assignment
-        updProgram: person.updProgram || '', // Which program they're UPD for
+        programId: person.programId || null, // Reference to programs collection
         isAdjunct: person.isAdjunct,
         isTenured: person.isTenured || false,
         isAlsoStaff: hasRole('staff'),
@@ -443,6 +402,7 @@ export const isNormalizedDataAvailable = async () => {
 
 export default {
   fetchPeople,
+  fetchPrograms,
   fetchSchedulesWithInstructors,
   adaptPeopleToFaculty,
   adaptPeopleToStaff,
@@ -452,6 +412,5 @@ export default {
   generateAnalyticsFromNormalizedData,
   getFullName,
   getInstructorDisplayName,
-  isNormalizedDataAvailable,
-  determineFacultyProgram
+  isNormalizedDataAvailable
 }; 

@@ -10,6 +10,7 @@
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "migrate": "node scripts/migrate.js",
+    "migrate-programs": "node migration-script.js",
     "validate-data": "node scripts/validate-data.js",
     "backup-data": "node scripts/backup-data.js",
     "test": "vitest",

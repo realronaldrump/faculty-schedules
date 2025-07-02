@@ -141,7 +141,8 @@ export const COLLECTIONS = {
   PEOPLE: 'people',
   SCHEDULES: 'schedules',
   ROOMS: 'rooms',
-  HISTORY: 'history'
+  HISTORY: 'history',
+  PROGRAMS: 'programs'
 };
 
 // Data validation utilities

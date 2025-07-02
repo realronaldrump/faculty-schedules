@@ -36,7 +36,7 @@ import {
 } from 'lucide-react';
 import { db } from './firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
-import { adaptPeopleToFaculty, adaptPeopleToStaff } from './utils/dataAdapter';
+import { adaptPeopleToFaculty, adaptPeopleToStaff, fetchPrograms } from './utils/dataAdapter';
 import { fetchSchedulesWithRelationalData } from './utils/dataImportUtils';
 import { autoMigrateIfNeeded } from './utils/importTransactionMigration';
 
@@ -56,6 +56,7 @@ function App() {
   // Raw data from Firebase
   const [rawScheduleData, setRawScheduleData] = useState([]);
   const [rawPeople, setRawPeople] = useState([]);
+  const [rawPrograms, setRawPrograms] = useState([]);
   const [editHistory, setEditHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -378,6 +379,9 @@ function App() {
         ...doc.data() 
       }));
       
+      // Load programs data
+      const programs = await fetchPrograms();
+      
       // Merge people from schedules with directory people
       const mergedPeople = [...people];
       schedulePeople.forEach(schedulePerson => {
@@ -393,11 +397,13 @@ function App() {
       console.log('✅ Data loaded successfully:', {
         schedules: schedules.length,
         people: mergedPeople.length,
+        programs: programs.length,
         history: history.length
       });
       
       setRawScheduleData(schedules);
       setRawPeople(mergedPeople);
+      setRawPrograms(programs);
       setEditHistory(history);
       updateAvailableSemesters(schedules);
       
@@ -655,7 +661,7 @@ function App() {
     const pageProps = {
       scheduleData,
       directoryData: rawPeople,
-      facultyData: adaptPeopleToFaculty(rawPeople),
+      facultyData: adaptPeopleToFaculty(rawPeople, rawScheduleData, rawPrograms),
       staffData: adaptPeopleToStaff(rawPeople),
       analytics,
       editHistory,

@@ -18,9 +18,11 @@ import {
   Check
 } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
+import { doc, updateDoc, getDocs, collection } from 'firebase/firestore';
+import { db, COLLECTIONS } from '../firebase';
 
 const ProgramManagement = ({ 
-  directoryData, 
+  facultyData,
   onFacultyUpdate, 
   onStaffUpdate, 
   showNotification 
@@ -33,69 +35,70 @@ const ProgramManagement = ({
   const [newProgramName, setNewProgramName] = useState('');
   const [draggedFaculty, setDraggedFaculty] = useState(null);
   const [dragOverDepartment, setDragOverDepartment] = useState(null);
-  const [showAdjuncts, setShowAdjuncts] = useState(false); // Hide adjuncts by default
-  // Removed refreshTrigger - data should update through proper data flow
-  const [expandedPrograms, setExpandedPrograms] = useState(new Set()); // Track expanded program cards
+  const [showAdjuncts, setShowAdjuncts] = useState(false);
+  const [expandedPrograms, setExpandedPrograms] = useState(new Set());
+  const [programs, setPrograms] = useState([]);
 
-  // Extract programs and organize faculty
+  // Load programs data
+  useEffect(() => {
+    const loadPrograms = async () => {
+      try {
+        const programsSnapshot = await getDocs(collection(db, COLLECTIONS.PROGRAMS));
+        const programsData = programsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setPrograms(programsData);
+      } catch (error) {
+        console.error('Error loading programs:', error);
+      }
+    };
+    loadPrograms();
+  }, []);
+
+  // Organize faculty by program using the reliable program data
   const programData = useMemo(() => {
-    if (!directoryData || !Array.isArray(directoryData)) return {};
+    if (!facultyData || !Array.isArray(facultyData)) return {};
 
     const programs = {};
     
     // Filter out adjuncts if the toggle is off
-    const facultyToProcess = showAdjuncts ? directoryData : directoryData.filter(f => !f.isAdjunct);
+    const facultyToProcess = showAdjuncts ? facultyData : facultyData.filter(f => !f.isAdjunct);
     
     facultyToProcess.forEach(faculty => {
-      // Determine program from course data - this is the primary organizing principle
+      // Use the program from faculty data (which comes from the programs collection)
       let programName = 'Unassigned';
       
-      // First: Check for manually assigned program override
-      if (faculty.programOverride && faculty.programOverride.trim() !== '') {
-        programName = faculty.programOverride.trim();
-      }
-      // Second: program from course data (ADM, CFS, NUTR, ID)
-      else if (faculty.program && faculty.program.name) {
+      if (faculty.program && faculty.program.name) {
         programName = faculty.program.name;
-      }
-      // Fallback: try to extract from job title (less reliable)
-      else if (faculty.jobTitle) {
-        const jobTitle = faculty.jobTitle.toLowerCase();
-        if (jobTitle.includes('apparel') || jobTitle.includes('design') || jobTitle.includes('adm')) {
-          programName = 'Apparel Design & Manufacturing';
-        } else if (jobTitle.includes('nutrition') || jobTitle.includes('nutr')) {
-          programName = 'Nutrition';
-        } else if (jobTitle.includes('interior') || jobTitle.includes('id')) {
-          programName = 'Interior Design';
-        } else if (jobTitle.includes('child') || jobTitle.includes('family') || jobTitle.includes('cfs')) {
-          programName = 'Child & Family Studies';
-        }
       }
 
       if (!programs[programName]) {
         programs[programName] = {
           name: programName,
           faculty: [],
-          upd: null
+          upd: null,
+          programId: faculty.program ? faculty.program.id : null
         };
       }
 
       programs[programName].faculty.push(faculty);
 
-      // Check if this faculty member is marked as UPD for this program
-      if (faculty.isUPD && faculty.updProgram === programName) {
-        programs[programName].upd = faculty;
+      // Check if this faculty member is marked as UPD
+      if (faculty.isUPD) {
+        // Check if this program has this faculty as UPD
+        const programInfo = programs.find(p => p.id === faculty.programId);
+        if (programInfo && programInfo.updId === faculty.id) {
+          programs[programName].upd = faculty;
+        }
       }
     });
 
     return programs;
-  }, [directoryData, showAdjuncts]);
+  }, [facultyData, showAdjuncts]);
 
   const programList = Object.keys(programData).sort();
 
   // Filter faculty based on selected program and search
   const filteredFaculty = useMemo(() => {
-    let faculty = directoryData || [];
+    let faculty = facultyData || [];
     
     // Filter out adjuncts if the toggle is off
     if (!showAdjuncts) {
@@ -104,7 +107,6 @@ const ProgramManagement = ({
 
     if (selectedProgram !== 'all') {
       // Find faculty in the selected program from programData
-      // This ensures consistency with how programs are determined
       const program = programData[selectedProgram];
       if (program && program.faculty) {
         const programFacultyIds = new Set(program.faculty.map(f => f.id));
@@ -125,10 +127,10 @@ const ProgramManagement = ({
     }
 
     return faculty;
-  }, [directoryData, programData, selectedProgram, searchText, showAdjuncts]);
+  }, [facultyData, programData, selectedProgram, searchText, showAdjuncts]);
 
-  // Handle UPD designation
-  const handleSetUPD = async (program, faculty) => {
+  // Handle UPD designation - now updates the programs collection
+  const handleSetUPD = async (programName, faculty) => {
     try {
       // Validation: Only non-adjunct faculty can be UPD
       if (faculty.isAdjunct) {
@@ -140,39 +142,45 @@ const ProgramManagement = ({
         return;
       }
 
-      // Validation: Faculty must have required information
-      if (!faculty.name || !faculty.id) {
+      // Find the program in our programs data
+      const program = programData[programName];
+      if (!program || !program.programId) {
         showNotification(
           'error',
-          'Invalid Faculty',
-          'Faculty member is missing required information'
+          'Program Error',
+          'Cannot find program information. Please refresh and try again.'
         );
         return;
       }
 
       // Remove UPD from previous UPD in this program
-      const currentUPD = programData[program]?.upd;
+      const currentUPD = program.upd;
       if (currentUPD && currentUPD.id !== faculty.id) {
         await onFacultyUpdate({
           ...currentUPD,
           isUPD: false,
-          updProgram: '', // Clear the UPD program
           updatedAt: new Date().toISOString()
         });
       }
 
-      // Set new UPD
+      // Set new UPD on the faculty member
       await onFacultyUpdate({
         ...faculty,
         isUPD: true,
-        updProgram: program, // Track which program they're UPD for
+        updatedAt: new Date().toISOString()
+      });
+
+      // Update the programs collection to reference this faculty member as UPD
+      const programRef = doc(db, COLLECTIONS.PROGRAMS, program.programId);
+      await updateDoc(programRef, {
+        updId: faculty.id,
         updatedAt: new Date().toISOString()
       });
 
       showNotification(
         'success',
         'UPD Updated',
-        `${faculty.name} is now the Undergraduate Program Director for ${program}`
+        `${faculty.name} is now the Undergraduate Program Director for ${programName}`
       );
       
       setEditingUPD(null);
@@ -195,7 +203,7 @@ const ProgramManagement = ({
   const handleDragOver = (e, program) => {
     if (!draggedFaculty || !program) return;
     e.preventDefault();
-    setDragOverDepartment(program); // Note: keeping variable name for consistency with existing drag state
+    setDragOverDepartment(program);
   };
 
   const handleDragLeave = (e) => {
@@ -205,11 +213,11 @@ const ProgramManagement = ({
     }
   };
 
-  const handleDrop = async (e, targetProgram) => {
+  const handleDrop = async (e, targetProgramName) => {
     e.preventDefault();
     setDragOverDepartment(null);
 
-    if (!draggedFaculty || !targetProgram) {
+    if (!draggedFaculty || !targetProgramName) {
       setDraggedFaculty(null);
       return;
     }
@@ -219,40 +227,38 @@ const ProgramManagement = ({
       programData[prog].faculty.some(f => f.id === draggedFaculty.id)
     );
     
-    if (currentProgram === targetProgram) {
+    if (currentProgram === targetProgramName) {
       setDraggedFaculty(null);
       return;
     }
 
     try {
-      console.log('🔧 Moving faculty to program:', {
-        faculty: draggedFaculty.name,
-        from: currentProgram,
-        to: targetProgram,
-        facultyData: draggedFaculty
-      });
+      // Find the target program ID
+      const targetProgram = programData[targetProgramName];
+      if (!targetProgram || !targetProgram.programId) {
+        showNotification(
+          'error',
+          'Program Error',
+          'Cannot find target program information.'
+        );
+        setDraggedFaculty(null);
+        return;
+      }
 
-      // Update program override, keep department the same
+      // Update faculty member's programId
       const updateData = {
         ...draggedFaculty,
-        programOverride: targetProgram, // Set program override instead of department
+        programId: targetProgram.programId,
         updatedAt: new Date().toISOString()
       };
-
-      console.log('📋 Update data being sent:', updateData);
 
       await onFacultyUpdate(updateData);
 
       showNotification(
         'success',
         'Faculty Moved',
-        `${draggedFaculty.name} moved to ${targetProgram} program`
+        `${draggedFaculty.name} moved to ${targetProgramName} program`
       );
-      
-      // Allow parent state to update, then force re-render
-      setTimeout(() => {
-        setRefreshTrigger(prev => prev + 1);
-      }, 100);
     } catch (error) {
       console.error('Error moving faculty:', error);
       showNotification('error', 'Error', 'Failed to move faculty member. Please try again.');
@@ -262,48 +268,42 @@ const ProgramManagement = ({
   };
 
   // Handle program change via dropdown
-  const handleProgramChange = async (faculty, newProgram) => {
-    if (!faculty || !newProgram) return;
+  const handleProgramChange = async (faculty, newProgramName) => {
+    if (!faculty || !newProgramName) return;
 
     // Don't move if already in the target program
     const currentProgram = Object.keys(programData).find(program => 
       programData[program].faculty.some(f => f.id === faculty.id)
     );
     
-    if (currentProgram === newProgram) return;
+    if (currentProgram === newProgramName) return;
 
     try {
-      console.log('🔧 Moving faculty via dropdown:', {
-        faculty: faculty.name,
-        from: currentProgram,
-        to: newProgram,
-        facultyData: faculty
-      });
+      // Find the target program ID
+      const targetProgram = programData[newProgramName];
+      if (!targetProgram || !targetProgram.programId) {
+        showNotification(
+          'error',
+          'Program Error',
+          'Cannot find target program information.'
+        );
+        return;
+      }
 
-      // For program changes, we need to update the program field, not department
-      // Department stays the same (Human Sciences & Design)
+      // Update faculty member's programId
       const updateData = {
         ...faculty,
-        // Don't change department - that stays "Human Sciences & Design" 
-        // We're changing their program/specialization within the department
-        programOverride: newProgram, // Add a field to override program detection
+        programId: targetProgram.programId,
         updatedAt: new Date().toISOString()
       };
-
-      console.log('📋 Dropdown update data being sent:', updateData);
 
       await onFacultyUpdate(updateData);
 
       showNotification(
         'success',
         'Faculty Moved',
-        `${faculty.name} moved to ${newProgram} program`
+        `${faculty.name} moved to ${newProgramName} program`
       );
-      
-      // Allow parent state to update, then force re-render
-      setTimeout(() => {
-        setRefreshTrigger(prev => prev + 1);
-      }, 100);
     } catch (error) {
       console.error('Error moving faculty:', error);
       showNotification('error', 'Error', 'Failed to move faculty member. Please try again.');
@@ -334,16 +334,15 @@ const ProgramManagement = ({
       return;
     }
 
-    // For now, we'll just add it to our local state
-    // In a real implementation, you might want to store programs separately
+    // For now, just show a notification that this would need to be implemented
+    showNotification(
+      'info',
+      'Feature Not Implemented',
+      'Creating new programs will be implemented in a future update'
+    );
+    
     setNewProgramName('');
     setShowCreateProgram(false);
-    
-    showNotification(
-      'success',
-      'Program Created',
-      `${programName} program has been created`
-    );
   };
 
   return (
@@ -352,7 +351,7 @@ const ProgramManagement = ({
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Program Management</h1>
-                      <p className="text-gray-600">Organize faculty by program and manage UPD designations</p>
+          <p className="text-gray-600">Organize faculty by program and manage UPD designations</p>
         </div>
         <button
           onClick={() => setShowCreateProgram(true)}
@@ -367,7 +366,7 @@ const ProgramManagement = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {programList.map(programName => {
           const program = programData[programName];
-          const isDragOver = dragOverDepartment === programName; // Note: keeping variable name for consistency
+          const isDragOver = dragOverDepartment === programName;
           
           return (
             <div
@@ -395,22 +394,26 @@ const ProgramManagement = ({
               {/* UPD Section */}
               <div className="mb-3 p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center justify-between">
-                                  <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
-                  <UserCog size={14} className="text-amber-600" />
-                  UPD
-                </span>
+                  <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                    <UserCog size={14} className="text-amber-600" />
+                    UPD
+                  </span>
+                  
                   {editingUPD === programName ? (
-                    <button
-                      onClick={() => setEditingUPD(null)}
-                      className="text-gray-500 hover:text-gray-700"
-                    >
-                      <X size={14} />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setEditingUPD(null)}
+                        className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                        title="Cancel"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
                   ) : (
                     <button
                       onClick={() => setEditingUPD(programName)}
-                      className="text-gray-500 hover:text-baylor-green"
-                      disabled={program.faculty.length === 0}
+                      className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                      title="Edit UPD"
                     >
                       <Edit size={14} />
                     </button>
@@ -418,97 +421,95 @@ const ProgramManagement = ({
                 </div>
                 
                 {editingUPD === programName ? (
-                  <div className="mt-2 space-y-2">
-                    {program.faculty.length === 0 ? (
-                      <div className="text-sm text-gray-500 italic">No faculty in this program</div>
-                    ) : (
-                      program.faculty
-                        .filter(faculty => !faculty.isAdjunct) // Only show non-adjuncts for UPD selection
-                        .map(faculty => (
-                          <button
-                            key={faculty.id}
-                            onClick={() => handleSetUPD(programName, faculty)}
-                            className="w-full text-left px-2 py-1 text-sm rounded hover:bg-baylor-green/10 flex items-center justify-between"
-                          >
-                            <span>{faculty.name}</span>
-                            {program.upd?.id === faculty.id && <Check size={14} className="text-green-600" />}
-                          </button>
-                        ))
-                    )}
+                  <div className="mt-2 space-y-2 max-h-32 overflow-y-auto">
+                    {program.faculty.filter(f => !f.isAdjunct).map(faculty => (
+                      <button
+                        key={faculty.id}
+                        onClick={() => handleSetUPD(programName, faculty)}
+                        className="w-full text-left p-2 text-sm bg-white rounded border hover:bg-baylor-green/5 hover:border-baylor-green/30 transition-all"
+                      >
+                        <div className="font-medium text-gray-900">{faculty.name}</div>
+                        <div className="text-gray-500 text-xs">{faculty.jobTitle}</div>
+                      </button>
+                    ))}
                   </div>
                 ) : (
-                  <div className="mt-1">
+                  <div className="mt-2">
                     {program.upd ? (
-                      <div 
-                        className="text-sm text-gray-900 cursor-pointer hover:text-baylor-green"
-                        onClick={() => setSelectedFacultyForCard(program.upd)}
-                      >
-                        <div className="font-medium">{program.upd.name}</div>
-                        {program.upd.email && (
-                          <div className="text-xs text-gray-600">{program.upd.email}</div>
-                        )}
+                      <div className="text-sm">
+                        <div className="font-medium text-gray-900">{program.upd.name}</div>
+                        <div className="text-gray-500 text-xs">{program.upd.jobTitle}</div>
                       </div>
                     ) : (
-                      <div className="text-sm text-gray-500 italic">Not assigned</div>
+                      <div className="text-sm text-gray-500 italic">No UPD assigned</div>
                     )}
                   </div>
                 )}
               </div>
 
               {/* Faculty Preview */}
-              <div className="space-y-1">
-                {(expandedPrograms.has(programName) ? program.faculty : program.faculty.slice(0, 3)).map(faculty => (
-                  <div
-                    key={faculty.id}
-                    className="flex items-center justify-between p-2 bg-gray-50 rounded text-sm"
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, faculty)}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">Faculty</span>
+                  <button
+                    onClick={() => toggleProgramExpansion(programName)}
+                    className="text-xs text-baylor-green hover:text-baylor-green/80 transition-colors"
                   >
-                    <div className="flex items-center gap-2">
-                      <GripVertical size={12} className="text-gray-400 cursor-move" title="Drag to move program" />
-                      <span className="font-medium">{faculty.name}</span>
-                      {program.upd?.id === faculty.id && <UserCog size={12} className="text-amber-600" />}
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSetUPD(programName, faculty);
-                      }}
-                      className="text-xs text-baylor-green hover:text-baylor-green/80"
-                      title="Set as UPD"
+                    {expandedPrograms.has(programName) ? 'Show Less' : 'Show All'}
+                  </button>
+                </div>
+                
+                <div className="space-y-2">
+                  {(expandedPrograms.has(programName) ? program.faculty : program.faculty.slice(0, 3)).map(faculty => (
+                    <div
+                      key={faculty.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, faculty)}
+                      className="flex items-center justify-between p-2 bg-white rounded border border-gray-200 hover:border-baylor-green/30 transition-all cursor-move group"
                     >
-                      Set UPD
-                    </button>
-                  </div>
-                ))}
-                
-                {program.faculty.length > 3 && !expandedPrograms.has(programName) && (
-                  <button
-                    onClick={() => toggleProgramExpansion(programName)}
-                    className="w-full text-center text-sm text-baylor-green hover:text-baylor-green/80 font-medium"
-                  >
-                    Show {program.faculty.length - 3} more...
-                  </button>
-                )}
-                
-                {expandedPrograms.has(programName) && program.faculty.length > 3 && (
-                  <button
-                    onClick={() => toggleProgramExpansion(programName)}
-                    className="w-full text-center text-sm text-baylor-green hover:text-baylor-green/80 font-medium"
-                  >
-                    Show less
-                  </button>
-                )}
-              </div>
-
-              {/* Quick Actions */}
-              <div className="mt-3 pt-3 border-t border-gray-200">
-                <button
-                  onClick={() => setSelectedProgram(programName)}
-                  className="w-full text-center text-sm text-baylor-green hover:text-baylor-green/80 font-medium"
-                >
-                  View All Faculty
-                </button>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <GripVertical size={14} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="min-w-0">
+                          <div className="font-medium text-sm text-gray-900 truncate">{faculty.name}</div>
+                          <div className="text-xs text-gray-500 truncate">{faculty.jobTitle}</div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => setSelectedFacultyForCard(faculty)}
+                          className="p-1 text-gray-400 hover:text-baylor-green transition-colors"
+                          title="View Details"
+                        >
+                          <Users size={12} />
+                        </button>
+                        <div className="relative">
+                          <select
+                            value={programName}
+                            onChange={(e) => handleProgramChange(faculty, e.target.value)}
+                            className="text-xs border-0 bg-transparent cursor-pointer text-gray-400 hover:text-baylor-green transition-colors"
+                            title="Move to Program"
+                          >
+                            <option value={programName}>{programName}</option>
+                            {programList.filter(p => p !== programName).map(otherProgram => (
+                              <option key={otherProgram} value={otherProgram}>
+                                {otherProgram}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {!expandedPrograms.has(programName) && program.faculty.length > 3 && (
+                    <div className="text-center py-2">
+                      <span className="text-xs text-gray-500">
+                        +{program.faculty.length - 3} more faculty
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -693,61 +694,66 @@ const ProgramManagement = ({
         </div>
       </div>
 
-      {/* Create Program Modal */}
-      {showCreateProgram && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowCreateProgram(false);
-            }
-          }}
-        >
-          <div 
-            className="bg-white rounded-lg p-6 w-full max-w-md"
-            role="dialog"
-            aria-labelledby="create-dept-title"
-            aria-modal="true"
-          >
-            <h3 id="create-dept-title" className="text-lg font-semibold mb-4">Create New Program</h3>
-            <input
-              type="text"
-              placeholder="Program name"
-              value={newProgramName}
-              onChange={(e) => setNewProgramName(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-baylor-green mb-4"
-              autoFocus
-              maxLength={100}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  createNewProgram();
-                }
-              }}
-            />
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setShowCreateProgram(false)}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={createNewProgram}
-                className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90"
-              >
-                Create
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Faculty Contact Card Modal */}
       {selectedFacultyForCard && (
         <FacultyContactCard
           faculty={selectedFacultyForCard}
           onClose={() => setSelectedFacultyForCard(null)}
+          onUpdate={onFacultyUpdate}
+          showNotification={showNotification}
         />
+      )}
+
+      {/* Create New Program Modal */}
+      {showCreateProgram && (
+        <div className="modal-overlay">
+          <div className="modal-content max-w-md">
+            <div className="modal-header">
+              <h3 className="modal-title">Create New Program</h3>
+              <button 
+                onClick={() => setShowCreateProgram(false)}
+                className="modal-close"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Program Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newProgramName}
+                    onChange={(e) => setNewProgramName(e.target.value)}
+                    className="input-field"
+                    placeholder="Enter program name..."
+                    autoFocus
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="modal-footer">
+              <button 
+                onClick={() => setShowCreateProgram(false)}
+                className="btn-ghost"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={createNewProgram}
+                className="btn-primary"
+                disabled={!newProgramName.trim()}
+              >
+                <Plus size={16} className="mr-2" />
+                Create Program
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

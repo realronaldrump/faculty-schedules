@@ -1,99 +1,72 @@
 import React, { useEffect } from 'react';
-import { CheckCircle, AlertCircle, X, Info, AlertTriangle } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, AlertTriangle, Info, Shield } from 'lucide-react';
 
-const Notification = ({ 
-  type = 'success', 
-  title, 
-  message, 
-  onClose, 
-  duration = 4000,
-  show = false 
-}) => {
+const Notification = ({ show, type, title, message, onClose }) => {
   useEffect(() => {
-    if (show && duration > 0) {
+    if (show) {
       const timer = setTimeout(() => {
         onClose();
-      }, duration);
-      
+      }, 5000);
       return () => clearTimeout(timer);
     }
-  }, [show, duration, onClose]);
+  }, [show, onClose]);
 
   if (!show) return null;
 
   const getIcon = () => {
     switch (type) {
       case 'success':
-        return <CheckCircle className="w-5 h-5" />;
+        return <CheckCircle className="w-5 h-5 text-green-600" />;
       case 'error':
-        return <AlertCircle className="w-5 h-5" />;
+        return <AlertCircle className="w-5 h-5 text-red-600" />;
       case 'warning':
-        return <AlertTriangle className="w-5 h-5" />;
+        return <AlertTriangle className="w-5 h-5 text-yellow-600" />;
       case 'info':
-        return <Info className="w-5 h-5" />;
+        return <Info className="w-5 h-5 text-blue-600" />;
       default:
-        return <CheckCircle className="w-5 h-5" />;
+        return <Shield className="w-5 h-5 text-baylor-green" />;
     }
   };
 
-  const getStyles = () => {
+  const getNotificationClass = () => {
+    const baseClass = 'notification animate-slide-down';
     switch (type) {
       case 'success':
-        return 'bg-green-50 border-green-200 text-green-800';
+        return `${baseClass} notification-success`;
       case 'error':
-        return 'bg-red-50 border-red-200 text-red-800';
+        return `${baseClass} notification-error`;
       case 'warning':
-        return 'bg-amber-50 border-amber-200 text-amber-800';
+        return `${baseClass} notification-warning`;
       case 'info':
-        return 'bg-blue-50 border-blue-200 text-blue-800';
+        return `${baseClass} notification-info`;
       default:
-        return 'bg-green-50 border-green-200 text-green-800';
-    }
-  };
-
-  const getIconColor = () => {
-    switch (type) {
-      case 'success':
-        return 'text-green-600';
-      case 'error':
-        return 'text-red-600';
-      case 'warning':
-        return 'text-amber-600';
-      case 'info':
-        return 'text-blue-600';
-      default:
-        return 'text-green-600';
+        return `${baseClass} border-l-4 border-baylor-green`;
     }
   };
 
   return (
-    <div className="fixed top-4 right-4 z-50 max-w-md w-full">
-      <div className={`border rounded-lg p-4 shadow-lg transition-all duration-300 ${getStyles()}`}>
+    <div className={getNotificationClass()}>
+      <div className="p-4">
         <div className="flex items-start">
-          <div className={`flex-shrink-0 ${getIconColor()}`}>
+          <div className="flex-shrink-0">
             {getIcon()}
           </div>
           <div className="ml-3 flex-1">
             {title && (
-              <h3 className="text-sm font-medium mb-1">
+              <h4 className="text-sm font-semibold text-gray-900 mb-1">
                 {title}
-              </h3>
+              </h4>
             )}
             {message && (
-              <p className="text-sm">
+              <p className="text-sm text-gray-600">
                 {message}
               </p>
             )}
           </div>
-          <div className="ml-auto pl-3">
+          <div className="ml-4 flex-shrink-0">
             <button
               onClick={onClose}
-              className={`inline-flex rounded-md p-1.5 focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                type === 'success' ? 'hover:bg-green-100 focus:ring-green-600' :
-                type === 'error' ? 'hover:bg-red-100 focus:ring-red-600' :
-                type === 'warning' ? 'hover:bg-amber-100 focus:ring-amber-600' :
-                'hover:bg-blue-100 focus:ring-blue-600'
-              }`}
+              className="inline-flex text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition-colors"
             >
               <X className="w-4 h-4" />
             </button>

@@ -462,10 +462,12 @@ export const getDataHealthReport = async () => {
   const totalPeople = peopleSnapshot.size;
   const totalSchedules = schedulesSnapshot.size;
   
-  // Count people missing key info
+  // Count people missing key info (excluding those intentionally marked as not having them)
   const people = peopleSnapshot.docs.map(doc => doc.data());
-  const missingEmail = people.filter(p => !p.email).length;
-  const missingPhone = people.filter(p => !p.phone).length;
+  const missingEmail = people.filter(p => !p.email || p.email.trim() === '').length;
+  const missingPhone = people.filter(p => (!p.phone || p.phone.trim() === '') && !p.hasNoPhone).length;
+  const missingOffice = people.filter(p => (!p.office || p.office.trim() === '') && !p.hasNoOffice).length;
+  const missingJobTitle = people.filter(p => !p.jobTitle || p.jobTitle.trim() === '').length;
   
   return {
     summary: {
@@ -475,6 +477,8 @@ export const getDataHealthReport = async () => {
       orphanedSchedules: orphaned.length,
       missingEmail,
       missingPhone,
+      missingOffice,
+      missingJobTitle,
       healthScore: calculateHealthScore(totalPeople, duplicates.length, orphaned.length, missingEmail)
     },
     duplicates,

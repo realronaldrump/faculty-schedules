@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, User, Mail, Phone, Building, AlertCircle, CheckCircle } from 'lucide-react';
+import { X, Save, User, Mail, Phone, PhoneOff, Building, BuildingIcon, AlertCircle, CheckCircle } from 'lucide-react';
 import { doc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -28,10 +28,14 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
           missingRecords = people.filter(person => !person.email || person.email.trim() === '');
           break;
         case 'phone':
-          missingRecords = people.filter(person => !person.phone || person.phone.trim() === '');
+          missingRecords = people.filter(person => 
+            (!person.phone || person.phone.trim() === '') && !person.hasNoPhone
+          );
           break;
         case 'office':
-          missingRecords = people.filter(person => !person.office || person.office.trim() === '');
+          missingRecords = people.filter(person => 
+            (!person.office || person.office.trim() === '') && !person.hasNoOffice
+          );
           break;
         case 'jobTitle':
           missingRecords = people.filter(person => !person.jobTitle || person.jobTitle.trim() === '');
@@ -39,7 +43,9 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
         default:
           missingRecords = people.filter(person => 
             (!person.email || person.email.trim() === '') ||
-            (!person.phone || person.phone.trim() === '')
+            ((!person.phone || person.phone.trim() === '') && !person.hasNoPhone) ||
+            ((!person.office || person.office.trim() === '') && !person.hasNoOffice) ||
+            (!person.jobTitle || person.jobTitle.trim() === '')
           );
       }
 
@@ -57,12 +63,34 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
       newEmail: record.email || '',
       newPhone: record.phone || '',
       newOffice: record.office || '',
-      newJobTitle: record.jobTitle || ''
+      newJobTitle: record.jobTitle || '',
+      newHasNoPhone: record.hasNoPhone || false,
+      newHasNoOffice: record.hasNoOffice || false
     });
   };
 
   const cancelEditing = () => {
     setEditingRecord(null);
+  };
+
+  const togglePhoneState = () => {
+    if (!editingRecord) return;
+    const newHasNoPhone = !editingRecord.newHasNoPhone;
+    setEditingRecord(prev => ({
+      ...prev,
+      newHasNoPhone,
+      newPhone: newHasNoPhone ? '' : prev.newPhone
+    }));
+  };
+
+  const toggleOfficeState = () => {
+    if (!editingRecord) return;
+    const newHasNoOffice = !editingRecord.newHasNoOffice;
+    setEditingRecord(prev => ({
+      ...prev,
+      newHasNoOffice,
+      newOffice: newHasNoOffice ? '' : prev.newOffice
+    }));
   };
 
   const saveRecord = async () => {
@@ -74,16 +102,29 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
         updatedAt: new Date().toISOString()
       };
 
-      // Only update fields that have new values
+      // Only update fields that have new values or flags
       if (editingRecord.newEmail.trim()) {
         updates.email = editingRecord.newEmail.trim().toLowerCase();
       }
-      if (editingRecord.newPhone.trim()) {
+      
+      // Handle phone field with hasNoPhone flag
+      if (editingRecord.newHasNoPhone) {
+        updates.hasNoPhone = true;
+        updates.phone = '';
+      } else if (editingRecord.newPhone.trim()) {
         updates.phone = editingRecord.newPhone.replace(/\D/g, '');
+        updates.hasNoPhone = false;
       }
-      if (editingRecord.newOffice.trim()) {
+      
+      // Handle office field with hasNoOffice flag
+      if (editingRecord.newHasNoOffice) {
+        updates.hasNoOffice = true;
+        updates.office = '';
+      } else if (editingRecord.newOffice.trim()) {
         updates.office = editingRecord.newOffice.trim();
+        updates.hasNoOffice = false;
       }
+      
       if (editingRecord.newJobTitle.trim()) {
         updates.jobTitle = editingRecord.newJobTitle.trim();
       }
@@ -211,7 +252,9 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                         {record.jobTitle || 'No job title'} • {record.department || 'No department'}
                       </p>
                       <p className="text-sm text-gray-500">
-                        Email: {record.email || 'Missing'} • Phone: {record.phone || 'Missing'} • Office: {record.office || 'Missing'}
+                        Email: {record.email || 'Missing'} • 
+                        Phone: {record.hasNoPhone ? 'No phone' : (record.phone || 'Missing')} • 
+                        Office: {record.hasNoOffice ? 'No office' : (record.office || 'Missing')}
                       </p>
                     </div>
                     
@@ -244,19 +287,37 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                               Phone Number
                             </label>
-                            <input
-                              type="tel"
-                              value={editingRecord.newPhone}
-                              onChange={(e) => setEditingRecord(prev => ({ ...prev, newPhone: e.target.value }))}
-                              className={`w-full px-3 py-2 border rounded-lg ${
-                                editingRecord.newPhone && !validatePhone(editingRecord.newPhone)
-                                  ? 'border-red-300 focus:border-red-500'
-                                  : 'border-gray-300 focus:border-blue-500'
-                              } focus:outline-none focus:ring-2 focus:ring-blue-200`}
-                              placeholder="(254) 710-1234"
-                            />
-                            {editingRecord.newPhone && !validatePhone(editingRecord.newPhone) && (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="tel"
+                                value={editingRecord.newPhone}
+                                onChange={(e) => setEditingRecord(prev => ({ ...prev, newPhone: e.target.value }))}
+                                disabled={editingRecord.newHasNoPhone}
+                                className={`flex-1 px-3 py-2 border rounded-lg ${
+                                  editingRecord.newPhone && !validatePhone(editingRecord.newPhone)
+                                    ? 'border-red-300 focus:border-red-500'
+                                    : 'border-gray-300 focus:border-blue-500'
+                                } focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100 disabled:text-gray-500`}
+                                placeholder="(254) 710-1234"
+                              />
+                              <button
+                                type="button"
+                                onClick={togglePhoneState}
+                                className={`p-2 rounded transition-colors ${
+                                  editingRecord.newHasNoPhone 
+                                    ? 'text-red-600 bg-red-100 hover:bg-red-200' 
+                                    : 'text-gray-400 hover:bg-gray-100'
+                                }`}
+                                title={editingRecord.newHasNoPhone ? 'Mark as having no phone' : 'Mark as having phone'}
+                              >
+                                {editingRecord.newHasNoPhone ? <PhoneOff size={16} /> : <Phone size={16} />}
+                              </button>
+                            </div>
+                            {editingRecord.newPhone && !validatePhone(editingRecord.newPhone) && !editingRecord.newHasNoPhone && (
                               <p className="text-red-600 text-xs mt-1">Please enter a 10-digit phone number</p>
+                            )}
+                            {editingRecord.newHasNoPhone && (
+                              <p className="text-gray-600 text-xs mt-1">This person is marked as not having a phone number</p>
                             )}
                           </div>
                         )}
@@ -266,13 +327,31 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                               Office Location
                             </label>
-                            <input
-                              type="text"
-                              value={editingRecord.newOffice}
-                              onChange={(e) => setEditingRecord(prev => ({ ...prev, newOffice: e.target.value }))}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                              placeholder="Building Room#"
-                            />
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={editingRecord.newOffice}
+                                onChange={(e) => setEditingRecord(prev => ({ ...prev, newOffice: e.target.value }))}
+                                disabled={editingRecord.newHasNoOffice}
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100 disabled:text-gray-500"
+                                placeholder="Building Room#"
+                              />
+                              <button
+                                type="button"
+                                onClick={toggleOfficeState}
+                                className={`p-2 rounded transition-colors ${
+                                  editingRecord.newHasNoOffice 
+                                    ? 'text-red-600 bg-red-100 hover:bg-red-200' 
+                                    : 'text-gray-400 hover:bg-gray-100'
+                                }`}
+                                title={editingRecord.newHasNoOffice ? 'Mark as having no office' : 'Mark as having office'}
+                              >
+                                {editingRecord.newHasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
+                              </button>
+                            </div>
+                            {editingRecord.newHasNoOffice && (
+                              <p className="text-gray-600 text-xs mt-1">This person is marked as not having an office</p>
+                            )}
                           </div>
                         )}
                         

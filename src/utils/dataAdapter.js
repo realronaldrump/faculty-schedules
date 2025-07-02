@@ -161,6 +161,8 @@ export const adaptPeopleToFaculty = (people, scheduleData = []) => {
         isTenured: person.isTenured || false,
         isAlsoStaff: hasRole('staff'),
         isUPD: person.isUPD || false,
+        hasNoPhone: person.hasNoPhone || false,
+        hasNoOffice: person.hasNoOffice || false,
         program: program,
         ...person // Include any additional fields
       };
@@ -205,6 +207,8 @@ export const adaptPeopleToStaff = (people) => {
         isFullTime: person.isFullTime,
         isTenured: hasRole('faculty') ? (person.isTenured || false) : false, // Only display tenure for dual-role staff
         isAlsoFaculty: hasRole('faculty'),
+        hasNoPhone: person.hasNoPhone || false,
+        hasNoOffice: person.hasNoOffice || false,
         ...person // Include any additional fields
       };
     });

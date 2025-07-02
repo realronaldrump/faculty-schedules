@@ -51,7 +51,7 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
                 <span className="text-white font-bold text-sm">HSD</span>
               </div>
               <div>
-                <div className="sidebar-title">HSD Faculty System</div>
+                <div className="sidebar-title">HSD Dashboard</div>
                 <div className="sidebar-subtitle">
                   {selectedSemester || 'Fall 2025'}
                 </div>

@@ -34,7 +34,7 @@ const ProgramManagement = ({
   const [showCreateProgram, setShowCreateProgram] = useState(false);
   const [newProgramName, setNewProgramName] = useState('');
   const [draggedFaculty, setDraggedFaculty] = useState(null);
-  const [dragOverDepartment, setDragOverDepartment] = useState(null);
+  const [dragOverProgram, setDragOverProgram] = useState(null);
   const [showAdjuncts, setShowAdjuncts] = useState(false);
   const [expandedPrograms, setExpandedPrograms] = useState(new Set());
   const [programs, setPrograms] = useState([]);
@@ -203,19 +203,14 @@ const ProgramManagement = ({
   const handleDragOver = (e, program) => {
     if (!draggedFaculty || !program) return;
     e.preventDefault();
-    setDragOverDepartment(program);
+    setDragOverProgram(program);
   };
 
-  const handleDragLeave = (e) => {
-    // Only clear if we're actually leaving the drop zone
-    if (!e.currentTarget.contains(e.relatedTarget)) {
-      setDragOverDepartment(null);
-    }
-  };
+
 
   const handleDrop = async (e, targetProgramName) => {
     e.preventDefault();
-    setDragOverDepartment(null);
+    setDragOverProgram(null);
 
     if (!draggedFaculty || !targetProgramName) {
       setDraggedFaculty(null);
@@ -366,7 +361,7 @@ const ProgramManagement = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {programList.map(programName => {
           const program = programData[programName];
-          const isDragOver = dragOverDepartment === programName;
+          const isDragOver = dragOverProgram === programName;
           
           return (
             <div
@@ -377,7 +372,7 @@ const ProgramManagement = ({
                   : 'border-gray-200 hover:border-baylor-green/50'
               }`}
               onDragOver={(e) => handleDragOver(e, programName)}
-              onDragLeave={handleDragLeave}
+
               onDrop={(e) => handleDrop(e, programName)}
             >
               {/* Program Header */}

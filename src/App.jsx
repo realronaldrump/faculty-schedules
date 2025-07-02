@@ -35,10 +35,11 @@ import {
   LogOut
 } from 'lucide-react';
 import { db } from './firebase';
-import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { adaptPeopleToFaculty, adaptPeopleToStaff, fetchPrograms } from './utils/dataAdapter';
 import { fetchSchedulesWithRelationalData } from './utils/dataImportUtils';
 import { autoMigrateIfNeeded } from './utils/importTransactionMigration';
+import MaintenancePage from './components/MaintenancePage';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -67,6 +68,12 @@ function App() {
     title: '',
     message: ''
   });
+
+  // -------------------- Maintenance mode --------------------
+  // Set this to true to enable maintenance mode
+  const MAINTENANCE_MODE = true;
+  const MAINTENANCE_MESSAGE = "I accidentally broke my dashboard, but it will be fixed soon (hopefully!!)";
+  const MAINTENANCE_UNTIL = "2025-07-03T08:00:00"; // Set your expected completion time here
 
   // Notification helper functions
   const showNotification = (type, title, message) => {
@@ -716,7 +723,17 @@ function App() {
     }
   };
 
-  // Authentication check
+  // If the app is in maintenance mode, render the maintenance page and block the rest of the UI
+  if (MAINTENANCE_MODE) {
+    return (
+      <MaintenancePage
+        message={MAINTENANCE_MESSAGE}
+        until={MAINTENANCE_UNTIL}
+      />
+    );
+  }
+
+  // Authentication check (only if NOT in maintenance mode)
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;
   }

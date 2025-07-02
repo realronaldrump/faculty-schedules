@@ -582,7 +582,7 @@ const RecordDisplay = ({ record, type }) => {
         return [
           { label: 'Name', value: `${record.firstName} ${record.lastName}` },
           { label: 'Email', value: record.email },
-          { label: 'Department', value: record.department },
+          { label: 'Program', value: record.program?.name || 'Unassigned' },
           { label: 'Job Title', value: record.jobTitle }
         ];
       case 'schedules':
@@ -724,4 +724,4 @@ const Recommendations = ({ recommendations, onStandardizeData, onBulkMerge, sele
   );
 };
 
-export default ComprehensiveDataHygieneManager; 
+export default ComprehensiveDataHygieneManager;

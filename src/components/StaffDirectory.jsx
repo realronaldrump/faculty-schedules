@@ -874,7 +874,7 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                   </td>
                   <td className="p-2 align-top text-right">
                     <div className="flex gap-2">
-                      <button onClick={handleCreateSave} className="p-2 text-green-600 hover:bg-green-100 rounded-full"><Save size={16} /></button>
+                      <button onClick={handleCreateSave} className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"><Save size={16} /></button>
                       <button onClick={handleCancelCreate} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
                     </div>
                   </td>
@@ -954,8 +954,8 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                       </td>
                       <td className="p-2 align-top text-right">
                         <div className="flex gap-2">
-                          <button onClick={handleSave} className="p-2 text-green-600 hover:bg-green-100 rounded-full"><Save size={16} /></button>
-                          <button onClick={handleCancel} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
+                                                <button onClick={handleSave} className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"><Save size={16} /></button>
+                      <button onClick={handleCancel} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
                         </div>
                       </td>
                     </>
@@ -967,7 +967,7 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                           <div className="text-xs text-baylor-gold font-medium">Also Faculty</div>
                         )}
                         {staff.isFullTime === false && (
-                          <div className="text-xs text-blue-600 font-medium">Part Time</div>
+                          <div className="text-xs text-baylor-green font-medium">Part Time</div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedStaffForCard(staff)}>{staff.jobTitle || '-'}</td>
@@ -998,8 +998,8 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex gap-1 justify-end">
-                          <button onClick={(e) => { e.stopPropagation(); handleEdit(staff); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><Edit size={16} /></button>
-                          <button onClick={(e) => { e.stopPropagation(); handleDelete(staff); }} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><Trash2 size={16} /></button>
+                                                  <button onClick={(e) => { e.stopPropagation(); handleEdit(staff); }} className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"><Edit size={16} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDelete(staff); }} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><Trash2 size={16} /></button>
                         </div>
                       </td>
                     </>

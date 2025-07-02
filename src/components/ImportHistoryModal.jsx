@@ -70,9 +70,9 @@ const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'committed': return 'text-green-600 bg-green-50';
-      case 'rolled_back': return 'text-red-600 bg-red-50';
-      case 'preview': return 'text-yellow-600 bg-yellow-50';
+          case 'committed': return 'text-baylor-green bg-baylor-green/10';
+    case 'rolled_back': return 'text-red-600 bg-red-50';
+    case 'preview': return 'text-baylor-gold bg-baylor-gold/10';
       default: return 'text-gray-600 bg-gray-50';
     }
   };

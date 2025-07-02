@@ -42,34 +42,38 @@ export default {
         'baylor-charcoal': '#333333',
       },
       fontFamily: {
-        // Default sans-serif fonts
-        sans: [
-          'Inter',
+        // Baylor University Brand Typography
+        // Bio Sans equivalent (DM Sans) for headings and UI elements
+        'sans': [
+          'DM Sans',
+          'Helvetica Neue',
+          'Helvetica',
+          'Arial',
           'ui-sans-serif',
           'system-ui',
           '-apple-system',
           'BlinkMacSystemFont',
-          'Segoe UI',
-          'Roboto',
-          'Helvetica Neue',
-          'Arial',
-          'Noto Sans',
-          'sans-serif',
-          'Apple Color Emoji',
-          'Segoe UI Emoji',
-          'Segoe UI Symbol',
-          'Noto Color Emoji'
+          'sans-serif'
         ],
-        // Serif fonts for headings and formal text
-        serif: [
+        // Body text font - Calluna equivalent (Crimson Text) with Georgia fallback
+        'serif': [
+          'Crimson Text',
           'Georgia',
           'Cambria',
           'Times New Roman',
           'Times',
           'serif'
         ],
+        // Display font for special headings (Bio Sans Bold equivalent)
+        'display': [
+          'DM Sans',
+          'Helvetica Neue',
+          'Helvetica',
+          'Arial',
+          'sans-serif'
+        ],
         // Monospace fonts for code
-        mono: [
+        'mono': [
           'ui-monospace',
           'SFMono-Regular',
           'Monaco',

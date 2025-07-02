@@ -842,7 +842,7 @@ const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
             <button
               onClick={() => generateEmailList('outlook')}
               disabled={selectedPeople.length === 0}
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
             >
               <Mail className="w-4 h-4 mr-2" />
               Copy for Outlook
@@ -979,7 +979,7 @@ const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
       {/* Notification */}
       {notification.show && (
         <div className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg ${
-          notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'
+                      notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-baylor-green text-white'
         }`}>
           <div className="flex items-center">
             {notification.type === 'error' ? (

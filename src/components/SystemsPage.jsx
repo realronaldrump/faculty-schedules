@@ -9,7 +9,7 @@ const SystemsPage = ({ onNavigate }) => {
       url: 'https://www1.baylor.edu/scheduleofclasses/',
       icon: Calendar,
       category: 'Academic',
-      color: 'bg-blue-500'
+      color: 'bg-baylor-green'
     },
     { 
       name: 'CLSS', 
@@ -17,7 +17,7 @@ const SystemsPage = ({ onNavigate }) => {
       url: 'https://registrar.web.baylor.edu/courses-catalogs/clss-class-scheduling-facultystaff',
       icon: BookOpen,
       category: 'Academic',
-      color: 'bg-green-500'
+      color: 'bg-baylor-green'
     },
     { 
       name: 'ChairSIS', 
@@ -25,7 +25,7 @@ const SystemsPage = ({ onNavigate }) => {
       url: 'https://www1.baylor.edu/ChairSIS/',
       icon: Settings,
       category: 'Administrative',
-      color: 'bg-purple-500'
+      color: 'bg-baylor-green'
     },
     { 
       name: 'Canvas', 
@@ -33,7 +33,7 @@ const SystemsPage = ({ onNavigate }) => {
       url: 'https://canvas.baylor.edu/',
       icon: GraduationCap,
       category: 'Academic',
-      color: 'bg-orange-500'
+      color: 'bg-baylor-gold'
     },
     { 
       name: 'CSGold', 
@@ -41,7 +41,7 @@ const SystemsPage = ({ onNavigate }) => {
       url: 'https://idcard.baylor.edu',
       icon: IdCard,
       category: 'Campus Services',
-      color: 'bg-yellow-500'
+      color: 'bg-baylor-gold'
     }
   ];
 
@@ -155,7 +155,7 @@ const SystemsPage = ({ onNavigate }) => {
         
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 text-center">
           <div className="w-12 h-12 bg-baylor-green/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <id-card className="w-6 h-6 text-baylor-green" />
+            <IdCard className="w-6 h-6 text-baylor-green" />
           </div>
           <h3 className="font-semibold text-gray-900 mb-2">Campus Services</h3>
           <p className="text-sm text-gray-600">ID cards, access control, and campus utilities</p>

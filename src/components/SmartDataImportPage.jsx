@@ -675,27 +675,27 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
       </div>
 
       {/* Benefits Overview */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
-        <h2 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
+      <div className="bg-baylor-green/5 border border-baylor-green/20 rounded-lg p-6 mb-8">
+        <h2 className="text-lg font-semibold text-baylor-green mb-4 flex items-center">
           <CheckCircle className="w-5 h-5 mr-2" />
           Smart Import Benefits
         </h2>
         <div className="grid md:grid-cols-4 gap-4 text-sm">
           <div>
-            <h3 className="font-medium text-blue-800 mb-2">🔍 Preview First</h3>
-            <p className="text-blue-700">Review all changes before applying to database</p>
+            <h3 className="font-medium text-baylor-green mb-2">🔍 Preview First</h3>
+            <p className="text-baylor-green/80">Review all changes before applying to database</p>
           </div>
           <div>
-            <h3 className="font-medium text-blue-800 mb-2">✅ Selective Import</h3>
-            <p className="text-blue-700">Choose exactly which changes to apply</p>
+            <h3 className="font-medium text-baylor-green mb-2">✅ Selective Import</h3>
+            <p className="text-baylor-green/80">Choose exactly which changes to apply</p>
           </div>
           <div>
-            <h3 className="font-medium text-blue-800 mb-2">🔄 Complete Rollback</h3>
-            <p className="text-blue-700">Undo entire imports as if they never happened</p>
+            <h3 className="font-medium text-baylor-green mb-2">🔄 Complete Rollback</h3>
+            <p className="text-baylor-green/80">Undo entire imports as if they never happened</p>
           </div>
           <div>
-            <h3 className="font-medium text-blue-800 mb-2">🎯 Zero Data Loss</h3>
-            <p className="text-blue-700">Safe imports with full transaction history</p>
+            <h3 className="font-medium text-baylor-green mb-2">🎯 Zero Data Loss</h3>
+            <p className="text-baylor-green/80">Safe imports with full transaction history</p>
           </div>
         </div>
       </div>
@@ -945,7 +945,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
             {importType === 'schedule' && csvData && (
               <button
                 onClick={startDeduplication}
-                className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+                className="px-6 py-3 bg-baylor-green text-white font-semibold rounded-lg hover:bg-baylor-green/90 transition-colors flex items-center"
               >
                 <Database className="mr-2" size={18} />
                 Detect Duplicates
@@ -987,7 +987,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
           <button
             onClick={analyzeCRN}
             disabled={isCrnAnalyzing}
-            className="px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
+                            className="px-6 py-3 bg-baylor-gold text-baylor-green font-semibold rounded-lg hover:bg-baylor-gold/90 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
           >
             {isCrnAnalyzing ? (
               <>
@@ -1007,7 +1007,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
               <button
                 onClick={() => handleCRNBackfill(false)}
                 disabled={isCrnMigrating || crnAnalysis.recordsNeedingCRN.length === 0}
-                className="px-6 py-3 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
+                className="px-6 py-3 bg-baylor-green text-white font-semibold rounded-lg hover:bg-baylor-green/90 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
               >
                 {isCrnMigrating ? (
                   <>
@@ -1026,7 +1026,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
                 <button
                   onClick={() => handleCRNBackfill(true)}
                   disabled={isCrnMigrating}
-                  className="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
+                  className="px-6 py-3 bg-baylor-gold text-baylor-green font-semibold rounded-lg hover:bg-baylor-gold/90 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
                 >
                   {isCrnMigrating ? (
                     <>
@@ -1055,7 +1055,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
                 <div className="text-sm text-gray-600">Coverage</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">{crnAnalysis.withCRN}</div>
+                <div className="text-2xl font-bold text-baylor-green">{crnAnalysis.withCRN}</div>
                 <div className="text-sm text-gray-600">With CRN</div>
               </div>
               <div className="text-center">
@@ -1133,12 +1133,12 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
             </div>
           </div>
           
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-            <div className="flex items-start">
-              <AlertCircle className="w-5 h-5 text-blue-600 mr-3 mt-0.5 flex-shrink-0" />
-              <div className="text-sm">
-                <p className="text-blue-800 font-medium mb-1">Enhanced Import Controls</p>
-                <p className="text-blue-700">
+                  <div className="bg-baylor-green/5 border border-baylor-green/20 rounded-lg p-4 mb-4">
+          <div className="flex items-start">
+            <AlertCircle className="w-5 h-5 text-baylor-green mr-3 mt-0.5 flex-shrink-0" />
+            <div className="text-sm">
+              <p className="text-baylor-green font-medium mb-1">Enhanced Import Controls</p>
+              <p className="text-baylor-green/80">
                   Remove people from import, assign roles, mark adjunct status, and specify missing contact info. 
                   Exact duplicates with no new data are automatically excluded.
                 </p>
@@ -1333,15 +1333,15 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
               <h3 className="font-medium text-gray-900 mb-3">Summary</h3>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">{importResults.created}</div>
-                  <div className="text-sm text-gray-600">Created</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">{importResults.updated}</div>
-                  <div className="text-sm text-gray-600">Updated</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-yellow-600">{importResults.skipped}</div>
+                                  <div className="text-2xl font-bold text-baylor-green">{importResults.created}</div>
+                <div className="text-sm text-gray-600">Created</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-baylor-gold">{importResults.updated}</div>
+                <div className="text-sm text-gray-600">Updated</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-gray-600">{importResults.skipped}</div>
                   <div className="text-sm text-gray-600">Skipped</div>
                 </div>
                 <div className="text-center">

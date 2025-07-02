@@ -133,8 +133,8 @@ const DataHygieneManager = () => {
 
   // Get health score color
   const getHealthScoreColor = (score) => {
-    if (score >= 90) return 'text-green-600';
-    if (score >= 70) return 'text-yellow-600';
+    if (score >= 90) return 'text-baylor-green';
+    if (score >= 70) return 'text-baylor-gold';
     return 'text-red-600';
   };
 
@@ -150,7 +150,7 @@ const DataHygieneManager = () => {
     return (
       <div className="max-w-6xl mx-auto p-6">
         <div className="flex items-center justify-center h-64">
-          <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
+          <RefreshCw className="w-8 h-8 animate-spin text-baylor-green" />
           <span className="ml-2 text-lg">Analyzing data health...</span>
         </div>
       </div>
@@ -169,7 +169,7 @@ const DataHygieneManager = () => {
           <button
             onClick={loadHealthReport}
             disabled={isLoading}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center"
+            className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50 flex items-center"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
@@ -177,14 +177,14 @@ const DataHygieneManager = () => {
           <button
             onClick={handleAutoFix}
             disabled={isLoading}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+            className="px-4 py-2 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 disabled:opacity-50 font-semibold"
           >
             Auto-Fix Obvious
           </button>
           <button
             onClick={handleStandardizeAll}
             disabled={isLoading}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+            className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50"
           >
             Standardize All
           </button>
@@ -212,21 +212,21 @@ const DataHygieneManager = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
             <div className="text-center">
               <div className="flex items-center justify-center mb-2">
-                <Users className="w-5 h-5 text-blue-600" />
+                <Users className="w-5 h-5 text-baylor-green" />
               </div>
               <div className="text-2xl font-bold text-gray-900">{healthReport.summary.totalPeople}</div>
               <div className="text-sm text-gray-600">People</div>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center mb-2">
-                <Calendar className="w-5 h-5 text-green-600" />
+                <Calendar className="w-5 h-5 text-baylor-green" />
               </div>
               <div className="text-2xl font-bold text-gray-900">{healthReport.summary.totalSchedules}</div>
               <div className="text-sm text-gray-600">Schedules</div>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center mb-2">
-                <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                <AlertTriangle className="w-5 h-5 text-baylor-gold" />
               </div>
               <div className="text-2xl font-bold text-gray-900">{healthReport.summary.duplicatePeople}</div>
               <div className="text-sm text-gray-600">Duplicates</div>

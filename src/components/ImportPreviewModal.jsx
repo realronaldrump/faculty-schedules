@@ -116,9 +116,9 @@ const ImportPreviewModal = ({
 
   const getActionColor = (action) => {
     switch (action) {
-      case 'add': return 'text-green-600 bg-green-50';
-      case 'modify': return 'text-blue-600 bg-blue-50';
-      case 'delete': return 'text-red-600 bg-red-50';
+          case 'add': return 'text-baylor-green bg-baylor-green/10';
+    case 'modify': return 'text-baylor-gold bg-baylor-gold/10';
+    case 'delete': return 'text-red-600 bg-red-50';
       default: return 'text-gray-600 bg-gray-50';
     }
   };

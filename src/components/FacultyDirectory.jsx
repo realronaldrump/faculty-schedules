@@ -1030,7 +1030,7 @@ const FacultyDirectory = ({ directoryData, scheduleData = [], onFacultyUpdate, o
                            name="isTenured"
                            checked={newFaculty.isTenured}
                            onChange={handleCreateChange}
-                           className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-600"
+                                                       className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                          />
                          <label htmlFor="new-isTenured" className="font-normal">Tenured</label>
                       </div>
@@ -1120,8 +1120,8 @@ const FacultyDirectory = ({ directoryData, scheduleData = [], onFacultyUpdate, o
                   </td>
                   <td className="p-2 align-top text-right">
                     <div className="flex gap-2">
-                      <button onClick={handleCreateSave} className="p-2 text-green-600 hover:bg-green-100 rounded-full"><Save size={16} /></button>
-                      <button onClick={handleCancelCreate} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
+                                                <button onClick={handleCreateSave} className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"><Save size={16} /></button>
+                          <button onClick={handleCancelCreate} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
                     </div>
                   </td>
                 </tr>
@@ -1143,7 +1143,7 @@ const FacultyDirectory = ({ directoryData, scheduleData = [], onFacultyUpdate, o
                                name="isTenured"
                                checked={!!editFormData.isTenured}
                                onChange={handleChange}
-                               className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-600"
+                               className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                              />
                              <label htmlFor={`isTenured-${faculty.id || index}`} className="font-normal">Tenured</label>
                           </div>

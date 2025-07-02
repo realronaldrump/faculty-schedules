@@ -9,17 +9,22 @@ import {
   Shield,
   TrendingUp,
   Users,
-  Calendar
+  Calendar,
+  Mail,
+  Phone,
+  Building,
+  User,
+  Edit
 } from 'lucide-react';
 import {
   getDataHealthReport,
   findDuplicatePeople,
   findOrphanedSchedules,
   mergePeople,
-  linkScheduleToPerson,
-  standardizeAllData,
-  autoMergeObviousDuplicates
+  linkScheduleToPerson
 } from '../utils/dataHygiene';
+import MissingDataReviewModal from './MissingDataReviewModal';
+import DeduplicationReviewModal from './DeduplicationReviewModal';
 
 const DataHygieneManager = () => {
   const [healthReport, setHealthReport] = useState(null);
@@ -27,6 +32,11 @@ const DataHygieneManager = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [duplicates, setDuplicates] = useState([]);
   const [orphanedSchedules, setOrphanedSchedules] = useState([]);
+  
+  // Professional modal states
+  const [showMissingDataModal, setShowMissingDataModal] = useState(false);
+  const [missingDataType, setMissingDataType] = useState('email');
+  const [showDeduplicationModal, setShowDeduplicationModal] = useState(false);
 
   // Load health report
   const loadHealthReport = async () => {
@@ -78,57 +88,19 @@ const DataHygieneManager = () => {
     }
   };
 
-  // Standardize all data
-  const handleStandardizeAll = async () => {
-    if (!confirm('This will standardize all data formats. Continue?')) {
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const result = await standardizeAllData();
-      alert(`Data standardized successfully. ${result.updatedRecords} records updated.`);
-      loadHealthReport(); // Refresh
-    } catch (error) {
-      console.error('Error standardizing data:', error);
-      alert('Error standardizing data: ' + error.message);
-    } finally {
-      setIsLoading(false);
-    }
+  // Professional handlers for data review
+  const openMissingDataReview = (dataType) => {
+    setMissingDataType(dataType);
+    setShowMissingDataModal(true);
   };
 
-  // Auto-fix obvious duplicates
-  const handleAutoFix = async () => {
-    if (!confirm('This will automatically merge obvious duplicates (95%+ confidence). Continue?')) {
-      return;
-    }
+  const openDeduplicationReview = () => {
+    setShowDeduplicationModal(true);
+  };
 
-    setIsLoading(true);
-    try {
-      const result = await autoMergeObviousDuplicates();
-      let message = `Auto-fix complete!\n\n`;
-      message += `✅ Merged: ${result.merged} obvious duplicates\n`;
-      message += `⏭️ Skipped: ${result.skipped} lower confidence matches\n`;
-      
-      if (result.errors.length > 0) {
-        message += `❌ Errors: ${result.errors.length}\n`;
-      }
-      
-      if (result.mergedPairs.length > 0) {
-        message += `\nMerged pairs:\n`;
-        result.mergedPairs.forEach(pair => {
-          message += `• Kept "${pair.kept}", removed "${pair.removed}"\n`;
-        });
-      }
-      
-      alert(message);
-      loadHealthReport(); // Refresh
-    } catch (error) {
-      console.error('Error in auto-fix:', error);
-      alert('Error during auto-fix: ' + error.message);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleDataUpdated = () => {
+    // Refresh health report when data is updated
+    loadHealthReport();
   };
 
   // Get health score color
@@ -172,21 +144,23 @@ const DataHygieneManager = () => {
             className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50 flex items-center"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
+            Refresh Analysis
           </button>
           <button
-            onClick={handleAutoFix}
+            onClick={openDeduplicationReview}
             disabled={isLoading}
-            className="px-4 py-2 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 disabled:opacity-50 font-semibold"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center"
           >
-            Auto-Fix Obvious
+            <Users className="w-4 h-4 mr-2" />
+            Review Duplicates
           </button>
           <button
-            onClick={handleStandardizeAll}
+            onClick={() => openMissingDataReview('all')}
             disabled={isLoading}
-            className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50"
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center"
           >
-            Standardize All
+            <Edit className="w-4 h-4 mr-2" />
+            Fix Missing Data
           </button>
         </div>
       </div>
@@ -266,76 +240,107 @@ const DataHygieneManager = () => {
       {/* Tab Content */}
       {activeTab === 'overview' && healthReport && (
         <div className="space-y-6">
-          {/* Quick Actions */}
+          {/* Professional Data Review Actions */}
           <div className="bg-white rounded-lg shadow-sm border p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Data Quality Actions</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="p-4 border rounded-lg">
-                <h4 className="font-medium text-gray-900 mb-2">Fix Duplicates</h4>
+                <div className="flex items-center mb-2">
+                  <Users className="w-5 h-5 text-blue-600 mr-2" />
+                  <h4 className="font-medium text-gray-900">Review Duplicates</h4>
+                </div>
                 <p className="text-sm text-gray-600 mb-3">
-                  {duplicates.length} duplicate records found
+                  {duplicates.length} potential duplicate records found. Review and manually merge.
                 </p>
                 <button
-                  onClick={() => setActiveTab('duplicates')}
-                  className="w-full px-3 py-2 bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200"
+                  onClick={openDeduplicationReview}
+                  className="w-full px-3 py-2 bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200"
                 >
-                  Review Duplicates
+                  Review & Merge Duplicates
                 </button>
               </div>
               
               <div className="p-4 border rounded-lg">
-                <h4 className="font-medium text-gray-900 mb-2">Link Orphaned Schedules</h4>
+                <div className="flex items-center mb-2">
+                  <Link className="w-5 h-5 text-red-600 mr-2" />
+                  <h4 className="font-medium text-gray-900">Fix Orphaned Records</h4>
+                </div>
                 <p className="text-sm text-gray-600 mb-3">
-                  {orphanedSchedules.length} schedules need linking
+                  {orphanedSchedules.length} schedules need to be linked to faculty
                 </p>
                 <button
                   onClick={() => setActiveTab('orphaned')}
                   className="w-full px-3 py-2 bg-red-100 text-red-800 rounded-lg hover:bg-red-200"
                 >
-                  Fix Orphaned
+                  Fix Orphaned Schedules
                 </button>
               </div>
               
               <div className="p-4 border rounded-lg">
-                <h4 className="font-medium text-gray-900 mb-2">Auto-Fix Issues</h4>
+                <div className="flex items-center mb-2">
+                  <Edit className="w-5 h-5 text-purple-600 mr-2" />
+                  <h4 className="font-medium text-gray-900">Complete Missing Data</h4>
+                </div>
                 <p className="text-sm text-gray-600 mb-3">
-                  Automatically merge obvious duplicates (95%+ confidence)
+                  Review records and manually add missing contact information
                 </p>
                 <button
-                  onClick={handleAutoFix}
+                  onClick={() => openMissingDataReview('all')}
                   className="w-full px-3 py-2 bg-purple-100 text-purple-800 rounded-lg hover:bg-purple-200"
                 >
-                  Auto-Fix Obvious
-                </button>
-              </div>
-              
-              <div className="p-4 border rounded-lg">
-                <h4 className="font-medium text-gray-900 mb-2">Standardize Data</h4>
-                <p className="text-sm text-gray-600 mb-3">
-                  Fix formatting and consistency
-                </p>
-                <button
-                  onClick={handleStandardizeAll}
-                  className="w-full px-3 py-2 bg-green-100 text-green-800 rounded-lg hover:bg-green-200"
-                >
-                  Standardize All
+                  Review Missing Data
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Missing Data Summary */}
+          {/* Interactive Missing Data Summary */}
           <div className="bg-white rounded-lg shadow-sm border p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Missing Data</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <span className="text-gray-700">Missing Email</span>
-                <span className="font-medium text-gray-900">{healthReport.summary.missingEmail}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <span className="text-gray-700">Missing Phone</span>
-                <span className="font-medium text-gray-900">{healthReport.summary.missingPhone}</span>
-              </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Missing Contact Information</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Click on any category below to review and manually add the missing information.
+            </p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <button
+                onClick={() => openMissingDataReview('email')}
+                className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border-2 border-transparent hover:border-blue-200"
+              >
+                <div className="flex items-center">
+                  <Mail className="w-5 h-5 text-blue-600 mr-2" />
+                  <span className="text-gray-700">Missing Email</span>
+                </div>
+                <span className="font-medium text-red-600">{healthReport.summary.missingEmail}</span>
+              </button>
+              <button
+                onClick={() => openMissingDataReview('phone')}
+                className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border-2 border-transparent hover:border-blue-200"
+              >
+                <div className="flex items-center">
+                  <Phone className="w-5 h-5 text-green-600 mr-2" />
+                  <span className="text-gray-700">Missing Phone</span>
+                </div>
+                <span className="font-medium text-red-600">{healthReport.summary.missingPhone}</span>
+              </button>
+              <button
+                onClick={() => openMissingDataReview('office')}
+                className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border-2 border-transparent hover:border-blue-200"
+              >
+                <div className="flex items-center">
+                  <Building className="w-5 h-5 text-purple-600 mr-2" />
+                  <span className="text-gray-700">Missing Office</span>
+                </div>
+                <span className="font-medium text-red-600">{healthReport.summary.missingOffice || 0}</span>
+              </button>
+              <button
+                onClick={() => openMissingDataReview('jobTitle')}
+                className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border-2 border-transparent hover:border-blue-200"
+              >
+                <div className="flex items-center">
+                  <User className="w-5 h-5 text-orange-600 mr-2" />
+                  <span className="text-gray-700">Missing Job Title</span>
+                </div>
+                <span className="font-medium text-red-600">{healthReport.summary.missingJobTitle || 0}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -455,6 +460,20 @@ const DataHygieneManager = () => {
           </div>
         </div>
       )}
+
+      {/* Professional Review Modals */}
+      <MissingDataReviewModal
+        isOpen={showMissingDataModal}
+        onClose={() => setShowMissingDataModal(false)}
+        onDataUpdated={handleDataUpdated}
+        missingDataType={missingDataType}
+      />
+
+      <DeduplicationReviewModal
+        isOpen={showDeduplicationModal}
+        onClose={() => setShowDeduplicationModal(false)}
+        onDuplicatesResolved={handleDataUpdated}
+      />
     </div>
   );
 };

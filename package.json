@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "migrate": "node scripts/migrate.js",
     "migrate-programs": "node migration-script.js",
+    "clear-programs": "node clear-faculty-programs.js",
     "validate-data": "node scripts/validate-data.js",
     "backup-data": "node scripts/backup-data.js",
     "test": "vitest",

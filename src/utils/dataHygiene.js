@@ -61,6 +61,7 @@ export const standardizeSchedule = (schedule) => {
     courseCode: standardizeCourseCode(schedule.courseCode),
     courseTitle: (schedule.courseTitle || '').trim(),
     section: (schedule.section || '').trim(),
+    crn: (schedule.crn || '').trim(), // Add CRN standardization
     
     // Term standardization
     term: standardizeTerm(schedule.term),

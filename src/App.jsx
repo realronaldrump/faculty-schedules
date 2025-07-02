@@ -214,6 +214,7 @@ function App() {
             Term: schedule.term || '',
             Credits: schedule.credits || '',
             Section: schedule.section || '',
+            crn: schedule.crn || '', // Include CRN field
             
             // Keep relational data available
             instructor: schedule.instructor,

@@ -51,6 +51,7 @@ export const createScheduleModel = (rawData) => {
     courseCode: (rawData.courseCode || '').trim(),
     courseTitle: (rawData.courseTitle || '').trim(),
     section: (rawData.section || '').trim(),
+    crn: rawData.crn || '', // Add CRN field
     meetingPatterns: Array.isArray(rawData.meetingPatterns) ? rawData.meetingPatterns : [],
     roomId: rawData.roomId || null,
     roomName: (rawData.roomName || '').trim(),
@@ -622,6 +623,7 @@ export const processScheduleImport = async (csvData) => {
       const courseCode = row['Course'] || '';
       const courseTitle = row['Course Title'] || row['Long Title'] || '';
       const section = row['Section #'] || '';
+      const crn = row['CRN'] || ''; // Extract CRN field
       const meetingPattern = row['Meeting Pattern'] || '';
       const meetings = row['Meetings'] || '';
       const roomName = (row['Room'] || '').trim();
@@ -725,6 +727,7 @@ export const processScheduleImport = async (csvData) => {
         courseCode,
         courseTitle,
         section,
+        crn, // Pass CRN to the model
         meetingPatterns,
         roomId,
         roomName,

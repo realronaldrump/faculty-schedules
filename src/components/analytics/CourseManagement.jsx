@@ -187,7 +187,8 @@ const CourseManagement = ({
         (item.Course?.toLowerCase().includes(lowercasedFilter)) ||
         (item['Course Title']?.toLowerCase().includes(lowercasedFilter)) ||
         (item.Instructor?.toLowerCase().includes(lowercasedFilter)) ||
-        (item.Room?.toLowerCase().includes(lowercasedFilter))
+        (item.Room?.toLowerCase().includes(lowercasedFilter)) ||
+        (item.crn?.toString().toLowerCase().includes(lowercasedFilter))
       );
     }
     
@@ -856,6 +857,7 @@ const CourseManagement = ({
                 <DataTableHeader columnKey="Instructor" label="Instructor" />
                 <DataTableHeader columnKey="Course" label="Course" />
                 <DataTableHeader columnKey="Course Title" label="Course Title" />
+                <DataTableHeader columnKey="crn" label="CRN" />
                 <DataTableHeader columnKey="Day" label="Day" />
                 <DataTableHeader columnKey="Start Time" label="Start Time" />
                 <DataTableHeader columnKey="End Time" label="End Time" />
@@ -901,6 +903,15 @@ const CourseManagement = ({
                             onChange={handleEditFormChange}
                             className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
                             placeholder="Course Title"
+                          />
+                        </td>
+                        <td className="p-1">
+                          <input
+                            name="crn"
+                            value={editFormData.crn || ''}
+                            onChange={handleEditFormChange}
+                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
+                            placeholder="CRN"
                           />
                         </td>
                         <td className="p-1">
@@ -974,6 +985,7 @@ const CourseManagement = ({
                         </td>
                         <td className="px-4 py-3 text-gray-700 font-medium">{row.Course}</td>
                         <td className="px-4 py-3 text-gray-700">{row['Course Title']}</td>
+                        <td className="px-4 py-3 text-gray-700 font-medium">{row.crn}</td>
                         <td className="px-4 py-3 text-gray-700 text-center">
                           <span className="px-2 py-1 bg-baylor-green/10 text-baylor-green rounded text-xs font-medium">
                             {row.Day}
@@ -1006,7 +1018,7 @@ const CourseManagement = ({
                 ))
               ) : (
                 <tr>
-                  <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan="9" className="px-4 py-8 text-center text-gray-500">
                     {scheduleData.length === 0 ? (
                       <div>
                         <p className="text-lg mb-2">No course data available</p>

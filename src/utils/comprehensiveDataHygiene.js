@@ -519,6 +519,7 @@ const standardizeScheduleData = (schedule) => {
     courseCode: (schedule.courseCode || '').trim(),
     courseTitle: (schedule.courseTitle || '').trim(),
     section: (schedule.section || '').trim(),
+    crn: (schedule.crn || '').trim(), // Add CRN standardization
     instructorName: (schedule.instructorName || '').trim(),
     roomName: (schedule.roomName || '').trim(),
     term: (schedule.term || '').trim(),

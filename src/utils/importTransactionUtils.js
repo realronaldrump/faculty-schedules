@@ -275,6 +275,7 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
       courseCode,
       courseTitle: row['Course Title'] || '',
       section,
+      crn: row['CRN'] || '', // Add CRN field
       credits: row.Credits || '',
       term,
       academicYear: extractAcademicYear(term),

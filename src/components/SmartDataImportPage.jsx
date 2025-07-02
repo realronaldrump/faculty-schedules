@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Upload, FileText, Users, Calendar, AlertCircle, CheckCircle, X, RotateCcw, Database, Trash2, UserCheck, UserX, Phone, PhoneOff, Building, BuildingIcon, History, Eye, Shield } from 'lucide-react';
+import { ArrowLeft, Upload, FileText, Users, Calendar, AlertCircle, CheckCircle, X, RotateCcw, Database, Trash2, UserCheck, UserX, Phone, PhoneOff, Building, BuildingIcon, History, Eye, Shield, Settings, RefreshCw } from 'lucide-react';
 import { processDirectoryImport, processScheduleImport, cleanDirectoryData, determineRoles, createPersonModel, findMatchingPerson, parseCLSSCSV } from '../utils/dataImportUtils';
 import { previewImportChanges, commitTransaction } from '../utils/importTransactionUtils';
+import { analyzeCRNCoverage, backfillCRNData, reimportCRNFromCSV } from '../utils/crnMigrationUtils';
 import ImportPreviewModal from './ImportPreviewModal';
 import ImportHistoryModal from './ImportHistoryModal';
 import DataDeduplicationManager from './DataDeduplicationManager';
@@ -30,6 +31,12 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
   // Data deduplication states
   const [showDeduplication, setShowDeduplication] = useState(false);
   const [deduplicatedData, setDeduplicatedData] = useState(null);
+  
+  // CRN migration states
+  const [crnAnalysis, setCrnAnalysis] = useState(null);
+  const [isCrnAnalyzing, setIsCrnAnalyzing] = useState(false);
+  const [isCrnMigrating, setIsCrnMigrating] = useState(false);
+  const [crnMigrationResults, setCrnMigrationResults] = useState(null);
 
   // Check for semester mismatches in schedule data
   const checkSemesterMismatch = (data) => {
@@ -575,6 +582,65 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
     setShowDeduplication(true);
   };
 
+  // CRN Migration Functions
+  const analyzeCRN = async () => {
+    setIsCrnAnalyzing(true);
+    try {
+      const analysis = await analyzeCRNCoverage();
+      setCrnAnalysis(analysis);
+      if (showNotification) {
+        showNotification('info', `CRN Analysis: ${analysis.coveragePercentage}% coverage (${analysis.withCRN}/${analysis.total} records)`);
+      }
+    } catch (error) {
+      console.error('CRN analysis error:', error);
+      if (showNotification) {
+        showNotification('error', 'Failed to analyze CRN coverage: ' + error.message);
+      }
+    }
+    setIsCrnAnalyzing(false);
+  };
+
+  const handleCRNBackfill = async (useCSVData = false) => {
+    if (!crnAnalysis || crnAnalysis.recordsNeedingCRN.length === 0) {
+      if (showNotification) {
+        showNotification('info', 'No records need CRN backfill');
+      }
+      return;
+    }
+
+    setIsCrnMigrating(true);
+    try {
+      let results;
+      
+      if (useCSVData && csvData) {
+        // Use reimport method with current CSV data
+        results = await reimportCRNFromCSV(csvData);
+        setCrnMigrationResults(results);
+        
+        if (showNotification) {
+          showNotification('success', `CRN Re-import: Updated ${results.updated} records from CSV data`);
+        }
+      } else {
+        // Use backfill method
+        results = await backfillCRNData();
+        setCrnMigrationResults(results);
+        
+        if (showNotification) {
+          showNotification('success', `CRN Backfill: Updated ${results.updated} records`);
+        }
+      }
+      
+      // Refresh analysis
+      await analyzeCRN();
+    } catch (error) {
+      console.error('CRN migration error:', error);
+      if (showNotification) {
+        showNotification('error', 'Failed to migrate CRN data: ' + error.message);
+      }
+    }
+    setIsCrnMigrating(false);
+  };
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       {/* Header */}
@@ -733,6 +799,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
                     <>
                       <th className="text-left py-2 px-3 font-medium text-gray-700">Course</th>
                       <th className="text-left py-2 px-3 font-medium text-gray-700">Course Title</th>
+                      <th className="text-left py-2 px-3 font-medium text-gray-700">CRN</th>
                       <th className="text-left py-2 px-3 font-medium text-gray-700">Instructor</th>
                       <th className="text-left py-2 px-3 font-medium text-gray-700">Meeting Pattern</th>
                       <th className="text-left py-2 px-3 font-medium text-gray-700">Room</th>
@@ -767,6 +834,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
                       <>
                         <td className="py-2 px-3 text-gray-800 max-w-32 truncate font-medium">{row['Course']}</td>
                         <td className="py-2 px-3 text-gray-800 max-w-40 truncate">{row['Course Title'] || row['Long Title']}</td>
+                        <td className="py-2 px-3 text-gray-800 max-w-24 truncate text-xs font-medium">{row['CRN'] || 'N/A'}</td>
                         <td className="py-2 px-3 text-gray-800 max-w-32 truncate">{row['Instructor']}</td>
                         <td className="py-2 px-3 text-gray-800 max-w-32 truncate text-xs">{row['Meeting Pattern']}</td>
                         <td className="py-2 px-3 text-gray-800 max-w-24 truncate">{row['Room']}</td>
@@ -899,6 +967,133 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
           </div>
         </div>
       )}
+
+      {/* CRN Data Management */}
+      <div className="mb-8">
+        <h2 className="text-lg font-serif font-semibold text-baylor-green mb-4">CRN Data Management</h2>
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+          <div className="flex items-start">
+            <Settings className="w-5 h-5 text-yellow-600 mr-3 mt-0.5 flex-shrink-0" />
+            <div className="text-sm">
+              <p className="text-yellow-800 font-medium mb-1">Data Hygiene & Migration</p>
+              <p className="text-yellow-700">
+                Analyze and backfill missing CRN data for existing schedule records. This helps ensure data consistency across your application.
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex flex-col sm:flex-row gap-4 items-start">
+          <button
+            onClick={analyzeCRN}
+            disabled={isCrnAnalyzing}
+            className="px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
+          >
+            {isCrnAnalyzing ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                Analyzing...
+              </>
+            ) : (
+              <>
+                <Database className="mr-2" size={18} />
+                Analyze CRN Coverage
+              </>
+            )}
+          </button>
+          
+          {crnAnalysis && (
+            <>
+              <button
+                onClick={() => handleCRNBackfill(false)}
+                disabled={isCrnMigrating || crnAnalysis.recordsNeedingCRN.length === 0}
+                className="px-6 py-3 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
+              >
+                {isCrnMigrating ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Migrating...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="mr-2" size={18} />
+                    Smart Backfill ({crnAnalysis.recordsNeedingCRN.length})
+                  </>
+                )}
+              </button>
+              
+              {csvData && importType === 'schedule' && (
+                <button
+                  onClick={() => handleCRNBackfill(true)}
+                  disabled={isCrnMigrating}
+                  className="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
+                >
+                  {isCrnMigrating ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      Re-importing...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="mr-2" size={18} />
+                      Re-import from Current CSV
+                    </>
+                  )}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+        
+        {/* CRN Analysis Results */}
+        {crnAnalysis && (
+          <div className="mt-6 bg-white border border-gray-200 rounded-lg p-4">
+            <h3 className="text-md font-semibold text-gray-900 mb-3">CRN Coverage Analysis</h3>
+            <div className="grid md:grid-cols-4 gap-4 mb-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-baylor-green">{crnAnalysis.coveragePercentage}%</div>
+                <div className="text-sm text-gray-600">Coverage</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">{crnAnalysis.withCRN}</div>
+                <div className="text-sm text-gray-600">With CRN</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-red-600">{crnAnalysis.missingCRN + crnAnalysis.emptyCRN}</div>
+                <div className="text-sm text-gray-600">Missing CRN</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-gray-600">{crnAnalysis.total}</div>
+                <div className="text-sm text-gray-600">Total Records</div>
+              </div>
+            </div>
+            
+            {crnAnalysis.duplicateCRNs.length > 0 && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded">
+                <h4 className="text-sm font-medium text-red-800 mb-2">⚠️ Duplicate CRNs Found</h4>
+                <div className="text-sm text-red-700">
+                  {crnAnalysis.duplicateCRNs.length} CRN(s) are used by multiple records. This may indicate data integrity issues.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Migration Results */}
+        {crnMigrationResults && (
+          <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 className="text-md font-semibold text-blue-900 mb-2">Migration Results</h3>
+            <div className="text-sm text-blue-800">
+              <p>Processed: {crnMigrationResults.processed} records</p>
+              <p>Updated: {crnMigrationResults.updated} records</p>
+              {crnMigrationResults.matched !== undefined && <p>Matched from CSV: {crnMigrationResults.matched} records</p>}
+              {crnMigrationResults.errors && crnMigrationResults.errors.length > 0 && (
+                <p className="text-red-600">Errors: {crnMigrationResults.errors.length}</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Role Assignment Review */}
       {showRoleAssignment && (

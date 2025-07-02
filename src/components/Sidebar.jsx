@@ -41,18 +41,18 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
   const isCurrentPage = (path) => currentPage === path;
 
   return (
-    <div className={`sidebar transition-all duration-300 ${collapsed ? 'w-16' : 'w-72'} flex flex-col h-full`}>
+    <div className={`sidebar transition-all duration-300 ${collapsed ? 'w-16' : 'w-72'} flex flex-col min-h-screen h-screen sticky top-0`}>
       {/* Professional University Header */}
       <div className={`sidebar-header ${collapsed ? 'p-4' : 'p-6'}`}>
         <div className="flex items-center justify-between">
           {!collapsed && (
             <div className="sidebar-brand">
               <div className="sidebar-logo">
-                <span className="text-white font-bold text-sm">HSD</span>
+                <span className="text-white font-bold text-sm font-['DM_Sans']">HSD</span>
               </div>
               <div>
-                <div className="sidebar-title">HSD Dashboard</div>
-                <div className="sidebar-subtitle">
+                <div className="sidebar-title text-lg font-bold text-white font-['DM_Sans']">HSD Dashboard</div>
+                <div className="sidebar-subtitle text-sm text-baylor-gold/80 mt-1 font-['DM_Sans']">
                   {selectedSemester || 'Fall 2025'}
                 </div>
               </div>
@@ -60,7 +60,7 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
           )}
           {collapsed && (
             <div className="sidebar-logo mx-auto">
-              <span className="text-white font-bold text-sm">HSD</span>
+              <span className="text-white font-bold text-sm font-['DM_Sans']">HSD</span>
             </div>
           )}
           <button
@@ -108,7 +108,7 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
                       }`} 
                     />
                     {!collapsed && (
-                      <span className="font-medium">{item.label}</span>
+                      <span className="font-medium text-sm font-['DM_Sans']">{item.label}</span>
                     )}
                   </div>
                   {!collapsed && hasChildren && (
@@ -132,7 +132,7 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
                           isCurrentPage(child.path) ? 'nav-sub-item-active' : 'nav-sub-item-inactive'
                         }`}
                       >
-                        <span className="text-sm">{child.label}</span>
+                        <span className="text-sm font-['DM_Sans']">{child.label}</span>
                       </button>
                     ))}
                   </div>
@@ -144,19 +144,19 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
       </nav>
 
       {/* Professional Footer */}
-      <div className="border-t border-gray-200 p-4">
+      <div className="border-t border-gray-200 p-4 mt-auto">
         {!collapsed ? (
           <div className="text-center space-y-1">
-            <div className="text-xs font-medium text-baylor-green">Baylor University</div>
-            <div className="text-xs text-gray-500">Human Sciences & Design</div>
-            <div className="text-xs text-gray-400 mt-2">
+            <div className="text-xs font-medium text-baylor-green font-['DM_Sans']">Baylor University</div>
+            <div className="text-xs text-gray-500 font-['DM_Sans']">Human Sciences & Design</div>
+            <div className="text-xs text-gray-400 mt-2 font-['DM_Sans']">
               Faculty Schedule Management System
             </div>
           </div>
         ) : (
           <div className="flex justify-center">
             <div className="w-8 h-8 bg-baylor-green/10 rounded-lg flex items-center justify-center">
-              <span className="text-xs font-bold text-baylor-green">BU</span>
+              <span className="text-xs font-bold text-baylor-green font-['DM_Sans']">BU</span>
             </div>
           </div>
         )}

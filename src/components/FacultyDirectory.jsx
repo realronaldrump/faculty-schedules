@@ -15,7 +15,7 @@ const formatPhoneNumber = (phoneStr) => {
     return phoneStr;
 };
 
-const FacultyDirectory = ({ directoryData, scheduleData = [], onFacultyUpdate, onStaffUpdate, onFacultyDelete }) => {
+const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onStaffUpdate, onFacultyDelete }) => {
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [filterText, setFilterText] = useState('');
@@ -107,9 +107,9 @@ const FacultyDirectory = ({ directoryData, scheduleData = [], onFacultyUpdate, o
 
   // Calculate course counts for each faculty member
   const facultyWithCourseCounts = useMemo(() => {
-    if (!directoryData || !Array.isArray(directoryData)) return [];
+    if (!facultyData || !Array.isArray(facultyData)) return [];
     
-    return directoryData.map(faculty => {
+    return facultyData.map(faculty => {
       const facultyName = faculty.name;
       const facultyCourses = scheduleData.filter(schedule => {
         const instructorName = schedule.instructor ? 
@@ -136,7 +136,7 @@ const FacultyDirectory = ({ directoryData, scheduleData = [], onFacultyUpdate, o
         }))
       };
     });
-  }, [directoryData, scheduleData]);
+  }, [facultyData, scheduleData]);
 
   // Remove duplicates from directoryData and ensure unique entries
   const uniqueDirectoryData = useMemo(() => {

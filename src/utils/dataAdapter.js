@@ -105,6 +105,7 @@ export const adaptPeopleToFaculty = (people, scheduleData = [], programs = []) =
       };
       
       return {
+        ...person, // Spread original data first
         id: person.id,
         name: facultyName,
         firstName: person.firstName,
@@ -122,8 +123,7 @@ export const adaptPeopleToFaculty = (people, scheduleData = [], programs = []) =
         isUPD: person.isUPD || false,
         hasNoPhone: person.hasNoPhone || false,
         hasNoOffice: person.hasNoOffice || false,
-        program: program,
-        ...person // Include any additional fields
+        program: program // Ensure program is set last so it isn't overwritten
       };
     });
 };

@@ -11,6 +11,41 @@
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 
+// ---------------------------------------------------------------------------
+// PERSON SCHEMA CONSISTENCY
+// ---------------------------------------------------------------------------
+
+// A canonical list of every field we expect to be present on a person record.
+// NOTE:  If you add or remove a field that should be universal, update this
+// object as well as any Firestore security rules or TypeScript definitions.
+export const DEFAULT_PERSON_SCHEMA = {
+  firstName: '',
+  lastName: '',
+  name: '', // Convenience – concatenated first & last name.
+  title: '',
+  email: '',
+  phone: '',
+  jobTitle: '',
+  department: '',
+  office: '',
+  roles: [],
+  // Employment status flags
+  isAdjunct: false,
+  isFullTime: true,
+  isTenured: false,
+  isUPD: false,
+  // Relational references
+  programId: null,
+  // Data-quality helpers
+  hasNoPhone: false,
+  hasNoOffice: false,
+  // Basic activity flag so we can "disable" a record without deleting it
+  isActive: true,
+  // Timestamps
+  createdAt: '',
+  updatedAt: ''
+};
+
 // ==================== DATA STANDARDIZATION ====================
 
 /**
@@ -47,6 +82,19 @@ export const standardizePerson = (person) => {
   if (!standardized.firstName && !standardized.lastName) {
     delete standardized.name;
   }
+
+  // ---------------------------------------------------------------------
+  // Ensure schema completeness – add any fields that were missing from
+  // the incoming record so that *every* person document shares the same
+  // structure regardless of role or data source. This is critical for
+  // predictable queries and UI rendering.
+  // ---------------------------------------------------------------------
+
+  Object.entries(DEFAULT_PERSON_SCHEMA).forEach(([key, defaultValue]) => {
+    if (standardized[key] === undefined) {
+      standardized[key] = defaultValue;
+    }
+  });
 
   return standardized;
 };

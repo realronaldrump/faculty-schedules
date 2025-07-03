@@ -11,6 +11,7 @@
 
 import { collection, getDocs, doc, updateDoc, deleteDoc, writeBatch, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
+import { DEFAULT_PERSON_SCHEMA } from './dataHygiene';
 
 // ==================== CORE DATA HYGIENE FUNCTIONS ====================
 
@@ -495,7 +496,7 @@ export const standardizeAllData = async () => {
  * Standardize person data
  */
 const standardizePersonData = (person) => {
-  return {
+  const standardized = {
     ...person,
     firstName: (person.firstName || '').trim(),
     lastName: (person.lastName || '').trim(),
@@ -508,6 +509,15 @@ const standardizePersonData = (person) => {
     roles: Array.isArray(person.roles) ? person.roles : ['faculty'],
     updatedAt: new Date().toISOString()
   };
+
+  // Guarantee schema completeness using the shared constant.
+  Object.entries(DEFAULT_PERSON_SCHEMA).forEach(([key, defaultValue]) => {
+    if (standardized[key] === undefined) {
+      standardized[key] = defaultValue;
+    }
+  });
+
+  return standardized;
 };
 
 /**

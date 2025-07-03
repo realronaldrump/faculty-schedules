@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Edit, Save, X, Users, Mail, Phone, PhoneOff, Building, BuildingIcon, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, Filter, UserCog } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
 import MultiSelectDropdown from './MultiSelectDropdown';
+import { adaptPeopleToStaff } from '../utils/dataAdapter';
 
 const formatPhoneNumber = (phoneStr) => {
     if (!phoneStr) return '-';
@@ -15,7 +16,7 @@ const formatPhoneNumber = (phoneStr) => {
     return phoneStr;
 };
 
-const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaffDelete }) => {
+const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaffDelete, programs = [] }) => {
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [filterText, setFilterText] = useState('');
@@ -54,13 +55,19 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
     hasEmail: true
   });
 
-  // Remove duplicates from directoryData and ensure unique entries
-  const uniqueDirectoryData = useMemo(() => {
+  // Replace direct directoryData usage with adapted data
+  const adaptedStaffData = useMemo(() => {
     if (!directoryData || !Array.isArray(directoryData)) return [];
+    return adaptPeopleToStaff(directoryData, [], programs);
+  }, [directoryData, programs]);
+
+  // Remove duplicates from adaptedStaffData and ensure unique entries
+  const uniqueDirectoryData = useMemo(() => {
+    if (!adaptedStaffData || !Array.isArray(adaptedStaffData)) return [];
     
     const uniqueMap = new Map();
     
-    directoryData.forEach(staff => {
+    adaptedStaffData.forEach(staff => {
       // Create a unique key based on name and email
       const key = `${staff.name?.toLowerCase()}-${(staff.email || 'no-email').toLowerCase()}`;
       
@@ -80,7 +87,7 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
     });
     
     return Array.from(uniqueMap.values());
-  }, [directoryData]);
+  }, [adaptedStaffData]);
 
   const validate = (data) => {
     const newErrors = {};

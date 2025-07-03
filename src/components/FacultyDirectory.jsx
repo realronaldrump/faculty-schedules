@@ -173,14 +173,9 @@ const FacultyDirectory = ({ directoryData, scheduleData = [], onFacultyUpdate, o
     const buildings = new Set();
 
     uniqueDirectoryData.forEach(person => {
-      // Extract program from faculty program field or fallback to jobTitle parsing
+      // Use normalized program data (single source of truth)
       if (person.program && person.program.name) {
         programs.add(person.program.name);
-      } else if (person.jobTitle) {
-        const parts = person.jobTitle.split(' - ');
-        if (parts.length > 1) {
-          programs.add(parts[0].trim());
-        }
       }
       
       if (person.jobTitle) {
@@ -220,14 +215,8 @@ const FacultyDirectory = ({ directoryData, scheduleData = [], onFacultyUpdate, o
     // Program filter (include/exclude)
     if (filters.programs.include.length > 0 || filters.programs.exclude.length > 0) {
       data = data.filter(person => {
-        let programName = '';
-        
-        if (person.program && person.program.name) {
-          programName = person.program.name;
-        } else if (person.jobTitle) {
-          const parts = person.jobTitle.split(' - ');
-          programName = parts.length > 1 ? parts[0].trim() : '';
-        }
+        // Use normalized program data only (single source of truth)
+        const programName = person.program && person.program.name ? person.program.name : '';
         
         const includeMatch = filters.programs.include.length === 0 || filters.programs.include.includes(programName);
         const excludeMatch = filters.programs.exclude.length === 0 || !filters.programs.exclude.includes(programName);

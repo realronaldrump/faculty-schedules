@@ -18,8 +18,8 @@ import {
 import FacultyContactCard from './FacultyContactCard';
 
 const BuildingDirectory = ({ 
-  directoryData, 
-  staffData = [],
+  facultyData,
+  staffData,
   showNotification 
 }) => {
   const [selectedPersonForCard, setSelectedPersonForCard] = useState(null);
@@ -101,8 +101,8 @@ const BuildingDirectory = ({
     const buildings = {};
     
     // Process faculty data
-    if (showFaculty && directoryData && Array.isArray(directoryData)) {
-      const facultyToProcess = showAdjuncts ? directoryData : directoryData.filter(f => !f.isAdjunct);
+    if (showFaculty && facultyData && Array.isArray(facultyData)) {
+      const facultyToProcess = showAdjuncts ? facultyData : facultyData.filter(f => !f.isAdjunct);
       
       facultyToProcess.forEach(person => {
         const buildingName = person.office ? extractBuildingName(person.office) : 'No Building';
@@ -172,7 +172,7 @@ const BuildingDirectory = ({
     });
 
     return buildings;
-  }, [directoryData, staffData, showFaculty, showStaff, showAdjuncts]);
+  }, [facultyData, staffData, showFaculty, showStaff, showAdjuncts]);
 
   const buildingList = Object.keys(buildingData).sort();
 

@@ -447,7 +447,8 @@ const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
     }
     
     copyToClipboard(emailString);
-    showNotification(`${format.charAt(0).toUpperCase() + format.slice(1)} email list copied to clipboard with ${selectedData.length} contacts`);
+    // Show a generic success notification
+    showNotification(`Email list copied to clipboard with ${selectedData.length} contacts`);
   };
 
   const generateOutlookFormat = (peopleData) => {
@@ -575,7 +576,7 @@ const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Email Lists</h1>
           <p className="text-gray-600 mt-1">
-            Filter and select faculty and staff to create email lists for Outlook or other email clients
+            Filter and select faculty and staff to create comma-separated email lists for any email client
           </p>
         </div>
         <div className="flex items-center space-x-4">
@@ -840,21 +841,12 @@ const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
           
           <div className="flex items-center space-x-3">
             <button
-              onClick={() => generateEmailList('outlook')}
+              onClick={() => generateEmailList('gmail')}
               disabled={selectedPeople.length === 0}
               className="flex items-center px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
             >
               <Mail className="w-4 h-4 mr-2" />
-              Copy for Outlook
-            </button>
-            
-            <button
-              onClick={() => generateEmailList('gmail')}
-              disabled={selectedPeople.length === 0}
-              className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            >
-              <Mail className="w-4 h-4 mr-2" />
-              Copy for Gmail
+              Copy Emails
             </button>
             
             <button

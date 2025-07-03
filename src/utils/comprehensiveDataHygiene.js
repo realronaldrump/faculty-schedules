@@ -517,6 +517,13 @@ const standardizePersonData = (person) => {
     }
   });
 
+  // Remove stray attributes not in the canonical schema
+  Object.keys(standardized).forEach((key) => {
+    if (!Object.prototype.hasOwnProperty.call(DEFAULT_PERSON_SCHEMA, key)) {
+      delete standardized[key];
+    }
+  });
+
   return standardized;
 };
 

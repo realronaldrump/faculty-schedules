@@ -7,6 +7,7 @@ import {
   Link, 
   RefreshCw,
   Shield,
+  Settings,
   TrendingUp,
   Users,
   Calendar,
@@ -25,6 +26,7 @@ import {
 } from '../utils/dataHygiene';
 import MissingDataReviewModal from './MissingDataReviewModal';
 import DeduplicationReviewModal from './DeduplicationReviewModal';
+import { standardizeAllData } from '../utils/comprehensiveDataHygiene';
 
 const DataHygieneManager = () => {
   const [healthReport, setHealthReport] = useState(null);
@@ -103,6 +105,24 @@ const DataHygieneManager = () => {
     loadHealthReport();
   };
 
+  // Run full database standardization (adds missing, removes stray fields)
+  const handleStandardizeData = async () => {
+    if (!confirm('This will clean up formatting for all records (add missing fields, remove legacy ones). Continue?')) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const result = await standardizeAllData();
+      alert(`Data cleanup complete. Updated ${result.recordsUpdated} records.`);
+      await loadHealthReport();
+    } catch (error) {
+      console.error('Error standardizing data:', error);
+      alert('Error during standardization: ' + error.message);
+    }
+    setIsLoading(false);
+  };
+
   // Get health score color
   const getHealthScoreColor = (score) => {
     if (score >= 90) return 'text-baylor-green';
@@ -145,6 +165,14 @@ const DataHygieneManager = () => {
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh Analysis
+          </button>
+          <button
+            onClick={handleStandardizeData}
+            disabled={isLoading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center"
+          >
+            <Settings className="w-4 h-4 mr-2" />
+            Clean Up Formatting
           </button>
           <button
             onClick={openDeduplicationReview}
@@ -289,6 +317,23 @@ const DataHygieneManager = () => {
                   className="w-full px-3 py-2 bg-purple-100 text-purple-800 rounded-lg hover:bg-purple-200"
                 >
                   Review Missing Data
+                </button>
+              </div>
+
+              {/* Clean Up Formatting card */}
+              <div className="p-4 border rounded-lg">
+                <div className="flex items-center mb-2">
+                  <Settings className="w-5 h-5 text-blue-600 mr-2" />
+                  <h4 className="font-medium text-gray-900">Clean Up Formatting</h4>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">
+                  Standardize every record and remove legacy fields so the schema is uniform.
+                </p>
+                <button
+                  onClick={handleStandardizeData}
+                  className="w-full px-3 py-2 bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200"
+                >
+                  Run Cleanup
                 </button>
               </div>
             </div>

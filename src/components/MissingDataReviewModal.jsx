@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Save, User, Mail, Phone, PhoneOff, Building, BuildingIcon, AlertCircle, CheckCircle } from 'lucide-react';
 import { doc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
+import { DEFAULT_PERSON_SCHEMA } from '../utils/dataHygiene';
 
 const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataType = 'email' }) => {
   const [records, setRecords] = useState([]);
@@ -41,12 +42,21 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
           missingRecords = people.filter(person => !person.jobTitle || person.jobTitle.trim() === '');
           break;
         default:
-          missingRecords = people.filter(person => 
-            (!person.email || person.email.trim() === '') ||
-            ((!person.phone || person.phone.trim() === '') && !person.hasNoPhone) ||
-            ((!person.office || person.office.trim() === '') && !person.hasNoOffice) ||
-            (!person.jobTitle || person.jobTitle.trim() === '')
-          );
+          // Identify any record where at least one schema field is "empty"
+          missingRecords = people.filter(person => {
+            return Object.keys(DEFAULT_PERSON_SCHEMA).some(key => {
+              // Skip timestamps and boolean flags when checking for emptiness
+              if (['createdAt', 'updatedAt', 'isAdjunct', 'isFullTime', 'isTenured', 'isUPD', 'hasNoPhone', 'hasNoOffice', 'isActive', 'roles'].includes(key)) {
+                return false;
+              }
+
+              const value = person[key];
+              if (value === undefined || value === null) return true;
+              if (typeof value === 'string') return value.trim() === '';
+              if (Array.isArray(value)) return value.length === 0;
+              return false;
+            });
+          });
       }
 
       setRecords(missingRecords);

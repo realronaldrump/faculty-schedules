@@ -57,7 +57,26 @@ const ProgramManagement = ({
   const programData = useMemo(() => {
     if (!facultyData || !Array.isArray(facultyData)) return {};
 
+    // Start with all programs from the database
     const programGroups = {};
+    programs.forEach(p => {
+      programGroups[p.name] = {
+        name: p.name,
+        faculty: [],
+        upd: null,
+        programId: p.id
+      };
+    });
+
+    // Add an 'Unassigned' group for faculty without a program
+    if (!programGroups['Unassigned']) {
+      programGroups['Unassigned'] = {
+        name: 'Unassigned',
+        faculty: [],
+        upd: null,
+        programId: null
+      };
+    }
     
     // Filter out adjuncts if the toggle is off
     const facultyToProcess = showAdjuncts ? facultyData : facultyData.filter(f => !f.isAdjunct);
@@ -66,16 +85,21 @@ const ProgramManagement = ({
       // Use the program from faculty data (which comes from the programs collection)
       let programName = 'Unassigned';
       
-      if (faculty.program && faculty.program.name) {
-        programName = faculty.program.name;
+      // Find the program name from the programs list using programId
+      if (faculty.programId) {
+        const program = programs.find(p => p.id === faculty.programId);
+        if (program) {
+          programName = program.name;
+        }
       }
 
       if (!programGroups[programName]) {
+        // This case should ideally not be hit if faculty programs are clean
         programGroups[programName] = {
           name: programName,
           faculty: [],
           upd: null,
-          programId: faculty.program ? faculty.program.id : null
+          programId: faculty.programId
         };
       }
 
@@ -92,7 +116,7 @@ const ProgramManagement = ({
     });
 
     return programGroups;
-  }, [facultyData, showAdjuncts]);
+  }, [facultyData, showAdjuncts, programs]);
 
   const programList = Object.keys(programData).sort();
 
@@ -205,8 +229,6 @@ const ProgramManagement = ({
     e.preventDefault();
     setDragOverProgram(program);
   };
-
-
 
   const handleDrop = async (e, targetProgramName) => {
     e.preventDefault();
@@ -372,7 +394,6 @@ const ProgramManagement = ({
                   : 'border-gray-200 hover:border-baylor-green/50'
               }`}
               onDragOver={(e) => handleDragOver(e, programName)}
-
               onDrop={(e) => handleDrop(e, programName)}
             >
               {/* Program Header */}

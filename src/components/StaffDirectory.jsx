@@ -214,7 +214,11 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
     if (validate(newStaff)) {
       const dataToSave = {
         ...newStaff,
-        phone: (newStaff.phone || '').replace(/\D/g, '')
+        phone: (newStaff.phone || '').replace(/\D/g, ''),
+        roles: {
+          staff: true,
+          faculty: newStaff.isAlsoFaculty || false
+        }
       };
       
       // Track the creation
@@ -242,6 +246,21 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
     if (validate(editFormData)) {
         const originalData = uniqueDirectoryData.find(s => s.id === editingId);
         const dataToSave = { ...editFormData };
+        const originalRoles = originalData?.roles;
+        let updatedRoles;
+        if (Array.isArray(originalRoles)) {
+          updatedRoles = originalRoles.filter(r => r !== 'faculty' && r !== 'staff');
+          // Staff directory always implies staff role
+          updatedRoles.push('staff');
+          if (dataToSave.isAlsoFaculty) updatedRoles.push('faculty');
+        } else {
+          updatedRoles = {
+            ...(typeof originalRoles === 'object' && originalRoles !== null ? originalRoles : {}),
+            staff: true,
+            faculty: dataToSave.isAlsoFaculty || false
+          };
+        }
+        dataToSave.roles = updatedRoles;
         const cleanedData = { ...dataToSave, phone: (dataToSave.phone || '').replace(/\D/g, '') };
 
         // Track the change before saving

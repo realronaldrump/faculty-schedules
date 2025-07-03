@@ -434,6 +434,24 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
     if (validate(editFormData)) {
         const originalData = uniqueDirectoryData.find(f => f.id === editingId);
         const dataToSave = { ...editFormData };
+        // Ensure the `roles` field stays in sync with the "Also Staff" checkbox
+        const originalRoles = originalData?.roles;
+        let updatedRoles;
+        if (Array.isArray(originalRoles)) {
+          // Remove any existing faculty/staff duplicates first
+          updatedRoles = originalRoles.filter(r => r !== 'faculty' && r !== 'staff');
+          // Faculty directory always implies faculty role
+          updatedRoles.push('faculty');
+          if (dataToSave.isAlsoStaff) updatedRoles.push('staff');
+        } else {
+          // Object (or missing) representation – normalise to object format
+          updatedRoles = {
+            ...(typeof originalRoles === 'object' && originalRoles !== null ? originalRoles : {}),
+            faculty: true,
+            staff: dataToSave.isAlsoStaff || false
+          };
+        }
+        dataToSave.roles = updatedRoles;
         const cleanedData = { ...dataToSave, phone: (dataToSave.phone || '').replace(/\D/g, '') };
 
         // Track the change before saving
@@ -600,6 +618,12 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
       const dataToSave = {
         ...newFaculty,
         phone: (newFaculty.phone || '').replace(/\D/g, '')
+      };
+      
+      // Set roles for new faculty record
+      dataToSave.roles = {
+        faculty: true,
+        staff: newFaculty.isAlsoStaff || false
       };
       
       // Track the creation

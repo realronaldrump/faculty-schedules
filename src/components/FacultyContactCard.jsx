@@ -33,13 +33,24 @@ const FacultyContactCard = ({ faculty, onClose }) => {
                 <div className="text-center">
                     <h3 className="text-2xl font-serif font-bold text-baylor-green">{faculty.name}</h3>
                     {faculty.jobTitle && <p className="text-md text-gray-600">{faculty.jobTitle}</p>}
-                    <p className="text-md text-baylor-gold font-semibold">
-                        {faculty.isAlsoStaff 
-                            ? 'Faculty & Staff'
-                            : faculty.isAdjunct 
-                                ? 'Adjunct Faculty' 
-                                : 'Faculty'}
-                    </p>
+                    {(() => {
+                        const getRoleLabel = () => {
+                            if (faculty.isAlsoStaff || faculty.isAlsoFaculty) {
+                                return 'Faculty & Staff';
+                            }
+                            if (faculty.isAdjunct) {
+                                return 'Adjunct Faculty';
+                            }
+                            // If the person is coming from the staff directory and is not also faculty
+                            if (faculty.isAlsoFaculty === false) {
+                                return 'Staff';
+                            }
+                            return 'Faculty';
+                        };
+                        return (
+                            <p className="text-md text-baylor-gold font-semibold">{getRoleLabel()}</p>
+                        );
+                    })()}
                     {faculty.courseCount > 0 && (
                         <div className="mt-2 flex items-center justify-center gap-2 text-sm text-baylor-green">
                             <BookOpen size={16} />

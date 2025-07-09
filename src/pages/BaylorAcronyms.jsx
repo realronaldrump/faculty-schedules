@@ -47,9 +47,25 @@ const BaylorAcronyms = ({ showNotification }) => {
             showNotification('error', 'Validation Error', 'Please fill out Acronym, Stands For, and Category.');
             return;
         }
+
+        const isDuplicate = acronyms.some(
+            acronym => acronym.acronym.trim().toLowerCase() === newAcronym.acronym.trim().toLowerCase()
+        );
+
+        if (isDuplicate) {
+            showNotification('error', 'Duplicate Entry', `The acronym "${newAcronym.acronym}" already exists.`);
+            return;
+        }
+
         setIsSubmitting(true);
         try {
-            const docRef = await addDoc(acronymsCollectionRef, newAcronym);
+            const docRef = await addDoc(acronymsCollectionRef, {
+                ...newAcronym,
+                acronym: newAcronym.acronym.trim(),
+                standsFor: newAcronym.standsFor.trim(),
+                description: newAcronym.description.trim(),
+                category: newAcronym.category.trim()
+            });
             const newlyAdded = { ...newAcronym, id: docRef.id };
             
             // Optimistic update
@@ -85,13 +101,31 @@ const BaylorAcronyms = ({ showNotification }) => {
     };
 
     const handleUpdateAcronym = async (id) => {
+        const isDuplicate = acronyms.some(
+            acronym =>
+                acronym.id !== id &&
+                acronym.acronym.trim().toLowerCase() === editedAcronym.acronym.trim().toLowerCase()
+        );
+
+        if (isDuplicate) {
+            showNotification('error', 'Duplicate Entry', `The acronym "${editedAcronym.acronym}" already exists.`);
+            return;
+        }
+        
         setIsSubmitting(true);
         try {
             const acronymDoc = doc(db, 'baylorAcronyms', id);
-            await updateDoc(acronymDoc, editedAcronym);
+            const finalEditedAcronym = {
+                ...editedAcronym,
+                acronym: editedAcronym.acronym.trim(),
+                standsFor: editedAcronym.standsFor.trim(),
+                description: editedAcronym.description.trim(),
+                category: editedAcronym.category.trim()
+            };
+            await updateDoc(acronymDoc, finalEditedAcronym);
 
             // Optimistic update
-            const updatedAcronyms = acronyms.map(acro => acro.id === id ? editedAcronym : acro);
+            const updatedAcronyms = acronyms.map(acro => acro.id === id ? finalEditedAcronym : acro);
             setAcronyms(updatedAcronyms);
 
             const updatedCategories = [...new Set(updatedAcronyms.map(item => item.category))].filter(Boolean).sort();
@@ -213,7 +247,7 @@ const BaylorAcronyms = ({ showNotification }) => {
                                                 <td className="px-4 py-3 text-right">
                                                     {confirmingDeleteId === acronym.id ? (
                                                         <div className="flex justify-end items-center space-x-2">
-                                                            <span className="text-sm text-yellow-600 flex items-center"><AlertTriangle size={16} className="mr-1" /> Sure?</span>
+                                                            <span className="text-sm text-yellow-600 flex items-center"><AlertTriangle size={16} className="mr-1" /> Delete?</span>
                                                             <button onClick={() => handleDeleteAcronym(acronym.id)} disabled={isSubmitting} className="btn-danger-sm">Confirm</button>
                                                             <button onClick={() => setConfirmingDeleteId(null)} disabled={isSubmitting} className="btn-secondary-sm">Cancel</button>
                                                         </div>

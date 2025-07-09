@@ -5,9 +5,7 @@ import GroupMeetings from './components/scheduling/GroupMeetings.jsx';
 import IndividualAvailability from './components/scheduling/IndividualAvailability';
 import RoomSchedules from './components/scheduling/RoomSchedules';
 import FacultySchedules from './components/FacultySchedules';
-import FacultyDirectory from './components/FacultyDirectory';
-import StaffDirectory from './components/StaffDirectory';
-import AdjunctDirectory from './components/AdjunctDirectory';
+import PeopleDirectory from './components/PeopleDirectory';
 import ProgramManagement from './components/ProgramManagement';
 import DepartmentInsights from './components/analytics/DepartmentInsights.jsx';
 import CourseManagement from './components/analytics/CourseManagement';
@@ -173,9 +171,7 @@ function App() {
       children: [
         { id: 'department-management', label: 'Program Management', path: 'directory/department-management' },
         { id: 'building-directory', label: 'Office Directory', path: 'directory/building-directory' },
-        { id: 'faculty-directory', label: 'Faculty Directory', path: 'directory/faculty-directory' },
-        { id: 'adjunct-directory', label: 'Adjunct Directory', path: 'directory/adjunct-directory' },
-        { id: 'staff-directory', label: 'Staff Directory', path: 'directory/staff-directory' },
+        { id: 'people-directory', label: 'People Directory', path: 'directory/people-directory' },
         { id: 'email-lists', label: 'Email Lists', path: 'directory/email-lists' }
       ]
     },
@@ -824,12 +820,14 @@ function App() {
         return <IndividualAvailability {...pageProps} />;
       case 'scheduling/room-schedules':
         return <RoomSchedules {...pageProps} />;
+      case 'directory/people-directory':
+        return <PeopleDirectory {...pageProps} />;
       case 'directory/faculty-directory':
-        return <FacultyDirectory {...pageProps} />;
+        return <PeopleDirectory {...pageProps} initialTab="faculty" />;
       case 'directory/staff-directory':
-        return <StaffDirectory {...pageProps} />;
+        return <PeopleDirectory {...pageProps} initialTab="staff" />;
       case 'directory/adjunct-directory':
-        return <AdjunctDirectory {...pageProps} />;
+        return <PeopleDirectory {...pageProps} initialTab="adjunct" />;
       case 'directory/department-management':
         return <ProgramManagement {...pageProps} />;
       case 'directory/email-lists':

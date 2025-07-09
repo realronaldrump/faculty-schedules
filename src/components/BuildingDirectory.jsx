@@ -415,104 +415,108 @@ const BuildingDirectory = ({
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
-                            {building.people.map(person => (
-                              <tr 
-                                key={person.id}
-                                className="hover:bg-gray-50 cursor-pointer"
-                                onClick={() => setSelectedPersonForCard(person)}
-                              >
-                                <td className="px-4 py-3 whitespace-nowrap">
-                                  <div className="flex items-center gap-2">
-                                    <MapPin size={14} className="text-gray-400" />
-                                    <span className="text-sm font-medium text-gray-900">
-                                      {person.roomNumber || 'No room'}
-                                    </span>
-                                  </div>
-                                  {person.office && (
-                                    <div className="text-xs text-gray-500 mt-1">
-                                      {person.office}
+                            {building.people.map(person => {
+                              // Ensure a unique key by combining id and roleType (faculty/staff)
+                              const rowKey = `${person.id}-${person.roleType}`;
+                              return (
+                                <tr 
+                                  key={rowKey}
+                                  className="hover:bg-gray-50 cursor-pointer"
+                                  onClick={() => setSelectedPersonForCard(person)}
+                                >
+                                  <td className="px-4 py-3 whitespace-nowrap">
+                                    <div className="flex items-center gap-2">
+                                      <MapPin size={14} className="text-gray-400" />
+                                      <span className="text-sm font-medium text-gray-900">
+                                        {person.roomNumber || 'No room'}
+                                      </span>
                                     </div>
-                                  )}
-                                </td>
-                                
-                                <td className="px-4 py-3 whitespace-nowrap">
-                                  <div>
-                                    <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
-                                      {person.name}
-                                      {person.isUPD && (
-                                        <UserCog size={14} className="text-amber-600" title="Undergraduate Program Director" />
+                                    {person.office && (
+                                      <div className="text-xs text-gray-500 mt-1">
+                                        {person.office}
+                                      </div>
+                                    )}
+                                  </td>
+                                  
+                                  <td className="px-4 py-3 whitespace-nowrap">
+                                    <div>
+                                      <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                        {person.name}
+                                        {person.isUPD && (
+                                          <UserCog size={14} className="text-amber-600" title="Undergraduate Program Director" />
+                                        )}
+                                      </div>
+                                      <div className="text-xs text-gray-600">
+                                        {person.displayRole}
+                                      </div>
+                                      {person.program && person.program.name && (
+                                        <div className="text-xs text-baylor-green font-medium">
+                                          {person.program.name}
+                                        </div>
                                       )}
                                     </div>
-                                    <div className="text-xs text-gray-600">
-                                      {person.displayRole}
+                                  </td>
+                                  
+                                  <td className="px-4 py-3 whitespace-nowrap">
+                                    <div className="text-sm text-gray-900">{person.jobTitle || '-'}</div>
+                                    <div className="flex gap-1 mt-1">
+                                      {person.isTenured && (
+                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                          Tenured
+                                        </span>
+                                      )}
+                                      {person.isAdjunct && (
+                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                          Adjunct
+                                        </span>
+                                      )}
                                     </div>
-                                    {person.program && person.program.name && (
-                                      <div className="text-xs text-baylor-green font-medium">
-                                        {person.program.name}
-                                      </div>
-                                    )}
-                                  </div>
-                                </td>
-                                
-                                <td className="px-4 py-3 whitespace-nowrap">
-                                  <div className="text-sm text-gray-900">{person.jobTitle || '-'}</div>
-                                  <div className="flex gap-1 mt-1">
-                                    {person.isTenured && (
-                                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                                        Tenured
-                                      </span>
-                                    )}
-                                    {person.isAdjunct && (
-                                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                        Adjunct
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                
-                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                                  <div className="space-y-1">
-                                    {person.email && (
-                                      <div className="flex items-center gap-1">
-                                        <Mail size={12} />
-                                        <a 
-                                          href={`mailto:${person.email}`}
-                                          className="text-baylor-green hover:underline"
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          {person.email}
-                                        </a>
-                                      </div>
-                                    )}
-                                    {person.phone && !person.hasNoPhone && (
-                                      <div className="flex items-center gap-1">
-                                        <Phone size={12} />
-                                        {formatPhoneNumber(person.phone)}
-                                      </div>
-                                    )}
-                                    {person.hasNoPhone && (
-                                      <div className="flex items-center gap-1 text-gray-400">
-                                        <PhoneOff size={12} />
-                                        No phone
-                                      </div>
-                                    )}
-                                  </div>
-                                </td>
-                                
-                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedPersonForCard(person);
-                                    }}
-                                    className="text-baylor-green hover:text-baylor-green/80 flex items-center gap-1"
-                                  >
-                                    <Eye size={16} />
-                                    View
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
+                                  </td>
+                                  
+                                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                                    <div className="space-y-1">
+                                      {person.email && (
+                                        <div className="flex items-center gap-1">
+                                          <Mail size={12} />
+                                          <a 
+                                            href={`mailto:${person.email}`}
+                                            className="text-baylor-green hover:underline"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            {person.email}
+                                          </a>
+                                        </div>
+                                      )}
+                                      {person.phone && !person.hasNoPhone && (
+                                        <div className="flex items-center gap-1">
+                                          <Phone size={12} />
+                                          {formatPhoneNumber(person.phone)}
+                                        </div>
+                                      )}
+                                      {person.hasNoPhone && (
+                                        <div className="flex items-center gap-1 text-gray-400">
+                                          <PhoneOff size={12} />
+                                          No phone
+                                        </div>
+                                      )}
+                                    </div>
+                                  </td>
+                                  
+                                  <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedPersonForCard(person);
+                                      }}
+                                      className="text-baylor-green hover:text-baylor-green/80 flex items-center gap-1"
+                                    >
+                                      <Eye size={16} />
+                                      View
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>

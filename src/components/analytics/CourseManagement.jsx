@@ -359,6 +359,26 @@ const CourseManagement = ({
       });
     }
 
+    // Group by course, section, term, instructor, room, and time to collapse multi-day sessions into a single row
+    const dayOrderMap = { M: 1, T: 2, W: 3, R: 4, F: 5 };
+    const groupedMap = {};
+    data.forEach(item => {
+      if (!item) return;
+      const key = `${item.Course}|${item.Section}|${item.Term}|${item.CRN}|${item.Instructor}|${item['Start Time']}|${item['End Time']}|${item.Room}`;
+      if (!groupedMap[key]) {
+        groupedMap[key] = { ...item, _daySet: new Set(item.Day ? [item.Day] : []) };
+      } else if (item.Day) {
+        groupedMap[key]._daySet.add(item.Day);
+      }
+    });
+    data = Object.values(groupedMap).map(entry => {
+      const dayPattern = Array.from(entry._daySet)
+        .sort((a, b) => dayOrderMap[a] - dayOrderMap[b])
+        .join('');
+      const { _daySet, ...rest } = entry;
+      return { ...rest, Day: dayPattern };
+    });
+
     // Sort data
     if (sortConfig.key) {
       data.sort((a, b) => {
@@ -385,8 +405,8 @@ const CourseManagement = ({
         // Special handling for day fields to sort by day order
         else if (sortConfig.key === 'Day') {
           const dayOrder = { M: 1, T: 2, W: 3, R: 4, F: 5 };
-          aValue = dayOrder[aValue] || 99;
-          bValue = dayOrder[bValue] || 99;
+          aValue = dayOrder[aValue?.[0]] || 99;
+          bValue = dayOrder[bValue?.[0]] || 99;
         }
         // Convert to string for comparison
         else {
@@ -410,8 +430,8 @@ const CourseManagement = ({
       errors.push('Course code is required');
     }
     
-    if (!data.Day || !['M', 'T', 'W', 'R', 'F'].includes(data.Day)) {
-      errors.push('Valid day is required (M, T, W, R, F)');
+    if (!data.Day || typeof data.Day !== 'string' || !/^([MTWRF]+)$/.test(data.Day)) {
+      errors.push('Valid day pattern is required (combination of M, T, W, R, F)');
     }
     
     if (!data['Start Time'] || !data['End Time']) {
@@ -493,23 +513,23 @@ const CourseManagement = ({
   };
 
   const handleAddCourse = () => {
-    const errors = validateScheduleData(newCourseData);
-    
+    const dayPattern = Array.isArray(newCourseData.Day) ? newCourseData.Day.join('') : newCourseData.Day;
+    const validationData = { ...newCourseData, Day: dayPattern };
+    const errors = validateScheduleData(validationData);
     if (errors.length > 0) {
       alert('Validation errors:\n' + errors.join('\n'));
       return;
     }
-
     // Create new course with unique ID
     const courseWithId = {
       ...newCourseData,
+      Day: dayPattern,
       id: `new_${Date.now()}`,
       CRN: newCourseData.CRN || '',
       Status: newCourseData.Status || 'Active',
       'Schedule Type': newCourseData['Schedule Type'] || 'Class Instruction',
       Credits: newCourseData.Credits || '3'
     };
-
     onDataUpdate(courseWithId);
     setNewCourseData({});
     setShowAddCourseForm(false);
@@ -751,18 +771,14 @@ const CourseManagement = ({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Day *</label>
-                <select
-                  name="Day"
-                  value={newCourseData.Day || ''}
-                  onChange={handleNewCourseChange}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
-                >
-                  <option value="">Select Day</option>
-                  {Object.entries(dayNames).map(([code, name]) => (
-                    <option key={code} value={code}>{code} - {name}</option>
-                  ))}
-                </select>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Days *</label>
+                <MultiSelectDropdown
+                  options={Object.keys(dayNames)}
+                  selected={newCourseData.Day || []}
+                  onChange={(selected) => setNewCourseData(prev => ({ ...prev, Day: selected }))}
+                  placeholder="Select days..."
+                  displayMap={dayNames}
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Start Time *</label>
@@ -786,13 +802,17 @@ const CourseManagement = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
-                <input
+                <select
                   name="Room"
                   value={newCourseData.Room || ''}
                   onChange={handleNewCourseChange}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
-                  placeholder="Room name"
-                />
+                >
+                  <option value="">Select Room</option>
+                  {uniqueRooms.map(room => (
+                    <option key={room} value={room}>{room}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Credits</label>
@@ -1296,17 +1316,13 @@ const CourseManagement = ({
                           />
                         </td>
                         <td className="p-1">
-                          <select
-                            name="Day"
-                            value={editFormData.Day || ''}
-                            onChange={handleEditFormChange}
-                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
-                          >
-                            <option value="">Select Day</option>
-                            {Object.entries(dayNames).map(([code, name]) => (
-                              <option key={code} value={code}>{code} - {name}</option>
-                            ))}
-                          </select>
+                          <MultiSelectDropdown
+                            options={Object.keys(dayNames)}
+                            selected={editFormData.Day ? editFormData.Day.split('') : []}
+                            onChange={(selected) => setEditFormData(prev => ({ ...prev, Day: selected.join('') }))}
+                            placeholder="Days..."
+                            displayMap={dayNames}
+                          />
                         </td>
                         <td className="p-1">
                           <input

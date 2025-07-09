@@ -36,6 +36,8 @@ const CourseManagement = ({
     scheduleType: 'all', // 'all', 'Class Instruction', 'Lab', etc.
     status: 'all' // 'all', 'Active', 'Cancelled', etc.
   });
+
+
   const [activeFilterPreset, setActiveFilterPreset] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'Instructor', direction: 'ascending' });
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
@@ -209,57 +211,76 @@ const CourseManagement = ({
 
   // Filter and sort data
   const filteredAndSortedData = useMemo(() => {
+    
     let data = [...scheduleData];
     
     // Apply text search filter
-    if (filters.searchTerm) {
-      const lowercasedFilter = filters.searchTerm.toLowerCase();
-      data = data.filter(item =>
-        (item.Course?.toLowerCase().includes(lowercasedFilter)) ||
-        (item['Course Title']?.toLowerCase().includes(lowercasedFilter)) ||
-        (item.Instructor?.toLowerCase().includes(lowercasedFilter)) ||
-        (item.Room?.toLowerCase().includes(lowercasedFilter)) ||
-        (item.CRN?.toString().toLowerCase().includes(lowercasedFilter)) ||
-        (item.Term?.toLowerCase().includes(lowercasedFilter)) ||
-        (item.Section?.toLowerCase().includes(lowercasedFilter))
-      );
+    if (filters.searchTerm && filters.searchTerm.trim() !== '') {
+      const lowercasedFilter = filters.searchTerm.toLowerCase().trim();
+      data = data.filter(item => {
+        if (!item) return false;
+        return (
+          (item.Course?.toLowerCase().includes(lowercasedFilter)) ||
+          (item['Course Title']?.toLowerCase().includes(lowercasedFilter)) ||
+          (item.Instructor?.toLowerCase().includes(lowercasedFilter)) ||
+          (item.Room?.toLowerCase().includes(lowercasedFilter)) ||
+          (item.CRN?.toString().toLowerCase().includes(lowercasedFilter)) ||
+          (item.Term?.toLowerCase().includes(lowercasedFilter)) ||
+          (item.Section?.toLowerCase().includes(lowercasedFilter))
+        );
+      });
     }
     
     // Apply basic multi-select filters
-    if (filters.instructor.length > 0) {
+    if (filters.instructor && Array.isArray(filters.instructor) && filters.instructor.length > 0) {
       data = data.filter(item => item && item.Instructor && filters.instructor.includes(item.Instructor));
     }
-    if (filters.day.length > 0) {
+    
+    if (filters.day && Array.isArray(filters.day) && filters.day.length > 0) {
       data = data.filter(item => item && item.Day && filters.day.includes(item.Day));
     }
-    if (filters.room.length > 0) {
+    
+    if (filters.room && Array.isArray(filters.room) && filters.room.length > 0) {
       data = data.filter(item => item && item.Room && filters.room.includes(item.Room));
     }
 
     // Apply term filter
-    if (filters.terms.length > 0) {
+    if (filters.terms && Array.isArray(filters.terms) && filters.terms.length > 0) {
       data = data.filter(item => item && item.Term && filters.terms.includes(item.Term));
     }
 
     // Apply section filter
-    if (filters.sections.length > 0) {
+    if (filters.sections && Array.isArray(filters.sections) && filters.sections.length > 0) {
       data = data.filter(item => item && item.Section && filters.sections.includes(item.Section));
     }
 
+    // Apply course type filters
+    if (filters.courseTypes && Array.isArray(filters.courseTypes) && filters.courseTypes.length > 0) {
+      data = data.filter(item => {
+        if (!item || !item.Course) return false;
+        const match = item.Course.match(/^([A-Z]{2,4})/);
+        return match && filters.courseTypes.includes(match[1]);
+      });
+    }
+
     // Apply schedule type filter
-    if (filters.scheduleType !== 'all') {
-      data = data.filter(item => item && item['Schedule Type'] === filters.scheduleType);
+    if (filters.scheduleType && filters.scheduleType !== 'all') {
+      data = data.filter(item => {
+        return item && item['Schedule Type'] && item['Schedule Type'] === filters.scheduleType;
+      });
     }
 
     // Apply status filter
-    if (filters.status !== 'all') {
-      data = data.filter(item => item && item.Status === filters.status);
+    if (filters.status && filters.status !== 'all') {
+      data = data.filter(item => {
+        return item && item.Status && item.Status === filters.status;
+      });
     }
 
     // Apply program filters
-    if (filters.programs.include.length > 0 || filters.programs.exclude.length > 0) {
+    if (filters.programs && (filters.programs.include.length > 0 || filters.programs.exclude.length > 0)) {
       data = data.filter(item => {
-        if (!item.Instructor || !facultyData) return true;
+        if (!item || !item.Instructor || !facultyData) return true;
         
         const faculty = facultyData.find(f => f.name === item.Instructor);
         const programName = faculty?.program?.name || '';
@@ -271,19 +292,10 @@ const CourseManagement = ({
       });
     }
 
-    // Apply course type filters
-    if (filters.courseTypes.length > 0) {
-      data = data.filter(item => {
-        if (!item.Course) return false;
-        const match = item.Course.match(/^([A-Z]{2,4})/);
-        return match && filters.courseTypes.includes(match[1]);
-      });
-    }
-
     // Apply building filters
-    if (filters.buildings.include.length > 0 || filters.buildings.exclude.length > 0) {
+    if (filters.buildings && (filters.buildings.include.length > 0 || filters.buildings.exclude.length > 0)) {
       data = data.filter(item => {
-        if (!item.Room) return true;
+        if (!item || !item.Room) return true;
         
         const buildingMatch = item.Room.match(/^([A-Z]+)/);
         const buildingName = buildingMatch ? buildingMatch[1] : 'Other';
@@ -296,38 +308,39 @@ const CourseManagement = ({
     }
 
     // Apply adjunct filter
-    if (filters.adjunct !== 'all') {
+    if (filters.adjunct && filters.adjunct !== 'all') {
       data = data.filter(item => {
-        if (!item.Instructor || !facultyData) return true;
+        if (!item || !item.Instructor || !facultyData) return true;
         
         const faculty = facultyData.find(f => f.name === item.Instructor);
         if (filters.adjunct === 'include') {
-          return faculty?.isAdjunct;
+          return faculty?.isAdjunct === true;
         } else if (filters.adjunct === 'exclude') {
-          return !faculty?.isAdjunct;
+          return faculty?.isAdjunct !== true;
         }
         return true;
       });
     }
 
     // Apply tenured filter
-    if (filters.tenured !== 'all') {
+    if (filters.tenured && filters.tenured !== 'all') {
       data = data.filter(item => {
-        if (!item.Instructor || !facultyData) return true;
+        if (!item || !item.Instructor || !facultyData) return true;
         
         const faculty = facultyData.find(f => f.name === item.Instructor);
         if (filters.tenured === 'include') {
-          return faculty?.isTenured;
+          return faculty?.isTenured === true;
         } else if (filters.tenured === 'exclude') {
-          return !faculty?.isTenured;
+          return faculty?.isTenured !== true;
         }
         return true;
       });
     }
 
     // Apply credits filter
-    if (filters.credits !== 'all') {
+    if (filters.credits && filters.credits !== 'all') {
       data = data.filter(item => {
+        if (!item) return false;
         const credits = parseInt(item.Credits) || 0;
         if (filters.credits === '1') return credits === 1;
         if (filters.credits === '2') return credits === 2;
@@ -338,8 +351,9 @@ const CourseManagement = ({
     }
 
     // Apply time of day filter
-    if (filters.timeOfDay !== 'all') {
+    if (filters.timeOfDay && filters.timeOfDay !== 'all') {
       data = data.filter(item => {
+        if (!item) return false;
         const timeOfDay = getTimeOfDay(item['Start Time']);
         return timeOfDay === filters.timeOfDay;
       });
@@ -348,26 +362,43 @@ const CourseManagement = ({
     // Sort data
     if (sortConfig.key) {
       data.sort((a, b) => {
-        let aValue = a[sortConfig.key] || '';
-        let bValue = b[sortConfig.key] || '';
+        if (!a || !b) return 0;
+        
+        let aValue = a[sortConfig.key];
+        let bValue = b[sortConfig.key];
+        
+        // Handle null/undefined values
+        if (aValue == null && bValue == null) return 0;
+        if (aValue == null) return sortConfig.direction === 'ascending' ? 1 : -1;
+        if (bValue == null) return sortConfig.direction === 'ascending' ? -1 : 1;
         
         // Special handling for time fields
         if (sortConfig.key === 'Start Time' || sortConfig.key === 'End Time') {
           aValue = parseTime(aValue) || 0;
           bValue = parseTime(bValue) || 0;
         }
-        
         // Special handling for numeric fields
-        if (sortConfig.key === 'CRN' || sortConfig.key === 'Credits') {
+        else if (sortConfig.key === 'CRN' || sortConfig.key === 'Credits') {
           aValue = parseInt(aValue) || 0;
           bValue = parseInt(bValue) || 0;
+        }
+        // Special handling for day fields to sort by day order
+        else if (sortConfig.key === 'Day') {
+          const dayOrder = { M: 1, T: 2, W: 3, R: 4, F: 5 };
+          aValue = dayOrder[aValue] || 99;
+          bValue = dayOrder[bValue] || 99;
+        }
+        // Convert to string for comparison
+        else {
+          aValue = String(aValue).toLowerCase();
+          bValue = String(bValue).toLowerCase();
         }
         
         if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
         if (aValue > bValue) return sortConfig.direction === 'ascending' ? 1 : -1;
         return 0;
       });
-    }
+          }
 
     return data;
   }, [scheduleData, filters, sortConfig, facultyData]);
@@ -435,10 +466,13 @@ const CourseManagement = ({
   };
 
   const handleSort = (key) => {
-    setSortConfig(prev => ({
-      key,
-      direction: prev.key === key && prev.direction === 'ascending' ? 'descending' : 'ascending'
-    }));
+    setSortConfig(prev => {
+      const newDirection = prev.key === key && prev.direction === 'ascending' ? 'descending' : 'ascending';
+      return {
+        key,
+        direction: newDirection
+      };
+    });
   };
 
   const handleShowContactCard = (facultyName) => {
@@ -502,13 +536,14 @@ const CourseManagement = ({
   };
 
   const clearFilters = () => {
-    setFilters({
+    const clearedFilters = {
       instructor: [], day: [], room: [], searchTerm: '',
       programs: { include: [], exclude: [] },
       courseTypes: [], terms: [], sections: [], buildings: { include: [], exclude: [] },
       adjunct: 'all', tenured: 'all', credits: 'all', timeOfDay: 'all',
       scheduleType: 'all', status: 'all'
-    });
+    };
+    setFilters(clearedFilters);
     setActiveFilterPreset('');
   };
 
@@ -1170,7 +1205,7 @@ const CourseManagement = ({
 
         {/* Data Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table key={`table-${filteredAndSortedData.length}-${JSON.stringify(sortConfig)}`} className="w-full text-sm">
             <thead className="bg-baylor-green/5">
               <tr>
                 <DataTableHeader columnKey="Instructor" label="Instructor" />

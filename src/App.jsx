@@ -40,6 +40,7 @@ import { adaptPeopleToFaculty, adaptPeopleToStaff, fetchPrograms } from './utils
 import { fetchSchedulesWithRelationalData } from './utils/dataImportUtils';
 import { autoMigrateIfNeeded } from './utils/importTransactionMigration';
 import MaintenancePage from './components/MaintenancePage';
+import { parseCourseCode } from './utils/courseUtils';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -171,7 +172,7 @@ function App() {
       icon: Users,
       children: [
         { id: 'department-management', label: 'Program Management', path: 'directory/department-management' },
-        { id: 'building-directory', label: 'Building Directory', path: 'directory/building-directory' },
+        { id: 'building-directory', label: 'Office Directory', path: 'directory/building-directory' },
         { id: 'faculty-directory', label: 'Faculty Directory', path: 'directory/faculty-directory' },
         { id: 'adjunct-directory', label: 'Adjunct Directory', path: 'directory/adjunct-directory' },
         { id: 'staff-directory', label: 'Staff Directory', path: 'directory/staff-directory' },
@@ -240,7 +241,7 @@ function App() {
             // Course details
             CRN: schedule.crn || schedule.CRN || '',
             'Course Level': schedule.courseLevel || '',
-            'Course Type': schedule.courseType || '',
+            'Course Type': schedule.program || '',
             'Schedule Type': schedule.scheduleType || 'Class Instruction',
             Status: schedule.status || 'Active',
             
@@ -499,14 +500,20 @@ function App() {
         });
       }
 
+      // Parse the course code to get program, level, and credits
+      const courseCode = updatedRow.Course || (originalSchedule?.courseCode || '');
+      const parsedCourse = parseCourseCode(courseCode);
+
       // Prepare update data with proper relational structure
       const updateData = {
-        courseCode: updatedRow.Course || (originalSchedule?.courseCode || ''),
+        courseCode: courseCode,
         courseTitle: updatedRow['Course Title'] || (originalSchedule?.courseTitle || ''),
+        program: parsedCourse.program,
+        courseLevel: parsedCourse.level,
         section: updatedRow.Section || (originalSchedule?.section || ''),
         crn: updatedRow.CRN || (originalSchedule?.crn || ''),
         term: updatedRow.Term || (originalSchedule?.term || ''),
-        credits: parseInt(updatedRow.Credits) || (originalSchedule?.credits || 3),
+        credits: parseInt(updatedRow.Credits) || parsedCourse.credits || (originalSchedule?.credits || 0),
         scheduleType: updatedRow['Schedule Type'] || (originalSchedule?.scheduleType || 'Class Instruction'),
         status: updatedRow.Status || (originalSchedule?.status || 'Active'),
         

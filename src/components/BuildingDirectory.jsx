@@ -245,7 +245,7 @@ const BuildingDirectory = ({
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Building Directory</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Office Directory</h1>
           <p className="text-gray-600">Find faculty and staff by building location</p>
         </div>
         <div className="text-right">

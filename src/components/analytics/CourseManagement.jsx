@@ -90,11 +90,8 @@ const CourseManagement = ({
       }
 
       // Extract course type from course code (e.g., "ADM" from "ADM 3330")
-      if (item.Course) {
-        const match = item.Course.match(/^([A-Z]{2,4})/);
-        if (match) {
-          courseTypes.add(match[1]);
-        }
+      if (item['Course Type']) {
+        courseTypes.add(item['Course Type']);
       }
 
       // Extract terms
@@ -257,9 +254,8 @@ const CourseManagement = ({
     // Apply course type filters
     if (filters.courseTypes && Array.isArray(filters.courseTypes) && filters.courseTypes.length > 0) {
       data = data.filter(item => {
-        if (!item || !item.Course) return false;
-        const match = item.Course.match(/^([A-Z]{2,4})/);
-        return match && filters.courseTypes.includes(match[1]);
+        if (!item || !item['Course Type']) return false;
+        return filters.courseTypes.includes(item['Course Type']);
       });
     }
 

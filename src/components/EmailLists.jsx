@@ -168,7 +168,9 @@ const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
             courseTitle: schedule.courseTitle || schedule['Course Title'] || '',
             section: schedule.section || schedule.Section || '',
             term: schedule.term || schedule.Term || '',
-            credits: schedule.credits || schedule.Credits || ''
+            credits: schedule.credits || schedule.Credits || '',
+            level: schedule.courseLevel,
+            program: schedule.program,
           }))
         });
       });
@@ -488,25 +490,42 @@ const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
   };
 
   const downloadCSV = () => {
-    const selectedData = getSelectedPeopleData();
-    
-    if (selectedData.length === 0) {
+    const peopleToExport = getSelectedPeopleData();
+    if (peopleToExport.length === 0) {
       showNotification('Please select at least one person to download CSV', 'error');
       return;
     }
 
-    const headers = ['Name', 'Email', 'Job Title', 'Role', 'Program', 'Office', 'Phone'];
+    // CSV Headers
+    const headers = [
+      'Name', 'Email', 'Phone', 'Role', 'Job Title', 'Program', 'Office', 'Building',
+      'Is Adjunct', 'Is Tenured', 'Is UPD',
+      'Course Count (current semester)', 'Courses Taught (current semester)'
+    ];
+
+    // CSV Rows
+    const rows = peopleToExport.map(p => ({
+      'Name': p.name || '',
+      'Email': p.email || '',
+      'Phone': p.phone || '',
+      'Role': p.role || '',
+      'Job Title': p.jobTitle || '',
+      'Program': p.program?.name || '',
+      'Office': p.office || '',
+      'Building': extractBuildingName(p.office || ''),
+      'Is Adjunct': p.isAdjunct ? 'Yes' : 'No',
+      'Is Tenured': p.isTenured ? 'Yes' : 'No',
+      'Is UPD': p.isUPD ? 'Yes' : 'No',
+      'Course Count (current semester)': p.courseCount || 0,
+      'Courses Taught (current semester)': p.courses && p.courses.length > 0
+        ? p.courses.map(c => `${c.courseCode} (Lvl: ${c.level}, Cr: ${c.credits}) - ${c.courseTitle}`).join('; ')
+        : '',
+    }));
+
+    // Convert to CSV string
     const csvContent = [
       headers.join(','),
-      ...selectedData.map(person => [
-        `"${person.name || ''}"`,
-        `"${person.email || ''}"`,
-        `"${person.jobTitle || ''}"`,
-        `"${person.role || ''}"`,
-        `"${person.program?.name || ''}"`,
-        `"${person.office || ''}"`,
-        `"${person.phone || ''}"`
-      ].join(','))
+      ...rows.map(row => Object.values(row).map(val => `"${val || ''}"`).join(','))
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -517,7 +536,7 @@ const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
     link.click();
     window.URL.revokeObjectURL(url);
 
-    showNotification(`CSV downloaded with ${selectedData.length} contacts`);
+    showNotification(`CSV downloaded with ${peopleToExport.length} contacts`);
   };
 
   const clearFilters = () => {
@@ -959,6 +978,16 @@ const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
                           {person.office || 'No office'}
                         </p>
                       </div>
+                    </div>
+                    <div className="mt-2">
+                      <p className="text-sm font-medium text-gray-700">Courses Taught:</p>
+                      <ul className="list-disc list-inside mt-2 text-sm space-y-1">
+                        {person.courses.map((course, index) => (
+                          <li key={index}>
+                            <span className="font-semibold">{course.courseCode}</span> (Lvl: {course.level}) - {course.courseTitle} ({course.credits} credits)
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   </div>
                 </label>

@@ -14,7 +14,7 @@ const menuItems = [
   { id: 'department-insights', label: 'Department Insights', icon: BarChart3 },
   { id: 'course-management', label: 'Course Management', icon: BarChart3 },
   { id: 'email-lists', label: 'Email Lists', icon: Users },
-  { id: 'building-directory', label: 'Building Directory', icon: Users },
+  { id: 'building-directory', label: 'Office Directory', icon: Users },
   { id: 'smart-data-import', label: 'Smart Data Import', icon: Database },
   { id: 'data-hygiene', label: 'Data Hygiene', icon: Shield },
   { id: 'systems', label: 'Systems', icon: Settings },

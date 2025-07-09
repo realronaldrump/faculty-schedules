@@ -6,6 +6,7 @@
 import { collection, addDoc, getDocs, query, where, doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { standardizePerson, standardizeSchedule, validateAndCleanBeforeSave } from './dataHygiene';
+import { parseCourseCode } from './courseUtils';
 
 // ==================== PROGRAM MAPPING ====================
 
@@ -28,9 +29,9 @@ const determineProgramIdFromCourses = (courses) => {
   // Extract course code prefixes
   courses.forEach(course => {
     const courseCode = course.courseCode || course.Course || '';
-    const match = courseCode.match(/^([A-Z]{2,4})\s*\d/);
-    if (match) {
-      prefixes.add(match[1]);
+    const parsed = parseCourseCode(courseCode);
+    if (parsed && !parsed.error) {
+      prefixes.add(parsed.program);
     }
   });
   
@@ -86,6 +87,8 @@ export const createScheduleModel = (rawData) => {
     instructorName: (rawData.instructorName || '').trim(),
     courseCode: (rawData.courseCode || '').trim(),
     courseTitle: (rawData.courseTitle || '').trim(),
+    program: rawData.program || '',
+    courseLevel: rawData.courseLevel || 0,
     section: (rawData.section || '').trim(),
     crn: rawData.crn || '', // Add CRN field
     meetingPatterns: Array.isArray(rawData.meetingPatterns) ? rawData.meetingPatterns : [],
@@ -664,7 +667,7 @@ export const processScheduleImport = async (csvData) => {
       const meetings = row['Meetings'] || '';
       const roomName = (row['Room'] || '').trim();
       const term = row['Term'] || '';
-      const credits = row['Credit Hrs'] || row['Credit Hrs Min'] || 0;
+      const creditsFromCsv = row['Credit Hrs'] || row['Credit Hrs Min'];
       const scheduleType = row['Schedule Type'] || 'Class Instruction';
       const status = row['Status'] || 'Active';
       
@@ -775,19 +778,25 @@ export const processScheduleImport = async (csvData) => {
       // Parse meeting patterns
       const meetingPatterns = parseMeetingPatterns(meetingPattern, meetings);
       
+      // Parse course code for additional details
+      const parsedCourse = parseCourseCode(courseCode);
+      const finalCredits = creditsFromCsv ? parseInt(creditsFromCsv) : parsedCourse.credits;
+
       // Create schedule data with full relational links
       const scheduleData = createScheduleModel({
         instructorId,
         instructorName: instructorData ? `${instructorData.firstName} ${instructorData.lastName}`.trim() : 'Staff',
         courseCode,
         courseTitle,
+        program: parsedCourse.program,
+        courseLevel: parsedCourse.level,
         section,
         crn, // Pass CRN to the model
         meetingPatterns,
         roomId,
         roomName,
         term,
-        credits,
+        credits: finalCredits,
         scheduleType,
         status
       });

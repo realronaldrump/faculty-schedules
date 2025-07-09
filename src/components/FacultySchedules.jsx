@@ -5,13 +5,21 @@ import FacultyContactCard from './FacultyContactCard';
 const FacultySchedules = ({ scheduleData, facultyData }) => {
   const [selectedFaculty, setSelectedFaculty] = useState([]);
   const [viewMode, setViewMode] = useState('timeline');
-  const [selectedDay, setSelectedDay] = useState('M');
+  const [selectedDays, setSelectedDays] = useState(['M', 'T', 'W', 'R', 'F']);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [selectedCourse, setSelectedCourse] = useState(null);
 
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
+
+  const handleDayToggle = (dayCode) => {
+    setSelectedDays(prev => 
+      prev.includes(dayCode) 
+        ? prev.filter(d => d !== dayCode) 
+        : [...prev, dayCode]
+    );
+  };
 
   // Utility functions
   const parseTime = (timeStr) => {
@@ -115,96 +123,180 @@ const FacultySchedules = ({ scheduleData, facultyData }) => {
     return courses;
   };
 
-  // Timeline View
-  const TimelineView = () => {
+  // Timeline View for a single day
+  const DayTimelineView = ({ dayCode }) => {
     const dayStart = 8 * 60;
     const dayEnd = 18 * 60;
     const totalMinutes = dayEnd - dayStart;
     const timeLabels = Array.from({length: (dayEnd - dayStart) / 60 + 1}, (_, i) => dayStart + i * 60);
 
     return (
-      <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
-        <div className="relative min-w-[800px]">
-          <div className="flex sticky top-0 bg-white z-10 border-b-2 border-baylor-green">
-            <div className="w-48 flex-shrink-0 font-serif font-semibold p-3 text-baylor-green border-r border-gray-200">
-              Faculty Member
-            </div>
-            <div className="flex-grow flex">
-              {timeLabels.slice(0, -1).map(time => (
-                <div 
-                  key={time} 
-                  style={{width: `${(60 / totalMinutes) * 100}%`}} 
-                  className="text-center text-xs font-medium p-2 border-l border-gray-200 text-baylor-green"
-                >
-                  {formatMinutesToTime(time).replace(':00','')}
-                </div>
-              ))}
-            </div>
-          </div>
-          
-          {selectedFaculty.map(facultyName => {
-            const courses = getFacultyScheduleData(facultyName, selectedDay);
-            
-            return (
-              <div key={facultyName} className="flex border-b border-gray-100 hover:bg-gray-50/50">
-                <div className="w-48 flex-shrink-0 p-4 border-r border-gray-200 bg-gray-50/30">
-                  <button
-                    onClick={() => {
-                      const faculty = facultyData.find(f => f.name === facultyName);
-                      if (faculty) setSelectedFacultyForCard(faculty);
-                    }}
-                    className="font-semibold text-baylor-green hover:underline text-left"
-                  >
-                    {facultyName}
-                  </button>
-                  <button
-                    onClick={() => setSelectedFaculty(prev => prev.filter(f => f !== facultyName))}
-                    className="ml-2 text-gray-400 hover:text-red-500"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-
-                <div className="flex-grow relative h-20">
-                  {courses.map(course => {
-                    const left = Math.max(0, ((course.start - dayStart) / totalMinutes) * 100);
-                    const width = (((course.end - course.start) / totalMinutes) * 100);
-
-                    if (course.end < dayStart || course.start > dayEnd) return null;
-
-                    return (
-                      <div
-                        key={course.id}
-                        style={{ 
-                          position: 'absolute', 
-                          left: `${left}%`, 
-                          width: `${width}%`, 
-                          top: '8px', 
-                          bottom: '8px' 
-                        }}
-                        className="px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green shadow-sm transition-all cursor-pointer"
-                        onClick={() => setSelectedCourse({ ...course, facultyName })}
-                        title={`${course.course} - ${course.title}\n${formatMinutesToTime(course.start)} - ${formatMinutesToTime(course.end)}\nRoom: ${course.room}`}
-                      >
-                        <div className="font-bold truncate">{course.course}</div>
-                        <div className="text-xs opacity-75 truncate">{course.room}</div>
-                      </div>
-                    );
-                  })}
-                  
-                  {courses.length === 0 && (
-                    <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">
-                      No classes scheduled
-                    </div>
-                  )}
-                </div>
+      <div className="mt-6">
+        <h2 className="text-xl font-serif font-semibold text-baylor-green mb-4">
+          {dayNames[dayCode]}
+        </h2>
+        <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
+          <div className="relative min-w-[800px]">
+            <div className="flex sticky top-0 bg-white z-10 border-b-2 border-baylor-green">
+              <div className="w-48 flex-shrink-0 font-serif font-semibold p-3 text-baylor-green border-r border-gray-200">
+                Faculty Member
               </div>
-            );
-          })}
+              <div className="flex-grow flex">
+                {timeLabels.slice(0, -1).map(time => (
+                  <div 
+                    key={time} 
+                    style={{width: `${(60 / totalMinutes) * 100}%`}} 
+                    className="text-center text-xs font-medium p-2 border-l border-gray-200 text-baylor-green"
+                  >
+                    {formatMinutesToTime(time).replace(':00','')}
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {selectedFaculty.map(facultyName => {
+              const courses = getFacultyScheduleData(facultyName, dayCode);
+              
+              return (
+                <div key={facultyName} className="flex border-b border-gray-100 hover:bg-gray-50/50">
+                  <div className="w-48 flex-shrink-0 p-4 border-r border-gray-200 bg-gray-50/30">
+                    <button
+                      onClick={() => {
+                        const faculty = facultyData.find(f => f.name === facultyName);
+                        if (faculty) setSelectedFacultyForCard(faculty);
+                      }}
+                      className="font-semibold text-baylor-green hover:underline text-left"
+                    >
+                      {facultyName}
+                    </button>
+                    <button
+                      onClick={() => setSelectedFaculty(prev => prev.filter(f => f !== facultyName))}
+                      className="ml-2 text-gray-400 hover:text-red-500"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  <div className="flex-grow relative h-20">
+                    {courses.map(course => {
+                      const left = Math.max(0, ((course.start - dayStart) / totalMinutes) * 100);
+                      const width = (((course.end - course.start) / totalMinutes) * 100);
+
+                      if (course.end < dayStart || course.start > dayEnd) return null;
+
+                      return (
+                        <div
+                          key={course.id}
+                          style={{ 
+                            position: 'absolute', 
+                            left: `${left}%`, 
+                            width: `${width}%`, 
+                            top: '8px', 
+                            bottom: '8px' 
+                          }}
+                          className="px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green shadow-sm transition-all cursor-pointer"
+                          onClick={() => setSelectedCourse({ ...course, facultyName })}
+                          title={`${course.course} - ${course.title}\n${formatMinutesToTime(course.start)} - ${formatMinutesToTime(course.end)}\nRoom: ${course.room}`}
+                        >
+                          <div className="font-bold truncate">{course.course}</div>
+                          <div className="text-xs opacity-75 truncate">{course.room}</div>
+                        </div>
+                      );
+                    })}
+                    
+                    {courses.length === 0 && (
+                      <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">
+                        No classes scheduled
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     );
   };
+
+  const CourseDetailModal = ({ course, facultyData, onClose }) => {
+    if (!course) return null;
+
+    const { rawData, facultyName } = course;
+    const faculty = facultyData.find(f => f.name === facultyName);
+
+    const levelMap = {
+      1: 'Freshman (1000-level)',
+      2: 'Sophomore (2000-level)',
+      3: 'Junior (3000-level)',
+      4: 'Senior (4000-level)',
+      5: 'Graduate (5000-level)',
+      6: 'Graduate (6000-level)',
+    };
+
+    const courseLevelDisplay = levelMap[rawData.courseLevel] || `Level ${rawData.courseLevel}` || 'N/A';
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 transition-opacity" onClick={onClose}>
+        <div className="bg-white rounded-xl shadow-2xl p-8 m-4 max-w-lg w-full relative transform transition-all" onClick={e => e.stopPropagation()}>
+          <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+            <X size={24} />
+          </button>
+          
+          <div className="mb-6">
+            <p className="text-sm font-semibold text-baylor-green tracking-wider uppercase">{course.course}</p>
+            <h2 className="text-3xl font-bold font-serif text-gray-900 mt-1">{course.title}</h2>
+          </div>
+
+          <div className="space-y-4 text-gray-700">
+            <div className="flex items-center">
+              <BookOpen size={20} className="text-gray-400 mr-4" />
+              <div>
+                <p className="font-semibold">Course Level</p>
+                <p>{courseLevelDisplay}</p>
+              </div>
+            </div>
+            <div className="flex items-center">
+              <Users size={20} className="text-gray-400 mr-4" />
+              <div>
+                <p className="font-semibold">Credits</p>
+                <p>{rawData.credits} credit hours</p>
+              </div>
+            </div>
+            <div className="flex items-center">
+              <Info size={20} className="text-gray-400 mr-4" />
+              <div>
+                <p className="font-semibold">Section</p>
+                <p>{course.section}</p>
+              </div>
+            </div>
+            <div className="flex items-center">
+              <Building size={20} className="text-gray-400 mr-4" />
+              <div>
+                <p className="font-semibold">Room</p>
+                <p>{course.room || 'N/A'}</p>
+              </div>
+            </div>
+            <div className="flex items-center">
+              <Clock size={20} className="text-gray-400 mr-4" />
+              <div>
+                <p className="font-semibold">Time</p>
+                <p>{formatMinutesToTime(course.start)} - {formatMinutesToTime(course.end)}</p>
+              </div>
+            </div>
+          </div>
+
+          {faculty && (
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-800 mb-3">Instructor</h3>
+              <FacultyContactCard faculty={faculty} showNotification={() => {}} compact={true} />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
 
   return (
     <div className="space-y-6">
@@ -261,14 +353,14 @@ const FacultySchedules = ({ scheduleData, facultyData }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Select Day</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Select Days to View</label>
             <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
               {Object.entries(dayNames).map(([dayCode, dayName]) => (
                 <button
                   key={dayCode}
-                  onClick={() => setSelectedDay(dayCode)}
+                  onClick={() => handleDayToggle(dayCode)}
                   className={`px-3 py-2 text-sm font-medium rounded-md transition-colors flex-1 ${
-                    selectedDay === dayCode 
+                    selectedDays.includes(dayCode) 
                       ? 'bg-baylor-green text-white shadow' 
                       : 'text-gray-600 hover:bg-gray-200'
                   }`}
@@ -302,15 +394,21 @@ const FacultySchedules = ({ scheduleData, facultyData }) => {
 
       <div>
         {selectedFaculty.length > 0 ? (
-          <>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-serif font-semibold text-baylor-green">
-                {dayNames[selectedDay]} Schedules
-              </h2>
-            </div>
-            
-            <TimelineView />
-          </>
+          <div className="space-y-8">
+            {selectedDays.length > 0 ? (
+              selectedDays
+                .sort((a, b) => Object.keys(dayNames).indexOf(a) - Object.keys(dayNames).indexOf(b))
+                .map(dayCode => <DayTimelineView key={dayCode} dayCode={dayCode} />)
+            ) : (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+                <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No Days Selected</h3>
+                <p className="text-gray-600">
+                  Please select at least one day to view schedules.
+                </p>
+              </div>
+            )}
+          </div>
         ) : (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
             <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -323,60 +421,18 @@ const FacultySchedules = ({ scheduleData, facultyData }) => {
       </div>
 
       {selectedCourse && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full mx-4">
-            <div className="bg-baylor-green text-white p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-2xl font-bold">{selectedCourse.course}</h3>
-                  <p className="text-baylor-gold text-lg">{selectedCourse.title}</p>
-                </div>
-                <button
-                  onClick={() => setSelectedCourse(null)}
-                  className="text-white hover:text-baylor-gold"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-            </div>
-            
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <h4 className="font-semibold text-baylor-green mb-2">Schedule</h4>
-                  <div className="text-sm space-y-1">
-                    <div>Day: {dayNames[selectedDay]}</div>
-                    <div>Time: {formatMinutesToTime(selectedCourse.start)} - {formatMinutesToTime(selectedCourse.end)}</div>
-                    <div>Room: {selectedCourse.room}</div>
-                  </div>
-                </div>
-                <div>
-                  <h4 className="font-semibold text-baylor-green mb-2">Course Info</h4>
-                  <div className="text-sm space-y-1">
-                    <div>Section: {selectedCourse.section}</div>
-                    <div>Credits: {selectedCourse.credits}</div>
-                    <div>Instructor: {selectedCourse.facultyName}</div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="border-t pt-4">
-                <button
-                  onClick={() => setSelectedCourse(null)}
-                  className="btn-primary"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <CourseDetailModal 
+          course={selectedCourse}
+          facultyData={facultyData}
+          onClose={() => setSelectedCourse(null)}
+        />
       )}
 
       {selectedFacultyForCard && (
-        <FacultyContactCard
-          faculty={selectedFacultyForCard}
-          onClose={() => setSelectedFacultyForCard(null)}
+        <FacultyContactCard 
+          faculty={selectedFacultyForCard} 
+          onClose={() => setSelectedFacultyForCard(null)} 
+          showNotification={() => {}} 
         />
       )}
     </div>

@@ -259,7 +259,7 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
 
     // Create schedule key for duplicate detection
     const courseCode = row.Course || '';
-    const section = row.Section || '';
+    const section = row['Section #'] || ''; // Fix: Use correct CSV column name
     const term = row.Term || '';
     const scheduleKey = `${courseCode}-${section}-${term}`;
 
@@ -276,7 +276,7 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
       courseTitle: row['Course Title'] || '',
       section,
       crn: row['CRN'] || '', // Add CRN field
-      credits: row.Credits || '',
+      credits: row['Credit Hrs'] || row['Credit Hrs Min'] || '', // Fix: Use correct CSV column name
       term,
       academicYear: extractAcademicYear(term),
       instructorId: instructorId,

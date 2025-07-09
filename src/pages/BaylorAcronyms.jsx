@@ -184,9 +184,9 @@ const BaylorAcronyms = ({ showNotification }) => {
                         <table className="min-w-full">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    <th className="th-style w-1/6">Acronym</th>
-                                    <th className="th-style w-1/4">Stands For</th>
-                                    <th className="th-style w-1/3">Description/Context</th>
+                                    <th className="th-style text-left w-1/6">Acronym</th>
+                                    <th className="th-style text-left w-1/4">Stands For</th>
+                                    <th className="th-style text-left w-1/3">Description/Context</th>
                                     <th className="th-style w-auto text-right pr-6">Actions</th>
                                 </tr>
                             </thead>

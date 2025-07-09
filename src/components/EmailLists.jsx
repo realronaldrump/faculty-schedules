@@ -979,16 +979,18 @@ const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
                         </p>
                       </div>
                     </div>
-                    <div className="mt-2">
-                      <p className="text-sm font-medium text-gray-700">Courses Taught:</p>
-                      <ul className="list-disc list-inside mt-2 text-sm space-y-1">
-                        {person.courses.map((course, index) => (
-                          <li key={index}>
-                            <span className="font-semibold">{course.courseCode}</span> (Lvl: {course.level}) - {course.courseTitle} ({course.credits} credits)
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+                    {(person.roleType === 'faculty' || person.roleType === 'both') && person.courseCount > 0 && (
+                      <div className="mt-2">
+                        <p className="text-sm font-medium text-gray-700">Courses Taught:</p>
+                        <ul className="list-disc list-inside mt-2 text-sm space-y-1">
+                          {person.courses.map((course, index) => (
+                            <li key={index}>
+                              <span className="font-semibold">{course.courseCode}</span> (Lvl: {course.level}) - {course.courseTitle} ({course.credits} credits)
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 </label>
               ))}

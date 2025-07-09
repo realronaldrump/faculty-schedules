@@ -225,17 +225,6 @@ const FacultySchedules = ({ scheduleData, facultyData }) => {
     const { rawData, facultyName } = course;
     const faculty = facultyData.find(f => f.name === facultyName);
 
-    const levelMap = {
-      1: 'Freshman (1000-level)',
-      2: 'Sophomore (2000-level)',
-      3: 'Junior (3000-level)',
-      4: 'Senior (4000-level)',
-      5: 'Graduate (5000-level)',
-      6: 'Graduate (6000-level)',
-    };
-
-    const courseLevelDisplay = levelMap[rawData.courseLevel] || `Level ${rawData.courseLevel}` || 'N/A';
-
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 transition-opacity" onClick={onClose}>
         <div className="bg-white rounded-xl shadow-2xl p-8 m-4 max-w-lg w-full relative transform transition-all" onClick={e => e.stopPropagation()}>
@@ -249,13 +238,6 @@ const FacultySchedules = ({ scheduleData, facultyData }) => {
           </div>
 
           <div className="space-y-4 text-gray-700">
-            <div className="flex items-center">
-              <BookOpen size={20} className="text-gray-400 mr-4" />
-              <div>
-                <p className="font-semibold">Course Level</p>
-                <p>{courseLevelDisplay}</p>
-              </div>
-            </div>
             <div className="flex items-center">
               <Users size={20} className="text-gray-400 mr-4" />
               <div>

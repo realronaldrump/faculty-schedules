@@ -1,10 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Copy, Plus, Minus, Settings, UserCog, BookOpen } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown';
+import FacultyContactCard from './FacultyContactCard';
 
 const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeople, setSelectedPeople] = useState([]);
+  const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [filters, setFilters] = useState({
     // Multi-select filters with include/exclude
     programs: { include: [], exclude: [] },
@@ -518,7 +520,7 @@ const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
       'Is UPD': p.isUPD ? 'Yes' : 'No',
       'Course Count (current semester)': p.courseCount || 0,
       'Courses Taught (current semester)': p.courses && p.courses.length > 0
-        ? p.courses.map(c => `${c.courseCode} (Lvl: ${c.level}, Cr: ${c.credits}) - ${c.courseTitle}`).join('; ')
+        ? p.courses.map(c => `${c.courseCode} (${c.credits} cr) - ${c.courseTitle}`).join('; ')
         : '',
     }));
 
@@ -925,79 +927,97 @@ const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
           </div>
         </div>
 
-        <div className="max-h-96 overflow-y-auto">
-          {filteredData.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
-              <Users className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-              <p>No people match your current filters.</p>
-              <p className="text-sm mt-2">Try adjusting your search or filter criteria.</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-200">
-              {filteredData.map((person) => (
-                <label
-                  key={person.id}
-                  className="flex items-center p-4 hover:bg-gray-50 cursor-pointer"
-                >
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-6 py-3 text-left">
                   <input
                     type="checkbox"
-                    checked={selectedPeople.includes(person.id)}
-                    onChange={() => handleSelectPerson(person.id)}
+                    checked={isAllSelected}
+                    ref={(input) => {
+                      if (input) input.indeterminate = isPartiallySelected;
+                    }}
+                    onChange={handleSelectAll}
                     className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                   />
-                  <div className="ml-3 flex-1">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {person.name}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          {person.email || 'No email'}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm text-gray-600 flex items-center justify-end gap-2">
-                          {person.jobTitle || 'No title'} • {person.role}
-                          {person.isUPD && (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                              <UserCog size={10} className="mr-1" />
-                              UPD
-                            </span>
-                          )}
-                          {(person.roleType === 'faculty' || person.roleType === 'both') && person.courseCount > 0 && (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-baylor-green/10 text-baylor-green">
-                              <BookOpen size={10} className="mr-1" />
-                              {person.courseCount} course{person.courseCount !== 1 ? 's' : ''}
-                            </span>
-                          )}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {person.program && person.program.name ? (
-                            <span className="text-baylor-green font-medium">{person.program.name} • </span>
-                          ) : null}
-                          {person.office || 'No office'}
-                        </p>
-                      </div>
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Contact
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Role
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredData.map((person) => (
+                <tr key={person.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={selectedPeople.includes(person.id)}
+                      onChange={() => handleSelectPerson(person.id)}
+                      className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                    />
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <button
+                      onClick={() => setSelectedFacultyForCard(person)}
+                      className="font-medium text-gray-900 hover:text-baylor-green text-left hover:underline"
+                    >
+                      {person.name}
+                    </button>
+                    <div className="text-sm text-gray-500">{person.email || 'No email'}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{person.jobTitle || 'No title'}</div>
+                    <div className="text-sm text-gray-500">{person.program?.name || 'No program'}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        person.roleType === 'faculty' ? 'bg-blue-100 text-blue-800' :
+                        person.roleType === 'staff' ? 'bg-green-100 text-green-800' :
+                        'bg-purple-100 text-purple-800'
+                      }`}>
+                        {person.role}
+                      </span>
+                      {person.isUPD && (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                          UPD
+                        </span>
+                      )}
+                      {(person.roleType === 'faculty' || person.roleType === 'both') && person.courseCount > 0 && (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-baylor-green/10 text-baylor-green">
+                          {person.courseCount} course{person.courseCount !== 1 ? 's' : ''}
+                        </span>
+                      )}
                     </div>
-                    {(person.roleType === 'faculty' || person.roleType === 'both') && person.courseCount > 0 && (
-                      <div className="mt-2">
-                        <p className="text-sm font-medium text-gray-700">Courses Taught:</p>
-                        <ul className="list-disc list-inside mt-2 text-sm space-y-1">
-                          {person.courses.map((course, index) => (
-                            <li key={index}>
-                              <span className="font-semibold">{course.courseCode}</span> (Lvl: {course.level}) - {course.courseTitle} ({course.credits} credits)
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                </label>
+                  </td>
+                </tr>
               ))}
-            </div>
-          )}
+            </tbody>
+          </table>
         </div>
+        {filteredData.length === 0 && (
+          <div className="p-8 text-center text-gray-500 border-t border-gray-200">
+            <Users className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+            <p>No people match your current filters.</p>
+            <p className="text-sm mt-2">Try adjusting your search or filter criteria.</p>
+          </div>
+        )}
       </div>
+
+      {selectedFacultyForCard && (
+        <FacultyContactCard
+          faculty={selectedFacultyForCard}
+          onClose={() => setSelectedFacultyForCard(null)}
+        />
+      )}
 
       {/* Notification */}
       {notification.show && (

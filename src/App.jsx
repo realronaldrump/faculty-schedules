@@ -487,10 +487,15 @@ function App() {
       // Create meeting patterns from Day/Start Time/End Time
       const meetingPatterns = [];
       if (updatedRow.Day && updatedRow['Start Time'] && updatedRow['End Time']) {
-        meetingPatterns.push({
-          day: updatedRow.Day,
-          startTime: updatedRow['Start Time'],
-          endTime: updatedRow['End Time']
+        // Split Day string into individual day codes (e.g., "MWF" -> ["M","W","F"])
+        const dayCodes = typeof updatedRow.Day === 'string' ? updatedRow.Day.match(/[MTWRF]/g) : [];
+        (dayCodes && dayCodes.length > 0 ? dayCodes : [updatedRow.Day]).forEach(code => {
+          if (!code) return;
+          meetingPatterns.push({
+            day: code,
+            startTime: updatedRow['Start Time'],
+            endTime: updatedRow['End Time']
+          });
         });
       }
 

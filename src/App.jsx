@@ -13,6 +13,7 @@ import CourseManagement from './components/analytics/CourseManagement';
 import SmartDataImportPage from './components/SmartDataImportPage';
 import SystemsPage from './components/SystemsPage';
 import DataHygieneManager from './components/DataHygieneManager';
+import BaylorAcronyms from './pages/BaylorAcronyms';
 
 import EmailLists from './components/EmailLists';
 import BuildingDirectory from './components/BuildingDirectory';
@@ -220,7 +221,8 @@ function App() {
       children: [
         { id: 'smart-import', label: 'Data Import', path: 'administration/smart-import' },
         { id: 'data-hygiene', label: 'Data Hygiene', path: 'administration/data-hygiene' },
-        { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' }
+        { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' },
+        { id: 'baylor-acronyms', label: 'Baylor Acronyms', path: 'administration/baylor-acronyms' }
       ]
     }
   ];
@@ -875,6 +877,8 @@ function App() {
         return <DataHygieneManager {...pageProps} />;
       case 'administration/baylor-systems':
         return <SystemsPage {...pageProps} />;
+      case 'administration/baylor-acronyms':
+        return <BaylorAcronyms {...pageProps} />;
       default:
         return <Dashboard {...pageProps} />;
     }

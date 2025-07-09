@@ -8,12 +8,15 @@ const CourseManagement = ({
   facultyData, 
   editHistory, 
   onDataUpdate, 
+  onScheduleDelete,
   onRevertChange
 }) => {
   const [editingRowId, setEditingRowId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [historyVisible, setHistoryVisible] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [showAddCourseForm, setShowAddCourseForm] = useState(false);
+  const [newCourseData, setNewCourseData] = useState({});
   const [filters, setFilters] = useState({ 
     // Basic filters
     instructor: [], 
@@ -24,11 +27,14 @@ const CourseManagement = ({
     programs: { include: [], exclude: [] },
     courseTypes: [],
     terms: [],
+    sections: [],
     buildings: { include: [], exclude: [] },
     adjunct: 'all', // 'all', 'include', 'exclude'
     tenured: 'all', // 'all', 'include', 'exclude'
     credits: 'all', // 'all', '1', '2', '3', '4+'
-    timeOfDay: 'all' // 'all', 'morning', 'afternoon', 'evening'
+    timeOfDay: 'all', // 'all', 'morning', 'afternoon', 'evening'
+    scheduleType: 'all', // 'all', 'Class Instruction', 'Lab', etc.
+    status: 'all' // 'all', 'Active', 'Cancelled', etc.
   });
   const [activeFilterPreset, setActiveFilterPreset] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'Instructor', direction: 'ascending' });
@@ -42,6 +48,26 @@ const CourseManagement = ({
 
   const uniqueRooms = useMemo(() => 
     [...new Set(scheduleData.filter(item => item && item.Room).map(item => item.Room))].sort(),
+    [scheduleData]
+  );
+
+  const uniqueTerms = useMemo(() => 
+    [...new Set(scheduleData.filter(item => item && item.Term).map(item => item.Term))].sort(),
+    [scheduleData]
+  );
+
+  const uniqueSections = useMemo(() => 
+    [...new Set(scheduleData.filter(item => item && item.Section).map(item => item.Section))].sort(),
+    [scheduleData]
+  );
+
+  const uniqueScheduleTypes = useMemo(() => 
+    [...new Set(scheduleData.filter(item => item && item['Schedule Type']).map(item => item['Schedule Type']))].sort(),
+    [scheduleData]
+  );
+
+  const uniqueStatuses = useMemo(() => 
+    [...new Set(scheduleData.filter(item => item && item.Status).map(item => item.Status))].sort(),
     [scheduleData]
   );
 
@@ -100,8 +126,9 @@ const CourseManagement = ({
       filters: {
         instructor: [], day: [], room: [], searchTerm: '',
         programs: { include: [], exclude: [] },
-        courseTypes: [], terms: [], buildings: { include: [], exclude: [] },
-        adjunct: 'all', tenured: 'all', credits: 'all', timeOfDay: 'all'
+        courseTypes: [], terms: [], sections: [], buildings: { include: [], exclude: [] },
+        adjunct: 'all', tenured: 'all', credits: 'all', timeOfDay: 'all',
+        scheduleType: 'all', status: 'all'
       }
     },
     'adjunct-courses': {
@@ -109,17 +136,19 @@ const CourseManagement = ({
       filters: {
         instructor: [], day: [], room: [], searchTerm: '',
         programs: { include: [], exclude: [] },
-        courseTypes: [], terms: [], buildings: { include: [], exclude: [] },
-        adjunct: 'include', tenured: 'all', credits: 'all', timeOfDay: 'all'
+        courseTypes: [], terms: [], sections: [], buildings: { include: [], exclude: [] },
+        adjunct: 'include', tenured: 'all', credits: 'all', timeOfDay: 'all',
+        scheduleType: 'all', status: 'all'
       }
     },
-    'tenured-courses': {
-      name: 'Tenured Faculty',
+    'active-courses': {
+      name: 'Active Courses Only',
       filters: {
         instructor: [], day: [], room: [], searchTerm: '',
         programs: { include: [], exclude: [] },
-        courseTypes: [], terms: [], buildings: { include: [], exclude: [] },
-        adjunct: 'exclude', tenured: 'include', credits: 'all', timeOfDay: 'all'
+        courseTypes: [], terms: [], sections: [], buildings: { include: [], exclude: [] },
+        adjunct: 'all', tenured: 'all', credits: 'all', timeOfDay: 'all',
+        scheduleType: 'all', status: 'Active'
       }
     },
     'morning-classes': {
@@ -127,8 +156,9 @@ const CourseManagement = ({
       filters: {
         instructor: [], day: [], room: [], searchTerm: '',
         programs: { include: [], exclude: [] },
-        courseTypes: [], terms: [], buildings: { include: [], exclude: [] },
-        adjunct: 'all', tenured: 'all', credits: 'all', timeOfDay: 'morning'
+        courseTypes: [], terms: [], sections: [], buildings: { include: [], exclude: [] },
+        adjunct: 'all', tenured: 'all', credits: 'all', timeOfDay: 'morning',
+        scheduleType: 'all', status: 'all'
       }
     },
     'high-credit': {
@@ -136,8 +166,9 @@ const CourseManagement = ({
       filters: {
         instructor: [], day: [], room: [], searchTerm: '',
         programs: { include: [], exclude: [] },
-        courseTypes: [], terms: [], buildings: { include: [], exclude: [] },
-        adjunct: 'all', tenured: 'all', credits: '4+', timeOfDay: 'all'
+        courseTypes: [], terms: [], sections: [], buildings: { include: [], exclude: [] },
+        adjunct: 'all', tenured: 'all', credits: '4+', timeOfDay: 'all',
+        scheduleType: 'all', status: 'all'
       }
     }
   };
@@ -188,7 +219,9 @@ const CourseManagement = ({
         (item['Course Title']?.toLowerCase().includes(lowercasedFilter)) ||
         (item.Instructor?.toLowerCase().includes(lowercasedFilter)) ||
         (item.Room?.toLowerCase().includes(lowercasedFilter)) ||
-        (item.crn?.toString().toLowerCase().includes(lowercasedFilter))
+        (item.CRN?.toString().toLowerCase().includes(lowercasedFilter)) ||
+        (item.Term?.toLowerCase().includes(lowercasedFilter)) ||
+        (item.Section?.toLowerCase().includes(lowercasedFilter))
       );
     }
     
@@ -201,6 +234,26 @@ const CourseManagement = ({
     }
     if (filters.room.length > 0) {
       data = data.filter(item => item && item.Room && filters.room.includes(item.Room));
+    }
+
+    // Apply term filter
+    if (filters.terms.length > 0) {
+      data = data.filter(item => item && item.Term && filters.terms.includes(item.Term));
+    }
+
+    // Apply section filter
+    if (filters.sections.length > 0) {
+      data = data.filter(item => item && item.Section && filters.sections.includes(item.Section));
+    }
+
+    // Apply schedule type filter
+    if (filters.scheduleType !== 'all') {
+      data = data.filter(item => item && item['Schedule Type'] === filters.scheduleType);
+    }
+
+    // Apply status filter
+    if (filters.status !== 'all') {
+      data = data.filter(item => item && item.Status === filters.status);
     }
 
     // Apply program filters
@@ -225,11 +278,6 @@ const CourseManagement = ({
         const match = item.Course.match(/^([A-Z]{2,4})/);
         return match && filters.courseTypes.includes(match[1]);
       });
-    }
-
-    // Apply term filters
-    if (filters.terms.length > 0) {
-      data = data.filter(item => item && item.Term && filters.terms.includes(item.Term));
     }
 
     // Apply building filters
@@ -280,49 +328,50 @@ const CourseManagement = ({
     // Apply credits filter
     if (filters.credits !== 'all') {
       data = data.filter(item => {
-        if (!item.Credits) return false;
-        const credits = parseInt(item.Credits);
-        if (filters.credits === '4+') {
-          return credits >= 4;
-        }
-        return credits.toString() === filters.credits;
+        const credits = parseInt(item.Credits) || 0;
+        if (filters.credits === '1') return credits === 1;
+        if (filters.credits === '2') return credits === 2;
+        if (filters.credits === '3') return credits === 3;
+        if (filters.credits === '4+') return credits >= 4;
+        return true;
       });
     }
 
     // Apply time of day filter
     if (filters.timeOfDay !== 'all') {
       data = data.filter(item => {
-        const timeCategory = getTimeOfDay(item['Start Time']);
-        return timeCategory === filters.timeOfDay;
+        const timeOfDay = getTimeOfDay(item['Start Time']);
+        return timeOfDay === filters.timeOfDay;
       });
     }
 
-    // Apply sorting
+    // Sort data
     if (sortConfig.key) {
       data.sort((a, b) => {
-        const aVal = a[sortConfig.key];
-        const bVal = b[sortConfig.key];
-        const directionMultiplier = sortConfig.direction === 'ascending' ? 1 : -1;
-
-        // Custom sorting logic for specific columns
-        if (sortConfig.key === 'Day') {
-          const dayOrder = { M: 1, T: 2, W: 3, R: 4, F: 5 };
-          return ((dayOrder[aVal] || 99) - (dayOrder[bVal] || 99)) * directionMultiplier;
-        }
+        let aValue = a[sortConfig.key] || '';
+        let bValue = b[sortConfig.key] || '';
+        
+        // Special handling for time fields
         if (sortConfig.key === 'Start Time' || sortConfig.key === 'End Time') {
-          return ((parseTime(aVal) || 0) - (parseTime(bVal) || 0)) * directionMultiplier;
+          aValue = parseTime(aValue) || 0;
+          bValue = parseTime(bValue) || 0;
         }
-        // Default string locale-aware sorting with null checks
-        const aString = (aVal || '').toString();
-        const bString = (bVal || '').toString();
-        return aString.localeCompare(bString) * directionMultiplier;
+        
+        // Special handling for numeric fields
+        if (sortConfig.key === 'CRN' || sortConfig.key === 'Credits') {
+          aValue = parseInt(aValue) || 0;
+          bValue = parseInt(bValue) || 0;
+        }
+        
+        if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'ascending' ? 1 : -1;
+        return 0;
       });
     }
-    
+
     return data;
   }, [scheduleData, filters, sortConfig, facultyData]);
 
-  // Validation function for schedule data
   const validateScheduleData = (data) => {
     const errors = [];
     
@@ -343,6 +392,14 @@ const CourseManagement = ({
     
     if (startTime && endTime && startTime >= endTime) {
       errors.push('End time must be after start time');
+    }
+
+    if (!data.Term || data.Term.trim() === '') {
+      errors.push('Term is required');
+    }
+
+    if (!data.Section || data.Section.trim() === '') {
+      errors.push('Section is required');
     }
     
     return errors;
@@ -393,10 +450,40 @@ const CourseManagement = ({
 
   const handleDeleteSchedule = (scheduleId) => {
     if (window.confirm('Are you sure you want to delete this schedule entry? This action cannot be undone.')) {
-      // Note: You'll need to implement this in your App.jsx
-      console.log('Delete schedule:', scheduleId);
-      // onDeleteSchedule(scheduleId);
+      if (onScheduleDelete) {
+        onScheduleDelete(scheduleId);
+      } else {
+        console.error('Delete function not provided');
+      }
     }
+  };
+
+  const handleAddCourse = () => {
+    const errors = validateScheduleData(newCourseData);
+    
+    if (errors.length > 0) {
+      alert('Validation errors:\n' + errors.join('\n'));
+      return;
+    }
+
+    // Create new course with unique ID
+    const courseWithId = {
+      ...newCourseData,
+      id: `new_${Date.now()}`,
+      CRN: newCourseData.CRN || '',
+      Status: newCourseData.Status || 'Active',
+      'Schedule Type': newCourseData['Schedule Type'] || 'Class Instruction',
+      Credits: newCourseData.Credits || '3'
+    };
+
+    onDataUpdate(courseWithId);
+    setNewCourseData({});
+    setShowAddCourseForm(false);
+  };
+
+  const handleNewCourseChange = (e) => {
+    const { name, value } = e.target;
+    setNewCourseData(prev => ({ ...prev, [name]: value }));
   };
 
   // Filter preset handlers
@@ -418,8 +505,9 @@ const CourseManagement = ({
     setFilters({
       instructor: [], day: [], room: [], searchTerm: '',
       programs: { include: [], exclude: [] },
-      courseTypes: [], terms: [], buildings: { include: [], exclude: [] },
-      adjunct: 'all', tenured: 'all', credits: 'all', timeOfDay: 'all'
+      courseTypes: [], terms: [], sections: [], buildings: { include: [], exclude: [] },
+      adjunct: 'all', tenured: 'all', credits: 'all', timeOfDay: 'all',
+      scheduleType: 'all', status: 'all'
     });
     setActiveFilterPreset('');
   };
@@ -434,12 +522,15 @@ const CourseManagement = ({
     if (filters.programs.exclude.length > 0) count++;
     if (filters.courseTypes.length > 0) count++;
     if (filters.terms.length > 0) count++;
+    if (filters.sections.length > 0) count++;
     if (filters.buildings.include.length > 0) count++;
     if (filters.buildings.exclude.length > 0) count++;
     if (filters.adjunct !== 'all') count++;
     if (filters.tenured !== 'all') count++;
     if (filters.credits !== 'all') count++;
     if (filters.timeOfDay !== 'all') count++;
+    if (filters.scheduleType !== 'all') count++;
+    if (filters.status !== 'all') count++;
     if (filters.searchTerm) count++;
     return count;
   }, [filters]);
@@ -467,10 +558,9 @@ const CourseManagement = ({
       uniqueCourses: new Set(scheduleData.filter(s => s && s.Course).map(s => s.Course)).size,
       uniqueInstructors: new Set(scheduleData.filter(s => s && s.Instructor).map(s => s.Instructor)).size,
       adjunctTaughtSessions: scheduleData.filter(s => {
-        if (!s || !s.Instructor) return false;
-        // This would need faculty data to check if instructor is adjunct
-        // For now, return 0 since this logic should be handled in the main analytics
-        return false;
+        if (!s || !s.Instructor || !facultyData) return false;
+        const faculty = facultyData.find(f => f.name === s.Instructor);
+        return faculty?.isAdjunct;
       }).length
     };
     
@@ -487,7 +577,7 @@ const CourseManagement = ({
     
     stats.busiestDay = busiestDay;
     return stats;
-  }, [scheduleData]);
+  }, [scheduleData, facultyData]);
 
   return (
     <div className="space-y-6">
@@ -515,17 +605,15 @@ const CourseManagement = ({
           <div className="text-xs text-gray-500">faculty and staff</div>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="text-sm text-gray-600">Busiest Day</div>
-          <div className="text-2xl font-bold text-baylor-green">
-            {courseStats.busiestDay.day ? dayNames[courseStats.busiestDay.day]?.substring(0, 3) : 'N/A'}
-          </div>
-          <div className="text-xs text-gray-500">{courseStats.busiestDay.count} sessions</div>
+          <div className="text-sm text-gray-600">Adjunct Taught</div>
+          <div className="text-2xl font-bold text-baylor-green">{courseStats.adjunctTaughtSessions}</div>
+          <div className="text-xs text-gray-500">sessions by adjuncts</div>
         </div>
       </div>
 
       {/* Main Content Card */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        {/* Header with History Toggle */}
+        {/* Header with History Toggle and Add Course */}
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 border-b border-baylor-gold pb-4 gap-4">
           <div>
             <h2 className="text-xl font-serif font-semibold text-baylor-green">Course Schedule Data</h2>
@@ -535,6 +623,13 @@ const CourseManagement = ({
           </div>
           <div className="flex gap-2">
             <button
+              onClick={() => setShowAddCourseForm(!showAddCourseForm)}
+              className="px-4 py-2 bg-baylor-green text-white font-bold rounded-lg hover:bg-baylor-green/90 transition-colors text-sm flex items-center"
+            >
+              <Plus size={16} className="mr-2" />
+              Add Course
+            </button>
+            <button
               onClick={() => setHistoryVisible(!historyVisible)}
               className="px-4 py-2 bg-baylor-gold text-baylor-green font-bold rounded-lg hover:bg-baylor-gold/90 transition-colors text-sm flex items-center"
             >
@@ -543,6 +638,180 @@ const CourseManagement = ({
             </button>
           </div>
         </div>
+
+        {/* Add Course Form */}
+        {showAddCourseForm && (
+          <div className="mb-6 p-4 bg-green-50 rounded-lg border border-green-200">
+            <h3 className="text-lg font-serif font-semibold text-baylor-green mb-3">Add New Course</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Course Code *</label>
+                <input
+                  name="Course"
+                  value={newCourseData.Course || ''}
+                  onChange={handleNewCourseChange}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+                  placeholder="e.g., ADM 3330"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Course Title *</label>
+                <input
+                  name="Course Title"
+                  value={newCourseData['Course Title'] || ''}
+                  onChange={handleNewCourseChange}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+                  placeholder="Course title"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">CRN</label>
+                <input
+                  name="CRN"
+                  value={newCourseData.CRN || ''}
+                  onChange={handleNewCourseChange}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+                  placeholder="Course reference number"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Instructor *</label>
+                <select
+                  name="Instructor"
+                  value={newCourseData.Instructor || ''}
+                  onChange={handleNewCourseChange}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+                >
+                  <option value="">Select Instructor</option>
+                  <option value="Staff">Staff</option>
+                  {facultyData.map(faculty => (
+                    <option key={faculty.id} value={faculty.name}>
+                      {faculty.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Term *</label>
+                <select
+                  name="Term"
+                  value={newCourseData.Term || ''}
+                  onChange={handleNewCourseChange}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+                >
+                  <option value="">Select Term</option>
+                  {uniqueTerms.map(term => (
+                    <option key={term} value={term}>{term}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Section *</label>
+                <input
+                  name="Section"
+                  value={newCourseData.Section || ''}
+                  onChange={handleNewCourseChange}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+                  placeholder="e.g., 01, 02"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Day *</label>
+                <select
+                  name="Day"
+                  value={newCourseData.Day || ''}
+                  onChange={handleNewCourseChange}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+                >
+                  <option value="">Select Day</option>
+                  {Object.entries(dayNames).map(([code, name]) => (
+                    <option key={code} value={code}>{code} - {name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Start Time *</label>
+                <input
+                  name="Start Time"
+                  value={newCourseData['Start Time'] || ''}
+                  onChange={handleNewCourseChange}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+                  placeholder="e.g., 9:00 AM"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">End Time *</label>
+                <input
+                  name="End Time"
+                  value={newCourseData['End Time'] || ''}
+                  onChange={handleNewCourseChange}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+                  placeholder="e.g., 10:00 AM"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
+                <input
+                  name="Room"
+                  value={newCourseData.Room || ''}
+                  onChange={handleNewCourseChange}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+                  placeholder="Room name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Credits</label>
+                <select
+                  name="Credits"
+                  value={newCourseData.Credits || '3'}
+                  onChange={handleNewCourseChange}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+                >
+                  <option value="1">1 Credit</option>
+                  <option value="2">2 Credits</option>
+                  <option value="3">3 Credits</option>
+                  <option value="4">4 Credits</option>
+                  <option value="5">5 Credits</option>
+                  <option value="6">6 Credits</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Schedule Type</label>
+                <select
+                  name="Schedule Type"
+                  value={newCourseData['Schedule Type'] || 'Class Instruction'}
+                  onChange={handleNewCourseChange}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+                >
+                  <option value="Class Instruction">Class Instruction</option>
+                  <option value="Lab">Lab</option>
+                  <option value="Studio">Studio</option>
+                  <option value="Seminar">Seminar</option>
+                  <option value="Independent Study">Independent Study</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleAddCourse}
+                className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 flex items-center"
+              >
+                <Save size={16} className="mr-2" />
+                Add Course
+              </button>
+              <button
+                onClick={() => {
+                  setShowAddCourseForm(false);
+                  setNewCourseData({});
+                }}
+                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 flex items-center"
+              >
+                <X size={16} className="mr-2" />
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Filters Section */}
         <div className="p-4 mb-6 bg-gray-50 rounded-lg border">
@@ -680,10 +949,25 @@ const CourseManagement = ({
                     Terms
                   </label>
                   <MultiSelectDropdown
-                    options={filterOptions.terms}
+                    options={uniqueTerms}
                     selected={filters.terms}
                     onChange={(selected) => setFilters(prev => ({ ...prev, terms: selected }))}
                     placeholder="Select terms..."
+                  />
+                </div>
+              </div>
+
+              {/* Sections */}
+              <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Sections
+                  </label>
+                  <MultiSelectDropdown
+                    options={uniqueSections}
+                    selected={filters.sections}
+                    onChange={(selected) => setFilters(prev => ({ ...prev, sections: selected }))}
+                    placeholder="Select sections..."
                   />
                 </div>
               </div>
@@ -785,6 +1069,41 @@ const CourseManagement = ({
                   </select>
                 </div>
               </div>
+
+              {/* Schedule Type and Status Filters */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Schedule Type
+                  </label>
+                  <select
+                    value={filters.scheduleType}
+                    onChange={(e) => setFilters(prev => ({ ...prev, scheduleType: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  >
+                    <option value="all">All Schedule Types</option>
+                    {uniqueScheduleTypes.map(type => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Status
+                  </label>
+                  <select
+                    value={filters.status}
+                    onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  >
+                    <option value="all">All Statuses</option>
+                    {uniqueStatuses.map(status => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
           )}
 
@@ -857,11 +1176,16 @@ const CourseManagement = ({
                 <DataTableHeader columnKey="Instructor" label="Instructor" />
                 <DataTableHeader columnKey="Course" label="Course" />
                 <DataTableHeader columnKey="Course Title" label="Course Title" />
-                <DataTableHeader columnKey="crn" label="CRN" />
+                <DataTableHeader columnKey="CRN" label="CRN" />
+                <DataTableHeader columnKey="Term" label="Term" />
+                <DataTableHeader columnKey="Section" label="Section" />
                 <DataTableHeader columnKey="Day" label="Day" />
                 <DataTableHeader columnKey="Start Time" label="Start Time" />
                 <DataTableHeader columnKey="End Time" label="End Time" />
                 <DataTableHeader columnKey="Room" label="Room" />
+                <DataTableHeader columnKey="Credits" label="Credits" />
+                <DataTableHeader columnKey="Schedule Type" label="Schedule Type" />
+                <DataTableHeader columnKey="Status" label="Status" />
                 <th className="px-4 py-3 text-center">Actions</th>
               </tr>
             </thead>
@@ -907,11 +1231,33 @@ const CourseManagement = ({
                         </td>
                         <td className="p-1">
                           <input
-                            name="crn"
-                            value={editFormData.crn || ''}
+                            name="CRN"
+                            value={editFormData.CRN || ''}
                             onChange={handleEditFormChange}
                             className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
                             placeholder="CRN"
+                          />
+                        </td>
+                        <td className="p-1">
+                          <select
+                            name="Term"
+                            value={editFormData.Term || ''}
+                            onChange={handleEditFormChange}
+                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
+                          >
+                            <option value="">Select Term</option>
+                            {uniqueTerms.map(term => (
+                              <option key={term} value={term}>{term}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="p-1">
+                          <input
+                            name="Section"
+                            value={editFormData.Section || ''}
+                            onChange={handleEditFormChange}
+                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
+                            placeholder="Section"
                           />
                         </td>
                         <td className="p-1">
@@ -921,7 +1267,7 @@ const CourseManagement = ({
                             onChange={handleEditFormChange}
                             className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
                           >
-                            <option value="">Day</option>
+                            <option value="">Select Day</option>
                             {Object.entries(dayNames).map(([code, name]) => (
                               <option key={code} value={code}>{code} - {name}</option>
                             ))}
@@ -954,6 +1300,41 @@ const CourseManagement = ({
                             placeholder="Room Name"
                           />
                         </td>
+                        <td className="p-1">
+                          <input
+                            name="Credits"
+                            value={editFormData.Credits || ''}
+                            onChange={handleEditFormChange}
+                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
+                            placeholder="Credits"
+                          />
+                        </td>
+                        <td className="p-1">
+                          <select
+                            name="Schedule Type"
+                            value={editFormData['Schedule Type'] || ''}
+                            onChange={handleEditFormChange}
+                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
+                          >
+                            <option value="">Select Schedule Type</option>
+                            {uniqueScheduleTypes.map(type => (
+                              <option key={type} value={type}>{type}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="p-1">
+                          <select
+                            name="Status"
+                            value={editFormData.Status || ''}
+                            onChange={handleEditFormChange}
+                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
+                          >
+                            <option value="">Select Status</option>
+                            {uniqueStatuses.map(status => (
+                              <option key={status} value={status}>{status}</option>
+                            ))}
+                          </select>
+                        </td>
                         <td className="p-1 text-center">
                           <div className="flex gap-1 justify-center">
                             <button
@@ -985,7 +1366,9 @@ const CourseManagement = ({
                         </td>
                         <td className="px-4 py-3 text-gray-700 font-medium">{row.Course}</td>
                         <td className="px-4 py-3 text-gray-700">{row['Course Title']}</td>
-                        <td className="px-4 py-3 text-gray-700 font-medium">{row.crn}</td>
+                        <td className="px-4 py-3 text-gray-700 font-medium">{row.CRN}</td>
+                        <td className="px-4 py-3 text-gray-700">{row.Term}</td>
+                        <td className="px-4 py-3 text-gray-700">{row.Section}</td>
                         <td className="px-4 py-3 text-gray-700 text-center">
                           <span className="px-2 py-1 bg-baylor-green/10 text-baylor-green rounded text-xs font-medium">
                             {row.Day}
@@ -994,6 +1377,9 @@ const CourseManagement = ({
                         <td className="px-4 py-3 text-gray-700">{row['Start Time']}</td>
                         <td className="px-4 py-3 text-gray-700">{row['End Time']}</td>
                         <td className="px-4 py-3 text-gray-700">{row.Room}</td>
+                        <td className="px-4 py-3 text-gray-700">{row.Credits}</td>
+                        <td className="px-4 py-3 text-gray-700">{row['Schedule Type']}</td>
+                        <td className="px-4 py-3 text-gray-700">{row.Status}</td>
                         <td className="px-4 py-3 text-center">
                           <div className="flex gap-1 justify-center">
                             <button
@@ -1018,7 +1404,7 @@ const CourseManagement = ({
                 ))
               ) : (
                 <tr>
-                  <td colSpan="9" className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan="15" className="px-4 py-8 text-center text-gray-500">
                     {scheduleData.length === 0 ? (
                       <div>
                         <p className="text-lg mb-2">No course data available</p>

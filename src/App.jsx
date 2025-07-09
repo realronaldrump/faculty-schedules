@@ -35,7 +35,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { db } from './firebase';
-import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, setDoc, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { adaptPeopleToFaculty, adaptPeopleToStaff, fetchPrograms } from './utils/dataAdapter';
 import { fetchSchedulesWithRelationalData } from './utils/dataImportUtils';
 import { autoMigrateIfNeeded } from './utils/importTransactionMigration';
@@ -238,9 +238,11 @@ function App() {
             'Room Capacity': schedule.room ? schedule.room.capacity : '',
             
             // Course details
-            CRN: schedule.crn || '',
+            CRN: schedule.crn || schedule.CRN || '',
             'Course Level': schedule.courseLevel || '',
             'Course Type': schedule.courseType || '',
+            'Schedule Type': schedule.scheduleType || 'Class Instruction',
+            Status: schedule.status || 'Active',
             
             // Legacy flat structure compatibility
             ...schedule
@@ -257,7 +259,9 @@ function App() {
           Credits: schedule.credits || '',
           Term: schedule.term || '',
           Room: schedule.room ? (schedule.room.displayName || schedule.room.name) : (schedule.roomName || ''),
-          CRN: schedule.crn || '',
+          CRN: schedule.crn || schedule.CRN || '',
+          'Schedule Type': schedule.scheduleType || 'Class Instruction',
+          Status: schedule.status || 'Active',
           ...schedule
         });
       }
@@ -437,50 +441,125 @@ function App() {
     checkAuthStatus();
   }, []);
 
-  // Data update handlers
+  // Data update handlers with enhanced relational integrity
   const handleDataUpdate = async (updatedRow) => {
     console.log('💾 Updating schedule data:', updatedRow);
     
     try {
-      // Find the original schedule item
-      const originalSchedule = rawScheduleData.find(s => s.id === updatedRow.id);
-      if (!originalSchedule) {
-        console.error('❌ Original schedule not found for update');
+      const isNewCourse = updatedRow.id && updatedRow.id.startsWith('new_');
+      let scheduleRef;
+      let originalSchedule = null;
+
+      if (isNewCourse) {
+        // Creating a new course
+        console.log('🆕 Creating new course entry');
+        scheduleRef = doc(collection(db, 'schedules'));
+      } else {
+        // Updating existing course
+        originalSchedule = rawScheduleData.find(s => s.id === updatedRow.id);
+        if (!originalSchedule) {
+          console.error('❌ Original schedule not found for update');
+          showNotification('error', 'Update Failed', 'Original schedule not found.');
+          return;
+        }
+        scheduleRef = doc(db, 'schedules', updatedRow.id);
+      }
+
+      // Validate and resolve instructor reference
+      let instructorId = null;
+      if (updatedRow.Instructor && updatedRow.Instructor !== 'Staff') {
+        const instructor = rawPeople.find(person => person.name === updatedRow.Instructor);
+        if (instructor) {
+          instructorId = instructor.id;
+        } else {
+          console.warn('⚠️ Instructor not found in people collection:', updatedRow.Instructor);
+        }
+      }
+
+      // Validate and resolve room reference
+      let roomId = null;
+      if (updatedRow.Room && updatedRow.Room.trim() !== '') {
+        // Check if room exists or needs to be created
+        // For now, we'll store room name and handle room creation separately
+        // This could be enhanced to create room entries automatically
+      }
+
+      // Create meeting patterns from Day/Start Time/End Time
+      const meetingPatterns = [];
+      if (updatedRow.Day && updatedRow['Start Time'] && updatedRow['End Time']) {
+        meetingPatterns.push({
+          day: updatedRow.Day,
+          startTime: updatedRow['Start Time'],
+          endTime: updatedRow['End Time']
+        });
+      }
+
+      // Prepare update data with proper relational structure
+      const updateData = {
+        courseCode: updatedRow.Course || (originalSchedule?.courseCode || ''),
+        courseTitle: updatedRow['Course Title'] || (originalSchedule?.courseTitle || ''),
+        section: updatedRow.Section || (originalSchedule?.section || ''),
+        crn: updatedRow.CRN || (originalSchedule?.crn || ''),
+        term: updatedRow.Term || (originalSchedule?.term || ''),
+        credits: parseInt(updatedRow.Credits) || (originalSchedule?.credits || 3),
+        scheduleType: updatedRow['Schedule Type'] || (originalSchedule?.scheduleType || 'Class Instruction'),
+        status: updatedRow.Status || (originalSchedule?.status || 'Active'),
+        
+        // Relational references
+        instructorId: instructorId,
+        instructorName: updatedRow.Instructor || (originalSchedule?.instructorName || ''),
+        roomId: roomId,
+        roomName: updatedRow.Room || (originalSchedule?.roomName || ''),
+        
+        // Meeting patterns
+        meetingPatterns: meetingPatterns.length > 0 ? meetingPatterns : (originalSchedule?.meetingPatterns || []),
+        
+        // Timestamps
+        updatedAt: new Date().toISOString(),
+        ...(isNewCourse && { createdAt: new Date().toISOString() })
+      };
+
+      // Validate required fields
+      const validationErrors = [];
+      if (!updateData.courseCode) validationErrors.push('Course code is required');
+      if (!updateData.term) validationErrors.push('Term is required');
+      if (!updateData.section) validationErrors.push('Section is required');
+      if (meetingPatterns.length === 0 && (!originalSchedule?.meetingPatterns || originalSchedule.meetingPatterns.length === 0)) {
+        validationErrors.push('Meeting time and day are required');
+      }
+
+      if (validationErrors.length > 0) {
+        showNotification('error', 'Validation Failed', validationErrors.join('\n'));
         return;
       }
 
-      // Update the document in Firebase
-      const scheduleRef = doc(db, 'schedules', updatedRow.id);
-      const updateData = {
-        courseCode: updatedRow.Course || originalSchedule.courseCode,
-        courseTitle: updatedRow['Course Title'] || originalSchedule.courseTitle,
-        instructorName: updatedRow.Instructor || originalSchedule.instructorName,
-        section: updatedRow.Section || originalSchedule.section,
-        credits: updatedRow.Credits || originalSchedule.credits,
-        roomName: updatedRow.Room || originalSchedule.roomName,
-        crn: updatedRow.CRN || originalSchedule.crn,
-        updatedAt: new Date().toISOString()
-      };
-
-      await updateDoc(scheduleRef, updateData);
+      // Save to Firebase
+      if (isNewCourse) {
+        await setDoc(scheduleRef, updateData);
+      } else {
+        await updateDoc(scheduleRef, updateData);
+      }
 
       // Add to edit history
       await addDoc(collection(db, 'editHistory'), {
-        action: 'UPDATE',
-        entity: `${updatedRow.Course} - ${updatedRow.Instructor}`,
+        action: isNewCourse ? 'CREATE' : 'UPDATE',
+        entity: `${updateData.courseCode} ${updateData.section} - ${updateData.instructorName}`,
         changes: updateData,
+        originalData: originalSchedule,
         timestamp: new Date().toISOString(),
         userId: 'system'
       });
 
-      // Refresh data
+      // Refresh data to reflect changes
       await loadData();
       
-      showNotification('success', 'Schedule Updated', 'Schedule information has been updated successfully.');
+      const actionText = isNewCourse ? 'created' : 'updated';
+      showNotification('success', `Schedule ${isNewCourse ? 'Created' : 'Updated'}`, 
+        `Course ${updateData.courseCode} ${updateData.section} has been ${actionText} successfully.`);
       
     } catch (error) {
       console.error('❌ Error updating schedule:', error);
-      showNotification('error', 'Update Failed', 'Failed to update schedule. Please try again.');
+      showNotification('error', 'Update Failed', `Failed to update schedule: ${error.message}`);
     }
   };
 
@@ -602,6 +681,41 @@ function App() {
     }
   };
 
+  const handleScheduleDelete = async (scheduleId) => {
+    console.log('🗑️ Deleting schedule:', scheduleId);
+    
+    try {
+      // Find the schedule to get details for history
+      const scheduleToDelete = rawScheduleData.find(s => s.id === scheduleId);
+      if (!scheduleToDelete) {
+        showNotification('error', 'Delete Failed', 'Schedule not found.');
+        return;
+      }
+
+      // Delete from Firebase
+      await deleteDoc(doc(db, 'schedules', scheduleId));
+
+      // Add to edit history
+      await addDoc(collection(db, 'editHistory'), {
+        action: 'DELETE',
+        entity: `${scheduleToDelete.courseCode} ${scheduleToDelete.section} - ${scheduleToDelete.instructorName}`,
+        deletedData: scheduleToDelete,
+        timestamp: new Date().toISOString(),
+        userId: 'system'
+      });
+
+      // Refresh data
+      await loadData();
+      
+      showNotification('success', 'Schedule Deleted', 
+        `Course ${scheduleToDelete.courseCode} ${scheduleToDelete.section} has been removed successfully.`);
+      
+    } catch (error) {
+      console.error('❌ Error deleting schedule:', error);
+      showNotification('error', 'Delete Failed', 'Failed to delete schedule. Please try again.');
+    }
+  };
+
   const handleRevertChange = async (changeToRevert) => {
     console.log('↩️ Reverting change:', changeToRevert);
     
@@ -678,6 +792,7 @@ function App() {
       onStaffUpdate: handleStaffUpdate,
       onFacultyDelete: handleFacultyDelete,
       onStaffDelete: handleStaffDelete,
+      onScheduleDelete: handleScheduleDelete,
       onRevertChange: handleRevertChange,
       onNavigate: setCurrentPage,
       showNotification,

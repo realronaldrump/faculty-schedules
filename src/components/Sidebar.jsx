@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, Menu, X, Home, Calendar, Users, BarChart3, Settings, Bell, Search, User, Database, Shield } from 'lucide-react';
+import { ChevronDown, ChevronRight, Menu, X, Home, Calendar, Users, BarChart3, Settings, Bell, Search, User, Database, Shield, Star } from 'lucide-react';
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: Home },
@@ -20,8 +20,8 @@ const menuItems = [
   { id: 'systems', label: 'Systems', icon: Settings },
 ];
 
-const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggleCollapse, selectedSemester }) => {
-  const [expandedSections, setExpandedSections] = useState(['scheduling', 'directory']); // Default expanded sections
+const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggleCollapse, selectedSemester, pinnedPages, togglePinPage }) => {
+  const [expandedSections, setExpandedSections] = useState([]); // Default expanded sections
 
   const toggleSection = (sectionId) => {
     setExpandedSections(prev => 
@@ -29,6 +29,17 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
         ? prev.filter(id => id !== sectionId)
         : [...prev, sectionId]
     );
+  };
+
+  const findNavItem = (id) => {
+    for (const section of navigationItems) {
+      if (section.id === id) return section;
+      if (section.children) {
+        const child = section.children.find(c => c.id === id);
+        if (child) return child;
+      }
+    }
+    return null;
   };
 
   const isActive = (path) => {
@@ -76,6 +87,29 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
       {/* Professional Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 baylor-scrollbar">
         <div className="space-y-1 px-4">
+          {/* Pinned Items */}
+          {!collapsed && pinnedPages.length > 0 && (
+            <div className="space-y-1 mb-4">
+              <div className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Pinned</div>
+              {pinnedPages.map(pageId => {
+                const item = findNavItem(pageId);
+                if (!item) return null;
+                const Icon = item.icon || User;
+                return (
+                  <button
+                    key={`pinned-${item.id}`}
+                    onClick={() => onNavigate(item.path)}
+                    className={`nav-sub-item w-full ${isCurrentPage(item.path) ? 'nav-sub-item-active' : 'nav-sub-item-inactive'}`}
+                  >
+                    <Icon size={16} className="mr-2" />
+                    <span className="text-sm font-['DM_Sans']">{item.label}</span>
+                  </button>
+                );
+              })}
+              <div className="pt-2 border-b border-gray-200 mx-2"></div>
+            </div>
+          )}
+
           {navigationItems.map((item) => {
             const Icon = item.icon;
             const hasChildren = item.children && item.children.length > 0;
@@ -124,17 +158,34 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
                 {/* Sub-navigation Items */}
                 {!collapsed && hasChildren && isExpanded && (
                   <div className="space-y-1 pl-2">
-                    {item.children.map((child) => (
-                      <button
-                        key={child.id}
-                        onClick={() => onNavigate(child.path)}
-                        className={`nav-sub-item w-full ${
-                          isCurrentPage(child.path) ? 'nav-sub-item-active' : 'nav-sub-item-inactive'
-                        }`}
-                      >
-                        <span className="text-sm font-['DM_Sans']">{child.label}</span>
-                      </button>
-                    ))}
+                    {item.children.map((child) => {
+                      const isPinned = pinnedPages.includes(child.id);
+                      return (
+                        <div key={child.id} className="group flex items-center">
+                          <button
+                            onClick={() => onNavigate(child.path)}
+                            className={`nav-sub-item w-full text-left ${
+                              isCurrentPage(child.path) ? 'nav-sub-item-active' : 'nav-sub-item-inactive'
+                            }`}
+                          >
+                            <span className="text-sm font-['DM_Sans']">{child.label}</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              togglePinPage(child.id);
+                            }}
+                            className="p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-baylor-green/20"
+                            title={isPinned ? 'Unpin page' : 'Pin page'}
+                          >
+                            <Star 
+                              size={14} 
+                              className={`${isPinned ? 'text-baylor-gold fill-current' : 'text-gray-400'}`}
+                            />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

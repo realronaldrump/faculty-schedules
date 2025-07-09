@@ -17,35 +17,42 @@ const PeopleDirectory = (props) => {
   const [activeTab, setActiveTab] = useState(initialTab);
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md">
-      <div className="flex items-center mb-6">
-        <Users className="h-6 w-6 mr-3 text-gray-500" />
-        <h1 className="text-2xl font-semibold text-gray-800">People Directory</h1>
+    <div className="university-card">
+      <div className="university-card-header flex justify-between items-center">
+        <div>
+          <h2 className="university-card-title">People Directory</h2>
+          <p className="university-card-subtitle">Manage faculty, staff, and adjunct information.</p>
+        </div>
+        <div className="p-3 bg-baylor-green/10 rounded-lg">
+           <Users className="h-6 w-6 text-baylor-green" />
+        </div>
       </div>
 
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-6" aria-label="Tabs">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors duration-150 focus:outline-none ${
-                activeTab === tab.id
-                  ? 'border-baylor-green text-baylor-green'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
-      </div>
+      <div className="university-card-content">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors duration-150 focus:outline-none ${
+                  activeTab === tab.id
+                    ? 'border-baylor-green text-baylor-green'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        </div>
 
-      {/* Content */}
-      <div className="mt-6">
-        {activeTab === 'faculty' && <FacultyDirectory {...props} />}
-        {activeTab === 'staff' && <StaffDirectory {...props} />}
-        {activeTab === 'adjunct' && <AdjunctDirectory {...props} />}
+        {/* Content */}
+        <div className="mt-6">
+          {activeTab === 'faculty' && <FacultyDirectory {...props} />}
+          {activeTab === 'staff' && <StaffDirectory {...props} />}
+          {activeTab === 'adjunct' && <AdjunctDirectory {...props} />}
+        </div>
       </div>
     </div>
   );

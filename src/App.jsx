@@ -30,7 +30,8 @@ import {
   ChevronDown,
   GraduationCap,
   Menu,
-  LogOut
+  LogOut,
+  Star
 } from 'lucide-react';
 import { db } from './firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, setDoc, query, orderBy, onSnapshot } from 'firebase/firestore';
@@ -45,6 +46,17 @@ function App() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+  // Pinned pages state
+  const [pinnedPages, setPinnedPages] = useState(() => {
+    try {
+      const savedPins = localStorage.getItem('pinnedPages');
+      return savedPins ? JSON.parse(savedPins) : [];
+    } catch (error) {
+      console.error("Failed to parse pinned pages from localStorage", error);
+      return [];
+    }
+  });
   
   // Semester Selection State with localStorage persistence
   const [selectedSemester, setSelectedSemester] = useState(() => {
@@ -87,6 +99,15 @@ function App() {
   const hideNotification = () => {
     setNotification(prev => ({ ...prev, show: false }));
   };
+
+  // Persist pinned pages to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('pinnedPages', JSON.stringify(pinnedPages));
+    } catch (error) {
+      console.error("Failed to save pinned pages to localStorage", error);
+    }
+  }, [pinnedPages]);
 
   // Persist selected semester to localStorage
   useEffect(() => {
@@ -136,6 +157,14 @@ function App() {
       console.log(`🎓 Auto-selecting newly imported semester: ${newestSemester}`);
       setSelectedSemester(newestSemester);
     }
+  };
+
+  const togglePinPage = (pageId) => {
+    setPinnedPages(prev => 
+      prev.includes(pageId) 
+        ? prev.filter(id => id !== pageId)
+        : [...prev, pageId]
+    );
   };
 
   // Filter schedule data by selected semester (removed problematic fallback)
@@ -806,7 +835,9 @@ function App() {
       showNotification,
       selectedSemester,
       availableSemesters,
-      onSemesterDataImported: loadData
+      onSemesterDataImported: loadData,
+      pinnedPages,
+      togglePinPage
     };
 
     switch (currentPage) {
@@ -874,6 +905,8 @@ function App() {
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         selectedSemester={selectedSemester}
+        pinnedPages={pinnedPages}
+        togglePinPage={togglePinPage}
       />
 
       {/* Main Content Area */}

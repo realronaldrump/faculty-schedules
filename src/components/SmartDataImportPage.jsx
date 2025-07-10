@@ -683,7 +683,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
           </div>
           <div>
             <h2 className="text-xl font-bold text-baylor-green">Smart Import System</h2>
-            <p className="text-baylor-green/70">Enterprise-grade data management with comprehensive safeguards</p>
+            <p className="text-baylor-green/70">Data management with comprehensive safeguards</p>
           </div>
         </div>
         <div className="grid md:grid-cols-4 gap-6">

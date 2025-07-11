@@ -9,6 +9,8 @@ import DataDeduplicationManager from './DataDeduplicationManager';
 
 import { collection, getDocs, doc, updateDoc, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { standardizeAllData } from '../utils/comprehensiveDataHygiene';
+import DeduplicationReviewModal from './DeduplicationReviewModal';
 
 const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, availableSemesters, onSemesterDataImported }) => {
   const [csvData, setCsvData] = useState(null);
@@ -31,6 +33,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
   // Data deduplication states
   const [showDeduplication, setShowDeduplication] = useState(false);
   const [deduplicatedData, setDeduplicatedData] = useState(null);
+  const [showDeduplicationModal, setShowDeduplicationModal] = useState(false);
   
   // CRN migration states
   const [crnAnalysis, setCrnAnalysis] = useState(null);
@@ -1653,6 +1656,13 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
         />
       )}
 
+      {showDeduplicationModal && (
+        <DeduplicationReviewModal 
+          isOpen={showDeduplicationModal}
+          onClose={() => setShowDeduplicationModal(false)}
+          // Pass matches as needed
+        />
+      )}
 
     </div>
   );

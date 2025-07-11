@@ -143,7 +143,7 @@ const detectPeopleDuplicates = (people) => {
 /**
  * Detect duplicate schedule records
  */
-const detectScheduleDuplicates = (schedules) => {
+export const detectScheduleDuplicates = (schedules) => {
   const duplicates = [];
   const scheduleMap = new Map();
 
@@ -190,7 +190,7 @@ const detectScheduleDuplicates = (schedules) => {
 /**
  * Detect duplicate room records
  */
-const detectRoomDuplicates = (rooms) => {
+export const detectRoomDuplicates = (rooms) => {
   const duplicates = [];
   const roomMap = new Map();
 

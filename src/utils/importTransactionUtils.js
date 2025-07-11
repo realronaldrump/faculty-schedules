@@ -243,7 +243,7 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
       const newRoom = {
         name: roomName,
         displayName: roomName,
-        building: roomName.includes('(') ? roomName.split('(')[1]?.replace(')', '') : '',
+        building: roomName.includes('(') ? (roomName.split('(')[1] || '').replace(')', '') : '',
         capacity: null,
         type: 'Classroom',
         isActive: true
@@ -442,6 +442,23 @@ const normalizeTime = (timeStr) => {
   return timeStr; // Return as-is if can't parse
 };
 
+// Add this after the imports
+const cleanObject = (obj) => {
+  if (typeof obj !== 'object' || obj === null) {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(cleanObject).filter((item) => item !== undefined);
+  }
+  const cleaned = {};
+  Object.entries(obj).forEach(([key, value]) => {
+    if (value !== undefined) {
+      cleaned[key] = cleanObject(value);
+    }
+  });
+  return cleaned;
+};
+
 // Commit transaction changes to database
 export const commitTransaction = async (transactionId, selectedChanges = null) => {
   const transactions = await getImportTransactions();
@@ -607,9 +624,11 @@ const saveTransactionToDatabase = async (transaction) => {
     // Use the transaction's ID as the document ID for consistent access
     const transactionRef = doc(db, 'importTransactions', transaction.id);
     const transactionData = transaction.toFirestore();
+    // Add cleaning
+    const cleanedData = cleanObject(transactionData);
     
     // Use setDoc which can both create and update documents
-    await setDoc(transactionRef, transactionData, { merge: true });
+    await setDoc(transactionRef, cleanedData, { merge: true });
     console.log(`💾 Saved transaction ${transaction.id} to database`);
   } catch (error) {
     console.error('Error saving transaction to database:', error);

@@ -10,6 +10,8 @@
 
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
+import { normalizedSchema } from './normalizedSchema';
+import { detectScheduleDuplicates, detectRoomDuplicates, mergeScheduleRecords, mergeRoomRecords } from './comprehensiveDataHygiene';
 
 // ---------------------------------------------------------------------------
 // PERSON SCHEMA CONSISTENCY
@@ -44,6 +46,23 @@ export const DEFAULT_PERSON_SCHEMA = {
   // Timestamps
   createdAt: '',
   updatedAt: ''
+};
+
+/**
+ * Count the number of filled fields in a person record
+ */
+export const countFilledFields = (person) => {
+  const filledKeys = ['firstName', 'lastName', 'name', 'title', 'email', 'phone', 'jobTitle', 'department', 'office', 'roles', 'programId'];
+  return filledKeys.reduce((count, key) => {
+    const value = person[key];
+    if (key === 'roles') {
+      return (value || []).length > 0 ? count + 1 : count;
+    } else if (key === 'programId') {
+      return value != null ? count + 1 : count;
+    } else {
+      return (value || '').trim() !== '' ? count + 1 : count;
+    }
+  }, 0);
 };
 
 // ==================== DATA STANDARDIZATION ====================
@@ -207,13 +226,21 @@ export const findDuplicatePeople = async () => {
     if (person.email && person.email.trim()) {
       const email = person.email.toLowerCase().trim();
       if (emailMap.has(email)) {
+        const existing = emailMap.get(email);
+        const existingCount = countFilledFields(existing);
+        const newCount = countFilledFields(person);
+        let primary = existingCount >= newCount ? existing : person;
+        let duplicateRecord = existingCount >= newCount ? person : existing; // renamed to avoid keyword conflict
         duplicates.push({
           type: 'email',
           reason: 'Same email address',
-          primary: emailMap.get(email),
-          duplicate: person,
+          primary,
+          duplicate: duplicateRecord,
           confidence: 100
         });
+        if (existingCount < newCount) {
+          emailMap.set(email, person);
+        }
       } else {
         emailMap.set(email, person);
       }
@@ -223,13 +250,21 @@ export const findDuplicatePeople = async () => {
     if (person.phone) {
       const phone = standardizePhone(person.phone);
       if (phone.length >= 10 && phoneMap.has(phone)) {
+        const existing = phoneMap.get(phone);
+        const existingCount = countFilledFields(existing);
+        const newCount = countFilledFields(person);
+        let primary = existingCount >= newCount ? existing : person;
+        let duplicateRecord = existingCount >= newCount ? person : existing;
         duplicates.push({
           type: 'phone',
           reason: 'Same phone number',
-          primary: phoneMap.get(phone),
-          duplicate: person,
+          primary,
+          duplicate: duplicateRecord,
           confidence: 90
         });
+        if (existingCount < newCount) {
+          phoneMap.set(phone, person);
+        }
       } else if (phone.length >= 10) {
         phoneMap.set(phone, person);
       }
@@ -241,13 +276,21 @@ export const findDuplicatePeople = async () => {
       
       // Check for exact matches first
       if (nameMap.has(fullName)) {
+        const existing = nameMap.get(fullName);
+        const existingCount = countFilledFields(existing);
+        const newCount = countFilledFields(person);
+        let primary = existingCount >= newCount ? existing : person;
+        let duplicateRecord = existingCount >= newCount ? person : existing;
         duplicates.push({
           type: 'name',
           reason: 'Identical first and last name',
-          primary: nameMap.get(fullName),
-          duplicate: person,
+          primary,
+          duplicate: duplicateRecord,
           confidence: 100
         });
+        if (existingCount < newCount) {
+          nameMap.set(fullName, person);
+        }
       } else {
         nameMap.set(fullName, person);
         
@@ -257,13 +300,20 @@ export const findDuplicatePeople = async () => {
           
           const similarity = calculateFuzzyNameSimilarity(fullName, existingFullName);
           if (similarity >= 0.85) { // 85% similarity threshold
+            const existingCount = countFilledFields(existingPerson);
+            const newCount = countFilledFields(person);
+            let primary = existingCount >= newCount ? existingPerson : person;
+            let duplicateRecord = existingCount >= newCount ? person : existingPerson;
             duplicates.push({
               type: 'fuzzy_name',
               reason: `Very similar names (${Math.round(similarity * 100)}% match) - likely same person with variations`,
-              primary: existingPerson,
-              duplicate: person,
+              primary,
+              duplicate: duplicateRecord,
               confidence: Math.round(similarity * 100)
             });
+            if (existingCount < newCount) {
+              nameMap.set(existingFullName, person); // Update map to the better record
+            }
             break; // Only report the first fuzzy match to avoid spam
           }
         }
@@ -320,7 +370,7 @@ export const findOrphanedSchedules = async () => {
 /**
  * Merge two people records (keep the primary, delete the duplicate)
  */
-export const mergePeople = async (primaryId, duplicateId) => {
+export const mergePeople = async (primaryId, duplicateId, fieldChoices = {}) => {
   const batch = writeBatch(db);
   
   // Get both records directly by ID
@@ -336,21 +386,42 @@ export const mergePeople = async (primaryId, duplicateId) => {
   const primary = { id: primaryDoc.id, ...primaryDoc.data() };
   const duplicate = { id: duplicateDoc.id, ...duplicateDoc.data() };
   
-  // Merge data - primary wins, but fill in missing fields from duplicate
-  const merged = {
-    ...duplicate,
-    ...primary,
-    // Keep the best of each field
-    email: primary.email || duplicate.email,
-    phone: primary.phone || duplicate.phone,
-    office: primary.office || duplicate.office,
-    title: primary.title || duplicate.title,
-    jobTitle: primary.jobTitle || duplicate.jobTitle,
-    // Merge roles
-    roles: [...new Set([...(primary.roles || []), ...(duplicate.roles || [])])],
-    updatedAt: new Date().toISOString()
-  };
+  // Base on primary
+  const merged = { ...primary };
   
+  // Fill missing fields from duplicate
+  Object.keys(DEFAULT_PERSON_SCHEMA).forEach(key => {
+    const primaryValue = merged[key];
+    const duplicateValue = duplicate[key];
+    if (
+      (typeof primaryValue === 'string' && primaryValue.trim() === '') ||
+      (Array.isArray(primaryValue) && primaryValue.length === 0) ||
+      primaryValue === null ||
+      primaryValue === undefined
+    ) {
+      merged[key] = duplicateValue;
+    }
+  });
+  
+  // Always merge roles
+  merged.roles = [...new Set([...(primary.roles || []), ...(duplicate.roles || [])])];
+  
+  // Apply field choices for conflicts
+  Object.entries(fieldChoices).forEach(([field, source]) => {
+    const chosenValue = source === 'primary' ? primary[field] : duplicate[field];
+    merged[field] = chosenValue !== undefined ? chosenValue : null;
+  });
+
+  // Update timestamp
+  merged.updatedAt = new Date().toISOString();
+
+  // Clean merged object: convert undefined to null
+  Object.keys(merged).forEach(key => {
+    if (merged[key] === undefined) {
+      merged[key] = null;
+    }
+  });
+
   // Update schedules that reference the duplicate
   const schedulesSnapshot = await getDocs(query(collection(db, 'schedules'), where('instructorId', '==', duplicateId)));
   schedulesSnapshot.docs.forEach(scheduleDoc => {
@@ -420,36 +491,85 @@ export const standardizeAllData = async () => {
  * Returns a report of what was merged
  */
 export const autoMergeObviousDuplicates = async () => {
+  // Existing people merging
   const duplicates = await findDuplicatePeople();
   const results = {
-    merged: 0,
+    mergedPeople: 0,
+    mergedSchedules: 0,
+    mergedRooms: 0,
     skipped: 0,
     errors: [],
     mergedPairs: []
   };
-  
+
+  // Merge people
   for (const duplicate of duplicates) {
-    // Only auto-merge very high confidence duplicates
     if (duplicate.confidence >= 95) {
       try {
         await mergePeople(duplicate.primary.id, duplicate.duplicate.id);
-        results.merged++;
+        results.mergedPeople++;
         results.mergedPairs.push({
+          type: 'person',
           kept: `${duplicate.primary.firstName} ${duplicate.primary.lastName}`,
           removed: `${duplicate.duplicate.firstName} ${duplicate.duplicate.lastName}`,
           reason: duplicate.reason
         });
-        console.log(`✅ Auto-merged: ${duplicate.primary.firstName} ${duplicate.primary.lastName} (kept) ← ${duplicate.duplicate.firstName} ${duplicate.duplicate.lastName} (removed)`);
       } catch (error) {
-        results.errors.push(`Failed to merge ${duplicate.duplicate.firstName} ${duplicate.duplicate.lastName}: ${error.message}`);
-        console.error(`❌ Auto-merge failed:`, error);
+        results.errors.push(`Failed to merge person ${duplicate.duplicate.firstName} ${duplicate.duplicate.lastName}: ${error.message}`);
       }
     } else {
       results.skipped++;
-      console.log(`⏭️ Skipped lower confidence duplicate: ${duplicate.primary.firstName} ${duplicate.primary.lastName} vs ${duplicate.duplicate.firstName} ${duplicate.duplicate.lastName} (${duplicate.confidence}% confidence)`);
     }
   }
-  
+
+  // Fetch schedules and rooms for duplicate detection
+  const schedulesSnapshot = await getDocs(collection(db, 'schedules'));
+  const schedules = schedulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const roomsSnapshot = await getDocs(collection(db, 'rooms'));
+  const rooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+  // Merge schedules
+  const scheduleDuplicates = detectScheduleDuplicates(schedules);
+  for (const dup of scheduleDuplicates) {
+    if (dup.confidence >= 0.95) {
+      try {
+        const mergeResult = await mergeScheduleRecords(dup);
+        results.mergedSchedules++;
+        results.mergedPairs.push({
+          type: 'schedule',
+          kept: mergeResult.primaryId,
+          removed: mergeResult.secondaryId,
+          reason: dup.reason
+        });
+      } catch (error) {
+        results.errors.push(`Failed to merge schedule: ${error.message}`);
+      }
+    } else {
+      results.skipped++;
+    }
+  }
+
+  // Merge rooms
+  const roomDuplicates = detectRoomDuplicates(rooms);
+  for (const dup of roomDuplicates) {
+    if (dup.confidence >= 0.95) {
+      try {
+        const mergeResult = await mergeRoomRecords(dup);
+        results.mergedRooms++;
+        results.mergedPairs.push({
+          type: 'room',
+          kept: mergeResult.primaryId,
+          removed: mergeResult.secondaryId,
+          reason: dup.reason
+        });
+      } catch (error) {
+        results.errors.push(`Failed to merge room: ${error.message}`);
+      }
+    } else {
+      results.skipped++;
+    }
+  }
+
   return results;
 };
 
@@ -471,6 +591,21 @@ export const validateAndCleanBeforeSave = async (data, collection_name) => {
         duplicateWarnings.push(`Email ${cleanPerson.email} already exists`);
       }
       
+      // After cleaning
+      // Enforce schema
+      const schema = normalizedSchema.tables[collection_name];
+      if (schema) {
+        Object.keys(schema.fields).forEach(key => {
+          if (cleanPerson[key] === undefined) {
+            cleanPerson[key] = null; // Or default value from schema
+          }
+        });
+        // Remove extra fields
+        Object.keys(cleanPerson).forEach(key => {
+          if (!schema.fields[key]) delete cleanPerson[key];
+        });
+      }
+
       return {
         cleanData: cleanPerson,
         warnings: duplicateWarnings,
@@ -526,6 +661,12 @@ export const getDataHealthReport = async () => {
   const missingPhone = people.filter(p => (!p.phone || p.phone.trim() === '') && !p.hasNoPhone).length;
   const missingOffice = people.filter(p => (!p.office || p.office.trim() === '') && !p.hasNoOffice).length;
   const missingJobTitle = people.filter(p => !p.jobTitle || p.jobTitle.trim() === '').length;
+  const missingProgram = people.filter(p => {
+    // Only check for missing program if the person is faculty
+    const roles = p.roles || [];
+    const isFaculty = Array.isArray(roles) ? roles.includes('faculty') : !!roles.faculty;
+    return isFaculty && !p.programId;
+  }).length;
   
   return {
     summary: {
@@ -537,6 +678,7 @@ export const getDataHealthReport = async () => {
       missingPhone,
       missingOffice,
       missingJobTitle,
+      missingProgram,
       healthScore: calculateHealthScore(totalPeople, duplicates.length, orphaned.length, missingEmail)
     },
     duplicates,

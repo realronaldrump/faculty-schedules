@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, User, Mail, Phone, PhoneOff, Building, BuildingIcon, AlertCircle, CheckCircle } from 'lucide-react';
+import { X, Save, User, Mail, Phone, PhoneOff, Building, BuildingIcon, AlertCircle, CheckCircle, BookUser } from 'lucide-react';
 import { doc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, COLLECTIONS } from '../firebase';
 import { DEFAULT_PERSON_SCHEMA } from '../utils/dataHygiene';
 
 const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataType = 'email' }) => {
   const [records, setRecords] = useState([]);
+  const [programs, setPrograms] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -14,8 +15,21 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
   useEffect(() => {
     if (isOpen) {
       loadMissingDataRecords();
+      if (missingDataType === 'program' || missingDataType === 'all') {
+        loadPrograms();
+      }
     }
   }, [isOpen, missingDataType]);
+
+  const loadPrograms = async () => {
+    try {
+      const programsSnapshot = await getDocs(collection(db, COLLECTIONS.PROGRAMS));
+      const programsData = programsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setPrograms(programsData);
+    } catch (error) {
+      console.error("Error loading programs:", error);
+    }
+  };
 
   const loadMissingDataRecords = async () => {
     setIsLoading(true);
@@ -41,13 +55,28 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
         case 'jobTitle':
           missingRecords = people.filter(person => !person.jobTitle || person.jobTitle.trim() === '');
           break;
+        case 'program':
+          missingRecords = people.filter(p => {
+            const roles = p.roles || [];
+            const isFaculty = Array.isArray(roles) ? roles.includes('faculty') : !!roles.faculty;
+            return isFaculty && !p.programId;
+          });
+          break;
         default:
           // Identify any record where at least one schema field is "empty"
           missingRecords = people.filter(person => {
             return Object.keys(DEFAULT_PERSON_SCHEMA).some(key => {
               // Skip timestamps and boolean flags when checking for emptiness
-              if (['createdAt', 'updatedAt', 'isAdjunct', 'isFullTime', 'isTenured', 'isUPD', 'hasNoPhone', 'hasNoOffice', 'isActive', 'roles'].includes(key)) {
+              if (['createdAt', 'updatedAt', 'isAdjunct', 'isFullTime', 'isTenured', 'isUPD', 'hasNoPhone', 'hasNoOffice', 'isActive', 'roles', 'department', 'programId'].includes(key)) {
                 return false;
+              }
+
+              // Special handling for fields with corresponding "hasNo..." flags
+              if (key === 'phone') {
+                return (!person.phone || person.phone.trim() === '') && !person.hasNoPhone;
+              }
+              if (key === 'office') {
+                return (!person.office || person.office.trim() === '') && !person.hasNoOffice;
               }
 
               const value = person[key];
@@ -74,6 +103,8 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
       newPhone: record.phone || '',
       newOffice: record.office || '',
       newJobTitle: record.jobTitle || '',
+      newTitle: record.title || '',
+      newProgramId: record.programId || '',
       newHasNoPhone: record.hasNoPhone || false,
       newHasNoOffice: record.hasNoOffice || false
     });
@@ -138,6 +169,12 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
       if (editingRecord.newJobTitle.trim()) {
         updates.jobTitle = editingRecord.newJobTitle.trim();
       }
+      if (editingRecord.newTitle.trim()) {
+        updates.title = editingRecord.newTitle.trim();
+      }
+      if (editingRecord.newProgramId) {
+        updates.programId = editingRecord.newProgramId;
+      }
 
       await updateDoc(doc(db, 'people', editingRecord.id), updates);
 
@@ -178,6 +215,8 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
       case 'email': return <Mail className="w-4 h-4" />;
       case 'phone': return <Phone className="w-4 h-4" />;
       case 'office': return <Building className="w-4 h-4" />;
+      case 'jobTitle': return <User className="w-4 h-4" />;
+      case 'program': return <BookUser className="w-4 h-4" />;
       default: return <User className="w-4 h-4" />;
     }
   };
@@ -188,6 +227,7 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
       case 'phone': return 'Phone Number';
       case 'office': return 'Office Location';
       case 'jobTitle': return 'Job Title';
+      case 'program': return 'Program Assignment';
       default: return 'Contact Information';
     }
   };
@@ -259,7 +299,7 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                         {record.firstName} {record.lastName}
                       </h4>
                       <p className="text-sm text-gray-600">
-                        {record.jobTitle || 'No job title'} • {record.department || 'No department'}
+                        {record.jobTitle || 'No job title'}
                       </p>
                       <p className="text-sm text-gray-500">
                         Email: {record.email || 'Missing'} • 
@@ -376,6 +416,39 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                               onChange={(e) => setEditingRecord(prev => ({ ...prev, newJobTitle: e.target.value }))}
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                               placeholder="Professor, Lecturer, etc."
+                            />
+                          </div>
+                        )}
+
+                        {(missingDataType === 'program' || missingDataType === 'all') && programs.length > 0 && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Program
+                            </label>
+                            <select
+                              value={editingRecord.newProgramId}
+                              onChange={(e) => setEditingRecord(prev => ({ ...prev, newProgramId: e.target.value }))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            >
+                              <option value="">Select a program...</option>
+                              {programs.map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {(missingDataType === 'all') && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Title (e.g., Dr., Mr., Ms.)
+                            </label>
+                            <input
+                              type="text"
+                              value={editingRecord.newTitle}
+                              onChange={(e) => setEditingRecord(prev => ({ ...prev, newTitle: e.target.value }))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                              placeholder="Dr."
                             />
                           </div>
                         )}

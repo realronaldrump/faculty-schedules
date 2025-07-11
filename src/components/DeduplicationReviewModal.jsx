@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Users, ArrowRight, AlertTriangle, CheckCircle, Mail, Phone, Building, User } from 'lucide-react';
+import { X, Users, ArrowRight, AlertTriangle, CheckCircle, Mail, Phone, Building, User, ArrowLeftRight } from 'lucide-react';
 import { findDuplicatePeople, mergePeople } from '../utils/dataHygiene';
 
 const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => {
@@ -8,6 +8,7 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
   const [processingMerge, setProcessingMerge] = useState(null);
   const [selectedDuplicates, setSelectedDuplicates] = useState(new Set());
   const [mergeResults, setMergeResults] = useState(null);
+  const [fieldSelections, setFieldSelections] = useState({});
 
   useEffect(() => {
     if (isOpen) {
@@ -39,11 +40,32 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
     setSelectedDuplicates(newSelected);
   };
 
+  const swapPrimary = (index) => {
+    setDuplicates(prev => prev.map((d, i) => i === index ? { ...d, primary: d.duplicate, duplicate: d.primary } : d));
+    setFieldSelections(prev => {
+      const newSelections = { ...prev };
+      delete newSelections[index];
+      return newSelections;
+    });
+  };
+
+  const handleSelect = (index, field, source) => {
+    setFieldSelections(prev => ({
+      ...prev,
+      [index]: {
+        ...(prev[index] || {}),
+        [field]: source
+      }
+    }));
+  };
+
   const mergeSelectedDuplicates = async () => {
     if (selectedDuplicates.size === 0) return;
 
     const selectedDuplicatesList = Array.from(selectedDuplicates).map(index => duplicates[index]);
     
+    console.log('Starting merge for:', selectedDuplicatesList.map(d => `${d.primary.firstName} ${d.primary.lastName} <- ${d.duplicate.firstName} ${d.duplicate.lastName}`));
+
     setProcessingMerge({ current: 0, total: selectedDuplicatesList.length });
     const results = { merged: 0, errors: [], mergedPairs: [] };
 
@@ -52,7 +74,8 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
       setProcessingMerge({ current: i + 1, total: selectedDuplicatesList.length });
 
       try {
-        await mergePeople(duplicate.primary.id, duplicate.duplicate.id);
+        console.log(`Attempting merge: ${duplicate.primary.id} <- ${duplicate.duplicate.id}`);
+        await mergePeople(duplicate.primary.id, duplicate.duplicate.id, fieldSelections[duplicate.id] || {});
         results.merged++;
         results.mergedPairs.push({
           kept: `${duplicate.primary.firstName} ${duplicate.primary.lastName}`,
@@ -60,6 +83,7 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
           reason: duplicate.reason
         });
       } catch (error) {
+        console.error('Merge failed for:', duplicate, error);
         results.errors.push({
           duplicate: `${duplicate.duplicate.firstName} ${duplicate.duplicate.lastName}`,
           error: error.message
@@ -91,26 +115,53 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
     return 'Low';
   };
 
-  const formatFieldComparison = (field1, field2, label) => {
-    if (!field1 && !field2) return null;
+  const formatFieldComparison = (fieldName, value1, value2, label, index) => {
+    if (!value1 && !value2) return null;
     
-    const same = field1 === field2;
+    const same = value1 === value2;
+    const isConflict = value1 && value2 && !same;
+    const selection = fieldSelections[index]?.[fieldName] || 'primary';
+
     return (
       <div className="text-xs">
         <span className="text-gray-500">{label}:</span>
-        <div className="flex items-center space-x-2 mt-1">
-          <span className={`px-2 py-1 rounded ${same ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-            {field1 || 'Missing'}
-          </span>
-          {!same && (
-            <>
-              <ArrowRight className="w-3 h-3 text-gray-400" />
-              <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded">
-                {field2 || 'Missing'}
-              </span>
-            </>
-          )}
-        </div>
+        {isConflict ? (
+          <div className="flex items-center space-x-2 mt-1">
+            <label className={`flex items-center px-2 py-1 rounded cursor-pointer ${selection === 'primary' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+              <input
+                type="radio"
+                checked={selection === 'primary'}
+                onChange={() => handleSelect(index, fieldName, 'primary')}
+                className="mr-1"
+              />
+              {value1}
+            </label>
+            <ArrowRight className="w-3 h-3 text-gray-400" />
+            <label className={`flex items-center px-2 py-1 rounded cursor-pointer ${selection === 'duplicate' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+              <input
+                type="radio"
+                checked={selection === 'duplicate'}
+                onChange={() => handleSelect(index, fieldName, 'duplicate')}
+                className="mr-1"
+              />
+              {value2}
+            </label>
+          </div>
+        ) : (
+          <div className="flex items-center space-x-2 mt-1">
+            <span className={`px-2 py-1 rounded ${same ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+              {value1 || 'Missing'}
+            </span>
+            {!same && (
+              <>
+                <ArrowRight className="w-3 h-3 text-gray-400" />
+                <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded">
+                  {value2 || 'Missing'}
+                </span>
+              </>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -322,14 +373,31 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
                       </div>
                     </div>
 
+                    <div className="flex justify-center mt-4">
+                      <button 
+                        onClick={() => swapPrimary(index)}
+                        className="flex items-center space-x-1 px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                      >
+                        <ArrowLeftRight className="w-4 h-4" />
+                        <span>Swap Primary</span>
+                      </button>
+                    </div>
+
                     {/* Field Comparison */}
                     <div className="mt-4 pt-4 border-t">
                       <h5 className="text-sm font-medium text-gray-700 mb-2">Field Comparison:</h5>
                       <div className="grid grid-cols-2 gap-4">
-                        {formatFieldComparison(duplicate.primary.email, duplicate.duplicate.email, 'Email')}
-                        {formatFieldComparison(duplicate.primary.phone, duplicate.duplicate.phone, 'Phone')}
-                        {formatFieldComparison(duplicate.primary.office, duplicate.duplicate.office, 'Office')}
-                        {formatFieldComparison(duplicate.primary.jobTitle, duplicate.duplicate.jobTitle, 'Job Title')}
+                        {['firstName', 'lastName', 'email', 'phone', 'office', 'jobTitle', 'department', 'title'].map((field, fieldIndex) => (
+                          <React.Fragment key={fieldIndex}>
+                            {formatFieldComparison(
+                              field,
+                              duplicate.primary[field] || '',
+                              duplicate.duplicate[field] || '',
+                              field.charAt(0).toUpperCase() + field.slice(1).replace(/([A-Z])/g, ' $1'),
+                              index
+                            )}
+                          </React.Fragment>
+                        ))}
                       </div>
                     </div>
                   </div>

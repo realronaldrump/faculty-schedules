@@ -174,6 +174,11 @@ const ComprehensiveDataHygieneManager = () => {
     URL.revokeObjectURL(url);
   };
 
+  const runFullHygieneCheck = async () => {
+    const report = await generateDataHygieneReport();
+    setHygieneReport(report);
+  };
+
   if (!hygieneReport && !isLoading) {
     return (
       <div className="max-w-6xl mx-auto p-6">
@@ -215,6 +220,13 @@ const ComprehensiveDataHygieneManager = () => {
           >
             <Download className="w-4 h-4 mr-2" />
             Export Report
+          </button>
+          <button
+            onClick={runFullHygieneCheck}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center"
+          >
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Run Full Hygiene Check
           </button>
         </div>
       </div>

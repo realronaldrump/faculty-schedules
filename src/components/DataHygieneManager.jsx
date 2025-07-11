@@ -15,7 +15,8 @@ import {
   Phone,
   Building,
   User,
-  Edit
+  Edit,
+  BookUser
 } from 'lucide-react';
 import {
   getDataHealthReport,
@@ -27,8 +28,9 @@ import {
 import MissingDataReviewModal from './MissingDataReviewModal';
 import DeduplicationReviewModal from './DeduplicationReviewModal';
 import { standardizeAllData } from '../utils/comprehensiveDataHygiene';
+import CustomAlert from './CustomAlert';
 
-const DataHygieneManager = () => {
+const DataHygieneManager = ({ showNotification }) => {
   const [healthReport, setHealthReport] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
@@ -39,6 +41,7 @@ const DataHygieneManager = () => {
   const [showMissingDataModal, setShowMissingDataModal] = useState(false);
   const [missingDataType, setMissingDataType] = useState('email');
   const [showDeduplicationModal, setShowDeduplicationModal] = useState(false);
+  const [showConfirmAlert, setShowConfirmAlert] = useState(false);
 
   // Load health report
   const loadHealthReport = async () => {
@@ -106,19 +109,28 @@ const DataHygieneManager = () => {
   };
 
   // Run full database standardization (adds missing, removes stray fields)
-  const handleStandardizeData = async () => {
-    if (!confirm('This will clean up formatting for all records (add missing fields, remove legacy ones). Continue?')) {
-      return;
-    }
+  const handleStandardizeData = () => {
+    setShowConfirmAlert(true);
+  };
 
+  const runStandardization = async () => {
+    setShowConfirmAlert(false);
     setIsLoading(true);
     try {
       const result = await standardizeAllData();
-      alert(`Data cleanup complete. Updated ${result.recordsUpdated} records.`);
+      showNotification(
+        'success',
+        'Standardization Complete',
+        `Updated ${result.recordsUpdated} records to conform to the standard schema.`
+      );
       await loadHealthReport();
     } catch (error) {
       console.error('Error standardizing data:', error);
-      alert('Error during standardization: ' + error.message);
+      showNotification(
+        'error',
+        'Standardization Error',
+        'An error occurred during standardization. Please check the console for details.'
+      );
     }
     setIsLoading(false);
   };
@@ -324,16 +336,16 @@ const DataHygieneManager = () => {
               <div className="p-4 border rounded-lg">
                 <div className="flex items-center mb-2">
                   <Settings className="w-5 h-5 text-blue-600 mr-2" />
-                  <h4 className="font-medium text-gray-900">Clean Up Formatting</h4>
+                  <h4 className="font-medium text-gray-900">Standardize All Data</h4>
                 </div>
                 <p className="text-sm text-gray-600 mb-3">
-                  Standardize every record and remove legacy fields so the schema is uniform.
+                  Enforce a consistent schema for all records. Adds missing fields, removes obsolete ones, and cleans up formatting.
                 </p>
                 <button
                   onClick={handleStandardizeData}
                   className="w-full px-3 py-2 bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200"
                 >
-                  Run Cleanup
+                  Run Standardization
                 </button>
               </div>
             </div>
@@ -345,7 +357,7 @@ const DataHygieneManager = () => {
             <p className="text-sm text-gray-600 mb-4">
               Click on any category below to review and manually add the missing information.
             </p>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
               <button
                 onClick={() => openMissingDataReview('email')}
                 className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border-2 border-transparent hover:border-blue-200"
@@ -385,6 +397,16 @@ const DataHygieneManager = () => {
                   <span className="text-gray-700">Missing Job Title</span>
                 </div>
                 <span className="font-medium text-red-600">{healthReport.summary.missingJobTitle || 0}</span>
+              </button>
+              <button
+                onClick={() => openMissingDataReview('program')}
+                className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border-2 border-transparent hover:border-blue-200"
+              >
+                <div className="flex items-center">
+                  <BookUser className="w-5 h-5 text-indigo-600 mr-2" />
+                  <span className="text-gray-700">Missing Program</span>
+                </div>
+                <span className="font-medium text-red-600">{healthReport.summary.missingProgram || 0}</span>
               </button>
             </div>
           </div>
@@ -519,6 +541,16 @@ const DataHygieneManager = () => {
         onClose={() => setShowDeduplicationModal(false)}
         onDuplicatesResolved={handleDataUpdated}
       />
+
+      {showConfirmAlert && (
+        <CustomAlert
+          type="warning"
+          title="Confirm Full Data Standardization"
+          message="This action will scan every person record to ensure it conforms to the standard data schema. It will add any missing fields with default values and remove old or unrecognized fields. This is a powerful tool for ensuring data quality, but the changes cannot be undone. Are you sure you want to proceed?"
+          onConfirm={runStandardization}
+          onCancel={() => setShowConfirmAlert(false)}
+        />
+      )}
     </div>
   );
 };

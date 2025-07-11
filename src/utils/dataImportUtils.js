@@ -5,7 +5,7 @@
 
 import { collection, addDoc, getDocs, query, where, doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
-import { standardizePerson, standardizeSchedule, validateAndCleanBeforeSave } from './dataHygiene';
+import { standardizePerson, standardizeSchedule, validateAndCleanBeforeSave, autoMergeObviousDuplicates } from './dataHygiene';
 import { parseCourseCode } from './courseUtils';
 
 // ==================== PROGRAM MAPPING ====================
@@ -375,7 +375,7 @@ export const determineRoles = (jobTitle) => {
 // ==================== MATCHING ALGORITHMS ====================
 
 /**
- * Smart person matching algorithm
+ * Smart person matching algorithm with fuzzy matching
  */
 export const findMatchingPerson = async (personData, existingPeople = null) => {
   // If existing people not provided, fetch from database
@@ -404,6 +404,29 @@ export const findMatchingPerson = async (personData, existingPeople = null) => {
     if (nameMatch) return { person: nameMatch, confidence: 'medium' };
   }
   
+  // Fuzzy name match
+  if (firstName && lastName) {
+    let bestMatch = null;
+    let bestSimilarity = 0;
+    
+    existingPeople.forEach(p => {
+      if (p.firstName && p.lastName) {
+        const similarity = calculateFuzzyNameSimilarity(
+          `${firstName} ${lastName}`,
+          `${p.firstName} ${p.lastName}`
+        );
+        if (similarity > bestSimilarity && similarity >= 0.85) {
+          bestSimilarity = similarity;
+          bestMatch = p;
+        }
+      }
+    });
+    
+    if (bestMatch) {
+      return { person: bestMatch, confidence: 'fuzzy', similarity: bestSimilarity };
+    }
+  }
+  
   // Last name only match (lower confidence)
   if (lastName) {
     const lastNameMatches = existingPeople.filter(p => 
@@ -415,6 +438,33 @@ export const findMatchingPerson = async (personData, existingPeople = null) => {
   }
   
   return null;
+};
+
+// Add this helper function for fuzzy similarity (simple Levenshtein)
+const calculateFuzzyNameSimilarity = (name1, name2) => {
+  const n1 = name1.toLowerCase();
+  const n2 = name2.toLowerCase();
+  
+  if (n1 === n2) return 1.0;
+  
+  const matrix = Array(n1.length + 1).fill().map(() => Array(n2.length + 1).fill(0));
+  
+  for (let i = 0; i <= n1.length; i++) matrix[i][0] = i;
+  for (let j = 0; j <= n2.length; j++) matrix[0][j] = j;
+  
+  for (let i = 1; i <= n1.length; i++) {
+    for (let j = 1; j <= n2.length; j++) {
+      const cost = n1[i - 1] === n2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+  
+  const maxLength = Math.max(n1.length, n2.length);
+  return maxLength === 0 ? 1.0 : 1.0 - (matrix[n1.length][n2.length] / maxLength);
 };
 
 // ==================== DATA CLEANING UTILITIES ====================
@@ -621,6 +671,9 @@ export const processDirectoryImport = async (csvData, options = {}) => {
       results.errors.push(`Row ${i + 1}: Error processing ${row['First Name']} ${row['Last Name']}: ${error.message}`);
     }
   }
+  
+  // After import, run automatic duplicate cleanup
+  await autoMergeObviousDuplicates();
   
   return results;
 };
@@ -829,6 +882,9 @@ export const processScheduleImport = async (csvData) => {
     }
   }
   
+  // After import, run automatic duplicate cleanup
+  await autoMergeObviousDuplicates();
+  
   console.log(`🎉 Schedule import complete: ${results.created} schedules, ${results.peopleCreated} new people, ${results.roomsCreated} new rooms`);
   return results;
 };
@@ -878,7 +934,31 @@ const findBestInstructorMatch = async (instructorInfo, existingPeople) => {
     }
   }
   
-  // Strategy 3: Last name + first initial match (medium confidence)
+  // Strategy 3: Fuzzy name match
+  if (firstName && lastName) {
+    let bestMatch = null;
+    let bestSimilarity = 0;
+    
+    existingPeople.forEach(p => {
+      if (p.firstName && p.lastName) {
+        const similarity = calculateFuzzyNameSimilarity(
+          `${firstName} ${lastName}`,
+          `${p.firstName} ${p.lastName}`
+        );
+        if (similarity > bestSimilarity && similarity >= 0.85) {
+          bestSimilarity = similarity;
+          bestMatch = p;
+        }
+      }
+    });
+    
+    if (bestMatch) {
+      console.log(`🔍 Fuzzy match (${Math.round(bestSimilarity * 100)}%): "${firstName} ${lastName}" → "${bestMatch.firstName} ${bestMatch.lastName}" (${bestMatch.id})`);
+      return { person: bestMatch, confidence: 'fuzzy', similarity: bestSimilarity };
+    }
+  }
+  
+  // Strategy 4: Last name + first initial match (medium confidence)
   if (firstName && lastName) {
     const firstInitial = firstName.charAt(0).toLowerCase();
     const initialMatch = existingPeople.find(p => 
@@ -889,29 +969,6 @@ const findBestInstructorMatch = async (instructorInfo, existingPeople) => {
     if (initialMatch) {
       console.log(`📝 Initial match: ${firstName} ${lastName} → ${initialMatch.firstName} ${initialMatch.lastName}`);
       return { person: initialMatch, confidence: 'medium' };
-    }
-  }
-  
-  // Strategy 4: Fuzzy name similarity (for cases like "Bob" vs "Robert")
-  if (normalizedFirstName && normalizedLastName) {
-    const fuzzyMatches = existingPeople.filter(p => {
-      if (!p.firstName || !p.lastName) return false;
-      
-      const existingFirst = normalizeNameForMatching(p.firstName);
-      const existingLast = normalizeNameForMatching(p.lastName);
-      
-      // Must have exact last name match
-      if (existingLast !== normalizedLastName) return false;
-      
-      // Check for common first name variations
-      const firstNameSimilarity = calculateNameSimilarity(normalizedFirstName, existingFirst);
-      return firstNameSimilarity >= 0.8; // 80% similarity threshold
-    });
-    
-    if (fuzzyMatches.length === 1) {
-      const match = fuzzyMatches[0];
-      console.log(`🔍 Fuzzy match: "${firstName} ${lastName}" → "${match.firstName} ${match.lastName}" (${match.id})`);
-      return { person: match, confidence: 'medium' };
     }
   }
   

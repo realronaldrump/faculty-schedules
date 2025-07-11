@@ -15,7 +15,7 @@ const formatPhoneNumber = (phoneStr) => {
     return phoneStr;
 };
 
-const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onStaffUpdate, onFacultyDelete }) => {
+const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onStaffUpdate, onFacultyDelete, programs = [] }) => {
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [filterText, setFilterText] = useState('');
@@ -1053,9 +1053,19 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
                       </div>
                   </td>
                   <td className="p-2 align-top">
-                      <div className="text-sm text-gray-500 italic">
-                        Program will be determined from courses taught
-                      </div>
+                      <select
+                        name="programId"
+                        value={newFaculty.programId || ''}
+                        onChange={handleCreateChange}
+                        className={getInputClass('programId')}
+                      >
+                        <option value="">No Program</option>
+                        {programs.map(program => (
+                          <option key={program.id} value={program.id}>
+                            {program.name}
+                          </option>
+                        ))}
+                      </select>
                   </td>
                   <td className="p-2 align-top">
                       <input
@@ -1166,9 +1176,19 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
                           </div>
                       </td>
                       <td className="p-2 align-top">
-                          <div className="text-sm text-gray-600">
-                            {faculty.program ? faculty.program.name : 'No Program'}
-                          </div>
+                          <select
+                            name="programId"
+                            value={editFormData.programId || ''}
+                            onChange={handleChange}
+                            className={getInputClass('programId')}
+                          >
+                            <option value="">No Program</option>
+                            {programs.map(program => (
+                              <option key={program.id} value={program.id}>
+                                {program.name}
+                              </option>
+                            ))}
+                          </select>
                       </td>
                       <td className="p-2 align-top">
                           <input name="jobTitle" value={editFormData.jobTitle || ''} onChange={handleChange} className={getInputClass('jobTitle')} placeholder="Job Title" />

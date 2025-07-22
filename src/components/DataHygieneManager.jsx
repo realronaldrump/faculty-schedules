@@ -16,19 +16,139 @@ import {
   Building,
   User,
   Edit,
-  BookUser
+  BookUser,
+  Eye,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import {
   getDataHealthReport,
   findDuplicatePeople,
   findOrphanedSchedules,
   mergePeople,
-  linkScheduleToPerson
+  linkScheduleToPerson,
+  previewStandardization,
+  applyTargetedStandardization
 } from '../utils/dataHygiene';
 import MissingDataReviewModal from './MissingDataReviewModal';
 import DeduplicationReviewModal from './DeduplicationReviewModal';
-import { standardizeAllData } from '../utils/comprehensiveDataHygiene';
-import CustomAlert from './CustomAlert';
+import { ConfirmationDialog } from './CustomAlert';
+
+// Standardization Preview Component
+const StandardizationPreview = ({ preview, onClose, onConfirm, isLoading }) => {
+  const [expandedChanges, setExpandedChanges] = useState(new Set());
+  
+  const toggleExpanded = (personId) => {
+    const newExpanded = new Set(expandedChanges);
+    if (newExpanded.has(personId)) {
+      newExpanded.delete(personId);
+    } else {
+      newExpanded.add(personId);
+    }
+    setExpandedChanges(newExpanded);
+  };
+
+  if (!preview) return null;
+
+  return (
+    <ConfirmationDialog
+      isOpen={true}
+      title="Data Standardization Preview"
+      message={`Found ${preview.recordsToChange} records that can be improved. Review the changes below:`}
+      type="info"
+      confirmText={isLoading ? "Applying..." : `Apply ${preview.recordsToChange} Changes`}
+      cancelText="Cancel"
+      onConfirm={onConfirm}
+      onCancel={onClose}
+    >
+      <div className="max-h-96 overflow-y-auto">
+        {/* Summary */}
+        <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+          <h4 className="font-medium text-blue-900 mb-2">Summary of Changes</h4>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            {preview.summary.nameParsingFixes > 0 && (
+              <div>• Name parsing fixes: {preview.summary.nameParsingFixes}</div>
+            )}
+            {preview.summary.brokenNameFixes > 0 && (
+              <div>• Broken name fixes: {preview.summary.brokenNameFixes}</div>
+            )}
+            {preview.summary.phoneFormatFixes > 0 && (
+              <div>• Phone formatting: {preview.summary.phoneFormatFixes}</div>
+            )}
+            {preview.summary.emailFormatFixes > 0 && (
+              <div>• Email formatting: {preview.summary.emailFormatFixes}</div>
+            )}
+            {preview.summary.rolesFormatFixes > 0 && (
+              <div>• Roles format fixes: {preview.summary.rolesFormatFixes}</div>
+            )}
+          </div>
+        </div>
+
+        {/* Detailed Changes */}
+        <div className="space-y-2">
+          {preview.changes.slice(0, 10).map((change) => (
+            <div key={change.personId} className="border rounded-lg p-3">
+              <div 
+                className="flex items-center justify-between cursor-pointer"
+                onClick={() => toggleExpanded(change.personId)}
+              >
+                <div className="flex items-center">
+                  <User className="w-4 h-4 text-blue-600 mr-2" />
+                  <span className="font-medium">{change.personName}</span>
+                  <span className="text-sm text-gray-500 ml-2">
+                    ({change.differences.length} change{change.differences.length !== 1 ? 's' : ''})
+                  </span>
+                </div>
+                {expandedChanges.has(change.personId) ? (
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                )}
+              </div>
+              
+              {expandedChanges.has(change.personId) && (
+                <div className="mt-3 space-y-2">
+                  {change.differences.map((diff, index) => (
+                    <div key={index} className="text-sm bg-gray-50 p-2 rounded">
+                      <div className="font-medium text-gray-700 mb-1">{diff.description}</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <div className="text-xs text-red-600 font-medium">Before:</div>
+                          <div className="text-xs font-mono bg-red-50 p-1 rounded">
+                            {JSON.stringify(diff.before, null, 1)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-green-600 font-medium">After:</div>
+                          <div className="text-xs font-mono bg-green-50 p-1 rounded">
+                            {JSON.stringify(diff.after, null, 1)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+          
+          {preview.changes.length > 10 && (
+            <div className="text-center text-sm text-gray-500 py-2">
+              ... and {preview.changes.length - 10} more records
+            </div>
+          )}
+        </div>
+
+        {preview.recordsToChange === 0 && (
+          <div className="text-center py-4 text-gray-500">
+            <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-500" />
+            All records are already properly formatted!
+          </div>
+        )}
+      </div>
+    </ConfirmationDialog>
+  );
+};
 
 const DataHygieneManager = ({ showNotification }) => {
   const [healthReport, setHealthReport] = useState(null);
@@ -41,7 +161,11 @@ const DataHygieneManager = ({ showNotification }) => {
   const [showMissingDataModal, setShowMissingDataModal] = useState(false);
   const [missingDataType, setMissingDataType] = useState('email');
   const [showDeduplicationModal, setShowDeduplicationModal] = useState(false);
-  const [showConfirmAlert, setShowConfirmAlert] = useState(false);
+  
+  // Standardization states
+  const [showStandardizationPreview, setShowStandardizationPreview] = useState(false);
+  const [standardizationPreview, setStandardizationPreview] = useState(null);
+  const [isStandardizing, setIsStandardizing] = useState(false);
 
   // Load health report
   const loadHealthReport = async () => {
@@ -108,31 +232,51 @@ const DataHygieneManager = ({ showNotification }) => {
     loadHealthReport();
   };
 
-  // Run full database standardization (adds missing, removes stray fields)
-  const handleStandardizeData = () => {
-    setShowConfirmAlert(true);
-  };
-
-  const runStandardization = async () => {
-    setShowConfirmAlert(false);
+  // Preview standardization changes
+  const handlePreviewStandardization = async () => {
     setIsLoading(true);
     try {
-      const result = await standardizeAllData();
+      const preview = await previewStandardization();
+      setStandardizationPreview(preview);
+      setShowStandardizationPreview(true);
+    } catch (error) {
+      console.error('Error previewing standardization:', error);
+      showNotification(
+        'error',
+        'Preview Error',
+        'Failed to generate standardization preview. Please try again.'
+      );
+    }
+    setIsLoading(false);
+  };
+
+  // Apply standardization changes
+  const handleApplyStandardization = async () => {
+    if (!standardizationPreview) return;
+    
+    setIsStandardizing(true);
+    try {
+      const result = await applyTargetedStandardization();
+      
       showNotification(
         'success',
         'Standardization Complete',
-        `Updated ${result.recordsUpdated} records to conform to the standard schema.`
+        `Successfully updated ${result.applied} records. ${result.errors.length > 0 ? `${result.errors.length} errors occurred.` : ''}`
       );
+      
+      setShowStandardizationPreview(false);
+      setStandardizationPreview(null);
       await loadHealthReport();
+      
     } catch (error) {
-      console.error('Error standardizing data:', error);
+      console.error('Error applying standardization:', error);
       showNotification(
         'error',
         'Standardization Error',
         'An error occurred during standardization. Please check the console for details.'
       );
     }
-    setIsLoading(false);
+    setIsStandardizing(false);
   };
 
   // Get health score color
@@ -179,12 +323,12 @@ const DataHygieneManager = ({ showNotification }) => {
             Refresh Analysis
           </button>
           <button
-            onClick={handleStandardizeData}
+            onClick={handlePreviewStandardization}
             disabled={isLoading}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center"
           >
-            <Settings className="w-4 h-4 mr-2" />
-            Clean Up Formatting
+            <Eye className="w-4 h-4 mr-2" />
+            Preview Data Cleanup
           </button>
           <button
             onClick={openDeduplicationReview}
@@ -207,53 +351,112 @@ const DataHygieneManager = ({ showNotification }) => {
 
       {/* Health Score Card */}
       {healthReport && (
-        <div className="bg-white rounded-lg shadow-sm border mb-6 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">Data Health Score</h2>
-              <div className="flex items-center space-x-4">
-                <div className={`text-3xl font-bold ${getHealthScoreColor(healthReport.summary.healthScore)}`}>
+        <>
+          <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-serif font-semibold text-baylor-green">Data Health Score</h2>
+              <div className="flex items-center">
+                <span className={`text-3xl font-bold ${getHealthScoreColor(healthReport.summary.healthScore)}`}>
                   {healthReport.summary.healthScore}%
-                </div>
-                <div className="text-gray-600">
-                  {getHealthScoreDescription(healthReport.summary.healthScore)}
-                </div>
+                </span>
+                <span className="ml-2 text-gray-600">
+                  ({getHealthScoreDescription(healthReport.summary.healthScore)})
+                </span>
               </div>
             </div>
-            <Shield className={`w-16 h-16 ${getHealthScoreColor(healthReport.summary.healthScore)}`} />
-          </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-            <div className="text-center">
-              <div className="flex items-center justify-center mb-2">
-                <Users className="w-5 h-5 text-baylor-green" />
+            
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="text-center p-4 bg-blue-50 rounded-lg">
+                <div className="text-2xl font-bold text-blue-600">{healthReport.summary.totalPeople}</div>
+                <div className="text-sm text-gray-600">People</div>
               </div>
-              <div className="text-2xl font-bold text-gray-900">{healthReport.summary.totalPeople}</div>
-              <div className="text-sm text-gray-600">People</div>
-            </div>
-            <div className="text-center">
-              <div className="flex items-center justify-center mb-2">
-                <Calendar className="w-5 h-5 text-baylor-green" />
+              <div className="text-center p-4 bg-green-50 rounded-lg">
+                <div className="text-2xl font-bold text-green-600">{healthReport.summary.totalSchedules}</div>
+                <div className="text-sm text-gray-600">Schedules</div>
               </div>
-              <div className="text-2xl font-bold text-gray-900">{healthReport.summary.totalSchedules}</div>
-              <div className="text-sm text-gray-600">Schedules</div>
-            </div>
-            <div className="text-center">
-              <div className="flex items-center justify-center mb-2">
-                <AlertTriangle className="w-5 h-5 text-baylor-gold" />
+              <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                <div className="text-2xl font-bold text-yellow-600">{duplicates.length}</div>
+                <div className="text-sm text-gray-600">Potential Duplicates</div>
               </div>
-              <div className="text-2xl font-bold text-gray-900">{healthReport.summary.duplicatePeople}</div>
-              <div className="text-sm text-gray-600">Duplicates</div>
-            </div>
-            <div className="text-center">
-              <div className="flex items-center justify-center mb-2">
-                <Link className="w-5 h-5 text-red-600" />
+              <div className="text-center p-4 bg-red-50 rounded-lg">
+                <div className="text-2xl font-bold text-red-600">{orphanedSchedules.length}</div>
+                <div className="text-sm text-gray-600">Orphaned Schedules</div>
               </div>
-              <div className="text-2xl font-bold text-gray-900">{healthReport.summary.orphanedSchedules}</div>
-              <div className="text-sm text-gray-600">Orphaned</div>
             </div>
           </div>
-        </div>
+
+          {/* Data Quality Actions */}
+          <div className="bg-white rounded-lg shadow-sm border p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Data Quality Actions</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="p-4 border rounded-lg">
+                <div className="flex items-center mb-2">
+                  <Users className="w-5 h-5 text-blue-600 mr-2" />
+                  <h4 className="font-medium text-gray-900">Review Duplicates</h4>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">
+                  {duplicates.length} potential duplicate records found. Review and manually merge.
+                </p>
+                <button
+                  onClick={openDeduplicationReview}
+                  className="w-full px-3 py-2 bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200"
+                >
+                  Review & Merge Duplicates
+                </button>
+              </div>
+              
+              <div className="p-4 border rounded-lg">
+                <div className="flex items-center mb-2">
+                  <Link className="w-5 h-5 text-red-600 mr-2" />
+                  <h4 className="font-medium text-gray-900">Fix Orphaned Records</h4>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">
+                  {orphanedSchedules.length} schedules need to be linked to faculty
+                </p>
+                <button
+                  onClick={() => setActiveTab('orphaned')}
+                  className="w-full px-3 py-2 bg-red-100 text-red-800 rounded-lg hover:bg-red-200"
+                >
+                  Fix Orphaned Schedules
+                </button>
+              </div>
+              
+              <div className="p-4 border rounded-lg">
+                <div className="flex items-center mb-2">
+                  <Edit className="w-5 h-5 text-purple-600 mr-2" />
+                  <h4 className="font-medium text-gray-900">Complete Missing Data</h4>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">
+                  Review records and manually add missing contact information
+                </p>
+                <button
+                  onClick={() => openMissingDataReview('all')}
+                  className="w-full px-3 py-2 bg-purple-100 text-purple-800 rounded-lg hover:bg-purple-200"
+                >
+                  Review Missing Data
+                </button>
+              </div>
+
+              {/* Safe Data Cleanup card */}
+              <div className="p-4 border rounded-lg">
+                <div className="flex items-center mb-2">
+                  <Eye className="w-5 h-5 text-blue-600 mr-2" />
+                  <h4 className="font-medium text-gray-900">Smart Data Cleanup</h4>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">
+                  Preview and apply safe formatting fixes like name parsing and phone numbers
+                </p>
+                <button
+                  onClick={handlePreviewStandardization}
+                  disabled={isLoading}
+                  className="w-full px-3 py-2 bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200 disabled:opacity-50"
+                >
+                  {isLoading ? 'Analyzing...' : 'Preview Cleanup Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Tab Navigation */}
@@ -342,10 +545,11 @@ const DataHygieneManager = ({ showNotification }) => {
                   Enforce a consistent schema for all records. Adds missing fields, removes obsolete ones, and cleans up formatting.
                 </p>
                 <button
-                  onClick={handleStandardizeData}
+                  onClick={handlePreviewStandardization}
+                  disabled={isLoading}
                   className="w-full px-3 py-2 bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200"
                 >
-                  Run Standardization
+                  Preview Standardization
                 </button>
               </div>
             </div>
@@ -532,8 +736,8 @@ const DataHygieneManager = ({ showNotification }) => {
       <MissingDataReviewModal
         isOpen={showMissingDataModal}
         onClose={() => setShowMissingDataModal(false)}
-        onDataUpdated={handleDataUpdated}
         missingDataType={missingDataType}
+        onDataUpdated={handleDataUpdated}
       />
 
       <DeduplicationReviewModal
@@ -542,13 +746,16 @@ const DataHygieneManager = ({ showNotification }) => {
         onDuplicatesResolved={handleDataUpdated}
       />
 
-      {showConfirmAlert && (
-        <CustomAlert
-          type="warning"
-          title="Confirm Full Data Standardization"
-          message="This action will scan every person record to ensure it conforms to the standard data schema. It will add any missing fields with default values and remove old or unrecognized fields. This is a powerful tool for ensuring data quality, but the changes cannot be undone. Are you sure you want to proceed?"
-          onConfirm={runStandardization}
-          onCancel={() => setShowConfirmAlert(false)}
+      {/* Standardization Preview */}
+      {showStandardizationPreview && (
+        <StandardizationPreview
+          preview={standardizationPreview}
+          onClose={() => {
+            setShowStandardizationPreview(false);
+            setStandardizationPreview(null);
+          }}
+          onConfirm={handleApplyStandardization}
+          isLoading={isStandardizing}
         />
       )}
     </div>

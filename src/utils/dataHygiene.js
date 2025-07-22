@@ -8,7 +8,7 @@
  * - One source of truth per record
  */
 
-import { collection, getDocs, query, where, doc, getDoc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc, updateDoc, deleteDoc, writeBatch, addDoc, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { normalizedSchema } from './normalizedSchema';
 import { detectScheduleDuplicates, detectRoomDuplicates, mergeScheduleRecords, mergeRoomRecords } from './comprehensiveDataHygiene';
@@ -865,4 +865,206 @@ const calculateHealthScore = (total, duplicates, orphaned, missingEmail) => {
   const issues = duplicates + orphaned + missingEmail;
   const score = Math.max(0, 100 - (issues / total) * 100);
   return Math.round(score);
+}; 
+
+/**
+ * Preview what standardization would change without making actual changes
+ */
+export const previewStandardization = async () => {
+  try {
+    const peopleSnapshot = await getDocs(collection(db, 'people'));
+    const people = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    const changes = [];
+    
+    people.forEach(person => {
+      const original = { ...person };
+      const standardized = standardizePerson(person);
+      
+      // Find actual differences
+      const differences = [];
+      
+      // Check name parsing issues
+      if ((!original.firstName || !original.lastName) && original.name) {
+        if (standardized.firstName && standardized.lastName) {
+          differences.push({
+            field: 'name_parsing',
+            description: `Parse "${original.name}" into firstName: "${standardized.firstName}" and lastName: "${standardized.lastName}"`,
+            before: { firstName: original.firstName || '', lastName: original.lastName || '', name: original.name || '' },
+            after: { firstName: standardized.firstName, lastName: standardized.lastName, name: standardized.name }
+          });
+        }
+      }
+      
+      // Check for undefined name construction
+      if (original.name === 'undefined undefined' || original.name === ' ' || original.name === '') {
+        if (standardized.name && standardized.name !== 'undefined undefined' && standardized.name.trim() !== '') {
+          differences.push({
+            field: 'fix_broken_name',
+            description: `Fix broken name "${original.name}" to "${standardized.name}"`,
+            before: { name: original.name },
+            after: { name: standardized.name }
+          });
+        }
+      }
+      
+      // Check phone standardization
+      if (original.phone && original.phone !== standardized.phone) {
+        differences.push({
+          field: 'phone_format',
+          description: `Standardize phone from "${original.phone}" to "${standardized.phone}"`,
+          before: { phone: original.phone },
+          after: { phone: standardized.phone }
+        });
+      }
+      
+      // Check email standardization
+      if (original.email && original.email !== standardized.email) {
+        differences.push({
+          field: 'email_format',
+          description: `Standardize email from "${original.email}" to "${standardized.email}"`,
+          before: { email: original.email },
+          after: { email: standardized.email }
+        });
+      }
+      
+      // Check roles standardization
+      if (original.roles && !Array.isArray(original.roles) && typeof original.roles === 'object') {
+        differences.push({
+          field: 'roles_format',
+          description: `Convert roles from object to array format`,
+          before: { roles: original.roles },
+          after: { roles: standardized.roles }
+        });
+      }
+      
+      if (differences.length > 0) {
+        changes.push({
+          personId: person.id,
+          personName: original.name || `${original.firstName} ${original.lastName}`.trim() || 'Unknown',
+          differences
+        });
+      }
+    });
+    
+    return {
+      totalRecords: people.length,
+      recordsToChange: changes.length,
+      changes,
+      summary: {
+        nameParsingFixes: changes.filter(c => c.differences.some(d => d.field === 'name_parsing')).length,
+        brokenNameFixes: changes.filter(c => c.differences.some(d => d.field === 'fix_broken_name')).length,
+        phoneFormatFixes: changes.filter(c => c.differences.some(d => d.field === 'phone_format')).length,
+        emailFormatFixes: changes.filter(c => c.differences.some(d => d.field === 'email_format')).length,
+        rolesFormatFixes: changes.filter(c => c.differences.some(d => d.field === 'roles_format')).length
+      }
+    };
+  } catch (error) {
+    console.error('Error previewing standardization:', error);
+    throw error;
+  }
+};
+
+/**
+ * Apply targeted standardization changes with logging for undo capability
+ */
+export const applyTargetedStandardization = async (changeIds = null) => {
+  try {
+    const preview = await previewStandardization();
+    
+    // If changeIds provided, only apply those changes
+    const changesToApply = changeIds 
+      ? preview.changes.filter(change => changeIds.includes(change.personId))
+      : preview.changes;
+    
+    if (changesToApply.length === 0) {
+      return { applied: 0, skipped: 0, errors: [] };
+    }
+    
+    const batch = writeBatch(db);
+    const changeLog = [];
+    let applied = 0;
+    let errors = [];
+    
+    for (const change of changesToApply) {
+      try {
+        // Get current data
+        const personRef = doc(db, 'people', change.personId);
+        const personSnapshot = await getDoc(personRef);
+        
+        if (!personSnapshot.exists()) {
+          errors.push(`Person ${change.personId} not found`);
+          continue;
+        }
+        
+        const currentData = personSnapshot.data();
+        const standardizedData = standardizePerson(currentData);
+        
+        // Only update if there are actual changes
+        if (JSON.stringify(currentData) !== JSON.stringify(standardizedData)) {
+          batch.update(personRef, standardizedData);
+          
+          // Log the change for potential undo
+          changeLog.push({
+            personId: change.personId,
+            personName: change.personName,
+            timestamp: new Date().toISOString(),
+            originalData: currentData,
+            updatedData: standardizedData,
+            changes: change.differences
+          });
+          
+          applied++;
+        }
+      } catch (error) {
+        errors.push(`Error updating ${change.personName}: ${error.message}`);
+      }
+    }
+    
+    // Commit all changes
+    if (applied > 0) {
+      await batch.commit();
+      
+      // Save change log for potential undo
+      if (changeLog.length > 0) {
+        await addDoc(collection(db, 'standardizationHistory'), {
+          timestamp: new Date().toISOString(),
+          operation: 'targeted_standardization',
+          changes: changeLog,
+          summary: `Applied ${applied} standardization changes`
+        });
+      }
+    }
+    
+    return {
+      applied,
+      skipped: changesToApply.length - applied,
+      errors,
+      changeLogId: changeLog.length > 0 ? 'saved' : null
+    };
+    
+  } catch (error) {
+    console.error('Error applying targeted standardization:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get recent standardization history for undo capability
+ */
+export const getStandardizationHistory = async (limit = 10) => {
+  try {
+    const historySnapshot = await getDocs(
+      query(
+        collection(db, 'standardizationHistory'), 
+        orderBy('timestamp', 'desc'),
+        limit(limit)
+      )
+    );
+    
+    return historySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error('Error getting standardization history:', error);
+    return [];
+  }
 }; 

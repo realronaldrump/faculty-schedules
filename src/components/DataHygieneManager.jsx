@@ -19,7 +19,9 @@ import {
   BookUser,
   Eye,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Search,
+  X
 } from 'lucide-react';
 import {
   getDataHealthReport,
@@ -30,9 +32,200 @@ import {
   previewStandardization,
   applyTargetedStandardization
 } from '../utils/dataHygiene';
+import { fetchPeople } from '../utils/dataAdapter';
 import MissingDataReviewModal from './MissingDataReviewModal';
 import DeduplicationReviewModal from './DeduplicationReviewModal';
 import { ConfirmationDialog } from './CustomAlert';
+
+// Link Person Modal Component
+const LinkPersonModal = ({ isOpen, onClose, onConfirm, schedule }) => {
+  const [people, setPeople] = useState([]);
+  const [filteredPeople, setFilteredPeople] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedPerson, setSelectedPerson] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Load people data when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      loadPeople();
+      setSearchTerm('');
+      setSelectedPerson(null);
+    }
+  }, [isOpen]);
+
+  // Filter people based on search term
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredPeople(people);
+    } else {
+      const search = searchTerm.toLowerCase();
+      const filtered = people.filter(person => {
+        const fullName = `${person.firstName || ''} ${person.lastName || ''}`.toLowerCase();
+        const email = (person.email || '').toLowerCase();
+        const jobTitle = (person.jobTitle || '').toLowerCase();
+        
+        return fullName.includes(search) || 
+               email.includes(search) || 
+               jobTitle.includes(search);
+      });
+      setFilteredPeople(filtered);
+    }
+  }, [searchTerm, people]);
+
+  const loadPeople = async () => {
+    setIsLoading(true);
+    try {
+      const allPeople = await fetchPeople();
+      // Sort people by name for easier browsing
+      const sortedPeople = allPeople.sort((a, b) => {
+        const nameA = `${a.firstName || ''} ${a.lastName || ''}`.trim();
+        const nameB = `${b.firstName || ''} ${b.lastName || ''}`.trim();
+        return nameA.localeCompare(nameB);
+      });
+      setPeople(sortedPeople);
+      setFilteredPeople(sortedPeople);
+    } catch (error) {
+      console.error('Error loading people:', error);
+    }
+    setIsLoading(false);
+  };
+
+  const handleConfirm = () => {
+    if (selectedPerson) {
+      onConfirm(selectedPerson.id);
+      onClose();
+    }
+  };
+
+  const getRoleDisplay = (person) => {
+    const roles = person.roles || [];
+    if (Array.isArray(roles)) {
+      return roles.length > 0 ? roles.join(', ') : 'No role';
+    }
+    return Object.keys(roles).filter(key => roles[key]).join(', ') || 'No role';
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] mx-4">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Link Schedule to Person</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Select a person to link to: <span className="font-medium">{schedule?.courseCode} - {schedule?.courseTitle}</span>
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="p-4 border-b">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search by name, email, or job title..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+        </div>
+
+        {/* People List */}
+        <div className="flex-1 overflow-y-auto max-h-96">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
+              <span className="ml-2 text-gray-600">Loading people...</span>
+            </div>
+          ) : filteredPeople.length === 0 ? (
+            <div className="flex items-center justify-center h-32 text-gray-500">
+              {searchTerm ? 'No people found matching your search' : 'No people available'}
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-200">
+              {filteredPeople.map((person) => (
+                <div
+                  key={person.id}
+                  className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${
+                    selectedPerson?.id === person.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                  }`}
+                  onClick={() => setSelectedPerson(person)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center">
+                        <User className="w-4 h-4 text-gray-400 mr-2" />
+                        <h4 className="font-medium text-gray-900">
+                          {person.firstName} {person.lastName}
+                        </h4>
+                        {selectedPerson?.id === person.id && (
+                          <CheckCircle className="w-4 h-4 text-blue-600 ml-2" />
+                        )}
+                      </div>
+                      <div className="mt-1 space-y-1">
+                        {person.jobTitle && (
+                          <p className="text-sm text-gray-600">{person.jobTitle}</p>
+                        )}
+                        {person.email && (
+                          <p className="text-sm text-gray-500">{person.email}</p>
+                        )}
+                        <div className="flex items-center text-xs text-gray-500">
+                          <span className="bg-gray-100 px-2 py-1 rounded">
+                            {getRoleDisplay(person)}
+                          </span>
+                          {person.office && (
+                            <span className="ml-2">• {person.office}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between p-6 border-t bg-gray-50">
+          <div className="text-sm text-gray-600">
+            {selectedPerson ? (
+              <span>Selected: <strong>{selectedPerson.firstName} {selectedPerson.lastName}</strong></span>
+            ) : (
+              'Please select a person to link'
+            )}
+          </div>
+          <div className="flex space-x-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirm}
+              disabled={!selectedPerson}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Link Schedule
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // Standardization Preview Component
 const StandardizationPreview = ({ preview, onClose, onConfirm, isLoading }) => {
@@ -162,6 +355,10 @@ const DataHygieneManager = ({ showNotification }) => {
   const [missingDataType, setMissingDataType] = useState('email');
   const [showDeduplicationModal, setShowDeduplicationModal] = useState(false);
   
+  // Link person modal states
+  const [showLinkPersonModal, setShowLinkPersonModal] = useState(false);
+  const [scheduleToLink, setScheduleToLink] = useState(null);
+  
   // Standardization states
   const [showStandardizationPreview, setShowStandardizationPreview] = useState(false);
   const [standardizationPreview, setStandardizationPreview] = useState(null);
@@ -205,15 +402,33 @@ const DataHygieneManager = ({ showNotification }) => {
     }
   };
 
+  // Open link person modal
+  const openLinkPersonModal = (schedule) => {
+    setScheduleToLink(schedule);
+    setShowLinkPersonModal(true);
+  };
+
   // Link schedule to person
-  const handleLinkSchedule = async (scheduleId, personId) => {
+  const handleLinkSchedule = async (personId) => {
+    if (!scheduleToLink) return;
+    
     try {
-      await linkScheduleToPerson(scheduleId, personId);
-      alert('Schedule linked successfully');
+      await linkScheduleToPerson(scheduleToLink.id, personId);
+      showNotification(
+        'success',
+        'Schedule Linked',
+        `Successfully linked ${scheduleToLink.courseCode} to selected person.`
+      );
+      setShowLinkPersonModal(false);
+      setScheduleToLink(null);
       loadHealthReport(); // Refresh
     } catch (error) {
       console.error('Error linking schedule:', error);
-      alert('Error linking schedule: ' + error.message);
+      showNotification(
+        'error',
+        'Link Failed',
+        'Failed to link schedule to person. Please try again.'
+      );
     }
   };
 
@@ -708,12 +923,7 @@ const DataHygieneManager = ({ showNotification }) => {
                         </p>
                       </div>
                       <button
-                        onClick={() => {
-                          const personId = prompt('Enter person ID to link this schedule to:');
-                          if (personId) {
-                            handleLinkSchedule(schedule.id, personId);
-                          }
-                        }}
+                        onClick={() => openLinkPersonModal(schedule)}
                         className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
                       >
                         Link to Person
@@ -758,6 +968,17 @@ const DataHygieneManager = ({ showNotification }) => {
           isLoading={isStandardizing}
         />
       )}
+
+      {/* Link Person Modal */}
+      <LinkPersonModal
+        isOpen={showLinkPersonModal}
+        onClose={() => {
+          setShowLinkPersonModal(false);
+          setScheduleToLink(null);
+        }}
+        onConfirm={handleLinkSchedule}
+        schedule={scheduleToLink}
+      />
     </div>
   );
 };

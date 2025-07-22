@@ -68,15 +68,81 @@ export const countFilledFields = (person) => {
 // ==================== DATA STANDARDIZATION ====================
 
 /**
+ * Parse full name into components
+ */
+const parseFullName = (fullName) => {
+  if (!fullName) return { title: '', firstName: '', lastName: '' };
+  
+  const name = fullName.trim();
+  const parts = name.split(/\s+/);
+  
+  // Common titles
+  const titles = ['dr', 'dr.', 'mr', 'mr.', 'mrs', 'mrs.', 'ms', 'ms.', 'miss', 'prof', 'professor'];
+  
+  let title = '';
+  let firstName = '';
+  let lastName = '';
+  
+  let nameStart = 0;
+  
+  // Check for title
+  if (parts.length > 1 && titles.includes(parts[0].toLowerCase())) {
+    title = parts[0];
+    nameStart = 1;
+  }
+  
+  if (parts.length > nameStart) {
+    if (parts.length === nameStart + 1) {
+      // Only one name part after title
+      lastName = parts[nameStart];
+    } else if (parts.length === nameStart + 2) {
+      // First and last name
+      firstName = parts[nameStart];
+      lastName = parts[nameStart + 1];
+    } else {
+      // Multiple parts - take first as firstName, rest as lastName
+      firstName = parts[nameStart];
+      lastName = parts.slice(nameStart + 1).join(' ');
+    }
+  }
+  
+  return {
+    title: title,
+    firstName: firstName,
+    lastName: lastName
+  };
+};
+
+/**
  * Standardize a person record
  */
 export const standardizePerson = (person) => {
+  // Handle name standardization - support both full name and firstName/lastName
+  let firstName = (person.firstName || '').trim();
+  let lastName = (person.lastName || '').trim();
+  let fullName = (person.name || '').trim();
+  
+  // If we have a full name but no firstName/lastName, parse it
+  if (fullName && (!firstName && !lastName)) {
+    const parsed = parseFullName(fullName);
+    firstName = parsed.firstName;
+    lastName = parsed.lastName;
+  }
+  // If we have firstName/lastName but no full name, construct it
+  else if ((firstName || lastName) && !fullName) {
+    fullName = `${firstName} ${lastName}`.trim();
+  }
+  // If we have both, prefer the constructed version for consistency
+  else if (firstName || lastName) {
+    fullName = `${firstName} ${lastName}`.trim();
+  }
+
   const standardized = {
     ...person,
     // Name standardization
-    firstName: (person.firstName || '').trim(),
-    lastName: (person.lastName || '').trim(),
-    name: `${(person.firstName || '').trim()} ${(person.lastName || '').trim()}`.trim(),
+    firstName: firstName,
+    lastName: lastName,
+    name: fullName,
     
     // Contact standardization
     email: (person.email || '').toLowerCase().trim(),
@@ -97,8 +163,8 @@ export const standardizePerson = (person) => {
     updatedAt: new Date().toISOString()
   };
 
-  // Remove empty name if both parts are empty
-  if (!standardized.firstName && !standardized.lastName) {
+  // Remove empty name if no meaningful name data
+  if (!standardized.firstName && !standardized.lastName && !standardized.name) {
     delete standardized.name;
   }
 

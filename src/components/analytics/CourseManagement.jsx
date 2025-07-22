@@ -362,17 +362,20 @@ const CourseManagement = ({
       if (!item) return;
       const key = `${item.Course}|${item.Section}|${item.Term}|${item.CRN}|${item.Instructor}|${item['Start Time']}|${item['End Time']}|${item.Room}`;
       if (!groupedMap[key]) {
-        groupedMap[key] = { ...item, _daySet: new Set(item.Day ? [item.Day] : []) };
+        groupedMap[key] = { ...item, _daySet: new Set(item.Day ? [item.Day] : []), _originalIds: [item.id] };
       } else if (item.Day) {
         groupedMap[key]._daySet.add(item.Day);
+        groupedMap[key]._originalIds.push(item.id);
       }
     });
-    data = Object.values(groupedMap).map(entry => {
+    data = Object.values(groupedMap).map((entry, index) => {
       const dayPattern = Array.from(entry._daySet)
         .sort((a, b) => dayOrderMap[a] - dayOrderMap[b])
         .join('');
-      const { _daySet, ...rest } = entry;
-      return { ...rest, Day: dayPattern };
+      const { _daySet, _originalIds, ...rest } = entry;
+      // Generate unique ID for grouped entries to prevent duplicate key warnings
+      const uniqueId = _originalIds.length > 1 ? `grouped_${index}_${_originalIds.join('_')}` : _originalIds[0];
+      return { ...rest, Day: dayPattern, id: uniqueId };
     });
 
     // Sort data

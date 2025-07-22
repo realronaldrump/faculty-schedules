@@ -606,18 +606,38 @@ function App() {
     console.log('👤 Updating faculty member:', facultyToUpdate);
     
     try {
-      // Update in Firebase
-      const facultyRef = doc(db, 'people', facultyToUpdate.id);
+      const isNewFaculty = !facultyToUpdate.id;
+      let facultyRef;
+      let actionType;
+      
+      if (isNewFaculty) {
+        // Creating a new faculty member
+        console.log('🆕 Creating new faculty member');
+        facultyRef = doc(collection(db, 'people'));
+        actionType = 'CREATE';
+      } else {
+        // Updating existing faculty member
+        console.log('📝 Updating existing faculty member');
+        facultyRef = doc(db, 'people', facultyToUpdate.id);
+        actionType = 'UPDATE';
+      }
+      
       const updateData = {
         ...facultyToUpdate,
         updatedAt: new Date().toISOString()
       };
-      
-      await updateDoc(facultyRef, updateData);
+
+      if (isNewFaculty) {
+        // Use setDoc for new faculty to ensure we get the generated ID
+        await setDoc(facultyRef, updateData);
+      } else {
+        // Use updateDoc for existing faculty
+        await updateDoc(facultyRef, updateData);
+      }
 
       // Add to edit history
       await addDoc(collection(db, 'editHistory'), {
-        action: 'UPDATE',
+        action: actionType,
         entity: `Faculty - ${facultyToUpdate.name}`,
         changes: updateData,
         timestamp: new Date().toISOString(),
@@ -627,11 +647,18 @@ function App() {
       // Refresh data
       await loadData();
       
-      showNotification('success', 'Faculty Updated', `${facultyToUpdate.name} has been updated successfully.`);
+      const successMessage = isNewFaculty 
+        ? `${facultyToUpdate.name} has been added to the directory successfully.`
+        : `${facultyToUpdate.name} has been updated successfully.`;
+      
+      showNotification('success', isNewFaculty ? 'Faculty Added' : 'Faculty Updated', successMessage);
       
     } catch (error) {
       console.error('❌ Error updating faculty:', error);
-      showNotification('error', 'Update Failed', 'Failed to update faculty member. Please try again.');
+      const errorMessage = !facultyToUpdate.id 
+        ? 'Failed to add faculty member. Please try again.'
+        : 'Failed to update faculty member. Please try again.';
+      showNotification('error', 'Operation Failed', errorMessage);
     }
   };
 

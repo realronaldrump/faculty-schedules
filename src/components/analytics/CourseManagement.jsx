@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Edit, Save, X, History, RotateCcw, Filter, Search, ChevronsUpDown, Plus, Trash2, ChevronDown, Settings } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Edit, Save, X, History, RotateCcw, Filter, Search, ChevronsUpDown, Plus, Trash2, ChevronDown, Settings, Download } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import FacultyContactCard from '../FacultyContactCard';
 
@@ -41,6 +41,8 @@ const CourseManagement = ({
   const [activeFilterPreset, setActiveFilterPreset] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'Instructor', direction: 'ascending' });
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [selectedExportFields, setSelectedExportFields] = useState([]);
 
   // Get unique values for filters (using display names)
   const uniqueInstructors = useMemo(() => 
@@ -72,6 +74,25 @@ const CourseManagement = ({
     [...new Set(scheduleData.filter(item => item && item.Status).map(item => item.Status))].sort(),
     [scheduleData]
   );
+
+  // Available fields for export
+  const availableExportFields = useMemo(() => {
+    const allKeys = new Set();
+    scheduleData.forEach(item => {
+      if (!item) return;
+      Object.keys(item).forEach(k => {
+        if (!k.startsWith('_')) allKeys.add(k);
+      });
+    });
+    return Array.from(allKeys).sort();
+  }, [scheduleData]);
+
+  // Sync selected fields when modal opens
+  useEffect(() => {
+    if (exportModalOpen) {
+      setSelectedExportFields(availableExportFields);
+    }
+  }, [exportModalOpen, availableExportFields]);
 
   // Extract unique filter options
   const filterOptions = useMemo(() => {
@@ -566,6 +587,36 @@ const CourseManagement = ({
     setActiveFilterPreset('');
   };
 
+  // Export helpers
+  const toggleExportField = (field) => {
+    setSelectedExportFields(prev =>
+      prev.includes(field) ? prev.filter(f => f !== field) : [...prev, field]
+    );
+  };
+
+  const handleDownloadCSV = () => {
+    if (selectedExportFields.length === 0) {
+      alert('Please select at least one field to export.');
+      return;
+    }
+    const headers = selectedExportFields;
+    const rows = filteredAndSortedData.map(row =>
+      headers.map(h => {
+        const val = row && row[h] !== undefined && row[h] !== null ? row[h] : '';
+        return `"${String(val).replace(/"/g, '""')}"`;
+      }).join(',')
+    );
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `course-export-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+    setExportModalOpen(false);
+  };
+
   // Count active filters
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -689,6 +740,13 @@ const CourseManagement = ({
             >
               <History size={16} className="mr-2" />
               {historyVisible ? 'Hide' : 'Show'} History ({editHistory.length})
+            </button>
+            <button
+              onClick={() => setExportModalOpen(true)}
+              className="px-4 py-2 bg-gray-600 text-white font-bold rounded-lg hover:bg-gray-700 transition-colors text-sm flex items-center"
+            >
+              <Download size={16} className="mr-2" />
+              Export
             </button>
           </div>
         </div>
@@ -1475,6 +1533,60 @@ const CourseManagement = ({
       </div>
 
       {/* Faculty Contact Card Modal */}
+      {/* Export Modal */}
+      {exportModalOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg">
+            <h3 className="text-lg font-serif font-semibold text-baylor-green mb-4">Export Courses</h3>
+            <p className="text-sm text-gray-600 mb-4">Select the fields to include in your export.</p>
+            <div className="max-h-60 overflow-y-auto grid grid-cols-2 gap-2">
+              {availableExportFields.map(field => (
+                <label key={field} className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedExportFields.includes(field)}
+                    onChange={() => toggleExportField(field)}
+                    className="h-4 w-4 text-baylor-green focus:ring-baylor-green border-gray-300 rounded"
+                  />
+                  <span className="text-sm">{field}</span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-6 flex justify-between items-center">
+              <div className="space-x-2">
+                <button
+                  onClick={() => setSelectedExportFields(availableExportFields)}
+                  className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
+                >
+                  Select All
+                </button>
+                <button
+                  onClick={() => setSelectedExportFields([])}
+                  className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
+                >
+                  Clear All
+                </button>
+              </div>
+              <div className="space-x-2">
+                <button
+                  onClick={handleDownloadCSV}
+                  className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 text-sm flex items-center"
+                >
+                  <Download size={16} className="mr-2" />
+                  Download CSV
+                </button>
+                <button
+                  onClick={() => setExportModalOpen(false)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedFacultyForCard && (
         <FacultyContactCard
           faculty={selectedFacultyForCard}

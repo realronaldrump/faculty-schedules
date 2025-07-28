@@ -121,6 +121,7 @@ export const adaptPeopleToFaculty = (people, scheduleData = [], programs = []) =
         isTenured: person.isTenured || false,
         isAlsoStaff: hasRole('staff'),
         isUPD: person.isUPD || false,
+        baylorId: person.baylorId || '', // 9-digit Baylor ID number
         hasNoPhone: person.hasNoPhone || false,
         hasNoOffice: person.hasNoOffice || false,
         program: program // Ensure program is set last so it isn't overwritten

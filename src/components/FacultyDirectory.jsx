@@ -30,6 +30,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
     email: '',
     phone: '',
     office: '',
+    baylorId: '',
     isAdjunct: false,
     isTenured: false,
     isAlsoStaff: false,
@@ -374,6 +375,11 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
         newErrors.phone = 'Phone number must contain exactly 10 digits.';
     }
 
+    // Baylor ID validation
+    if (data.baylorId && !/^\d{9}$/.test(data.baylorId)) {
+        newErrors.baylorId = 'Baylor ID must be exactly 9 digits.';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -480,6 +486,11 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
     if (name === 'phone') {
         finalValue = finalValue.replace(/\D/g, '');
     }
+    
+    // Allow only numbers for Baylor ID and limit to 9 digits
+    if (name === 'baylorId') {
+        finalValue = finalValue.replace(/\D/g, '').slice(0, 9);
+    }
 
     const newFormData = {
         ...editFormData,
@@ -569,6 +580,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
       email: '',
       phone: '',
       office: '',
+      baylorId: '',
       isAdjunct: false,
       isTenured: false,
       isAlsoStaff: false,
@@ -586,6 +598,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
       email: '',
       phone: '',
       office: '',
+      baylorId: '',
       isAdjunct: false,
       isTenured: false,
       isAlsoStaff: false,
@@ -601,6 +614,10 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
     
     if (name === 'phone') {
       finalValue = finalValue.replace(/\D/g, '');
+    }
+    
+    if (name === 'baylorId') {
+      finalValue = finalValue.replace(/\D/g, '').slice(0, 9);
     }
 
     setNewFaculty(prev => ({
@@ -1010,6 +1027,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
                   <SortableHeader label="Email" columnKey="email" />
                   <SortableHeader label="Phone" columnKey="phone" />
                   <SortableHeader label="Office" columnKey="office" />
+                  <SortableHeader label="Baylor ID" columnKey="baylorId" />
                   <SortableHeader label="Courses" columnKey="courseCount" />
                   <th className="px-4 py-3"></th>
               </tr>
@@ -1137,6 +1155,17 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
                     </div>
                   </td>
                   <td className="p-2 align-top">
+                    <input
+                      name="baylorId"
+                      value={newFaculty.baylorId}
+                      onChange={handleCreateChange}
+                      className={getInputClass('baylorId')}
+                      placeholder="9 digits"
+                      maxLength="9"
+                    />
+                    {errors.baylorId && <p className="text-red-600 text-xs mt-1">{errors.baylorId}</p>}
+                  </td>
+                  <td className="p-2 align-top">
                     <div className="text-sm text-gray-500 italic">
                       Will be calculated from courses
                     </div>
@@ -1247,6 +1276,17 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
                           </button>
                         </div>
                       </td>
+                      <td className="p-2 align-top">
+                        <input 
+                          name="baylorId" 
+                          value={editFormData.baylorId || ''} 
+                          onChange={handleChange} 
+                          className={getInputClass('baylorId')} 
+                          placeholder="9 digits" 
+                          maxLength="9"
+                        />
+                        {errors.baylorId && <p className="text-red-600 text-xs mt-1">{errors.baylorId}</p>}
+                      </td>
                                               <td className="p-2 align-top">
                           <div className="text-sm text-gray-600">
                             {faculty.courseCount || 0}
@@ -1303,6 +1343,11 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
                           ) : (
                             faculty.office || '-'
                           )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
+                        <div className={`font-mono ${faculty.baylorId ? 'text-gray-900' : 'text-red-500 italic'}`}>
+                          {faculty.baylorId || 'Not assigned'}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>

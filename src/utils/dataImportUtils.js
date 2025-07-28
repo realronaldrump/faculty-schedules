@@ -67,6 +67,7 @@ export const createPersonModel = (rawData) => {
     isTenured: rawData.roles?.includes('faculty') ? (rawData.isTenured || false) : false,
     isUPD: rawData.roles?.includes('faculty') ? (rawData.isUPD || false) : false,
     programId: rawData.programId || null, // Reference to programs collection
+    baylorId: rawData.baylorId || '', // 9-digit Baylor ID number
     hasNoPhone: rawData.hasNoPhone || false,
     hasNoOffice: rawData.hasNoOffice || false,
     createdAt: rawData.createdAt || new Date().toISOString(),

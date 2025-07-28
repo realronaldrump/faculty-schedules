@@ -16,6 +16,7 @@ export const normalizedSchema = {
         name: 'TEXT NOT NULL',
         email: 'TEXT',
         department_id: 'TEXT REFERENCES departments(department_code)',
+        baylor_id: 'TEXT', // 9-digit Baylor ID number
         is_active: 'BOOLEAN DEFAULT true',
         hire_date: 'DATE',
         created_at: 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP',

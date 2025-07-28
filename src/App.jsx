@@ -14,6 +14,7 @@ import SmartDataImportPage from './components/SmartDataImportPage';
 import SystemsPage from './components/SystemsPage';
 import DataHygieneManager from './components/DataHygieneManager';
 import BaylorAcronyms from './pages/BaylorAcronyms';
+import BaylorIDManagement from './components/BaylorIDManagement';
 
 import EmailLists from './components/EmailLists';
 import BuildingDirectory from './components/BuildingDirectory';
@@ -202,7 +203,8 @@ function App() {
         { id: 'department-management', label: 'Program Management', path: 'directory/department-management' },
         { id: 'building-directory', label: 'Office Directory', path: 'directory/building-directory' },
         { id: 'people-directory', label: 'People Directory', path: 'directory/people-directory' },
-        { id: 'email-lists', label: 'Email Lists', path: 'directory/email-lists' }
+        { id: 'email-lists', label: 'Email Lists', path: 'directory/email-lists' },
+        { id: 'baylor-id-management', label: 'Baylor ID Management', path: 'directory/baylor-id-management' }
       ]
     },
     {
@@ -894,6 +896,8 @@ function App() {
         return <EmailLists {...pageProps} />;
       case 'directory/building-directory':
         return <BuildingDirectory {...pageProps} />;
+      case 'directory/baylor-id-management':
+        return <BaylorIDManagement {...pageProps} />;
       case 'analytics/department-insights':
         return <DepartmentInsights {...pageProps} />;
       case 'analytics/course-management':

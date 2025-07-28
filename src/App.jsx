@@ -477,15 +477,31 @@ function App() {
     
     try {
       const isNewCourse = updatedRow.id && updatedRow.id.startsWith('new_');
+      const isGroupedCourse = updatedRow.id && updatedRow.id.startsWith('grouped_');
       let scheduleRef;
       let originalSchedule = null;
+      let originalSchedules = [];
 
       if (isNewCourse) {
         // Creating a new course
         console.log('🆕 Creating new course entry');
         scheduleRef = doc(collection(db, 'schedules'));
+      } else if (isGroupedCourse) {
+        // Handle grouped courses (multi-day classes)
+        console.log('🔄 Updating grouped course entry');
+        // Extract original IDs from grouped ID (format: grouped_index_id1_id2_id3...)
+        const idParts = updatedRow.id.split('_');
+        const originalIds = idParts.slice(2); // Skip 'grouped' and index parts
+        
+        originalSchedules = rawScheduleData.filter(s => originalIds.includes(s.id));
+        if (originalSchedules.length === 0) {
+          console.error('❌ No original schedules found for grouped update');
+          showNotification('error', 'Update Failed', 'Original schedules not found for grouped course.');
+          return;
+        }
+        console.log(`📋 Found ${originalSchedules.length} original schedules for grouped course`);
       } else {
-        // Updating existing course
+        // Updating existing single course
         originalSchedule = rawScheduleData.find(s => s.id === updatedRow.id);
         if (!originalSchedule) {
           console.error('❌ Original schedule not found for update');
@@ -529,31 +545,34 @@ function App() {
         });
       }
 
+      // Get reference data from the appropriate source
+      const referenceSchedule = isGroupedCourse ? originalSchedules[0] : originalSchedule;
+      
       // Parse the course code to get program, level, and credits
-      const courseCode = updatedRow.Course || (originalSchedule?.courseCode || '');
+      const courseCode = updatedRow.Course || (referenceSchedule?.courseCode || '');
       const parsedCourse = parseCourseCode(courseCode);
 
       // Prepare update data with proper relational structure
       const updateData = {
         courseCode: courseCode,
-        courseTitle: updatedRow['Course Title'] || (originalSchedule?.courseTitle || ''),
+        courseTitle: updatedRow['Course Title'] || (referenceSchedule?.courseTitle || ''),
         program: parsedCourse.program,
         courseLevel: parsedCourse.level,
-        section: updatedRow.Section || (originalSchedule?.section || ''),
-        crn: updatedRow.CRN || (originalSchedule?.crn || ''),
-        term: updatedRow.Term || (originalSchedule?.term || ''),
-        credits: parseInt(updatedRow.Credits) || parsedCourse.credits || (originalSchedule?.credits || 0),
-        scheduleType: updatedRow['Schedule Type'] || (originalSchedule?.scheduleType || 'Class Instruction'),
-        status: updatedRow.Status || (originalSchedule?.status || 'Active'),
+        section: updatedRow.Section || (referenceSchedule?.section || ''),
+        crn: updatedRow.CRN || (referenceSchedule?.crn || ''),
+        term: updatedRow.Term || (referenceSchedule?.term || ''),
+        credits: parseInt(updatedRow.Credits) || parsedCourse.credits || (referenceSchedule?.credits || 0),
+        scheduleType: updatedRow['Schedule Type'] || (referenceSchedule?.scheduleType || 'Class Instruction'),
+        status: updatedRow.Status || (referenceSchedule?.status || 'Active'),
         
         // Relational references
         instructorId: instructorId,
-        instructorName: updatedRow.Instructor || (originalSchedule?.instructorName || ''),
+        instructorName: updatedRow.Instructor || (referenceSchedule?.instructorName || ''),
         roomId: roomId,
-        roomName: updatedRow.Room || (originalSchedule?.roomName || ''),
+        roomName: updatedRow.Room || (referenceSchedule?.roomName || ''),
         
         // Meeting patterns
-        meetingPatterns: meetingPatterns.length > 0 ? meetingPatterns : (originalSchedule?.meetingPatterns || []),
+        meetingPatterns: meetingPatterns.length > 0 ? meetingPatterns : (referenceSchedule?.meetingPatterns || []),
         
         // Timestamps
         updatedAt: new Date().toISOString(),
@@ -565,7 +584,7 @@ function App() {
       if (!updateData.courseCode) validationErrors.push('Course code is required');
       if (!updateData.term) validationErrors.push('Term is required');
       if (!updateData.section) validationErrors.push('Section is required');
-      if (meetingPatterns.length === 0 && (!originalSchedule?.meetingPatterns || originalSchedule.meetingPatterns.length === 0)) {
+      if (meetingPatterns.length === 0 && (!referenceSchedule?.meetingPatterns || referenceSchedule.meetingPatterns.length === 0)) {
         validationErrors.push('Meeting time and day are required');
       }
 
@@ -577,26 +596,95 @@ function App() {
       // Save to Firebase
       if (isNewCourse) {
         await setDoc(scheduleRef, updateData);
+      } else if (isGroupedCourse) {
+        // Handle grouped course updates
+        console.log('🔄 Updating grouped course schedules...');
+        
+        // Split the day pattern into individual days for updating each schedule
+        const dayCodes = typeof updatedRow.Day === 'string' ? updatedRow.Day.match(/[MTWRF]/g) : [];
+        
+        // Update each original schedule with its corresponding day
+        for (let i = 0; i < originalSchedules.length && i < dayCodes.length; i++) {
+          const originalId = originalSchedules[i].id;
+          const dayCode = dayCodes[i];
+          
+          // Create update data for this specific day
+          const daySpecificUpdateData = {
+            ...updateData,
+            meetingPatterns: [{
+              day: dayCode,
+              startTime: updatedRow['Start Time'],
+              endTime: updatedRow['End Time']
+            }]
+          };
+          
+          const scheduleDocRef = doc(db, 'schedules', originalId);
+          await updateDoc(scheduleDocRef, daySpecificUpdateData);
+          console.log(`✅ Updated schedule ${originalId} for day ${dayCode}`);
+        }
+        
+        // If there are more days than original schedules, create new ones
+        if (dayCodes.length > originalSchedules.length) {
+          for (let i = originalSchedules.length; i < dayCodes.length; i++) {
+            const dayCode = dayCodes[i];
+            const newScheduleData = {
+              ...updateData,
+              meetingPatterns: [{
+                day: dayCode,
+                startTime: updatedRow['Start Time'],
+                endTime: updatedRow['End Time']
+              }],
+              createdAt: new Date().toISOString()
+            };
+            
+            const newScheduleRef = doc(collection(db, 'schedules'));
+            await setDoc(newScheduleRef, newScheduleData);
+            console.log(`✅ Created new schedule for day ${dayCode}`);
+          }
+        }
+        
+        // If there are fewer days than original schedules, delete the extra ones
+        if (dayCodes.length < originalSchedules.length) {
+          for (let i = dayCodes.length; i < originalSchedules.length; i++) {
+            const scheduleToDelete = originalSchedules[i];
+            const scheduleDocRef = doc(db, 'schedules', scheduleToDelete.id);
+            await deleteDoc(scheduleDocRef);
+            console.log(`🗑️ Deleted extra schedule ${scheduleToDelete.id}`);
+          }
+        }
       } else {
         await updateDoc(scheduleRef, updateData);
       }
 
       // Add to edit history
-      await addDoc(collection(db, 'editHistory'), {
-        action: isNewCourse ? 'CREATE' : 'UPDATE',
+      const historyData = {
+        action: isNewCourse ? 'CREATE' : (isGroupedCourse ? 'UPDATE_GROUPED' : 'UPDATE'),
         entity: `${updateData.courseCode} ${updateData.section} - ${updateData.instructorName}`,
         changes: updateData,
-        originalData: originalSchedule,
+        originalData: isGroupedCourse ? originalSchedules : originalSchedule,
         timestamp: new Date().toISOString(),
         userId: 'system'
-      });
+      };
+      
+      if (isGroupedCourse) {
+        historyData.affectedScheduleCount = originalSchedules.length;
+      }
+      
+      await addDoc(collection(db, 'editHistory'), historyData);
 
       // Refresh data to reflect changes
       await loadData();
       
-      const actionText = isNewCourse ? 'created' : 'updated';
-      showNotification('success', `Schedule ${isNewCourse ? 'Created' : 'Updated'}`, 
-        `Course ${updateData.courseCode} ${updateData.section} has been ${actionText} successfully.`);
+      if (isNewCourse) {
+        showNotification('success', 'Schedule Created', 
+          `Course ${updateData.courseCode} ${updateData.section} has been created successfully.`);
+      } else if (isGroupedCourse) {
+        showNotification('success', 'Grouped Schedule Updated', 
+          `Course ${updateData.courseCode} ${updateData.section} (${originalSchedules.length} schedule entries) has been updated successfully.`);
+      } else {
+        showNotification('success', 'Schedule Updated', 
+          `Course ${updateData.courseCode} ${updateData.section} has been updated successfully.`);
+      }
       
     } catch (error) {
       console.error('❌ Error updating schedule:', error);

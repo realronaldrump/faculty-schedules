@@ -837,6 +837,93 @@ function App() {
     }
   };
 
+  const handleStudentUpdate = async (studentToUpdate) => {
+    console.log('🎓 Updating student worker:', studentToUpdate);
+    
+    try {
+      const isNewStudent = !studentToUpdate.id;
+      let studentRef;
+      let actionType;
+      
+      if (isNewStudent) {
+        // Creating a new student worker
+        console.log('🆕 Creating new student worker');
+        studentRef = doc(collection(db, 'people'));
+        actionType = 'CREATE';
+      } else {
+        // Updating existing student worker
+        console.log('📝 Updating existing student worker');
+        studentRef = doc(db, 'people', studentToUpdate.id);
+        actionType = 'UPDATE';
+      }
+      
+      const updateData = {
+        ...studentToUpdate,
+        roles: ['student'], // Ensure student role is set
+        updatedAt: new Date().toISOString()
+      };
+
+      if (isNewStudent) {
+        // Use setDoc for new student to ensure we get the generated ID
+        await setDoc(studentRef, updateData);
+      } else {
+        // Use updateDoc for existing student
+        await updateDoc(studentRef, updateData);
+      }
+
+      // Add to edit history
+      await addDoc(collection(db, 'editHistory'), {
+        action: actionType,
+        entity: `Student - ${studentToUpdate.name}`,
+        changes: updateData,
+        timestamp: new Date().toISOString(),
+        userId: 'system'
+      });
+
+      // Refresh data
+      await loadData();
+      
+      const successMessage = isNewStudent 
+        ? `${studentToUpdate.name} has been added to the student worker directory successfully.`
+        : `${studentToUpdate.name} has been updated successfully.`;
+      
+      showNotification('success', isNewStudent ? 'Student Added' : 'Student Updated', successMessage);
+      
+    } catch (error) {
+      console.error('❌ Error updating student:', error);
+      const errorMessage = !studentToUpdate.id
+        ? 'Failed to add student worker. Please try again.'
+        : 'Failed to update student worker. Please try again.';
+      showNotification('error', 'Operation Failed', errorMessage);
+    }
+  };
+
+  const handleStudentDelete = async (studentToDelete) => {
+    console.log('🗑️ Deleting student worker:', studentToDelete);
+    
+    try {
+      // Delete from Firebase
+      await deleteDoc(doc(db, 'people', studentToDelete.id));
+
+      // Add to edit history
+      await addDoc(collection(db, 'editHistory'), {
+        action: 'DELETE',
+        entity: `Student - ${studentToDelete.name}`,
+        timestamp: new Date().toISOString(),
+        userId: 'system'
+      });
+
+      // Refresh data
+      await loadData();
+      
+      showNotification('success', 'Student Deleted', `${studentToDelete.name} has been removed from the directory.`);
+      
+    } catch (error) {
+      console.error('❌ Error deleting student:', error);
+      showNotification('error', 'Delete Failed', 'Failed to delete student worker. Please try again.');
+    }
+  };
+
   const handleScheduleDelete = async (scheduleId) => {
     console.log('🗑️ Deleting schedule:', scheduleId);
     
@@ -935,19 +1022,28 @@ function App() {
       );
     }
 
+    // Filter student data from rawPeople
+    const studentData = rawPeople.filter(person => 
+      person.roles?.includes('student') || 
+      (Array.isArray(person.roles) ? person.roles.includes('student') : person.roles?.student)
+    );
+
     const pageProps = {
       scheduleData,
       directoryData: rawPeople,
       facultyData: adaptPeopleToFaculty(rawPeople, rawScheduleData, rawPrograms),
       staffData: adaptPeopleToStaff(rawPeople, rawScheduleData, rawPrograms),
+      studentData: studentData,
       programs: rawPrograms,
       analytics,
       editHistory,
       onDataUpdate: handleDataUpdate,
       onFacultyUpdate: handleFacultyUpdate,
       onStaffUpdate: handleStaffUpdate,
+      onStudentUpdate: handleStudentUpdate,
       onFacultyDelete: handleFacultyDelete,
       onStaffDelete: handleStaffDelete,
+      onStudentDelete: handleStudentDelete,
       onScheduleDelete: handleScheduleDelete,
       onRevertChange: handleRevertChange,
       onNavigate: setCurrentPage,
@@ -978,6 +1074,8 @@ function App() {
         return <PeopleDirectory {...pageProps} initialTab="staff" />;
       case 'directory/adjunct-directory':
         return <PeopleDirectory {...pageProps} initialTab="adjunct" />;
+      case 'directory/student-directory':
+        return <PeopleDirectory {...pageProps} initialTab="student" />;
       case 'directory/department-management':
         return <ProgramManagement {...pageProps} />;
       case 'directory/email-lists':

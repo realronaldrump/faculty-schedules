@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import FacultyDirectory from './FacultyDirectory';
 import StaffDirectory from './StaffDirectory';
 import AdjunctDirectory from './AdjunctDirectory';
+import StudentDirectory from './StudentDirectory';
 import { Users } from 'lucide-react';
 
 // Local tab definitions to switch between directory views
@@ -9,6 +10,7 @@ const tabs = [
   { id: 'faculty', label: 'Faculty' },
   { id: 'staff', label: 'Staff' },
   { id: 'adjunct', label: 'Adjunct' },
+  { id: 'student', label: 'Student' },
 ];
 
 const PeopleDirectory = (props) => {
@@ -21,7 +23,7 @@ const PeopleDirectory = (props) => {
       <div className="university-card-header flex justify-between items-center">
         <div>
           <h2 className="university-card-title">People Directory</h2>
-          <p className="university-card-subtitle">Manage faculty, staff, and adjunct information.</p>
+          <p className="university-card-subtitle">Manage faculty, staff, adjunct, and student worker information.</p>
         </div>
         <div className="p-3 bg-baylor-green/10 rounded-lg">
            <Users className="h-6 w-6 text-baylor-green" />
@@ -52,6 +54,7 @@ const PeopleDirectory = (props) => {
           {activeTab === 'faculty' && <FacultyDirectory {...props} />}
           {activeTab === 'staff' && <StaffDirectory {...props} />}
           {activeTab === 'adjunct' && <AdjunctDirectory {...props} />}
+          {activeTab === 'student' && <StudentDirectory {...props} />}
         </div>
       </div>
     </div>

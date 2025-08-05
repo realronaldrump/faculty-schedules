@@ -815,42 +815,68 @@ function App() {
     console.log('👥 Updating staff member:', staffToUpdate);
     
     try {
-      // Update in Firebase
-      const staffRef = doc(db, 'people', staffToUpdate.id);
-      const updateData = {
-        ...staffToUpdate,
-        updatedAt: new Date().toISOString()
-      };
+      let docRef;
+      let action;
+      let logFunction;
+      let originalData = null;
       
-      await updateDoc(staffRef, updateData);
+      if (staffToUpdate.id) {
+        // Update existing staff member
+        const staffRef = doc(db, 'people', staffToUpdate.id);
+        const updateData = {
+          ...staffToUpdate,
+          updatedAt: new Date().toISOString()
+        };
+        
+        await updateDoc(staffRef, updateData);
+        docRef = staffRef;
+        action = 'UPDATE';
+        logFunction = logUpdate;
+        
+      } else {
+        // Create new staff member
+        const createData = {
+          ...staffToUpdate,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
+        docRef = await addDoc(collection(db, 'people'), createData);
+        action = 'CREATE';
+        logFunction = logCreate;
+      }
 
       // Add to edit history (legacy)
       await addDoc(collection(db, 'editHistory'), {
-        action: 'UPDATE',
+        action: action,
         entity: `Staff - ${staffToUpdate.name}`,
-        changes: updateData,
+        changes: staffToUpdate,
         timestamp: new Date().toISOString(),
         userId: 'system'
       });
 
       // Log change in centralized system
-      await logUpdate(
+      await logFunction(
         `Staff - ${staffToUpdate.name}`,
         'people',
-        staffToUpdate.id,
-        updateData,
-        null, // Original data not available here
+        docRef.id,
+        staffToUpdate,
+        originalData,
         'App.jsx - handleStaffUpdate'
       );
 
       // Refresh data
       await loadData();
       
-      showNotification('success', 'Staff Updated', `${staffToUpdate.name} has been updated successfully.`);
+      const successMessage = action === 'CREATE' 
+        ? `${staffToUpdate.name} has been created successfully.`
+        : `${staffToUpdate.name} has been updated successfully.`;
+      
+      showNotification('success', `Staff ${action === 'CREATE' ? 'Created' : 'Updated'}`, successMessage);
       
     } catch (error) {
       console.error('❌ Error updating staff:', error);
-      showNotification('error', 'Update Failed', 'Failed to update staff member. Please try again.');
+      showNotification('error', 'Operation Failed', 'Failed to save staff member. Please try again.');
     }
   };
 

@@ -36,6 +36,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
     isAlsoStaff: false,
     hasNoPhone: false,
     hasNoOffice: false,
+    hasPhD: false,
   });
 
 
@@ -58,7 +59,8 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
     upd: 'all',
     hasEmail: true,
     courseCount: 'all', // 'all', 'with-courses', 'without-courses'
-    isAlsoStaff: 'all' // 'all', 'include', 'exclude'
+    isAlsoStaff: 'all', // 'all', 'include', 'exclude'
+    hasPhD: 'all' // 'all', 'include', 'exclude'
   });
 
   // Helper function to extract building name from office location
@@ -291,6 +293,18 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
           return person.isAlsoStaff;
         } else if (filters.isAlsoStaff === 'exclude') {
           return !person.isAlsoStaff;
+        }
+        return true;
+      });
+    }
+
+    // PhD filter
+    if (filters.hasPhD !== 'all') {
+      data = data.filter(person => {
+        if (filters.hasPhD === 'include') {
+          return person.hasPhD;
+        } else if (filters.hasPhD === 'exclude') {
+          return !person.hasPhD;
         }
         return true;
       });
@@ -543,6 +557,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
       isAlsoStaff: false,
       hasNoPhone: false,
       hasNoOffice: false,
+      hasPhD: false,
     });
     setErrors({});
   };
@@ -561,6 +576,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
       isAlsoStaff: false,
       hasNoPhone: false,
       hasNoOffice: false,
+      hasPhD: false,
     });
     setErrors({});
   };
@@ -624,7 +640,8 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
       upd: 'all',
       hasEmail: true,
       courseCount: 'all',
-      isAlsoStaff: 'all'
+      isAlsoStaff: 'all',
+      hasPhD: 'all'
     });
     setFilterText('');
     setShowOnlyWithCourses(false);
@@ -839,7 +856,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
               </div>
 
               {/* Status Filters */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Adjunct Status
@@ -928,6 +945,21 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
                     <option value="without-courses">Not Teaching</option>
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    PhD Status
+                  </label>
+                  <select
+                    value={filters.hasPhD}
+                    onChange={(e) => setFilters(prev => ({ ...prev, hasPhD: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  >
+                    <option value="all">All</option>
+                    <option value="include">PhD Only</option>
+                    <option value="exclude">Exclude PhD</option>
+                  </select>
+                </div>
               </div>
             </div>
           </div>
@@ -994,6 +1026,17 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
                       <div className="flex items-center gap-2 text-xs mt-1">
                          <input type="checkbox" id="new-isAlsoStaff" name="isAlsoStaff" checked={newFaculty.isAlsoStaff} onChange={handleCreateChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
                          <label htmlFor="new-isAlsoStaff" className="font-normal">Also a staff member</label>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs mt-1">
+                         <input
+                           type="checkbox"
+                           id="new-hasPhD"
+                           name="hasPhD"
+                           checked={newFaculty.hasPhD}
+                           onChange={handleCreateChange}
+                           className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                         />
+                         <label htmlFor="new-hasPhD" className="font-normal">Has PhD</label>
                       </div>
                   </td>
                   <td className="p-2 align-top">
@@ -1129,6 +1172,17 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
                              <input type="checkbox" id={`isAlsoStaff-${faculty.id || index}`} name="isAlsoStaff" checked={!!editFormData.isAlsoStaff} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
                              <label htmlFor={`isAlsoStaff-${faculty.id || index}`} className="font-normal">Also a staff member</label>
                           </div>
+                          <div className="flex items-center gap-2 text-xs mt-1">
+                             <input
+                               type="checkbox"
+                               id={`hasPhD-${faculty.id || index}`}
+                               name="hasPhD"
+                               checked={!!editFormData.hasPhD}
+                               onChange={handleChange}
+                               className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                             />
+                             <label htmlFor={`hasPhD-${faculty.id || index}`} className="font-normal">Has PhD</label>
+                          </div>
                       </td>
                       <td className="p-2 align-top">
                           <select
@@ -1240,6 +1294,9 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
                         )}
                         {faculty.isTenured && (
                           <div className="text-xs text-purple-600 font-medium">Tenured</div>
+                        )}
+                        {faculty.hasPhD && (
+                          <div className="text-xs text-green-600 font-medium">PhD</div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>

@@ -45,6 +45,13 @@ const FacultyContactCard = ({ person, faculty, onClose, personType = 'faculty' }
         return 'Faculty';
     };
 
+    const getDisplayName = () => {
+        if (contactPerson.hasPhD && personType !== 'student') {
+            return `Dr. ${contactPerson.name}`;
+        }
+        return contactPerson.name;
+    };
+
     const getIconForPersonType = () => {
         switch (personType) {
             case 'student':
@@ -63,9 +70,15 @@ const FacultyContactCard = ({ person, faculty, onClose, personType = 'faculty' }
                     <X size={20} />
                 </button>
                 <div className="text-center">
-                    <h3 className="text-2xl font-serif font-bold text-baylor-green">{contactPerson.name}</h3>
+                    <h3 className="text-2xl font-serif font-bold text-baylor-green">{getDisplayName()}</h3>
                     {contactPerson.jobTitle && <p className="text-md text-gray-600">{contactPerson.jobTitle}</p>}
                     <p className="text-md text-baylor-gold font-semibold">{getRoleLabel()}</p>
+                    {contactPerson.hasPhD && personType !== 'student' && (
+                        <div className="mt-1 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <GraduationCap size={12} className="mr-1" />
+                            PhD
+                        </div>
+                    )}
                     
                     {/* Different info based on person type */}
                     {personType === 'student' && contactPerson.department && (

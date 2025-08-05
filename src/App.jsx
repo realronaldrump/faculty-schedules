@@ -751,8 +751,13 @@ function App() {
         actionType = 'UPDATE';
       }
       
+      // Filter out undefined values to prevent Firebase errors
+      const cleanData = Object.fromEntries(
+        Object.entries(facultyToUpdate).filter(([_, value]) => value !== undefined)
+      );
+      
       const updateData = {
-        ...facultyToUpdate,
+        ...cleanData,
         updatedAt: new Date().toISOString()
       };
 
@@ -820,11 +825,16 @@ function App() {
       let logFunction;
       let originalData = null;
       
+      // Filter out undefined values to prevent Firebase errors
+      const cleanStaffData = Object.fromEntries(
+        Object.entries(staffToUpdate).filter(([_, value]) => value !== undefined)
+      );
+      
       if (staffToUpdate.id) {
         // Update existing staff member
         const staffRef = doc(db, 'people', staffToUpdate.id);
         const updateData = {
-          ...staffToUpdate,
+          ...cleanStaffData,
           updatedAt: new Date().toISOString()
         };
         
@@ -836,7 +846,7 @@ function App() {
       } else {
         // Create new staff member
         const createData = {
-          ...staffToUpdate,
+          ...cleanStaffData,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
@@ -970,8 +980,13 @@ function App() {
         actionType = 'UPDATE';
       }
       
+      // Filter out undefined values to prevent Firebase errors
+      const cleanStudentData = Object.fromEntries(
+        Object.entries(studentToUpdate).filter(([_, value]) => value !== undefined)
+      );
+      
       const updateData = {
-        ...studentToUpdate,
+        ...cleanStudentData,
         roles: ['student'], // Ensure student role is set
         updatedAt: new Date().toISOString()
       };

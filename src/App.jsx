@@ -217,7 +217,8 @@ function App() {
       icon: BarChart3,
       children: [
         { id: 'department-insights', label: 'Department Insights', path: 'analytics/department-insights' },
-        { id: 'course-management', label: 'Course Management', path: 'analytics/course-management' }
+        { id: 'course-management', label: 'Course Management', path: 'analytics/course-management' },
+        { id: 'recent-changes', label: 'Recent Changes', path: 'analytics/recent-changes' }
       ]
     },
     {

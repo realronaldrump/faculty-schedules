@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../firebase';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import { PlusCircle, Edit, Trash2, Save, XCircle, AlertTriangle } from 'lucide-react';
+import { logCreate, logUpdate, logDelete } from '../utils/changeLogger';
 
 const BaylorAcronyms = ({ showNotification }) => {
     const [acronyms, setAcronyms] = useState([]);
@@ -59,14 +60,25 @@ const BaylorAcronyms = ({ showNotification }) => {
 
         setIsSubmitting(true);
         try {
-            const docRef = await addDoc(acronymsCollectionRef, {
+            const acronymData = {
                 ...newAcronym,
                 acronym: newAcronym.acronym.trim(),
                 standsFor: newAcronym.standsFor.trim(),
                 description: newAcronym.description.trim(),
                 category: newAcronym.category.trim()
-            });
-            const newlyAdded = { ...newAcronym, id: docRef.id };
+            };
+            
+            const docRef = await addDoc(acronymsCollectionRef, acronymData);
+            const newlyAdded = { ...acronymData, id: docRef.id };
+            
+            // Log the change
+            await logCreate(
+                `Acronym - ${acronymData.acronym} (${acronymData.standsFor})`,
+                'baylorAcronyms',
+                docRef.id,
+                acronymData,
+                'BaylorAcronyms.jsx - handleAddAcronym'
+            );
             
             // Optimistic update
             const updatedAcronyms = [...acronyms, newlyAdded].sort((a, b) => {
@@ -114,6 +126,7 @@ const BaylorAcronyms = ({ showNotification }) => {
         
         setIsSubmitting(true);
         try {
+            const originalAcronym = acronyms.find(acro => acro.id === id);
             const acronymDoc = doc(db, 'baylorAcronyms', id);
             const finalEditedAcronym = {
                 ...editedAcronym,
@@ -123,6 +136,16 @@ const BaylorAcronyms = ({ showNotification }) => {
                 category: editedAcronym.category.trim()
             };
             await updateDoc(acronymDoc, finalEditedAcronym);
+
+            // Log the change
+            await logUpdate(
+                `Acronym - ${finalEditedAcronym.acronym} (${finalEditedAcronym.standsFor})`,
+                'baylorAcronyms',
+                id,
+                finalEditedAcronym,
+                originalAcronym,
+                'BaylorAcronyms.jsx - handleUpdateAcronym'
+            );
 
             // Optimistic update
             const updatedAcronyms = acronyms.map(acro => acro.id === id ? finalEditedAcronym : acro);
@@ -145,8 +168,18 @@ const BaylorAcronyms = ({ showNotification }) => {
     const handleDeleteAcronym = async (id) => {
         setIsSubmitting(true);
         try {
+            const acronymToDelete = acronyms.find(acro => acro.id === id);
             const acronymDoc = doc(db, 'baylorAcronyms', id);
             await deleteDoc(acronymDoc);
+
+            // Log the change
+            await logDelete(
+                `Acronym - ${acronymToDelete.acronym} (${acronymToDelete.standsFor})`,
+                'baylorAcronyms',
+                id,
+                acronymToDelete,
+                'BaylorAcronyms.jsx - handleDeleteAcronym'
+            );
 
             // Optimistic update
             const updatedAcronyms = acronyms.filter(acro => acro.id !== id);

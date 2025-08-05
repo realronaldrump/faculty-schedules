@@ -11,6 +11,7 @@ import { collection, getDocs, doc, updateDoc, addDoc } from 'firebase/firestore'
 import { db } from '../firebase';
 import { standardizeAllData } from '../utils/comprehensiveDataHygiene';
 import DeduplicationReviewModal from './DeduplicationReviewModal';
+import { logImport, logBulkUpdate } from '../utils/changeLogger';
 
 const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, availableSemesters, onSemesterDataImported }) => {
   const [csvData, setCsvData] = useState(null);
@@ -426,11 +427,31 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
           };
 
           await updateDoc(doc(db, 'people', match.person.id), updates);
+          
+          // Log the update (no await to avoid slowing down bulk import)
+          logUpdate(
+            `Directory Import Update - ${personData.firstName} ${personData.lastName}`,
+            'people',
+            match.person.id,
+            updates,
+            match.person,
+            'SmartDataImportPage.jsx - processDirectoryImportWithRoles'
+          ).catch(err => console.error('Change logging error:', err));
+          
           results.updated++;
           results.people.push({ ...updates, id: match.person.id });
         } else {
           // Create new person
           const docRef = await addDoc(collection(db, 'people'), personData);
+          
+          // Log the creation (no await to avoid slowing down bulk import)
+          logImport(
+            `Directory Import Create - ${personData.firstName} ${personData.lastName}`,
+            'people',
+            1,
+            'SmartDataImportPage.jsx - processDirectoryImportWithRoles'
+          ).catch(err => console.error('Change logging error:', err));
+          
           results.created++;
           results.people.push({ ...personData, id: docRef.id });
           existingPeople.push({ ...personData, id: docRef.id });

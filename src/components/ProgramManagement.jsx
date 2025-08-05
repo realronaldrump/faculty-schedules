@@ -20,6 +20,7 @@ import {
 import FacultyContactCard from './FacultyContactCard';
 import { doc, updateDoc, getDocs, collection } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
+import { logUpdate } from '../utils/changeLogger';
 
 const ProgramManagement = ({ 
   facultyData,
@@ -196,10 +197,22 @@ const ProgramManagement = ({
 
       // Update the programs collection to reference this faculty member as UPD
       const programRef = doc(db, COLLECTIONS.PROGRAMS, program.programId);
-      await updateDoc(programRef, {
+      const updateData = {
         updId: faculty.id,
         updatedAt: new Date().toISOString()
-      });
+      };
+      
+      await updateDoc(programRef, updateData);
+
+      // Log the change
+      await logUpdate(
+        `Program UPD Assignment - ${programName} → ${faculty.name}`,
+        'programs',
+        program.programId,
+        updateData,
+        { updId: currentUPD?.id || null }, // Previous UPD
+        'ProgramManagement.jsx - handleSetUPD'
+      );
 
       showNotification(
         'success',

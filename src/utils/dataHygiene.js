@@ -12,6 +12,7 @@ import { collection, getDocs, query, where, doc, getDoc, updateDoc, deleteDoc, w
 import { db } from '../firebase';
 import { normalizedSchema } from './normalizedSchema';
 import { detectScheduleDuplicates, detectRoomDuplicates, mergeScheduleRecords, mergeRoomRecords } from './comprehensiveDataHygiene';
+import { logUpdate, logStandardization, logMerge } from './changeLogger';
 
 // ---------------------------------------------------------------------------
 // PERSON SCHEMA CONSISTENCY
@@ -548,6 +549,9 @@ export const standardizeAllData = async () => {
   });
   
   await batch.commit();
+  
+  // Log the standardization operation
+  await logStandardization('multiple', updateCount, 'dataHygiene.js - standardizeAllData');
   
   return { updatedRecords: updateCount };
 };

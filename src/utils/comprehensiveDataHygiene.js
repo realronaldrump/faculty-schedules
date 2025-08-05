@@ -12,6 +12,7 @@
 import { collection, getDocs, doc, updateDoc, deleteDoc, writeBatch, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { DEFAULT_PERSON_SCHEMA } from './dataHygiene';
+import { logStandardization, logMerge, logBulkUpdate } from './changeLogger';
 
 // ==================== CORE DATA HYGIENE FUNCTIONS ====================
 
@@ -480,6 +481,9 @@ export const standardizeAllData = async () => {
     if (updateCount > 0) {
       await batch.commit();
       console.log(`✅ Standardized ${updateCount} records`);
+      
+      // Log the bulk standardization operation
+      await logStandardization('multiple', updateCount, 'comprehensiveDataHygiene.js - standardizeAllData');
     } else {
       console.log('✅ All data already standardized');
     }

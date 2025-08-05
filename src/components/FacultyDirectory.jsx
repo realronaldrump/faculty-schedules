@@ -38,9 +38,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
     hasNoOffice: false,
   });
 
-  // Undo functionality
-  const [changeHistory, setChangeHistory] = useState([]);
-  const [showHistory, setShowHistory] = useState(false);
+
 
   // Delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -384,45 +382,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
     return Object.keys(newErrors).length === 0;
   };
 
-  const trackChange = (originalData, updatedData, action) => {
-    const change = {
-      id: Date.now(),
-      timestamp: new Date().toISOString(),
-      action,
-      originalData: { ...originalData },
-      updatedData: { ...updatedData },
-      facultyId: originalData.id || updatedData.id,
-      facultyName: originalData.name || updatedData.name
-    };
-    
-    setChangeHistory(prev => [change, ...prev.slice(0, 19)]); // Keep last 20 changes
-  };
 
-  const undoChange = async (change) => {
-    try {
-      if (change.action === 'update') {
-        // Restore original data
-        const dataToRestore = { ...change.originalData };
-
-        if (dataToRestore.isAlsoStaff) {
-          await onStaffUpdate(dataToRestore);
-        } else {
-          await onFacultyUpdate(dataToRestore);
-        }
-
-        // Remove this change from history
-        setChangeHistory(prev => prev.filter(c => c.id !== change.id));
-        
-        console.log('Change undone successfully');
-      } else if (change.action === 'create') {
-        // This would require a delete function - for now just log
-        console.log('Cannot undo create action - delete functionality not implemented');
-      }
-    } catch (error) {
-      console.error('Error undoing change:', error);
-      alert('Error undoing change: ' + error.message);
-    }
-  };
 
   const handleEdit = (faculty) => {
     setErrors({}); // Clear previous errors
@@ -460,20 +420,17 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
         dataToSave.roles = updatedRoles;
         const cleanedData = { ...dataToSave, phone: (dataToSave.phone || '').replace(/\D/g, '') };
 
-        // Track the change before saving
-        trackChange(originalData, cleanedData, 'update');
+
 
         try {
           // Always use onFacultyUpdate when editing from faculty directory
           // The handler will manage dual roles properly
-          await onFacultyUpdate(cleanedData);
+          await onFacultyUpdate(cleanedData, originalData);
           
           setEditingId(null);
           setErrors({});
         } catch (error) {
-          // Remove the change from history if save failed
-          setChangeHistory(prev => prev.slice(1));
-          throw error;
+
         }
     }
   };
@@ -632,8 +589,14 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
 
   const handleCreateSave = async () => {
     if (validate(newFaculty)) {
+      const nameParts = newFaculty.name.split(' ');
+      const firstName = nameParts.slice(0, -1).join(' ');
+      const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
+
       const dataToSave = {
         ...newFaculty,
+        firstName: firstName,
+        lastName: lastName,
         phone: (newFaculty.phone || '').replace(/\D/g, '')
       };
       
@@ -643,8 +606,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
         staff: newFaculty.isAlsoStaff || false
       };
       
-      // Track the creation
-      trackChange({}, dataToSave, 'create');
+
       
       await onFacultyUpdate(dataToSave);
       setIsCreating(false);
@@ -755,15 +717,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
                   <Filter size={16} />
                   Filters
                 </button>
-                {changeHistory.length > 0 && (
-                  <button
-                    onClick={() => setShowHistory(!showHistory)}
-                    className="flex items-center gap-2 px-3 py-2 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 transition-colors"
-                  >
-                    <History size={16} />
-                    Changes ({changeHistory.length})
-                  </button>
-                )}
+
                 <button
                   onClick={handleCreate}
                   className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
@@ -987,35 +941,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
           </p>
         </div>
 
-        {/* Change History */}
-        {showHistory && changeHistory.length > 0 && (
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <h3 className="font-medium text-gray-900 mb-3">Recent Changes</h3>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {changeHistory.map((change) => (
-                <div key={change.id} className="flex items-center justify-between p-3 bg-white rounded border">
-                  <div className="flex-1">
-                    <div className="font-medium text-sm">
-                      {change.action === 'create' ? 'Created' : 'Updated'} {change.facultyName}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {new Date(change.timestamp).toLocaleString()}
-                    </div>
-                  </div>
-                  {change.action === 'update' && (
-                    <button
-                      onClick={() => undoChange(change)}
-                      className="flex items-center gap-1 px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
-                    >
-                      <RotateCcw size={12} />
-                      Undo
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

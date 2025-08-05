@@ -15,6 +15,7 @@ import SystemsPage from './components/SystemsPage';
 import DataHygieneManager from './components/DataHygieneManager';
 import BaylorAcronyms from './pages/BaylorAcronyms';
 import BaylorIDManagement from './components/BaylorIDManagement';
+import RecentChangesPage from './components/RecentChangesPage';
 
 import EmailLists from './components/EmailLists';
 import BuildingDirectory from './components/BuildingDirectory';
@@ -42,6 +43,8 @@ import { fetchSchedulesWithRelationalData } from './utils/dataImportUtils';
 import { autoMigrateIfNeeded } from './utils/importTransactionMigration';
 import MaintenancePage from './components/MaintenancePage';
 import { parseCourseCode } from './utils/courseUtils';
+import { logCreate, logUpdate, logDelete } from './utils/changeLogger';
+import { fetchRecentChanges } from './utils/recentChanges';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -72,6 +75,7 @@ function App() {
   const [rawPeople, setRawPeople] = useState([]);
   const [rawPrograms, setRawPrograms] = useState([]);
   const [editHistory, setEditHistory] = useState([]);
+  const [recentChanges, setRecentChanges] = useState([]);
   const [loading, setLoading] = useState(true);
   
   // Notification state
@@ -431,21 +435,26 @@ function App() {
         }
       });
       
-      // Load edit history
+      // Load edit history (legacy)
       const historySnapshot = await getDocs(query(collection(db, 'editHistory'), orderBy('timestamp', 'desc')));
       const history = historySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // Load recent changes from new centralized log
+      const recentChangesData = await fetchRecentChanges(100);
       
       console.log('✅ Data loaded successfully:', {
         schedules: schedules.length,
         people: mergedPeople.length,
         programs: programs.length,
-        history: history.length
+        history: history.length,
+        recentChanges: recentChangesData.length
       });
       
       setRawScheduleData(schedules);
       setRawPeople(mergedPeople);
       setRawPrograms(programs);
       setEditHistory(history);
+      setRecentChanges(recentChangesData);
       updateAvailableSemesters(schedules);
       
     } catch (error) {
@@ -656,7 +665,7 @@ function App() {
         await updateDoc(scheduleRef, updateData);
       }
 
-      // Add to edit history
+      // Add to edit history (legacy)
       const historyData = {
         action: isNewCourse ? 'CREATE' : (isGroupedCourse ? 'UPDATE_GROUPED' : 'UPDATE'),
         entity: `${updateData.courseCode} ${updateData.section} - ${updateData.instructorName}`,
@@ -671,6 +680,35 @@ function App() {
       }
       
       await addDoc(collection(db, 'editHistory'), historyData);
+
+      // Log change in centralized system
+      if (isNewCourse) {
+        await logCreate(
+          `Schedule - ${updateData.courseCode} ${updateData.section} (${updateData.instructorName})`,
+          'schedules',
+          scheduleRef.id,
+          updateData,
+          'App.jsx - handleDataUpdate'
+        );
+      } else if (isGroupedCourse) {
+        await logUpdate(
+          `Schedule Group - ${updateData.courseCode} ${updateData.section} (${originalSchedules.length} schedules)`,
+          'schedules',
+          'multiple',
+          updateData,
+          originalSchedules,
+          'App.jsx - handleDataUpdate'
+        );
+      } else {
+        await logUpdate(
+          `Schedule - ${updateData.courseCode} ${updateData.section} (${updateData.instructorName})`,
+          'schedules',
+          updatedRow.id,
+          updateData,
+          originalSchedule,
+          'App.jsx - handleDataUpdate'
+        );
+      }
 
       // Refresh data to reflect changes
       await loadData();
@@ -692,7 +730,7 @@ function App() {
     }
   };
 
-  const handleFacultyUpdate = async (facultyToUpdate) => {
+  const handleFacultyUpdate = async (facultyToUpdate, originalData = null) => {
     console.log('👤 Updating faculty member:', facultyToUpdate);
     
     try {
@@ -725,7 +763,7 @@ function App() {
         await updateDoc(facultyRef, updateData);
       }
 
-      // Add to edit history
+      // Add to edit history (legacy)
       await addDoc(collection(db, 'editHistory'), {
         action: actionType,
         entity: `Faculty - ${facultyToUpdate.name}`,
@@ -733,6 +771,26 @@ function App() {
         timestamp: new Date().toISOString(),
         userId: 'system'
       });
+
+      // Log change in centralized system
+      if (isNewFaculty) {
+        await logCreate(
+          `Faculty - ${facultyToUpdate.name}`,
+          'people',
+          facultyRef.id,
+          updateData,
+          'App.jsx - handleFacultyUpdate'
+        );
+      } else {
+        await logUpdate(
+          `Faculty - ${facultyToUpdate.name}`,
+          'people',
+          facultyToUpdate.id,
+          updateData,
+          originalData, // Pass original data for accurate logging
+          'App.jsx - handleFacultyUpdate'
+        );
+      }
 
       // Refresh data
       await loadData();
@@ -765,7 +823,7 @@ function App() {
       
       await updateDoc(staffRef, updateData);
 
-      // Add to edit history
+      // Add to edit history (legacy)
       await addDoc(collection(db, 'editHistory'), {
         action: 'UPDATE',
         entity: `Staff - ${staffToUpdate.name}`,
@@ -773,6 +831,16 @@ function App() {
         timestamp: new Date().toISOString(),
         userId: 'system'
       });
+
+      // Log change in centralized system
+      await logUpdate(
+        `Staff - ${staffToUpdate.name}`,
+        'people',
+        staffToUpdate.id,
+        updateData,
+        null, // Original data not available here
+        'App.jsx - handleStaffUpdate'
+      );
 
       // Refresh data
       await loadData();
@@ -792,13 +860,22 @@ function App() {
       // Delete from Firebase
       await deleteDoc(doc(db, 'people', facultyToDelete.id));
 
-      // Add to edit history
+      // Add to edit history (legacy)
       await addDoc(collection(db, 'editHistory'), {
         action: 'DELETE',
         entity: `Faculty - ${facultyToDelete.name}`,
         timestamp: new Date().toISOString(),
         userId: 'system'
       });
+
+      // Log change in centralized system
+      await logDelete(
+        `Faculty - ${facultyToDelete.name}`,
+        'people',
+        facultyToDelete.id,
+        facultyToDelete,
+        'App.jsx - handleFacultyDelete'
+      );
 
       // Refresh data
       await loadData();
@@ -818,13 +895,22 @@ function App() {
       // Delete from Firebase
       await deleteDoc(doc(db, 'people', staffToDelete.id));
 
-      // Add to edit history
+      // Add to edit history (legacy)
       await addDoc(collection(db, 'editHistory'), {
         action: 'DELETE',
         entity: `Staff - ${staffToDelete.name}`,
         timestamp: new Date().toISOString(),
         userId: 'system'
       });
+
+      // Log change in centralized system
+      await logDelete(
+        `Staff - ${staffToDelete.name}`,
+        'people',
+        staffToDelete.id,
+        staffToDelete,
+        'App.jsx - handleStaffDelete'
+      );
 
       // Refresh data
       await loadData();
@@ -871,7 +957,7 @@ function App() {
         await updateDoc(studentRef, updateData);
       }
 
-      // Add to edit history
+      // Add to edit history (legacy)
       await addDoc(collection(db, 'editHistory'), {
         action: actionType,
         entity: `Student - ${studentToUpdate.name}`,
@@ -879,6 +965,26 @@ function App() {
         timestamp: new Date().toISOString(),
         userId: 'system'
       });
+
+      // Log change in centralized system
+      if (isNewStudent) {
+        await logCreate(
+          `Student - ${studentToUpdate.name}`,
+          'people',
+          studentRef.id,
+          updateData,
+          'App.jsx - handleStudentUpdate'
+        );
+      } else {
+        await logUpdate(
+          `Student - ${studentToUpdate.name}`,
+          'people',
+          studentToUpdate.id,
+          updateData,
+          null, // Original data not available here
+          'App.jsx - handleStudentUpdate'
+        );
+      }
 
       // Refresh data
       await loadData();
@@ -905,13 +1011,22 @@ function App() {
       // Delete from Firebase
       await deleteDoc(doc(db, 'people', studentToDelete.id));
 
-      // Add to edit history
+      // Add to edit history (legacy)
       await addDoc(collection(db, 'editHistory'), {
         action: 'DELETE',
         entity: `Student - ${studentToDelete.name}`,
         timestamp: new Date().toISOString(),
         userId: 'system'
       });
+
+      // Log change in centralized system
+      await logDelete(
+        `Student - ${studentToDelete.name}`,
+        'people',
+        studentToDelete.id,
+        studentToDelete,
+        'App.jsx - handleStudentDelete'
+      );
 
       // Refresh data
       await loadData();
@@ -938,7 +1053,7 @@ function App() {
       // Delete from Firebase
       await deleteDoc(doc(db, 'schedules', scheduleId));
 
-      // Add to edit history
+      // Add to edit history (legacy)
       await addDoc(collection(db, 'editHistory'), {
         action: 'DELETE',
         entity: `${scheduleToDelete.courseCode} ${scheduleToDelete.section} - ${scheduleToDelete.instructorName}`,
@@ -946,6 +1061,15 @@ function App() {
         timestamp: new Date().toISOString(),
         userId: 'system'
       });
+
+      // Log change in centralized system
+      await logDelete(
+        `Schedule - ${scheduleToDelete.courseCode} ${scheduleToDelete.section} (${scheduleToDelete.instructorName})`,
+        'schedules',
+        scheduleId,
+        scheduleToDelete,
+        'App.jsx - handleScheduleDelete'
+      );
 
       // Refresh data
       await loadData();
@@ -1023,10 +1147,21 @@ function App() {
     }
 
     // Filter student data from rawPeople
-    const studentData = rawPeople.filter(person => 
-      person.roles?.includes('student') || 
-      (Array.isArray(person.roles) ? person.roles.includes('student') : person.roles?.student)
-    );
+    const studentData = rawPeople.filter(person => {
+      if (!person.roles) return false;
+      
+      // Handle array format (newer format)
+      if (Array.isArray(person.roles)) {
+        return person.roles.includes('student');
+      }
+      
+      // Handle object format (legacy format)
+      if (typeof person.roles === 'object') {
+        return person.roles.student === true;
+      }
+      
+      return false;
+    });
 
     const pageProps = {
       scheduleData,
@@ -1037,6 +1172,7 @@ function App() {
       programs: rawPrograms,
       analytics,
       editHistory,
+      recentChanges,
       onDataUpdate: handleDataUpdate,
       onFacultyUpdate: handleFacultyUpdate,
       onStaffUpdate: handleStaffUpdate,
@@ -1088,6 +1224,8 @@ function App() {
         return <DepartmentInsights {...pageProps} />;
       case 'analytics/course-management':
         return <CourseManagement {...pageProps} />;
+      case 'analytics/recent-changes':
+        return <RecentChangesPage {...pageProps} />;
       case 'administration/smart-import':
         return <SmartDataImportPage {...pageProps} />;
       case 'administration/data-hygiene':

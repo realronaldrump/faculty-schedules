@@ -3,6 +3,7 @@ import { X, Save, User, Mail, Phone, PhoneOff, Building, BuildingIcon, AlertCirc
 import { doc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { DEFAULT_PERSON_SCHEMA } from '../utils/dataHygiene';
+import { logUpdate } from '../utils/changeLogger';
 
 const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataType = 'email' }) => {
   const [records, setRecords] = useState([]);
@@ -177,6 +178,16 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
       }
 
       await updateDoc(doc(db, 'people', editingRecord.id), updates);
+
+      // Log the change
+      await logUpdate(
+        `Missing Data Review - ${editingRecord.name || 'Unknown Person'}`,
+        'people',
+        editingRecord.id,
+        updates,
+        editingRecord, // Original data
+        'MissingDataReviewModal.jsx - saveRecord'
+      );
 
       // Update local state
       setRecords(prev => prev.map(record => 

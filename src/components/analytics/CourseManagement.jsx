@@ -2,11 +2,13 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Edit, Save, X, History, RotateCcw, Filter, Search, ChevronsUpDown, Plus, Trash2, ChevronDown, Settings, Download } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import FacultyContactCard from '../FacultyContactCard';
+import { formatChangeForDisplay } from '../../utils/recentChanges';
 
 const CourseManagement = ({ 
   scheduleData, 
   facultyData, 
   editHistory, 
+  recentChanges = [],
   onDataUpdate, 
   onScheduleDelete,
   onRevertChange
@@ -43,6 +45,37 @@ const CourseManagement = ({
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [selectedExportFields, setSelectedExportFields] = useState([]);
+
+  // Process recent changes to show schedule-related changes in the legacy format
+  const processedChanges = useMemo(() => {
+    // Filter for schedule-related changes and convert to legacy format
+    const scheduleChanges = recentChanges
+      .filter(change => change.collection === 'schedules')
+      .map(change => {
+        const formatted = formatChangeForDisplay(change);
+        // Extract course and instructor info from entity string
+        const entityParts = change.entity?.split(' - ') || [];
+        const scheduleInfo = entityParts[1] || '';
+        const instructorInfo = entityParts[2] || '';
+        
+        return {
+          action: change.action,
+          entity: change.entity,
+          course: scheduleInfo,
+          instructor: instructorInfo,
+          field: 'Schedule Data', // Generic field name since we don't have specific field info
+          oldValue: '', // Not available in new format
+          newValue: '', // Not available in new format
+          timestamp: change.timestamp,
+          isRevert: false,
+          displayAction: formatted.displayAction,
+          timeAgo: formatted.timeAgo
+        };
+      });
+    
+    // Combine with legacy editHistory for backward compatibility
+    return [...scheduleChanges, ...(editHistory || [])];
+  }, [recentChanges, editHistory]);
 
   // Get unique values for filters (using display names)
   const uniqueInstructors = useMemo(() => 
@@ -739,7 +772,7 @@ const CourseManagement = ({
               className="px-4 py-2 bg-baylor-gold text-baylor-green font-bold rounded-lg hover:bg-baylor-gold/90 transition-colors text-sm flex items-center"
             >
               <History size={16} className="mr-2" />
-              {historyVisible ? 'Hide' : 'Show'} History ({editHistory.length})
+              {historyVisible ? 'Hide' : 'Show'} History ({processedChanges.length})
             </button>
             <button
               onClick={() => setExportModalOpen(true)}
@@ -1236,9 +1269,9 @@ const CourseManagement = ({
         {historyVisible && (
           <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
             <h3 className="text-lg font-serif font-semibold text-baylor-green mb-3">Change History</h3>
-            {editHistory.length > 0 ? (
+            {processedChanges.length > 0 ? (
               <ul className="space-y-3 max-h-96 overflow-y-auto">
-                {editHistory.map((change, index) => (
+                {processedChanges.slice(0, 50).map((change, index) => (
                   <li
                     key={index}
                     className={`p-3 rounded-lg flex items-center justify-between text-sm ${
@@ -1247,19 +1280,26 @@ const CourseManagement = ({
                   >
                     <div className="flex-1">
                       <p className="font-medium text-gray-800">
-                        <button
-                          className="font-bold hover:underline"
-                          onClick={() => handleShowContactCard(change.instructor)}
-                        >
-                          {change.instructor}
-                        </button>
-                        's <span className="font-bold">{change.course}</span> entry updated.
+                        {change.displayAction || change.action}: {change.entity || 'Unknown'}
                       </p>
-                      <p className="text-gray-600">
-                        Field <span className="font-semibold">{change.field}</span> changed from "{change.oldValue}" to "{change.newValue}".
-                      </p>
+                      {change.instructor && change.course && (
+                        <p className="text-gray-600">
+                          <button
+                            className="font-bold hover:underline"
+                            onClick={() => handleShowContactCard(change.instructor)}
+                          >
+                            {change.instructor}
+                          </button>
+                          's <span className="font-bold">{change.course}</span> entry.
+                        </p>
+                      )}
+                      {change.field && (change.oldValue || change.newValue) && (
+                        <p className="text-gray-600">
+                          Field <span className="font-semibold">{change.field}</span> changed from "{change.oldValue}" to "{change.newValue}".
+                        </p>
+                      )}
                       <p className="text-xs text-gray-500 mt-1">
-                        {new Date(change.timestamp).toLocaleString()}
+                        {change.timeAgo || new Date(change.timestamp).toLocaleString()}
                       </p>
                     </div>
                     {!change.isRevert && (

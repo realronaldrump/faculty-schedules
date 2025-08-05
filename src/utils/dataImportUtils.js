@@ -7,6 +7,7 @@ import { collection, addDoc, getDocs, query, where, doc, updateDoc, writeBatch }
 import { db, COLLECTIONS } from '../firebase';
 import { standardizePerson, standardizeSchedule, validateAndCleanBeforeSave, autoMergeObviousDuplicates } from './dataHygiene';
 import { parseCourseCode } from './courseUtils';
+import { logCreate, logUpdate, logImport, logBulkUpdate } from './changeLogger';
 
 // ==================== PROGRAM MAPPING ====================
 
@@ -64,8 +65,12 @@ export const createPersonModel = (rawData) => {
     roles: Array.isArray(rawData.roles) ? rawData.roles : [],
     isAdjunct: rawData.isAdjunct || false,
     isFullTime: rawData.isFullTime !== undefined ? rawData.isFullTime : true,
-    isTenured: rawData.roles?.includes('faculty') ? (rawData.isTenured || false) : false,
-    isUPD: rawData.roles?.includes('faculty') ? (rawData.isUPD || false) : false,
+    isTenured: (Array.isArray(rawData.roles) && rawData.roles.includes('faculty')) || 
+               (typeof rawData.roles === 'object' && rawData.roles?.faculty) ? 
+               (rawData.isTenured || false) : false,
+    isUPD: (Array.isArray(rawData.roles) && rawData.roles.includes('faculty')) || 
+           (typeof rawData.roles === 'object' && rawData.roles?.faculty) ? 
+           (rawData.isUPD || false) : false,
     programId: rawData.programId || null, // Reference to programs collection
     baylorId: rawData.baylorId || '', // 9-digit Baylor ID number
     hasNoPhone: rawData.hasNoPhone || false,
@@ -658,11 +663,32 @@ export const processDirectoryImport = async (csvData, options = {}) => {
         };
         
         await updateDoc(doc(db, 'people', match.person.id), updates);
+        
+        // Log update (no await to avoid slowing bulk import)
+        logUpdate(
+          `Directory Import - ${personData.firstName} ${personData.lastName}`,
+          'people',
+          match.person.id,
+          updates,
+          match.person,
+          'dataImportUtils.js - processDirectoryImport'
+        ).catch(err => console.error('Change logging error:', err));
+        
         results.updated++;
         results.people.push({ ...updates, id: match.person.id });
       } else {
         // Create new person
         const docRef = await addDoc(collection(db, 'people'), personData);
+        
+        // Log creation (no await to avoid slowing bulk import)
+        logCreate(
+          `Directory Import - ${personData.firstName} ${personData.lastName}`,
+          'people',
+          docRef.id,
+          personData,
+          'dataImportUtils.js - processDirectoryImport'
+        ).catch(err => console.error('Change logging error:', err));
+        
         results.created++;
         results.people.push({ ...personData, id: docRef.id });
         existingPeople.push({ ...personData, id: docRef.id });
@@ -750,8 +776,16 @@ export const processScheduleImport = async (csvData) => {
           instructorData = match.person;
           
           // Update person's roles if they don't have faculty role
-          if (!match.person.roles.includes('faculty')) {
-            const updatedRoles = [...new Set([...match.person.roles, 'faculty'])];
+          const hasRoles = match.person.roles && (
+            (Array.isArray(match.person.roles) && match.person.roles.includes('faculty')) ||
+            (typeof match.person.roles === 'object' && match.person.roles.faculty === true)
+          );
+          
+          if (!hasRoles) {
+            const currentRoles = Array.isArray(match.person.roles) 
+              ? match.person.roles 
+              : Object.keys(match.person.roles || {}).filter(key => match.person.roles[key]);
+            const updatedRoles = [...new Set([...currentRoles, 'faculty'])];
             await updateDoc(doc(db, 'people', match.person.id), { 
               roles: updatedRoles,
               updatedAt: new Date().toISOString()

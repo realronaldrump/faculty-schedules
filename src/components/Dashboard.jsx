@@ -15,8 +15,9 @@ import {
   GraduationCap,
   Building
 } from 'lucide-react';
+import { formatChangeForDisplay } from '../utils/recentChanges';
 
-const Dashboard = ({ analytics, editHistory, onNavigate, selectedSemester }) => {
+const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, selectedSemester }) => {
 
   // Metrics are now derived from the centralized 'analytics' prop
   const metrics = useMemo(() => {
@@ -29,9 +30,9 @@ const Dashboard = ({ analytics, editHistory, onNavigate, selectedSemester }) => 
       totalSessions: analytics.totalSessions,
       uniqueCourses: analytics.uniqueCourses,
       busiestDay: analytics.busiestDay,
-      recentChanges: editHistory.slice(0, 5)
+      recentChanges: recentChanges.slice(0, 5)
     };
-  }, [analytics, editHistory]);
+  }, [analytics, recentChanges]);
 
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
 
@@ -224,7 +225,7 @@ const Dashboard = ({ analytics, editHistory, onNavigate, selectedSemester }) => 
           <div className="university-card-header">
             <h3 className="university-card-title">Recent Changes</h3>
             <button 
-              onClick={() => onNavigate('analytics/course-management')}
+              onClick={() => onNavigate('analytics/recent-changes')}
               className="btn-ghost text-sm"
             >
               View all
@@ -233,19 +234,30 @@ const Dashboard = ({ analytics, editHistory, onNavigate, selectedSemester }) => 
           <div className="university-card-content">
             <div className="space-y-4">
               {metrics.recentChanges.length > 0 ? (
-                metrics.recentChanges.map((change, index) => (
-                  <div key={index} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
-                    <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 flex-shrink-0"></div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {change.action} - {change.entity}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {new Date(change.timestamp).toLocaleString()}
-                      </p>
+                metrics.recentChanges.map((change, index) => {
+                  const formattedChange = formatChangeForDisplay(change);
+                  return (
+                    <div key={change.id || index} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
+                      <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 flex-shrink-0"></div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          <span className={`${formattedChange.actionColor} font-semibold`}>
+                            {formattedChange.displayAction}
+                          </span>
+                          {' '}- {formattedChange.displayEntity}
+                        </p>
+                        <div className="flex items-center justify-between mt-1">
+                          <p className="text-xs text-gray-500">
+                            {formattedChange.timeAgo}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            {formattedChange.displaySource}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="text-center py-8">
                   <Clock className="w-8 h-8 text-gray-300 mx-auto mb-3" />

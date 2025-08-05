@@ -47,7 +47,8 @@ export const formatChangeForDisplay = (change) => {
     displayAction: getDisplayAction(change.action),
     displayEntity: change.entity,
     displaySource: getDisplaySource(change.source),
-    actionColor: getActionColor(change.action)
+    actionColor: getActionColor(change.action),
+    detailedDescription: getDetailedDescription(change)
   };
 };
 
@@ -145,6 +146,108 @@ const getTimeAgo = (timestamp) => {
   } else {
     return changeTime.toLocaleDateString();
   }
+};
+
+/**
+ * Generate detailed description of what changed
+ * @param {Object} change - Change log entry
+ * @returns {string} Human-readable description of changes
+ */
+const getDetailedDescription = (change) => {
+  // Handle different action types
+  if (change.action === 'CREATE') {
+    return `Created new ${change.collection === 'people' ? 'person' : 'record'}`;
+  }
+  
+  if (change.action === 'DELETE') {
+    return `Deleted ${change.collection === 'people' ? 'person' : 'record'}`;
+  }
+  
+  if (change.action === 'IMPORT') {
+    const count = change.metadata?.importCount || 'unknown';
+    return `Imported ${count} ${count === 1 ? 'record' : 'records'}`;
+  }
+  
+  if (change.action === 'BULK_UPDATE') {
+    const count = change.metadata?.affectedCount || 'unknown';
+    return `Updated ${count} ${count === 1 ? 'record' : 'records'} in bulk`;
+  }
+  
+  // Handle UPDATE with detailed field changes
+  if (change.action === 'UPDATE') {
+    const fieldChanges = change.metadata?.fieldChanges;
+    
+    if (!fieldChanges || Object.keys(fieldChanges).length === 0) {
+      return 'Updated (no specific changes detected)';
+    }
+    
+    const changes = [];
+    const fieldNames = getFieldDisplayNames();
+    
+    Object.entries(fieldChanges).forEach(([field, change]) => {
+      const displayName = fieldNames[field] || field;
+      const changeType = change.type;
+      
+      if (changeType === 'added') {
+        changes.push(`Added ${displayName}: "${change.to}"`);
+      } else if (changeType === 'removed') {
+        changes.push(`Removed ${displayName} (was "${change.from}")`);
+      } else {
+        // Handle special cases for better readability
+        if (field === 'hasPhD') {
+          changes.push(`${change.to === 'Yes' ? 'Marked as having' : 'Removed'} PhD`);
+        } else if (field === 'isAdjunct') {
+          changes.push(`${change.to === 'Yes' ? 'Marked as' : 'Removed'} Adjunct status`);
+        } else if (field === 'isTenured') {
+          changes.push(`${change.to === 'Yes' ? 'Marked as' : 'Removed'} Tenured status`);
+        } else if (field === 'isAlsoStaff') {
+          changes.push(`${change.to === 'Yes' ? 'Added' : 'Removed'} Staff role`);
+        } else {
+          changes.push(`Changed ${displayName}: "${change.from}" → "${change.to}"`);
+        }
+      }
+    });
+    
+    if (changes.length === 1) {
+      return changes[0];
+    } else if (changes.length <= 3) {
+      return changes.join(', ');
+    } else {
+      return `Updated ${changes.length} fields: ${changes.slice(0, 2).join(', ')} and ${changes.length - 2} more`;
+    }
+  }
+  
+  return `Performed ${change.action.toLowerCase()} operation`;
+};
+
+/**
+ * Map field names to display-friendly names
+ * @returns {Object} Field name mapping
+ */
+const getFieldDisplayNames = () => {
+  return {
+    'name': 'Name',
+    'firstName': 'First Name',
+    'lastName': 'Last Name',
+    'email': 'Email',
+    'phone': 'Phone',
+    'office': 'Office',
+    'jobTitle': 'Job Title',
+    'baylorId': 'Baylor ID',
+    'isAdjunct': 'Adjunct Status',
+    'isTenured': 'Tenure Status',
+    'isAlsoStaff': 'Staff Role',
+    'hasPhD': 'PhD Status',
+    'hasNoPhone': 'No Phone Status',
+    'hasNoOffice': 'No Office Status',
+    'program': 'Program',
+    'department': 'Department',
+    'supervisor': 'Supervisor',
+    'startDate': 'Start Date',
+    'hourlyRate': 'Hourly Rate',
+    'workSchedule': 'Work Schedule',
+    'roles': 'Roles'
+  };
 };
 
 /**

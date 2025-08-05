@@ -246,6 +246,11 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
                           </span>
                           {' '}- {formattedChange.displayEntity}
                         </p>
+                        {formattedChange.detailedDescription && (
+                          <p className="text-xs text-gray-600 mt-1 truncate">
+                            {formattedChange.detailedDescription}
+                          </p>
+                        )}
                         <div className="flex items-center justify-between mt-1">
                           <p className="text-xs text-gray-500">
                             {formattedChange.timeAgo}

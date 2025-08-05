@@ -253,10 +253,46 @@ const RecentChangesPage = ({ recentChanges = [], onNavigate }) => {
                               </span>
                               {' '}- {change.displayEntity}
                             </p>
+                            {change.detailedDescription && (
+                              <p className="text-sm text-gray-700 mt-1 bg-gray-100 rounded px-2 py-1">
+                                {change.detailedDescription}
+                              </p>
+                            )}
                             <p className="text-xs text-gray-500 mt-1">
                               Collection: {change.collection} • Source: {change.displaySource}
                             </p>
-                            {change.metadata && Object.keys(change.metadata).length > 0 && (
+                            {change.metadata && change.metadata.fieldChanges && Object.keys(change.metadata.fieldChanges).length > 0 && (
+                              <div className="mt-2">
+                                <details className="text-xs">
+                                  <summary className="text-gray-600 cursor-pointer hover:text-gray-800">
+                                    View detailed changes ({Object.keys(change.metadata.fieldChanges).length} field{Object.keys(change.metadata.fieldChanges).length !== 1 ? 's' : ''})
+                                  </summary>
+                                  <div className="mt-2 space-y-1 pl-4 border-l-2 border-gray-200">
+                                    {Object.entries(change.metadata.fieldChanges).map(([field, fieldChange]) => (
+                                      <div key={field} className="text-xs">
+                                        <span className="font-medium text-gray-700">{field}:</span>
+                                        {fieldChange.type === 'added' && (
+                                          <span className="text-green-600 ml-1">
+                                            Added "{fieldChange.to}"
+                                          </span>
+                                        )}
+                                        {fieldChange.type === 'removed' && (
+                                          <span className="text-red-600 ml-1">
+                                            Removed "{fieldChange.from}"
+                                          </span>
+                                        )}
+                                        {fieldChange.type === 'modified' && (
+                                          <span className="text-blue-600 ml-1">
+                                            "{fieldChange.from}" → "{fieldChange.to}"
+                                          </span>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </details>
+                              </div>
+                            )}
+                            {change.metadata && Object.keys(change.metadata).length > 0 && !change.metadata.fieldChanges && (
                               <div className="mt-2 text-xs text-gray-600">
                                 {Object.entries(change.metadata).map(([key, value]) => (
                                   <span key={key} className="inline-block mr-4">

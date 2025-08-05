@@ -72,6 +72,96 @@ export const logBatchChanges = async (changes, batchDescription, source) => {
 };
 
 /**
+ * Calculate detailed field changes between original and updated data
+ * @param {Object} originalData - Original data before changes
+ * @param {Object} updatedData - Updated data after changes
+ * @returns {Object} Detailed field changes with before/after values
+ */
+const getFieldChanges = (originalData, updatedData) => {
+  const changes = {};
+  
+  if (!originalData || !updatedData) {
+    return changes;
+  }
+
+  // Get all unique keys from both objects
+  const allKeys = new Set([
+    ...Object.keys(originalData || {}),
+    ...Object.keys(updatedData || {})
+  ]);
+
+  allKeys.forEach(key => {
+    // Skip system fields
+    if (['id', 'createdAt', 'updatedAt', 'timestamp'].includes(key)) {
+      return;
+    }
+
+    const oldValue = originalData[key];
+    const newValue = updatedData[key];
+
+    // Only track if values are actually different
+    if (!areValuesEqual(oldValue, newValue)) {
+      changes[key] = {
+        from: formatValue(oldValue),
+        to: formatValue(newValue),
+        type: getChangeType(oldValue, newValue)
+      };
+    }
+  });
+
+  return changes;
+};
+
+/**
+ * Compare two values for equality (handles objects, arrays, etc.)
+ */
+const areValuesEqual = (val1, val2) => {
+  if (val1 === val2) return true;
+  
+  // Handle null/undefined cases
+  if (val1 == null && val2 == null) return true;
+  if (val1 == null || val2 == null) return false;
+  
+  // Handle objects/arrays
+  if (typeof val1 === 'object' && typeof val2 === 'object') {
+    return JSON.stringify(val1) === JSON.stringify(val2);
+  }
+  
+  return false;
+};
+
+/**
+ * Format value for display in change log
+ */
+const formatValue = (value) => {
+  if (value === null || value === undefined) {
+    return '(empty)';
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'Yes' : 'No';
+  }
+  if (typeof value === 'object') {
+    if (Array.isArray(value)) {
+      return value.length > 0 ? value.join(', ') : '(empty)';
+    }
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'string' && value.trim() === '') {
+    return '(empty)';
+  }
+  return String(value);
+};
+
+/**
+ * Determine the type of change that occurred
+ */
+const getChangeType = (oldValue, newValue) => {
+  if (oldValue == null && newValue != null) return 'added';
+  if (oldValue != null && newValue == null) return 'removed';
+  return 'modified';
+};
+
+/**
  * Convenience functions for common actions
  */
 
@@ -87,6 +177,9 @@ export const logCreate = (entity, collection, documentId, data, source) => {
 };
 
 export const logUpdate = (entity, collection, documentId, changes, originalData, source) => {
+  // Calculate detailed field changes
+  const fieldChanges = getFieldChanges(originalData, changes);
+  
   return logChange({
     action: 'UPDATE',
     entity,
@@ -94,7 +187,12 @@ export const logUpdate = (entity, collection, documentId, changes, originalData,
     documentId,
     changes,
     originalData,
-    source
+    source,
+    metadata: {
+      fieldChanges,
+      changedFields: Object.keys(fieldChanges),
+      changeCount: Object.keys(fieldChanges).length
+    }
   });
 };
 

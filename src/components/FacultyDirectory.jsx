@@ -55,7 +55,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
     programs: { include: [], exclude: [] },
     jobTitles: { include: [], exclude: [] },
     buildings: { include: [], exclude: [] },
-    adjunct: 'all', // 'all', 'include', 'exclude'
+    adjunct: 'exclude', // 'all', 'include', 'exclude' - default to exclude adjunct
     tenured: 'all',
     upd: 'all',
     hasEmail: true,
@@ -657,7 +657,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
       programs: { include: [], exclude: [] },
       jobTitles: { include: [], exclude: [] },
       buildings: { include: [], exclude: [] },
-      adjunct: 'all',
+      adjunct: 'exclude', // Maintain default to exclude adjunct
       tenured: 'all',
       upd: 'all',
       hasEmail: true,

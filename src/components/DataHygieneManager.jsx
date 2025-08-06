@@ -5,6 +5,7 @@ import {
   AlertTriangle, 
   Trash2, 
   Link, 
+  MapPin,
   RefreshCw,
   Shield,
   Settings,
@@ -18,6 +19,7 @@ import {
   Edit,
   BookUser,
   Eye,
+  FileText,
   ChevronDown,
   ChevronRight,
   Search,
@@ -32,6 +34,13 @@ import {
   previewStandardization,
   applyTargetedStandardization
 } from '../utils/dataHygiene';
+import {
+  generateDataHygieneReport,
+  mergePeopleRecords,
+  mergeScheduleRecords,
+  mergeRoomRecords,
+  standardizeAllData as standardizeAllDataComprehensive
+} from '../utils/comprehensiveDataHygiene';
 import { fetchPeople } from '../utils/dataAdapter';
 import MissingDataReviewModal from './MissingDataReviewModal';
 import DeduplicationReviewModal from './DeduplicationReviewModal';
@@ -348,6 +357,13 @@ const DataHygieneManager = ({ showNotification }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [duplicates, setDuplicates] = useState([]);
+  const [duplicateSchedules, setDuplicateSchedules] = useState([]);
+  const [duplicateRooms, setDuplicateRooms] = useState([]);
+  const [relationshipIssues, setRelationshipIssues] = useState([]);
+  const [recommendations, setRecommendations] = useState([]);
+  const [selectedDuplicates, setSelectedDuplicates] = useState([]);
+  const [mergeProgress, setMergeProgress] = useState(null);
+  const [showConfirmMerge, setShowConfirmMerge] = useState(false);
   const [orphanedSchedules, setOrphanedSchedules] = useState([]);
   
   // Professional modal states
@@ -368,11 +384,21 @@ const DataHygieneManager = ({ showNotification }) => {
   const loadHealthReport = async () => {
     setIsLoading(true);
     try {
-      const report = await getDataHealthReport();
-      setHealthReport(report);
-      setDuplicates(report.duplicates);
-      setOrphanedSchedules(report.orphaned);
-      console.log('✅ Data health report loaded:', report);
+      const [basicReport, comprehensiveReport] = await Promise.all([
+        getDataHealthReport(),
+        generateDataHygieneReport()
+      ]);
+      setHealthReport(basicReport);
+      setDuplicates(basicReport.duplicates);
+      setOrphanedSchedules(basicReport.orphaned);
+
+      // Comprehensive details
+      setDuplicateSchedules(comprehensiveReport.details.schedules.duplicates);
+      setDuplicateRooms(comprehensiveReport.details.rooms.duplicates);
+      setRelationshipIssues(comprehensiveReport.details.crossCollection);
+      setRecommendations(comprehensiveReport.recommendations);
+
+      console.log('✅ Data health reports loaded:', { basicReport, comprehensiveReport });
     } catch (error) {
       console.error('❌ Error loading health report:', error);
       alert('Error loading data health report: ' + error.message);
@@ -492,8 +518,85 @@ const DataHygieneManager = ({ showNotification }) => {
       );
     }
     setIsStandardizing(false);
+    };
+
+  // ==== Duplicate Selection & Bulk Merge ====
+  const toggleDuplicateSelection = (duplicate) => {
+    setSelectedDuplicates(prev => {
+      const exists = prev.find(d =>
+        d.type === duplicate.type &&
+        d.records[0].id === duplicate.records[0].id &&
+        d.records[1].id === duplicate.records[1].id
+      );
+      if (exists) {
+        return prev.filter(d => d !== exists);
+      } else {
+        return [...prev, duplicate];
+      }
+    });
   };
 
+  const handleBulkMerge = () => {
+    if (selectedDuplicates.length === 0) {
+      alert('Please select duplicates to merge');
+      return;
+    }
+    setShowConfirmMerge(true);
+  };
+
+  const executeBulkMerge = async () => {
+    setShowConfirmMerge(false);
+    setMergeProgress({ current: 0, total: selectedDuplicates.length, type: 'merge' });
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (let i = 0; i < selectedDuplicates.length; i++) {
+      const duplicate = selectedDuplicates[i];
+      setMergeProgress({ current: i + 1, total: selectedDuplicates.length, type: 'merge' });
+      try {
+        switch (duplicate.mergeStrategy) {
+          case 'merge_people':
+            await mergePeopleRecords(duplicate);
+            break;
+          case 'merge_schedules':
+            await mergeScheduleRecords(duplicate);
+            break;
+          case 'merge_rooms':
+            await mergeRoomRecords(duplicate);
+            break;
+          default:
+            console.warn('Unknown merge strategy:', duplicate.mergeStrategy);
+        }
+        successCount++;
+      } catch (error) {
+        console.error('Error merging duplicate:', error);
+        errorCount++;
+      }
+    }
+
+    setMergeProgress(null);
+    alert(`Merge complete: ${successCount} successful, ${errorCount} failed`);
+    await loadHealthReport();
+    setSelectedDuplicates([]);
+  };
+
+  const handleStandardizeAllData = async () => {
+    if (!confirm('This will standardize all data in the database. Continue?')) {
+      return;
+    }
+    setMergeProgress({ current: 0, total: 1, type: 'standardize' });
+    try {
+      const result = await standardizeAllDataComprehensive();
+      setMergeProgress(null);
+      alert(`Data standardization complete: ${result.recordsUpdated} records updated`);
+      await loadHealthReport();
+    } catch (error) {
+      console.error('Error standardizing data:', error);
+      setMergeProgress(null);
+      alert('Error standardizing data: ' + error.message);
+    }
+  };
+  
   // Get health score color
   const getHealthScoreColor = (score) => {
     if (score >= 90) return 'text-baylor-green';
@@ -563,6 +666,26 @@ const DataHygieneManager = ({ showNotification }) => {
           </button>
         </div>
       </div>
+
+      {/* Progress Indicator */}
+      {mergeProgress && (
+        <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-medium text-blue-900">
+              {mergeProgress.type === 'merge' ? 'Merging Duplicates' : 'Standardizing Data'}
+            </span>
+            <span className="text-sm text-blue-700">
+              {mergeProgress.current} / {mergeProgress.total}
+            </span>
+          </div>
+          <div className="w-full bg-blue-200 rounded-full h-2">
+            <div
+              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${(mergeProgress.current / mergeProgress.total) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Health Score Card */}
       {healthReport && (
@@ -678,8 +801,12 @@ const DataHygieneManager = ({ showNotification }) => {
       <div className="flex space-x-1 mb-6">
         {[
           { id: 'overview', label: 'Overview' },
-          { id: 'duplicates', label: `Duplicates (${duplicates.length})` },
-          { id: 'orphaned', label: `Orphaned (${orphanedSchedules.length})` }
+          { id: 'duplicates', label: `People (${duplicates.length})` },
+          { id: 'duplicateSchedules', label: `Schedules (${duplicateSchedules.length})` },
+          { id: 'duplicateRooms', label: `Rooms (${duplicateRooms.length})` },
+          { id: 'orphaned', label: `Orphaned (${orphanedSchedules.length})` },
+          { id: 'relationships', label: `Broken Links (${relationshipIssues.length})` },
+          { id: 'recommendations', label: 'Fix Guide' }
         ].map((tab) => (
           <button
             key={tab.id}
@@ -892,6 +1019,43 @@ const DataHygieneManager = ({ showNotification }) => {
         </div>
       )}
 
+      {/* Duplicate Schedules Tab */}
+      {activeTab === 'duplicateSchedules' && (
+        <DuplicateList
+          title="Schedule Duplicates"
+          duplicates={duplicateSchedules}
+          selectedDuplicates={selectedDuplicates}
+          onToggleSelection={toggleDuplicateSelection}
+          recordType="schedules"
+        />
+      )}
+
+      {/* Duplicate Rooms Tab */}
+      {activeTab === 'duplicateRooms' && (
+        <DuplicateList
+          title="Room Duplicates"
+          duplicates={duplicateRooms}
+          selectedDuplicates={selectedDuplicates}
+          onToggleSelection={toggleDuplicateSelection}
+          recordType="rooms"
+        />
+      )}
+
+      {/* Relationship Issues Tab */}
+      {activeTab === 'relationships' && (
+        <RelationshipIssues issues={relationshipIssues} />
+      )}
+
+      {/* Recommendations Tab */}
+      {activeTab === 'recommendations' && (
+        <Recommendations
+          recommendations={recommendations}
+          onStandardizeData={handleStandardizeAllData}
+          onBulkMerge={handleBulkMerge}
+          selectedCount={selectedDuplicates.length}
+        />
+      )}
+
       {/* Orphaned Schedules Tab */}
       {activeTab === 'orphaned' && (
         <div className="bg-white rounded-lg shadow-sm border">
@@ -942,6 +1106,38 @@ const DataHygieneManager = ({ showNotification }) => {
         </div>
       )}
 
+      {/* Confirm Merge Modal */}
+      {showConfirmMerge && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">Fix These Issues?</h3>
+            <p className="text-gray-600 mb-4">
+              You're about to merge {selectedDuplicates.length} duplicate records into single, clean records.
+            </p>
+            <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-6">
+              <p className="text-blue-800 text-sm">
+                <strong>What this does:</strong> Combines duplicate records and updates all references. 
+                The duplicates will be removed, keeping the most complete information.
+              </p>
+            </div>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowConfirmMerge(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeBulkMerge}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                Fix {selectedDuplicates.length} Issues
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Professional Review Modals */}
       <MissingDataReviewModal
         isOpen={showMissingDataModal}
@@ -979,6 +1175,234 @@ const DataHygieneManager = ({ showNotification }) => {
         onConfirm={handleLinkSchedule}
         schedule={scheduleToLink}
       />
+    </div>
+  );
+};
+
+/* ===== Additional Components from ComprehensiveDataHygieneManager ===== */
+
+const DuplicateList = ({ title, duplicates, selectedDuplicates, onToggleSelection, recordType }) => {
+  if (duplicates.length === 0) {
+    return (
+      <div className="p-6 text-center">
+        <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">No Duplicates Found!</h3>
+        <p className="text-gray-600">All {recordType} records are unique and clean.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-lg font-semibold">{title}</h3>
+          <span className="text-sm text-gray-500">{duplicates.length} issues found</span>
+        </div>
+        <p className="text-sm text-gray-600">
+          Check the boxes next to duplicates you want to merge, then go to "Fix Guide" tab to apply changes.
+        </p>
+      </div>
+      <div className="space-y-4">
+        {duplicates.map((duplicate, index) => {
+          const isSelected = selectedDuplicates.some(d =>
+            d.type === duplicate.type &&
+            d.records[0].id === duplicate.records[0].id &&
+            d.records[1].id === duplicate.records[1].id
+          );
+
+          return (
+            <div
+              key={index}
+              className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+              }`}
+              onClick={() => onToggleSelection(duplicate)}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggleSelection(duplicate)}
+                    className="rounded"
+                  />
+                  <span className="font-medium text-gray-900">{duplicate.reason}</span>
+                </div>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  duplicate.confidence >= 0.9
+                    ? 'bg-green-100 text-green-800'
+                    : duplicate.confidence >= 0.7
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : 'bg-red-100 text-red-800'
+                }`}>
+                  {Math.round(duplicate.confidence * 100)}% match
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="font-medium text-sm text-gray-700 mb-2">Record 1</h4>
+                  <RecordDisplay record={duplicate.records[0]} type={recordType} />
+                </div>
+                <div>
+                  <h4 className="font-medium text-sm text-gray-700 mb-2">Record 2</h4>
+                  <RecordDisplay record={duplicate.records[1]} type={recordType} />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const RecordDisplay = ({ record, type }) => {
+  const getDisplayFields = () => {
+    switch (type) {
+      case 'people':
+        return [
+          { label: 'Name', value: `${record.firstName} ${record.lastName}` },
+          { label: 'Email', value: record.email },
+          { label: 'Program', value: record.program?.name || 'Unassigned' },
+          { label: 'Job Title', value: record.jobTitle }
+        ];
+      case 'schedules':
+        return [
+          { label: 'Course', value: record.courseCode },
+          { label: 'Section', value: record.section },
+          { label: 'Term', value: record.term },
+          { label: 'Instructor', value: record.instructorName }
+        ];
+      case 'rooms':
+        return [
+          { label: 'Name', value: record.name || record.displayName },
+          { label: 'Building', value: record.building },
+          { label: 'Room Number', value: record.roomNumber },
+          { label: 'Type', value: record.type }
+        ];
+      default:
+        return [];
+    }
+  };
+
+  return (
+    <div className="text-sm space-y-1">
+      {getDisplayFields().map((field, index) => (
+        <div key={index} className="flex justify-between">
+          <span className="text-gray-600">{field.label}:</span>
+          <span className="font-medium">{field.value || 'N/A'}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const RelationshipIssues = ({ issues }) => {
+  if (issues.length === 0) {
+    return (
+      <div className="p-6 text-center">
+        <Link className="w-12 h-12 text-green-500 mx-auto mb-4" />
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">No Relationship Issues</h3>
+        <p className="text-gray-600">All cross-collection relationships are intact!</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      <h3 className="text-lg font-semibold mb-4">Relationship Issues</h3>
+      <div className="space-y-4">
+        {issues.map((issue, index) => (
+          <div key={index} className="border border-red-200 rounded-lg p-4 bg-red-50">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <h4 className="font-medium text-red-900 mb-1">{issue.type.replace(/_/g, ' ').toUpperCase()}</h4>
+                <p className="text-red-700 text-sm mb-2">{issue.reason}</p>
+                <p className="text-red-600 text-xs">Severity: {issue.severity}</p>
+              </div>
+              <span className="text-xs text-red-600 bg-red-100 px-2 py-1 rounded">
+                {issue.fix.replace(/_/g, ' ')}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const Recommendations = ({ recommendations, onStandardizeData, onBulkMerge, selectedCount }) => {
+  if (recommendations.length === 0) {
+    return (
+      <div className="p-6 text-center">
+        <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Your Data Looks Great!</h3>
+        <p className="text-gray-600">No issues found that need attention.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      <h3 className="text-lg font-semibold mb-2">What Should I Fix?</h3>
+      <p className="text-gray-600 text-sm mb-6">Here's what we found and how to fix it:</p>
+      <div className="space-y-4 mb-8">
+        {recommendations.map((rec, index) => (
+          <div key={index} className="border rounded-lg p-4 bg-gray-50">
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center space-x-2">
+                <span
+                  className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    rec.priority === 'high'
+                      ? 'bg-red-100 text-red-800'
+                      : rec.priority === 'medium'
+                      ? 'bg-yellow-100 text-yellow-800'
+                      : 'bg-blue-100 text-blue-800'
+                  }`}
+                >
+                  {rec.priority === 'high' ? 'Important' : rec.priority === 'medium' ? 'Recommended' : 'Optional'}
+                </span>
+                <h4 className="font-medium text-gray-900">{rec.action}</h4>
+              </div>
+              <span className="text-sm font-medium text-gray-900 bg-white px-2 py-1 rounded">
+                {rec.count} {rec.count === 1 ? 'item' : 'items'}
+              </span>
+            </div>
+            <p className="text-gray-700 text-sm mb-2">{rec.description}</p>
+            <p className="text-green-700 text-sm font-medium">✓ {rec.benefit}</p>
+          </div>
+        ))}
+      </div>
+      <div className="border-t pt-6 bg-blue-50 -mx-6 px-6 -mb-6 pb-6">
+        <h4 className="font-medium mb-2">How to Fix These Issues</h4>
+        <p className="text-sm text-gray-600 mb-4">
+          Select the duplicates you want to merge using the checkboxes in the tabs above, then click "Fix Selected Issues"
+          below.
+        </p>
+        <div className="flex space-x-3">
+          <button
+            onClick={onBulkMerge}
+            disabled={selectedCount === 0}
+            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+          >
+            <CheckCircle className="w-4 h-4 mr-2" />
+            Fix Selected Issues ({selectedCount})
+          </button>
+          <button
+            onClick={onStandardizeData}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center font-medium"
+          >
+            <Settings className="w-4 h-4 mr-2" />
+            Clean Up Formatting
+          </button>
+        </div>
+        {selectedCount === 0 && (
+          <p className="text-sm text-gray-500 mt-2">
+            Go to the People, Schedules, or Rooms tabs above to select items to fix.
+          </p>
+        )}
+      </div>
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import GroupMeetings from './components/scheduling/GroupMeetings.jsx';
@@ -47,9 +48,20 @@ import { logCreate, logUpdate, logDelete } from './utils/changeLogger';
 import { fetchRecentChanges } from './utils/recentChanges';
 
 function App() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [currentPage, setCurrentPage] = useState('dashboard');
+  const currentPage = useMemo(() => {
+    const path = (location.pathname || '/').replace(/^\//, '');
+    return path === '' ? 'dashboard' : path;
+  }, [location.pathname]);
+  const handleNavigate = (path) => {
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    if (normalized !== location.pathname) {
+      navigate(normalized);
+    }
+  };
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
   // Pinned pages state
@@ -1158,7 +1170,7 @@ function App() {
     setIsAuthenticated(false);
     localStorage.removeItem('isAuthenticated');
     setShowLogoutConfirm(false);
-    setCurrentPage('dashboard');
+    navigate('/dashboard');
   };
 
   const getCurrentBreadcrumb = () => {
@@ -1224,7 +1236,7 @@ function App() {
       onStudentDelete: handleStudentDelete,
       onScheduleDelete: handleScheduleDelete,
       onRevertChange: handleRevertChange,
-      onNavigate: setCurrentPage,
+      onNavigate: handleNavigate,
       showNotification,
       selectedSemester,
       availableSemesters,
@@ -1302,7 +1314,7 @@ function App() {
       <Sidebar
         navigationItems={navigationItems}
         currentPage={currentPage}
-        onNavigate={setCurrentPage}
+        onNavigate={handleNavigate}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         selectedSemester={selectedSemester}

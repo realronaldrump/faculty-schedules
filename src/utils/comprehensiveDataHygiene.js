@@ -165,9 +165,9 @@ export const detectScheduleDuplicates = (schedules) => {
       scheduleMap.set(scheduleKey, schedule);
     }
 
-    // Check for CRN duplicates (should be unique)
-    if (schedule.crn) {
-      const crnKey = `crn-${schedule.crn}`;
+    // Check for CRN duplicates (unique within a term)
+    if (schedule.crn && schedule.term) {
+      const crnKey = `crn-${schedule.crn}-${schedule.term}`;
       if (scheduleMap.has(crnKey)) {
         const existing = scheduleMap.get(crnKey);
         if (existing.id !== schedule.id) {
@@ -360,8 +360,21 @@ export const mergeScheduleRecords = async (duplicateGroup) => {
     // Keep most recent enrollment data
     enrollment: Math.max(primary.enrollment || 0, secondary.enrollment || 0),
     maxEnrollment: Math.max(primary.maxEnrollment || 0, secondary.maxEnrollment || 0),
-    // Combine meeting patterns
-    meetingPatterns: [...(primary.meetingPatterns || []), ...(secondary.meetingPatterns || [])],
+    // Combine meeting patterns without duplicates (unique by day/start/end)
+    meetingPatterns: (() => {
+      const patternKey = (p) => `${p.day || ''}|${p.startTime || ''}|${p.endTime || ''}`;
+      const combined = [...(primary.meetingPatterns || []), ...(secondary.meetingPatterns || [])];
+      const seen = new Set();
+      const unique = [];
+      for (const p of combined) {
+        const key = patternKey(p || {});
+        if (!seen.has(key)) {
+          seen.add(key);
+          unique.push(p);
+        }
+      }
+      return unique;
+    })(),
     // Keep most recent update
     updatedAt: new Date().toISOString()
   };
@@ -373,6 +386,20 @@ export const mergeScheduleRecords = async (duplicateGroup) => {
   batch.delete(doc(db, 'schedules', secondary.id));
 
   await batch.commit();
+  
+  // Log merge action
+  try {
+    await logMerge(
+      `Schedule Merge - ${primary.courseCode} ${primary.section} (${primary.term})`,
+      'schedules',
+      primary.id,
+      [secondary.id],
+      'comprehensiveDataHygiene.js - mergeScheduleRecords'
+    );
+  } catch (e) {
+    // logging should not block
+    console.error('Change logging error (merge schedules):', e);
+  }
   
   return {
     primaryId: primary.id,
@@ -418,6 +445,19 @@ export const mergeRoomRecords = async (duplicateGroup) => {
   batch.delete(doc(db, 'rooms', secondary.id));
 
   await batch.commit();
+  
+  // Log merge action
+  try {
+    await logMerge(
+      `Room Merge - ${primary.displayName || primary.name}`,
+      'rooms',
+      primary.id,
+      [secondary.id],
+      'comprehensiveDataHygiene.js - mergeRoomRecords'
+    );
+  } catch (e) {
+    console.error('Change logging error (merge rooms):', e);
+  }
   
   return {
     primaryId: primary.id,

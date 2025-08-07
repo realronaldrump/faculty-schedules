@@ -75,7 +75,7 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
 
       try {
         console.log(`Attempting merge: ${duplicate.primary.id} <- ${duplicate.duplicate.id}`);
-        await mergePeople(duplicate.primary.id, duplicate.duplicate.id, fieldSelections[duplicate.id] || {});
+        await mergePeople(duplicate.primary.id, duplicate.duplicate.id, fieldSelections[index] || {});
         results.merged++;
         results.mergedPairs.push({
           kept: `${duplicate.primary.firstName} ${duplicate.primary.lastName}`,

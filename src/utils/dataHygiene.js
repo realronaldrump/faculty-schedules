@@ -502,6 +502,35 @@ export const mergePeople = async (primaryId, duplicateId, fieldChoices = {}) => 
   batch.delete(doc(db, 'people', duplicateId));
   
   await batch.commit();
+
+  // Update instructorName on schedules formerly pointing to duplicate to ensure display consistency
+  try {
+    const instructorName = `${merged.firstName || ''} ${merged.lastName || ''}`.trim();
+    const reassignedSchedules = await getDocs(query(collection(db, 'schedules'), where('instructorId', '==', primaryId)));
+    const postBatch = writeBatch(db);
+    reassignedSchedules.docs.forEach(snap => {
+      const data = snap.data();
+      if ((data.instructorName || '') !== instructorName) {
+        postBatch.update(snap.ref, { instructorName, updatedAt: new Date().toISOString() });
+      }
+    });
+    await postBatch.commit();
+  } catch (e) {
+    console.error('Error standardizing instructorName after merge:', e);
+  }
+
+  // Log merge
+  try {
+    await logMerge(
+      `People Merge - ${merged.firstName || ''} ${merged.lastName || ''}`.trim(),
+      'people',
+      primaryId,
+      [duplicateId],
+      'dataHygiene.js - mergePeople'
+    );
+  } catch (e) {
+    console.error('Change logging error (merge people):', e);
+  }
   
   return merged;
 };

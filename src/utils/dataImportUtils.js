@@ -948,12 +948,18 @@ export const processScheduleImport = async (csvData) => {
         status
       });
       
-      // Composite key matching: Course + Section + Term
-      const existingMatch = existingSchedules.find(s => 
-        s.courseCode === scheduleData.courseCode &&
-        s.section === scheduleData.section &&
-        s.term === scheduleData.term
-      );
+      // Prefer CRN + Term matching when available, fallback to Course + Section + Term
+      let existingMatch = null;
+      if (scheduleData.crn && scheduleData.term) {
+        existingMatch = existingSchedules.find(s => (s.crn || '') === scheduleData.crn && (s.term || '') === scheduleData.term);
+      }
+      if (!existingMatch) {
+        existingMatch = existingSchedules.find(s => 
+          s.courseCode === scheduleData.courseCode &&
+          s.section === scheduleData.section &&
+          s.term === scheduleData.term
+        );
+      }
       
       if (existingMatch) {
         // Upsert: only overwrite with non-empty CSV values; skip if identical

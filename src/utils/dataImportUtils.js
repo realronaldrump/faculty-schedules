@@ -113,6 +113,64 @@ export const createScheduleModel = (rawData) => {
   return standardizeSchedule(schedule);
 };
 
+// ==================== UPSERT HELPERS ====================
+
+/**
+ * Determine whether a value should be considered "empty" for merge purposes
+ */
+const isEmptyForMerge = (value) => {
+  if (value === null || value === undefined) return true;
+  if (typeof value === 'string') return value.trim() === '';
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === 'object') return Object.keys(value).length === 0;
+  return false;
+};
+
+/**
+ * Build an updates object applying upsert rules:
+ * - If CSV has a non-empty value, it overwrites existing
+ * - If CSV value is empty, leave existing field unchanged (omit from updates)
+ * - Always refresh updatedAt
+ */
+export const buildUpsertUpdates = (existingRecord, incomingRecord) => {
+  const updates = {};
+  let hasChanges = false;
+
+  const deepEqual = (a, b) => {
+    if (a === b) return true;
+    if (typeof a !== typeof b) return false;
+    if (a && b && typeof a === 'object') {
+      try {
+        return JSON.stringify(a) === JSON.stringify(b);
+      } catch (e) {
+        return false;
+      }
+    }
+    return false;
+  };
+
+  Object.keys(incomingRecord).forEach((key) => {
+    if (key === 'createdAt' || key === 'updatedAt') return; // ignore timestamps for diff
+
+    const incoming = incomingRecord[key];
+    if (isEmptyForMerge(incoming)) return; // don't overwrite with empty
+
+    const existing = existingRecord[key];
+    const valuesEqual = deepEqual(incoming, existing);
+
+    if (!valuesEqual) {
+      updates[key] = incoming;
+      hasChanges = true;
+    }
+  });
+
+  if (hasChanges) {
+    updates.updatedAt = new Date().toISOString();
+  }
+
+  return { updates, hasChanges };
+};
+
 /**
  * Meeting Pattern Model
  */
@@ -650,32 +708,33 @@ export const processDirectoryImport = async (csvData, options = {}) => {
         isFullTime: !jobTitle.toLowerCase().includes('part') && !jobTitle.toLowerCase().includes('adjunct')
       });
       
-      // Find matching person
-      const match = await findMatchingPerson(personData, existingPeople);
+      // Match strictly by email for idempotent upsert behavior
+      const existingMatch = personData.email
+        ? existingPeople.find(p => (p.email || '').toLowerCase() === personData.email)
+        : null;
       
-      if (match) {
-        // Update existing person
-        const updates = {
-          ...personData,
-          updatedAt: new Date().toISOString(),
-          // Merge roles to avoid overwriting
-          roles: [...new Set([...match.person.roles, ...personData.roles])]
-        };
-        
-        await updateDoc(doc(db, 'people', match.person.id), updates);
+      if (existingMatch) {
+        // Upsert: only overwrite with non-empty CSV values; skip if identical
+        const { updates, hasChanges } = buildUpsertUpdates(existingMatch, personData);
+        if (!hasChanges) {
+          results.skipped++;
+          continue;
+        }
+
+        await updateDoc(doc(db, 'people', existingMatch.id), updates);
         
         // Log update (no await to avoid slowing bulk import)
         logUpdate(
           `Directory Import - ${personData.firstName} ${personData.lastName}`,
           'people',
-          match.person.id,
+          existingMatch.id,
           updates,
-          match.person,
+          existingMatch,
           'dataImportUtils.js - processDirectoryImport'
         ).catch(err => console.error('Change logging error:', err));
         
         results.updated++;
-        results.people.push({ ...updates, id: match.person.id });
+        results.people.push({ ...existingMatch, ...updates });
       } else {
         // Create new person
         const docRef = await addDoc(collection(db, 'people'), personData);
@@ -889,27 +948,49 @@ export const processScheduleImport = async (csvData) => {
         status
       });
       
-      // Enhanced duplicate detection
-      const duplicateSchedule = existingSchedules.find(s => 
+      // Composite key matching: Course + Section + Term
+      const existingMatch = existingSchedules.find(s => 
         s.courseCode === scheduleData.courseCode &&
         s.section === scheduleData.section &&
-        s.term === scheduleData.term &&
-        s.instructorId === scheduleData.instructorId
+        s.term === scheduleData.term
       );
       
-      if (duplicateSchedule) {
-        results.skipped++;
-        console.log(`⏭️ Skipped duplicate: ${courseCode} ${section} - ${instructorData?.firstName} ${instructorData?.lastName}`);
-        continue;
+      if (existingMatch) {
+        // Upsert: only overwrite with non-empty CSV values; skip if identical
+        const { updates, hasChanges } = buildUpsertUpdates(existingMatch, scheduleData);
+        if (!hasChanges) {
+          results.skipped++;
+          continue;
+        }
+
+        await updateDoc(doc(db, 'schedules', existingMatch.id), updates);
+        
+        logUpdate(
+          `Schedule Import - ${courseCode} ${section} (${term})`,
+          'schedules',
+          existingMatch.id,
+          updates,
+          existingMatch,
+          'dataImportUtils.js - processScheduleImport'
+        ).catch(err => console.error('Change logging error:', err));
+
+        results.updated++;
+        results.schedules.push({ ...existingMatch, ...updates });
+      } else {
+        // Create new schedule with full relational integrity
+        const docRef = await addDoc(collection(db, 'schedules'), scheduleData);
+        results.created++;
+        results.schedules.push({ ...scheduleData, id: docRef.id });
+        existingSchedules.push({ ...scheduleData, id: docRef.id });
+        
+        logCreate(
+          `Schedule Import - ${courseCode} ${section} (${term})`,
+          'schedules',
+          docRef.id,
+          scheduleData,
+          'dataImportUtils.js - processScheduleImport'
+        ).catch(err => console.error('Change logging error:', err));
       }
-      
-      // Create new schedule with full relational integrity
-      const docRef = await addDoc(collection(db, 'schedules'), scheduleData);
-      results.created++;
-      results.schedules.push({ ...scheduleData, id: docRef.id });
-      existingSchedules.push({ ...scheduleData, id: docRef.id });
-      
-      console.log(`✅ Created schedule: ${courseCode} ${section} → ${instructorData?.firstName} ${instructorData?.lastName || 'Staff'}`);
       
     } catch (error) {
       results.errors.push(`Error processing schedule: ${error.message}`);

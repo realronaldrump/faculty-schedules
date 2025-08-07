@@ -26,6 +26,8 @@ const ImportPreviewModal = ({
   const [expandedSections, setExpandedSections] = useState(new Set(['schedules', 'people', 'rooms']));
   const [showDetails, setShowDetails] = useState({});
   const [selectAll, setSelectAll] = useState(true);
+  // Per-change field selections for 'modify' actions: changeId -> Set(fieldKey)
+  const [selectedFieldsByChange, setSelectedFieldsByChange] = useState({});
 
   const allChanges = useMemo(() => transaction?.getAllChanges() || [], [transaction]);
   
@@ -102,7 +104,17 @@ const ImportPreviewModal = ({
 
   const handleCommit = () => {
     const selectedChangeIds = Array.from(selectedChanges);
-    onCommit(transaction.id, selectedChangeIds.length === allChanges.length ? null : selectedChangeIds);
+    // Build mapping of selected field keys for modify changes
+    const fieldMap = {};
+    allChanges.forEach((change) => {
+      if (change.action === 'modify' && selectedChanges.has(change.id) && change.diff && change.diff.length > 0) {
+        const selectedSet = selectedFieldsByChange[change.id];
+        if (selectedSet && selectedSet.size > 0) {
+          fieldMap[change.id] = Array.from(selectedSet);
+        }
+      }
+    });
+    onCommit(transaction.id, selectedChangeIds.length === allChanges.length ? null : selectedChangeIds, fieldMap);
   };
 
   const getCollectionIcon = (collection) => {
@@ -157,8 +169,11 @@ const ImportPreviewModal = ({
       return {
         'Name': `${change.newData.firstName} ${change.newData.lastName}`,
         'Email': change.newData.email,
-        'Phone': change.newData.contactInfo?.phone || '',
-        'Office': change.newData.contactInfo?.office || ''
+        'Phone': change.newData.phone || '',
+        'Office': change.newData.office || '',
+        'Title': change.newData.title || '',
+        'Job Title': change.newData.jobTitle || '',
+        'Department': change.newData.department || ''
       };
     } else if (change.collection === 'rooms') {
       return {
@@ -169,6 +184,63 @@ const ImportPreviewModal = ({
       };
     }
     return {};
+  };
+
+  const renderFieldDiffs = (change) => {
+    if (!change.diff || change.diff.length === 0) return null;
+    const selectedSet = selectedFieldsByChange[change.id] || new Set(change.diff.map(d => d.key));
+    // Ensure default selection
+    React.useEffect(() => {
+      if (!selectedFieldsByChange[change.id]) {
+        setSelectedFieldsByChange((prev) => ({ ...prev, [change.id]: new Set(change.diff.map(d => d.key)) }));
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const toggleField = (key) => {
+      setSelectedFieldsByChange((prev) => {
+        const curr = new Set(prev[change.id] || []);
+        if (curr.has(key)) curr.delete(key); else curr.add(key);
+        return { ...prev, [change.id]: curr };
+      });
+    };
+
+    const toggleAllFields = (checked) => {
+      setSelectedFieldsByChange((prev) => ({
+        ...prev,
+        [change.id]: checked ? new Set(change.diff.map(d => d.key)) : new Set()
+      }));
+    };
+
+    const allChecked = selectedSet.size === change.diff.length;
+
+    return (
+      <div className="mt-3">
+        <div className="flex items-center mb-2">
+          <label className="flex items-center space-x-2 cursor-pointer text-sm text-gray-700">
+            <input type="checkbox" className="form-checkbox h-4 w-4 text-baylor-green" checked={allChecked} onChange={(e) => toggleAllFields(e.target.checked)} />
+            <span>Select all fields ({selectedSet.size}/{change.diff.length})</span>
+          </label>
+        </div>
+        <div className="divide-y divide-gray-100">
+          {change.diff.map(({ key, from, to }) => (
+            <label key={key} className="flex items-start py-2 space-x-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-1 form-checkbox h-4 w-4 text-baylor-green"
+                checked={selectedSet.has(key)}
+                onChange={() => toggleField(key)}
+              />
+              <div className="flex-1">
+                <div className="text-xs text-gray-500">{key}</div>
+                <div className="text-sm text-gray-900">{String(to || '')}</div>
+                <div className="text-xs text-gray-500 line-through">{String(from || '')}</div>
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   if (!transaction) return null;
@@ -310,19 +382,7 @@ const ImportPreviewModal = ({
                                       ))}
                                     </div>
 
-                                    {change.action === 'modify' && change.originalData && (
-                                      <div className="mt-3 pt-3 border-t border-gray-100">
-                                        <h5 className="text-xs font-medium text-gray-500 mb-2">ORIGINAL VALUES:</h5>
-                                        <div className="grid grid-cols-2 gap-3 text-sm">
-                                          {Object.entries(formatChangeDetails({...change, newData: change.originalData})).map(([key, value]) => (
-                                            <div key={key}>
-                                              <span className="font-medium text-gray-500">{key}:</span>
-                                              <span className="ml-2 text-gray-600 line-through">{value}</span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
+                                    {change.action === 'modify' && renderFieldDiffs(change)}
                                   </div>
                                 )}
                               </div>

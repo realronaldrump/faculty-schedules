@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Upload, FileText, Users, Calendar, AlertCircle, CheckCircle, X, RotateCcw, Database, Trash2, UserCheck, UserX, Phone, PhoneOff, Building, BuildingIcon, History, Eye, Shield, Settings, RefreshCw } from 'lucide-react';
-import { processDirectoryImport, processScheduleImport, cleanDirectoryData, determineRoles, createPersonModel, findMatchingPerson, parseCLSSCSV } from '../utils/dataImportUtils';
+import { processDirectoryImport, processScheduleImport, cleanDirectoryData, determineRoles, createPersonModel, findMatchingPerson, parseCLSSCSV, buildUpsertUpdates } from '../utils/dataImportUtils';
 import { previewImportChanges, commitTransaction } from '../utils/importTransactionUtils';
 import { analyzeCRNCoverage, backfillCRNData, reimportCRNFromCSV } from '../utils/crnMigrationUtils';
 import ImportPreviewModal from './ImportPreviewModal';
@@ -11,7 +11,7 @@ import { collection, getDocs, doc, updateDoc, addDoc } from 'firebase/firestore'
 import { db } from '../firebase';
 import { standardizeAllData } from '../utils/comprehensiveDataHygiene';
 import DeduplicationReviewModal from './DeduplicationReviewModal';
-import { logImport, logBulkUpdate } from '../utils/changeLogger';
+import { logImport, logBulkUpdate, logCreate, logUpdate } from '../utils/changeLogger';
 
 const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, availableSemesters, onSemesterDataImported }) => {
   const [csvData, setCsvData] = useState(null);
@@ -181,12 +181,12 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
     if (importType === 'directory') {
       // Check for directory CSV headers
       const requiredHeaders = ['First Name', 'Last Name', 'E-mail Address'];
-      const hasRequiredHeaders = requiredHeaders.some(header => headers.includes(header));
+      const hasRequiredHeaders = requiredHeaders.every(header => headers.includes(header));
       console.log('📋 Directory validation:', hasRequiredHeaders, 'required headers found:', requiredHeaders.filter(h => headers.includes(h)));
       return hasRequiredHeaders;
     } else if (importType === 'schedule') {
       // Check for CLSS CSV headers
-      const requiredHeaders = ['Instructor', 'Course'];
+      const requiredHeaders = ['Instructor', 'Course', 'Section #', 'Term'];
       const hasRequiredHeaders = requiredHeaders.every(header => headers.includes(header));
       console.log('📚 Schedule validation:', hasRequiredHeaders, 'required headers found:', requiredHeaders.filter(h => headers.includes(h)));
       return hasRequiredHeaders;
@@ -306,7 +306,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
           if (results.errors.length > 0) {
             showNotification('error', `Schedule import completed with ${results.errors.length} errors`);
           } else {
-            showNotification('success', `Successfully imported ${results.created} schedules`);
+            showNotification('success', `Schedules: created ${results.created}, updated ${results.updated}, skipped ${results.skipped}`);
           }
         }
       }
@@ -348,7 +348,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
         if (results.errors.length > 0) {
           showNotification('error', `Import completed with ${results.errors.length} errors`);
         } else {
-          showNotification('success', `Successfully imported ${results.created} new and updated ${results.updated} existing people`);
+          showNotification('success', `People: created ${results.created}, updated ${results.updated}, skipped ${results.skipped}`);
         }
       }
     } catch (error) {
@@ -415,31 +415,32 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
           hasNoOffice: personRoles.hasNoOffice
         });
 
-        // Find matching person
-        const match = await findMatchingPerson(personData, existingPeople);
+        // Strict email-based match for idempotent upsert
+        const match = personData.email
+          ? existingPeople.find(p => (p.email || '').toLowerCase() === personData.email)
+          : null;
 
         if (match) {
-          // Update existing person with merged roles
-          const updates = {
-            ...personData,
-            updatedAt: new Date().toISOString(),
-            roles: [...new Set([...match.person.roles, ...personData.roles])]
-          };
-
-          await updateDoc(doc(db, 'people', match.person.id), updates);
-          
-          // Log the update (no await to avoid slowing down bulk import)
-          logUpdate(
-            `Directory Import Update - ${personData.firstName} ${personData.lastName}`,
-            'people',
-            match.person.id,
-            updates,
-            match.person,
-            'SmartDataImportPage.jsx - processDirectoryImportWithRoles'
-          ).catch(err => console.error('Change logging error:', err));
-          
-          results.updated++;
-          results.people.push({ ...updates, id: match.person.id });
+          // Upsert: only overwrite with non-empty CSV values; skip if identical
+          const { updates, hasChanges } = buildUpsertUpdates(match, personData);
+          if (!hasChanges) {
+            results.skipped++;
+          } else {
+            await updateDoc(doc(db, 'people', match.id), updates);
+            
+            // Log the update (no await to avoid slowing down bulk import)
+            logUpdate(
+              `Directory Import Update - ${personData.firstName} ${personData.lastName}`,
+              'people',
+              match.id,
+              updates,
+              match,
+              'SmartDataImportPage.jsx - processDirectoryImportWithRoles'
+            ).catch(err => console.error('Change logging error:', err));
+            
+            results.updated++;
+            results.people.push({ ...match, ...updates });
+          }
         } else {
           // Create new person
           const docRef = await addDoc(collection(db, 'people'), personData);
@@ -533,11 +534,11 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
   };
 
   // Handle committing the preview transaction
-  const handleCommitTransaction = async (transactionId, selectedChanges = null) => {
+  const handleCommitTransaction = async (transactionId, selectedChanges = null, selectedFieldMap = null) => {
     setIsCommitting(true);
     
     try {
-      const result = await commitTransaction(transactionId, selectedChanges);
+      const result = await commitTransaction(transactionId, selectedChanges, selectedFieldMap);
       
       // Close the preview modal
       setShowPreviewModal(false);
@@ -547,7 +548,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
       if (showNotification) {
         const stats = result.getSummary().stats;
         const totalChanges = stats.totalChanges;
-        showNotification('success', `Successfully imported ${totalChanges} changes`);
+        showNotification('success', `Successfully applied ${totalChanges} changes`);
       }
       
       // If we imported new semester data, notify parent to refresh

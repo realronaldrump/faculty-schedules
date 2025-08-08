@@ -259,26 +259,24 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
         }
         
         // Room utilization
-        if (schedule.roomName && schedule.roomName.toLowerCase() !== 'online') {
-          if (!roomUtilization[schedule.roomName]) {
-            roomUtilization[schedule.roomName] = { 
-              classes: 0, 
-              hours: 0, 
-              adjunctTaughtClasses: 0 
-            };
-          }
-          
-          roomUtilization[schedule.roomName].classes++;
-          
-          const duration = calculateDuration(pattern.startTime, pattern.endTime);
-          roomUtilization[schedule.roomName].hours += duration;
-          
-          // Check if instructor is adjunct faculty
-          const instructor = people.find(p => p.id === schedule.instructorId);
-          if (instructor?.isAdjunct) {
-            roomUtilization[schedule.roomName].adjunctTaughtClasses++;
-          }
-        }
+        // Multi-room aware utilization
+        const roomNamesArr = Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0
+          ? schedule.roomNames
+          : (schedule.roomName ? [schedule.roomName] : []);
+        roomNamesArr
+          .filter(rn => rn && rn.toLowerCase() !== 'online')
+          .forEach((rn) => {
+            if (!roomUtilization[rn]) {
+              roomUtilization[rn] = { classes: 0, hours: 0, adjunctTaughtClasses: 0 };
+            }
+            roomUtilization[rn].classes++;
+            const duration = calculateDuration(pattern.startTime, pattern.endTime);
+            roomUtilization[rn].hours += duration;
+            const instructor = people.find(p => p.id === schedule.instructorId);
+            if (instructor?.isAdjunct) {
+              roomUtilization[rn].adjunctTaughtClasses++;
+            }
+          });
         
         // Day statistics
         if (pattern.day) {

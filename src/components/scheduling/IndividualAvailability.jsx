@@ -90,7 +90,12 @@ const IndividualAvailability = ({ scheduleData, facultyData }) => {
                   start: parseTime(pattern.startTime),
                   end: parseTime(pattern.endTime),
                   course: item.courseCode,
-                  room: item.room ? item.room.displayName : item.roomName,
+                  room: (() => {
+                    const names = Array.isArray(item.roomNames) && item.roomNames.length > 0
+                      ? item.roomNames
+                      : [item.room ? item.room.displayName : item.roomName].filter(Boolean);
+                    return names.join('; ');
+                  })(),
                   title: item.courseTitle
                 }));
             }

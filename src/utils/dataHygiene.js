@@ -213,7 +213,10 @@ export const standardizeSchedule = (schedule) => {
     // Instructor name standardization
     instructorName: (schedule.instructorName || '').trim(),
     
-    // Room standardization
+    // Room standardization (multi-room aware)
+    roomNames: Array.isArray(schedule.roomNames)
+      ? schedule.roomNames.map(standardizeRoomName).filter(Boolean)
+      : ((schedule.roomName ? [standardizeRoomName(schedule.roomName)] : [])),
     roomName: standardizeRoomName(schedule.roomName),
     
     // Status standardization

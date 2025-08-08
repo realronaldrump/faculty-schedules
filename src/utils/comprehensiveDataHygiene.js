@@ -246,7 +246,7 @@ export const detectRoomDuplicates = (rooms) => {
   rooms.forEach(room => {
     // Name-based duplicates
     if (room.name || room.displayName) {
-      const roomName = (room.name || room.displayName).toLowerCase().trim();
+      const roomName = (room.name || room.displayName || '').toLowerCase().trim();
       if (roomMap.has(roomName)) {
         duplicates.push({
           type: 'room_name',
@@ -303,18 +303,21 @@ const detectCrossCollectionIssues = (people, schedules, rooms) => {
     }
   });
 
-  // Check for orphaned schedules (no room)
+  // Check for orphaned schedules (no room). Supports multi-room arrays
   const roomIds = new Set(rooms.map(r => r.id));
   schedules.forEach(schedule => {
-    if (schedule.roomId && !roomIds.has(schedule.roomId)) {
-      issues.push({
-        type: 'orphaned_room',
-        severity: 'medium',
-        record: schedule,
-        reason: 'Schedule references non-existent room',
-        fix: 'link_to_existing_room'
-      });
-    }
+    const ids = Array.isArray(schedule.roomIds) ? schedule.roomIds : (schedule.roomId ? [schedule.roomId] : []);
+    ids.forEach((rid) => {
+      if (rid && !roomIds.has(rid)) {
+        issues.push({
+          type: 'orphaned_room',
+          severity: 'medium',
+          record: schedule,
+          reason: 'Schedule references non-existent room',
+          fix: 'link_to_existing_room'
+        });
+      }
+    });
   });
 
   // Check for inconsistent instructor names
@@ -477,16 +480,23 @@ export const mergeRoomRecords = async (duplicateGroup) => {
   // Update primary record
   batch.update(doc(db, 'rooms', primary.id), mergedData);
   
-  // Update all schedules that reference the secondary room
-  const schedulesSnapshot = await getDocs(
-    query(collection(db, 'schedules'), where('roomId', '==', secondary.id))
-  );
-  
+  // Update all schedules that reference the secondary room (multi-room aware)
+  const schedulesSnapshot = await getDocs(query(collection(db, 'schedules')));
   schedulesSnapshot.docs.forEach(scheduleDoc => {
-    batch.update(doc(db, 'schedules', scheduleDoc.id), {
-      roomId: primary.id,
-      roomName: mergedData.displayName || mergedData.name
-    });
+    const s = scheduleDoc.data();
+    const currentIds = Array.isArray(s.roomIds) ? s.roomIds : (s.roomId ? [s.roomId] : []);
+    const currentNames = Array.isArray(s.roomNames) ? s.roomNames : (s.roomName ? [s.roomName] : []);
+    if (currentIds.includes(secondary.id)) {
+      const nextIds = [...new Set(currentIds.map(id => (id === secondary.id ? primary.id : id)))];
+      const primaryName = mergedData.displayName || mergedData.name;
+      const nextNames = currentNames.map(n => (n === (s.roomName || '') ? primaryName : n));
+      batch.update(doc(db, 'schedules', scheduleDoc.id), {
+        roomIds: nextIds,
+        roomId: nextIds[0] || null,
+        roomNames: nextNames.length > 0 ? nextNames : [primaryName],
+        roomName: (nextNames[0] || primaryName)
+      });
+    }
   });
 
   // Delete secondary record

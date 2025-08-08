@@ -104,7 +104,15 @@ export const createScheduleModel = (rawData) => {
     section: (rawData.section || '').trim(),
     crn: rawData.crn || '', // Add CRN field
     meetingPatterns: Array.isArray(rawData.meetingPatterns) ? rawData.meetingPatterns : [],
+    // Multi-room support (backwards compatible):
+    // - roomIds: array of referenced room document IDs
+    // - roomNames: array of display strings for rooms
+    // - roomId/roomName retained for legacy consumers (first room)
+    roomIds: Array.isArray(rawData.roomIds) ? rawData.roomIds : (rawData.roomId ? [rawData.roomId] : []),
     roomId: rawData.roomId || null,
+    roomNames: Array.isArray(rawData.roomNames)
+      ? rawData.roomNames.map((n) => (n || '').toString().trim()).filter(Boolean)
+      : ((rawData.roomName || '').trim() ? [(rawData.roomName || '').trim()] : []),
     roomName: (rawData.roomName || '').trim(),
     term: (rawData.term || '').trim(),
     termCode: (rawData.termCode || '').trim(),
@@ -930,42 +938,44 @@ export const processScheduleImport = async (csvData) => {
         }
       }
       
-      // === ENHANCED ROOM LINKING ===
-      let roomId = null;
+      // === ENHANCED ROOM LINKING (supports multiple rooms separated by ';') ===
+      let roomIds = [];
+      let roomNames = [];
       if (roomName && roomName.toLowerCase() !== 'online' && roomName !== 'No Room Needed') {
-        // Deterministic room ID: buildingCode_roomNumber (fallback to sanitized name)
-        const building = extractBuildingFromRoom(roomName);
-        const roomNumber = extractRoomNumberFromRoom(roomName);
-        const deterministicRoomId = (building && roomNumber)
-          ? `${building.replace(/\s+/g,'_').toLowerCase()}_${roomNumber}`
-          : roomName.replace(/\s+/g,'_').toLowerCase();
-        const existingRoom = existingRooms.find(r => r.id === deterministicRoomId || r.name === roomName || r.displayName === roomName);
-        
-        if (existingRoom) {
-          roomId = existingRoom.id;
-        } else {
-           // Create new room using deterministic ID
-           const newRoom = createRoomModel({
-             name: roomName,
-             displayName: roomName,
-             building,
-             roomNumber,
-             type: 'Classroom'
-           });
-           const roomRef = doc(db, COLLECTIONS.ROOMS, deterministicRoomId);
-           await setDoc(roomRef, newRoom, { merge: true });
-           // Log room creation
-           logCreate(
-             `Room - ${roomName}`,
-             COLLECTIONS.ROOMS,
-             roomRef.id,
-             newRoom,
-             'dataImportUtils.js - processScheduleImport'
-           ).catch(err => console.error('Change logging error (room):', err));
-           roomId = roomRef.id;
-           existingRooms.push({ ...newRoom, id: roomRef.id });
-          results.roomsCreated++;
-          console.log(`🏛️ Created new room: ${roomName}`);
+        const splitRooms = roomName.split(';').map(s => s.trim()).filter(Boolean);
+        for (const singleRoom of splitRooms) {
+          roomNames.push(singleRoom);
+          // Deterministic room ID: buildingCode_roomNumber (fallback to sanitized name)
+          const building = extractBuildingFromRoom(singleRoom);
+          const roomNumber = extractRoomNumberFromRoom(singleRoom);
+          const deterministicRoomId = (building && roomNumber)
+            ? `${building.replace(/\s+/g,'_').toLowerCase()}_${roomNumber}`
+            : singleRoom.replace(/\s+/g,'_').toLowerCase();
+          const existingRoom = existingRooms.find(r => r.id === deterministicRoomId || r.name === singleRoom || r.displayName === singleRoom);
+          if (existingRoom) {
+            roomIds.push(existingRoom.id);
+          } else {
+            const newRoom = createRoomModel({
+              name: singleRoom,
+              displayName: singleRoom,
+              building,
+              roomNumber,
+              type: 'Classroom'
+            });
+            const roomRef = doc(db, COLLECTIONS.ROOMS, deterministicRoomId);
+            await setDoc(roomRef, newRoom, { merge: true });
+            logCreate(
+              `Room - ${singleRoom}`,
+              COLLECTIONS.ROOMS,
+              roomRef.id,
+              newRoom,
+              'dataImportUtils.js - processScheduleImport'
+            ).catch(err => console.error('Change logging error (room):', err));
+            roomIds.push(roomRef.id);
+            existingRooms.push({ ...newRoom, id: roomRef.id });
+            results.roomsCreated++;
+            console.log(`🏛️ Created new room: ${singleRoom}`);
+          }
         }
       }
       
@@ -1047,8 +1057,11 @@ export const processScheduleImport = async (csvData) => {
         section,
         crn, // Pass CRN to the model
         meetingPatterns,
-        roomId,
-        roomName,
+        // Multi-room fields
+        roomIds,
+        roomId: roomIds.length > 0 ? roomIds[0] : null,
+        roomNames,
+        roomName: roomNames[0] || '',
         term,
         termCode,
         credits: finalCredits,
@@ -1525,15 +1538,25 @@ export const fetchSchedulesWithRelationalData = async () => {
     // Populate relational data
     const enrichedSchedules = schedules.map(schedule => {
       const instructor = schedule.instructorId ? peopleMap.get(schedule.instructorId) : null;
-      const room = schedule.roomId ? roomsMap.get(schedule.roomId) : null;
-      
+      // Multi-room relational enrichment
+      const resolvedRooms = Array.isArray(schedule.roomIds)
+        ? schedule.roomIds.map((rid) => roomsMap.get(rid)).filter(Boolean)
+        : (schedule.roomId ? [roomsMap.get(schedule.roomId)].filter(Boolean) : []);
+
+      // Derive legacy single room fields for compatibility
+      const primaryRoom = resolvedRooms[0] || (schedule.roomId ? roomsMap.get(schedule.roomId) : null);
+      const derivedRoomName = Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0
+        ? schedule.roomNames[0]
+        : (primaryRoom ? (primaryRoom.displayName || primaryRoom.name) : (schedule.roomName || ''));
+
       return {
         ...schedule,
-        instructor, // Full instructor object
-        room, // Full room object
-        // Keep display fields for component compatibility
+        instructor,
+        rooms: resolvedRooms, // new relational array
+        room: primaryRoom || null, // maintain legacy singular field for older UIs
         instructorName: instructor ? `${instructor.firstName} ${instructor.lastName}`.trim() : schedule.instructorName || 'Staff',
-        roomName: room ? room.displayName : schedule.roomName || ''
+        roomName: derivedRoomName,
+        roomNames: Array.isArray(schedule.roomNames) ? schedule.roomNames : (derivedRoomName ? [derivedRoomName] : [])
       };
     });
     

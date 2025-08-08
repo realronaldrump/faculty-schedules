@@ -83,10 +83,16 @@ const CourseManagement = ({
     [scheduleData]
   );
 
-  const uniqueRooms = useMemo(() => 
-    [...new Set(scheduleData.filter(item => item && item.Room).map(item => item.Room))].sort(),
-    [scheduleData]
-  );
+  const uniqueRooms = useMemo(() => {
+    const all = [];
+    scheduleData.forEach(item => {
+      if (!item) return;
+      if (item.Room && typeof item.Room === 'string') {
+        item.Room.split(';').map(s => s.trim()).filter(Boolean).forEach(r => all.push(r));
+      }
+    });
+    return [...new Set(all)].sort();
+  }, [scheduleData]);
 
   const uniqueTerms = useMemo(() => 
     [...new Set(scheduleData.filter(item => item && item.Term).map(item => item.Term))].sort(),
@@ -292,7 +298,11 @@ const CourseManagement = ({
     }
     
     if (filters.room && Array.isArray(filters.room) && filters.room.length > 0) {
-      data = data.filter(item => item && item.Room && filters.room.includes(item.Room));
+      data = data.filter(item => {
+        if (!item || !item.Room) return false;
+        const rooms = item.Room.split(';').map(s => s.trim()).filter(Boolean);
+        return rooms.some(r => filters.room.includes(r));
+      });
     }
 
     // Apply term filter
@@ -347,8 +357,13 @@ const CourseManagement = ({
       data = data.filter(item => {
         if (!item || !item.Room) return true;
         
-        const buildingMatch = item.Room.match(/^([A-Z]+)/);
-        const buildingName = buildingMatch ? buildingMatch[1] : 'Other';
+        // For multi-room rows, consider a match if ANY room's building matches
+        const rooms = item.Room.split(';').map(s => s.trim()).filter(Boolean);
+        const buildingForAny = rooms.map(r => {
+          const m = r.match(/^([^0-9]+)/);
+          return m ? m[1].trim().toUpperCase().replace(/\s+$/,'') : 'Other';
+        });
+        const buildingName = buildingForAny[0] || 'Other';
         
         const includeMatch = filters.buildings.include.length === 0 || filters.buildings.include.includes(buildingName);
         const excludeMatch = filters.buildings.exclude.length === 0 || !filters.buildings.exclude.includes(buildingName);
@@ -414,7 +429,7 @@ const CourseManagement = ({
     const groupedMap = {};
     data.forEach(item => {
       if (!item) return;
-      const key = `${item.Course}|${item.Section}|${item.Term}|${item.CRN}|${item.Instructor}|${item['Start Time']}|${item['End Time']}|${item.Room}`;
+      const key = `${item.Course}|${item.Section}|${item.Term}|${item.CRN}|${item.Instructor}|${item['Start Time']}|${item['End Time']}|${(item.Room||'')}`;
       if (!groupedMap[key]) {
         groupedMap[key] = { ...item, _daySet: new Set(item.Day ? [item.Day] : []), _originalIds: [item.id] };
       } else if (item.Day) {
@@ -581,6 +596,8 @@ const CourseManagement = ({
     const courseWithId = {
       ...newCourseData,
       Day: dayPattern,
+      // Persist Room as semicolon-separated string for compatibility
+      Room: Array.isArray(newCourseData.Rooms) && newCourseData.Rooms.length > 0 ? newCourseData.Rooms.join('; ') : (newCourseData.Room || ''),
       id: `new_${Date.now()}`,
       CRN: newCourseData.CRN || '',
       Status: newCourseData.Status || 'Active',
@@ -926,18 +943,13 @@ const CourseManagement = ({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
-                <select
-                  name="Room"
-                  value={newCourseData.Room || ''}
-                  onChange={handleNewCourseChange}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
-                >
-                  <option value="">Select Room</option>
-                  {uniqueRooms.map(room => (
-                    <option key={room} value={room}>{room}</option>
-                  ))}
-                </select>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Rooms</label>
+                <MultiSelectDropdown
+                  options={uniqueRooms}
+                  selected={Array.isArray(newCourseData.Rooms) ? newCourseData.Rooms : []}
+                  onChange={(selected) => setNewCourseData(prev => ({ ...prev, Rooms: selected }))}
+                  placeholder="Select one or more rooms..."
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Credits</label>
@@ -1475,12 +1487,11 @@ const CourseManagement = ({
                           />
                         </td>
                         <td className="p-1">
-                          <input
-                            name="Room"
-                            value={editFormData.Room || ''}
-                            onChange={handleEditFormChange}
-                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
-                            placeholder="Room Name"
+                          <MultiSelectDropdown
+                            options={uniqueRooms}
+                            selected={(editFormData.Room || '').split(';').map(s => s.trim()).filter(Boolean)}
+                            onChange={(selected) => setEditFormData(prev => ({ ...prev, Room: selected.join('; ') }))}
+                            placeholder="Select room(s)..."
                           />
                         </td>
                         <td className="p-1">
@@ -1573,7 +1584,7 @@ const CourseManagement = ({
                               <Edit size={16} />
                             </button>
                             <button
-                              onClick={() => handleDeleteSchedule(row.id)}
+                              onClick={() => handleDeleteSchedule(row._originalId || row.id)}
                               className="p-2 text-red-600 hover:bg-red-100 rounded-full"
                               title="Delete this record"
                             >

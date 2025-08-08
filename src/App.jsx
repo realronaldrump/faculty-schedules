@@ -265,6 +265,17 @@ function App() {
         schedule.meetingPatterns.forEach((pattern, index) => {
           if (!pattern) return; // Skip null patterns
           
+          // Build room fields with multi-room awareness
+          const roomDisplay = (() => {
+            if (Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0) {
+              return schedule.roomNames.join('; ');
+            }
+            if (Array.isArray(schedule.rooms) && schedule.rooms.length > 0) {
+              return schedule.rooms.map(r => r?.displayName || r?.name).filter(Boolean).join('; ');
+            }
+            return schedule.room ? (schedule.room.displayName || schedule.room.name) : (schedule.roomName || '');
+          })();
+
           flattenedData.push({
             id: `${schedule.id}-${index}`,
             // Basic schedule info
@@ -281,8 +292,8 @@ function App() {
             'End Time': pattern.endTime || '',
             
             // Room info
-            Room: schedule.room ? (schedule.room.displayName || schedule.room.name) : (schedule.roomName || ''),
-            'Room Capacity': schedule.room ? schedule.room.capacity : '',
+            Room: roomDisplay,
+            'Room Capacity': Array.isArray(schedule.rooms) && schedule.rooms.length > 0 ? (schedule.rooms[0]?.capacity || '') : (schedule.room ? schedule.room.capacity : ''),
             
             // Course details
             CRN: schedule.crn || schedule.CRN || '',
@@ -292,11 +303,22 @@ function App() {
             Status: schedule.status || 'Active',
             
             // Legacy flat structure compatibility
-            ...schedule
+            ...schedule,
+            _originalId: schedule.id
           });
         });
       } else {
         // If no meeting patterns, create a single entry (legacy format support)
+        const roomDisplay = (() => {
+          if (Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0) {
+            return schedule.roomNames.join('; ');
+          }
+          if (Array.isArray(schedule.rooms) && schedule.rooms.length > 0) {
+            return schedule.rooms.map(r => r?.displayName || r?.name).filter(Boolean).join('; ');
+          }
+          return schedule.room ? (schedule.room.displayName || schedule.room.name) : (schedule.roomName || '');
+        })();
+
         flattenedData.push({
           id: schedule.id,
           Course: schedule.courseCode || '',
@@ -305,11 +327,12 @@ function App() {
           Section: schedule.section || '',
           Credits: schedule.credits || '',
           Term: schedule.term || '',
-          Room: schedule.room ? (schedule.room.displayName || schedule.room.name) : (schedule.roomName || ''),
+          Room: roomDisplay,
           CRN: schedule.crn || schedule.CRN || '',
           'Schedule Type': schedule.scheduleType || 'Class Instruction',
           Status: schedule.status || 'Active',
-          ...schedule
+          ...schedule,
+          _originalId: schedule.id
         });
       }
     });
@@ -524,13 +547,14 @@ function App() {
         console.log(`📋 Found ${originalSchedules.length} original schedules for grouped course`);
       } else {
         // Updating existing single course
-        originalSchedule = rawScheduleData.find(s => s.id === updatedRow.id);
+        const effectiveId = updatedRow._originalId || updatedRow.id;
+        originalSchedule = rawScheduleData.find(s => s.id === effectiveId);
         if (!originalSchedule) {
           console.error('❌ Original schedule not found for update');
           showNotification('error', 'Update Failed', 'Original schedule not found.');
           return;
         }
-        scheduleRef = doc(db, 'schedules', updatedRow.id);
+        scheduleRef = doc(db, 'schedules', effectiveId);
       }
 
       // Validate and resolve instructor reference
@@ -716,7 +740,7 @@ function App() {
         await logUpdate(
           `Schedule - ${updateData.courseCode} ${updateData.section} (${updateData.instructorName})`,
           'schedules',
-          updatedRow.id,
+          (updatedRow._originalId || updatedRow.id),
           updateData,
           originalSchedule,
           'App.jsx - handleDataUpdate'

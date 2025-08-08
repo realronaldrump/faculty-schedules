@@ -282,7 +282,10 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
       academicYear: extractAcademicYear(term),
       instructorId: instructorId,
       instructorName: instructorName,
+      // Multi-room preview support: split on ';' while retaining legacy fields
+      roomIds: roomName && roomName.includes(';') ? [] : (roomId ? [roomId] : []),
       roomId: roomId,
+      roomNames: roomName ? roomName.split(';').map(s => s.trim()).filter(Boolean) : [],
       roomName: roomName,
       meetingPatterns: parseMeetingPatterns(row),
       scheduleType: row['Schedule Type'] || 'Class Instruction',

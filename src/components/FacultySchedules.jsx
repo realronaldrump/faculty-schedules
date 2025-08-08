@@ -96,7 +96,12 @@ const FacultySchedules = ({ scheduleData, facultyData }) => {
               end: parseTime(pattern.endTime),
               course: item.courseCode || item.Course,
               title: item.courseTitle || item['Course Title'],
-              room: item.room ? (item.room.displayName || item.room.name) : (item.roomName || item.Room),
+              room: (() => {
+                if (Array.isArray(item.roomNames) && item.roomNames.length > 0) {
+                  return item.roomNames.join('; ');
+                }
+                return item.room ? (item.room.displayName || item.room.name) : (item.roomName || item.Room);
+              })(),
               section: item.section || item.Section,
               credits: item.credits || item.Credits,
               term: item.term || item.Term,
@@ -110,7 +115,12 @@ const FacultySchedules = ({ scheduleData, facultyData }) => {
           end: parseTime(item['End Time']),
           course: item.Course,
           title: item['Course Title'],
-          room: item.Room,
+          room: (() => {
+            if (Array.isArray(item.roomNames) && item.roomNames.length > 0) {
+              return item.roomNames.join('; ');
+            }
+            return item.Room;
+          })(),
           section: item.Section,
           credits: item.Credits,
           term: item.Term,

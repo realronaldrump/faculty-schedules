@@ -630,7 +630,7 @@ export const autoMergeObviousDuplicates = async () => {
   // Merge schedules
   const scheduleDuplicates = detectScheduleDuplicates(schedules);
   for (const dup of scheduleDuplicates) {
-    if (dup.confidence >= 0.95) {
+    if (dup.confidence >= 0.98) {
       try {
         const mergeResult = await mergeScheduleRecords(dup);
         results.mergedSchedules++;

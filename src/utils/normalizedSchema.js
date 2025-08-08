@@ -117,7 +117,7 @@ export const normalizedSchema = {
       fields: {
         section_id: 'TEXT PRIMARY KEY', // CRN or CLSS_ID + Term
         clss_id: 'TEXT',
-        crn: 'TEXT',
+        crn: 'TEXT', // real CRN from authoritative source; no placeholders
         course_code: 'TEXT NOT NULL REFERENCES courses(course_code)',
         term_code: 'TEXT NOT NULL REFERENCES terms(term_code)',
         section_number: 'TEXT NOT NULL',

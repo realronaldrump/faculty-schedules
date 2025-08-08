@@ -1229,10 +1229,10 @@ const DuplicateList = ({ title, duplicates, selectedDuplicates, onToggleSelectio
                   />
                   <span className="font-medium text-gray-900">{duplicate.reason}</span>
                 </div>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  duplicate.confidence >= 0.9
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  duplicate.confidence >= 0.98
                     ? 'bg-green-100 text-green-800'
-                    : duplicate.confidence >= 0.7
+                    : duplicate.confidence >= 0.9
                     ? 'bg-yellow-100 text-yellow-800'
                     : 'bg-red-100 text-red-800'
                 }`}>

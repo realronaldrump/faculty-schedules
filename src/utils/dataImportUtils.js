@@ -1101,8 +1101,13 @@ export const processScheduleImport = async (csvData) => {
         results.schedules.push({ ...existingMatch, ...updates });
       } else {
         // Create new schedule with full relational integrity
-        // Deterministic schedule ID: termCode_crn (fallback term_crn)
-        const scheduleDeterministicId = (scheduleData.termCode || scheduleData.term || 'TERM') + '_' + (scheduleData.crn || 'CRN');
+        // Deterministic schedule ID strategy:
+        //   Prefer: termCode_crn when a valid 5–6 digit CRN exists
+        //   Fallback: termCode_course_section (lowercase, underscores)
+        const hasValidCrn = (scheduleData.crn || '').toString().trim().match(/^\d{5,6}$/);
+        const baseTerm = (scheduleData.termCode || scheduleData.term || 'TERM').toString().trim();
+        const fallbackKey = `${baseTerm}_${(scheduleData.courseCode || 'COURSE').replace(/\s+/g, '-').toUpperCase()}_${(scheduleData.section || 'SECTION').replace(/\s+/g, '-')}`;
+        const scheduleDeterministicId = hasValidCrn ? `${baseTerm}_${scheduleData.crn}` : fallbackKey;
         const schedRef = doc(db, COLLECTIONS.SCHEDULES, scheduleDeterministicId);
         await setDoc(schedRef, scheduleWrite, { merge: true });
         results.created++;
@@ -1112,7 +1117,7 @@ export const processScheduleImport = async (csvData) => {
         logCreate(
           `Schedule Import - ${courseCode} ${section} (${term})`,
           'schedules',
-          docRef.id,
+          schedRef.id,
           scheduleData,
           'dataImportUtils.js - processScheduleImport'
         ).catch(err => console.error('Change logging error:', err));

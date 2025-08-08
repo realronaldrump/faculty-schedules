@@ -10,6 +10,7 @@ import DataDeduplicationManager from './DataDeduplicationManager';
 import { collection, getDocs, doc, updateDoc, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { standardizeAllData } from '../utils/comprehensiveDataHygiene';
+import { autoMergeObviousDuplicates } from '../utils/dataHygiene';
 import DeduplicationReviewModal from './DeduplicationReviewModal';
 import { logImport, logBulkUpdate, logCreate, logUpdate } from '../utils/changeLogger';
 
@@ -397,6 +398,12 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
           continue;
         }
 
+        // Enforce a unique key for idempotency and duplicate prevention
+        if (!email) {
+          results.errors.push(`Row ${i + 1}: Missing email for ${firstName} ${lastName}; skipped to prevent duplicate creation`);
+          continue;
+        }
+
         // Create person data with assigned roles and special flags
         const personData = createPersonModel({
           firstName,
@@ -446,10 +453,11 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
           const docRef = await addDoc(collection(db, 'people'), personData);
           
           // Log the creation (no await to avoid slowing down bulk import)
-          logImport(
+          logCreate(
             `Directory Import Create - ${personData.firstName} ${personData.lastName}`,
             'people',
-            1,
+            docRef.id,
+            personData,
             'SmartDataImportPage.jsx - processDirectoryImportWithRoles'
           ).catch(err => console.error('Change logging error:', err));
           
@@ -461,6 +469,13 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
       } catch (error) {
         results.errors.push(`Row ${i + 1}: Error processing ${row['First Name']} ${row['Last Name']}: ${error.message}`);
       }
+    }
+
+    // Post-import: run automatic duplicate cleanup for safety
+    try {
+      await autoMergeObviousDuplicates();
+    } catch (e) {
+      console.error('Duplicate cleanup error:', e);
     }
 
     return results;

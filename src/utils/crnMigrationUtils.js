@@ -3,35 +3,19 @@ import { collection, getDocs, doc, updateDoc, writeBatch } from 'firebase/firest
 
 /**
  * Utility to backfill CRN data for existing schedule records
- * This helps maintain data consistency when CRN field was added later
+ * IMPORTANT: We never generate placeholder CRNs. Only real CRNs from trusted
+ * sources (e.g., CSV re-import) should be written. This avoids false duplicate
+ * detection across unrelated schedules.
  */
 
 /**
- * Extract potential CRN from course code patterns
- * Some institutions include CRN-like numbers in course codes
+ * Extract CRN if explicitly present in a string (rare). We do NOT fabricate
+ * CRNs. If not found, return null.
  */
-const extractPotentialCRN = (courseCode, section) => {
-  // If courseCode contains numbers that could be CRN (5-6 digits)
+const extractPotentialCRN = (courseCode) => {
   const crnPattern = /\b(\d{5,6})\b/;
   const match = courseCode?.match(crnPattern);
-  if (match) {
-    return match[1];
-  }
-  
-  // Generate a placeholder CRN based on course code and section
-  // This is for records where CRN is completely missing
-  if (courseCode && section) {
-    const courseHash = courseCode.replace(/[^A-Z0-9]/g, '');
-    const sectionHash = section.replace(/[^A-Z0-9]/g, '');
-    // Create a consistent 5-digit number based on course and section
-    const combined = courseHash + sectionHash;
-    const hash = combined.split('').reduce((acc, char) => {
-      return acc + char.charCodeAt(0);
-    }, 0);
-    return String(hash % 90000 + 10000); // Ensure 5-digit number
-  }
-  
-  return null;
+  return match ? match[1] : null;
 };
 
 /**
@@ -152,15 +136,16 @@ export const backfillCRNData = async (csvData = null, dryRun = false) => {
 
       let newCRN = null;
 
-      // Method 1: Try to find CRN from CSV data
+      // Method 1: Try to find CRN from provided CSV data (authoritative source)
       if (csvCRNMap) {
         const lookupKey = `${schedule.courseCode || ''}_${schedule.section || ''}_${schedule.term || ''}`.toLowerCase();
         newCRN = csvCRNMap.get(lookupKey);
       }
 
-      // Method 2: Extract potential CRN from existing data
+      // Method 2 (optional, conservative): extract only if an obvious 5–6 digit CRN
+      // is embedded in courseCode text. We do NOT generate placeholders.
       if (!newCRN) {
-        newCRN = extractPotentialCRN(schedule.courseCode, schedule.section);
+        newCRN = extractPotentialCRN(schedule.courseCode);
       }
 
       if (newCRN) {

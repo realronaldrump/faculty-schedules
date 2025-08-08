@@ -146,41 +146,89 @@ const detectPeopleDuplicates = (people) => {
  */
 export const detectScheduleDuplicates = (schedules) => {
   const duplicates = [];
-  const scheduleMap = new Map();
+  const seenByKey = new Map();
+  const seenByCrnTerm = new Map();
 
-  schedules.forEach(schedule => {
-    // Create unique key for schedule identification
-    const scheduleKey = `${schedule.courseCode}-${schedule.section}-${schedule.term}-${schedule.instructorId}`;
-    
-    if (scheduleMap.has(scheduleKey)) {
-      const existing = scheduleMap.get(scheduleKey);
-      duplicates.push({
-        type: 'schedule',
-        confidence: 1.0,
-        records: [existing, schedule],
-        reason: 'Identical course-section-term-instructor combination',
-        mergeStrategy: 'merge_schedules'
-      });
-    } else {
-      scheduleMap.set(scheduleKey, schedule);
+  const normalize = (v) => (v || '').toString().trim().toLowerCase();
+  const parseCrnFromSection = (section) => {
+    if (!section) return null;
+    const m = String(section).match(/\b(\d{5,6})\b/);
+    return m ? m[1] : null;
+  };
+  const getEffectiveCrn = (schedule) => {
+    const crnFromField = (schedule.crn || '').toString().trim();
+    const crnFromSection = parseCrnFromSection(schedule.section);
+    // Prefer numeric CRN that matches the section's embedded CRN if present.
+    if (/^\d{5,6}$/.test(crnFromField)) {
+      if (crnFromSection && crnFromSection !== crnFromField) {
+        // Likely legacy placeholder in field; trust the section value instead
+        return crnFromSection;
+      }
+      return crnFromField;
+    }
+    return crnFromSection || '';
+  };
+
+  schedules.forEach((schedule) => {
+    // Primary duplicate signal: exact CRN within the same term
+    const crn = getEffectiveCrn(schedule);
+    const term = (schedule.term || '').toString().trim();
+    const hasRealCrn = crn !== '' && /^(\d{5,6})$/.test(crn); // only accept 5–6 digit numeric CRNs
+
+    if (hasRealCrn && term) {
+      const crnKey = `${crn}__${term}`;
+      if (seenByCrnTerm.has(crnKey)) {
+        const existing = seenByCrnTerm.get(crnKey);
+        if (existing.id !== schedule.id) {
+          // Require at least one strong corroborating attribute to avoid
+          // false positives from legacy placeholder CRNs
+          const sameCourse = normalize(existing.courseCode) === normalize(schedule.courseCode);
+          const sameSection = normalize(existing.section) === normalize(schedule.section);
+          const sameInstructor = normalize(existing.instructorId) === normalize(schedule.instructorId) ||
+                                 normalize(existing.instructorName) === normalize(schedule.instructorName);
+
+          if (sameCourse || sameSection || sameInstructor) {
+            duplicates.push({
+              type: 'crn',
+              confidence: 1.0,
+              records: [existing, schedule],
+              reason: 'Duplicate CRN within the same term',
+              mergeStrategy: 'merge_schedules'
+            });
+          } else {
+            // Treat as likely placeholder collision → ignore
+          }
+        }
+      } else {
+        seenByCrnTerm.set(crnKey, schedule);
+      }
     }
 
-    // Check for CRN duplicates (unique within a term)
-    if (schedule.crn && schedule.term) {
-      const crnKey = `crn-${schedule.crn}-${schedule.term}`;
-      if (scheduleMap.has(crnKey)) {
-        const existing = scheduleMap.get(crnKey);
+    // Secondary signal when CRN is missing: consider course+section+term as the identity
+    // Include instructor if present to reduce false positives.
+    const courseCode = normalize(schedule.courseCode);
+    const section = normalize(schedule.section);
+    const instructorId = normalize(schedule.instructorId);
+    const scheduleKey = `${courseCode}__${section}__${normalize(schedule.term)}__${instructorId}`;
+
+    if (courseCode && section && term) {
+      if (seenByKey.has(scheduleKey)) {
+        const existing = seenByKey.get(scheduleKey);
+        // Confidence is high if all 4 fields match; slightly lower if instructorId missing on both
+        const confidence = instructorId ? 1.0 : 0.95;
         if (existing.id !== schedule.id) {
           duplicates.push({
-            type: 'crn',
-            confidence: 1.0,
+            type: 'schedule',
+            confidence,
             records: [existing, schedule],
-            reason: 'Duplicate CRN (should be unique)',
+            reason: instructorId
+              ? 'Identical course, section, term, and instructor'
+              : 'Identical course, section, and term (no instructor id)',
             mergeStrategy: 'merge_schedules'
           });
         }
       } else {
-        scheduleMap.set(crnKey, schedule);
+        seenByKey.set(scheduleKey, schedule);
       }
     }
   });

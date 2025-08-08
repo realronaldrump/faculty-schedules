@@ -3,7 +3,7 @@
  * Implements normalized data model with unified 'people' collection and ID-based references
  */
 
-import { collection, addDoc, getDocs, query, where, doc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, updateDoc, writeBatch, setDoc } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { standardizePerson, standardizeSchedule, validateAndCleanBeforeSave, autoMergeObviousDuplicates } from './dataHygiene';
 import { parseCourseCode } from './courseUtils';
@@ -72,6 +72,11 @@ export const createPersonModel = (rawData) => {
            (typeof rawData.roles === 'object' && rawData.roles?.faculty) ? 
            (rawData.isUPD || false) : false,
     programId: rawData.programId || null, // Reference to programs collection
+    externalIds: {
+      clssInstructorId: rawData.clssInstructorId || null,
+      baylorId: rawData.baylorId || null,
+      emails: rawData.email ? [rawData.email.toLowerCase().trim()] : []
+    },
     baylorId: rawData.baylorId || '', // 9-digit Baylor ID number
     hasNoPhone: rawData.hasNoPhone || false,
     hasNoOffice: rawData.hasNoOffice || false,
@@ -91,6 +96,7 @@ export const createScheduleModel = (rawData) => {
   const schedule = {
     instructorId: rawData.instructorId || '',
     instructorName: (rawData.instructorName || '').trim(),
+    courseId: (rawData.courseId || '').trim(),
     courseCode: (rawData.courseCode || '').trim(),
     courseTitle: (rawData.courseTitle || '').trim(),
     program: rawData.program || '',
@@ -101,6 +107,7 @@ export const createScheduleModel = (rawData) => {
     roomId: rawData.roomId || null,
     roomName: (rawData.roomName || '').trim(),
     term: (rawData.term || '').trim(),
+    termCode: (rawData.termCode || '').trim(),
     academicYear: (rawData.academicYear || '').trim(),
     credits: parseInt(rawData.credits) || 0,
     scheduleType: (rawData.scheduleType || 'Class Instruction').trim(),
@@ -782,15 +789,19 @@ export const processScheduleImport = async (csvData) => {
   console.log('🔗 Starting enhanced relational schedule import...');
   
   // Fetch existing data
-  const [peopleSnapshot, schedulesSnapshot, roomsSnapshot] = await Promise.all([
-    getDocs(collection(db, 'people')),
-    getDocs(collection(db, 'schedules')),
-    getDocs(collection(db, 'rooms'))
+  const [peopleSnapshot, schedulesSnapshot, roomsSnapshot, coursesSnapshot, termsSnapshot] = await Promise.all([
+    getDocs(collection(db, COLLECTIONS.PEOPLE)),
+    getDocs(collection(db, COLLECTIONS.SCHEDULES)),
+    getDocs(collection(db, COLLECTIONS.ROOMS)),
+    getDocs(collection(db, COLLECTIONS.COURSES)),
+    getDocs(collection(db, COLLECTIONS.TERMS))
   ]);
   
   const existingPeople = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   const existingSchedules = schedulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   const existingRooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const existingCourses = coursesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const existingTerms = termsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   
   console.log(`📊 Found ${existingPeople.length} existing people, ${existingRooms.length} rooms`);
   
@@ -806,6 +817,7 @@ export const processScheduleImport = async (csvData) => {
       const meetings = row['Meetings'] || '';
       const roomName = (row['Room'] || '').trim();
       const term = row['Term'] || '';
+      const termCode = row['Term Code'] || '';
       const creditsFromCsv = row['Credit Hrs'] || row['Credit Hrs Min'];
       const scheduleType = row['Schedule Type'] || 'Class Instruction';
       const status = row['Status'] || 'Active';
@@ -845,7 +857,7 @@ export const processScheduleImport = async (csvData) => {
               ? match.person.roles 
               : Object.keys(match.person.roles || {}).filter(key => match.person.roles[key]);
             const updatedRoles = [...new Set([...currentRoles, 'faculty'])];
-            await updateDoc(doc(db, 'people', match.person.id), { 
+              await updateDoc(doc(db, 'people', match.person.id), { 
               roles: updatedRoles,
               updatedAt: new Date().toISOString()
             });
@@ -883,10 +895,11 @@ export const processScheduleImport = async (csvData) => {
             isAdjunct: true,
             department: 'Human Sciences & Design', // Default from CLSS context
             jobTitle: 'Instructor', // Default
-            programId: programId // Set program based on course
+            programId: programId, // Set program based on course
+            clssInstructorId: instructorInfo.id || null
           });
           
-          const docRef = await addDoc(collection(db, 'people'), newPerson);
+          const docRef = await addDoc(collection(db, COLLECTIONS.PEOPLE), newPerson);
           instructorId = docRef.id;
           instructorData = { ...newPerson, id: docRef.id };
           existingPeople.push(instructorData);
@@ -898,25 +911,37 @@ export const processScheduleImport = async (csvData) => {
       // === ENHANCED ROOM LINKING ===
       let roomId = null;
       if (roomName && roomName.toLowerCase() !== 'online' && roomName !== 'No Room Needed') {
-        const existingRoom = existingRooms.find(r => 
-          r.name === roomName || r.displayName === roomName
-        );
+        // Deterministic room ID: buildingCode_roomNumber (fallback to sanitized name)
+        const building = extractBuildingFromRoom(roomName);
+        const roomNumber = extractRoomNumberFromRoom(roomName);
+        const deterministicRoomId = (building && roomNumber)
+          ? `${building.replace(/\s+/g,'_').toLowerCase()}_${roomNumber}`
+          : roomName.replace(/\s+/g,'_').toLowerCase();
+        const existingRoom = existingRooms.find(r => r.id === deterministicRoomId || r.name === roomName || r.displayName === roomName);
         
         if (existingRoom) {
           roomId = existingRoom.id;
-                 } else {
-           // Create new room using the Room model
+        } else {
+           // Create new room using deterministic ID
            const newRoom = createRoomModel({
              name: roomName,
              displayName: roomName,
-             building: extractBuildingFromRoom(roomName),
-             roomNumber: extractRoomNumberFromRoom(roomName),
+             building,
+             roomNumber,
              type: 'Classroom'
            });
-          
-          const docRef = await addDoc(collection(db, 'rooms'), newRoom);
-          roomId = docRef.id;
-          existingRooms.push({ ...newRoom, id: docRef.id });
+           const roomRef = doc(db, COLLECTIONS.ROOMS, deterministicRoomId);
+           await setDoc(roomRef, newRoom, { merge: true });
+           // Log room creation
+           logCreate(
+             `Room - ${roomName}`,
+             COLLECTIONS.ROOMS,
+             roomRef.id,
+             newRoom,
+             'dataImportUtils.js - processScheduleImport'
+           ).catch(err => console.error('Change logging error (room):', err));
+           roomId = roomRef.id;
+           existingRooms.push({ ...newRoom, id: roomRef.id });
           results.roomsCreated++;
           console.log(`🏛️ Created new room: ${roomName}`);
         }
@@ -929,10 +954,70 @@ export const processScheduleImport = async (csvData) => {
       const parsedCourse = parseCourseCode(courseCode);
       const finalCredits = creditsFromCsv ? parseInt(creditsFromCsv) : parsedCourse.credits;
 
+      // === COURSE UPSERT WITH DETERMINISTIC ID ===
+      let courseId = '';
+      if (courseCode) {
+        const courseDeterministicId = courseCode.replace(/\s+/g, '_').toUpperCase();
+        const existingCourse = existingCourses.find(c => c.id === courseDeterministicId);
+        const courseDoc = {
+          courseCode,
+          title: courseTitle,
+          departmentCode: (row['Department Code'] || '').trim(),
+          subjectCode: (row['Subject Code'] || '').trim(),
+          catalogNumber: (row['Catalog Number'] || '').trim(),
+          credits: finalCredits || null,
+          program: parsedCourse.program || null,
+          updatedAt: new Date().toISOString(),
+        };
+        if (!existingCourse) {
+          await setDoc(doc(db, COLLECTIONS.COURSES, courseDeterministicId), { ...courseDoc, createdAt: new Date().toISOString() });
+          // Log course creation
+          logCreate(
+            `Course - ${courseCode}`,
+            COLLECTIONS.COURSES,
+            courseDeterministicId,
+            courseDoc,
+            'dataImportUtils.js - processScheduleImport'
+          ).catch(err => console.error('Change logging error (course):', err));
+          existingCourses.push({ id: courseDeterministicId, ...courseDoc });
+        } else {
+          await setDoc(doc(db, COLLECTIONS.COURSES, courseDeterministicId), courseDoc, { merge: true });
+        }
+        courseId = courseDeterministicId;
+      }
+
+      // === TERM UPSERT WITH DETERMINISTIC ID ===
+      let termId = '';
+      if (termCode) {
+        const termDeterministicId = termCode;
+        const existingTerm = existingTerms.find(t => t.id === termDeterministicId);
+        const termDoc = {
+          term,
+          termCode,
+          updatedAt: new Date().toISOString()
+        };
+        if (!existingTerm) {
+          await setDoc(doc(db, COLLECTIONS.TERMS, termDeterministicId), { ...termDoc, createdAt: new Date().toISOString() });
+          // Log term creation
+          logCreate(
+            `Term - ${term} (${termCode})`,
+            COLLECTIONS.TERMS,
+            termDeterministicId,
+            termDoc,
+            'dataImportUtils.js - processScheduleImport'
+          ).catch(err => console.error('Change logging error (term):', err));
+          existingTerms.push({ id: termDeterministicId, ...termDoc });
+        } else {
+          await setDoc(doc(db, COLLECTIONS.TERMS, termDeterministicId), termDoc, { merge: true });
+        }
+        termId = termDeterministicId;
+      }
+
       // Create schedule data with full relational links
       const scheduleData = createScheduleModel({
         instructorId,
         instructorName: instructorData ? `${instructorData.firstName} ${instructorData.lastName}`.trim() : 'Staff',
+        courseId,
         courseCode,
         courseTitle,
         program: parsedCourse.program,
@@ -943,6 +1028,7 @@ export const processScheduleImport = async (csvData) => {
         roomId,
         roomName,
         term,
+        termCode,
         credits: finalCredits,
         scheduleType,
         status
@@ -969,7 +1055,7 @@ export const processScheduleImport = async (csvData) => {
           continue;
         }
 
-        await updateDoc(doc(db, 'schedules', existingMatch.id), updates);
+        await updateDoc(doc(db, COLLECTIONS.SCHEDULES, existingMatch.id), updates);
         
         logUpdate(
           `Schedule Import - ${courseCode} ${section} (${term})`,
@@ -984,10 +1070,13 @@ export const processScheduleImport = async (csvData) => {
         results.schedules.push({ ...existingMatch, ...updates });
       } else {
         // Create new schedule with full relational integrity
-        const docRef = await addDoc(collection(db, 'schedules'), scheduleData);
+        // Deterministic schedule ID: termCode_crn (fallback term_crn)
+        const scheduleDeterministicId = (scheduleData.termCode || scheduleData.term || 'TERM') + '_' + (scheduleData.crn || 'CRN');
+        const schedRef = doc(db, COLLECTIONS.SCHEDULES, scheduleDeterministicId);
+        await setDoc(schedRef, scheduleData, { merge: true });
         results.created++;
-        results.schedules.push({ ...scheduleData, id: docRef.id });
-        existingSchedules.push({ ...scheduleData, id: docRef.id });
+        results.schedules.push({ ...scheduleData, id: schedRef.id });
+        existingSchedules.push({ ...scheduleData, id: schedRef.id });
         
         logCreate(
           `Schedule Import - ${courseCode} ${section} (${term})`,
@@ -1015,7 +1104,15 @@ export const processScheduleImport = async (csvData) => {
  * Enhanced instructor matching with multiple strategies
  */
 const findBestInstructorMatch = async (instructorInfo, existingPeople) => {
-  const { firstName, lastName, title } = instructorInfo;
+  const { firstName, lastName, title, id: clssId } = instructorInfo;
+  // Strategy 0: External ID direct match (highest confidence)
+  if (clssId) {
+    const externalMatch = existingPeople.find(p => p.externalIds && p.externalIds.clssInstructorId && String(p.externalIds.clssInstructorId) === String(clssId));
+    if (externalMatch) {
+      console.log(`🎯 External ID match (CLSS): ${clssId} → ${externalMatch.firstName} ${externalMatch.lastName} (${externalMatch.id})`);
+      return { person: externalMatch, confidence: 'high' };
+    }
+  }
   
   // Normalize names for comparison (remove middle initials, common variations)
   const normalizeNameForMatching = (name) => {

@@ -142,7 +142,10 @@ export const COLLECTIONS = {
   SCHEDULES: 'schedules',
   ROOMS: 'rooms',
   HISTORY: 'history',
-  PROGRAMS: 'programs'
+  PROGRAMS: 'programs',
+  COURSES: 'courses',
+  TERMS: 'terms',
+  DEPARTMENTS: 'departments'
 };
 
 // Data validation utilities

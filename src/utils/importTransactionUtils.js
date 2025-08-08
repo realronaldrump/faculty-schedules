@@ -1,5 +1,6 @@
 import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, writeBatch, query, orderBy, setDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, COLLECTIONS } from '../firebase';
+import { findMatchingPerson } from './dataImportUtils';
 
 // Import transaction model for tracking changes
 export class ImportTransaction {
@@ -150,9 +151,9 @@ export const previewImportChanges = async (csvData, importType, selectedSemester
   try {
     // Load existing data for comparison
     const [existingSchedules, existingPeople, existingRooms] = await Promise.all([
-      getDocs(collection(db, 'schedules')),
-      getDocs(collection(db, 'people')),
-      getDocs(collection(db, 'rooms'))
+      getDocs(collection(db, COLLECTIONS.SCHEDULES)),
+      getDocs(collection(db, COLLECTIONS.PEOPLE)),
+      getDocs(collection(db, COLLECTIONS.ROOMS))
     ]);
 
     const existingSchedulesData = existingSchedules.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -318,12 +319,19 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople) => 
     const emailKey = email.toLowerCase();
     
     let existingPerson = existingPeopleMap.get(nameKey) || existingPeopleMap.get(emailKey);
+    // Attempt smart matching across existing people
+    if (!existingPerson) {
+      const match = await findMatchingPerson({ firstName, lastName, email }, existingPeople);
+      if (match && match.person) {
+        existingPerson = match.person;
+      }
+    }
 
     const personData = {
       firstName,
       lastName,
       email,
-      roles: ['faculty'], // Use array format - default to faculty for directory imports
+      roles: ['faculty'], // default to faculty for directory imports
       contactInfo: {
         phone: row['Phone'] || '',
         office: row['Office'] || ''
@@ -332,14 +340,23 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople) => 
     };
 
     if (existingPerson) {
-      // Check if update is needed
-      const needsUpdate = 
-        existingPerson.email !== email ||
-        existingPerson.contactInfo?.phone !== personData.contactInfo.phone ||
-        existingPerson.contactInfo?.office !== personData.contactInfo.office;
-
-      if (needsUpdate) {
-        transaction.addChange('people', 'modify', personData, existingPerson);
+      // Build minimal updates and diff
+      const updates = {};
+      const diff = [];
+      if (email && existingPerson.email !== email) { updates.email = email; diff.push('email'); }
+      const existingPhone = existingPerson.contactInfo?.phone || '';
+      const existingOffice = existingPerson.contactInfo?.office || '';
+      if ((personData.contactInfo.phone || '') && existingPhone !== personData.contactInfo.phone) { 
+        updates['contactInfo.phone'] = personData.contactInfo.phone; diff.push('contactInfo.phone'); 
+      }
+      if ((personData.contactInfo.office || '') && existingOffice !== personData.contactInfo.office) { 
+        updates['contactInfo.office'] = personData.contactInfo.office; diff.push('contactInfo.office'); 
+      }
+      if (diff.length > 0) {
+        const changeId = transaction.addChange('people', 'modify', updates, existingPerson);
+        // Attach diff for UI
+        const last = transaction.changes.people.modified.find(c => c.id === changeId);
+        if (last) last.diff = diff;
       }
     } else {
       transaction.addChange('people', 'add', personData);
@@ -460,7 +477,7 @@ const cleanObject = (obj) => {
 };
 
 // Commit transaction changes to database
-export const commitTransaction = async (transactionId, selectedChanges = null) => {
+export const commitTransaction = async (transactionId, selectedChanges = null, selectedFieldMap = null) => {
   const transactions = await getImportTransactions();
   const transaction = transactions.find(t => t.id === transactionId);
   
@@ -485,7 +502,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null) =
     // First pass: Create people and rooms, collect their IDs
     for (const change of changesToApply) {
       if (change.collection === 'people' && change.action === 'add') {
-        const docRef = doc(collection(db, 'people'));
+        const docRef = doc(collection(db, COLLECTIONS.PEOPLE));
         batch.set(docRef, change.newData);
         change.documentId = docRef.id;
         
@@ -496,7 +513,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null) =
         console.log(`👤 Created person mapping: ${nameKey} -> ${docRef.id}`);
         
       } else if (change.collection === 'rooms' && change.action === 'add') {
-        const docRef = doc(collection(db, 'rooms'));
+        const docRef = doc(collection(db, COLLECTIONS.ROOMS));
         batch.set(docRef, change.newData);
         change.documentId = docRef.id;
         
@@ -539,14 +556,32 @@ export const commitTransaction = async (transactionId, selectedChanges = null) =
           }
         }
         
-        const docRef = doc(collection(db, 'schedules'));
-        batch.set(docRef, scheduleData);
-        change.documentId = docRef.id;
+        // Deterministic schedule ID: termCode_crn (fallback term_crn)
+        const scheduleDeterministicId = (scheduleData.termCode || scheduleData.term || 'TERM') + '_' + (scheduleData.crn || 'CRN');
+        const schedRef = doc(db, COLLECTIONS.SCHEDULES, scheduleDeterministicId);
+        batch.set(schedRef, scheduleData, { merge: true });
+        change.documentId = schedRef.id;
         
       } else if (change.collection !== 'people' && change.collection !== 'rooms') {
         // Handle other types of changes (modify, delete)
         if (change.action === 'modify') {
-          batch.update(doc(db, change.collection, change.originalData.id), change.newData);
+          // Apply only selected fields if provided
+          let updates = change.newData;
+          const selectedKeys = selectedFieldMap && selectedFieldMap[change.id];
+          if (selectedKeys && Array.isArray(selectedKeys) && selectedKeys.length > 0) {
+            updates = {};
+            selectedKeys.forEach((key) => {
+              // Support dotted keys like 'contactInfo.phone'
+              if (key.includes('.')) {
+                const [parent, child] = key.split('.');
+                const val = change.newData[key];
+                if (val !== undefined) updates[key] = val;
+              } else if (change.newData[key] !== undefined) {
+                updates[key] = change.newData[key];
+              }
+            });
+          }
+          batch.update(doc(db, change.collection, change.originalData.id), updates);
           change.documentId = change.originalData.id;
         } else if (change.action === 'delete') {
           batch.delete(doc(db, change.collection, change.originalData.id));

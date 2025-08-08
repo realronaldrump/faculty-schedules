@@ -402,6 +402,28 @@ export const normalizeTime = (timeStr) => {
   return timeStr;
 };
 
+/**
+ * Extract cross-listed CRNs from CLSS row (if present)
+ * Looks at fields like "Cross-listings", "Cross-list Enrollment", and textual hints like "Also ... (CRN)"
+ */
+export const parseCrossListCrns = (row) => {
+  const fields = [
+    'Cross-listings',
+    'Cross-list Enrollment',
+    'Cross-list Maximum',
+    'Cross-list Wait Total',
+    'Also'
+  ];
+  const crns = new Set();
+  for (const f of fields) {
+    const val = row && row[f];
+    if (!val || typeof val !== 'string') continue;
+    const matches = val.match(/\b(\d{5})\b/g);
+    if (matches) matches.forEach((m) => crns.add(m));
+  }
+  return Array.from(crns);
+};
+
 // ==================== ROLE DETERMINATION ====================
 
 /**
@@ -1033,6 +1055,15 @@ export const processScheduleImport = async (csvData) => {
         scheduleType,
         status
       });
+
+      // Parse cross-listings from CSV text (store related CRNs if present)
+      const crossListCrns = parseCrossListCrns(row);
+
+      // Omit redundant display fields from writes; keep on read via joins
+      const { instructorName: _omitInstructorName, roomName: _omitRoomName, courseTitle: _omitCourseTitle, ...scheduleWrite } = scheduleData;
+      if (crossListCrns && crossListCrns.length > 0) {
+        scheduleWrite.crossListCrns = Array.from(new Set(crossListCrns));
+      }
       
       // Prefer CRN + Term matching when available, fallback to Course + Section + Term
       let existingMatch = null;
@@ -1049,7 +1080,7 @@ export const processScheduleImport = async (csvData) => {
       
       if (existingMatch) {
         // Upsert: only overwrite with non-empty CSV values; skip if identical
-        const { updates, hasChanges } = buildUpsertUpdates(existingMatch, scheduleData);
+        const { updates, hasChanges } = buildUpsertUpdates(existingMatch, scheduleWrite);
         if (!hasChanges) {
           results.skipped++;
           continue;
@@ -1073,10 +1104,10 @@ export const processScheduleImport = async (csvData) => {
         // Deterministic schedule ID: termCode_crn (fallback term_crn)
         const scheduleDeterministicId = (scheduleData.termCode || scheduleData.term || 'TERM') + '_' + (scheduleData.crn || 'CRN');
         const schedRef = doc(db, COLLECTIONS.SCHEDULES, scheduleDeterministicId);
-        await setDoc(schedRef, scheduleData, { merge: true });
+        await setDoc(schedRef, scheduleWrite, { merge: true });
         results.created++;
-        results.schedules.push({ ...scheduleData, id: schedRef.id });
-        existingSchedules.push({ ...scheduleData, id: schedRef.id });
+        results.schedules.push({ ...scheduleWrite, id: schedRef.id });
+        existingSchedules.push({ ...scheduleWrite, id: schedRef.id });
         
         logCreate(
           `Schedule Import - ${courseCode} ${section} (${term})`,

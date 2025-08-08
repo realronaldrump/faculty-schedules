@@ -496,10 +496,14 @@ export const standardizeAllData = async () => {
       }
     });
 
-    // Standardize schedule data
+    // Standardize schedule data (drop redundant text fields, ensure references present)
     schedulesSnapshot.docs.forEach(doc => {
       const schedule = doc.data();
       const standardized = standardizeScheduleData(schedule);
+      // Remove redundant display fields if references exist
+      if (standardized.instructorId) delete standardized.instructorName;
+      if (standardized.roomId) delete standardized.roomName;
+      if (standardized.courseId) delete standardized.courseTitle;
       
       if (JSON.stringify(schedule) !== JSON.stringify(standardized)) {
         batch.update(doc.ref, standardized);

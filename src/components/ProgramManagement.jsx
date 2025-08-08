@@ -64,7 +64,7 @@ const ProgramManagement = ({
       programGroups[p.name] = {
         name: p.name,
         faculty: [],
-        upd: null,
+        upds: [],
         programId: p.id
       };
     });
@@ -74,7 +74,7 @@ const ProgramManagement = ({
       programGroups['Unassigned'] = {
         name: 'Unassigned',
         faculty: [],
-        upd: null,
+        upds: [],
         programId: null
       };
     }
@@ -99,7 +99,7 @@ const ProgramManagement = ({
         programGroups[programName] = {
           name: programName,
           faculty: [],
-          upd: null,
+          upds: [],
           programId: faculty.programId
         };
       }
@@ -108,10 +108,17 @@ const ProgramManagement = ({
 
       // Check if this faculty member is marked as UPD
       if (faculty.isUPD) {
-        // Check if this program has this faculty as UPD
+        // Check if this program has this faculty as UPD (supports single updId and multiple updIds)
         const programInfo = programs.find(p => p.id === faculty.programId);
-        if (programInfo && programInfo.updId === faculty.id) {
-          programGroups[programName].upd = faculty;
+        const updIds = Array.isArray(programInfo?.updIds)
+          ? programInfo.updIds
+          : (programInfo?.updId ? [programInfo.updId] : []);
+        if (updIds.includes(faculty.id)) {
+          const existing = programGroups[programName].upds || [];
+          if (!existing.some(u => u.id === faculty.id)) {
+            existing.push(faculty);
+            programGroups[programName].upds = existing.slice(0, 2);
+          }
         }
       }
     });
@@ -154,7 +161,7 @@ const ProgramManagement = ({
     return faculty;
   }, [facultyData, programData, selectedProgram, searchText, showAdjuncts]);
 
-  // Handle UPD designation - now updates the programs collection
+  // Handle UPD designation - now updates the programs collection (supports up to two UPDs)
   const handleSetUPD = async (programName, faculty) => {
     try {
       // Validation: Only non-adjunct faculty can be UPD
@@ -178,14 +185,24 @@ const ProgramManagement = ({
         return;
       }
 
-      // Remove UPD from previous UPD in this program
-      const currentUPD = program.upd;
-      if (currentUPD && currentUPD.id !== faculty.id) {
-        await onFacultyUpdate({
-          ...currentUPD,
-          isUPD: false,
-          updatedAt: new Date().toISOString()
-        });
+      // Determine current UPDs for this program
+      const currentUPDs = Array.isArray(program.upds) ? program.upds : [];
+      if (currentUPDs.some(u => u.id === faculty.id)) {
+        showNotification(
+          'info',
+          'Already UPD',
+          `${faculty.name} is already an Undergraduate Program Director for ${programName}`
+        );
+        setEditingUPD(null);
+        return;
+      }
+      if (currentUPDs.length >= 2) {
+        showNotification(
+          'error',
+          'UPD Limit Reached',
+          'This program already has two UPDs. Remove one before adding another.'
+        );
+        return;
       }
 
       // Set new UPD on the faculty member
@@ -195,10 +212,12 @@ const ProgramManagement = ({
         updatedAt: new Date().toISOString()
       });
 
-      // Update the programs collection to reference this faculty member as UPD
+      // Update the programs collection to reference this faculty member as UPD (append to updIds array)
       const programRef = doc(db, COLLECTIONS.PROGRAMS, program.programId);
+      const prevUpdIds = currentUPDs.map(u => u.id);
+      const newUpdIds = [...prevUpdIds, faculty.id];
       const updateData = {
-        updId: faculty.id,
+        updIds: newUpdIds,
         updatedAt: new Date().toISOString()
       };
       
@@ -210,14 +229,14 @@ const ProgramManagement = ({
         'programs',
         program.programId,
         updateData,
-        { updId: currentUPD?.id || null }, // Previous UPD
+        { updIds: prevUpdIds }, // Previous UPDs
         'ProgramManagement.jsx - handleSetUPD'
       );
 
       showNotification(
         'success',
         'UPD Updated',
-        `${faculty.name} is now the Undergraduate Program Director for ${programName}`
+        `${faculty.name} is now an Undergraduate Program Director for ${programName}`
       );
       
       setEditingUPD(null);
@@ -464,10 +483,14 @@ const ProgramManagement = ({
                   </div>
                 ) : (
                   <div className="mt-2">
-                    {program.upd ? (
-                      <div className="text-sm">
-                        <div className="font-medium text-gray-900">{program.upd.name}</div>
-                        <div className="text-gray-500 text-xs">{program.upd.jobTitle}</div>
+                    {Array.isArray(program.upds) && program.upds.length > 0 ? (
+                      <div className="text-sm space-y-1">
+                        {program.upds.map(u => (
+                          <div key={u.id}>
+                            <div className="font-medium text-gray-900">{u.name}</div>
+                            <div className="text-gray-500 text-xs">{u.jobTitle}</div>
+                          </div>
+                        ))}
                       </div>
                     ) : (
                       <div className="text-sm text-gray-500 italic">No UPD assigned</div>
@@ -630,7 +653,7 @@ const ProgramManagement = ({
                   const program = Object.keys(programData).find(prog => 
                     programData[prog].faculty.some(f => f.id === faculty.id)
                   );
-                  const isUPD = programData[program]?.upd?.id === faculty.id;
+                  const isUPD = Array.isArray(programData[program]?.upds) && programData[program].upds.some(u => u.id === faculty.id);
                 
                 return (
                   <tr 

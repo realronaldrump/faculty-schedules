@@ -332,29 +332,32 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople) => 
       lastName,
       email,
       roles: ['faculty'], // default to faculty for directory imports
-      contactInfo: {
-        phone: row['Phone'] || '',
-        office: row['Office'] || ''
-      },
+      phone: row['Phone'] || row['Business Phone'] || row['Home Phone'] || '',
+      office: row['Office'] || row['Office Location'] || '',
       isActive: true
     };
 
     if (existingPerson) {
-      // Build minimal updates and diff
+      // Build minimal updates and diff with from/to pairs
       const updates = {};
       const diff = [];
-      if (email && existingPerson.email !== email) { updates.email = email; diff.push('email'); }
-      const existingPhone = existingPerson.contactInfo?.phone || '';
-      const existingOffice = existingPerson.contactInfo?.office || '';
-      if ((personData.contactInfo.phone || '') && existingPhone !== personData.contactInfo.phone) { 
-        updates['contactInfo.phone'] = personData.contactInfo.phone; diff.push('contactInfo.phone'); 
+      if (email && existingPerson.email !== email) { 
+        updates.email = email; 
+        diff.push({ key: 'email', from: existingPerson.email || '', to: email }); 
       }
-      if ((personData.contactInfo.office || '') && existingOffice !== personData.contactInfo.office) { 
-        updates['contactInfo.office'] = personData.contactInfo.office; diff.push('contactInfo.office'); 
+      const existingPhone = existingPerson.phone || '';
+      const existingOffice = existingPerson.office || '';
+      if ((personData.phone || '') && existingPhone !== personData.phone) { 
+        updates.phone = personData.phone; 
+        diff.push({ key: 'phone', from: existingPhone, to: personData.phone });
+      }
+      if ((personData.office || '') && existingOffice !== personData.office) { 
+        updates.office = personData.office; 
+        diff.push({ key: 'office', from: existingOffice, to: personData.office });
       }
       if (diff.length > 0) {
         const changeId = transaction.addChange('people', 'modify', updates, existingPerson);
-        // Attach diff for UI
+        // Attach diff for UI consumption
         const last = transaction.changes.people.modified.find(c => c.id === changeId);
         if (last) last.diff = diff;
       }

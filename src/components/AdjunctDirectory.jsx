@@ -354,7 +354,7 @@ const AdjunctDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
       }
     } catch (error) {
       console.error('Error undoing change:', error);
-      alert('Error undoing change: ' + error.message);
+      setInlineError({ context: 'undo', message: 'Error undoing change: ' + error.message });
     }
   };
 
@@ -446,7 +446,7 @@ const AdjunctDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
       setFacultyToDelete(null);
     } catch (error) {
       console.error('Error deleting faculty:', error);
-      alert('Error deleting faculty: ' + error.message);
+      setInlineError({ context: 'delete', message: 'Error deleting faculty: ' + error.message });
     }
   };
 

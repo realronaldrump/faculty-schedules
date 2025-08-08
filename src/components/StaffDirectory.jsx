@@ -143,7 +143,7 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
       }
     } catch (error) {
       console.error('Error undoing change:', error);
-      alert('Error undoing change: ' + error.message);
+      setInlineError({ context: 'undo', message: 'Error undoing change: ' + error.message });
     }
   };
 
@@ -160,7 +160,7 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
         setStaffToDelete(null);
       } catch (error) {
         console.error('Error deleting staff:', error);
-        alert('Error deleting staff: ' + error.message);
+        setInlineError({ context: 'delete', message: 'Error deleting staff: ' + error.message });
       }
     }
   };

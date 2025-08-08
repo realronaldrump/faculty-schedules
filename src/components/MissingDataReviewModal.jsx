@@ -92,7 +92,7 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
       setRecords(missingRecords);
     } catch (error) {
       console.error('Error loading missing data records:', error);
-      alert('Error loading records: ' + error.message);
+      setSaveResults({ success: false, message: 'Failed to load records: ' + error.message });
     }
     setIsLoading(false);
   };

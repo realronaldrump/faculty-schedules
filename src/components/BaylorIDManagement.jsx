@@ -359,13 +359,22 @@ const BaylorIDManagement = ({ facultyData, scheduleData = [], onFacultyUpdate, o
   };
 
   const handleDelete = async (faculty) => {
-    if (window.confirm(`Are you sure you want to remove ${faculty.firstName} ${faculty.lastName} from the system? This action cannot be undone.`)) {
-      try {
-        await onFacultyDelete(faculty);
-      } catch (error) {
-        console.error('Error deleting faculty:', error);
-      }
-    }
+    setConfirmState({
+      isOpen: true,
+      title: 'Remove Faculty',
+      message: `Are you sure you want to remove ${faculty.firstName} ${faculty.lastName} from the system? This action cannot be undone.`,
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          await onFacultyDelete(faculty);
+        } catch (error) {
+          console.error('Error deleting faculty:', error);
+        } finally {
+          setConfirmState(prev => ({ ...prev, isOpen: false }));
+        }
+      },
+      onCancel: () => setConfirmState(prev => ({ ...prev, isOpen: false }))
+    });
   };
 
   const SortableHeader = ({ columnKey, label }) => {

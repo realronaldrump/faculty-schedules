@@ -401,7 +401,11 @@ const DataHygieneManager = ({ showNotification }) => {
       console.log('✅ Data health reports loaded:', { basicReport, comprehensiveReport });
     } catch (error) {
       console.error('❌ Error loading health report:', error);
-      alert('Error loading data health report: ' + error.message);
+      showNotification(
+        'error',
+        'Analysis Error',
+        `Error loading data health report: ${error.message}`
+      );
     } finally {
       setIsLoading(false);
     }
@@ -414,17 +418,17 @@ const DataHygieneManager = ({ showNotification }) => {
 
   // Merge duplicate people
   const handleMergePeople = async (primaryId, duplicateId) => {
-    if (!confirm('Are you sure you want to merge these records? This cannot be undone.')) {
-      return;
-    }
+    // Use styled confirmation dialog instead of native confirm
+    setShowConfirmMerge(true);
+    return;
 
     try {
       await mergePeople(primaryId, duplicateId);
-      alert('Records merged successfully');
+      showNotification('success', 'Merge Complete', 'Records merged successfully');
       loadHealthReport(); // Refresh
     } catch (error) {
       console.error('Error merging records:', error);
-      alert('Error merging records: ' + error.message);
+      showNotification('error', 'Merge Failed', `Error merging records: ${error.message}`);
     }
   };
 
@@ -538,7 +542,7 @@ const DataHygieneManager = ({ showNotification }) => {
 
   const handleBulkMerge = () => {
     if (selectedDuplicates.length === 0) {
-      alert('Please select duplicates to merge');
+      showNotification('warning', 'No Selection', 'Please select duplicates to merge');
       return;
     }
     setShowConfirmMerge(true);
@@ -575,25 +579,25 @@ const DataHygieneManager = ({ showNotification }) => {
     }
 
     setMergeProgress(null);
-    alert(`Merge complete: ${successCount} successful, ${errorCount} failed`);
+    showNotification('success', 'Bulk Merge Complete', `${successCount} successful, ${errorCount} failed`);
     await loadHealthReport();
     setSelectedDuplicates([]);
   };
 
   const handleStandardizeAllData = async () => {
-    if (!confirm('This will standardize all data in the database. Continue?')) {
-      return;
-    }
+    // Reuse merge confirmation modal for standardization flow
+    setShowConfirmMerge(true);
+    return;
     setMergeProgress({ current: 0, total: 1, type: 'standardize' });
     try {
       const result = await standardizeAllDataComprehensive();
       setMergeProgress(null);
-      alert(`Data standardization complete: ${result.recordsUpdated} records updated`);
+      showNotification('success', 'Standardization Complete', `${result.recordsUpdated} records updated`);
       await loadHealthReport();
     } catch (error) {
       console.error('Error standardizing data:', error);
       setMergeProgress(null);
-      alert('Error standardizing data: ' + error.message);
+      showNotification('error', 'Standardization Error', `Error: ${error.message}`);
     }
   };
   

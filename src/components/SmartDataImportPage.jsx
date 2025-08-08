@@ -166,7 +166,9 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
           
         } catch (error) {
           console.error('❌ CSV parsing error:', error);
-          alert('Error parsing CSV file: ' + error.message);
+          if (showNotification) {
+            showNotification('error', 'CSV Parse Error: ' + error.message);
+          }
         }
       };
       reader.readAsText(file);
@@ -198,7 +200,9 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
 
   const handleProcessData = async () => {
     if (!csvData || !validateImportType()) {
-      alert('Invalid CSV format for selected import type');
+      if (showNotification) {
+        showNotification('warning', 'Invalid CSV format for selected import type');
+      }
       return;
     }
 
@@ -313,7 +317,9 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
       }
     } catch (error) {
       console.error('Processing error:', error);
-      alert('Error processing data: ' + error.message);
+      if (showNotification) {
+        showNotification('error', 'Error processing data: ' + error.message);
+      }
     }
     
     setIsLoading(false);
@@ -622,11 +628,15 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
 
   const startDeduplication = () => {
     if (!csvData || csvData.length === 0) {
-      alert('Please upload and process CLSS export data first');
+      if (showNotification) {
+        showNotification('warning', 'Please upload and process CLSS export data first');
+      }
       return;
     }
     if (importType !== 'schedule') {
-      alert('Data deduplication is only available for CLSS schedule imports');
+      if (showNotification) {
+        showNotification('warning', 'Data deduplication is only available for CLSS schedule imports');
+      }
       return;
     }
     setShowDeduplication(true);

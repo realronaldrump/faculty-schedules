@@ -25,7 +25,8 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
       setMergeResults(null);
     } catch (error) {
       console.error('Error loading duplicates:', error);
-      alert('Error loading duplicates: ' + error.message);
+      // Show error inline instead of a blocking browser alert
+      setMergeResults({ merged: 0, errors: [{ duplicate: 'Load', error: error.message }], mergedPairs: [] });
     }
     setIsLoading(false);
   };

@@ -533,7 +533,9 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
         setFacultyToDelete(null);
       } catch (error) {
         console.error('Error deleting faculty:', error);
-        alert('Error deleting faculty: ' + error.message);
+        if (showNotification) {
+          showNotification('error', 'Error deleting faculty: ' + error.message);
+        }
       }
     }
   };

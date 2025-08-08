@@ -524,7 +524,8 @@ const CourseManagement = ({
     const errors = validateScheduleData(editFormData);
     
     if (errors.length > 0) {
-      alert('Validation errors:\n' + errors.join('\n'));
+      // Replace blocking alert with inline banner
+      setInlineError({ context: 'edit', messages: errors });
       return;
     }
     
@@ -556,13 +557,16 @@ const CourseManagement = ({
   };
 
   const handleDeleteSchedule = (scheduleId) => {
-    if (window.confirm('Are you sure you want to delete this schedule entry? This action cannot be undone.')) {
-      if (onScheduleDelete) {
-        onScheduleDelete(scheduleId);
-      } else {
-        console.error('Delete function not provided');
-      }
-    }
+    setInlineConfirm({
+      isOpen: true,
+      title: 'Delete Schedule Entry',
+      message: 'Are you sure you want to delete this schedule entry? This action cannot be undone.',
+      onConfirm: () => {
+        if (onScheduleDelete) onScheduleDelete(scheduleId);
+        setInlineConfirm({ isOpen: false });
+      },
+      onCancel: () => setInlineConfirm({ isOpen: false })
+    });
   };
 
   const handleAddCourse = () => {
@@ -570,7 +574,7 @@ const CourseManagement = ({
     const validationData = { ...newCourseData, Day: dayPattern };
     const errors = validateScheduleData(validationData);
     if (errors.length > 0) {
-      alert('Validation errors:\n' + errors.join('\n'));
+      setInlineError({ context: 'add', messages: errors });
       return;
     }
     // Create new course with unique ID
@@ -627,9 +631,12 @@ const CourseManagement = ({
     );
   };
 
+  const [inlineError, setInlineError] = useState(null);
+  const [inlineConfirm, setInlineConfirm] = useState({ isOpen: false });
+
   const handleDownloadCSV = () => {
     if (selectedExportFields.length === 0) {
-      alert('Please select at least one field to export.');
+      setInlineError({ context: 'export', messages: ['Please select at least one field to export.'] });
       return;
     }
     const headers = selectedExportFields;
@@ -719,6 +726,34 @@ const CourseManagement = ({
 
   return (
     <div className="space-y-6">
+      {inlineError && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded text-red-800 text-sm flex items-start">
+          <X className="w-4 h-4 mr-2 mt-0.5" />
+          <div>
+            <div className="font-medium mb-1">There were validation issues</div>
+            <ul className="list-disc list-inside">
+              {inlineError.messages.map((m, idx) => (
+                <li key={idx}>{m}</li>
+              ))}
+            </ul>
+          </div>
+          <button className="ml-auto text-gray-500 hover:text-gray-700" onClick={() => setInlineError(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+      {inlineConfirm.isOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{inlineConfirm.title}</h3>
+            <p className="text-gray-700 mb-4">{inlineConfirm.message}</p>
+            <div className="flex justify-end gap-2">
+              <button className="px-4 py-2 rounded bg-gray-100 text-gray-700" onClick={inlineConfirm.onCancel}>Cancel</button>
+              <button className="px-4 py-2 rounded bg-red-600 text-white" onClick={inlineConfirm.onConfirm}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Course Management</h1>

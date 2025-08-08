@@ -551,6 +551,16 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
         showNotification('success', `Successfully applied ${totalChanges} changes`);
       }
       
+      // Post-commit: run comprehensive standardization to ensure canonical shape
+      try {
+        const std = await standardizeAllData();
+        if (showNotification && std && typeof std.recordsUpdated === 'number') {
+          showNotification('info', `Standardized ${std.recordsUpdated} records after import`);
+        }
+      } catch (e) {
+        console.error('Post-commit standardization failed:', e);
+      }
+      
       // If we imported new semester data, notify parent to refresh
       if (onSemesterDataImported && result.getSummary().stats.schedulesAdded > 0) {
         console.log('🔄 Notifying parent of new semester data:', result.getSummary().semester);

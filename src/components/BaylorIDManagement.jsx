@@ -409,7 +409,7 @@ const BaylorIDManagement = ({ facultyData, scheduleData = [], onFacultyUpdate, o
               Baylor ID Management
             </h2>
             <p className="text-gray-600 mt-1">
-              Manage faculty Baylor ID numbers and department assignments. Drag column headers to reorder.
+              Manage faculty Baylor ID numbers and program assignments. Drag column headers to reorder.
             </p>
           </div>
           

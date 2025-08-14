@@ -173,37 +173,7 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
         </div>
       </div>
 
-      {/* Key Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <MetricCard
-          title="Faculty Members"
-          value={metrics.facultyCount}
-          subtitle="Active this semester"
-          icon={Users}
-          onClick={() => onNavigate('directory/faculty-directory')}
-        />
-        <MetricCard
-          title="Weekly Sessions"
-          value={metrics.totalSessions}
-          subtitle={`${metrics.adjunctTaughtCourses} adjunct-taught`}
-          icon={BookOpen}
-          onClick={() => onNavigate('analytics/course-management')}
-        />
-        <MetricCard
-          title="Classrooms"
-          value={metrics.roomsInUse}
-          subtitle="In active use"
-          icon={MapPin}
-          onClick={() => onNavigate('scheduling/room-schedules')}
-        />
-        <MetricCard
-          title="Busiest Day"
-          value={dayNames[metrics.busiestDay.day]?.substring(0, 3) || 'N/A'}
-          subtitle={`${metrics.busiestDay.count} sessions`}
-          icon={Clock}
-          onClick={() => onNavigate('analytics/department-insights')}
-        />
-      </div>
+
 
       {/* Quick Actions Section */}
       <div className="mb-8">

@@ -97,6 +97,7 @@ const FacultySchedules = ({ scheduleData, facultyData }) => {
               course: item.courseCode || item.Course,
               title: item.courseTitle || item['Course Title'],
               room: (() => {
+                if (item.isOnline) return 'Online';
                 if (Array.isArray(item.roomNames) && item.roomNames.length > 0) {
                   return item.roomNames.join('; ');
                 }
@@ -116,6 +117,7 @@ const FacultySchedules = ({ scheduleData, facultyData }) => {
           course: item.Course,
           title: item['Course Title'],
           room: (() => {
+            if (item.isOnline) return 'Online';
             if (Array.isArray(item.roomNames) && item.roomNames.length > 0) {
               return item.roomNames.join('; ');
             }

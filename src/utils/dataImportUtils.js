@@ -119,6 +119,9 @@ export const createScheduleModel = (rawData) => {
     academicYear: (rawData.academicYear || '').trim(),
     credits: parseInt(rawData.credits) || 0,
     scheduleType: (rawData.scheduleType || 'Class Instruction').trim(),
+    // Online flags
+    isOnline: Boolean(rawData.isOnline) || false,
+    onlineMode: rawData.onlineMode || null, // 'synchronous' | 'asynchronous' | null
     status: (rawData.status || 'Active').trim(),
     createdAt: rawData.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString()
@@ -846,6 +849,7 @@ export const processScheduleImport = async (csvData) => {
       const meetingPattern = row['Meeting Pattern'] || '';
       const meetings = row['Meetings'] || '';
       const roomName = (row['Room'] || '').trim();
+      const instructionMethod = (row['Inst. Method'] || row['Instruction Method'] || '').trim();
       const term = row['Term'] || '';
       const termCode = row['Term Code'] || '';
       const creditsFromCsv = row['Credit Hrs'] || row['Credit Hrs Min'];
@@ -938,10 +942,17 @@ export const processScheduleImport = async (csvData) => {
         }
       }
       
+      // Determine online flags
+      const inferredIsOnline = (
+        (roomName && roomName.toLowerCase() === 'online') ||
+        (roomName && roomName === 'No Room Needed') ||
+        (instructionMethod && instructionMethod.toLowerCase().includes('online'))
+      );
+
       // === ENHANCED ROOM LINKING (supports multiple rooms separated by ';') ===
       let roomIds = [];
       let roomNames = [];
-      if (roomName && roomName.toLowerCase() !== 'online' && roomName !== 'No Room Needed') {
+      if (!inferredIsOnline && roomName && roomName.toLowerCase() !== 'online' && roomName !== 'No Room Needed') {
         const splitRooms = roomName.split(';').map(s => s.trim()).filter(Boolean);
         for (const singleRoom of splitRooms) {
           roomNames.push(singleRoom);
@@ -1061,11 +1072,14 @@ export const processScheduleImport = async (csvData) => {
         roomIds,
         roomId: roomIds.length > 0 ? roomIds[0] : null,
         roomNames,
-        roomName: roomNames[0] || '',
+        roomName: inferredIsOnline ? '' : (roomNames[0] || ''),
         term,
         termCode,
         credits: finalCredits,
         scheduleType,
+        // Online flags
+        isOnline: inferredIsOnline,
+        onlineMode: inferredIsOnline ? (meetingPatterns && meetingPatterns.length > 0 ? 'synchronous' : 'asynchronous') : null,
         status
       });
 

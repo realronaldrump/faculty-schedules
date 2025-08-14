@@ -91,6 +91,7 @@ const IndividualAvailability = ({ scheduleData, facultyData }) => {
                   end: parseTime(pattern.endTime),
                   course: item.courseCode,
                   room: (() => {
+                    if (item.isOnline) return 'Online';
                     const names = Array.isArray(item.roomNames) && item.roomNames.length > 0
                       ? item.roomNames
                       : [item.room ? item.room.displayName : item.roomName].filter(Boolean);
@@ -106,6 +107,8 @@ const IndividualAvailability = ({ scheduleData, facultyData }) => {
               end: parseTime(item['End Time']),
               course: item.Course,
               room: item.Room,
+              // Normalize online display
+              ...(item.isOnline ? { room: 'Online' } : {}),
               title: item['Course Title']
             }];
           })

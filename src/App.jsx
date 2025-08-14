@@ -36,7 +36,8 @@ import {
   GraduationCap,
   Menu,
   LogOut,
-  Star
+  Star,
+  X
 } from 'lucide-react';
 import { db } from './firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, setDoc, query, orderBy, onSnapshot } from 'firebase/firestore';
@@ -64,6 +65,8 @@ function App() {
     }
   };
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
   
   // Pinned pages state
   const [pinnedPages, setPinnedPages] = useState(() => {
@@ -132,6 +135,20 @@ function App() {
   useEffect(() => {
     localStorage.setItem('selectedSemester', selectedSemester);
   }, [selectedSemester]);
+
+  // Global command menu hotkey (Cmd/Ctrl + K)
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const metaPressed = isMac ? e.metaKey : e.ctrlKey;
+      if (metaPressed && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setCommandOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // Extract available semesters from schedule data
   const updateAvailableSemesters = (scheduleData) => {
@@ -269,6 +286,7 @@ function App() {
           
           // Build room fields with multi-room awareness
           const roomDisplay = (() => {
+            if (schedule.isOnline) return 'Online';
             if (Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0) {
               return schedule.roomNames.join('; ');
             }
@@ -312,6 +330,7 @@ function App() {
       } else {
         // If no meeting patterns, create a single entry (legacy format support)
         const roomDisplay = (() => {
+          if (schedule.isOnline) return 'Online';
           if (Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0) {
             return schedule.roomNames.join('; ');
           }
@@ -367,10 +386,10 @@ function App() {
       return facultyMember && facultyMember.isAdjunct;
     }).length;
 
-    // Rooms in use
+    // Rooms in use (exclude Online)
     const rooms = new Set();
     scheduleData.forEach(schedule => {
-      if (schedule.Room && schedule.Room.trim()) {
+      if (schedule.Room && schedule.Room.trim() && schedule.Room.trim().toLowerCase() !== 'online') {
         rooms.add(schedule.Room.trim());
       }
     });
@@ -444,6 +463,55 @@ function App() {
   }, []);
 
   // Data loading function
+  const autoBackfillOnlineFlags = async (schedules) => {
+    try {
+      const updatesPerformed = [];
+      for (const schedule of schedules) {
+        if (!schedule || !schedule.id) continue;
+        const hasOnlineRoom = (
+          (Array.isArray(schedule.roomNames) && schedule.roomNames.some(n => (n || '').toLowerCase() === 'online')) ||
+          ((schedule.roomName || '').toLowerCase() === 'online') ||
+          ((schedule.room && ((schedule.room.displayName || schedule.room.name || '').toLowerCase() === 'online')))
+        );
+        const noMeeting = !Array.isArray(schedule.meetingPatterns) || schedule.meetingPatterns.length === 0;
+        const missingFlag = schedule.isOnline !== true;
+        if (hasOnlineRoom && noMeeting && missingFlag) {
+          const scheduleDocRef = doc(db, 'schedules', schedule.id);
+          const updates = {
+            isOnline: true,
+            onlineMode: 'asynchronous',
+            meetingPatterns: []
+          };
+          try {
+            await updateDoc(scheduleDocRef, updates);
+            // Non-blocking change log
+            logUpdate(
+              `Schedule - ${schedule.courseCode || ''} ${schedule.section || ''} (${schedule.instructorName || ''})`,
+              'schedules',
+              schedule.id,
+              updates,
+              schedule,
+              'App.jsx - autoBackfillOnlineFlags'
+            ).catch(() => {});
+            updatesPerformed.push(schedule.id);
+            // Mutate local copy for immediate UX consistency
+            schedule.isOnline = true;
+            schedule.onlineMode = 'asynchronous';
+            schedule.meetingPatterns = [];
+          } catch (e) {
+            console.warn('Auto-backfill online flags failed for schedule', schedule.id, e);
+          }
+        }
+      }
+      if (updatesPerformed.length > 0) {
+        console.log(`🔁 Auto-backfilled online flags for ${updatesPerformed.length} schedules`);
+      }
+    } catch (err) {
+      console.warn('Auto-backfill online flags encountered an error:', err);
+    }
+    return schedules;
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -453,7 +521,9 @@ function App() {
       await autoMigrateIfNeeded();
       
       // Load schedule data with relational structure
-      const { schedules, people: schedulePeople } = await fetchSchedulesWithRelationalData();
+      let { schedules, people: schedulePeople } = await fetchSchedulesWithRelationalData();
+      // Backfill online flags for legacy records
+      schedules = await autoBackfillOnlineFlags(schedules);
       
       // Load people data
       const peopleSnapshot = await getDocs(collection(db, 'people'));
@@ -580,7 +650,9 @@ function App() {
 
       // Create meeting patterns from Day/Start Time/End Time
       const meetingPatterns = [];
-      if (updatedRow.Day && updatedRow['Start Time'] && updatedRow['End Time']) {
+      const isOnlineFlag = updatedRow.isOnline === true || String(updatedRow.isOnline).toLowerCase() === 'true';
+      const onlineMode = updatedRow.onlineMode || (referenceSchedule?.onlineMode || null);
+      if (!isOnlineFlag && updatedRow.Day && updatedRow['Start Time'] && updatedRow['End Time']) {
         // Split Day string into individual day codes (e.g., "MWF" -> ["M","W","F"])
         const dayCodes = typeof updatedRow.Day === 'string' ? updatedRow.Day.match(/[MTWRF]/g) : [];
         (dayCodes && dayCodes.length > 0 ? dayCodes : [updatedRow.Day]).forEach(code => {
@@ -616,11 +688,15 @@ function App() {
         // Relational references
         instructorId: instructorId,
         instructorName: updatedRow.Instructor || (referenceSchedule?.instructorName || ''),
-        roomId: roomId,
-        roomName: updatedRow.Room || (referenceSchedule?.roomName || ''),
+        roomId: isOnlineFlag ? null : roomId,
+        roomName: isOnlineFlag ? '' : (updatedRow.Room || (referenceSchedule?.roomName || '')),
         
         // Meeting patterns
-        meetingPatterns: meetingPatterns.length > 0 ? meetingPatterns : (referenceSchedule?.meetingPatterns || []),
+        meetingPatterns: isOnlineFlag ? [] : (meetingPatterns.length > 0 ? meetingPatterns : (referenceSchedule?.meetingPatterns || [])),
+        
+        // Online flags
+        isOnline: isOnlineFlag,
+        onlineMode: isOnlineFlag ? (onlineMode || (meetingPatterns.length > 0 ? 'synchronous' : 'asynchronous')) : null,
         
         // Timestamps
         updatedAt: new Date().toISOString(),
@@ -632,7 +708,7 @@ function App() {
       if (!updateData.courseCode) validationErrors.push('Course code is required');
       if (!updateData.term) validationErrors.push('Term is required');
       if (!updateData.section) validationErrors.push('Section is required');
-      if (meetingPatterns.length === 0 && (!referenceSchedule?.meetingPatterns || referenceSchedule.meetingPatterns.length === 0)) {
+      if (!isOnlineFlag && meetingPatterns.length === 0 && (!referenceSchedule?.meetingPatterns || referenceSchedule.meetingPatterns.length === 0)) {
         validationErrors.push('Meeting time and day are required');
       }
 
@@ -1266,16 +1342,30 @@ function App() {
 
   const getCurrentBreadcrumb = () => {
     const pathParts = currentPage.split('/');
+    const crumbs = [];
+    const dashboardCrumb = { label: 'Dashboard', path: 'dashboard' };
+    crumbs.push(dashboardCrumb);
+
     const section = navigationItems.find(item => item.id === pathParts[0]);
-    
-    if (!section) return ['Dashboard'];
-    
-    if (pathParts.length === 1) {
-      return [section.label];
-    } else {
+    if (!section || currentPage === 'dashboard') return crumbs;
+
+    const sectionCrumb = {
+      label: section.label,
+      path: section.children && section.children.length > 0 ? section.children[0].path : null
+    };
+    crumbs.push(sectionCrumb);
+
+    if (pathParts.length > 1) {
       const subsection = section.children?.find(child => child.path === currentPage);
-      return [section.label, subsection?.label || pathParts[1]];
+      if (subsection) crumbs.push({ label: subsection.label, path: null });
     }
+
+    return crumbs;
+  };
+
+  const getActiveSection = () => {
+    const pathParts = currentPage.split('/');
+    return navigationItems.find(item => item.id === pathParts[0]) || null;
   };
 
   // Main page content renderer
@@ -1403,43 +1493,92 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      {/* Professional Sidebar */}
-      <Sidebar
-        navigationItems={navigationItems}
-        currentPage={currentPage}
-        onNavigate={handleNavigate}
-        collapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-        selectedSemester={selectedSemester}
-        pinnedPages={pinnedPages}
-        togglePinPage={togglePinPage}
-      />
+      {/* Professional Sidebar - Desktop */}
+      <div className="hidden md:block">
+        <Sidebar
+          navigationItems={navigationItems}
+          currentPage={currentPage}
+          onNavigate={(path) => { handleNavigate(path); }}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          selectedSemester={selectedSemester}
+          pinnedPages={pinnedPages}
+          togglePinPage={togglePinPage}
+        />
+      </div>
+
+      {/* Mobile Sidebar Drawer */}
+      {mobileSidebarOpen && (
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileSidebarOpen(false)}></div>
+          <div className="absolute inset-y-0 left-0 w-72 max-w-[80%] bg-white shadow-xl">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <div className="text-sm font-semibold text-baylor-green">Navigation</div>
+              <button onClick={() => setMobileSidebarOpen(false)} className="p-2 rounded-md hover:bg-gray-100">
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+            <Sidebar
+              navigationItems={navigationItems}
+              currentPage={currentPage}
+              onNavigate={(path) => { setMobileSidebarOpen(false); handleNavigate(path); }}
+              collapsed={false}
+              onToggleCollapse={() => {}}
+              selectedSemester={selectedSemester}
+              pinnedPages={pinnedPages}
+              togglePinPage={togglePinPage}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Professional Header Bar */}
         <header className="bg-white border-b border-gray-200 shadow-sm">
-          <div className="flex items-center justify-between px-6 py-4">
-            {/* Breadcrumb Navigation */}
-            <div className="flex items-center space-x-2">
-              <GraduationCap className="w-5 h-5 text-baylor-green" />
-              <nav className="flex items-center space-x-2 text-sm">
-                {getCurrentBreadcrumb().map((crumb, index) => (
-                  <React.Fragment key={index}>
-                    {index > 0 && <span className="text-gray-400">/</span>}
-                    <span className={index === getCurrentBreadcrumb().length - 1 
-                      ? 'text-baylor-green font-medium' 
-                      : 'text-gray-600'
-                    }>
-                      {crumb}
-                    </span>
-                  </React.Fragment>
-                ))}
-              </nav>
+          <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4">
+            {/* Left: Mobile menu + Breadcrumb */}
+            <div className="flex items-center space-x-3">
+              <button className="md:hidden p-2 rounded-md hover:bg-gray-100" aria-label="Open menu" onClick={() => setMobileSidebarOpen(true)}>
+                <Menu className="w-5 h-5 text-gray-700" />
+              </button>
+              <div className="flex items-center space-x-2">
+                <GraduationCap className="w-5 h-5 text-baylor-green" />
+                <nav className="flex items-center space-x-2 text-sm">
+                  {getCurrentBreadcrumb().map((crumb, index, arr) => (
+                    <React.Fragment key={index}>
+                      {index > 0 && <span className="text-gray-400">/</span>}
+                      {crumb.path ? (
+                        <button
+                          className="text-gray-600 hover:text-baylor-green"
+                          onClick={() => handleNavigate(crumb.path)}
+                        >
+                          {crumb.label}
+                        </button>
+                      ) : (
+                        <span className={index === arr.length - 1 ? 'text-baylor-green font-medium' : 'text-gray-600'}>
+                          {crumb.label}
+                        </span>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </nav>
+              </div>
             </div>
 
-            {/* Header Actions */}
-            <div className="flex items-center space-x-4">
+            {/* Right: Actions */}
+            <div className="flex items-center space-x-2 md:space-x-4">
+              {/* Command Menu Trigger */}
+              <button
+                onClick={() => setCommandOpen(true)}
+                className="hidden md:inline-flex items-center px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                title="Command menu"
+              >
+                <Search className="w-4 h-4 text-gray-500 mr-2" />
+                <span className="font-medium text-gray-900">Search or jump…</span>
+                <span className="ml-3 text-xs text-gray-500 border border-gray-200 rounded px-1">⌘K</span>
+              </button>
+
               {/* Semester Selector */}
               <div className="relative semester-dropdown">
                 <button
@@ -1450,7 +1589,6 @@ function App() {
                   <span className="font-medium text-gray-900">{selectedSemester}</span>
                   <ChevronDown className="w-4 h-4 text-gray-500" />
                 </button>
-                
                 {showSemesterDropdown && (
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
                     <div className="py-2">
@@ -1480,17 +1618,41 @@ function App() {
                 title="Logout"
               >
                 <LogOut className="w-4 h-4" />
-                <span className="ml-2">Logout</span>
+                <span className="ml-2 hidden sm:inline">Logout</span>
               </button>
             </div>
           </div>
+
+          {/* Section Sub-navigation */}
+          {getActiveSection()?.children && getActiveSection().children.length > 0 && (
+            <div className="px-4 md:px-6 pb-2">
+              <div className="flex flex-wrap gap-2">
+                {getActiveSection().children.map((child) => (
+                  <button
+                    key={child.id}
+                    onClick={() => handleNavigate(child.path)}
+                    className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                      currentPage === child.path
+                        ? 'bg-baylor-green/10 text-baylor-green border-baylor-green/30'
+                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    {child.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto p-6">
-          {renderPageContent()}
+        <main className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-7xl px-4 md:px-6 py-6">
+            {renderPageContent()}
+          </div>
         </main>
       </div>
+
 
       {/* Logout Confirmation Modal */}
       {showLogoutConfirm && (

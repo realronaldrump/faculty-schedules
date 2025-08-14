@@ -91,7 +91,7 @@ const CourseManagement = ({
         item.Room.split(';').map(s => s.trim()).filter(Boolean).forEach(r => all.push(r));
       }
     });
-    return [...new Set(all)].sort();
+    return [...new Set(all)].filter(r => r.toLowerCase() !== 'online').sort();
   }, [scheduleData]);
 
   const uniqueTerms = useMemo(() => 
@@ -498,18 +498,22 @@ const CourseManagement = ({
       errors.push('Course code is required');
     }
     
-    if (!data.Day || typeof data.Day !== 'string' || !/^([MTWRF]+)$/.test(data.Day)) {
-      errors.push('Valid day pattern is required (combination of M, T, W, R, F)');
-    }
-    
-    if (!data['Start Time'] || !data['End Time']) {
-      errors.push('Start time and end time are required');
+    const isOnline = data.isOnline === true || String(data.isOnline).toLowerCase() === 'true';
+    const hasDay = data.Day && typeof data.Day === 'string' && /^([MTWRF]+)$/.test(data.Day);
+    const hasTimes = Boolean(data['Start Time']) && Boolean(data['End Time']);
+    if (!isOnline) {
+      if (!hasDay) {
+        errors.push('Valid day pattern is required (combination of M, T, W, R, F)');
+      }
+      if (!hasTimes) {
+        errors.push('Start time and end time are required');
+      }
     }
     
     const startTime = parseTime(data['Start Time']);
     const endTime = parseTime(data['End Time']);
     
-    if (startTime && endTime && startTime >= endTime) {
+    if (!isOnline && startTime && endTime && startTime >= endTime) {
       errors.push('End time must be after start time');
     }
 
@@ -951,6 +955,30 @@ const CourseManagement = ({
                   placeholder="Select one or more rooms..."
                 />
               </div>
+              <div className="flex items-center gap-2">
+                <label className="block text-sm font-medium text-gray-700">Online</label>
+                <input
+                  type="checkbox"
+                  name="isOnline"
+                  checked={Boolean(newCourseData.isOnline)}
+                  onChange={(e) => setNewCourseData(prev => ({ ...prev, isOnline: e.target.checked }))}
+                  className="h-4 w-4 text-baylor-green focus:ring-baylor-green border-gray-300 rounded"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Online Mode</label>
+                <select
+                  name="onlineMode"
+                  value={newCourseData.onlineMode || ''}
+                  onChange={handleNewCourseChange}
+                  disabled={!newCourseData.isOnline}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+                >
+                  <option value="">Not set</option>
+                  <option value="synchronous">Synchronous</option>
+                  <option value="asynchronous">Asynchronous</option>
+                </select>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Credits</label>
                 <select
@@ -1385,6 +1413,8 @@ const CourseManagement = ({
                 <DataTableHeader columnKey="Credits" label="Credits" />
                 <DataTableHeader columnKey="Schedule Type" label="Schedule Type" />
                 <DataTableHeader columnKey="Status" label="Status" />
+                <DataTableHeader columnKey="isOnline" label="Online" />
+                <DataTableHeader columnKey="onlineMode" label="Online Mode" />
                 <th className="px-4 py-3 text-center">Actions</th>
               </tr>
             </thead>
@@ -1529,6 +1559,31 @@ const CourseManagement = ({
                             ))}
                           </select>
                         </td>
+                        <td className="p-1">
+                          <label className="inline-flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              name="isOnline"
+                              checked={Boolean(editFormData.isOnline)}
+                              onChange={(e) => setEditFormData(prev => ({ ...prev, isOnline: e.target.checked }))}
+                              className="h-4 w-4 text-baylor-green focus:ring-baylor-green border-gray-300 rounded"
+                            />
+                            Online
+                          </label>
+                        </td>
+                        <td className="p-1">
+                          <select
+                            name="onlineMode"
+                            value={editFormData.onlineMode || ''}
+                            onChange={handleEditFormChange}
+                            disabled={!editFormData.isOnline}
+                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
+                          >
+                            <option value="">Not set</option>
+                            <option value="synchronous">Synchronous</option>
+                            <option value="asynchronous">Asynchronous</option>
+                          </select>
+                        </td>
                         <td className="p-1 text-center">
                           <div className="flex gap-1 justify-center">
                             <button
@@ -1574,6 +1629,8 @@ const CourseManagement = ({
                         <td className="px-4 py-3 text-gray-700">{row.Credits}</td>
                         <td className="px-4 py-3 text-gray-700">{row['Schedule Type']}</td>
                         <td className="px-4 py-3 text-gray-700">{row.Status}</td>
+                        <td className="px-4 py-3 text-gray-700">{row.isOnline ? 'Yes' : 'No'}</td>
+                        <td className="px-4 py-3 text-gray-700">{row.onlineMode ? (row.onlineMode.charAt(0).toUpperCase() + row.onlineMode.slice(1)) : '-'}</td>
                         <td className="px-4 py-3 text-center">
                           <div className="flex gap-1 justify-center">
                             <button

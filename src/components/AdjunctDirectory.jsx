@@ -384,7 +384,7 @@ const AdjunctDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
         trackChange(originalData, cleanedData, 'update');
 
         try {
-          await onFacultyUpdate(cleanedData);
+          await onFacultyUpdate(cleanedData, originalData);
           setEditingId(null);
           setErrors({});
         } catch (error) {

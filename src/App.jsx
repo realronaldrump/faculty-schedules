@@ -858,7 +858,6 @@ function App() {
     try {
       let docRef;
       let action;
-      let logFunction;
       let originalData = null;
       
       // Filter out undefined values to prevent Firebase errors
@@ -868,6 +867,8 @@ function App() {
       
       if (staffToUpdate.id) {
         // Update existing staff member
+        // Find original data for change logging
+        originalData = rawPeople.find(p => p.id === staffToUpdate.id) || null;
         const staffRef = doc(db, 'people', staffToUpdate.id);
         const updateData = {
           ...cleanStaffData,
@@ -877,7 +878,25 @@ function App() {
         await updateDoc(staffRef, updateData);
         docRef = staffRef;
         action = 'UPDATE';
-        logFunction = logUpdate;
+        
+        // Add to edit history (legacy)
+        await addDoc(collection(db, 'editHistory'), {
+          action: action,
+          entity: `Staff - ${staffToUpdate.name}`,
+          changes: updateData,
+          timestamp: new Date().toISOString(),
+          userId: 'system'
+        });
+        
+        // Log change in centralized system with field diffs
+        await logUpdate(
+          `Staff - ${staffToUpdate.name}`,
+          'people',
+          staffToUpdate.id,
+          updateData,
+          originalData,
+          'App.jsx - handleStaffUpdate'
+        );
         
       } else {
         // Create new staff member
@@ -889,27 +908,25 @@ function App() {
         
         docRef = await addDoc(collection(db, 'people'), createData);
         action = 'CREATE';
-        logFunction = logCreate;
+        
+        // Add to edit history (legacy)
+        await addDoc(collection(db, 'editHistory'), {
+          action: action,
+          entity: `Staff - ${staffToUpdate.name}`,
+          changes: createData,
+          timestamp: new Date().toISOString(),
+          userId: 'system'
+        });
+        
+        // Log change in centralized system
+        await logCreate(
+          `Staff - ${staffToUpdate.name}`,
+          'people',
+          docRef.id,
+          createData,
+          'App.jsx - handleStaffUpdate'
+        );
       }
-
-      // Add to edit history (legacy)
-      await addDoc(collection(db, 'editHistory'), {
-        action: action,
-        entity: `Staff - ${staffToUpdate.name}`,
-        changes: staffToUpdate,
-        timestamp: new Date().toISOString(),
-        userId: 'system'
-      });
-
-      // Log change in centralized system
-      await logFunction(
-        `Staff - ${staffToUpdate.name}`,
-        'people',
-        docRef.id,
-        staffToUpdate,
-        originalData,
-        'App.jsx - handleStaffUpdate'
-      );
 
       // Refresh data
       await loadData();
@@ -1032,7 +1049,31 @@ function App() {
         await setDoc(studentRef, updateData);
       } else {
         // Use updateDoc for existing student
+        const originalData = rawPeople.find(p => p.id === studentToUpdate.id) || null;
         await updateDoc(studentRef, updateData);
+        // Add to edit history (legacy)
+        await addDoc(collection(db, 'editHistory'), {
+          action: actionType,
+          entity: `Student - ${studentToUpdate.name}`,
+          changes: updateData,
+          timestamp: new Date().toISOString(),
+          userId: 'system'
+        });
+        // Log with original for diffs
+        await logUpdate(
+          `Student - ${studentToUpdate.name}`,
+          'people',
+          studentToUpdate.id,
+          updateData,
+          originalData,
+          'App.jsx - handleStudentUpdate'
+        );
+        
+        // Refresh data and notify below as usual
+        await loadData();
+        const successMessage = `${studentToUpdate.name} has been updated successfully.`;
+        showNotification('success', 'Student Updated', successMessage);
+        return;
       }
 
       // Add to edit history (legacy)
@@ -1051,15 +1092,6 @@ function App() {
           'people',
           studentRef.id,
           updateData,
-          'App.jsx - handleStudentUpdate'
-        );
-      } else {
-        await logUpdate(
-          `Student - ${studentToUpdate.name}`,
-          'people',
-          studentToUpdate.id,
-          updateData,
-          null, // Original data not available here
           'App.jsx - handleStudentUpdate'
         );
       }

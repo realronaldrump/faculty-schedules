@@ -4,14 +4,9 @@
   "description": "Baylor University Human Sciences & Design Faculty Schedule Management System",
   "icons": [
     {
-      "src": "/favicon-192x192.png",
+      "src": "/vite.svg",
       "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "/favicon-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/svg+xml"
     }
   ],
   "start_url": "/index.html",

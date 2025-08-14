@@ -648,6 +648,9 @@ function App() {
         // This could be enhanced to create room entries automatically
       }
 
+      // Establish a reference schedule before computing dependent fields
+      const referenceSchedule = isGroupedCourse ? originalSchedules[0] : originalSchedule;
+
       // Create meeting patterns from Day/Start Time/End Time
       const meetingPatterns = [];
       const isOnlineFlag = updatedRow.isOnline === true || String(updatedRow.isOnline).toLowerCase() === 'true';
@@ -665,9 +668,6 @@ function App() {
         });
       }
 
-      // Get reference data from the appropriate source
-      const referenceSchedule = isGroupedCourse ? originalSchedules[0] : originalSchedule;
-      
       // Parse the course code to get program, level, and credits
       const courseCode = updatedRow.Course || (referenceSchedule?.courseCode || '');
       const parsedCourse = parseCourseCode(courseCode);

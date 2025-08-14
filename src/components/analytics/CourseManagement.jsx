@@ -1421,7 +1421,7 @@ const CourseManagement = ({
             <tbody className="divide-y divide-gray-200">
               {filteredAndSortedData.length > 0 ? (
                 filteredAndSortedData.map(row => (
-                  <tr key={row.id} className="hover:bg-gray-50">
+                  <tr key={`${row.id}|${row.CRN||''}|${row.Term||''}|${row.Section||''}`} className="hover:bg-gray-50">
                     {editingRowId === row.id ? (
                       <>
                         <td className="p-1">

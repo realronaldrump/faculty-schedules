@@ -136,19 +136,7 @@ function App() {
     localStorage.setItem('selectedSemester', selectedSemester);
   }, [selectedSemester]);
 
-  // Global command menu hotkey (Cmd/Ctrl + K)
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-      const metaPressed = isMac ? e.metaKey : e.ctrlKey;
-      if (metaPressed && (e.key === 'k' || e.key === 'K')) {
-        e.preventDefault();
-        setCommandOpen(true);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+
 
   // Extract available semesters from schedule data
   const updateAvailableSemesters = (scheduleData) => {
@@ -1568,16 +1556,7 @@ function App() {
 
             {/* Right: Actions */}
             <div className="flex items-center space-x-2 md:space-x-4">
-              {/* Command Menu Trigger */}
-              <button
-                onClick={() => setCommandOpen(true)}
-                className="hidden md:inline-flex items-center px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                title="Command menu"
-              >
-                <Search className="w-4 h-4 text-gray-500 mr-2" />
-                <span className="font-medium text-gray-900">Search or jump…</span>
-                <span className="ml-3 text-xs text-gray-500 border border-gray-200 rounded px-1">⌘K</span>
-              </button>
+
 
               {/* Semester Selector */}
               <div className="relative semester-dropdown">

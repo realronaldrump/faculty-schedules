@@ -46,6 +46,35 @@ const CourseManagement = ({
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [selectedExportFields, setSelectedExportFields] = useState([]);
 
+  const sortedFaculty = useMemo(() => {
+    if (!facultyData) return [];
+    return [...facultyData]
+      .map(faculty => {
+        const name = faculty.name || '';
+        // Handles "First Last" and single names like "Staff"
+        const nameParts = name.split(' ');
+        let lastName = '';
+        let firstName = '';
+
+        if (nameParts.length > 1) {
+          lastName = nameParts.pop();
+          firstName = nameParts.join(' ');
+        } else {
+          lastName = name;
+        }
+
+        const displayName = firstName ? `${lastName}, ${firstName}` : lastName;
+
+        return {
+          id: faculty.id,
+          originalName: name,
+          displayName: displayName,
+          lastName: lastName.toLowerCase(),
+        };
+      })
+      .sort((a, b) => a.lastName.localeCompare(b.lastName));
+  }, [facultyData]);
+
   // Process recent changes to show schedule-related changes in the legacy format
   const processedChanges = useMemo(() => {
     // Filter for schedule-related changes and convert to legacy format
@@ -885,9 +914,9 @@ const CourseManagement = ({
                 >
                   <option value="">Select Instructor</option>
                   <option value="Staff">Staff</option>
-                  {facultyData.map(faculty => (
-                    <option key={faculty.id} value={faculty.name}>
-                      {faculty.name}
+                  {sortedFaculty.map(faculty => (
+                    <option key={faculty.id} value={faculty.originalName}>
+                      {faculty.displayName}
                     </option>
                   ))}
                 </select>
@@ -1433,9 +1462,9 @@ const CourseManagement = ({
                           >
                             <option value="">Select Instructor</option>
                             <option value="Staff">Staff</option>
-                            {facultyData.map(faculty => (
-                              <option key={faculty.id} value={faculty.name}>
-                                {faculty.name}
+                            {sortedFaculty.map(faculty => (
+                              <option key={faculty.id} value={faculty.originalName}>
+                                {faculty.displayName}
                               </option>
                             ))}
                           </select>

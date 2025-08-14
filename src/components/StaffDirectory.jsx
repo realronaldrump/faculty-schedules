@@ -103,6 +103,11 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
         newErrors.phone = 'Phone number must contain exactly 10 digits.';
     }
 
+    // Baylor ID validation
+    if (data.baylorId && !/^\d{9}$/.test(data.baylorId)) {
+        newErrors.baylorId = 'Baylor ID must be exactly 9 digits.';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -288,6 +293,10 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
     // Allow only numbers for phone input
     if (name === 'phone') {
         finalValue = finalValue.replace(/\D/g, '');
+    }
+
+    if (name === 'baylorId') {
+        finalValue = finalValue.replace(/\D/g, '').slice(0, 9);
     }
 
     const newFormData = {
@@ -791,6 +800,7 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                   <SortableHeader label="Email" columnKey="email" />
                   <SortableHeader label="Phone" columnKey="phone" />
                   <SortableHeader label="Office" columnKey="office" />
+                  <SortableHeader label="Baylor ID" columnKey="baylorId" />
                   <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -954,7 +964,7 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                         </div>
                         {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
                       </td>
-                      <td className="p-2 align-top">
+                       <td className="p-2 align-top">
                         <div className="flex items-center gap-2">
                           <input 
                             name="office" 
@@ -978,6 +988,17 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                           </button>
                         </div>
                       </td>
+                       <td className="p-2 align-top">
+                         <input 
+                           name="baylorId" 
+                           value={editFormData.baylorId || ''} 
+                           onChange={handleChange} 
+                           className={getInputClass('baylorId')} 
+                           placeholder="9 digits" 
+                           maxLength="9"
+                         />
+                         {errors.baylorId && <p className="text-red-600 text-xs mt-1">{errors.baylorId}</p>}
+                       </td>
                       <td className="p-2 align-top text-right">
                         <div className="flex gap-2">
                                                 <button onClick={handleSave} className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"><Save size={16} /></button>
@@ -1010,7 +1031,7 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedStaffForCard(staff)}>
+                       <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedStaffForCard(staff)}>
                         <div className="flex items-center gap-2">
                           {staff.hasNoOffice ? (
                             <span className="flex items-center gap-1 text-gray-500">
@@ -1022,6 +1043,11 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                           )}
                         </div>
                       </td>
+                       <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedStaffForCard(staff)}>
+                         <div className={`font-mono ${staff.baylorId ? 'text-gray-900' : 'text-red-500 italic'}`}>
+                           {staff.baylorId || 'Not assigned'}
+                         </div>
+                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex gap-1 justify-end">
                                                   <button onClick={(e) => { e.stopPropagation(); handleEdit(staff); }} className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"><Edit size={16} /></button>

@@ -7,6 +7,8 @@ const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeople, setSelectedPeople] = useState([]);
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'ascending' });
+  const [nameSort, setNameSort] = useState('firstName');
   const [filters, setFilters] = useState({
     // Multi-select filters with include/exclude
     programs: { include: [], exclude: [] },
@@ -264,9 +266,60 @@ const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
     };
   }, [combinedDirectoryData]);
 
+  // Sorting helper
+  const sortedData = useMemo(() => {
+    const data = [...combinedDirectoryData];
+    data.sort((a, b) => {
+      const { key, direction } = sortConfig;
+      let valA;
+      let valB;
+      switch (key) {
+        case 'name':
+          if (nameSort === 'firstName') {
+            valA = (a.firstName || (a.name || '').split(' ')[0] || '').toLowerCase();
+            valB = (b.firstName || (b.name || '').split(' ')[0] || '').toLowerCase();
+          } else {
+            const aNameParts = (a.lastName || a.name || '').split(' ');
+            const bNameParts = (b.lastName || b.name || '').split(' ');
+            valA = (a.lastName || aNameParts[aNameParts.length - 1] || '').toLowerCase();
+            valB = (b.lastName || bNameParts[bNameParts.length - 1] || '').toLowerCase();
+          }
+          break;
+        case 'email':
+          valA = (a.email || '').toLowerCase();
+          valB = (b.email || '').toLowerCase();
+          break;
+        case 'role':
+          valA = (a.role || '').toLowerCase();
+          valB = (b.role || '').toLowerCase();
+          break;
+        case 'jobTitle':
+          valA = (a.jobTitle || '').toLowerCase();
+          valB = (b.jobTitle || '').toLowerCase();
+          break;
+        case 'program':
+          valA = (a.program && a.program.name ? a.program.name : '').toLowerCase();
+          valB = (b.program && b.program.name ? b.program.name : '').toLowerCase();
+          break;
+        case 'status':
+          // status combines chips: roleType/badges. Approximate with tuple
+          valA = `${a.roleType || ''}-${a.isUPD ? 1 : 0}-${(a.courseCount || 0) > 0 ? 1 : 0}`;
+          valB = `${b.roleType || ''}-${b.isUPD ? 1 : 0}-${(b.courseCount || 0) > 0 ? 1 : 0}`;
+          break;
+        default:
+          valA = a[key];
+          valB = b[key];
+      }
+      if (valA < valB) return direction === 'ascending' ? -1 : 1;
+      if (valA > valB) return direction === 'ascending' ? 1 : -1;
+      return 0;
+    });
+    return data;
+  }, [combinedDirectoryData, sortConfig, nameSort]);
+
   // Apply filters to data
   const filteredData = useMemo(() => {
-    let filtered = combinedDirectoryData;
+    let filtered = sortedData;
 
     // Search term filter
     if (searchTerm) {
@@ -399,7 +452,14 @@ const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
     }
 
     return filtered;
-  }, [combinedDirectoryData, searchTerm, filters, showOnlyWithCourses]);
+  }, [sortedData, searchTerm, filters, showOnlyWithCourses]);
+
+  const handleSort = (key) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'ascending' ? 'descending' : 'ascending'
+    }));
+  };
 
   const showNotification = (message, type = 'success') => {
     setNotification({ show: true, message, type });
@@ -894,16 +954,45 @@ const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
       {/* People List */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         {/* Course count filter UI */}
-        <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={showOnlyWithCourses}
-              onChange={e => setShowOnlyWithCourses(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-            />
-            Only show faculty with at least 1 course
-          </label>
+        <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-6">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={showOnlyWithCourses}
+                onChange={e => setShowOnlyWithCourses(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+              />
+              Only show faculty with at least 1 course
+            </label>
+            {sortConfig.key === 'name' && (
+              <div className="hidden md:flex items-center gap-2 text-sm">
+                <span className="text-gray-600">Sort by:</span>
+                <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                  <button
+                    onClick={() => setNameSort('firstName')}
+                    className={`px-3 py-1 text-xs ${
+                      nameSort === 'firstName' 
+                        ? 'bg-baylor-green text-white' 
+                        : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    First Name
+                  </button>
+                  <button
+                    onClick={() => setNameSort('lastName')}
+                    className={`px-3 py-1 text-xs ${
+                      nameSort === 'lastName' 
+                        ? 'bg-baylor-green text-white' 
+                        : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    Last Name
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <div className="flex items-center justify-between">
             <label className="flex items-center">
               <input
@@ -943,13 +1032,22 @@ const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
                   />
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Contact
+                  <button className="flex items-center gap-2" onClick={() => handleSort('name')}>
+                    Contact
+                    <span className="text-gray-400">{sortConfig.key === 'name' ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : ''}</span>
+                  </button>
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Role
+                  <button className="flex items-center gap-2" onClick={() => handleSort('role')}>
+                    Role
+                    <span className="text-gray-400">{sortConfig.key === 'role' ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : ''}</span>
+                  </button>
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
+                  <button className="flex items-center gap-2" onClick={() => handleSort('status')}>
+                    Status
+                    <span className="text-gray-400">{sortConfig.key === 'status' ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : ''}</span>
+                  </button>
                 </th>
               </tr>
             </thead>

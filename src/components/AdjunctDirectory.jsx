@@ -320,6 +320,11 @@ const AdjunctDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
         newErrors.phone = 'Phone number must contain exactly 10 digits.';
     }
 
+    // Baylor ID validation
+    if (data.baylorId && !/^\d{9}$/.test(data.baylorId)) {
+        newErrors.baylorId = 'Baylor ID must be exactly 9 digits.';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -395,6 +400,10 @@ const AdjunctDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
     
     if (name === 'phone') {
         finalValue = finalValue.replace(/\D/g, '');
+    }
+
+    if (name === 'baylorId') {
+        finalValue = finalValue.replace(/\D/g, '').slice(0, 9);
     }
 
     const newFormData = {
@@ -732,13 +741,7 @@ const AdjunctDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
           </div>
         )}
 
-        {/* Data Import Caution */}
-        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
-          <p className="flex items-center">
-            <span className="mr-2">⚠️</span>
-            Data is currently being imported. Some records may be missing or incomplete, and inaccuracies, duplications, and other issues may exist.
-          </p>
-        </div>
+        
 
         {/* Change History */}
         {showHistory && changeHistory.length > 0 && (
@@ -780,6 +783,7 @@ const AdjunctDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
                   <SortableHeader label="Email" columnKey="email" />
                   <SortableHeader label="Phone" columnKey="phone" />
                   <SortableHeader label="Office" columnKey="office" />
+                  <SortableHeader label="Baylor ID" columnKey="baylorId" />
                   <SortableHeader label="Courses" columnKey="courseCount" />
                   <th className="px-4 py-3"></th>
               </tr>
@@ -884,6 +888,17 @@ const AdjunctDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
                         </div>
                       </td>
                       <td className="p-2 align-top">
+                        <input 
+                          name="baylorId" 
+                          value={editFormData.baylorId || ''} 
+                          onChange={handleChange} 
+                          className={getInputClass('baylorId')} 
+                          placeholder="9 digits" 
+                          maxLength="9"
+                        />
+                        {errors.baylorId && <p className="text-red-600 text-xs mt-1">{errors.baylorId}</p>}
+                      </td>
+                      <td className="p-2 align-top">
                         <div className="text-sm text-gray-600">
                           {faculty.courseCount || 0}
                         </div>
@@ -943,6 +958,11 @@ const AdjunctDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
                           ) : (
                             faculty.office || '-'
                           )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
+                        <div className={`font-mono ${faculty.baylorId ? 'text-gray-900' : 'text-red-500 italic'}`}>
+                          {faculty.baylorId || 'Not assigned'}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>

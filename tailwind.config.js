@@ -39,38 +39,34 @@ export default {
         // Additional Baylor colors for expanded palette
         'baylor-blue': '#003F5C',
         'baylor-silver': '#8D8D8D',
-        'baylor-charcoal': '#333333',
+        'baylor-charcoal': '#383838',
+        'charcoal': '#383838',
+        'light-gray': '#eeeeee',
+        'link-green': '#006A52',
+        'link-green-hover': '#154734',
       },
       fontFamily: {
         // Baylor University Brand Typography
-        // Bio Sans equivalent (DM Sans) for headings and UI elements
+        // Use Calluna universally for a consistent Baylor feel
         'sans': [
-          'DM Sans',
-          'Helvetica Neue',
-          'Helvetica',
-          'Arial',
-          'ui-sans-serif',
-          'system-ui',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          'sans-serif'
+          'calluna',
+          'Georgia',
+          'ui-serif',
+          'serif'
         ],
-        // Body text font - Calluna equivalent (Crimson Text) with Georgia fallback
         'serif': [
-          'Crimson Text',
+          'calluna',
           'Georgia',
           'Cambria',
           'Times New Roman',
           'Times',
           'serif'
         ],
-        // Display font for special headings (Bio Sans Bold equivalent)
         'display': [
-          'DM Sans',
-          'Helvetica Neue',
-          'Helvetica',
-          'Arial',
-          'sans-serif'
+          'calluna',
+          'Georgia',
+          'ui-serif',
+          'serif'
         ],
         // Monospace fonts for code
         'mono': [

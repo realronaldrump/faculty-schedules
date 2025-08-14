@@ -1,6 +1,5 @@
 /* Baylor University Brand Fonts */
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&display=swap');
+/* Calluna is loaded via Adobe Fonts in index.html */
 
 /*
   BAYLOR UNIVERSITY BRAND COMPLIANCE IMPLEMENTATION
@@ -11,10 +10,9 @@
   - Clear contrast maintained per brand guidelines
   
   ✍️ Typography: ✅ COMPLIANT
-  - DM Sans (Bio Sans equivalent) for headings and UI elements
-  - Crimson Text (Calluna equivalent) for body text
-  - Georgia and Helvetica as universal fallbacks per brand guidelines
-  - Proper font weight hierarchy implemented
+  - Calluna (Adobe Fonts) for all text styles per request
+  - Georgia as universal serif fallback
+  - Proper font weight hierarchy implemented (400/700; italics supported)
   
   📐 Spacing & Layout: ✅ COMPLIANT
   - Minimum brand mark clear space implemented
@@ -32,19 +30,39 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --baylorGreen: #154734;
+    --universityGold: #FFB81C;
+    --white: #ffffff;
+    --charcoal: #383838;
+    --lightGray: #eeeeee;
+    --linkGreen: #006A52;
+    --linkGreenHover: #154734;
+  }
+
   /* Baylor University Brand Typography */
   body {
-    font-family: 'Crimson Text', Georgia, 'Times New Roman', Times, serif;
+    font-family: "calluna", Georgia, serif;
     font-size: 16px;
     line-height: 1.6;
-    color: #1f2937;
-    background-color: #f8fafc;
+    color: var(--charcoal);
+    background-color: var(--white);
+  }
+
+  a {
+    color: var(--linkGreen);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  a:hover {
+    color: var(--linkGreenHover);
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'DM Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-weight: 600;
-    color: #154734;
+    font-family: "calluna", Georgia, serif;
+    font-weight: 700;
+    color: var(--baylorGreen);
     margin-bottom: 0.75rem;
     letter-spacing: -0.025em;
   }
@@ -105,13 +123,13 @@
 
   /* Custom selection color */
   ::selection {
-    background: #154734;
+    background: var(--baylorGreen);
     color: white;
   }
 
   /* Focus styles for better accessibility */
   *:focus {
-    outline: 2px solid #154734;
+    outline: 2px solid var(--baylorGreen);
     outline-offset: 2px;
   }
 
@@ -137,7 +155,7 @@
 
   .university-title {
     @apply text-2xl font-bold text-white tracking-tight;
-    font-family: 'DM Sans', sans-serif;
+    font-family: "calluna", Georgia, serif;
   }
 
   .university-subtitle {
@@ -159,7 +177,7 @@
 
   .university-card-title {
     @apply text-xl font-semibold text-baylor-green mb-1;
-    font-family: 'DM Sans', sans-serif;
+    font-family: "calluna", Georgia, serif;
   }
 
   .university-card-subtitle {
@@ -181,12 +199,12 @@
 
   .metric-value {
     @apply text-3xl font-bold text-baylor-green;
-    font-family: 'DM Sans', sans-serif;
+    font-family: "calluna", Georgia, serif;
   }
 
   .metric-label {
     @apply text-sm font-medium text-gray-600 uppercase tracking-wide;
-    font-family: 'DM Sans', sans-serif;
+    font-family: "calluna", Georgia, serif;
   }
 
   .metric-subtitle {
@@ -200,27 +218,27 @@
   /* Professional Buttons */
   .btn-primary {
     @apply px-6 py-3 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-all duration-200 font-semibold text-sm shadow-sm hover:shadow-md active:scale-95;
-    font-family: 'DM Sans', sans-serif;
+    font-family: "calluna", Georgia, serif;
   }
 
   .btn-secondary {
     @apply px-6 py-3 bg-white text-baylor-green border border-baylor-green rounded-lg hover:bg-baylor-green/5 transition-all duration-200 font-semibold text-sm shadow-sm;
-    font-family: 'DM Sans', sans-serif;
+    font-family: "calluna", Georgia, serif;
   }
 
   .btn-accent {
     @apply px-6 py-3 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 transition-all duration-200 font-semibold text-sm shadow-sm hover:shadow-md active:scale-95;
-    font-family: 'DM Sans', sans-serif;
+    font-family: "calluna", Georgia, serif;
   }
 
   .btn-ghost {
     @apply px-4 py-2 text-gray-600 hover:text-baylor-green hover:bg-gray-50 rounded-lg transition-colors font-medium text-sm;
-    font-family: 'DM Sans', sans-serif;
+    font-family: "calluna", Georgia, serif;
   }
 
   .btn-danger {
     @apply px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm shadow-sm;
-    font-family: 'DM Sans', sans-serif;
+    font-family: "calluna", Georgia, serif;
   }
 
   /* Professional Form Elements */
@@ -230,7 +248,7 @@
 
   .form-label {
     @apply block text-sm font-medium text-gray-700 mb-1;
-    font-family: 'DM Sans', sans-serif;
+    font-family: "calluna", Georgia, serif;
   }
 
   .form-input {
@@ -267,7 +285,7 @@
 
   .university-table th {
     @apply px-6 py-4 text-left text-sm font-semibold text-baylor-green uppercase tracking-wide;
-    font-family: 'DM Sans', sans-serif;
+    font-family: "calluna", Georgia, serif;
   }
 
   .university-table td {
@@ -285,7 +303,7 @@
   /* Navigation Components */
   .nav-item {
     @apply flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 font-medium;
-    font-family: 'DM Sans', sans-serif;
+    font-family: "calluna", Georgia, serif;
   }
 
   .nav-item-active {
@@ -311,7 +329,7 @@
   /* Status Indicators */
   .status-badge {
     @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium;
-    font-family: 'DM Sans', sans-serif;
+    font-family: "calluna", Georgia, serif;
   }
 
   .status-success {
@@ -353,7 +371,7 @@
 
   .sidebar-title {
     @apply text-lg font-bold text-white;
-    font-family: 'DM Sans', sans-serif;
+    font-family: "calluna", Georgia, serif;
   }
 
   .sidebar-subtitle {
@@ -382,7 +400,7 @@
 
   .modal-title {
     @apply text-xl font-semibold text-baylor-green;
-    font-family: 'DM Sans', sans-serif;
+    font-family: "calluna", Georgia, serif;
   }
 
   .modal-body {
@@ -421,7 +439,7 @@
 
   .page-title {
     @apply text-3xl font-bold text-baylor-green mb-2;
-    font-family: 'DM Sans', sans-serif;
+    font-family: "calluna", Georgia, serif;
   }
 
   .page-subtitle {

@@ -27,11 +27,12 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
     name: '',
     email: '',
     phone: '',
-    workSchedule: '',
     startDate: '',
     hourlyRate: '',
     supervisor: '',
-    department: '',
+    jobTitle: '',
+    primaryBuildings: [], // e.g., ["Mary Gibbs Jones", "Goebel"]
+    weeklySchedule: [], // [{ day: 'M', start: '09:00', end: '12:00' }]
     hasNoPhone: false,
   });
 
@@ -54,12 +55,10 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
   });
 
   // Extract departments and supervisors for filtering
-  const availableDepartments = useMemo(() => {
-    const departments = new Set();
-    studentData.forEach(student => {
-      if (student.department) departments.add(student.department);
-    });
-    return Array.from(departments).sort();
+  const availableJobTitles = useMemo(() => {
+    const set = new Set();
+    studentData.forEach(student => { if (student.jobTitle) set.add(student.jobTitle); });
+    return Array.from(set).sort();
   }, [studentData]);
 
   const availableSupervisors = useMemo(() => {
@@ -81,29 +80,11 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
         const matchesText = (
           student.name?.toLowerCase().includes(searchText) ||
           student.email?.toLowerCase().includes(searchText) ||
-          student.department?.toLowerCase().includes(searchText) ||
           student.supervisor?.toLowerCase().includes(searchText) ||
-          student.workSchedule?.toLowerCase().includes(searchText)
+          student.jobTitle?.toLowerCase().includes(searchText)
         );
         if (!matchesText) return false;
       }
-
-      // Advanced filters
-      if (filters.departments.include.length > 0) {
-        if (!filters.departments.include.includes(student.department)) return false;
-      }
-      if (filters.departments.exclude.length > 0) {
-        if (filters.departments.exclude.includes(student.department)) return false;
-      }
-      if (filters.supervisors.include.length > 0) {
-        if (!filters.supervisors.include.includes(student.supervisor)) return false;
-      }
-      if (filters.supervisors.exclude.length > 0) {
-        if (filters.supervisors.exclude.includes(student.supervisor)) return false;
-      }
-      if (!filters.hasEmail && !student.email) return false;
-      if (!filters.hasPhone && !student.phone && !student.hasNoPhone) return false;
-      if (!filters.activeOnly && student.isActive === false) return false;
 
       return true;
     });
@@ -126,9 +107,9 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
           aValue = a.email || '';
           bValue = b.email || '';
           break;
-        case 'department':
-          aValue = a.department || '';
-          bValue = b.department || '';
+        case 'jobTitle':
+          aValue = a.jobTitle || '';
+          bValue = b.jobTitle || '';
           break;
         case 'supervisor':
           aValue = a.supervisor || '';
@@ -156,7 +137,11 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
 
   const startEdit = (student) => {
     setEditingId(student.id);
-    setEditFormData({...student});
+    setEditFormData({
+      ...student,
+      weeklySchedule: Array.isArray(student.weeklySchedule) ? [...student.weeklySchedule] : [],
+      primaryBuildings: Array.isArray(student.primaryBuildings) ? [...student.primaryBuildings] : (student.primaryBuilding ? [student.primaryBuilding] : [])
+    });
     setErrors({});
   };
 
@@ -183,8 +168,8 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
       errors.phone = 'Phone number is required (or check "No Phone")';
     }
     
-    if (!data.workSchedule?.trim()) {
-      errors.workSchedule = 'Work schedule is required';
+    if (!Array.isArray(data.weeklySchedule) || data.weeklySchedule.length === 0) {
+      errors.weeklySchedule = 'At least one weekly schedule entry is required';
     }
     
     return errors;
@@ -228,11 +213,12 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
       name: '',
       email: '',
       phone: '',
-      workSchedule: '',
       startDate: '',
       hourlyRate: '',
       supervisor: '',
-      department: '',
+      jobTitle: '',
+      primaryBuildings: [],
+      weeklySchedule: [],
       hasNoPhone: false,
     });
     setErrors({});
@@ -248,9 +234,6 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
     try {
       const studentToCreate = {
         ...newStudent,
-        id: Date.now().toString(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
         isActive: true
       };
 
@@ -310,6 +293,69 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
     }
   };
 
+  // Helpers for weekly schedule editing
+  const [scheduleDraft, setScheduleDraft] = useState({ day: 'M', start: '', end: '' });
+  const addScheduleEntry = () => {
+    if (!scheduleDraft.day || !scheduleDraft.start || !scheduleDraft.end) return;
+    const startMin = scheduleDraft.start;
+    const endMin = scheduleDraft.end;
+    if (startMin >= endMin) {
+      setErrors(prev => ({ ...prev, weeklySchedule: 'End time must be after start time' }));
+      return;
+    }
+    setNewStudent(prev => ({
+      ...prev,
+      weeklySchedule: [...prev.weeklySchedule, { ...scheduleDraft }]
+    }));
+    setScheduleDraft({ day: 'M', start: '', end: '' });
+    setErrors(prev => ({ ...prev, weeklySchedule: undefined }));
+  };
+  const removeScheduleEntry = (index) => {
+    setNewStudent(prev => ({
+      ...prev,
+      weeklySchedule: prev.weeklySchedule.filter((_, i) => i !== index)
+    }));
+  };
+
+  const [editScheduleDraft, setEditScheduleDraft] = useState({ day: 'M', start: '', end: '' });
+  const addEditScheduleEntry = () => {
+    if (!editScheduleDraft.day || !editScheduleDraft.start || !editScheduleDraft.end) return;
+    if (editScheduleDraft.start >= editScheduleDraft.end) {
+      setErrors(prev => ({ ...prev, weeklySchedule: 'End time must be after start time' }));
+      return;
+    }
+    setEditFormData(prev => ({
+      ...prev,
+      weeklySchedule: [...(prev.weeklySchedule || []), { ...editScheduleDraft }]
+    }));
+    setEditScheduleDraft({ day: 'M', start: '', end: '' });
+    setErrors(prev => ({ ...prev, weeklySchedule: undefined }));
+  };
+  const removeEditScheduleEntry = (index) => {
+    setEditFormData(prev => ({
+      ...prev,
+      weeklySchedule: (prev.weeklySchedule || []).filter((_, i) => i !== index)
+    }));
+  };
+
+  const formatWeeklySchedule = (entries) => {
+    if (!Array.isArray(entries) || entries.length === 0) return '-';
+    const dayOrder = ['M','T','W','R','F'];
+    const dayLabels = { M: 'Mon', T: 'Tue', W: 'Wed', R: 'Thu', F: 'Fri' };
+    const grouped = {};
+    entries.forEach(e => {
+      const key = `${e.start}-${e.end}`;
+      grouped[key] = grouped[key] || [];
+      grouped[key].push(e.day);
+    });
+    return Object.entries(grouped).map(([time, days]) => {
+      const orderedDays = days.sort((a,b) => dayOrder.indexOf(a) - dayOrder.indexOf(b));
+      const dayStr = orderedDays.map(d => dayLabels[d]).join(',');
+      const [s, e] = time.split('-');
+      return `${dayStr} ${s}–${e}`;
+    }).join(' | ');
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -357,6 +403,18 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
         </div>
       </div>
 
+      {/* Shared datalists for suggestions */}
+      <datalist id="supervisor-options">
+        {availableSupervisors.map(s => (
+          <option key={s} value={s} />
+        ))}
+      </datalist>
+      <datalist id="jobtitle-options">
+        {availableJobTitles.map(t => (
+          <option key={t} value={t} />
+        ))}
+      </datalist>
+
       {/* Search Bar */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -372,27 +430,7 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
       {/* Advanced Filters */}
       {showFilters && (
         <div className="bg-gray-50 p-4 rounded-lg space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
-              <select
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-                value=""
-                onChange={(e) => {
-                  if (e.target.value) {
-                    setFilters(prev => ({
-                      ...prev,
-                      departments: { ...prev.departments, include: [e.target.value] }
-                    }));
-                  }
-                }}
-              >
-                <option value="">All Departments</option>
-                {availableDepartments.map(dept => (
-                  <option key={dept} value={dept}>{dept}</option>
-                ))}
-              </select>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Supervisor</label>
               <select
@@ -413,35 +451,6 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
                 ))}
               </select>
             </div>
-          </div>
-          <div className="flex gap-4">
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={filters.hasEmail}
-                onChange={(e) => setFilters(prev => ({ ...prev, hasEmail: e.target.checked }))}
-                className="mr-2"
-              />
-              Has Email
-            </label>
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={filters.hasPhone}
-                onChange={(e) => setFilters(prev => ({ ...prev, hasPhone: e.target.checked }))}
-                className="mr-2"
-              />
-              Has Phone
-            </label>
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={filters.activeOnly}
-                onChange={(e) => setFilters(prev => ({ ...prev, activeOnly: e.target.checked }))}
-                className="mr-2"
-              />
-              Active Only
-            </label>
           </div>
         </div>
       )}
@@ -497,35 +506,90 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
               {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Work Schedule *</label>
-              <input
-                type="text"
-                value={newStudent.workSchedule}
-                onChange={(e) => setNewStudent(prev => ({ ...prev, workSchedule: e.target.value }))}
-                className={`w-full border rounded-md px-3 py-2 ${errors.workSchedule ? 'border-red-500' : 'border-gray-300'}`}
-                placeholder="MW 9:00-12:00, F 1:00-5:00"
-              />
-              {errors.workSchedule && <p className="text-red-500 text-xs mt-1">{errors.workSchedule}</p>}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Weekly Schedule *</label>
+              <div className="flex gap-2 items-end">
+                <select
+                  className="border rounded-md px-2 py-2"
+                  value={scheduleDraft.day}
+                  onChange={(e) => setScheduleDraft(prev => ({ ...prev, day: e.target.value }))}
+                >
+                  <option value="M">Mon</option>
+                  <option value="T">Tue</option>
+                  <option value="W">Wed</option>
+                  <option value="R">Thu</option>
+                  <option value="F">Fri</option>
+                </select>
+                <input type="time" className="border rounded-md px-2 py-2" value={scheduleDraft.start} onChange={e => setScheduleDraft(prev => ({ ...prev, start: e.target.value }))} />
+                <span className="text-gray-500">to</span>
+                <input type="time" className="border rounded-md px-2 py-2" value={scheduleDraft.end} onChange={e => setScheduleDraft(prev => ({ ...prev, end: e.target.value }))} />
+                <button onClick={addScheduleEntry} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-md text-sm">Add</button>
+              </div>
+              {errors.weeklySchedule && <p className="text-red-500 text-xs mt-1">{errors.weeklySchedule}</p>}
+              <div className="mt-2 flex flex-wrap gap-2">
+                {newStudent.weeklySchedule.map((entry, idx) => (
+                  <span key={idx} className="inline-flex items-center gap-1 text-xs bg-gray-100 px-2 py-1 rounded">
+                    {entry.day} {entry.start}-{entry.end}
+                    <button onClick={() => removeScheduleEntry(idx)} className="text-gray-500 hover:text-gray-700"><X className="h-3 w-3" /></button>
+                  </span>
+                ))}
+                {newStudent.weeklySchedule.length === 0 && (
+                  <span className="text-xs text-gray-500">No entries added</span>
+                )}
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-              <input
-                type="text"
-                value={newStudent.department}
-                onChange={(e) => setNewStudent(prev => ({ ...prev, department: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-                placeholder="Department"
-              />
-            </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Supervisor</label>
               <input
+                list="supervisor-options"
                 type="text"
                 value={newStudent.supervisor}
                 onChange={(e) => setNewStudent(prev => ({ ...prev, supervisor: e.target.value }))}
                 className="w-full border border-gray-300 rounded-md px-3 py-2"
-                placeholder="Supervisor name"
+                placeholder="Supervisor name (select or type new)"
               />
+              <datalist id="supervisor-options">
+                {availableSupervisors.map(s => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Job Title</label>
+              <input
+                list="jobtitle-options"
+                type="text"
+                value={newStudent.jobTitle}
+                onChange={(e) => setNewStudent(prev => ({ ...prev, jobTitle: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2"
+                placeholder="Select or type a title"
+              />
+              <datalist id="jobtitle-options">
+                {availableJobTitles.map(t => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Primary Building(s)</label>
+              <div className="flex gap-4 items-center text-sm">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={newStudent.primaryBuildings.includes('Mary Gibbs Jones')} onChange={(e) => setNewStudent(prev => ({
+                    ...prev,
+                    primaryBuildings: e.target.checked
+                      ? Array.from(new Set([...(prev.primaryBuildings || []), 'Mary Gibbs Jones']))
+                      : (prev.primaryBuildings || []).filter(b => b !== 'Mary Gibbs Jones')
+                  }))} /> Mary Gibbs Jones
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={newStudent.primaryBuildings.includes('Goebel')} onChange={(e) => setNewStudent(prev => ({
+                    ...prev,
+                    primaryBuildings: e.target.checked
+                      ? Array.from(new Set([...(prev.primaryBuildings || []), 'Goebel']))
+                      : (prev.primaryBuildings || []).filter(b => b !== 'Goebel')
+                  }))} /> Goebel
+                </label>
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
@@ -544,7 +608,7 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
                 value={newStudent.hourlyRate}
                 onChange={(e) => setNewStudent(prev => ({ ...prev, hourlyRate: e.target.value }))}
                 className="w-full border border-gray-300 rounded-md px-3 py-2"
-                placeholder="15.00"
+                placeholder="10.00"
               />
             </div>
           </div>
@@ -606,14 +670,14 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
                   Phone
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Work Schedule
+                  Weekly Schedule
                 </th>
                 <th 
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('department')}
+                  onClick={() => handleSort('jobTitle')}
                 >
                   <div className="flex items-center gap-1">
-                    Department
+                    Job Title
                     <ArrowUpDown className="h-3 w-3" />
                   </div>
                 </th>
@@ -625,6 +689,9 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
                     Supervisor
                     <ArrowUpDown className="h-3 w-3" />
                   </div>
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Building(s)
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
@@ -676,31 +743,75 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
                         </div>
                         {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
                       </td>
+              <td className="px-6 py-4">
+                <div className="flex gap-2 items-end">
+                  <select
+                    className="border rounded px-2 py-1 text-sm"
+                    value={editScheduleDraft.day}
+                    onChange={(e) => setEditScheduleDraft(prev => ({ ...prev, day: e.target.value }))}
+                  >
+                    <option value="M">Mon</option>
+                    <option value="T">Tue</option>
+                    <option value="W">Wed</option>
+                    <option value="R">Thu</option>
+                    <option value="F">Fri</option>
+                  </select>
+                  <input type="time" className="border rounded px-2 py-1 text-sm" value={editScheduleDraft.start} onChange={e => setEditScheduleDraft(prev => ({ ...prev, start: e.target.value }))} />
+                  <span className="text-gray-500 text-xs">to</span>
+                  <input type="time" className="border rounded px-2 py-1 text-sm" value={editScheduleDraft.end} onChange={e => setEditScheduleDraft(prev => ({ ...prev, end: e.target.value }))} />
+                  <button onClick={addEditScheduleEntry} className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-xs">Add</button>
+                </div>
+                {errors.weeklySchedule && <p className="text-red-500 text-xs mt-1">{errors.weeklySchedule}</p>}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(editFormData.weeklySchedule || []).map((entry, idx) => (
+                    <span key={idx} className="inline-flex items-center gap-1 text-xs bg-gray-100 px-2 py-1 rounded">
+                      {entry.day} {entry.start}-{entry.end}
+                      <button onClick={() => removeEditScheduleEntry(idx)} className="text-gray-500 hover:text-gray-700"><X className="h-3 w-3" /></button>
+                    </span>
+                  ))}
+                  {(editFormData.weeklySchedule || []).length === 0 && (
+                    <span className="text-xs text-gray-500">No entries added</span>
+                  )}
+                </div>
+              </td>
                       <td className="px-6 py-4">
-                        <input
-                          type="text"
-                          value={editFormData.workSchedule || ''}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, workSchedule: e.target.value }))}
-                          className={`w-full border rounded px-2 py-1 text-sm ${errors.workSchedule ? 'border-red-500' : 'border-gray-300'}`}
-                        />
-                        {errors.workSchedule && <p className="text-red-500 text-xs mt-1">{errors.workSchedule}</p>}
+                <input
+                  list="jobtitle-options"
+                  type="text"
+                  value={editFormData.jobTitle || ''}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, jobTitle: e.target.value }))}
+                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                />
                       </td>
                       <td className="px-6 py-4">
                         <input
-                          type="text"
-                          value={editFormData.department || ''}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, department: e.target.value }))}
-                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                        />
-                      </td>
-                      <td className="px-6 py-4">
-                        <input
+                          list="supervisor-options"
                           type="text"
                           value={editFormData.supervisor || ''}
                           onChange={(e) => setEditFormData(prev => ({ ...prev, supervisor: e.target.value }))}
                           className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
                         />
                       </td>
+              <td className="px-6 py-4">
+                <div className="flex gap-3 text-xs">
+                  <label className="flex items-center gap-1">
+                    <input type="checkbox" checked={(editFormData.primaryBuildings || []).includes('Mary Gibbs Jones')} onChange={(e) => setEditFormData(prev => ({
+                      ...prev,
+                      primaryBuildings: e.target.checked
+                        ? Array.from(new Set([...(prev.primaryBuildings || []), 'Mary Gibbs Jones']))
+                        : (prev.primaryBuildings || []).filter(b => b !== 'Mary Gibbs Jones')
+                    }))} /> MGJ
+                  </label>
+                  <label className="flex items-center gap-1">
+                    <input type="checkbox" checked={(editFormData.primaryBuildings || []).includes('Goebel')} onChange={(e) => setEditFormData(prev => ({
+                      ...prev,
+                      primaryBuildings: e.target.checked
+                        ? Array.from(new Set([...(prev.primaryBuildings || []), 'Goebel']))
+                        : (prev.primaryBuildings || []).filter(b => b !== 'Goebel')
+                    }))} /> Goebel
+                  </label>
+                </div>
+              </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-2">
                           <button
@@ -758,14 +869,17 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
                       <td className="px-6 py-4">
                         <div className="flex items-center">
                           <Clock className="h-4 w-4 text-gray-400 mr-2" />
-                          <span className="text-sm text-gray-900">{student.workSchedule || '-'}</span>
+                          <span className="text-sm text-gray-900">{formatWeeklySchedule(student.weeklySchedule) || '-'}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-gray-900">{student.department || '-'}</span>
+                        <span className="text-sm text-gray-900">{student.jobTitle || '-'}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="text-sm text-gray-900">{student.supervisor || '-'}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm text-gray-900">{Array.isArray(student.primaryBuildings) ? student.primaryBuildings.join(', ') : (student.primaryBuilding || '-')}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex justify-end gap-2">

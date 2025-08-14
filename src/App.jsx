@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard';
 import GroupMeetings from './components/scheduling/GroupMeetings.jsx';
 import IndividualAvailability from './components/scheduling/IndividualAvailability';
 import RoomSchedules from './components/scheduling/RoomSchedules';
+import StudentSchedules from './components/scheduling/StudentSchedules.jsx';
 import FacultySchedules from './components/FacultySchedules';
 import PeopleDirectory from './components/PeopleDirectory';
 import ProgramManagement from './components/ProgramManagement';
@@ -208,7 +209,8 @@ function App() {
         { id: 'faculty-schedules', label: 'Faculty Schedules', path: 'scheduling/faculty-schedules' },
         { id: 'group-meetings', label: 'Group Meetings', path: 'scheduling/group-meetings' },
         { id: 'individual-availability', label: 'Individual Availability', path: 'scheduling/individual-availability' },
-        { id: 'room-schedules', label: 'Room Schedules', path: 'scheduling/room-schedules' }
+        { id: 'room-schedules', label: 'Room Schedules', path: 'scheduling/room-schedules' },
+        { id: 'student-schedules', label: 'Student Worker Schedules', path: 'scheduling/student-schedules' }
       ]
     },
     {
@@ -1017,7 +1019,8 @@ function App() {
     console.log('🎓 Updating student worker:', studentToUpdate);
     
     try {
-      const isNewStudent = !studentToUpdate.id;
+      const hasProvidedId = Boolean(studentToUpdate.id);
+      const isNewStudent = !hasProvidedId;
       let studentRef;
       let actionType;
       
@@ -1046,10 +1049,37 @@ function App() {
 
       if (isNewStudent) {
         // Use setDoc for new student to ensure we get the generated ID
-        await setDoc(studentRef, updateData);
+        await setDoc(studentRef, { ...updateData, createdAt: new Date().toISOString() });
       } else {
-        // Use updateDoc for existing student
+        // Use updateDoc for existing student if doc exists; otherwise, create a new one
         const originalData = rawPeople.find(p => p.id === studentToUpdate.id) || null;
+        if (!originalData) {
+          console.warn('⚠️ Provided student id not found; creating new student instead of updating');
+          const createRef = doc(collection(db, 'people'));
+          await setDoc(createRef, { ...updateData, createdAt: new Date().toISOString() });
+
+          // Add to edit history (legacy)
+          await addDoc(collection(db, 'editHistory'), {
+            action: 'CREATE',
+            entity: `Student - ${studentToUpdate.name}`,
+            changes: { ...updateData, createdAt: new Date().toISOString() },
+            timestamp: new Date().toISOString(),
+            userId: 'system'
+          });
+          // Log as create
+          await logCreate(
+            `Student - ${studentToUpdate.name}`,
+            'people',
+            createRef.id,
+            { ...updateData, createdAt: new Date().toISOString() },
+            'App.jsx - handleStudentUpdate'
+          );
+
+          await loadData();
+          showNotification('success', 'Student Added', `${studentToUpdate.name} has been added to the student worker directory successfully.`);
+          return;
+        }
+
         await updateDoc(studentRef, updateData);
         // Add to edit history (legacy)
         await addDoc(collection(db, 'editHistory'), {
@@ -1091,7 +1121,7 @@ function App() {
           `Student - ${studentToUpdate.name}`,
           'people',
           studentRef.id,
-          updateData,
+          { ...updateData, createdAt: new Date().toISOString() },
           'App.jsx - handleStudentUpdate'
         );
       }
@@ -1118,23 +1148,28 @@ function App() {
     console.log('🗑️ Deleting student worker:', studentToDelete);
     
     try {
+      // Accept either an id or full object
+      const studentId = typeof studentToDelete === 'string' ? studentToDelete : studentToDelete.id;
+      const existing = rawPeople.find(p => p.id === studentId) || null;
+      const entityName = existing?.name || (typeof studentToDelete === 'object' ? studentToDelete.name : 'Unknown');
+
       // Delete from Firebase
-      await deleteDoc(doc(db, 'people', studentToDelete.id));
+      await deleteDoc(doc(db, 'people', studentId));
 
       // Add to edit history (legacy)
       await addDoc(collection(db, 'editHistory'), {
         action: 'DELETE',
-        entity: `Student - ${studentToDelete.name}`,
+        entity: `Student - ${entityName}`,
         timestamp: new Date().toISOString(),
         userId: 'system'
       });
 
       // Log change in centralized system
       await logDelete(
-        `Student - ${studentToDelete.name}`,
+        `Student - ${entityName}`,
         'people',
-        studentToDelete.id,
-        studentToDelete,
+        studentId,
+        existing || studentToDelete,
         'App.jsx - handleStudentDelete'
       );
 
@@ -1312,6 +1347,8 @@ function App() {
         return <IndividualAvailability {...pageProps} />;
       case 'scheduling/room-schedules':
         return <RoomSchedules {...pageProps} />;
+      case 'scheduling/student-schedules':
+        return <StudentSchedules {...pageProps} />;
       case 'directory/people-directory':
         return <PeopleDirectory {...pageProps} />;
       case 'directory/faculty-directory':

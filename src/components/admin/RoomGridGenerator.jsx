@@ -1,7 +1,6 @@
 import React, { useState, useRef } from 'react';
 import Papa from 'papaparse';
-import { Upload, X, Trash2, FileText, Download } from 'lucide-react';
-import ExportModal from './ExportModal';
+import { Upload, X, Trash2, FileText } from 'lucide-react';
 
 
 const RoomGridGenerator = () => {
@@ -14,7 +13,7 @@ const RoomGridGenerator = () => {
     const [message, setMessage] = useState({ text: '', type: '' });
     const [scheduleHtml, setScheduleHtml] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
-    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    
 
     const printRef = useRef();
     const fileInputRef = useRef();
@@ -367,20 +366,12 @@ const RoomGridGenerator = () => {
                             <FileText className="w-4 h-4 mr-2" />
                             Generate Schedule
                         </button>
-                        <button onClick={() => setIsExportModalOpen(true)} className="btn-secondary" disabled={!scheduleHtml}>
-                            <Download className="w-4 h-4 mr-2" />
-                            Export
-                        </button>
+                        
                     </div>
                 </div>
             </div>
 
-            <ExportModal
-                isOpen={isExportModalOpen}
-                onClose={() => setIsExportModalOpen(false)}
-                scheduleTableRef={printRef}
-                title={`${selectedBuilding}-${selectedRoom}-${selectedDayType}-${semester}`}
-            />
+            
 
             <div className="university-card mt-8">
                 <div className="university-card-content min-h-[400px]">

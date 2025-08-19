@@ -4,11 +4,23 @@ import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
+import html2pdf from 'html2pdf.js';
+import ExcelJS from 'exceljs';
 
 const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
     if (!isOpen) return null;
 
-    const handleExport = (format) => {
+    const downloadBlob = (blob, filename) => {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.setAttribute('download', filename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(link.href), 0);
+    };
+
+    const handleExport = async (format) => {
         const container = scheduleTableRef.current;
         const table = container ? container.querySelector('table') : null;
         if (!table) {
@@ -17,33 +29,54 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
             return;
         }
 
-        if (format === 'csv') {
-            const wb = XLSX.utils.table_to_book(table);
-            const ws = wb.Sheets[wb.SheetNames[0]];
-            const csv = XLSX.utils.sheet_to_csv(ws);
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.setAttribute('download', `${title}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        } else if (format === 'excel') {
-            const wb = XLSX.utils.table_to_book(table);
-            XLSX.writeFile(wb, `${title}.xlsx`);
-        } else if (format === 'pdf') {
-            const doc = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
-            autoTable(doc, { html: table, styles: { overflow: 'linebreak' }, bodyStyles: { valign: 'top' } });
-            doc.save(`${title}.pdf`);
-        } else if (format === 'png') {
-            html2canvas(table).then(canvas => {
-                const link = document.createElement('a');
-                link.download = `${title}.png`;
-                link.href = canvas.toDataURL();
-                link.click();
-            });
+        try {
+            if (format === 'csv') {
+                const wb = XLSX.utils.table_to_book(table);
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const csv = XLSX.utils.sheet_to_csv(ws);
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                downloadBlob(blob, `${title}.csv`);
+            } else if (format === 'excel') {
+                // Render the styled table to an image and embed it in an Excel sheet
+                const canvas = await html2canvas(table, { scale: 2 });
+                const dataUrl = canvas.toDataURL('image/png');
+
+                const workbook = new ExcelJS.Workbook();
+                const worksheet = workbook.addWorksheet('Schedule');
+
+                const imageId = workbook.addImage({ base64: dataUrl, extension: 'png' });
+                // Add image at the top-left; size based on pixels converted to Excel points (~0.75 ratio)
+                const imgWidth = canvas.width; // px
+                const imgHeight = canvas.height; // px
+                const pxToEMU = (px) => Math.round(px * 9525); // Excel uses EMUs
+                worksheet.addImage(imageId, {
+                    tl: { col: 0, row: 0 },
+                    ext: { width: pxToEMU(imgWidth), height: pxToEMU(imgHeight) }
+                });
+
+                const buffer = await workbook.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                downloadBlob(blob, `${title}.xlsx`);
+            } else if (format === 'pdf') {
+                // Use html2pdf to render the styled DOM to PDF for fidelity with the app's look
+                await html2pdf().set({
+                    filename: `${title}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true },
+                    jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' }
+                }).from(table).save();
+            } else if (format === 'png') {
+                const canvas = await html2canvas(table, { scale: 2 });
+                const dataUrl = canvas.toDataURL('image/png');
+                const res = await fetch(dataUrl);
+                const blob = await res.blob();
+                downloadBlob(blob, `${title}.png`);
+            }
+        } catch (err) {
+            console.error('Export failed:', err);
+        } finally {
+            onClose();
         }
-        onClose();
     };
 
     return (

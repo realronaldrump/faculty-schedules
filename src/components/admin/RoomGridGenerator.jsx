@@ -465,14 +465,29 @@ const RoomGridGenerator = () => {
                 formEl.className = 'weekly-add-form export-ignore';
                 formEl.innerHTML = `
                     <div class="inline-form">
-                        <label>Day</label>
-                        <select class="inline-input day">
-                            <option value="M">Mon</option>
-                            <option value="T">Tue</option>
-                            <option value="W">Wed</option>
-                            <option value="R">Thu</option>
-                            <option value="F">Fri</option>
-                        </select>
+                        <label>Days</label>
+                        <div class="day-checkboxes">
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="M" class="day-input">
+                                <span>Mon</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="T" class="day-input">
+                                <span>Tue</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="W" class="day-input">
+                                <span>Wed</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="R" class="day-input">
+                                <span>Thu</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="F" class="day-input">
+                                <span>Fri</span>
+                            </label>
+                        </div>
                         <label>Start</label>
                         <input class="inline-input start" placeholder="10:00 am" />
                         <label>End</label>
@@ -487,31 +502,49 @@ const RoomGridGenerator = () => {
                 if (!form) return;
                 const grid = container.querySelector('.weekly-grid');
                 if (!grid) return;
-                const day = form.querySelector('select.day').value;
+                
+                // Get selected days
+                const selectedDays = Array.from(form.querySelectorAll('.day-input:checked')).map(cb => cb.value);
+                if (selectedDays.length === 0) {
+                    alert('Please select at least one day.');
+                    return;
+                }
+                
                 const startStr = form.querySelector('input.start').value;
                 const endStr = form.querySelector('input.end').value;
+                if (!startStr || !endStr) {
+                    alert('Please enter both start and end times.');
+                    return;
+                }
+                
                 const timeStr = `${startStr} - ${endStr}`;
                 try {
                     const colMap = { 'M': 2, 'T': 3, 'W': 4, 'R': 5, 'F': 6 };
-                    const col = colMap[day];
                     const start = parseInt(grid.getAttribute('data-start'), 10);
                     const step = parseInt(grid.getAttribute('data-step'), 10);
                     const headerOffset = parseInt(grid.getAttribute('data-headeroffset'), 10);
                     const [startMin, endMin] = parseTimeRange(timeStr);
                     const startRow = Math.floor((startMin - start) / step) + headerOffset;
                     const endRow = Math.ceil((endMin - start) / step) + headerOffset;
-                    const html = `
-                        <div class="class-block" style="grid-column: ${col}; grid-row: ${startRow} / ${endRow};">
-                            <button class="delete-entry-btn delete-block-btn export-ignore" data-action="delete-block" title="Remove">×</button>
-                            <div class="class-title" contenteditable="true">NEW 000.01</div>
-                            <div class="class-instructor" contenteditable="true">Instructor Name</div>
-                            <div class="class-time">${timeStr}</div>
-                        </div>
-                    `;
-                    grid.insertAdjacentHTML('beforeend', html);
+                    
+                    // Create a block for each selected day
+                    selectedDays.forEach(day => {
+                        const col = colMap[day];
+                        if (col) {
+                            const html = `
+                                <div class="class-block" style="grid-column: ${col}; grid-row: ${startRow} / ${endRow};">
+                                    <button class="delete-entry-btn delete-block-btn export-ignore" data-action="delete-block" title="Remove">×</button>
+                                    <div class="class-title" contenteditable="true">NEW 000.01</div>
+                                    <div class="class-instructor" contenteditable="true">Instructor Name</div>
+                                    <div class="class-time">${timeStr}</div>
+                                </div>
+                            `;
+                            grid.insertAdjacentHTML('beforeend', html);
+                        }
+                    });
                     form.remove();
                 } catch (err) {
-                    // ignore invalid format
+                    alert('Invalid time format. Please use format like "10:00 am - 10:50 am"');
                 }
             }
         };
@@ -995,6 +1028,39 @@ const RoomGridGenerator = () => {
                 }
                 .weekly-add-form .btn-secondary:hover { 
                     background: #e5efe9; 
+                }
+                
+                /* Day checkbox styling */
+                .day-checkboxes {
+                    display: flex;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                }
+                .day-checkbox {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                    cursor: pointer;
+                    padding: 4px 8px;
+                    border: 1px solid #c7d7cf;
+                    border-radius: 4px;
+                    background: white;
+                    transition: all 0.2s;
+                }
+                .day-checkbox:hover {
+                    background: #f0fff0;
+                    border-color: var(--baylor-green);
+                }
+                .day-checkbox input[type="checkbox"] {
+                    margin: 0;
+                    cursor: pointer;
+                }
+                .day-checkbox input[type="checkbox"]:checked + span {
+                    color: var(--baylor-green);
+                    font-weight: 600;
+                }
+                .day-checkbox input[type="checkbox"]:checked {
+                    accent-color: var(--baylor-green);
                 }
                 @media print {
                   .export-ignore { display: none !important; }

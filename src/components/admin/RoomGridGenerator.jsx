@@ -86,7 +86,7 @@ const RoomGridGenerator = () => {
     };
     
     const processData = (data) => {
-        const processedClassData = data.flatMap(row => {
+        const items = data.flatMap(row => {
             try {
                 const roomRaw = row['Room'] || '';
                 const meetingPatternRaw = row['Meeting Pattern'] || '';
@@ -133,6 +133,22 @@ const RoomGridGenerator = () => {
             }
         });
 
+        // Deduplicate identical entries that sometimes occur in CLSS exports
+        const dedupedMap = new Map();
+        for (const item of items) {
+            const key = [
+                item.building,
+                item.room,
+                item.days.replace(/\s/g, ''),
+                item.time.replace(/\s/g, ''),
+                item.class,
+                item.section,
+                item.professor
+            ].join('|');
+            if (!dedupedMap.has(key)) dedupedMap.set(key, item);
+        }
+        const processedClassData = Array.from(dedupedMap.values());
+
         setAllClassData(processedClassData);
 
         const newBuildings = processedClassData.reduce((acc, item) => {
@@ -155,6 +171,11 @@ const RoomGridGenerator = () => {
     const generateSchedule = () => {
         if (!selectedBuilding || !selectedRoom) {
             showMessage("Please select a building and a room.");
+            return;
+        }
+
+        if (selectedDayType === 'WEEK') {
+            generateWeeklySchedule();
             return;
         }
 
@@ -216,6 +237,110 @@ const RoomGridGenerator = () => {
             </div>
         `);
         showMessage("Schedule generated. Click on fields to edit before printing.", 'success');
+    };
+
+    const parseDaysToChars = (daysStr) => {
+        const str = (daysStr || '').replace(/\s/g, '');
+        if (!str) return [];
+        const chars = [];
+        const add = (d) => { if (!chars.includes(d)) chars.push(d); };
+        if (/M/.test(str)) add('M');
+        if (/(T(?!h)|Tu)/i.test(str) || /\bT\b/.test(str)) add('T');
+        if (/W/.test(str)) add('W');
+        if (/(Th|R)/i.test(str)) add('R');
+        if (/F/.test(str)) add('F');
+        // Common shorthands
+        if (/MWF/i.test(str)) return ['M','W','F'];
+        if (/(TTh|TR)/i.test(str)) return ['T','R'];
+        return chars;
+    };
+
+    const formatTimeLabel = (mins) => {
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        const period = h >= 12 ? 'PM' : 'AM';
+        let hour = h % 12; if (hour === 0) hour = 12;
+        return `${hour}:${m.toString().padStart(2,'0')} ${period}`.replace(':00','');
+    };
+
+    const roundDownTo = (mins, step) => Math.floor(mins / step) * step;
+    const roundUpTo = (mins, step) => Math.ceil(mins / step) * step;
+
+    const generateWeeklySchedule = () => {
+        const relevant = allClassData.filter(c => c.building === selectedBuilding && c.room === selectedRoom);
+        if (relevant.length === 0) {
+            setScheduleHtml(`<div class="text-center p-8 text-gray-500">No classes found for ${selectedBuilding} ${selectedRoom}.</div>`);
+            return;
+        }
+
+        // Determine time range
+        let earliest = timeToMinutes('8:00 am');
+        let latest = timeToMinutes('5:30 pm');
+        try {
+            const starts = relevant.map(c => parseTimeRange(c.time)[0]);
+            const ends = relevant.map(c => parseTimeRange(c.time)[1]);
+            if (starts.length) earliest = Math.min(...starts);
+            if (ends.length) latest = Math.max(...ends);
+        } catch {}
+        const step = 15; // minutes per grid row
+        const start = roundDownTo(earliest, 60); // snap to hour for cleaner labels
+        const end = roundUpTo(latest, 30);
+        const slots = Math.max(1, Math.round((end - start) / step));
+
+        // Build hour labels and horizontal gridlines
+        const hourMarks = [];
+        const headerOffset = 2; // reserve row 1 for day headers
+        for (let t = start; t <= end; t += 60) {
+            const row = Math.round((t - start) / step) + headerOffset;
+            const span = 60 / step;
+            hourMarks.push(`
+                <div class="hour-label" style="grid-column: 1; grid-row: ${row} / span ${span};">${formatTimeLabel(t)}</div>
+                <div class="hour-line" style="grid-column: 2 / -1; grid-row: ${row};"></div>
+            `);
+        }
+
+        // Build class blocks per day
+        const dayToColumn = { 'M': 2, 'T': 3, 'W': 4, 'R': 5, 'F': 6 };
+        const blocks = relevant.flatMap(c => {
+            const [classStart, classEnd] = parseTimeRange(c.time);
+            const startRow = Math.floor((classStart - start) / step) + headerOffset;
+            const endRow = Math.ceil((classEnd - start) / step) + headerOffset;
+            return parseDaysToChars(c.days).filter(d => dayToColumn[d]).map(d => {
+                const col = dayToColumn[d];
+                return `
+                    <div class="class-block" style="grid-column: ${col}; grid-row: ${startRow} / ${endRow};">
+                        <div class="class-title" contenteditable="true">${c.class}.${c.section}</div>
+                        <div class="class-instructor" contenteditable="true">${c.professor}</div>
+                        <div class="class-time">${c.time}</div>
+                    </div>
+                `;
+            });
+        }).join('');
+
+        const grid = `
+            <div class="weekly-grid" style="--rows:${slots}; --rowHeight: 12px;">
+                ${hourMarks.join('')}
+                ${blocks}
+                <div class="day-header" style="grid-column: 2;">Monday</div>
+                <div class="day-header" style="grid-column: 3;">Tuesday</div>
+                <div class="day-header" style="grid-column: 4;">Wednesday</div>
+                <div class="day-header" style="grid-column: 5;">Thursday</div>
+                <div class="day-header" style="grid-column: 6;">Friday</div>
+            </div>
+        `;
+
+        const header = `
+            <div class="weekly-title" contenteditable="true">${selectedBuilding.replace(' Bldg','').toUpperCase()} ${selectedRoom} Schedule</div>
+            <div class="weekly-subtitle">${semester}</div>
+        `;
+
+        setScheduleHtml(`
+            <div class="schedule-sheet weekly-sheet">
+                ${header}
+                ${grid}
+            </div>
+        `);
+        showMessage("Weekly grid generated. Click on fields to edit before printing.", 'success');
     };
 
     const findClassesInSlot = (classes, slot) => {
@@ -345,10 +470,11 @@ const RoomGridGenerator = () => {
                             </select>
                         </div>
                         <div>
-                            <label htmlFor="dayTypeSelect" className="block text-sm font-medium text-gray-700 mb-1">5. Select Day Type</label>
+                            <label htmlFor="dayTypeSelect" className="block text-sm font-medium text-gray-700 mb-1">5. Select View</label>
                             <select id="dayTypeSelect" value={selectedDayType} onChange={e => setSelectedDayType(e.target.value)} className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" disabled={Object.keys(buildings).length === 0}>
                                 <option value="MWF">MWF</option>
                                 <option value="TR">TR</option>
+                                <option value="WEEK">Week (M-F)</option>
                             </select>
                         </div>
                     </div>
@@ -398,8 +524,8 @@ const RoomGridGenerator = () => {
                     --baylor-green: #154734; 
                     --baylor-gold: #FFB81C; 
                     background: #ffffff; 
-                    width: 6in; 
-                    min-height: 8in; 
+                    width: 7in; 
+                    min-height: 5in; 
                     margin: 0 auto; 
                     padding: 0.4in; 
                     border: 1px solid #e5e7eb; 
@@ -470,7 +596,7 @@ const RoomGridGenerator = () => {
                     border-radius: 2px;
                 }
                 @media print {
-                    @page { size: 6in 8in; margin: 0.25in; }
+                    @page { size:7in 5in; margin: 0.25in; }
                     .schedule-sheet { 
                         -webkit-print-color-adjust: exact; 
                         print-color-adjust: exact; 
@@ -485,6 +611,68 @@ const RoomGridGenerator = () => {
                     .schedule-table { font-size: 10pt; }
                     .schedule-table th, .schedule-table td { padding: 8pt; }
                 }
+
+                /* Weekly grid layout */
+                .weekly-sheet { padding-top: 0.25in; }
+                .weekly-title { 
+                    color: var(--baylor-green); 
+                    font-weight: 800; 
+                    font-size: 18px; 
+                    text-align: center; 
+                    margin-bottom: 4px; 
+                }
+                .weekly-subtitle { 
+                    text-align: center; 
+                    color: #374151; 
+                    font-size: 12px; 
+                    margin-bottom: 10px; 
+                }
+                .weekly-grid { 
+                    display: grid; 
+                    grid-template-columns: 1.0in repeat(5, 1fr);
+                    grid-template-rows: auto repeat(var(--rows), var(--rowHeight));
+                    position: relative; 
+                    gap: 0; 
+                    border: 2px solid var(--baylor-green);
+                }
+                .weekly-grid .day-header {
+                    position: sticky; top: 0; z-index: 2;
+                    grid-row: 1;
+                    background: var(--baylor-green);
+                    color: #fff;
+                    text-align: center;
+                    padding: 6px 4px;
+                    border-left: 1px solid rgba(255,255,255,0.2);
+                }
+                .weekly-grid .hour-label { 
+                    font-weight: 700; 
+                    color: var(--baylor-green); 
+                    display: flex; 
+                    align-items: flex-start; 
+                    justify-content: flex-start; 
+                    padding: 2px 6px; 
+                    border-top: 1px solid #e5e7eb; 
+                    background: #f7faf7; 
+                }
+                .weekly-grid .hour-line { 
+                    border-top: 1px solid #e5e7eb; 
+                }
+                .weekly-grid .class-block { 
+                    background: #ffffff; 
+                    border: 2px solid #1f2937; 
+                    border-radius: 6px; 
+                    padding: 4px 6px; 
+                    margin: 2px; 
+                    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                    display: flex; 
+                    flex-direction: column; 
+                    gap: 2px; 
+                    overflow: hidden;
+                    word-break: break-word;
+                }
+                .weekly-grid .class-title { font-weight: 800; color: var(--baylor-green); font-size: 12px; line-height: 1.1; }
+                .weekly-grid .class-instructor { font-size: 10px; color: #374151; line-height: 1.1; }
+                .weekly-grid .class-time { font-size: 10px; color: #111827; line-height: 1.1; }
             `}</style>
         </div>
     );

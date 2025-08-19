@@ -17,6 +17,10 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
     const [orientation, setOrientation] = useState('portrait');
     const [margin, setMargin] = useState(0.25);
 
+    // Determine if the rendered content contains a table (MWF/TR views)
+    const containerForCheck = scheduleTableRef?.current;
+    const hasTable = !!(containerForCheck && containerForCheck.querySelector('table'));
+
     const downloadBlob = (blob, filename) => {
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
@@ -30,14 +34,19 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
     const handleExport = async (format) => {
         const container = scheduleTableRef.current;
         const table = container ? container.querySelector('table') : null;
-        if (!table) {
-            console.error('No table to export.');
+        if (!container) {
+            console.error('Nothing to export.');
             onClose();
             return;
         }
 
         try {
             if (format === 'csv') {
+                if (!table) {
+                    console.warn('CSV export requires a table.');
+                    onClose();
+                    return;
+                }
                 const wb = XLSX.utils.table_to_book(table);
                 const ws = wb.Sheets[wb.SheetNames[0]];
                 const csv = XLSX.utils.sheet_to_csv(ws);
@@ -92,7 +101,7 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
                 </div>
                 <div className="p-6">
                     <div className="grid grid-cols-2 gap-4">
-                        <button onClick={() => handleExport('csv')} className="export-option" title="Export as CSV">
+                        <button onClick={() => handleExport('csv')} disabled={!hasTable} className={`export-option ${!hasTable ? 'opacity-50 cursor-not-allowed' : ''}`} title="Export as CSV">
                             <FileText className="w-8 h-8 mx-auto mb-2" />
                             <span>CSV</span>
                         </button>

@@ -58,7 +58,7 @@ const RoomGridGenerator = () => {
         
         Papa.parse(file, {
             header: true,
-            skipEmptyLines: true,
+            skipEmptyLines: "greedy",
             beforeFirstChunk: (chunk) => {
                 const lines = chunk.split(/\r\n|\n|\r/);
                 const headerIndex = lines.findIndex(line => line.includes('"CLSS ID","CRN","Term"'));
@@ -70,8 +70,7 @@ const RoomGridGenerator = () => {
 
                 const header = lines[headerIndex];
                 const dataLines = lines.slice(headerIndex + 1);
-                const filteredDataLines = dataLines.filter(line => line.trim().startsWith(','));
-                return [header, ...filteredDataLines].join('\n');
+                return [header, ...dataLines].join('\n');
             },
             complete: (results) => {
                 processData(results.data);
@@ -118,9 +117,9 @@ const RoomGridGenerator = () => {
                         roomNumber = "N/A";
                     }
                     
-                    const patternParts = patternString.split(' ');
-                    const days = patternParts[0];
-                    const time = patternParts.slice(1).join(' ');
+                    const mp = patternString.trim().match(/^([A-Za-z]+)\s+(.+)$/);
+                    const days = mp ? mp[1] : (patternString.split(/\s+/)[0] || '');
+                    const time = mp ? mp[2].trim() : patternString.replace(days, '').trim();
 
                     if (!buildingName || !roomNumber || !days || !time) return null;
 
@@ -180,11 +179,12 @@ const RoomGridGenerator = () => {
         }
 
         const dayChars = selectedDayType === 'MWF' ? ['M', 'W', 'F'] : ['T', 'R'];
-        const relevantClasses = allClassData.filter(c =>
-            c.building === selectedBuilding &&
-            c.room === selectedRoom &&
-            dayChars.some(day => c.days.includes(day))
-        );
+        const relevantClasses = allClassData.filter(c => {
+            const meetingDays = parseDaysToChars(c.days);
+            return c.building === selectedBuilding &&
+                   c.room === selectedRoom &&
+                   meetingDays.some(d => dayChars.includes(d));
+        });
 
         if (relevantClasses.length === 0) {
             setScheduleHtml(`<div class="text-center p-8 text-gray-500">No classes found for ${selectedBuilding} ${selectedRoom} on ${selectedDayType} days.</div>`);
@@ -201,14 +201,12 @@ const RoomGridGenerator = () => {
             const classesInSlot = findClassesInSlot(relevantClasses, slot);
             const classContent = classesInSlot.length > 0 ? classesInSlot.map(c => {
                 let daysIndicator = '';
-                let isFullPattern = false;
-                if (selectedDayType === 'MWF') {
-                    if (c.days === 'MWF') isFullPattern = true;
-                } else { // TR
-                    if (c.days === 'TTh' || c.days === 'TR') isFullPattern = true;
-                }
+                const mdays = parseDaysToChars(c.days);
+                const expected = selectedDayType === 'MWF' ? ['M','W','F'] : ['T','R'];
+                const isFullPattern = expected.every(d => mdays.includes(d)) && mdays.every(d => expected.includes(d));
                 if (!isFullPattern) {
-                    daysIndicator = ` (${c.days})`;
+                    const overlap = mdays.filter(d => expected.includes(d)).join('');
+                    daysIndicator = overlap ? ` (${overlap})` : ` (${c.days})`;
                 }
                 return `<div class="class-entry" contenteditable="true">${c.class}.${c.section}${daysIndicator}</div>
                         <div class="prof-entry" contenteditable="true">${c.professor}</div>`;

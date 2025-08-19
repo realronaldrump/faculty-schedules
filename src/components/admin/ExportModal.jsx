@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { X, FileText, Image, File } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
@@ -9,6 +9,13 @@ import html2pdf from 'html2pdf.js';
 
 const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
     if (!isOpen) return null;
+
+    const [presetSize, setPresetSize] = useState('6x8');
+    const [customUnit, setCustomUnit] = useState('in');
+    const [customWidth, setCustomWidth] = useState(6);
+    const [customHeight, setCustomHeight] = useState(8);
+    const [orientation, setOrientation] = useState('portrait');
+    const [margin, setMargin] = useState(0.25);
 
     const downloadBlob = (blob, filename) => {
         const link = document.createElement('a');
@@ -37,15 +44,31 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
                 const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                 downloadBlob(blob, `${title}.csv`);
             } else if (format === 'pdf') {
-                // Use html2pdf to render the styled DOM to PDF for fidelity with the app's look
+                // Determine size settings
+                let unit = 'in';
+                let formatSize = [6, 8];
+                if (presetSize === 'letter') {
+                    formatSize = [8.5, 11];
+                } else if (presetSize === 'a4') {
+                    unit = 'mm';
+                    formatSize = [210, 297];
+                } else if (presetSize === 'custom') {
+                    unit = customUnit;
+                    formatSize = [Number(customWidth) || 6, Number(customHeight) || 8];
+                }
+
+                // Swap if landscape selected
+                const finalFormat = orientation === 'landscape' ? [formatSize[1], formatSize[0]] : formatSize;
+
                 await html2pdf().set({
                     filename: `${title}.pdf`,
+                    margin: margin || 0,
                     image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2, useCORS: true },
-                    jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' }
-                }).from(table).save();
+                    html2canvas: { scale: 2, useCORS: true, backgroundColor: null },
+                    jsPDF: { unit, format: finalFormat, orientation }
+                }).from(container).save();
             } else if (format === 'png') {
-                const canvas = await html2canvas(table, { scale: 2 });
+                const canvas = await html2canvas(container, { scale: 2, backgroundColor: null });
                 const dataUrl = canvas.toDataURL('image/png');
                 const res = await fetch(dataUrl);
                 const blob = await res.blob();
@@ -82,6 +105,51 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
                             <Image className="w-8 h-8 mx-auto mb-2" />
                             <span>PNG</span>
                         </button>
+                    </div>
+                    <div className="mt-6 space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Page size</label>
+                            <select value={presetSize} onChange={(e) => setPresetSize(e.target.value)} className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="6x8">6 x 8 in (default)</option>
+                                <option value="letter">Letter 8.5 x 11 in</option>
+                                <option value="a4">A4 210 x 297 mm</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+                        {presetSize === 'custom' && (
+                            <div className="grid grid-cols-3 gap-3">
+                                <div>
+                                    <label className="block text-xs text-gray-600 mb-1">Width</label>
+                                    <input type="number" step="0.01" value={customWidth} onChange={(e) => setCustomWidth(e.target.value)} className="block w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-600 mb-1">Height</label>
+                                    <input type="number" step="0.01" value={customHeight} onChange={(e) => setCustomHeight(e.target.value)} className="block w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-600 mb-1">Units</label>
+                                    <select value={customUnit} onChange={(e) => setCustomUnit(e.target.value)} className="block w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                                        <option value="in">in</option>
+                                        <option value="mm">mm</option>
+                                        <option value="pt">pt</option>
+                                    </select>
+                                </div>
+                            </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Orientation</label>
+                                <select value={orientation} onChange={(e) => setOrientation(e.target.value)} className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="portrait">Portrait</option>
+                                    <option value="landscape">Landscape</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Margins</label>
+                                <input type="number" step="0.05" value={margin} onChange={(e) => setMargin(Number(e.target.value))} className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" />
+                                <p className="text-xs text-gray-500 mt-1">inches</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

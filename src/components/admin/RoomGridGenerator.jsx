@@ -202,16 +202,18 @@ const RoomGridGenerator = () => {
         }).join('');
 
         setScheduleHtml(`
-            <table class="schedule-table">
-                <thead>
-                    <tr>
-                        <th colspan="2">${tableHeader}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${tableBody}
-                </tbody>
-            </table>
+            <div class="schedule-sheet">
+                <table class="schedule-table">
+                    <thead>
+                        <tr>
+                            <th colspan="2">${tableHeader}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableBody}
+                    </tbody>
+                </table>
+            </div>
         `);
         showMessage("Schedule generated. Click on fields to edit before printing.", 'success');
     };
@@ -391,37 +393,76 @@ const RoomGridGenerator = () => {
                 </div>
             </div>
             <style>{`
+                /* Baylor brand palette */
+                .schedule-sheet { 
+                    --baylor-green: #154734; 
+                    --baylor-gold: #FFB81C; 
+                    background: #ffffff; 
+                    width: 6in; 
+                    min-height: 8in; 
+                    margin: 0 auto; 
+                    padding: 0.4in; 
+                    border: 1px solid #e5e7eb; 
+                    border-radius: 10px; 
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+                }
                 .schedule-table {
                     border-collapse: collapse;
                     width: 100%;
                     font-size: 12px;
+                    color: #111827;
                 }
                 .schedule-table th, .schedule-table td {
-                    border: 1px solid #000;
-                    padding: 8px;
-                    text-align: center;
+                    border: 1px solid #e5e7eb;
+                    padding: 10px;
+                    text-align: left;
                     vertical-align: top;
-                    height: 50px;
                 }
-                .schedule-table th {
-                    background-color: #f2f2f2;
+                .schedule-table thead th {
+                    background-color: var(--baylor-green);
+                    color: #ffffff;
+                    text-align: center;
+                    border-bottom: 3px solid var(--baylor-gold);
+                    padding-top: 14px;
+                    padding-bottom: 14px;
+                }
+                .schedule-table thead .text-2xl {
+                    font-size: 18px;
+                    letter-spacing: 0.5px;
+                }
+                .schedule-table thead .text-lg {
+                    font-size: 13px;
+                    opacity: 0.95;
+                }
+                .schedule-table thead .text-md {
+                    font-size: 12px;
+                    opacity: 0.9;
                 }
                 .time-slot {
-                    font-weight: bold;
-                    width: 100px;
+                    font-weight: 700;
+                    width: 1.15in;
+                    background-color: #f6f9f6;
+                    color: var(--baylor-green);
+                    text-align: center;
                 }
                 .class-entry {
-                    font-weight: bold;
+                    font-weight: 700;
+                    color: var(--baylor-green);
                 }
                 .prof-entry {
                     font-size: 11px;
-                    color: #333;
+                    color: #374151;
+                }
+                .schedule-table hr {
+                    border: 0;
+                    border-top: 1px solid #e5e7eb;
+                    margin: 6px 0;
                 }
                 [contenteditable="true"] {
                     cursor: pointer;
                 }
                 [contenteditable="true"]:hover {
-                    background-color: #f0f9ff;
+                    background-color: rgba(21,71,52,0.05);
                 }
                 [contenteditable="true"]:focus {
                     outline: 2px solid #3b82f6;
@@ -429,12 +470,20 @@ const RoomGridGenerator = () => {
                     border-radius: 2px;
                 }
                 @media print {
-                    .schedule-table {
-                        font-size: 10pt;
+                    @page { size: 6in 8in; margin: 0.25in; }
+                    .schedule-sheet { 
+                        -webkit-print-color-adjust: exact; 
+                        print-color-adjust: exact; 
+                        box-shadow: none; 
+                        border-radius: 0; 
+                        border: none;
+                        width: auto; 
+                        min-height: auto; 
+                        padding: 0; 
+                        margin: 0 auto;
                     }
-                     .schedule-table th, .schedule-table td {
-                        padding: 6px;
-                    }
+                    .schedule-table { font-size: 10pt; }
+                    .schedule-table th, .schedule-table td { padding: 8pt; }
                 }
             `}</style>
         </div>

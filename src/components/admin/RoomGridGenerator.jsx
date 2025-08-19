@@ -1,7 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Papa from 'papaparse';
-import { Upload, X, Trash2, FileText, Download } from 'lucide-react';
+import { Upload, X, Trash2, FileText, Download, Save as SaveIcon } from 'lucide-react';
 import ExportModal from './ExportModal';
+import { db } from '../../firebase';
+import { collection, addDoc, getDocs, deleteDoc, doc, query, where, orderBy, limit } from 'firebase/firestore';
+import { logCreate, logDelete } from '../../utils/changeLogger';
 
 
 const RoomGridGenerator = () => {
@@ -15,6 +18,9 @@ const RoomGridGenerator = () => {
     const [scheduleHtml, setScheduleHtml] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isLoadingSaved, setIsLoadingSaved] = useState(false);
+    const [savedGrids, setSavedGrids] = useState([]);
 
     const printRef = useRef();
     const fileInputRef = useRef();
@@ -208,14 +214,20 @@ const RoomGridGenerator = () => {
                     const overlap = mdays.filter(d => expected.includes(d)).join('');
                     daysIndicator = overlap ? ` (${overlap})` : ` (${c.days})`;
                 }
-                return `<div class="class-entry" contenteditable="true">${c.class}.${c.section}${daysIndicator}</div>
-                        <div class="prof-entry" contenteditable="true">${c.professor}</div>`;
-            }).join('<hr class="my-1 border-t border-gray-300">') : '';
+                return `<div class="class-entry-wrapper">
+                            <button class="delete-entry-btn export-ignore" data-action="delete-class" title="Remove">×</button>
+                            <div class="class-entry" contenteditable="true">${c.class}.${c.section}${daysIndicator}</div>
+                            <div class="prof-entry" contenteditable="true">${c.professor}</div>
+                        </div>`;
+            }).join('') : '';
 
             return `
                 <tr>
                     <td class="time-slot">${slot.replace(/ am/g, '').replace(/ pm/g, '')}</td>
-                    <td>${classContent}</td>
+                    <td data-slot="${slot}">
+                        <div class="slot-toolbar export-ignore"><button type="button" class="slot-add-btn export-ignore" data-action="add-class" title="Add entry">＋</button></div>
+                        <div class="class-list">${classContent}</div>
+                    </td>
                 </tr>
             `;
         }).join('');
@@ -307,6 +319,7 @@ const RoomGridGenerator = () => {
                 const col = dayToColumn[d];
                 return `
                     <div class="class-block" style="grid-column: ${col}; grid-row: ${startRow} / ${endRow};">
+                        <button class="delete-entry-btn delete-block-btn export-ignore" data-action="delete-block" title="Remove">×</button>
                         <div class="class-title" contenteditable="true">${c.class}.${c.section}</div>
                         <div class="class-instructor" contenteditable="true">${c.professor}</div>
                         <div class="class-time">${c.time}</div>
@@ -320,7 +333,7 @@ const RoomGridGenerator = () => {
         ).join('');
 
         const grid = `
-            <div class="weekly-grid" style="--rows:${slots}; --rowHeight: 15px;">
+            <div class="weekly-grid" style="--rows:${slots}; --rowHeight: 15px;" data-start="${start}" data-end="${end}" data-step="${step}" data-headeroffset="${headerOffset}">
                 ${hourMarks.join('')}
                 ${vLines}
                 ${blocks}
@@ -334,8 +347,13 @@ const RoomGridGenerator = () => {
 
         const header = `
             <div class="weekly-header">
-                <div class="text-2xl font-bold" contenteditable="true">${selectedBuilding.replace(' Bldg','').toUpperCase()} ${selectedRoom} Schedule</div>
-                <div class="text-md" contenteditable="true">${semester}</div>
+                <div class="header-left">
+                    <div class="text-2xl font-bold" contenteditable="true">${selectedBuilding.replace(' Bldg','').toUpperCase()} ${selectedRoom} Schedule</div>
+                    <div class="text-md" contenteditable="true">${semester}</div>
+                </div>
+                <div class="header-actions export-ignore">
+                    <button type="button" class="slot-add-btn export-ignore" data-action="toggle-add-week-form" title="Add class to week">＋ Add</button>
+                </div>
             </div>
         `;
 
@@ -404,6 +422,175 @@ const RoomGridGenerator = () => {
     
     const triggerFileUpload = () => {
         fileUploaderRef.current.click();
+    };
+
+    // Delegated events for add/delete within rendered HTML
+    useEffect(() => {
+        const container = printRef.current;
+        if (!container) return;
+        const handleClick = (e) => {
+            let target = e.target;
+            // If target is a text node, normalize to its parent element
+            if (target && target.nodeType !== 1 && target.parentElement) {
+                target = target.parentElement;
+            }
+            const actionEl = target && target.closest ? target.closest('[data-action]') : null;
+            if (!actionEl) return;
+            const action = actionEl.getAttribute('data-action');
+            if (action === 'add-class') {
+                const td = actionEl.closest('td[data-slot]');
+                if (!td) return;
+                const list = td.querySelector('.class-list');
+                if (!list) return;
+                const wrapper = document.createElement('div');
+                wrapper.className = 'class-entry-wrapper';
+                wrapper.innerHTML = `
+                    <button class="delete-entry-btn export-ignore" data-action="delete-class" title="Remove">×</button>
+                    <div class="class-entry" contenteditable="true">NEW 000.01</div>
+                    <div class="prof-entry" contenteditable="true">Instructor Name</div>
+                `;
+                list.appendChild(wrapper);
+            } else if (action === 'delete-class') {
+                const wrapper = actionEl.closest('.class-entry-wrapper');
+                if (wrapper) wrapper.remove();
+            } else if (action === 'delete-block') {
+                const block = actionEl.closest('.class-block');
+                if (block) block.remove();
+            } else if (action === 'add-week-block') {
+                const grid = container.querySelector('.weekly-grid');
+                if (!grid) return;
+                const existing = container.querySelector('.weekly-add-form');
+                if (existing) { existing.remove(); return; }
+                const formEl = document.createElement('div');
+                formEl.className = 'weekly-add-form export-ignore';
+                formEl.innerHTML = `
+                    <div class="inline-form">
+                        <label>Day</label>
+                        <select class="inline-input day">
+                            <option value="M">Mon</option>
+                            <option value="T">Tue</option>
+                            <option value="W">Wed</option>
+                            <option value="R">Thu</option>
+                            <option value="F">Fri</option>
+                        </select>
+                        <label>Start</label>
+                        <input class="inline-input start" placeholder="10:00 am" />
+                        <label>End</label>
+                        <input class="inline-input end" placeholder="10:50 am" />
+                        <button class="btn-primary inline-btn" data-action="submit-week-form" type="button">Add</button>
+                        <button class="btn-secondary inline-btn" data-action="add-week-block" type="button">Cancel</button>
+                    </div>
+                `;
+                grid.insertAdjacentElement('beforebegin', formEl);
+            } else if (action === 'submit-week-form') {
+                const form = actionEl.closest('.weekly-add-form');
+                if (!form) return;
+                const grid = container.querySelector('.weekly-grid');
+                if (!grid) return;
+                const day = form.querySelector('select.day').value;
+                const startStr = form.querySelector('input.start').value;
+                const endStr = form.querySelector('input.end').value;
+                const timeStr = `${startStr} - ${endStr}`;
+                try {
+                    const colMap = { 'M': 2, 'T': 3, 'W': 4, 'R': 5, 'F': 6 };
+                    const col = colMap[day];
+                    const start = parseInt(grid.getAttribute('data-start'), 10);
+                    const step = parseInt(grid.getAttribute('data-step'), 10);
+                    const headerOffset = parseInt(grid.getAttribute('data-headeroffset'), 10);
+                    const [startMin, endMin] = parseTimeRange(timeStr);
+                    const startRow = Math.floor((startMin - start) / step) + headerOffset;
+                    const endRow = Math.ceil((endMin - start) / step) + headerOffset;
+                    const html = `
+                        <div class="class-block" style="grid-column: ${col}; grid-row: ${startRow} / ${endRow};">
+                            <button class="delete-entry-btn delete-block-btn export-ignore" data-action="delete-block" title="Remove">×</button>
+                            <div class="class-title" contenteditable="true">NEW 000.01</div>
+                            <div class="class-instructor" contenteditable="true">Instructor Name</div>
+                            <div class="class-time">${timeStr}</div>
+                        </div>
+                    `;
+                    grid.insertAdjacentHTML('beforeend', html);
+                    form.remove();
+                } catch (err) {
+                    // ignore invalid format
+                }
+            }
+        };
+        container.addEventListener('click', handleClick);
+        return () => container.removeEventListener('click', handleClick);
+    }, [scheduleHtml]);
+
+    // Firestore: saved grids
+    const fetchSavedGrids = useCallback(async () => {
+        setIsLoadingSaved(true);
+        try {
+            const gridsRef = collection(db, 'roomGrids');
+            const q = query(gridsRef, orderBy('createdAt', 'desc'), limit(25));
+            const snap = await getDocs(q);
+            const results = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            setSavedGrids(results);
+        } catch (err) {
+            console.error('Error loading saved grids:', err);
+        } finally {
+            setIsLoadingSaved(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchSavedGrids();
+    }, [fetchSavedGrids]);
+
+    const saveGrid = async () => {
+        if (!scheduleHtml || !selectedBuilding || !selectedRoom) {
+            showMessage('Generate a schedule first, and ensure building/room are selected.');
+            return;
+        }
+        setIsSaving(true);
+        try {
+            const html = printRef.current ? printRef.current.innerHTML : scheduleHtml;
+            const payload = {
+                title: `${selectedBuilding}-${selectedRoom}-${selectedDayType}-${semester}`,
+                building: selectedBuilding,
+                room: selectedRoom,
+                dayType: selectedDayType,
+                semester,
+                html,
+                createdAt: Date.now()
+            };
+            const ref = await addDoc(collection(db, 'roomGrids'), payload);
+            logCreate(`Room Grid - ${payload.title}`, 'roomGrids', ref.id, payload, 'RoomGridGenerator.jsx - saveGrid').catch(() => {});
+            showMessage('Grid saved.', 'success');
+            fetchSavedGrids();
+        } catch (err) {
+            console.error('Save failed:', err);
+            showMessage('Failed to save grid.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const loadGrid = (grid) => {
+        if (!grid) return;
+        setSelectedBuilding(grid.building || selectedBuilding);
+        setSelectedRoom(grid.room || selectedRoom);
+        setSelectedDayType(grid.dayType || selectedDayType);
+        setSemester(grid.semester || semester);
+        setScheduleHtml(grid.html || '');
+        showMessage('Loaded saved grid.', 'success');
+    };
+
+    const deleteSavedGrid = async (grid) => {
+        if (!grid) return;
+        const confirmDelete = window.confirm('Delete this saved grid?');
+        if (!confirmDelete) return;
+        try {
+            await deleteDoc(doc(collection(db, 'roomGrids'), grid.id));
+            logDelete(`Room Grid - ${grid.title}`, 'roomGrids', grid.id, grid, 'RoomGridGenerator.jsx - deleteSavedGrid').catch(() => {});
+            showMessage('Deleted saved grid.', 'success');
+            setSavedGrids(prev => prev.filter(g => g.id !== grid.id));
+        } catch (err) {
+            console.error('Delete failed:', err);
+            showMessage('Failed to delete saved grid.');
+        }
     };
 
 
@@ -492,11 +679,59 @@ const RoomGridGenerator = () => {
                             <FileText className="w-4 h-4 mr-2" />
                             Generate Schedule
                         </button>
+                        <button onClick={saveGrid} className="btn-secondary" disabled={!scheduleHtml || isSaving}>
+                            <SaveIcon className="w-4 h-4 mr-2" />
+                            { isSaving ? 'Saving...' : 'Save Grid' }
+                        </button>
                         <button onClick={() => setIsExportModalOpen(true)} className="btn-secondary" disabled={!scheduleHtml}>
                             <Download className="w-4 h-4 mr-2" />
                             Export
                         </button>
                     </div>
+                </div>
+            </div>
+
+            <div className="university-card mt-6">
+                <div className="university-card-content">
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-lg font-semibold text-baylor-green">Saved Grids</h3>
+                        <button onClick={fetchSavedGrids} className="btn-secondary">Refresh</button>
+                    </div>
+                    {isLoadingSaved ? (
+                        <div className="text-gray-500">Loading...</div>
+                    ) : savedGrids.length === 0 ? (
+                        <div className="text-gray-500">No saved grids yet.</div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                                <thead>
+                                    <tr className="text-left text-gray-600">
+                                        <th className="py-2 pr-4">Title</th>
+                                        <th className="py-2 pr-4">Building</th>
+                                        <th className="py-2 pr-4">Room</th>
+                                        <th className="py-2 pr-4">View</th>
+                                        <th className="py-2 pr-4">Semester</th>
+                                        <th className="py-2">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {savedGrids.map(g => (
+                                        <tr key={g.id} className="border-t border-gray-200">
+                                            <td className="py-2 pr-4">{g.title}</td>
+                                            <td className="py-2 pr-4">{g.building}</td>
+                                            <td className="py-2 pr-4">{g.room}</td>
+                                            <td className="py-2 pr-4">{g.dayType}</td>
+                                            <td className="py-2 pr-4">{g.semester}</td>
+                                            <td className="py-2 space-x-2">
+                                                <button onClick={() => loadGrid(g)} className="btn-secondary">Load</button>
+                                                <button onClick={() => deleteSavedGrid(g)} className="btn-danger">Delete</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -626,7 +861,15 @@ const RoomGridGenerator = () => {
                     border-bottom: 3px solid var(--baylor-gold);
                     padding: 14px;
                     margin: 0 -0.4in 10px -0.4in;
+                    position: relative;
                 }
+                .weekly-header .header-left { display: table; margin: 0 auto; }
+                .weekly-header .header-actions { position: absolute; right: 12px; top: 12px; display: flex; align-items: center; gap: 8px; }
+                .weekly-add-form { background: #f9fafb; border: 1px solid #e5e7eb; border-left: 4px solid var(--baylor-green); padding: 8px 10px; margin: 8px 0; border-radius: 6px; }
+                .inline-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+                .inline-form label { font-size: 12px; color: #374151; }
+                .inline-input { border: 1px solid #d1d5db; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
+                .inline-btn { padding: 4px 8px; font-size: 12px; }
                 .weekly-header .text-2xl { font-size: 18px; letter-spacing: 0.5px; }
                 .weekly-header .text-md { font-size: 12px; opacity: 0.9; }
                 .weekly-grid { 
@@ -679,10 +922,59 @@ const RoomGridGenerator = () => {
                     overflow: hidden;
                     word-break: break-word;
                     font-size: 11px;
+                    position: relative;
                 }
                 .weekly-grid .class-title { font-weight: 700; color: var(--baylor-green); font-size: 11px; line-height: 1.2; }
                 .weekly-grid .class-instructor { font-size: 10px; color: #374151; line-height: 1.2; }
                 .weekly-grid .class-time { font-size: 9px; color: #111827; line-height: 1.2; }
+
+                /* Editing helpers */
+                .slot-toolbar { display: flex; justify-content: flex-end; }
+                .slot-add-btn { background: #e5efe9; color: var(--baylor-green); border: 1px solid #c7d7cf; border-radius: 4px; padding: 2px 6px; font-size: 11px; cursor: pointer; }
+                .class-list { display: flex; flex-direction: column; gap: 6px; }
+                .class-entry-wrapper { position: relative; padding-right: 18px; }
+                .delete-entry-btn { position: absolute; top: 0; right: 0; background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; width: 16px; height: 16px; line-height: 14px; text-align: center; border-radius: 4px; cursor: pointer; font-size: 12px; }
+                .delete-block-btn { top: 4px; right: 4px; }
+                .weekly-add-form {
+                    display: flex;
+                    gap: 10px;
+                    align-items: center;
+                    margin-top: 10px;
+                    padding: 10px;
+                    background-color: #f0fff0;
+                    border: 1px solid var(--baylor-green);
+                    border-radius: 4px;
+                    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                }
+                .weekly-add-form .inline-form {
+                    display: flex;
+                    gap: 10px;
+                    align-items: center;
+                }
+                .weekly-add-form .inline-form label {
+                    font-size: 11px;
+                    color: #374151;
+                    font-weight: 600;
+                }
+                .weekly-add-form .inline-input {
+                    padding: 4px 8px;
+                    border: 1px solid #c7d7cf;
+                    border-radius: 4px;
+                    font-size: 11px;
+                    color: #111827;
+                    flex: 1;
+                }
+                .weekly-add-form .inline-btn {
+                    padding: 4px 10px;
+                    font-size: 11px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                }
+                .weekly-add-form .btn-primary { background: #e5efe9; color: var(--baylor-green); border: 1px solid #c7d7cf; }
+                .weekly-add-form .btn-secondary { background: #f0fff0; color: var(--baylor-green); border: 1px solid #c7d7cf; }
+                @media print {
+                  .export-ignore { display: none !important; }
+                }
             `}</style>
         </div>
     );

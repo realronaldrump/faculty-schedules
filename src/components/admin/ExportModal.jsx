@@ -47,7 +47,10 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
                     onClose();
                     return;
                 }
-                const wb = XLSX.utils.table_to_book(table);
+                const tableClone = table.cloneNode(true);
+                // Remove interactive controls from clone
+                tableClone.querySelectorAll('.export-ignore').forEach(el => el.remove());
+                const wb = XLSX.utils.table_to_book(tableClone);
                 const ws = wb.Sheets[wb.SheetNames[0]];
                 const csv = XLSX.utils.sheet_to_csv(ws);
                 const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -70,11 +73,11 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
                     filename: `${title}.pdf`,
                     margin: margin || 0,
                     image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2, useCORS: true, backgroundColor: null },
+                    html2canvas: { scale: 2, useCORS: true, backgroundColor: null, ignoreElements: (el) => el && el.classList && el.classList.contains('export-ignore') },
                     jsPDF: { unit, format: finalFormat, orientation }
                 }).from(container).save();
             } else if (format === 'png') {
-                const canvas = await html2canvas(container, { scale: 2, backgroundColor: null });
+                const canvas = await html2canvas(container, { scale: 2, backgroundColor: null, ignoreElements: (el) => el && el.classList && el.classList.contains('export-ignore') });
                 const dataUrl = canvas.toDataURL('image/png');
                 const res = await fetch(dataUrl);
                 const blob = await res.blob();

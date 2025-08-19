@@ -275,12 +275,12 @@ const RoomGridGenerator = () => {
 
         // Determine time range
         let earliest = timeToMinutes('8:00 am');
-        let latest = timeToMinutes('5:30 pm');
+        let latest = timeToMinutes('5:00 pm');
         try {
             const starts = relevant.map(c => parseTimeRange(c.time)[0]);
             const ends = relevant.map(c => parseTimeRange(c.time)[1]);
-            if (starts.length) earliest = Math.min(...starts);
-            if (ends.length) latest = Math.max(...ends);
+            if (starts.length) earliest = Math.min(earliest, ...starts);
+            if (ends.length) latest = Math.max(latest, ...ends);
         } catch {}
         const step = 15; // minutes per grid row
         const start = roundDownTo(earliest, 60); // snap to hour for cleaner labels
@@ -676,6 +676,7 @@ const RoomGridGenerator = () => {
                     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
                     display: flex; 
                     flex-direction: column; 
+                    justify-content: center;
                     gap: 1px; 
                     overflow: hidden;
                     word-break: break-word;

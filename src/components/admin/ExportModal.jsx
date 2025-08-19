@@ -10,10 +10,10 @@ import html2pdf from 'html2pdf.js';
 const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
     if (!isOpen) return null;
 
-    const [presetSize, setPresetSize] = useState('6x8');
+    const [presetSize, setPresetSize] = useState('7x5');
     const [customUnit, setCustomUnit] = useState('in');
-    const [customWidth, setCustomWidth] = useState(6);
-    const [customHeight, setCustomHeight] = useState(8);
+    const [customWidth, setCustomWidth] = useState(7);
+    const [customHeight, setCustomHeight] = useState(5);
     const [orientation, setOrientation] = useState('portrait');
     const [margin, setMargin] = useState(0.25);
 
@@ -55,15 +55,12 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
             } else if (format === 'pdf') {
                 // Determine size settings
                 let unit = 'in';
-                let formatSize = [6, 8];
+                let formatSize = [7, 5];
                 if (presetSize === 'letter') {
                     formatSize = [8.5, 11];
-                } else if (presetSize === 'a4') {
-                    unit = 'mm';
-                    formatSize = [210, 297];
                 } else if (presetSize === 'custom') {
                     unit = customUnit;
-                    formatSize = [Number(customWidth) || 6, Number(customHeight) || 8];
+                    formatSize = [Number(customWidth) || 7, Number(customHeight) || 5];
                 }
 
                 // Swap if landscape selected
@@ -119,9 +116,8 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Page size</label>
                             <select value={presetSize} onChange={(e) => setPresetSize(e.target.value)} className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                                <option value="6x8">6 x 8 in (default)</option>
+                                <option value="7x5">7 x 5 in (default)</option>
                                 <option value="letter">Letter 8.5 x 11 in</option>
-                                <option value="a4">A4 210 x 297 mm</option>
                                 <option value="custom">Custom</option>
                             </select>
                         </div>

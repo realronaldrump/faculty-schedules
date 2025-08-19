@@ -18,6 +18,7 @@ import DataHygieneManager from './components/DataHygieneManager';
 import BaylorAcronyms from './pages/BaylorAcronyms';
 import BaylorIDManagement from './components/BaylorIDManagement';
 import RecentChangesPage from './components/RecentChangesPage';
+import RoomGridGenerator from './components/admin/RoomGridGenerator';
 
 import EmailLists from './components/EmailLists';
 import BuildingDirectory from './components/BuildingDirectory';
@@ -37,7 +38,8 @@ import {
   Menu,
   LogOut,
   Star,
-  X
+  X,
+  Wrench
 } from 'lucide-react';
 import { db } from './firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, setDoc, query, orderBy, onSnapshot } from 'firebase/firestore';
@@ -249,6 +251,14 @@ function App() {
         { id: 'data-hygiene', label: 'Data Hygiene', path: 'administration/data-hygiene' },
         { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' },
         { id: 'baylor-acronyms', label: 'Baylor Acronyms', path: 'administration/baylor-acronyms' }
+      ]
+    },
+    {
+      id: 'admin-tools',
+      label: 'Admin Tools',
+      icon: Wrench,
+      children: [
+        { id: 'room-grid-generator', label: 'Room Grid Generator', path: 'admin-tools/room-grid-generator' }
       ]
     }
   ];
@@ -1459,6 +1469,8 @@ function App() {
         return <SystemsPage {...pageProps} />;
       case 'administration/baylor-acronyms':
         return <BaylorAcronyms {...pageProps} />;
+      case 'admin-tools/room-grid-generator':
+        return <RoomGridGenerator {...pageProps} />;
       default:
         return <Dashboard {...pageProps} />;
     }

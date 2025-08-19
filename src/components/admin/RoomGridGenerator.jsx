@@ -375,7 +375,7 @@ const RoomGridGenerator = () => {
                     )}
                 </div>
             </div>
-            <style jsx>{`
+            <style>{`
                 .schedule-table {
                     border-collapse: collapse;
                     width: 100%;

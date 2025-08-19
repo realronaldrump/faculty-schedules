@@ -758,6 +758,7 @@ const RoomGridGenerator = () => {
                                         <th className="py-2 pr-4">Room</th>
                                         <th className="py-2 pr-4">View</th>
                                         <th className="py-2 pr-4">Semester</th>
+                                        <th className="py-2 pr-4">Created</th>
                                         <th className="py-2">Actions</th>
                                     </tr>
                                 </thead>
@@ -769,6 +770,9 @@ const RoomGridGenerator = () => {
                                             <td className="py-2 pr-4">{g.room}</td>
                                             <td className="py-2 pr-4">{g.dayType}</td>
                                             <td className="py-2 pr-4">{g.semester}</td>
+                                            <td className="py-2 pr-4 text-gray-600">
+                                                {g.createdAt ? new Date(g.createdAt).toLocaleString() : 'Unknown'}
+                                            </td>
                                             <td className="py-2 space-x-2">
                                                 <button onClick={() => loadGrid(g)} className="btn-secondary">Load</button>
                                                 <button onClick={() => deleteSavedGrid(g)} className="btn-danger">Delete</button>

@@ -352,7 +352,7 @@ const RoomGridGenerator = () => {
                     <div class="text-md" contenteditable="true">${semester}</div>
                 </div>
                 <div class="header-actions export-ignore">
-                    <button type="button" class="slot-add-btn export-ignore" data-action="toggle-add-week-form" title="Add class to week">＋ Add</button>
+                    <button type="button" class="slot-add-btn export-ignore" data-action="add-week-block" title="Add class to week">＋ Add</button>
                 </div>
             </div>
         `;
@@ -865,7 +865,6 @@ const RoomGridGenerator = () => {
                 }
                 .weekly-header .header-left { display: table; margin: 0 auto; }
                 .weekly-header .header-actions { position: absolute; right: 12px; top: 12px; display: flex; align-items: center; gap: 8px; }
-                .weekly-add-form { background: #f9fafb; border: 1px solid #e5e7eb; border-left: 4px solid var(--baylor-green); padding: 8px 10px; margin: 8px 0; border-radius: 6px; }
                 .inline-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
                 .inline-form label { font-size: 12px; color: #374151; }
                 .inline-input { border: 1px solid #d1d5db; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
@@ -939,39 +938,64 @@ const RoomGridGenerator = () => {
                     display: flex;
                     gap: 10px;
                     align-items: center;
-                    margin-top: 10px;
-                    padding: 10px;
-                    background-color: #f0fff0;
-                    border: 1px solid var(--baylor-green);
-                    border-radius: 4px;
-                    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                    margin: 15px 0;
+                    padding: 15px;
+                    background-color: #f8fffa;
+                    border: 2px solid var(--baylor-green);
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(21,71,52,0.15);
                 }
                 .weekly-add-form .inline-form {
                     display: flex;
-                    gap: 10px;
+                    gap: 12px;
                     align-items: center;
+                    flex-wrap: wrap;
                 }
                 .weekly-add-form .inline-form label {
-                    font-size: 11px;
-                    color: #374151;
+                    font-size: 12px;
+                    color: var(--baylor-green);
                     font-weight: 600;
+                    min-width: 40px;
                 }
                 .weekly-add-form .inline-input {
-                    padding: 4px 8px;
+                    padding: 8px 12px;
                     border: 1px solid #c7d7cf;
-                    border-radius: 4px;
-                    font-size: 11px;
+                    border-radius: 6px;
+                    font-size: 12px;
                     color: #111827;
-                    flex: 1;
+                    min-width: 100px;
+                    background: white;
+                }
+                .weekly-add-form .inline-input:focus {
+                    outline: none;
+                    border-color: var(--baylor-green);
+                    box-shadow: 0 0 0 2px rgba(21,71,52,0.1);
                 }
                 .weekly-add-form .inline-btn {
-                    padding: 4px 10px;
-                    font-size: 11px;
-                    border-radius: 4px;
+                    padding: 8px 16px;
+                    font-size: 12px;
+                    border-radius: 6px;
                     cursor: pointer;
+                    font-weight: 600;
+                    transition: all 0.2s;
                 }
-                .weekly-add-form .btn-primary { background: #e5efe9; color: var(--baylor-green); border: 1px solid #c7d7cf; }
-                .weekly-add-form .btn-secondary { background: #f0fff0; color: var(--baylor-green); border: 1px solid #c7d7cf; }
+                .weekly-add-form .btn-primary { 
+                    background: var(--baylor-green); 
+                    color: white; 
+                    border: 1px solid var(--baylor-green); 
+                }
+                .weekly-add-form .btn-primary:hover { 
+                    background: #0f3a2a; 
+                    border-color: #0f3a2a; 
+                }
+                .weekly-add-form .btn-secondary { 
+                    background: #f8fffa; 
+                    color: var(--baylor-green); 
+                    border: 1px solid var(--baylor-green); 
+                }
+                .weekly-add-form .btn-secondary:hover { 
+                    background: #e5efe9; 
+                }
                 @media print {
                   .export-ignore { display: none !important; }
                 }

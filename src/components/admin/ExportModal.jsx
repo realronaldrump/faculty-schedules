@@ -1,11 +1,11 @@
 import React from 'react';
-import { X, FileText, Image, Grid, File } from 'lucide-react';
+import { X, FileText, Image, File } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
 import html2pdf from 'html2pdf.js';
-import ExcelJS from 'exceljs';
+// Excel export removed per request
 
 const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
     if (!isOpen) return null;
@@ -36,27 +36,6 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
                 const csv = XLSX.utils.sheet_to_csv(ws);
                 const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                 downloadBlob(blob, `${title}.csv`);
-            } else if (format === 'excel') {
-                // Render the styled table to an image and embed it in an Excel sheet
-                const canvas = await html2canvas(table, { scale: 2 });
-                const dataUrl = canvas.toDataURL('image/png');
-
-                const workbook = new ExcelJS.Workbook();
-                const worksheet = workbook.addWorksheet('Schedule');
-
-                const imageId = workbook.addImage({ base64: dataUrl, extension: 'png' });
-                // Add image at the top-left; size based on pixels converted to Excel points (~0.75 ratio)
-                const imgWidth = canvas.width; // px
-                const imgHeight = canvas.height; // px
-                const pxToEMU = (px) => Math.round(px * 9525); // Excel uses EMUs
-                worksheet.addImage(imageId, {
-                    tl: { col: 0, row: 0 },
-                    ext: { width: pxToEMU(imgWidth), height: pxToEMU(imgHeight) }
-                });
-
-                const buffer = await workbook.xlsx.writeBuffer();
-                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                downloadBlob(blob, `${title}.xlsx`);
             } else if (format === 'pdf') {
                 // Use html2pdf to render the styled DOM to PDF for fidelity with the app's look
                 await html2pdf().set({
@@ -94,10 +73,7 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
                             <FileText className="w-8 h-8 mx-auto mb-2" />
                             <span>CSV</span>
                         </button>
-                        <button onClick={() => handleExport('excel')} className="export-option" title="Export as Excel (.xlsx)">
-                            <Grid className="w-8 h-8 mx-auto mb-2" />
-                            <span>Excel</span>
-                        </button>
+                        {/* Excel export removed */}
                         <button onClick={() => handleExport('pdf')} className="export-option" title="Export as PDF">
                             <File className="w-8 h-8 mx-auto mb-2" />
                             <span>PDF</span>

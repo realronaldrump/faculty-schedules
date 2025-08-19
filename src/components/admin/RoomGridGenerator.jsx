@@ -56,9 +56,16 @@ const RoomGridGenerator = () => {
         resetUI(true);
         setIsProcessing(true);
         
+        const headerCounts = {};
         Papa.parse(file, {
             header: true,
             skipEmptyLines: true,
+            transformHeader: (header) => {
+                const key = header || '';
+                const next = (headerCounts[key] ?? 0) + 1;
+                headerCounts[key] = next;
+                return next === 1 ? key : `${key}_${next}`;
+            },
             beforeFirstChunk: (chunk) => {
                 const lines = chunk.split(/\r\n|\n|\r/);
                 const headerIndex = lines.findIndex(line => line.includes('"CLSS ID","CRN","Term"'));

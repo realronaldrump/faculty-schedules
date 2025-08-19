@@ -5,6 +5,7 @@ import ExportModal from './ExportModal';
 import { db } from '../../firebase';
 import { collection, addDoc, getDocs, deleteDoc, doc, query, where, orderBy, limit } from 'firebase/firestore';
 import { logCreate, logDelete } from '../../utils/changeLogger';
+import { ConfirmationDialog } from '../CustomAlert';
 
 
 const RoomGridGenerator = () => {
@@ -21,6 +22,10 @@ const RoomGridGenerator = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [isLoadingSaved, setIsLoadingSaved] = useState(false);
     const [savedGrids, setSavedGrids] = useState([]);
+    
+    // Dialog states
+    const [alertDialog, setAlertDialog] = useState({ isOpen: false, message: '', title: '' });
+    const [deleteConfirmDialog, setDeleteConfirmDialog] = useState({ isOpen: false, grid: null });
 
     const printRef = useRef();
     const fileInputRef = useRef();
@@ -506,14 +511,14 @@ const RoomGridGenerator = () => {
                 // Get selected days
                 const selectedDays = Array.from(form.querySelectorAll('.day-input:checked')).map(cb => cb.value);
                 if (selectedDays.length === 0) {
-                    alert('Please select at least one day.');
+                    setAlertDialog({ isOpen: true, title: 'Validation Error', message: 'Please select at least one day.' });
                     return;
                 }
                 
                 const startStr = form.querySelector('input.start').value;
                 const endStr = form.querySelector('input.end').value;
                 if (!startStr || !endStr) {
-                    alert('Please enter both start and end times.');
+                    setAlertDialog({ isOpen: true, title: 'Validation Error', message: 'Please enter both start and end times.' });
                     return;
                 }
                 
@@ -544,7 +549,7 @@ const RoomGridGenerator = () => {
                     });
                     form.remove();
                 } catch (err) {
-                    alert('Invalid time format. Please use format like "10:00 am - 10:50 am"');
+                    setAlertDialog({ isOpen: true, title: 'Invalid Time Format', message: 'Please use format like "10:00 am - 10:50 am"' });
                 }
             }
         };
@@ -613,17 +618,26 @@ const RoomGridGenerator = () => {
 
     const deleteSavedGrid = async (grid) => {
         if (!grid) return;
-        const confirmDelete = window.confirm('Delete this saved grid?');
-        if (!confirmDelete) return;
+        setDeleteConfirmDialog({ isOpen: true, grid });
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!deleteConfirmDialog.grid) return;
         try {
-            await deleteDoc(doc(collection(db, 'roomGrids'), grid.id));
-            logDelete(`Room Grid - ${grid.title}`, 'roomGrids', grid.id, grid, 'RoomGridGenerator.jsx - deleteSavedGrid').catch(() => {});
+            await deleteDoc(doc(collection(db, 'roomGrids'), deleteConfirmDialog.grid.id));
+            logDelete(`Room Grid - ${deleteConfirmDialog.grid.title}`, 'roomGrids', deleteConfirmDialog.grid.id, deleteConfirmDialog.grid, 'RoomGridGenerator.jsx - deleteSavedGrid').catch(() => {});
             showMessage('Deleted saved grid.', 'success');
-            setSavedGrids(prev => prev.filter(g => g.id !== grid.id));
+            setSavedGrids(prev => prev.filter(g => g.id !== deleteConfirmDialog.grid.id));
         } catch (err) {
             console.error('Delete failed:', err);
             showMessage('Failed to delete saved grid.');
+        } finally {
+            setDeleteConfirmDialog({ isOpen: false, grid: null });
         }
+    };
+
+    const handleCancelDelete = () => {
+        setDeleteConfirmDialog({ isOpen: false, grid: null });
     };
 
 
@@ -773,6 +787,29 @@ const RoomGridGenerator = () => {
                 onClose={() => setIsExportModalOpen(false)}
                 scheduleTableRef={printRef}
                 title={`${selectedBuilding}-${selectedRoom}-${selectedDayType}-${semester}`}
+            />
+
+            {/* Alert Dialog */}
+            <ConfirmationDialog
+                isOpen={alertDialog.isOpen}
+                title={alertDialog.title}
+                message={alertDialog.message}
+                type="warning"
+                confirmText="OK"
+                onConfirm={() => setAlertDialog({ isOpen: false, message: '', title: '' })}
+                onCancel={() => setAlertDialog({ isOpen: false, message: '', title: '' })}
+            />
+
+            {/* Delete Confirmation Dialog */}
+            <ConfirmationDialog
+                isOpen={deleteConfirmDialog.isOpen}
+                title="Delete Saved Grid"
+                message={`Are you sure you want to delete "${deleteConfirmDialog.grid?.title}"? This action cannot be undone.`}
+                type="danger"
+                confirmText="Delete"
+                cancelText="Cancel"
+                onConfirm={handleConfirmDelete}
+                onCancel={handleCancelDelete}
             />
 
             <div className="university-card mt-8">

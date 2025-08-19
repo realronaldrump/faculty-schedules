@@ -295,6 +295,17 @@ const RoomGridGenerator = () => {
                 <p className="university-subtitle">Upload a CLSS export CSV to generate printable room schedules.</p>
             </div>
 
+            <div className="university-card mb-8">
+                <div className="university-card-content">
+                    <h3 className="text-lg font-semibold text-baylor-green mb-2">Instructions</h3>
+                    <ul className="list-disc list-inside text-gray-700 space-y-1 text-sm">
+                        <li>Currently, this tool requires a CSV export from CLSS.</li>
+                        <li>In CLSS: select the semester, choose the HSD department, and export the entire CSV with all fields selected. The app will handle the rest.</li>
+                        <li><strong>Coming Soon:</strong> This tool will be integrated directly with the dashboard's data, removing the need for manual CSV uploads.</li>
+                    </ul>
+                </div>
+            </div>
+
             {message.text && (
                 <div className={`border px-4 py-3 rounded-lg relative mb-6 ${message.type === 'success' ? 'bg-green-100 border-green-400 text-green-700' : 'bg-red-100 border-red-400 text-red-700'}`} role="alert">
                     <strong className="font-bold">Notice:</strong>

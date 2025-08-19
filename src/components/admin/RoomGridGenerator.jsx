@@ -317,9 +317,14 @@ const RoomGridGenerator = () => {
             });
         }).join('');
 
+        const vLines = Object.values(dayToColumn).slice(0, -1).map(col =>
+            `<div style="grid-column: ${col}; grid-row: 1 / -1; border-right: 1px solid #e5e7eb;"></div>`
+        ).join('');
+
         const grid = `
-            <div class="weekly-grid" style="--rows:${slots}; --rowHeight: 12px;">
+            <div class="weekly-grid" style="--rows:${slots}; --rowHeight: 15px;">
                 ${hourMarks.join('')}
+                ${vLines}
                 ${blocks}
                 <div class="day-header" style="grid-column: 2;">Monday</div>
                 <div class="day-header" style="grid-column: 3;">Tuesday</div>
@@ -330,8 +335,10 @@ const RoomGridGenerator = () => {
         `;
 
         const header = `
-            <div class="weekly-title" contenteditable="true">${selectedBuilding.replace(' Bldg','').toUpperCase()} ${selectedRoom} Schedule</div>
-            <div class="weekly-subtitle">${semester}</div>
+            <div class="weekly-header">
+                <div class="text-2xl font-bold" contenteditable="true">${selectedBuilding.replace(' Bldg','').toUpperCase()} ${selectedRoom} Schedule</div>
+                <div class="text-md" contenteditable="true">${semester}</div>
+            </div>
         `;
 
         setScheduleHtml(`
@@ -611,68 +618,72 @@ const RoomGridGenerator = () => {
                     .schedule-table { font-size: 10pt; }
                     .schedule-table th, .schedule-table td { padding: 8pt; }
                 }
-
-                /* Weekly grid layout */
-                .weekly-sheet { padding-top: 0.25in; }
-                .weekly-title { 
-                    color: var(--baylor-green); 
-                    font-weight: 800; 
-                    font-size: 18px; 
-                    text-align: center; 
-                    margin-bottom: 4px; 
+ 
+                 /* Weekly grid layout */
+                .weekly-sheet { padding: 0.4in; padding-top: 0; }
+                .weekly-header {
+                    background-color: var(--baylor-green);
+                    color: #ffffff;
+                    text-align: center;
+                    border-bottom: 3px solid var(--baylor-gold);
+                    padding: 14px;
+                    margin: 0 -0.4in 10px -0.4in;
                 }
-                .weekly-subtitle { 
-                    text-align: center; 
-                    color: #374151; 
-                    font-size: 12px; 
-                    margin-bottom: 10px; 
-                }
+                .weekly-header .text-2xl { font-size: 18px; letter-spacing: 0.5px; }
+                .weekly-header .text-md { font-size: 12px; opacity: 0.9; }
                 .weekly-grid { 
                     display: grid; 
-                    grid-template-columns: 1.0in repeat(5, 1fr);
+                    grid-template-columns: 0.75in repeat(5, 1fr);
                     grid-template-rows: auto repeat(var(--rows), var(--rowHeight));
                     position: relative; 
                     gap: 0; 
-                    border: 2px solid var(--baylor-green);
+                    border: 1px solid #e5e7eb;
                 }
                 .weekly-grid .day-header {
                     position: sticky; top: 0; z-index: 2;
                     grid-row: 1;
                     background: var(--baylor-green);
                     color: #fff;
+                    font-size: 12px;
+                    font-weight: 700;
                     text-align: center;
-                    padding: 6px 4px;
-                    border-left: 1px solid rgba(255,255,255,0.2);
+                    padding: 8px 4px;
+                    border-bottom: 2px solid var(--baylor-gold);
                 }
                 .weekly-grid .hour-label { 
                     font-weight: 700; 
+                    font-size: 11px;
                     color: var(--baylor-green); 
                     display: flex; 
                     align-items: flex-start; 
-                    justify-content: flex-start; 
-                    padding: 2px 6px; 
+                    justify-content: center; 
+                    text-align: center;
+                    padding: 4px 2px; 
                     border-top: 1px solid #e5e7eb; 
+                    border-right: 1px solid #e5e7eb;
                     background: #f7faf7; 
                 }
                 .weekly-grid .hour-line { 
                     border-top: 1px solid #e5e7eb; 
                 }
                 .weekly-grid .class-block { 
-                    background: #ffffff; 
-                    border: 2px solid #1f2937; 
-                    border-radius: 6px; 
-                    padding: 4px 6px; 
-                    margin: 2px; 
+                    background-color: #f0fff0;
+                    border: 1px solid var(--baylor-green);
+                    border-left: 3px solid var(--baylor-green);
+                    border-radius: 4px;
+                    padding: 3px 5px; 
+                    margin: 1px 2px; 
                     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
                     display: flex; 
                     flex-direction: column; 
-                    gap: 2px; 
+                    gap: 1px; 
                     overflow: hidden;
                     word-break: break-word;
+                    font-size: 11px;
                 }
-                .weekly-grid .class-title { font-weight: 800; color: var(--baylor-green); font-size: 12px; line-height: 1.1; }
-                .weekly-grid .class-instructor { font-size: 10px; color: #374151; line-height: 1.1; }
-                .weekly-grid .class-time { font-size: 10px; color: #111827; line-height: 1.1; }
+                .weekly-grid .class-title { font-weight: 700; color: var(--baylor-green); font-size: 11px; line-height: 1.2; }
+                .weekly-grid .class-instructor { font-size: 10px; color: #374151; line-height: 1.2; }
+                .weekly-grid .class-time { font-size: 9px; color: #111827; line-height: 1.2; }
             `}</style>
         </div>
     );

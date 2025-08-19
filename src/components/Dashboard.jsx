@@ -42,7 +42,7 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
       title: 'Schedule Group Meeting',
       description: 'Find available times for multiple faculty members',
       icon: Users,
-      action: () => onNavigate('scheduling/group-meetings'),
+              action: () => onNavigate('admin-tools/group-meeting-scheduler'),
       color: 'bg-blue-600',
       textColor: 'text-blue-600'
     },

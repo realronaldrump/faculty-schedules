@@ -3,7 +3,6 @@ import { ChevronDown, ChevronRight, Menu, X, Home, Calendar, Users, BarChart3, S
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: Home },
-  { id: 'group-meetings', label: 'Group Meetings', icon: Calendar },
   { id: 'individual-availability', label: 'Individual Availability', icon: User },
   { id: 'room-schedules', label: 'Room Schedules', icon: Calendar },
   { id: 'faculty-schedules', label: 'Faculty Schedules', icon: Calendar },

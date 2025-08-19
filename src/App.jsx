@@ -214,7 +214,6 @@ function App() {
       icon: Calendar,
       children: [
         { id: 'faculty-schedules', label: 'Faculty Schedules', path: 'scheduling/faculty-schedules' },
-        { id: 'group-meetings', label: 'Group Meetings', path: 'scheduling/group-meetings' },
         { id: 'individual-availability', label: 'Individual Availability', path: 'scheduling/individual-availability' },
         { id: 'room-schedules', label: 'Room Schedules', path: 'scheduling/room-schedules' },
         { id: 'student-schedules', label: 'Student Worker Schedules', path: 'scheduling/student-schedules' }
@@ -258,7 +257,8 @@ function App() {
       label: 'Admin Tools',
       icon: Wrench,
       children: [
-        { id: 'room-grid-generator', label: 'Room Grid Generator', path: 'admin-tools/room-grid-generator' }
+        { id: 'room-grid-generator', label: 'Room Grid Generator', path: 'admin-tools/room-grid-generator' },
+        { id: 'group-meeting-scheduler', label: 'Group Meeting Scheduler', path: 'admin-tools/group-meeting-scheduler' }
       ]
     }
   ];
@@ -1429,7 +1429,7 @@ function App() {
         return <Dashboard {...pageProps} />;
       case 'scheduling/faculty-schedules':
         return <FacultySchedules {...pageProps} />;
-      case 'scheduling/group-meetings':
+      case 'admin-tools/group-meeting-scheduler':
         return <GroupMeetings {...pageProps} />;
       case 'scheduling/individual-availability':
         return <IndividualAvailability {...pageProps} />;

@@ -730,10 +730,6 @@ const RoomGridGenerator = () => {
                             <SaveIcon className="w-4 h-4 mr-2" />
                             { isSaving ? 'Saving...' : 'Save Grid' }
                         </button>
-                        <button onClick={() => setIsExportModalOpen(true)} className="btn-secondary" disabled={!scheduleHtml}>
-                            <Download className="w-4 h-4 mr-2" />
-                            Export
-                        </button>
                     </div>
                 </div>
             </div>
@@ -818,6 +814,14 @@ const RoomGridGenerator = () => {
 
             <div className="university-card mt-8">
                 <div className="university-card-content min-h-[400px]">
+                    {scheduleHtml && (
+                        <div className="flex justify-end mb-4">
+                            <button onClick={() => setIsExportModalOpen(true)} className="btn-secondary">
+                                <Download className="w-4 h-4 mr-2" />
+                                Export
+                            </button>
+                        </div>
+                    )}
                      {isProcessing ? (
                         <div className="text-center text-gray-500 flex flex-col items-center justify-center h-full">
                             <p>Processing file...</p>

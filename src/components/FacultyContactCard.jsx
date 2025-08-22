@@ -3,6 +3,9 @@ import { X, Mail, Phone, Building, BookOpen, Clock, GraduationCap, User } from '
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 
+// Simple in-memory cache to avoid re-fetching schedules between openings
+const scheduleCache = new Map();
+
 const formatPhoneNumber = (phoneStr) => {
     if (!phoneStr) return '-';
     const cleaned = ('' + phoneStr).replace(/\D/g, '');
@@ -15,7 +18,7 @@ const formatPhoneNumber = (phoneStr) => {
     return phoneStr;
 };
 
-const FacultyContactCard = ({ person, faculty, onClose, personType = 'faculty', scheduleData = [] }) => {
+const FacultyContactCard = ({ person, faculty, onClose, personType = 'faculty' }) => {
     // Use either person or faculty prop (for backwards compatibility)
     const contactPerson = person || faculty;
 
@@ -43,13 +46,22 @@ const FacultyContactCard = ({ person, faculty, onClose, personType = 'faculty', 
         return parsed || t;
     };
 
-    // Load schedules directly from Firestore when no courses are embedded and no scheduleData provided
+    // Load schedules directly from Firestore when no courses are embedded
     useEffect(() => {
         let cancelled = false;
-        const shouldFetch = personType !== 'student' && (!Array.isArray(contactPerson.courses) || contactPerson.courses.length === 0) && (!Array.isArray(scheduleData) || scheduleData.length === 0);
+        const shouldFetch = personType !== 'student' && (!Array.isArray(contactPerson.courses) || contactPerson.courses.length === 0);
         const load = async () => {
             try {
                 setLoadingSchedules(true);
+                const cacheKey = contactPerson?.id ? `id:${contactPerson.id}` : (contactPerson?.name ? `name:${contactPerson.name}` : null);
+                if (cacheKey && scheduleCache.has(cacheKey)) {
+                    const cached = scheduleCache.get(cacheKey);
+                    if (!cancelled) {
+                        setExternalSchedules(cached);
+                        setLoadingSchedules(false);
+                    }
+                    return;
+                }
                 const schedulesRef = collection(db, COLLECTIONS.SCHEDULES);
                 const results = [];
                 // Prefer id-based match when available
@@ -64,6 +76,7 @@ const FacultyContactCard = ({ person, faculty, onClose, personType = 'faculty', 
                     const snapByName = await getDocs(qByName);
                     snapByName.forEach(doc => results.push({ id: doc.id, ...doc.data() }));
                 }
+                if (cacheKey) scheduleCache.set(cacheKey, results);
                 if (!cancelled) setExternalSchedules(results);
             } catch (err) {
                 console.warn('Failed to load schedules for contact card:', err);
@@ -74,20 +87,13 @@ const FacultyContactCard = ({ person, faculty, onClose, personType = 'faculty', 
         };
         if (shouldFetch) load();
         return () => { cancelled = true; };
-    }, [contactPerson?.id, contactPerson?.name, contactPerson?.courses, personType, scheduleData]);
+    }, [contactPerson?.id, contactPerson?.name, contactPerson?.courses, personType]);
 
-    // Build the source schedules: embedded > provided prop > fetched
+    // Build the source schedules: embedded > fetched
     const sourceSchedules = useMemo(() => {
         if (Array.isArray(contactPerson.courses) && contactPerson.courses.length > 0) return contactPerson.courses;
-        if (Array.isArray(scheduleData) && scheduleData.length > 0) {
-            const facultyName = contactPerson?.name || '';
-            return scheduleData.filter(s => {
-                const instructorName = s.instructor ? `${s.instructor.firstName || ''} ${s.instructor.lastName || ''}`.trim() : (s.instructorName || s.Instructor || '');
-                return instructorName === facultyName || (contactPerson?.id && s.instructorId === contactPerson.id);
-            });
-        }
         return externalSchedules;
-    }, [contactPerson, scheduleData, externalSchedules]);
+    }, [contactPerson, externalSchedules]);
 
     // Normalize, group, and sort courses by term for consistent display
     const normalizedCourses = useMemo(() => {
@@ -197,6 +203,12 @@ const FacultyContactCard = ({ person, faculty, onClose, personType = 'faculty', 
                         <Building size={18} className="text-baylor-green mr-4" />
                         <span className="text-gray-700">{contactPerson.office || 'Not specified'}</span>
                     </div>
+                    {personType !== 'student' && (
+                        <div className="flex items-center justify-center gap-2 text-sm text-baylor-green">
+                            <BookOpen size={16} />
+                            <span>{normalizedCourses.length} course{normalizedCourses.length !== 1 ? 's' : ''}</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Courses Section - only for faculty/adjunct */}

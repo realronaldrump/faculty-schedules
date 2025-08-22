@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { MapPin, Calendar, Clock, Search, Grid, List, Filter } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { MapPin, Calendar, Clock, Search, Grid, List, Filter, Building2, X, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
 
 const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate }) => {
@@ -8,10 +8,35 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
   const [selectedRoom, setSelectedRoom] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
+  const [selectedBuilding, setSelectedBuilding] = useState('');
+  const [showOnlyInUse, setShowOnlyInUse] = useState(false);
+  const [density, setDensity] = useState('comfortable'); // 'comfortable' | 'compact'
+  const [sortBy, setSortBy] = useState('room'); // 'room' | 'sessions' | 'utilization'
+  const [nowMinutes, setNowMinutes] = useState(() => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  });
 
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
 
   // Utility functions
+  const getBuildingFromRoom = (room) => {
+    if (!room) return '';
+    const trimmed = room.trim();
+    if (!trimmed) return '';
+    const spaceIdx = trimmed.indexOf(' ');
+    if (spaceIdx > 0) return trimmed.slice(0, spaceIdx);
+    const match = trimmed.match(/^[A-Za-z]+/);
+    return match ? match[0] : '';
+  };
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      setNowMinutes(now.getHours() * 60 + now.getMinutes());
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
   const parseTime = (timeStr) => {
     if (!timeStr) return null;
     const cleaned = timeStr.toLowerCase().replace(/\s+/g, '');
@@ -55,11 +80,22 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   }, [scheduleData]);
 
+  // Building options parsed from rooms
+  const buildingOptions = useMemo(() => {
+    const buildings = new Set();
+    uniqueRooms.forEach(room => {
+      const b = getBuildingFromRoom(room);
+      if (b) buildings.add(b);
+    });
+    return Array.from(buildings).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [uniqueRooms]);
+
   // Filter rooms based on search
-  const filteredRooms = useMemo(() => 
-    uniqueRooms.filter(room => room.toLowerCase().includes(searchTerm.toLowerCase())),
-    [uniqueRooms, searchTerm]
-  );
+  const filteredRooms = useMemo(() => {
+    const bySearch = uniqueRooms.filter(room => room.toLowerCase().includes(searchTerm.toLowerCase()));
+    const byBuilding = selectedBuilding ? bySearch.filter(room => getBuildingFromRoom(room) === selectedBuilding) : bySearch;
+    return byBuilding;
+  }, [uniqueRooms, searchTerm, selectedBuilding]);
 
   // Calculate daily room schedules
   const dailyRoomSchedules = useMemo(() => {
@@ -110,6 +146,34 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
     return stats;
   }, [dailyRoomSchedules]);
 
+  // Compute final visible rooms considering toggles and sorting
+  const visibleRooms = useMemo(() => {
+    const baseRooms = Object.keys(dailyRoomSchedules);
+    const inUseFiltered = showOnlyInUse ? baseRooms.filter(r => (dailyRoomSchedules[r] || []).length > 0) : baseRooms;
+    const sorted = [...inUseFiltered].sort((a, b) => {
+      if (sortBy === 'sessions') {
+        return (roomStats[b]?.sessions || 0) - (roomStats[a]?.sessions || 0) || a.localeCompare(b, undefined, { numeric: true });
+      }
+      if (sortBy === 'utilization') {
+        return (roomStats[b]?.utilization || 0) - (roomStats[a]?.utilization || 0) || a.localeCompare(b, undefined, { numeric: true });
+      }
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
+    return sorted;
+  }, [dailyRoomSchedules, roomStats, showOnlyInUse, sortBy]);
+
+  const visibleStats = useMemo(() => {
+    const statsForVisible = visibleRooms.map(r => roomStats[r]).filter(Boolean);
+    const totals = statsForVisible.reduce((acc, s) => {
+      acc.sessions += s.sessions;
+      acc.hours += s.hours;
+      acc.utilizationSum += s.utilization;
+      return acc;
+    }, { sessions: 0, hours: 0, utilizationSum: 0 });
+    const avgUtil = statsForVisible.length > 0 ? (totals.utilizationSum / statsForVisible.length) : 0;
+    return { count: visibleRooms.length, sessions: totals.sessions, hours: totals.hours, avgUtilization: avgUtil };
+  }, [visibleRooms, roomStats]);
+
   const handleShowContactCard = (facultyName) => {
     const faculty = facultyData.find(f => f.name === facultyName);
     if (faculty) {
@@ -123,6 +187,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
     const dayEnd = 18 * 60; // 6:00 PM
     const totalMinutes = dayEnd - dayStart;
     const timeLabels = Array.from({length: (dayEnd - dayStart) / 60 + 1}, (_, i) => dayStart + i * 60);
+    const rowHeight = density === 'compact' ? '44px' : '60px';
 
     return (
       <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
@@ -146,12 +211,18 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
           </div>
           
           {/* Room Rows */}
-          {Object.keys(dailyRoomSchedules).map(room => (
-            <div key={room} className="relative flex items-center border-t border-gray-200 hover:bg-gray-50" style={{ height: '60px' }}>
+          {visibleRooms.map(room => (
+            <div key={room} className="relative flex items-center border-t border-gray-200 hover:bg-gray-50" style={{ height: rowHeight }}>
               <div className="w-40 flex-shrink-0 font-medium p-3 text-sm text-baylor-green border-r border-gray-200">
                 <div className="font-semibold">{room}</div>
                 <div className="text-xs text-gray-500">
                   {roomStats[room]?.sessions || 0} sessions • {(roomStats[room]?.hours || 0).toFixed(1)}h
+                </div>
+                <div className="mt-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-baylor-green"
+                    style={{ width: `${Math.min(100, Math.max(0, roomStats[room]?.utilization || 0))}%` }}
+                  />
                 </div>
               </div>
               
@@ -164,6 +235,13 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
                     className="absolute top-0 bottom-0 w-px bg-gray-200"
                   ></div>
                 ))}
+                {/* Current time indicator */}
+                {nowMinutes >= dayStart && nowMinutes <= dayEnd && (
+                  <div
+                    className="absolute top-0 bottom-0 w-0.5 bg-red-500/70"
+                    style={{ left: `${((nowMinutes - dayStart) / totalMinutes) * 100}%` }}
+                  />
+                )}
                 
                 {/* Scheduled Items */}
                 {dailyRoomSchedules[room].map(item => {
@@ -183,10 +261,10 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
                         position: 'absolute', 
                         left: `${left}%`, 
                         width: `${width}%`, 
-                        top: '6px', 
-                        bottom: '6px' 
+                        top: density === 'compact' ? '4px' : '6px', 
+                        bottom: density === 'compact' ? '4px' : '6px' 
                       }}
-                      className="px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green shadow-sm transition-all cursor-pointer group"
+                      className={`px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md shadow-sm transition-all cursor-pointer group ${nowMinutes >= start && nowMinutes <= end ? 'bg-baylor-gold text-baylor-green ring-2 ring-baylor-gold/40' : 'bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green'}`}
                     >
                       <div className="font-bold truncate">{item.Course}</div>
                       <button
@@ -212,7 +290,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
   // List view component
   const ListView = () => (
     <div className="space-y-4">
-      {Object.keys(dailyRoomSchedules).map(room => (
+      {visibleRooms.map(room => (
         <div key={room} className="bg-white rounded-lg border border-gray-200 shadow-sm">
           <div className="bg-baylor-green/5 px-6 py-4 border-b border-gray-200">
             <div className="flex items-center justify-between">
@@ -230,7 +308,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
             {dailyRoomSchedules[room].length > 0 ? (
               <div className="space-y-3">
                 {dailyRoomSchedules[room].map((session, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                  <div key={index} className={`flex items-center justify-between ${density === 'compact' ? 'p-3' : 'p-4'} bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors`}>
                     <div className="flex-1">
                       <div className="flex items-center space-x-4">
                         <div className="font-semibold text-baylor-green">
@@ -271,6 +349,15 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
                 <p className="text-sm">No classes scheduled</p>
               </div>
             )}
+            <div className="mt-4">
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-baylor-green"
+                  style={{ width: `${Math.min(100, Math.max(0, roomStats[room]?.utilization || 0))}%` }}
+                />
+              </div>
+              <div className="mt-1 text-xs text-gray-500 text-right">{(roomStats[room]?.utilization || 0).toFixed(0)}% of day used</div>
+            </div>
           </div>
         </div>
       ))}
@@ -287,68 +374,166 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
 
       {/* Controls */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-          {/* Day Selector */}
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Select Day</label>
-            <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
-              {Object.entries(dayNames).map(([dayCode, dayName]) => (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-baylor-green">
+              <SlidersHorizontal className="h-4 w-4" />
+              <span className="font-medium">Filters & View</span>
+            </div>
+            {(selectedRoom || selectedBuilding || searchTerm || showOnlyInUse || sortBy !== 'room' || density !== 'comfortable') && (
+              <button
+                onClick={() => { setSelectedRoom(''); setSelectedBuilding(''); setSearchTerm(''); setShowOnlyInUse(false); setSortBy('room'); setDensity('comfortable'); }}
+                className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900"
+              >
+                <X className="mr-1 h-4 w-4" /> Clear
+              </button>
+            )}
+          </div>
+          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+            {/* Day Selector */}
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Select Day</label>
+              <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+                {Object.entries(dayNames).map(([dayCode, dayName]) => (
+                  <button
+                    key={dayCode}
+                    onClick={() => setRoomScheduleDay(dayCode)}
+                    className={`px-4 py-2 text-sm font-medium rounded-md transition-colors flex-1 ${
+                      roomScheduleDay === dayCode 
+                        ? 'bg-baylor-green text-white shadow' 
+                        : 'text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {dayName}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Room Filter */}
+            <div className="flex-1 max-w-xs">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Filter Rooms</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                <input
+                  type="text"
+                  placeholder="Search rooms..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+                />
+              </div>
+            </div>
+
+            {/* Building Filter */}
+            <div className="flex-1 max-w-xs">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Building</label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                <select
+                  value={selectedBuilding}
+                  onChange={(e) => setSelectedBuilding(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white"
+                >
+                  <option value="">All buildings</option>
+                  {buildingOptions.map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Room Selector */}
+            <div className="flex-1 max-w-xs">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Room</label>
+              <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                <select
+                  value={selectedRoom}
+                  onChange={(e) => setSelectedRoom(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white"
+                >
+                  <option value="">All rooms</option>
+                  {(selectedBuilding ? filteredRooms : uniqueRooms).map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* View Mode Toggle */}
+            <div className="flex-1 max-w-xs">
+              <label className="block text-sm font-medium text-gray-700 mb-2">View Mode</label>
+              <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
                 <button
-                  key={dayCode}
-                  onClick={() => setRoomScheduleDay(dayCode)}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors flex-1 ${
-                    roomScheduleDay === dayCode 
+                  onClick={() => setViewMode('timeline')}
+                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors flex items-center flex-1 justify-center ${
+                    viewMode === 'timeline' 
                       ? 'bg-baylor-green text-white shadow' 
                       : 'text-gray-600 hover:bg-gray-200'
                   }`}
                 >
-                  {dayName}
+                  <Grid className="mr-1" size={16} />
+                  Timeline
                 </button>
-              ))}
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors flex items-center flex-1 justify-center ${
+                    viewMode === 'list' 
+                      ? 'bg-baylor-green text-white shadow' 
+                      : 'text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  <List className="mr-1" size={16} />
+                  List
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Room Filter */}
-          <div className="flex-1 max-w-xs">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Filter Rooms</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-              <input
-                type="text"
-                placeholder="Search rooms..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
-              />
+          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+            {/* Only In Use Toggle */}
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium text-gray-700">Only rooms in use</label>
+              <button
+                onClick={() => setShowOnlyInUse(v => !v)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${showOnlyInUse ? 'bg-baylor-green' : 'bg-gray-300'}`}
+                aria-pressed={showOnlyInUse}
+              >
+                <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${showOnlyInUse ? 'translate-x-5' : 'translate-x-1'}`} />
+              </button>
             </div>
-          </div>
 
-          {/* View Mode Toggle */}
-          <div className="flex-1 max-w-xs">
-            <label className="block text-sm font-medium text-gray-700 mb-2">View Mode</label>
-            <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
-              <button
-                onClick={() => setViewMode('timeline')}
-                className={`px-3 py-2 text-sm font-medium rounded-md transition-colors flex items-center flex-1 justify-center ${
-                  viewMode === 'timeline' 
-                    ? 'bg-baylor-green text-white shadow' 
-                    : 'text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                <Grid className="mr-1" size={16} />
-                Timeline
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`px-3 py-2 text-sm font-medium rounded-md transition-colors flex items-center flex-1 justify-center ${
-                  viewMode === 'list' 
-                    ? 'bg-baylor-green text-white shadow' 
-                    : 'text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                <List className="mr-1" size={16} />
-                List
-              </button>
+            {/* Density Toggle */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">Density</label>
+              <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+                <button
+                  onClick={() => setDensity('comfortable')}
+                  className={`px-3 py-1.5 text-sm rounded-md ${density === 'comfortable' ? 'bg-baylor-green text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}
+                >Comfortable</button>
+                <button
+                  onClick={() => setDensity('compact')}
+                  className={`px-3 py-1.5 text-sm rounded-md ${density === 'compact' ? 'bg-baylor-green text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}
+                >Compact</button>
+              </div>
+            </div>
+
+            {/* Sort */}
+            <div className="flex-1 max-w-xs">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+              <div className="relative">
+                <ArrowUpDown className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white"
+                >
+                  <option value="room">Room (A–Z)</option>
+                  <option value="sessions">Sessions (High → Low)</option>
+                  <option value="utilization">Utilization (High → Low)</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -359,30 +544,28 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="text-sm text-gray-600">Rooms Shown</div>
           <div className="text-2xl font-bold text-baylor-green">
-            {Object.keys(dailyRoomSchedules).length}
+            {visibleStats.count}
           </div>
           <div className="text-xs text-gray-500">of {uniqueRooms.length} total</div>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="text-sm text-gray-600">Total Sessions</div>
           <div className="text-2xl font-bold text-baylor-green">
-            {Object.values(dailyRoomSchedules).reduce((sum, sessions) => sum + sessions.length, 0)}
+            {visibleStats.sessions}
           </div>
           <div className="text-xs text-gray-500">on {dayNames[roomScheduleDay]}</div>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="text-sm text-gray-600">Total Hours</div>
           <div className="text-2xl font-bold text-baylor-green">
-            {Object.values(roomStats).reduce((sum, stat) => sum + stat.hours, 0).toFixed(1)}h
+            {visibleStats.hours.toFixed(1)}h
           </div>
           <div className="text-xs text-gray-500">class time</div>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="text-sm text-gray-600">Avg Utilization</div>
           <div className="text-2xl font-bold text-baylor-green">
-            {Object.keys(roomStats).length > 0 
-              ? (Object.values(roomStats).reduce((sum, stat) => sum + stat.utilization, 0) / Object.keys(roomStats).length).toFixed(0)
-              : 0}%
+            {visibleStats.count > 0 ? visibleStats.avgUtilization.toFixed(0) : 0}%
           </div>
           <div className="text-xs text-gray-500">of 9-hour day</div>
         </div>
@@ -401,7 +584,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
           )}
         </div>
 
-        {Object.keys(dailyRoomSchedules).length > 0 ? (
+        {visibleRooms.length > 0 ? (
           viewMode === 'timeline' ? <TimelineView /> : <ListView />
         ) : (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">

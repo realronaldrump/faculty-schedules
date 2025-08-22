@@ -11,7 +11,7 @@ const tabs = [
   { id: 'faculty', label: 'Faculty', icon: GraduationCap, description: 'Full-time faculty members' },
   { id: 'staff', label: 'Staff', icon: UserCheck, description: 'Administrative and support staff' },
   { id: 'adjunct', label: 'Adjunct', icon: UserPlus, description: 'Part-time and adjunct faculty' },
-  { id: 'student', label: 'Student', icon: User, description: 'Student workers and assistants' },
+  { id: 'student', label: 'Student Workers', icon: User, description: 'Departmental student workers' },
 ];
 
 const PeopleDirectory = (props) => {

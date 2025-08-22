@@ -488,44 +488,54 @@ const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
                   {searchTerm ? 'No faculty found matching your search.' : (!showAdjuncts ? 'No full-time faculty available.' : 'No faculty available.')}
                 </div>
               ) : (
-                filteredInstructors.map(professor => (
-                  <div
-                    key={professor}
-                    className={`p-3 rounded-lg border transition-all flex justify-between items-center ${
-                      selectedProfessors.includes(professor)
-                        ? 'bg-baylor-green/10 border-baylor-green text-baylor-green'
-                        : 'bg-white border-gray-200'
-                    }`}
-                  >
-                    <button onClick={() => toggleProfessor(professor)} className="flex items-center flex-grow text-left">
-                      <div
-                        className={`w-3 h-3 rounded-full mr-3 ${
-                          selectedProfessors.includes(professor)
-                            ? 'bg-baylor-green'
-                            : 'bg-gray-300'
-                        }`}
-                      ></div>
-                      <span
-                        className="text-sm font-medium hover:underline cursor-pointer"
+                filteredInstructors.map(professor => {
+                  const faculty = facultyData.find(f => f.name === professor);
+                  const isAdjunct = faculty?.isAdjunct;
+                  
+                  return (
+                    <div
+                      key={professor}
+                      className={`p-3 rounded-lg border transition-all flex justify-between items-center ${
+                        selectedProfessors.includes(professor)
+                          ? 'bg-baylor-green/10 border-baylor-green text-baylor-green'
+                          : isAdjunct
+                            ? 'bg-gray-50 border-gray-200'
+                            : 'bg-white border-gray-200'
+                      }`}
+                    >
+                      <button onClick={() => toggleProfessor(professor)} className="flex items-center flex-grow text-left">
+                        <div
+                          className={`w-3 h-3 rounded-full mr-3 ${
+                            selectedProfessors.includes(professor)
+                              ? 'bg-baylor-green'
+                              : 'bg-gray-300'
+                          }`}
+                        ></div>
+                        <span
+                          className="text-sm font-medium hover:underline cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleShowContactCard(professor);
+                          }}
+                        >
+                          {professor}
+                          {isAdjunct && (
+                            <span className="ml-1 text-xs text-gray-500">(adjunct)</span>
+                          )}
+                        </span>
+                      </button>
+                      <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleShowContactCard(professor);
+                          // Could navigate to individual schedule view
                         }}
+                        className="p-1 rounded-full hover:bg-baylor-green/20"
                       >
-                        {professor}
-                      </span>
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Could navigate to individual schedule view
-                      }}
-                      className="p-1 rounded-full hover:bg-baylor-green/20"
-                    >
-                      <Eye size={16} className="text-baylor-green" />
-                    </button>
-                  </div>
-                ))
+                        <Eye size={16} className="text-baylor-green" />
+                      </button>
+                    </div>
+                  );
+                })
               )}
             </div>
 

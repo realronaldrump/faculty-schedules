@@ -169,7 +169,7 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
         </div>
         <div className="flex items-center mt-6 text-white/90">
           <Calendar className="w-5 h-5 mr-2" />
-          <span className="font-medium">{selectedSemester || 'Fall 2025'} Semester</span>
+          <span className="font-medium">{selectedSemester || 'No semester selected'} Semester</span>
         </div>
       </div>
 

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { User, Calendar, Clock, Search, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
 
-const IndividualAvailability = ({ scheduleData, facultyData, rawScheduleData }) => {
+const IndividualAvailability = ({ scheduleData, facultyData, rawScheduleData, selectedSemester }) => {
   const [selectedIndividual, setSelectedIndividual] = useState('');
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -347,7 +347,7 @@ const IndividualAvailability = ({ scheduleData, facultyData, rawScheduleData }) 
                   </button>
                   's Weekly Schedule
                 </h3>
-                <p className="text-gray-600 mt-2">Schedule and availability for Fall 2025</p>
+                <p className="text-gray-600 mt-2">Schedule and availability for {selectedSemester || 'selected semester'}</p>
               </div>
               <button
                 onClick={() => handleShowContactCard(selectedIndividual)}

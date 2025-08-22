@@ -84,9 +84,9 @@ function App() {
   
   // Semester Selection State with localStorage persistence
   const [selectedSemester, setSelectedSemester] = useState(() => {
-    return localStorage.getItem('selectedSemester') || 'Fall 2025';
+    return localStorage.getItem('selectedSemester') || '';
   });
-  const [availableSemesters, setAvailableSemesters] = useState(['Fall 2025']);
+  const [availableSemesters, setAvailableSemesters] = useState([]);
   const [showSemesterDropdown, setShowSemesterDropdown] = useState(false);
   
   // Raw data from Firebase
@@ -141,7 +141,7 @@ function App() {
 
 
 
-  // Extract available semesters from schedule data
+  // Extract available semesters from schedule data and auto-select most recent
   const updateAvailableSemesters = (scheduleData) => {
     const semesters = new Set();
     scheduleData.forEach(schedule => {
@@ -150,39 +150,36 @@ function App() {
       }
     });
     
-    const semesterList = Array.from(semesters).sort((a, b) => {
-      // Custom sort to put most recent semester first
-      // Assumes format like "Fall 2025", "Spring 2026", etc.
-      const [aTermType, aYear] = a.split(' ');
-      const [bTermType, bYear] = b.split(' ');
-      
-      if (aYear !== bYear) {
-        return parseInt(bYear) - parseInt(aYear); // Newer years first
-      }
-      
-      // For same year, order: Fall > Summer > Spring
-      const termOrder = { 'Fall': 3, 'Summer': 2, 'Spring': 1 };
-      return (termOrder[bTermType] || 0) - (termOrder[aTermType] || 0);
-    });
-    
-    console.log('🎓 Available semesters updated:', semesterList);
-    
-    const previousSemesters = availableSemesters;
-    setAvailableSemesters(semesterList.length > 0 ? semesterList : ['Fall 2025']);
-    
-    // Only auto-select if current selection isn't available
-    if (semesterList.length > 0 && !semesterList.includes(selectedSemester)) {
-      console.log(`🎓 Auto-selecting most recent semester: ${semesterList[0]}`);
-      setSelectedSemester(semesterList[0]);
-      return; // Exit early to avoid double-selection
+    if (semesters.size === 0) {
+      setAvailableSemesters([]);
+      return;
     }
     
-    // If we have new semesters that weren't in the previous list, auto-select the newest one
-    const newSemesters = semesterList.filter(semester => !previousSemesters.includes(semester));
-    if (newSemesters.length > 0 && previousSemesters.length > 0) { // Only if we already had semesters
-      const newestSemester = newSemesters[0]; // Already sorted, so first is newest
-      console.log(`🎓 Auto-selecting newly imported semester: ${newestSemester}`);
-      setSelectedSemester(newestSemester);
+    const semesterList = Array.from(semesters).sort((a, b) => {
+      // Simple sort: extract year and term, sort by year first, then by term
+      const [aTerm, aYear] = a.split(' ');
+      const [bTerm, bYear] = b.split(' ');
+      
+      const aYearNum = parseInt(aYear);
+      const bYearNum = parseInt(bYear);
+      
+      if (aYearNum !== bYearNum) {
+        return bYearNum - aYearNum; // Newer years first
+      }
+      
+      // For same year, Fall is most recent, then Summer, then Spring
+      const termOrder = { 'Fall': 3, 'Summer': 2, 'Spring': 1 };
+      return (termOrder[bTerm] || 0) - (termOrder[aTerm] || 0);
+    });
+    
+    console.log('🎓 Available semesters:', semesterList);
+    setAvailableSemesters(semesterList);
+    
+    // Always auto-select the most recent semester (first in sorted list)
+    const mostRecentSemester = semesterList[0];
+    if (mostRecentSemester !== selectedSemester) {
+      console.log(`🎓 Auto-selecting most recent semester: ${mostRecentSemester}`);
+      setSelectedSemester(mostRecentSemester);
     }
   };
 

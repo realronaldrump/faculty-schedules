@@ -20,7 +20,9 @@ import FacultyContactCard from './FacultyContactCard';
 const BuildingDirectory = ({ 
   facultyData,
   staffData,
-  showNotification 
+  showNotification,
+  scheduleData,
+  rawScheduleData
 }) => {
   const [selectedPersonForCard, setSelectedPersonForCard] = useState(null);
   const [searchText, setSearchText] = useState('');

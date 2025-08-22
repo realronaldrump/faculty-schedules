@@ -16,7 +16,7 @@ const formatPhoneNumber = (phoneStr) => {
     return phoneStr;
 };
 
-const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaffDelete, programs = [] }) => {
+const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaffDelete, programs = [], rawScheduleData }) => {
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [filterText, setFilterText] = useState('');

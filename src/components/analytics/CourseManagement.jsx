@@ -7,11 +7,13 @@ import { formatChangeForDisplay } from '../../utils/recentChanges';
 const CourseManagement = ({ 
   scheduleData, 
   facultyData, 
+  rawScheduleData, 
   editHistory, 
   recentChanges = [],
   onDataUpdate, 
   onScheduleDelete,
-  onRevertChange
+  onRevertChange,
+  showNotification
 }) => {
   const [editingRowId, setEditingRowId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
@@ -45,6 +47,7 @@ const CourseManagement = ({
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [selectedExportFields, setSelectedExportFields] = useState([]);
+  const [selectedRows, setSelectedRows] = useState(new Set());
 
   const sortedFaculty = useMemo(() => {
     if (!facultyData) return [];

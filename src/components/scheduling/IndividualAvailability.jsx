@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { User, Calendar, Clock, Search, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
 
-const IndividualAvailability = ({ scheduleData, facultyData }) => {
+const IndividualAvailability = ({ scheduleData, facultyData, rawScheduleData }) => {
   const [selectedIndividual, setSelectedIndividual] = useState('');
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);

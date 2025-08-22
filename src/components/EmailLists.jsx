@@ -2,8 +2,9 @@ import React, { useState, useMemo } from 'react';
 import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Copy, Plus, Minus, Settings, UserCog, BookOpen } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import FacultyContactCard from './FacultyContactCard';
+import CustomAlert from './CustomAlert';
 
-const EmailLists = ({ facultyData, staffData, scheduleData = [] }) => {
+const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawScheduleData }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeople, setSelectedPeople] = useState([]);
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);

@@ -1422,7 +1422,8 @@ function App() {
       availableSemesters,
       onSemesterDataImported: loadData,
       pinnedPages,
-      togglePinPage
+      togglePinPage,
+      rawScheduleData,
     };
 
     switch (currentPage) {

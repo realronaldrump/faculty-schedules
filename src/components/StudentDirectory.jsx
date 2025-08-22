@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Edit, Save, X, GraduationCap, Mail, Phone, PhoneOff, Clock, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, Filter, UserCog } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
+import CustomAlert from './CustomAlert';
 
 const formatPhoneNumber = (phoneStr) => {
     if (!phoneStr) return '-';
@@ -14,7 +15,7 @@ const formatPhoneNumber = (phoneStr) => {
     return phoneStr;
 };
 
-const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }) => {
+const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStudentDelete, showNotification }) => {
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [filterText, setFilterText] = useState('');
@@ -933,6 +934,7 @@ const StudentDirectory = ({ studentData = [], onStudentUpdate, onStudentDelete }
               person={selectedStudentForCard}
               onClose={() => setSelectedStudentForCard(null)}
               personType="student"
+              onUpdate={onStudentUpdate}
             />
           </div>
         </div>

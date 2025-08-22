@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { MapPin, Calendar, Clock, Search, Grid, List, Filter } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
 
-const RoomSchedules = ({ scheduleData, facultyData }) => {
+const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate }) => {
   const [roomScheduleDay, setRoomScheduleDay] = useState('M');
   const [viewMode, setViewMode] = useState('timeline'); // 'timeline' or 'list'
   const [selectedRoom, setSelectedRoom] = useState('');

@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
 
-const DepartmentInsights = ({ scheduleData, facultyData, onNavigate, analytics }) => {
+const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analytics, selectedSemester }) => {
   const [showWarning, setShowWarning] = useState(() => localStorage.getItem('insightsWarningDismissed') !== 'true');
   const [facultySort, setFacultySort] = useState({ key: 'totalHours', direction: 'desc' });
   const [roomSort, setRoomSort] = useState({ key: 'hours', direction: 'desc' });

@@ -26,7 +26,8 @@ const ProgramManagement = ({
   facultyData,
   onFacultyUpdate, 
   onStaffUpdate, 
-  showNotification 
+  showNotification,
+  rawScheduleData
 }) => {
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [editingUPD, setEditingUPD] = useState(null);

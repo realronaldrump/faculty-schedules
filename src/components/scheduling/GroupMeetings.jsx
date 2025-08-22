@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, Clock, Users, Calendar, X, CheckCircle, Eye, GraduationCap } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
 
-const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
+const GroupMeetings = ({ scheduleData, facultyData, rawScheduleData, onNavigate }) => {
   const [selectedProfessors, setSelectedProfessors] = useState([]);
   const [meetingDuration, setMeetingDuration] = useState(60);
   const [bufferTime, setBufferTime] = useState(15);

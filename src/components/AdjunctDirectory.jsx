@@ -15,7 +15,7 @@ const formatPhoneNumber = (phoneStr) => {
     return phoneStr;
 };
 
-const AdjunctDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onStaffUpdate, onFacultyDelete, programs = [] }) => {
+const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacultyUpdate, onStaffUpdate, onFacultyDelete, programs = [] }) => {
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [filterText, setFilterText] = useState('');

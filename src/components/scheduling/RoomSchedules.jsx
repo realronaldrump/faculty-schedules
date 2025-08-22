@@ -22,12 +22,12 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
   // Utility functions
   const getBuildingFromRoom = (room) => {
     if (!room) return '';
-    const trimmed = room.trim();
+    const trimmed = room.trim().replace(/\s{2,}/g, ' ');
     if (!trimmed) return '';
-    const spaceIdx = trimmed.indexOf(' ');
-    if (spaceIdx > 0) return trimmed.slice(0, spaceIdx);
-    const match = trimmed.match(/^[A-Za-z]+/);
-    return match ? match[0] : '';
+    // Capture everything before the first token that contains a digit (room number/identifier)
+    const match = trimmed.match(/^(.*?)(?=\s(?:[A-Za-z-]*\d))/);
+    const name = (match && match[1] ? match[1] : trimmed).trim();
+    return name || trimmed.split(' ')[0];
   };
 
   useEffect(() => {
@@ -389,7 +389,8 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
               </button>
             )}
           </div>
-          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+          {/* Row 1: Day selector full width */}
+          <div className="grid grid-cols-1 gap-4">
             {/* Day Selector */}
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-2">Select Day</label>
@@ -409,9 +410,12 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
                 ))}
               </div>
             </div>
+          </div>
 
+          {/* Row 2: Search, Building, Room, View Mode */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
             {/* Room Filter */}
-            <div className="flex-1 max-w-xs">
+            <div className="flex-1 max-w-full">
               <label className="block text-sm font-medium text-gray-700 mb-2">Filter Rooms</label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
@@ -426,7 +430,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
             </div>
 
             {/* Building Filter */}
-            <div className="flex-1 max-w-xs">
+            <div className="flex-1 max-w-full">
               <label className="block text-sm font-medium text-gray-700 mb-2">Building</label>
               <div className="relative">
                 <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
@@ -444,7 +448,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
             </div>
 
             {/* Room Selector */}
-            <div className="flex-1 max-w-xs">
+            <div className="flex-1 max-w-full">
               <label className="block text-sm font-medium text-gray-700 mb-2">Room</label>
               <div className="relative">
                 <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
@@ -462,7 +466,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
             </div>
 
             {/* View Mode Toggle */}
-            <div className="flex-1 max-w-xs">
+            <div className="flex-1 max-w-full">
               <label className="block text-sm font-medium text-gray-700 mb-2">View Mode</label>
               <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
                 <button
@@ -491,7 +495,8 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
             </div>
           </div>
 
-          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+          {/* Row 3: Only-in-use, Density, Sort */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-center">
             {/* Only In Use Toggle */}
             <div className="flex items-center gap-3">
               <label className="text-sm font-medium text-gray-700">Only rooms in use</label>
@@ -520,7 +525,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
             </div>
 
             {/* Sort */}
-            <div className="flex-1 max-w-xs">
+            <div className="flex-1 max-w-full">
               <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
               <div className="relative">
                 <ArrowUpDown className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />

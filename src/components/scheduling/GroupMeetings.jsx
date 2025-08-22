@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Search, Clock, Users, Calendar, X, CheckCircle, Eye } from 'lucide-react';
+import { Search, Clock, Users, Calendar, X, CheckCircle, Eye, GraduationCap } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
 
 const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
@@ -12,6 +12,10 @@ const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [selectedSlotForRoomSearch, setSelectedSlotForRoomSearch] = useState(null);
   const roomModalRef = useRef(null);
+  const [showAdjuncts, setShowAdjuncts] = useState(true);
+  const [isProgramDropdownOpen, setIsProgramDropdownOpen] = useState(false);
+  const [programSearchTerm, setProgramSearchTerm] = useState('');
+  const programDropdownRef = useRef(null);
 
   // Close room modal when clicking outside
   useEffect(() => {
@@ -23,6 +27,30 @@ const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isRoomModalOpen]);
+
+  // Close program dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (isProgramDropdownOpen && programDropdownRef.current && !programDropdownRef.current.contains(event.target)) {
+        setIsProgramDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isProgramDropdownOpen]);
+
+  // Remove adjuncts from selected when hidden
+  useEffect(() => {
+    if (!showAdjuncts && selectedProfessors.length > 0) {
+      const toRemove = selectedProfessors.filter(name => {
+        const f = facultyData.find(x => x.name === name);
+        return f && f.isAdjunct;
+      });
+      if (toRemove.length > 0) {
+        setSelectedProfessors(prev => prev.filter(name => !toRemove.includes(name)));
+      }
+    }
+  }, [showAdjuncts, selectedProfessors, facultyData]);
 
   // Utility functions
   const parseTime = (timeStr) => {
@@ -57,11 +85,27 @@ const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
 
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
 
-  // Get unique instructors
-  const uniqueInstructors = useMemo(() => 
-    [...new Set(scheduleData.map(item => item.Instructor).filter(Boolean))].sort(),
-    [scheduleData]
-  );
+  // Helper to normalize instructor names from schedule items
+  const getInstructorName = (item) => {
+    if (item?.instructor && (item.instructor.firstName || item.instructor.lastName)) {
+      return `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim();
+    }
+    return item?.Instructor || item?.instructorName || '';
+  };
+
+  // Get unique instructors (respects adjunct filter)
+  const uniqueInstructors = useMemo(() => {
+    const names = [...new Set(scheduleData.map(getInstructorName).filter(Boolean))];
+    if (!showAdjuncts) {
+      return names
+        .filter(name => {
+          const faculty = facultyData.find(f => f.name === name);
+          return faculty && !faculty.isAdjunct;
+        })
+        .sort();
+    }
+    return names.sort();
+  }, [scheduleData, facultyData, showAdjuncts]);
 
   const uniqueRooms = useMemo(() => 
     [...new Set(scheduleData.map(item => item.Room).filter(Boolean))].filter(room => room.toLowerCase() !== 'online').sort(),
@@ -73,6 +117,42 @@ const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
     [uniqueInstructors, searchTerm]
   );
 
+  // Unique programs from faculty data (respect adjunct filter)
+  const uniquePrograms = useMemo(() => {
+    const programs = new Set();
+    (facultyData || []).forEach(f => {
+      if (!showAdjuncts && f.isAdjunct) return;
+      if (f.program && f.program.name) programs.add(f.program.name);
+    });
+    return Array.from(programs).sort();
+  }, [facultyData, showAdjuncts]);
+
+  const filteredPrograms = useMemo(() =>
+    uniquePrograms.filter(p => p.toLowerCase().includes(programSearchTerm.toLowerCase())),
+    [uniquePrograms, programSearchTerm]
+  );
+
+  // Faculty by program (names that also have schedules)
+  const getFacultyByProgram = (programName) => {
+    const names = (facultyData || [])
+      .filter(f => {
+        if (!showAdjuncts && f.isAdjunct) return false;
+        return f.program && f.program.name === programName;
+      })
+      .map(f => f.name);
+    return names.filter(name => uniqueInstructors.includes(name));
+  };
+
+  // Bulk add from program
+  const handleAddProgramFaculty = (programName) => {
+    const programFaculty = getFacultyByProgram(programName);
+    const toAdd = programFaculty.filter(name => !selectedProfessors.includes(name));
+    if (toAdd.length === 0) return;
+    setSelectedProfessors(prev => [...prev, ...toAdd]);
+    setIsProgramDropdownOpen(false);
+    setProgramSearchTerm('');
+  };
+
   // Calculate common availability
   const commonAvailability = useMemo(() => {
     if (selectedProfessors.length === 0) return {};
@@ -82,8 +162,8 @@ const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
     days.forEach(day => {
       const busyPeriods = [];
       selectedProfessors.forEach(professor => {
-        // Include all professors in scheduling analysis
-        scheduleData.filter(item => item.Instructor === professor && item.Day === day).forEach(item => {
+        // Include all professors in scheduling analysis (normalized instructor name)
+        scheduleData.filter(item => getInstructorName(item) === professor && item.Day === day).forEach(item => {
           const start = parseTime(item['Start Time']);
           const end = parseTime(item['End Time']);
           if (start !== null && end !== null) {
@@ -266,6 +346,76 @@ const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
               Select Attendees ({selectedProfessors.length} selected)
             </h2>
 
+            {/* Program Add and Adjunct Toggle */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              {/* Program Dropdown */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Add Faculty by Program</label>
+                <div className="relative" ref={programDropdownRef}>
+                  <button
+                    onClick={() => setIsProgramDropdownOpen(prev => !prev)}
+                    className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900 flex items-center justify-between"
+                  >
+                    <span>Select program...</span>
+                    <GraduationCap className="w-5 h-5 text-baylor-green" />
+                  </button>
+                  {isProgramDropdownOpen && (
+                    <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-hidden">
+                      <div className="p-2 border-b border-gray-200">
+                        <input
+                          type="text"
+                          placeholder="Search programs..."
+                          value={programSearchTerm}
+                          onChange={(e) => setProgramSearchTerm(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-baylor-green focus:border-baylor-green text-sm"
+                        />
+                      </div>
+                      <div className="max-h-48 overflow-auto">
+                        {filteredPrograms.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-gray-500">
+                            {programSearchTerm ? 'No programs found matching your search.' : (!showAdjuncts ? 'No programs with full-time faculty available.' : 'No programs available.')}
+                          </div>
+                        ) : (
+                          filteredPrograms.map(program => {
+                            const programFaculty = getFacultyByProgram(program);
+                            const available = programFaculty.filter(n => !selectedProfessors.includes(n));
+                            const count = available.length;
+                            return (
+                              <button
+                                key={program}
+                                onClick={() => handleAddProgramFaculty(program)}
+                                disabled={count === 0}
+                                className={`w-full text-left px-3 py-2 hover:bg-baylor-green/10 transition-colors text-sm ${count === 0 ? 'text-gray-400 cursor-not-allowed' : ''}`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span>{program}</span>
+                                  <span className="text-xs text-gray-500">{count === 0 ? 'All selected' : `${count} faculty`}</span>
+                                </div>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Adjunct toggle */}
+              <div className="flex items-center justify-between rounded-lg border border-gray-200 p-3">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Include Adjunct Faculty</label>
+                  <p className="text-xs text-gray-500 mt-1">Toggle to show/hide adjunct faculty</p>
+                </div>
+                <button
+                  onClick={() => setShowAdjuncts(prev => !prev)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-baylor-green focus:ring-offset-2 ${showAdjuncts ? 'bg-baylor-green' : 'bg-gray-200'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showAdjuncts ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+            </div>
+
             {/* Search */}
             <div className="mb-4">
               <div className="relative">
@@ -284,66 +434,83 @@ const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
             {selectedProfessors.length > 0 && (
               <div className="mb-4 p-4 bg-baylor-green/10 rounded-lg border border-baylor-green/20">
                 <div className="flex flex-wrap gap-2">
-                  {selectedProfessors.map(professor => (
-                    <span key={professor} className="inline-flex items-center px-3 py-1 bg-baylor-green text-white rounded-full text-sm">
-                                          <button
-                      className="cursor-pointer hover:underline"
-                      onClick={() => handleShowContactCard(professor)}
-                    >
-                      {professor}
-                    </button>
-                      <button
-                        onClick={() => toggleProfessor(professor)}
-                        className="ml-2 hover:bg-baylor-green/80 rounded-full p-1"
-                      >
-                        <X size={12} />
-                      </button>
-                    </span>
-                  ))}
+                  {selectedProfessors.map(professor => {
+                    const faculty = facultyData.find(f => f.name === professor);
+                    const programName = faculty?.program?.name;
+                    const isAdjunct = faculty?.isAdjunct;
+                    return (
+                      <span key={professor} className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${isAdjunct ? 'bg-orange-100 text-orange-700 border border-orange-200' : 'bg-baylor-green text-white'}`}>
+                        <button
+                          className="cursor-pointer hover:underline"
+                          onClick={() => handleShowContactCard(professor)}
+                        >
+                          {professor}
+                        </button>
+                        {programName && (
+                          <span className={`ml-2 text-xs ${isAdjunct ? 'bg-orange-200 text-orange-900' : 'bg-white/20 text-white'} px-1 rounded`}>{programName}</span>
+                        )}
+                        {isAdjunct && (
+                          <span className="ml-1 text-[10px] bg-orange-200 text-orange-900 px-1 rounded">Adjunct</span>
+                        )}
+                        <button
+                          onClick={() => toggleProfessor(professor)}
+                          className={`ml-2 rounded-full p-1 ${isAdjunct ? 'hover:bg-orange-200/70' : 'hover:bg-baylor-green/80'}`}
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
             )}
 
             {/* Faculty Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
-              {filteredInstructors.map(professor => (
-                <div
-                  key={professor}
-                  className={`p-3 rounded-lg border transition-all flex justify-between items-center ${
-                    selectedProfessors.includes(professor)
-                      ? 'bg-baylor-green/10 border-baylor-green text-baylor-green'
-                      : 'bg-white border-gray-200'
-                  }`}
-                >
-                  <button onClick={() => toggleProfessor(professor)} className="flex items-center flex-grow text-left">
-                    <div
-                      className={`w-3 h-3 rounded-full mr-3 ${
-                        selectedProfessors.includes(professor)
-                          ? 'bg-baylor-green'
-                          : 'bg-gray-300'
-                      }`}
-                    ></div>
-                    <span
-                      className="text-sm font-medium hover:underline cursor-pointer"
+              {filteredInstructors.length === 0 ? (
+                <div className="col-span-full px-3 py-2 text-sm text-gray-500">
+                  {searchTerm ? 'No faculty found matching your search.' : (!showAdjuncts ? 'No full-time faculty available.' : 'No faculty available.')}
+                </div>
+              ) : (
+                filteredInstructors.map(professor => (
+                  <div
+                    key={professor}
+                    className={`p-3 rounded-lg border transition-all flex justify-between items-center ${
+                      selectedProfessors.includes(professor)
+                        ? 'bg-baylor-green/10 border-baylor-green text-baylor-green'
+                        : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    <button onClick={() => toggleProfessor(professor)} className="flex items-center flex-grow text-left">
+                      <div
+                        className={`w-3 h-3 rounded-full mr-3 ${
+                          selectedProfessors.includes(professor)
+                            ? 'bg-baylor-green'
+                            : 'bg-gray-300'
+                        }`}
+                      ></div>
+                      <span
+                        className="text-sm font-medium hover:underline cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleShowContactCard(professor);
+                        }}
+                      >
+                        {professor}
+                      </span>
+                    </button>
+                    <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleShowContactCard(professor);
+                        // Could navigate to individual schedule view
                       }}
+                      className="p-1 rounded-full hover:bg-baylor-green/20"
                     >
-                      {professor}
-                    </span>
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // Could navigate to individual schedule view
-                    }}
-                    className="p-1 rounded-full hover:bg-baylor-green/20"
-                  >
-                    <Eye size={16} className="text-baylor-green" />
-                  </button>
-                </div>
-              ))}
+                      <Eye size={16} className="text-baylor-green" />
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
 
             {/* Find Meeting Times Button */}
@@ -429,7 +596,7 @@ const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
                     </div>
                   ) : (
                     <div className="text-center py-8 text-gray-500">
-                      <div className="text-lg">😞</div>
+
                       <div className="mt-2">No availability found for all participants</div>
                     </div>
                   )}

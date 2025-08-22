@@ -224,7 +224,6 @@ function App() {
       label: 'Directory',
       icon: Users,
       children: [
-        { id: 'department-management', label: 'Program Management', path: 'directory/department-management' },
         { id: 'building-directory', label: 'Office Directory', path: 'directory/building-directory' },
         { id: 'people-directory', label: 'People Directory', path: 'directory/people-directory' },
         { id: 'email-lists', label: 'Email Lists', path: 'directory/email-lists' },
@@ -246,6 +245,7 @@ function App() {
       label: 'Administration',
       icon: Settings,
       children: [
+        { id: 'program-management', label: 'Program Management', path: 'administration/program-management' },
         { id: 'smart-import', label: 'Data Import', path: 'administration/smart-import' },
         { id: 'data-hygiene', label: 'Data Hygiene', path: 'administration/data-hygiene' },
         { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' },
@@ -1447,7 +1447,7 @@ function App() {
         return <PeopleDirectory {...pageProps} initialTab="adjunct" />;
       case 'directory/student-directory':
         return <PeopleDirectory {...pageProps} initialTab="student" />;
-      case 'directory/department-management':
+      case 'administration/program-management':
         return <ProgramManagement {...pageProps} />;
       case 'directory/email-lists':
         return <EmailLists {...pageProps} />;

@@ -107,10 +107,17 @@ const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
     return names.sort();
   }, [scheduleData, facultyData, showAdjuncts]);
 
-  const uniqueRooms = useMemo(() => 
-    [...new Set(scheduleData.map(item => item.Room).filter(Boolean))].filter(room => room.toLowerCase() !== 'online').sort(),
-    [scheduleData]
-  );
+  const uniqueRooms = useMemo(() => {
+    const allRooms = scheduleData.flatMap(item => (item.Room || '').split(';').map(r => r.trim()));
+    return [...new Set(allRooms)]
+      .filter(room => 
+        room &&
+        room.toLowerCase() !== 'online' &&
+        !room.toLowerCase().includes('no room needed') &&
+        !room.toLowerCase().includes('general assignment')
+      )
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [scheduleData]);
 
   const filteredInstructors = useMemo(() => 
     uniqueInstructors.filter(instructor => instructor.toLowerCase().includes(searchTerm.toLowerCase())),
@@ -222,13 +229,22 @@ const GroupMeetings = ({ scheduleData, facultyData, onNavigate }) => {
     const meetingStart = slot.start;
     const meetingEnd = meetingStart + meetingDuration;
     
-    const availableRooms = uniqueRooms.filter(room => 
-      !scheduleData.some(item => 
-        item.Day === dayCode && 
-        item.Room === room && 
-        Math.max(parseTime(item['Start Time']), meetingStart) < Math.min(parseTime(item['End Time']), meetingEnd)
-      )
-    );
+    // Determine availability using same multi-room parsing as RoomSchedules
+    const availableRooms = uniqueRooms.filter(room => {
+      return !scheduleData.some(item => {
+        if (item.Day !== dayCode) return false;
+        const itemRooms = (item.Room || '')
+          .split(';')
+          .map(r => r.trim())
+          .filter(r => r);
+        if (!itemRooms.includes(room)) return false;
+        const itemStart = parseTime(item['Start Time']);
+        const itemEnd = parseTime(item['End Time']);
+        if (itemStart == null || itemEnd == null) return false;
+        // overlap check
+        return Math.max(itemStart, meetingStart) < Math.min(itemEnd, meetingEnd);
+      });
+    });
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">

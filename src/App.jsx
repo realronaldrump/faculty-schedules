@@ -39,7 +39,8 @@ import {
   LogOut,
   Star,
   X,
-  Wrench
+  Wrench,
+  Database
 } from 'lucide-react';
 import { db } from './firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, setDoc, query, orderBy, onSnapshot } from 'firebase/firestore';
@@ -216,18 +217,27 @@ function App() {
         { id: 'faculty-schedules', label: 'Faculty Schedules', path: 'scheduling/faculty-schedules' },
         { id: 'individual-availability', label: 'Individual Availability', path: 'scheduling/individual-availability' },
         { id: 'room-schedules', label: 'Room Schedules', path: 'scheduling/room-schedules' },
-        { id: 'student-schedules', label: 'Student Worker Schedules', path: 'scheduling/student-schedules' }
+        { id: 'student-schedules', label: 'Student Worker Schedules', path: 'scheduling/student-schedules' },
+        { id: 'group-meeting-scheduler', label: 'Group Meeting Scheduler', path: 'scheduling/group-meeting-scheduler' }
       ]
     },
     {
-      id: 'directory',
-      label: 'Directory',
+      id: 'people',
+      label: 'People Management',
       icon: Users,
       children: [
-        { id: 'building-directory', label: 'Office Directory', path: 'directory/building-directory' },
-        { id: 'people-directory', label: 'People Directory', path: 'directory/people-directory' },
-        { id: 'email-lists', label: 'Email Lists', path: 'directory/email-lists' },
-        { id: 'baylor-id-management', label: 'Baylor ID Management', path: 'directory/baylor-id-management' }
+        { id: 'people-directory', label: 'People Directory', path: 'people/people-directory' },
+        { id: 'baylor-id-management', label: 'Baylor ID Management', path: 'people/baylor-id-management' },
+        { id: 'email-lists', label: 'Email Lists', path: 'people/email-lists' }
+      ]
+    },
+    {
+      id: 'resources',
+      label: 'Resources',
+      icon: Database,
+      children: [
+        { id: 'building-directory', label: 'Office Directory', path: 'resources/building-directory' },
+        { id: 'room-grid-generator', label: 'Room Grid Generator', path: 'resources/room-grid-generator' }
       ]
     },
     {
@@ -236,8 +246,7 @@ function App() {
       icon: BarChart3,
       children: [
         { id: 'department-insights', label: 'Department Insights', path: 'analytics/department-insights' },
-        { id: 'course-management', label: 'Course Management', path: 'analytics/course-management' },
-        { id: 'recent-changes', label: 'Recent Changes', path: 'analytics/recent-changes' }
+        { id: 'course-management', label: 'Course Management', path: 'analytics/course-management' }
       ]
     },
     {
@@ -248,17 +257,9 @@ function App() {
         { id: 'program-management', label: 'Program Management', path: 'administration/program-management' },
         { id: 'smart-import', label: 'Data Import', path: 'administration/smart-import' },
         { id: 'data-hygiene', label: 'Data Hygiene', path: 'administration/data-hygiene' },
+        { id: 'recent-changes', label: 'Recent Changes', path: 'administration/recent-changes' },
         { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' },
         { id: 'baylor-acronyms', label: 'Baylor Acronyms', path: 'administration/baylor-acronyms' }
-      ]
-    },
-    {
-      id: 'admin-tools',
-      label: 'Admin Tools',
-      icon: Wrench,
-      children: [
-        { id: 'room-grid-generator', label: 'Room Grid Generator', path: 'admin-tools/room-grid-generator' },
-        { id: 'group-meeting-scheduler', label: 'Group Meeting Scheduler', path: 'admin-tools/group-meeting-scheduler' }
       ]
     }
   ];
@@ -1429,7 +1430,7 @@ function App() {
         return <Dashboard {...pageProps} />;
       case 'scheduling/faculty-schedules':
         return <FacultySchedules {...pageProps} />;
-      case 'admin-tools/group-meeting-scheduler':
+      case 'scheduling/group-meeting-scheduler':
         return <GroupMeetings {...pageProps} />;
       case 'scheduling/individual-availability':
         return <IndividualAvailability {...pageProps} />;
@@ -1437,29 +1438,21 @@ function App() {
         return <RoomSchedules {...pageProps} />;
       case 'scheduling/student-schedules':
         return <StudentSchedules {...pageProps} />;
-      case 'directory/people-directory':
+      case 'people/people-directory':
         return <PeopleDirectory {...pageProps} />;
-      case 'directory/faculty-directory':
-        return <PeopleDirectory {...pageProps} initialTab="faculty" />;
-      case 'directory/staff-directory':
-        return <PeopleDirectory {...pageProps} initialTab="staff" />;
-      case 'directory/adjunct-directory':
-        return <PeopleDirectory {...pageProps} initialTab="adjunct" />;
-      case 'directory/student-directory':
-        return <PeopleDirectory {...pageProps} initialTab="student" />;
       case 'administration/program-management':
         return <ProgramManagement {...pageProps} />;
-      case 'directory/email-lists':
+      case 'people/email-lists':
         return <EmailLists {...pageProps} />;
-      case 'directory/building-directory':
-        return <BuildingDirectory {...pageProps} />;
-      case 'directory/baylor-id-management':
+      case 'people/baylor-id-management':
         return <BaylorIDManagement {...pageProps} />;
+      case 'resources/building-directory':
+        return <BuildingDirectory {...pageProps} />;
       case 'analytics/department-insights':
         return <DepartmentInsights {...pageProps} />;
       case 'analytics/course-management':
         return <CourseManagement {...pageProps} />;
-      case 'analytics/recent-changes':
+      case 'administration/recent-changes':
         return <RecentChangesPage {...pageProps} />;
       case 'administration/smart-import':
         return <SmartDataImportPage {...pageProps} />;
@@ -1469,7 +1462,7 @@ function App() {
         return <SystemsPage {...pageProps} />;
       case 'administration/baylor-acronyms':
         return <BaylorAcronyms {...pageProps} />;
-      case 'admin-tools/room-grid-generator':
+      case 'resources/room-grid-generator':
         return <RoomGridGenerator {...pageProps} />;
       default:
         return <Dashboard {...pageProps} />;

@@ -25,6 +25,9 @@ const AdjunctDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
   const [errors, setErrors] = useState({});
   const [showFilters, setShowFilters] = useState(false);
 
+  // Course count filter
+  const [showOnlyWithCourses, setShowOnlyWithCourses] = useState(false);
+
   // Filter state
   const [filters, setFilters] = useState({
     programs: { include: [], exclude: [] },
@@ -260,7 +263,12 @@ const AdjunctDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
       data = data.filter(person => person.email && person.email.trim() !== '');
     }
 
-    // Course count filter
+    // Course count filter (legacy support for the checkbox)
+    if (showOnlyWithCourses) {
+      data = data.filter(adjunct => adjunct.courseCount > 0);
+    }
+
+    // Course count filter (advanced filter)
     if (filters.courseCount === 'with-courses') {
       data = data.filter(person => person.courseCount > 0);
     } else if (filters.courseCount === 'without-courses') {
@@ -306,7 +314,7 @@ const AdjunctDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
     });
 
     return data;
-  }, [uniqueDirectoryData, filterText, filters, sortConfig, nameSort]);
+  }, [uniqueDirectoryData, filterText, filters, sortConfig, nameSort, showOnlyWithCourses]);
 
   const validate = (data) => {
     const newErrors = {};
@@ -533,6 +541,16 @@ const AdjunctDirectory = ({ facultyData, scheduleData = [], onFacultyUpdate, onS
                     </div>
                   </div>
                 )}
+                {/* Course count filter UI */}
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={showOnlyWithCourses}
+                    onChange={e => setShowOnlyWithCourses(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                  />
+                  Only show adjunct with at least 1 course
+                </label>
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                     <input 

@@ -43,12 +43,17 @@ const RoomSchedules = ({ scheduleData, facultyData }) => {
   };
 
   // Get unique rooms
-  const uniqueRooms = useMemo(() => 
-    [...new Set(scheduleData.map(item => item.Room).filter(Boolean))]
-      .filter(room => room.toLowerCase() !== 'online')
-      .sort(),
-    [scheduleData]
-  );
+  const uniqueRooms = useMemo(() => {
+    const allRooms = scheduleData.flatMap(item => (item.Room || '').split(';').map(r => r.trim()));
+    return [...new Set(allRooms)]
+      .filter(room => 
+        room &&
+        room.toLowerCase() !== 'online' &&
+        !room.toLowerCase().includes('no room needed') &&
+        !room.toLowerCase().includes('general assignment')
+      )
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [scheduleData]);
 
   // Filter rooms based on search
   const filteredRooms = useMemo(() => 
@@ -64,7 +69,7 @@ const RoomSchedules = ({ scheduleData, facultyData }) => {
     roomsToShow.forEach(room => {
       schedules[room] = scheduleData
         .filter(item => 
-          item.Room === room && 
+          (item.Room || '').split(';').map(r => r.trim()).includes(room) && 
           item.Day === roomScheduleDay && 
           item['Start Time'] && 
           item['End Time']

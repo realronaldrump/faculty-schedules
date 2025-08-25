@@ -647,11 +647,11 @@ function App() {
       // Establish a reference schedule before computing dependent fields
       const referenceSchedule = isGroupedCourse ? originalSchedules[0] : originalSchedule;
 
-      // Create meeting patterns from Day/Start Time/End Time
+      // Create meeting patterns from Day/Start Time/End Time (supports online synchronous)
       const meetingPatterns = [];
       const isOnlineFlag = updatedRow.isOnline === true || String(updatedRow.isOnline).toLowerCase() === 'true';
       const onlineMode = updatedRow.onlineMode || (referenceSchedule?.onlineMode || null);
-      if (!isOnlineFlag && updatedRow.Day && updatedRow['Start Time'] && updatedRow['End Time']) {
+      if (updatedRow.Day && updatedRow['Start Time'] && updatedRow['End Time']) {
         // Split Day string into individual day codes (e.g., "MWF" -> ["M","W","F"])
         const dayCodes = typeof updatedRow.Day === 'string' ? updatedRow.Day.match(/[MTWRF]/g) : [];
         (dayCodes && dayCodes.length > 0 ? dayCodes : [updatedRow.Day]).forEach(code => {
@@ -687,8 +687,8 @@ function App() {
         roomId: isOnlineFlag ? null : roomId,
         roomName: isOnlineFlag ? '' : (updatedRow.Room || (referenceSchedule?.roomName || '')),
         
-        // Meeting patterns
-        meetingPatterns: isOnlineFlag ? [] : (meetingPatterns.length > 0 ? meetingPatterns : (referenceSchedule?.meetingPatterns || [])),
+        // Meeting patterns (persist even when online for synchronous meetings)
+        meetingPatterns: meetingPatterns.length > 0 ? meetingPatterns : (referenceSchedule?.meetingPatterns || []),
         
         // Online flags
         isOnline: isOnlineFlag,
@@ -704,7 +704,9 @@ function App() {
       if (!updateData.courseCode) validationErrors.push('Course code is required');
       if (!updateData.term) validationErrors.push('Term is required');
       if (!updateData.section) validationErrors.push('Section is required');
-      if (!isOnlineFlag && meetingPatterns.length === 0 && (!referenceSchedule?.meetingPatterns || referenceSchedule.meetingPatterns.length === 0)) {
+      const requiresMeeting = (!isOnlineFlag) || (isOnlineFlag && ((onlineMode || '').toLowerCase() === 'synchronous'));
+      const hasExistingOrNewMeetings = (meetingPatterns.length > 0) || (Array.isArray(referenceSchedule?.meetingPatterns) && referenceSchedule.meetingPatterns.length > 0);
+      if (requiresMeeting && !hasExistingOrNewMeetings) {
         validationErrors.push('Meeting time and day are required');
       }
 

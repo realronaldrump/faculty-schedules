@@ -533,7 +533,8 @@ const CourseManagement = ({
     const isOnline = data.isOnline === true || String(data.isOnline).toLowerCase() === 'true';
     const hasDay = data.Day && typeof data.Day === 'string' && /^([MTWRF]+)$/.test(data.Day);
     const hasTimes = Boolean(data['Start Time']) && Boolean(data['End Time']);
-    if (!isOnline) {
+    const requiresMeetings = (!isOnline) || (isOnline && (String(data.onlineMode || '').toLowerCase() === 'synchronous'));
+    if (requiresMeetings) {
       if (!hasDay) {
         errors.push('Valid day pattern is required (combination of M, T, W, R, F)');
       }
@@ -545,7 +546,7 @@ const CourseManagement = ({
     const startTime = parseTime(data['Start Time']);
     const endTime = parseTime(data['End Time']);
     
-    if (!isOnline && startTime && endTime && startTime >= endTime) {
+    if (startTime && endTime && startTime >= endTime) {
       errors.push('End time must be after start time');
     }
 

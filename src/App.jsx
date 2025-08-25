@@ -16,7 +16,7 @@ import SmartDataImportPage from './components/SmartDataImportPage';
 import SystemsPage from './components/SystemsPage';
 import DataHygieneManager from './components/DataHygieneManager';
 import BaylorAcronyms from './pages/BaylorAcronyms';
-import BaylorIDManagement from './components/BaylorIDManagement';
+
 import RecentChangesPage from './components/RecentChangesPage';
 import RoomGridGenerator from './components/admin/RoomGridGenerator';
 
@@ -224,7 +224,6 @@ function App() {
       icon: Users,
       children: [
         { id: 'people-directory', label: 'People Directory', path: 'people/people-directory' },
-        { id: 'baylor-id-management', label: 'Baylor ID Management', path: 'people/baylor-id-management' },
         { id: 'email-lists', label: 'Email Lists', path: 'people/email-lists' }
       ]
     },
@@ -1444,8 +1443,6 @@ function App() {
         return <ProgramManagement {...pageProps} />;
       case 'people/email-lists':
         return <EmailLists {...pageProps} />;
-      case 'people/baylor-id-management':
-        return <BaylorIDManagement {...pageProps} />;
       case 'resources/building-directory':
         return <BuildingDirectory {...pageProps} />;
       case 'analytics/department-insights':

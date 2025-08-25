@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Edit, Save, X, BookUser, Mail, Phone, PhoneOff, Building, BuildingIcon, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, BookOpen, Filter, UserCog } from 'lucide-react';
+import { Edit, Save, X, BookUser, Mail, Phone, PhoneOff, Building, BuildingIcon, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, BookOpen, Filter, UserCog, Download } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
 import MultiSelectDropdown from './MultiSelectDropdown';
 
@@ -60,7 +60,8 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
     hasEmail: true,
     courseCount: 'all', // 'all', 'with-courses', 'without-courses'
     isAlsoStaff: 'all', // 'all', 'include', 'exclude'
-    hasPhD: 'all' // 'all', 'include', 'exclude'
+    hasPhD: 'all', // 'all', 'include', 'exclude'
+    hasBaylorId: 'all' // 'all', 'with-id', 'without-id'
   });
 
   // Helper function to extract building name from office location
@@ -325,6 +326,13 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
       data = data.filter(person => person.courseCount > 0);
     } else if (filters.courseCount === 'without-courses') {
       data = data.filter(person => person.courseCount === 0);
+    }
+
+    // Baylor ID status filter
+    if (filters.hasBaylorId === 'with-id') {
+      data = data.filter(person => person.baylorId && person.baylorId.trim() !== '');
+    } else if (filters.hasBaylorId === 'without-id') {
+      data = data.filter(person => !person.baylorId || person.baylorId.trim() === '');
     }
 
     // Sorting
@@ -643,10 +651,40 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
       hasEmail: true,
       courseCount: 'all',
       isAlsoStaff: 'all',
-      hasPhD: 'all'
+      hasPhD: 'all',
+      hasBaylorId: 'all'
     });
     setFilterText('');
     setShowOnlyWithCourses(false);
+  };
+
+  // Export functionality
+  const exportToCSV = () => {
+    const headers = ['Name', 'Program', 'Job Title', 'Email', 'Phone', 'Office', 'Baylor ID', 'Courses'];
+    const rows = sortedAndFilteredData.map(faculty => [
+      faculty.name || '',
+      faculty.program?.name || '',
+      faculty.jobTitle || '',
+      faculty.email || '',
+      faculty.hasNoPhone ? 'No phone' : formatPhoneNumber(faculty.phone),
+      faculty.hasNoOffice ? 'No office' : (faculty.office || ''),
+      faculty.baylorId || 'Not assigned',
+      faculty.courseCount || 0
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `faculty-directory-export-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const SortableHeader = ({ label, columnKey }) => {
@@ -735,6 +773,14 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                 >
                   <Filter size={16} />
                   Filters
+                </button>
+
+                <button
+                  onClick={exportToCSV}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Download size={18} />
+                  Export CSV
                 </button>
 
                 <button
@@ -962,14 +1008,36 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                     <option value="exclude">Exclude PhD</option>
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Baylor ID Status
+                  </label>
+                  <select
+                    value={filters.hasBaylorId}
+                    onChange={(e) => setFilters(prev => ({ ...prev, hasBaylorId: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  >
+                    <option value="all">All</option>
+                    <option value="with-id">Has Baylor ID</option>
+                    <option value="without-id">Missing Baylor ID</option>
+                  </select>
+                </div>
               </div>
             </div>
           </div>
-        )}
+                )}
 
-        
-
-
+        {/* Baylor ID Assignment Summary */}
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+          <p className="flex items-center">
+            <span className="mr-2">💡</span>
+            Showing {sortedAndFilteredData.length} faculty members.
+            {sortedAndFilteredData.filter(f => !f.baylorId || f.baylorId.trim() === '').length > 0 &&
+              ` ${sortedAndFilteredData.filter(f => !f.baylorId || f.baylorId.trim() === '').length} need Baylor ID assignment.`
+            }
+          </p>
+        </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -1325,7 +1393,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                         </div>
                       </td>
                       <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
-                        <div className={`font-mono ${faculty.baylorId ? 'text-gray-900' : 'text-red-500 italic'}`}>
+                        <div className={`font-mono ${faculty.baylorId ? 'text-gray-900' : 'text-red-500 italic font-medium'}`}>
                           {faculty.baylorId || 'Not assigned'}
                         </div>
                       </td>

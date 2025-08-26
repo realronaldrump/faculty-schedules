@@ -180,12 +180,21 @@ const FacultyContactCard = ({ person, faculty, onClose, personType = 'faculty' }
                     <h3 className="text-2xl font-serif font-bold text-baylor-green">{getDisplayName()}</h3>
                     {contactPerson.jobTitle && <p className="text-md text-gray-600">{contactPerson.jobTitle}</p>}
                     <p className="text-md text-baylor-gold font-semibold">{getRoleLabel()}</p>
-                    {contactPerson.hasPhD && personType !== 'student' && (
-                        <div className="mt-1 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            <GraduationCap size={12} className="mr-1" />
-                            PhD
-                        </div>
-                    )}
+                    <div className="mt-2 flex items-center justify-center gap-2">
+                        {contactPerson.hasPhD && personType !== 'student' && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                <GraduationCap size={12} className="mr-1" />
+                                PhD
+                            </span>
+                        )}
+                        {personType !== 'student' && contactPerson.isUPD && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                {/* Using BookOpen here keeps icon set local without additional imports */}
+                                <BookOpen size={12} className="mr-1" />
+                                UPD
+                            </span>
+                        )}
+                    </div>
                 </div>
                 
                 <div className="mt-6 space-y-4">

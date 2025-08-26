@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Edit, Save, X, BookUser, Mail, Phone, PhoneOff, Building, BuildingIcon, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, BookOpen, Filter, UserCog } from 'lucide-react';
+import { Edit, Save, X, BookUser, Mail, Phone, PhoneOff, Building, BuildingIcon, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, BookOpen, Filter } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
 import MultiSelectDropdown from './MultiSelectDropdown';
 
@@ -34,7 +34,6 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
     jobTitles: { include: [], exclude: [] },
     buildings: { include: [], exclude: [] },
     tenured: 'all',
-    upd: 'all',
     hasEmail: true,
     courseCount: 'all' // 'all', 'with-courses', 'without-courses'
   });
@@ -246,17 +245,7 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
       });
     }
 
-    // UPD filter
-    if (filters.upd !== 'all') {
-      data = data.filter(person => {
-        if (filters.upd === 'include') {
-          return person.isUPD;
-        } else if (filters.upd === 'exclude') {
-          return !person.isUPD;
-        }
-        return true;
-      });
-    }
+    // Note: Adjuncts cannot be UPD; no UPD filter applied
 
     // Has email filter
     if (filters.hasEmail) {
@@ -478,7 +467,6 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
       jobTitles: { include: [], exclude: [] },
       buildings: { include: [], exclude: [] },
       tenured: 'all',
-      upd: 'all',
       hasEmail: true,
       courseCount: 'all'
     });
@@ -695,7 +683,7 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
               </div>
 
               {/* Status Filters */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Tenure Status
@@ -708,21 +696,6 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
                     <option value="all">All</option>
                     <option value="include">Tenured Only</option>
                     <option value="exclude">Exclude Tenured</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    UPD Status
-                  </label>
-                  <select
-                    value={filters.upd}
-                    onChange={(e) => setFilters(prev => ({ ...prev, upd: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                  >
-                    <option value="all">All</option>
-                    <option value="include">UPD Only</option>
-                    <option value="exclude">Exclude UPD</option>
                   </select>
                 </div>
 
@@ -942,12 +915,7 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
                         {faculty.isTenured && (
                           <div className="text-xs text-purple-600 font-medium">Tenured</div>
                         )}
-                        {faculty.isUPD && (
-                          <div className="text-xs text-amber-600 font-medium flex items-center gap-1">
-                            <UserCog size={12} />
-                            UPD
-                          </div>
-                        )}
+                        {/* Adjuncts cannot be UPD; no badge shown */}
                       </td>
                       <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
                         {faculty.program ? faculty.program.name : '-'}

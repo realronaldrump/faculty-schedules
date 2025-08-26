@@ -800,7 +800,6 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                   <SortableHeader label="Email" columnKey="email" />
                   <SortableHeader label="Phone" columnKey="phone" />
                   <SortableHeader label="Office" columnKey="office" />
-                  <SortableHeader label="Baylor ID" columnKey="baylorId" />
                   <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -988,17 +987,6 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                           </button>
                         </div>
                       </td>
-                       <td className="p-2 align-top">
-                         <input 
-                           name="baylorId" 
-                           value={editFormData.baylorId || ''} 
-                           onChange={handleChange} 
-                           className={getInputClass('baylorId')} 
-                           placeholder="9 digits" 
-                           maxLength="9"
-                         />
-                         {errors.baylorId && <p className="text-red-600 text-xs mt-1">{errors.baylorId}</p>}
-                       </td>
                       <td className="p-2 align-top text-right">
                         <div className="flex gap-2">
                                                 <button onClick={handleSave} className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"><Save size={16} /></button>
@@ -1043,11 +1031,6 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                           )}
                         </div>
                       </td>
-                       <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedStaffForCard(staff)}>
-                         <div className={`font-mono ${staff.baylorId ? 'text-gray-900' : 'text-red-500 italic'}`}>
-                           {staff.baylorId || 'Not assigned'}
-                         </div>
-                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex gap-1 justify-end">
                                                   <button onClick={(e) => { e.stopPropagation(); handleEdit(staff); }} className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"><Edit size={16} /></button>

@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { X, Mail, Phone, Building, BookOpen, Clock, GraduationCap, User } from 'lucide-react';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
+import { logUpdate } from '../utils/changeLogger';
 
 // Simple in-memory cache to avoid re-fetching schedules between openings
 const scheduleCache = new Map();
@@ -24,6 +25,17 @@ const FacultyContactCard = ({ person, faculty, onClose, personType = 'faculty' }
 
     const [externalSchedules, setExternalSchedules] = useState([]);
     const [loadingSchedules, setLoadingSchedules] = useState(false);
+    const [isEditingBaylorId, setIsEditingBaylorId] = useState(false);
+    const [baylorIdValue, setBaylorIdValue] = useState(contactPerson?.baylorId || '');
+    const [baylorIdError, setBaylorIdError] = useState('');
+    const [savingBaylorId, setSavingBaylorId] = useState(false);
+
+    // Keep local value in sync when opening different people
+    useEffect(() => {
+        setBaylorIdValue(contactPerson?.baylorId || '');
+        setBaylorIdError('');
+        setIsEditingBaylorId(false);
+    }, [contactPerson?.id]);
 
     // Parse term code to human-readable format
     const parseTermCode = (termCode) => {
@@ -170,6 +182,43 @@ const FacultyContactCard = ({ person, faculty, onClose, personType = 'faculty' }
         }
     };
 
+    const validateBaylorId = (val) => {
+        if (!val) return 'Baylor ID is required';
+        if (!/^\d{9}$/.test(val)) return 'Baylor ID must be exactly 9 digits';
+        return '';
+    };
+
+    const saveBaylorId = async () => {
+        const err = validateBaylorId(baylorIdValue);
+        setBaylorIdError(err);
+        if (err) return;
+        if (!contactPerson?.id) {
+            setBaylorIdError('Cannot update: missing person id');
+            return;
+        }
+        try {
+            setSavingBaylorId(true);
+            const updates = { baylorId: baylorIdValue, updatedAt: new Date().toISOString() };
+            await updateDoc(doc(db, COLLECTIONS.PEOPLE, contactPerson.id), updates);
+            // Fire-and-forget change logging
+            logUpdate(
+                `Person - ${contactPerson.name || contactPerson.email || contactPerson.id}`,
+                COLLECTIONS.PEOPLE,
+                contactPerson.id,
+                updates,
+                contactPerson,
+                'FacultyContactCard.jsx - saveBaylorId'
+            ).catch(err => console.error('Change logging error:', err));
+            // Reflect locally
+            setIsEditingBaylorId(false);
+            setBaylorIdError('');
+        } catch (e) {
+            setBaylorIdError(e?.message || 'Failed to save');
+        } finally {
+            setSavingBaylorId(false);
+        }
+    };
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fade-in" onClick={onClose}>
             <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full mx-4 relative max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -211,6 +260,62 @@ const FacultyContactCard = ({ person, faculty, onClose, personType = 'faculty' }
                     <div className="flex items-center">
                         <Building size={18} className="text-baylor-green mr-4" />
                         <span className="text-gray-700">{contactPerson.office || 'Not specified'}</span>
+                    </div>
+                    <div className="flex items-start">
+                        <span className="inline-flex items-center justify-center w-5 h-5 mr-4 mt-0.5 rounded bg-baylor-green text-white text-[10px] font-bold">ID</span>
+                        <div className="flex-1">
+                            {isEditingBaylorId ? (
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        value={baylorIdValue}
+                                        onChange={(e) => {
+                                            const onlyDigits = e.target.value.replace(/\D/g, '').slice(0, 9);
+                                            setBaylorIdValue(onlyDigits);
+                                            if (baylorIdError) setBaylorIdError(validateBaylorId(onlyDigits));
+                                        }}
+                                        placeholder="9 digits"
+                                        maxLength={9}
+                                        className={`px-2 py-1 border rounded font-mono ${baylorIdError ? 'border-red-500' : 'border-gray-300'}`}
+                                    />
+                                    <button
+                                        onClick={saveBaylorId}
+                                        disabled={savingBaylorId}
+                                        className="px-2 py-1 text-xs bg-baylor-green text-white rounded disabled:opacity-60"
+                                    >
+                                        {savingBaylorId ? 'Saving…' : 'Save'}
+                                    </button>
+                                    <button
+                                        onClick={() => { setIsEditingBaylorId(false); setBaylorIdValue(contactPerson?.baylorId || ''); setBaylorIdError(''); }}
+                                        disabled={savingBaylorId}
+                                        className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 text-gray-700"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-gray-700 font-mono mr-1">{baylorIdValue || 'Not assigned'}</span>
+                                    {baylorIdValue && (
+                                        <button
+                                            onClick={() => navigator.clipboard.writeText(baylorIdValue)}
+                                            className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 text-gray-700"
+                                            title="Copy Baylor ID"
+                                        >
+                                            Copy
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => setIsEditingBaylorId(true)}
+                                        className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 text-gray-700"
+                                    >
+                                        {baylorIdValue ? 'Edit' : 'Add'}
+                                    </button>
+                                </div>
+                            )}
+                            {baylorIdError && (
+                                <div className="text-xs text-red-600 mt-1">{baylorIdError}</div>
+                            )}
+                        </div>
                     </div>
                     {personType !== 'student' && (
                         <div className="flex items-center justify-center gap-2 text-sm text-baylor-green">

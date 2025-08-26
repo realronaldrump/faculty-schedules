@@ -774,7 +774,6 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
                   <SortableHeader label="Email" columnKey="email" />
                   <SortableHeader label="Phone" columnKey="phone" />
                   <SortableHeader label="Office" columnKey="office" />
-                  <SortableHeader label="Baylor ID" columnKey="baylorId" />
                   <SortableHeader label="Courses" columnKey="courseCount" />
                   <th className="px-4 py-3"></th>
               </tr>
@@ -879,15 +878,9 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
                         </div>
                       </td>
                       <td className="p-2 align-top">
-                        <input 
-                          name="baylorId" 
-                          value={editFormData.baylorId || ''} 
-                          onChange={handleChange} 
-                          className={getInputClass('baylorId')} 
-                          placeholder="9 digits" 
-                          maxLength="9"
-                        />
-                        {errors.baylorId && <p className="text-red-600 text-xs mt-1">{errors.baylorId}</p>}
+                        <div className="text-sm text-gray-600">
+                          {faculty.courseCount || 0}
+                        </div>
                       </td>
                       <td className="p-2 align-top">
                         <div className="text-sm text-gray-600">
@@ -944,11 +937,6 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
                           ) : (
                             faculty.office || '-'
                           )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
-                        <div className={`font-mono ${faculty.baylorId ? 'text-gray-900' : 'text-red-500 italic'}`}>
-                          {faculty.baylorId || 'Not assigned'}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>

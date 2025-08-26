@@ -1047,7 +1047,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
           </div>
                 )}
 
-        {/* Baylor ID Assignment Summary */}
+        {/* Baylor ID Assignment Summary
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
           <p className="flex items-center">
             <span className="mr-2">💡</span>
@@ -1056,7 +1056,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
               ` ${sortedAndFilteredData.filter(f => !f.baylorId || f.baylorId.trim() === '').length} need Baylor ID assignment.`
             }
           </p>
-        </div>
+        </div> */}
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -1068,7 +1068,6 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                   <SortableHeader label="Email" columnKey="email" />
                   <SortableHeader label="Phone" columnKey="phone" />
                   <SortableHeader label="Office" columnKey="office" />
-                  <SortableHeader label="Baylor ID" columnKey="baylorId" />
                   <SortableHeader label="Courses" columnKey="courseCount" />
                   <th className="px-4 py-3"></th>
               </tr>
@@ -1207,17 +1206,6 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                     </div>
                   </td>
                   <td className="p-2 align-top">
-                    <input
-                      name="baylorId"
-                      value={newFaculty.baylorId}
-                      onChange={handleCreateChange}
-                      className={getInputClass('baylorId')}
-                      placeholder="9 digits"
-                      maxLength="9"
-                    />
-                    {errors.baylorId && <p className="text-red-600 text-xs mt-1">{errors.baylorId}</p>}
-                  </td>
-                  <td className="p-2 align-top">
                     <div className="text-sm text-gray-500 italic">
                       Will be calculated from courses
                     </div>
@@ -1339,17 +1327,6 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                           </button>
                         </div>
                       </td>
-                      <td className="p-2 align-top">
-                        <input 
-                          name="baylorId" 
-                          value={editFormData.baylorId || ''} 
-                          onChange={handleChange} 
-                          className={getInputClass('baylorId')} 
-                          placeholder="9 digits" 
-                          maxLength="9"
-                        />
-                        {errors.baylorId && <p className="text-red-600 text-xs mt-1">{errors.baylorId}</p>}
-                      </td>
                                               <td className="p-2 align-top">
                           <div className="text-sm text-gray-600">
                             {faculty.courseCount || 0}
@@ -1415,11 +1392,6 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                           ) : (
                             faculty.office || '-'
                           )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
-                        <div className={`font-mono ${faculty.baylorId ? 'text-gray-900' : 'text-red-500 italic font-medium'}`}>
-                          {faculty.baylorId || 'Not assigned'}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>

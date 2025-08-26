@@ -44,6 +44,90 @@ export default {
         'light-gray': '#eeeeee',
         'link-green': '#006A52',
         'link-green-hover': '#154734',
+
+        // Brand semantic aliases (prefer these for new UI work)
+        'brand-primary': '#154734', // Baylor Green
+        'brand-gold': '#FFB81C',
+        'brand-blue': '#003F5C', // Accent blue (limited use)
+        'brand-neutral': '#383838',
+
+        // Map common non-brand utilities to brand-approved colors to unify legacy usage
+        // Blue → Baylor Green scale (so text-blue-600, bg-blue-50, etc. are on-brand)
+        blue: {
+          50: '#f0f8f4',
+          100: '#dceee6',
+          200: '#bcddd0',
+          300: '#8fc5b2',
+          400: '#5ea68f',
+          500: '#3d8b73',
+          600: '#2d705c',
+          700: '#26594c',
+          800: '#22473f',
+          900: '#1f3c36',
+          950: '#0f211d',
+        },
+        // Purple → University Gold scale (labels, highlights become gold)
+        purple: {
+          50: '#fffbeb',
+          100: '#fef3c7',
+          200: '#fde68a',
+          300: '#fcd34d',
+          400: '#fbbf24',
+          500: '#f59e0b',
+          600: '#d97706',
+          700: '#b45309',
+          800: '#92400e',
+          900: '#78350f',
+          950: '#451a03',
+        },
+        // Amber/Yellow → University Gold scale (keeps warnings/highlights on-brand)
+        amber: {
+          50: '#fffbeb',
+          100: '#fef3c7',
+          200: '#fde68a',
+          300: '#fcd34d',
+          400: '#fbbf24',
+          500: '#f59e0b',
+          600: '#d97706',
+          700: '#b45309',
+          800: '#92400e',
+          900: '#78350f',
+          950: '#451a03',
+        },
+        yellow: {
+          50: '#fffbeb',
+          100: '#fef3c7',
+          200: '#fde68a',
+          300: '#fcd34d',
+          400: '#fbbf24',
+          500: '#f59e0b',
+          600: '#d97706',
+          700: '#b45309',
+          800: '#92400e',
+          900: '#78350f',
+          950: '#451a03',
+        },
+        // Green → Baylor Green scale (success, confirmations)
+        green: {
+          50: '#f0f8f4',
+          100: '#dceee6',
+          200: '#bcddd0',
+          300: '#8fc5b2',
+          400: '#5ea68f',
+          500: '#3d8b73',
+          600: '#2d705c',
+          700: '#26594c',
+          800: '#22473f',
+          900: '#1f3c36',
+          950: '#0f211d',
+        },
+        // Cyan/Pink → mapped to brand-safe accents used sparingly
+        cyan: {
+          600: '#006A52', // link green as teal accent
+        },
+        pink: {
+          600: '#d97706', // gold 600 for rare accent usage
+        },
       },
       fontFamily: {
         // Baylor University Brand Typography

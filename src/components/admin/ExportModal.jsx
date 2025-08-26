@@ -161,24 +161,6 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
                     </div>
                 </div>
             </div>
-            <style>{`
-                .export-option {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    padding: 1rem;
-                    border-radius: 0.5rem;
-                    background-color: #f9fafb;
-                    border: 1px solid #e5e7eb;
-                    transition: all 0.2s;
-                }
-                .export-option:hover {
-                    background-color: #f3f4f6;
-                    border-color: #d1d5db;
-                    color: #1f2937;
-                }
-            `}</style>
         </div>
     );
 };

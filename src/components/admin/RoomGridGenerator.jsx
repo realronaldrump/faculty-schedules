@@ -334,7 +334,7 @@ const RoomGridGenerator = () => {
         }).join('');
 
         const vLines = Object.values(dayToColumn).slice(0, -1).map(col =>
-            `<div style="grid-column: ${col}; grid-row: 1 / -1; border-right: 1px solid #e5e7eb;"></div>`
+            `<div style="grid-column: ${col}; grid-row: 1 / -1; border-right: 1px solid var(--neutral-border);"></div>`
         ).join('');
 
         const grid = `
@@ -670,11 +670,11 @@ const RoomGridGenerator = () => {
             </div>
 
             {message.text && (
-                <div className={`border px-4 py-3 rounded-lg relative mb-6 ${message.type === 'success' ? 'bg-green-100 border-green-400 text-green-700' : 'bg-red-100 border-red-400 text-red-700'}`} role="alert">
+                <div className={`alert mb-6 ${message.type === 'success' ? 'alert-success' : 'alert-error'}`} role="alert">
                     <strong className="font-bold">Notice:</strong>
                     <span className="block sm:inline"> {message.text}</span>
                     <span onClick={() => setMessage({ text: '', type: '' })} className="absolute top-0 bottom-0 right-0 px-4 py-3 cursor-pointer">
-                        <X className={`h-6 w-6 ${message.type === 'success' ? 'text-green-500' : 'text-red-500'}`} />
+                        <X className={`h-6 w-6 ${message.type === 'success' ? 'text-baylor-green' : 'text-red-500'}`} />
                     </span>
                 </div>
             )}
@@ -841,12 +841,28 @@ const RoomGridGenerator = () => {
                 .schedule-sheet { 
                     --baylor-green: #154734; 
                     --baylor-gold: #FFB81C; 
-                    background: #ffffff; 
+                    /* neutrals & semantic tokens for this sheet */
+                    --sheet-bg: #ffffff;
+                    --neutral-border: #e5e7eb;
+                    --neutral-border-strong: #d1d5db;
+                    --text-strong: #111827;
+                    --text-muted: #374151;
+                    --accent-bg: #f6f9f6;
+                    --row-bg: #f7faf7;
+                    --block-bg: #f0fff0;
+                    --form-bg: #f8fffa;
+                    --edit-bg: #e5efe9;
+                    --edit-border: #c7d7cf;
+                    --danger-bg: #fee2e2;
+                    --danger-text: #991b1b;
+                    --danger-border: #fecaca;
+                    --green-dark: #0f3a2a;
+                    background: var(--sheet-bg); 
                     width: 7in; 
                     min-height: 5in; 
                     margin: 0 auto; 
                     padding: 0.4in; 
-                    border: 1px solid #e5e7eb; 
+                    border: 1px solid var(--neutral-border); 
                     border-radius: 10px; 
                     box-shadow: 0 10px 30px rgba(0,0,0,0.08);
                 }
@@ -854,10 +870,10 @@ const RoomGridGenerator = () => {
                     border-collapse: collapse;
                     width: 100%;
                     font-size: 12px;
-                    color: #111827;
+                    color: var(--text-strong);
                 }
                 .schedule-table th, .schedule-table td {
-                    border: 1px solid #e5e7eb;
+                    border: 1px solid var(--neutral-border);
                     padding: 10px;
                     text-align: left;
                     vertical-align: top;
@@ -885,7 +901,7 @@ const RoomGridGenerator = () => {
                 .time-slot {
                     font-weight: 700;
                     width: 1.15in;
-                    background-color: #f6f9f6;
+                    background-color: var(--accent-bg);
                     color: var(--baylor-green);
                     text-align: center;
                 }
@@ -895,11 +911,11 @@ const RoomGridGenerator = () => {
                 }
                 .prof-entry {
                     font-size: 11px;
-                    color: #374151;
+                    color: var(--text-muted);
                 }
                 .schedule-table hr {
                     border: 0;
-                    border-top: 1px solid #e5e7eb;
+                    border-top: 1px solid var(--neutral-border);
                     margin: 6px 0;
                 }
                 [contenteditable="true"] {
@@ -909,8 +925,8 @@ const RoomGridGenerator = () => {
                     background-color: rgba(21,71,52,0.05);
                 }
                 [contenteditable="true"]:focus {
-                    outline: 2px solid #3b82f6;
-                    background-color: #eff6ff;
+                    outline: 2px solid var(--baylor-green);
+                    background-color: rgba(21,71,52,0.06);
                     border-radius: 2px;
                 }
                 @media print {
@@ -944,8 +960,8 @@ const RoomGridGenerator = () => {
                 .weekly-header .header-left { display: table; margin: 0 auto; }
                 .weekly-header .header-actions { position: absolute; right: 12px; top: 12px; display: flex; align-items: center; gap: 8px; }
                 .inline-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-                .inline-form label { font-size: 12px; color: #374151; }
-                .inline-input { border: 1px solid #d1d5db; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
+                .inline-form label { font-size: 12px; color: var(--text-muted); }
+                .inline-input { border: 1px solid var(--neutral-border-strong); border-radius: 4px; padding: 4px 6px; font-size: 12px; }
                 .inline-btn { padding: 4px 8px; font-size: 12px; }
                 .weekly-header .text-2xl { font-size: 18px; letter-spacing: 0.5px; }
                 .weekly-header .text-md { font-size: 12px; opacity: 0.9; }
@@ -955,7 +971,7 @@ const RoomGridGenerator = () => {
                     grid-template-rows: auto repeat(var(--rows), var(--rowHeight));
                     position: relative; 
                     gap: 0; 
-                    border: 1px solid #e5e7eb;
+                    border: 1px solid var(--neutral-border);
                 }
                 .weekly-grid .day-header {
                     position: sticky; top: 0; z-index: 2;
@@ -977,15 +993,15 @@ const RoomGridGenerator = () => {
                     justify-content: center; 
                     text-align: center;
                     padding: 4px 2px; 
-                    border-top: 1px solid #e5e7eb; 
-                    border-right: 1px solid #e5e7eb;
-                    background: #f7faf7; 
+                    border-top: 1px solid var(--neutral-border); 
+                    border-right: 1px solid var(--neutral-border);
+                    background: var(--row-bg); 
                 }
                 .weekly-grid .hour-line { 
-                    border-top: 1px solid #e5e7eb; 
+                    border-top: 1px solid var(--neutral-border); 
                 }
                 .weekly-grid .class-block { 
-                    background-color: #f0fff0;
+                    background-color: var(--block-bg);
                     border: 1px solid var(--baylor-green);
                     border-left: 3px solid var(--baylor-green);
                     border-radius: 4px;
@@ -1002,15 +1018,15 @@ const RoomGridGenerator = () => {
                     position: relative;
                 }
                 .weekly-grid .class-title { font-weight: 700; color: var(--baylor-green); font-size: 11px; line-height: 1.2; }
-                .weekly-grid .class-instructor { font-size: 10px; color: #374151; line-height: 1.2; }
-                .weekly-grid .class-time { font-size: 9px; color: #111827; line-height: 1.2; }
+                .weekly-grid .class-instructor { font-size: 10px; color: var(--text-muted); line-height: 1.2; }
+                .weekly-grid .class-time { font-size: 9px; color: var(--text-strong); line-height: 1.2; }
 
                 /* Editing helpers */
                 .slot-toolbar { display: flex; justify-content: flex-end; }
-                .slot-add-btn { background: #e5efe9; color: var(--baylor-green); border: 1px solid #c7d7cf; border-radius: 4px; padding: 2px 6px; font-size: 11px; cursor: pointer; }
+                .slot-add-btn { background: var(--edit-bg); color: var(--baylor-green); border: 1px solid var(--edit-border); border-radius: 4px; padding: 2px 6px; font-size: 11px; cursor: pointer; }
                 .class-list { display: flex; flex-direction: column; gap: 6px; }
                 .class-entry-wrapper { position: relative; padding-right: 18px; }
-                .delete-entry-btn { position: absolute; top: 0; right: 0; background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; width: 16px; height: 16px; line-height: 14px; text-align: center; border-radius: 4px; cursor: pointer; font-size: 12px; }
+                .delete-entry-btn { position: absolute; top: 0; right: 0; background: var(--danger-bg); color: var(--danger-text); border: 1px solid var(--danger-border); width: 16px; height: 16px; line-height: 14px; text-align: center; border-radius: 4px; cursor: pointer; font-size: 12px; }
                 .delete-block-btn { top: 4px; right: 4px; }
                 .weekly-add-form {
                     display: flex;
@@ -1018,7 +1034,7 @@ const RoomGridGenerator = () => {
                     align-items: center;
                     margin: 15px 0;
                     padding: 15px;
-                    background-color: #f8fffa;
+                    background-color: var(--form-bg);
                     border: 2px solid var(--baylor-green);
                     border-radius: 8px;
                     box-shadow: 0 4px 12px rgba(21,71,52,0.15);
@@ -1037,10 +1053,10 @@ const RoomGridGenerator = () => {
                 }
                 .weekly-add-form .inline-input {
                     padding: 8px 12px;
-                    border: 1px solid #c7d7cf;
+                    border: 1px solid var(--edit-border);
                     border-radius: 6px;
                     font-size: 12px;
-                    color: #111827;
+                    color: var(--text-strong);
                     min-width: 100px;
                     background: white;
                 }
@@ -1063,16 +1079,16 @@ const RoomGridGenerator = () => {
                     border: 1px solid var(--baylor-green); 
                 }
                 .weekly-add-form .btn-primary:hover { 
-                    background: #0f3a2a; 
-                    border-color: #0f3a2a; 
+                    background: var(--green-dark); 
+                    border-color: var(--green-dark); 
                 }
                 .weekly-add-form .btn-secondary { 
-                    background: #f8fffa; 
+                    background: var(--form-bg); 
                     color: var(--baylor-green); 
                     border: 1px solid var(--baylor-green); 
                 }
                 .weekly-add-form .btn-secondary:hover { 
-                    background: #e5efe9; 
+                    background: var(--edit-bg); 
                 }
                 
                 /* Day checkbox styling */
@@ -1087,13 +1103,13 @@ const RoomGridGenerator = () => {
                     gap: 4px;
                     cursor: pointer;
                     padding: 4px 8px;
-                    border: 1px solid #c7d7cf;
+                    border: 1px solid var(--edit-border);
                     border-radius: 4px;
                     background: white;
                     transition: all 0.2s;
                 }
                 .day-checkbox:hover {
-                    background: #f0fff0;
+                    background: var(--block-bg);
                     border-color: var(--baylor-green);
                 }
                 .day-checkbox input[type="checkbox"] {

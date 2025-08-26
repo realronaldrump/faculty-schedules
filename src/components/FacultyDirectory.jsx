@@ -63,6 +63,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
     hasPhD: 'all', // 'all', 'include', 'exclude'
     hasBaylorId: 'all' // 'all', 'with-id', 'without-id'
   });
+  const [pinUPDsFirst, setPinUPDsFirst] = useState(false);
 
   // Helper function to extract building name from office location
   const extractBuildingName = (officeLocation) => {
@@ -337,6 +338,11 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
 
     // Sorting
     data.sort((a, b) => {
+      // Optional: bring UPDs to the top subtly without adding a new column
+      if (pinUPDsFirst) {
+        if (!!a.isUPD && !b.isUPD) return -1;
+        if (!a.isUPD && !!b.isUPD) return 1;
+      }
       let valA, valB;
       
       if (sortConfig.key === 'name') {
@@ -379,7 +385,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
     });
 
     return data;
-  }, [uniqueDirectoryData, filterText, filters, sortConfig, nameSort, showOnlyWithCourses]);
+  }, [uniqueDirectoryData, filterText, filters, sortConfig, nameSort, showOnlyWithCourses, pinUPDsFirst]);
 
   const validate = (data) => {
     const newErrors = {};
@@ -715,6 +721,19 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
               Faculty Directory ({sortedAndFilteredData.length} members)
             </h2>
             <div className="flex items-center gap-4">
+                {/* UPD-first toggle (subtle) */}
+                <button
+                  onClick={() => setPinUPDsFirst(prev => !prev)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                    pinUPDsFirst
+                      ? 'bg-amber-100 text-amber-800 border-amber-200'
+                      : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'
+                  }`}
+                  title="Bring Undergraduate Program Directors to the top"
+                >
+                  <UserCog size={16} />
+                  <span className="text-xs font-medium">UPD first</span>
+                </button>
                 {/* Course count filter UI */}
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -1349,6 +1368,12 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                         <div>{faculty.name}</div>
                         {faculty.program && (
                           <div className="text-xs text-baylor-green font-medium">{faculty.program.name}</div>
+                        )}
+                        {faculty.isUPD && (
+                          <div className="text-xs text-amber-600 font-medium flex items-center gap-1">
+                            <UserCog size={12} />
+                            UPD
+                          </div>
                         )}
                         {faculty.isAlsoStaff && (
                           <div className="text-xs text-baylor-gold font-medium">Also Staff</div>

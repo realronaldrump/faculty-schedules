@@ -1047,16 +1047,6 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
           </div>
                 )}
 
-        {/* Baylor ID Assignment Summary
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-          <p className="flex items-center">
-            <span className="mr-2">💡</span>
-            Showing {sortedAndFilteredData.length} faculty members.
-            {sortedAndFilteredData.filter(f => !f.baylorId || f.baylorId.trim() === '').length > 0 &&
-              ` ${sortedAndFilteredData.filter(f => !f.baylorId || f.baylorId.trim() === '').length} need Baylor ID assignment.`
-            }
-          </p>
-        </div> */}
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

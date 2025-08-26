@@ -367,6 +367,18 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     }).join(' | ');
   };
 
+  const formatTime12h = (timeStr) => {
+    if (!timeStr || typeof timeStr !== 'string') return timeStr || '';
+    const [hStr, mStr = '00'] = timeStr.split(':');
+    let hour = parseInt(hStr, 10);
+    if (Number.isNaN(hour)) return timeStr;
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    hour = hour % 12;
+    if (hour === 0) hour = 12;
+    const minutes = (mStr || '00').padStart(2, '0');
+    return `${hour}:${minutes} ${ampm}`;
+  };
+
   const SortableHeader = ({ label, columnKey }) => {
     const isSorted = sortConfig.key === columnKey;
     const directionIcon = isSorted ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : <ArrowUpDown size={14} className="opacity-30" />;
@@ -590,7 +602,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
               <div className="mt-2 flex flex-wrap gap-2">
                 {newStudent.weeklySchedule.map((entry, idx) => (
                   <span key={idx} className="inline-flex items-center gap-1 text-xs bg-gray-100 px-2 py-1 rounded">
-                    {entry.day} {entry.start}-{entry.end}
+                    {entry.day} {formatTime12h(entry.start)}-{formatTime12h(entry.end)}
                     <button onClick={() => removeScheduleEntry(idx)} className="text-gray-500 hover:text-gray-700"><X className="h-3 w-3" /></button>
                   </span>
                 ))}
@@ -772,7 +784,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                 <div className="mt-2 flex flex-wrap gap-2">
                   {(editFormData.weeklySchedule || []).map((entry, idx) => (
                     <span key={idx} className="inline-flex items-center gap-1 text-xs bg-gray-100 px-2 py-1 rounded">
-                      {entry.day} {entry.start}-{entry.end}
+                      {entry.day} {formatTime12h(entry.start)}-{formatTime12h(entry.end)}
                       <button onClick={() => removeEditScheduleEntry(idx)} className="text-gray-500 hover:text-gray-700"><X className="h-3 w-3" /></button>
                     </span>
                   ))}

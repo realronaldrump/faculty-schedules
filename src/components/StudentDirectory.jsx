@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Edit, Save, X, GraduationCap, Mail, Phone, PhoneOff, Clock, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, Filter, UserCog } from 'lucide-react';
+import { Edit, Save, X, GraduationCap, Mail, Phone, PhoneOff, Clock, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, Filter } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
-import CustomAlert from './CustomAlert';
 
 const formatPhoneNumber = (phoneStr) => {
     if (!phoneStr) return '-';
@@ -343,6 +342,17 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     if (!Array.isArray(entries) || entries.length === 0) return '-';
     const dayOrder = ['M','T','W','R','F'];
     const dayLabels = { M: 'Mon', T: 'Tue', W: 'Wed', R: 'Thu', F: 'Fri' };
+    const to12Hour = (timeStr) => {
+      if (!timeStr || typeof timeStr !== 'string') return timeStr || '';
+      const [hStr, mStr = '00'] = timeStr.split(':');
+      let hour = parseInt(hStr, 10);
+      if (Number.isNaN(hour)) return timeStr;
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      hour = hour % 12;
+      if (hour === 0) hour = 12;
+      const minutes = (mStr || '00').padStart(2, '0');
+      return `${hour}:${minutes} ${ampm}`;
+    };
     const grouped = {};
     entries.forEach(e => {
       const key = `${e.start}-${e.end}`;
@@ -353,58 +363,103 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
       const orderedDays = days.sort((a,b) => dayOrder.indexOf(a) - dayOrder.indexOf(b));
       const dayStr = orderedDays.map(d => dayLabels[d]).join(',');
       const [s, e] = time.split('-');
-      return `${dayStr} ${s}–${e}`;
+      return `${dayStr} ${to12Hour(s)}–${to12Hour(e)}`;
     }).join(' | ');
+  };
+
+  const SortableHeader = ({ label, columnKey }) => {
+    const isSorted = sortConfig.key === columnKey;
+    const directionIcon = isSorted ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : <ArrowUpDown size={14} className="opacity-30" />;
+    return (
+      <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">
+        <button className="flex items-center gap-2" onClick={() => handleSort(columnKey)}>
+          {label}
+          {directionIcon}
+        </button>
+      </th>
+    );
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <GraduationCap className="h-5 w-5 text-baylor-green" />
-            Student Workers
-          </h3>
-          <p className="text-sm text-gray-600 mt-1">
-            {filteredAndSortedData.length} student{filteredAndSortedData.length !== 1 ? 's' : ''} found
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {changeHistory.length > 0 && (
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
+        <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200">
+          <h2 className="text-xl font-serif font-semibold text-baylor-green flex items-center">
+            <GraduationCap className="mr-2 text-baylor-gold" size={20} />
+            Student Directory ({filteredAndSortedData.length})
+          </h2>
+          <div className="flex items-center gap-4">
+            {sortConfig.key === 'name' && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-gray-600">Sort by:</span>
+                <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                  <button
+                    onClick={() => setNameSort('firstName')}
+                    className={`px-3 py-1 text-xs ${
+                      nameSort === 'firstName' ? 'bg-baylor-green text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    First Name
+                  </button>
+                  <button
+                    onClick={() => setNameSort('lastName')}
+                    className={`px-3 py-1 text-xs ${
+                      nameSort === 'lastName' ? 'bg-baylor-green text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    Last Name
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="text"
+                placeholder="Filter directory..."
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                className="w-full pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+              />
+            </div>
             <button
-              onClick={undoLastChange}
-              className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-md flex items-center gap-2 text-sm"
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                showFilters ? 'bg-baylor-green text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
             >
-              <RotateCcw className="h-4 w-4" />
-              Undo
+              <Filter size={16} />
+              Filters
             </button>
-          )}
-          <button
-            onClick={() => setShowHistory(!showHistory)}
-            className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-md flex items-center gap-2 text-sm"
-          >
-            <History className="h-4 w-4" />
-            History ({changeHistory.length})
-          </button>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-md flex items-center gap-2 text-sm"
-          >
-            <Filter className="h-4 w-4" />
-            Filters
-          </button>
-          <button
-            onClick={startCreate}
-            className="px-4 py-2 bg-baylor-green hover:bg-baylor-green/90 text-white rounded-md flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            Add Student
-          </button>
+            {changeHistory.length > 0 && (
+              <button
+                onClick={() => setShowHistory(!showHistory)}
+                className="flex items-center gap-2 px-3 py-2 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 transition-colors"
+              >
+                <History size={16} />
+                Changes ({changeHistory.length})
+              </button>
+            )}
+            {changeHistory.length > 0 && (
+              <button
+                onClick={undoLastChange}
+                className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                <RotateCcw size={16} />
+                Undo
+              </button>
+            )}
+            <button
+              onClick={startCreate}
+              className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+            >
+              <Plus size={18} />
+              Add Student
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* Shared datalists for suggestions */}
+        {/* Shared datalists for suggestions */}
       <datalist id="supervisor-options">
         {availableSupervisors.map(s => (
           <option key={s} value={s} />
@@ -416,26 +471,32 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
         ))}
       </datalist>
 
-      {/* Search Bar */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-        <input
-          type="text"
-          placeholder="Search by name, email, department, supervisor, or schedule..."
-          value={filterText}
-          onChange={(e) => setFilterText(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-        />
-      </div>
-
-      {/* Advanced Filters */}
-      {showFilters && (
-        <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+        {/* Advanced Filters */}
+        {showFilters && (
+        <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-medium text-gray-900">Advanced Filters</h3>
+            <button
+              onClick={() => {
+                setFilters({
+                  departments: { include: [], exclude: [] },
+                  supervisors: { include: [], exclude: [] },
+                  hasEmail: true,
+                  hasPhone: true,
+                  activeOnly: true
+                });
+                setFilterText('');
+              }}
+              className="text-sm text-baylor-green hover:text-baylor-green/80 font-medium"
+            >
+              Clear All Filters
+            </button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Supervisor</label>
               <select
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
                 value=""
                 onChange={(e) => {
                   if (e.target.value) {
@@ -454,11 +515,11 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
             </div>
           </div>
         </div>
-      )}
+        )}
 
-      {/* Create New Student Form */}
-      {isCreating && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        {/* Create New Student Form */}
+        {isCreating && (
+        <div className="bg-baylor-gold/5 border border-baylor-gold/30 rounded-lg p-4">
           <h4 className="font-medium text-gray-900 mb-4">Add New Student Worker</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -549,11 +610,6 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                 className="w-full border border-gray-300 rounded-md px-3 py-2"
                 placeholder="Supervisor name (select or type new)"
               />
-              <datalist id="supervisor-options">
-                {availableSupervisors.map(s => (
-                  <option key={s} value={s} />
-                ))}
-              </datalist>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Job Title</label>
@@ -619,93 +675,43 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
           <div className="flex justify-end gap-2 mt-4">
             <button
               onClick={cancelCreate}
-              className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
             >
               Cancel
             </button>
             <button
               onClick={saveCreate}
-              className="px-4 py-2 bg-baylor-green text-white rounded-md hover:bg-baylor-green/90"
+              className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90"
             >
               <Save className="h-4 w-4 inline mr-2" />
               Save Student
             </button>
           </div>
         </div>
-      )}
+        )}
 
-      {/* Students Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        {/* Students Table */}
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('name')}
-                >
-                  <div className="flex items-center gap-1">
-                    Name
-                    <ArrowUpDown className="h-3 w-3" />
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setNameSort(nameSort === 'firstName' ? 'lastName' : 'firstName');
-                      }}
-                      className="ml-1 text-xs text-blue-600 hover:text-blue-800"
-                    >
-                      ({nameSort === 'firstName' ? 'First' : 'Last'})
-                    </button>
-                  </div>
-                </th>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('email')}
-                >
-                  <div className="flex items-center gap-1">
-                    Email
-                    <ArrowUpDown className="h-3 w-3" />
-                  </div>
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Phone
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Weekly Schedule
-                </th>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('jobTitle')}
-                >
-                  <div className="flex items-center gap-1">
-                    Job Title
-                    <ArrowUpDown className="h-3 w-3" />
-                  </div>
-                </th>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('supervisor')}
-                >
-                  <div className="flex items-center gap-1">
-                    Supervisor
-                    <ArrowUpDown className="h-3 w-3" />
-                  </div>
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Building(s)
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-baylor-green/5">
+                <SortableHeader label="Name" columnKey="name" />
+                <SortableHeader label="Email" columnKey="email" />
+                <SortableHeader label="Phone" columnKey="phone" />
+                <SortableHeader label="Weekly Schedule" columnKey="weeklySchedule" />
+                <SortableHeader label="Job Title" columnKey="jobTitle" />
+                <SortableHeader label="Supervisor" columnKey="supervisor" />
+                <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">Building(s)</th>
+                <th className="px-4 py-3"></th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="divide-y divide-gray-200">
               {filteredAndSortedData.map((student) => (
                 <tr key={student.id} className="hover:bg-gray-50">
                   {editingId === student.id ? (
                     // Edit row
                     <>
-                      <td className="px-6 py-4">
+                      <td className="p-2 align-top">
                         <input
                           type="text"
                           value={editFormData.name || ''}
@@ -714,7 +720,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                         />
                         {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="p-2 align-top">
                         <input
                           type="email"
                           value={editFormData.email || ''}
@@ -723,7 +729,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                         />
                         {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="p-2 align-top">
                         <div className="flex items-center gap-2">
                           <input
                             type="tel"
@@ -744,7 +750,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                         </div>
                         {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
                       </td>
-              <td className="px-6 py-4">
+              <td className="p-2 align-top">
                 <div className="flex gap-2 items-end">
                   <select
                     className="border rounded px-2 py-1 text-sm"
@@ -775,7 +781,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                   )}
                 </div>
               </td>
-                      <td className="px-6 py-4">
+                      <td className="p-2 align-top">
                 <input
                   list="jobtitle-options"
                   type="text"
@@ -784,7 +790,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                   className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
                 />
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="p-2 align-top">
                         <input
                           list="supervisor-options"
                           type="text"
@@ -793,7 +799,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                           className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
                         />
                       </td>
-              <td className="px-6 py-4">
+              <td className="p-2 align-top">
                 <div className="flex gap-3 text-xs">
                   <label className="flex items-center gap-1">
                     <input type="checkbox" checked={(editFormData.primaryBuildings || []).includes('Mary Gibbs Jones')} onChange={(e) => setEditFormData(prev => ({
@@ -813,21 +819,21 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                   </label>
                 </div>
               </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end gap-2">
+                      <td className="p-2 align-top text-right">
+                        <div className="flex gap-2 justify-end">
                           <button
                             onClick={saveEdit}
-                            className="text-green-600 hover:text-green-800"
+                            className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
                             title="Save"
                           >
-                            <Save className="h-4 w-4" />
+                            <Save size={16} />
                           </button>
                           <button
                             onClick={cancelEdit}
-                            className="text-gray-600 hover:text-gray-800"
+                            className="p-2 text-red-600 hover:bg-red-100 rounded-full"
                             title="Cancel"
                           >
-                            <X className="h-4 w-4" />
+                            <X size={16} />
                           </button>
                         </div>
                       </td>
@@ -835,7 +841,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                   ) : (
                     // Display row
                     <>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap cursor-pointer" onClick={() => setSelectedStudentForCard(student)}>
                         <div className="flex items-center">
                           <div>
                             <div className="text-sm font-medium text-gray-900">
@@ -849,13 +855,13 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center">
                           <Mail className="h-4 w-4 text-gray-400 mr-2" />
                           <span className="text-sm text-gray-900">{student.email || '-'}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center">
                           {student.hasNoPhone ? (
                             <PhoneOff className="h-4 w-4 text-gray-400 mr-2" />
@@ -867,43 +873,36 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-3">
                         <div className="flex items-center">
                           <Clock className="h-4 w-4 text-gray-400 mr-2" />
                           <span className="text-sm text-gray-900">{formatWeeklySchedule(student.weeklySchedule) || '-'}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <span className="text-sm text-gray-900">{student.jobTitle || '-'}</span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <span className="text-sm text-gray-900">{student.supervisor || '-'}</span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <span className="text-sm text-gray-900">{Array.isArray(student.primaryBuildings) ? student.primaryBuildings.join(', ') : (student.primaryBuilding || '-')}</span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => setSelectedStudentForCard(student)}
-                            className="text-baylor-green hover:text-baylor-green/80"
-                            title="View Contact Card"
-                          >
-                            <UserCog className="h-4 w-4" />
-                          </button>
+                      <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex justify-end gap-1">
                           <button
                             onClick={() => startEdit(student)}
-                            className="text-blue-600 hover:text-blue-800"
+                            className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
                             title="Edit"
                           >
-                            <Edit className="h-4 w-4" />
+                            <Edit size={16} />
                           </button>
                           <button
                             onClick={() => confirmDelete(student)}
-                            className="text-red-600 hover:text-red-800"
+                            className="p-2 text-red-600 hover:bg-red-100 rounded-full"
                             title="Delete"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </td>
@@ -914,7 +913,6 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
             </tbody>
           </table>
         </div>
-        
         {filteredAndSortedData.length === 0 && (
           <div className="text-center py-12">
             <GraduationCap className="mx-auto h-12 w-12 text-gray-400" />

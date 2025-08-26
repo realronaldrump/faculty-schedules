@@ -233,7 +233,8 @@ function App() {
       icon: Database,
       children: [
         { id: 'building-directory', label: 'Office Directory', path: 'resources/building-directory' },
-        { id: 'room-grid-generator', label: 'Room Grid Generator', path: 'resources/room-grid-generator' }
+        { id: 'room-grid-generator', label: 'Room Grid Generator', path: 'resources/room-grid-generator' },
+        { id: 'baylor-acronyms', label: 'Baylor Acronyms', path: 'administration/baylor-acronyms' }
       ]
     },
     {
@@ -254,8 +255,7 @@ function App() {
         { id: 'smart-import', label: 'Data Import', path: 'administration/smart-import' },
         { id: 'data-hygiene', label: 'Data Hygiene', path: 'administration/data-hygiene' },
         { id: 'recent-changes', label: 'Recent Changes', path: 'administration/recent-changes' },
-        { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' },
-        { id: 'baylor-acronyms', label: 'Baylor Acronyms', path: 'administration/baylor-acronyms' }
+        { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' }
       ]
     }
   ];

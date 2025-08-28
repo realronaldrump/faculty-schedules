@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { MapPin, Calendar, Clock, Search, Grid, List, Filter, Building2, X, SlidersHorizontal, ArrowUpDown, Download, Printer } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
 import WeekView from './WeekView';
+import CourseDetailModal from './CourseDetailModal';
 
 const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate }) => {
   const [roomScheduleDay, setRoomScheduleDay] = useState('M');
@@ -18,6 +19,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
     const now = new Date();
     return now.getHours() * 60 + now.getMinutes();
   });
+  const [selectedCourseForModal, setSelectedCourseForModal] = useState(null);
 
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
   const dayOrder = ['M', 'T', 'W', 'R', 'F'];
@@ -31,6 +33,14 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
     const match = trimmed.match(/^(.*?)(?=\s(?:[A-Za-z-]*\d))/);
     const name = (match && match[1] ? match[1] : trimmed).trim();
     return name || trimmed.split(' ')[0];
+  };
+
+  // Normalize a meeting pattern string to ordered unique chars (e.g., "WFM" -> "MWF")
+  const normalizePattern = (patternStr) => {
+    if (!patternStr) return '';
+    const order = ['M', 'T', 'W', 'R', 'F'];
+    const set = new Set((patternStr || '').split('').filter(Boolean));
+    return order.filter(d => set.has(d)).join('');
   };
 
   useEffect(() => {
@@ -179,6 +189,16 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
     // Fallback to Day field
     return course?.Day || '';
   };
+
+  const openCourseCard = (item, roomOverride) => {
+    if (!item) return;
+    const pattern = item.__pattern || normalizePattern(getMeetingPattern(item.Course, item['Start Time'], item['End Time']) || item.Day || '');
+    const room = roomOverride || item.__room || ((item.Room || '').split(';')[0] || '').trim();
+    const building = getBuildingFromRoom(room);
+    setSelectedCourseForModal({ item, pattern, room, building });
+  };
+
+  const closeCourseCard = () => setSelectedCourseForModal(null);
 
   // Calculate room utilization stats
   const roomStats = useMemo(() => {
@@ -361,11 +381,12 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
                         bottom: density === 'compact' ? '4px' : '6px' 
                       }}
                       className={`px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md shadow-sm transition-all cursor-pointer group ${nowMinutes >= start && nowMinutes <= end ? 'bg-baylor-gold text-baylor-green ring-2 ring-baylor-gold/40' : 'bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green'}`}
+                      onClick={() => openCourseCard(item, room)}
                     >
                       <div className="font-bold truncate">{item.Course}</div>
                       <button
                         className="truncate hover:underline w-full text-left"
-                        onClick={() => handleShowContactCard(item.Instructor)}
+                        onClick={(e) => { e.stopPropagation(); handleShowContactCard(item.Instructor); }}
                       >
                         {item.Instructor}
                       </button>
@@ -404,7 +425,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
             {dailyRoomSchedules[room].length > 0 ? (
               <div className="space-y-3">
                 {dailyRoomSchedules[room].map((session, index) => (
-                  <div key={index} className={`flex items-center justify-between ${density === 'compact' ? 'p-3' : 'p-4'} bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors`}>
+                  <div key={index} className={`flex items-center justify-between ${density === 'compact' ? 'p-3' : 'p-4'} bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer`} onClick={() => openCourseCard(session, room)}>
                     <div className="flex-1">
                       <div className="flex items-center space-x-4">
                         <div className="font-semibold text-baylor-green">
@@ -417,7 +438,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
                       <div className="flex items-center space-x-4 mt-1">
                         <button
                           className="text-sm text-baylor-green hover:underline font-medium"
-                          onClick={() => handleShowContactCard(session.Instructor)}
+                          onClick={(e) => { e.stopPropagation(); handleShowContactCard(session.Instructor); }}
                         >
                           {session.Instructor}
                         </button>
@@ -752,6 +773,18 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
         <FacultyContactCard
           faculty={selectedFacultyForCard}
           onClose={() => setSelectedFacultyForCard(null)}
+        />
+      )}
+
+      {/* Course Detail Modal */}
+      {selectedCourseForModal && (
+        <CourseDetailModal
+          item={selectedCourseForModal.item}
+          pattern={selectedCourseForModal.pattern}
+          room={selectedCourseForModal.room}
+          building={selectedCourseForModal.building}
+          onClose={closeCourseCard}
+          onShowContactCard={(name) => handleShowContactCard(name)}
         />
       )}
     </div>

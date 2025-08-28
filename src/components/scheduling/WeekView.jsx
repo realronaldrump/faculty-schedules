@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { MapPin, Download, Printer } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { MapPin, Download, Printer, X } from 'lucide-react';
 
 const WeekView = ({ 
   scheduleData, 
@@ -14,6 +14,9 @@ const WeekView = ({
 }) => {
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
   const dayOrder = ['M', 'T', 'W', 'R', 'F'];
+
+  // Course detail card state
+  const [selectedCourse, setSelectedCourse] = useState(null);
 
   // Time scale configuration (dynamic 8:00 AM to last class end)
   const dayStartMinutes = 8 * 60;
@@ -127,6 +130,17 @@ const WeekView = ({
     return labels;
   }, [latestEndMinutes]);
   const totalMinutes = Math.max(0, latestEndMinutes - dayStartMinutes);
+
+  // Open/close handlers for course detail card
+  const openCourseCard = (item) => {
+    if (!item) return;
+    const pattern = item.__pattern || normalizePattern(getMeetingPattern(item.Course, item['Start Time'], item['End Time']) || item.Day || '');
+    const room = item.__room || ((item.Room || '').split(';')[0] || '').trim();
+    const building = getBuildingFromRoom(room);
+    setSelectedCourse({ item, pattern, room, building });
+  };
+
+  const closeCourseCard = () => setSelectedCourse(null);
 
   // Get meeting pattern for a course
   const getMeetingPattern = (courseCode, startTime, endTime) => {
@@ -401,11 +415,12 @@ const WeekView = ({
                                     : 'bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green'
                                 }`}
                                 title={`${item.Course} • ${item['Start Time']} - ${item['End Time']} • ${pattern}`}
+                                onClick={() => openCourseCard(item)}
                               >
                                 <div className="font-bold truncate">{item.Course}</div>
                                 <button
                                   className="truncate hover:underline w-full text-left"
-                                  onClick={() => onShowContactCard(item.Instructor)}
+                                  onClick={(e) => { e.stopPropagation(); onShowContactCard(item.Instructor); }}
                                 >
                                   {item.Instructor}
                                 </button>
@@ -430,6 +445,103 @@ const WeekView = ({
           ))}
         </div>
       ))}
+      {/* Course Detail Modal */}
+      {selectedCourse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={closeCourseCard}>
+          <div className="absolute inset-0 bg-black/40"></div>
+          <div
+            className="relative w-full max-w-lg bg-white rounded-lg shadow-xl border border-gray-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <div>
+                <div className="text-sm text-gray-500">Course</div>
+                <h4 className="text-lg font-semibold text-baylor-green">
+                  {selectedCourse.item?.Course}
+                  {selectedCourse.item?.Section ? (
+                    <span className="ml-2 text-gray-500 font-normal">Sec {selectedCourse.item.Section}</span>
+                  ) : null}
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={closeCourseCard}
+                className="p-2 rounded-md hover:bg-gray-100 text-gray-600"
+                aria-label="Close course details"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              {selectedCourse.item?.Title || selectedCourse.item?.['Course Title'] ? (
+                <div className="text-gray-800">{selectedCourse.item?.Title || selectedCourse.item?.['Course Title']}</div>
+              ) : null}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs text-gray-500">Instructor</div>
+                  <button
+                    className="text-baylor-green hover:underline"
+                    onClick={(e) => { e.stopPropagation(); onShowContactCard(selectedCourse.item?.Instructor); }}
+                  >
+                    {selectedCourse.item?.Instructor || '—'}
+                  </button>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Meeting Pattern</div>
+                  <div className="text-gray-800">{selectedCourse.pattern || selectedCourse.item?.Day || '—'}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Time</div>
+                  <div className="text-gray-800">{selectedCourse.item?.['Start Time']} - {selectedCourse.item?.['End Time']}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Room</div>
+                  <div className="text-gray-800">{selectedCourse.room || selectedCourse.item?.Room || '—'}</div>
+                  {selectedCourse.building ? (
+                    <div className="text-xs text-gray-500">{selectedCourse.building}</div>
+                  ) : null}
+                </div>
+
+                {selectedCourse.item?.CRN ? (
+                  <div>
+                    <div className="text-xs text-gray-500">CRN</div>
+                    <div className="text-gray-800">{selectedCourse.item.CRN}</div>
+                  </div>
+                ) : null}
+
+                {selectedCourse.item?.Enrollment || selectedCourse.item?.Cap ? (
+                  <div>
+                    <div className="text-xs text-gray-500">Enrollment</div>
+                    <div className="text-gray-800">
+                      {selectedCourse.item?.Enrollment || '—'}
+                      {selectedCourse.item?.Cap ? ` / ${selectedCourse.item.Cap}` : ''}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              {selectedCourse.item?.Notes ? (
+                <div className="mt-2">
+                  <div className="text-xs text-gray-500">Notes</div>
+                  <div className="text-gray-800 whitespace-pre-wrap">{selectedCourse.item.Notes}</div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="p-3 border-t border-gray-200 flex justify-end">
+              <button
+                type="button"
+                onClick={closeCourseCard}
+                className="px-3 py-1.5 text-sm font-medium text-baylor-green bg-white border border-baylor-green rounded-md hover:bg-baylor-green hover:text-white transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

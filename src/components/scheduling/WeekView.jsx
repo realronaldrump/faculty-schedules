@@ -283,6 +283,66 @@ const WeekView = ({
     return result;
   }, [scheduleData, filteredRooms, selectedRoom, getMeetingPattern]);
 
+  // --- Overlap layout: place overlapping items side-by-side per room ---
+  const layoutRoomEvents = (items) => {
+    if (!items || items.length === 0) return [];
+
+    // Normalize events with numeric times
+    const events = items
+      .map((it, idx) => ({
+        idx,
+        it,
+        start: parseTime(it['Start Time']),
+        end: parseTime(it['End Time'])
+      }))
+      .filter(e => e.start !== null && e.end !== null && e.end > e.start)
+      .sort((a, b) => a.start - b.start || a.end - b.end);
+
+    const laidOut = new Array(events.length);
+
+    let clusterStart = 0;
+    while (clusterStart < events.length) {
+      // Build a cluster of mutually-overlapping events
+      let clusterEnd = clusterStart + 1;
+      let maxEnd = events[clusterStart].end;
+      while (clusterEnd < events.length && events[clusterEnd].start < maxEnd) {
+        maxEnd = Math.max(maxEnd, events[clusterEnd].end);
+        clusterEnd++;
+      }
+
+      // Assign lanes within this cluster (greedy, first free lane)
+      const activeByLane = []; // lane -> end time
+      for (let i = clusterStart; i < clusterEnd; i++) {
+        const ev = events[i];
+        // free lanes whose events ended
+        for (let l = 0; l < activeByLane.length; l++) {
+          if (activeByLane[l] <= ev.start) activeByLane[l] = -1; // mark free
+        }
+        // find first free lane
+        let lane = activeByLane.findIndex(t => t === -1);
+        if (lane === -1) lane = activeByLane.length;
+        activeByLane[lane] = ev.end;
+        laidOut[i] = { ...ev, lane };
+      }
+
+      const lanes = activeByLane.length || 1;
+      for (let i = clusterStart; i < clusterEnd; i++) {
+        laidOut[i].lanes = lanes;
+      }
+
+      clusterStart = clusterEnd;
+    }
+
+    // Map back to original item order for rendering
+    return laidOut.map(({ it, start, end, lane, lanes }) => ({
+      item: it,
+      start,
+      end,
+      lane,
+      lanes
+    }));
+  };
+
   return (
     <div className="space-y-6">
       {/* Week View Header */}
@@ -395,9 +455,22 @@ const WeekView = ({
                     <div className="flex relative" style={{ height: `${totalMinutes * pixelsPerMinute}px` }}>
                       {rooms.map((room) => (
                         <div key={`${bucket}-body-${room}`} className="flex-1 relative border-r last:border-r-0">
-                          {(buildingPatternSchedules?.[building]?.[bucket]?.[room] || []).map((item, index) => {
-                            const style = getScheduleItemStyle(item['Start Time'], item['End Time']);
-                            if (!style) return null;
+                          {layoutRoomEvents(buildingPatternSchedules?.[building]?.[bucket]?.[room] || []).map((ev, index) => {
+                            const { item, lane, lanes } = ev;
+                            const baseStyle = getScheduleItemStyle(item['Start Time'], item['End Time']);
+                            if (!baseStyle) return null;
+
+                            // Side-by-side width/offset within a collision cluster
+                            const gutter = 4; // px space between overlapping blocks
+                            const widthPct = 100 / lanes;
+                            const leftPct = widthPct * lane;
+
+                            const style = {
+                              ...baseStyle,
+                              left: `calc(${leftPct}% + 2px)`,
+                              width: `calc(${widthPct}% - ${gutter}px - 4px)`,
+                              right: 'auto'
+                            };
 
                             const pattern = item.__pattern || normalizePattern(getMeetingPattern(item.Course, item['Start Time'], item['End Time']));
                             const isCurrent =
@@ -408,7 +481,7 @@ const WeekView = ({
                             return (
                               <div
                                 key={`${building}-${bucket}-${room}-${index}`}
-                                style={{ ...style, left: '2px', right: '2px' }}
+                                style={style}
                                 className={`px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md shadow-sm transition-all cursor-pointer group ${
                                   isCurrent
                                     ? 'bg-baylor-gold text-baylor-green ring-2 ring-baylor-gold/40'

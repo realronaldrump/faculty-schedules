@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { MapPin, Calendar, Clock, Search, Grid, List, Filter, Building2, X, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
+import { MapPin, Calendar, Clock, Search, Grid, List, Filter, Building2, X, SlidersHorizontal, ArrowUpDown, Download, Printer } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
+import WeekView from './WeekView';
 
 const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate }) => {
   const [roomScheduleDay, setRoomScheduleDay] = useState('M');
-  const [viewMode, setViewMode] = useState('timeline'); // 'timeline' or 'list'
+  const [viewMode, setViewMode] = useState('timeline'); // 'timeline', 'list', or 'week'
   const [selectedRoom, setSelectedRoom] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
@@ -12,12 +13,14 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
   const [showOnlyInUse, setShowOnlyInUse] = useState(false);
   const [density, setDensity] = useState('comfortable'); // 'comfortable' | 'compact'
   const [sortBy, setSortBy] = useState('room'); // 'room' | 'sessions' | 'utilization'
+  const [weekViewMode, setWeekViewMode] = useState('all'); // 'all', 'mwf', 'tr', 'mw', 'trf'
   const [nowMinutes, setNowMinutes] = useState(() => {
     const now = new Date();
     return now.getHours() * 60 + now.getMinutes();
   });
 
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
+  const dayOrder = ['M', 'T', 'W', 'R', 'F'];
 
   // Utility functions
   const getBuildingFromRoom = (room) => {
@@ -124,6 +127,59 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
     return schedules;
   }, [scheduleData, filteredRooms, selectedRoom, roomScheduleDay]);
 
+  // Calculate weekly room schedules for week view
+  const weeklyRoomSchedules = useMemo(() => {
+    const schedules = {};
+    const roomsToShow = selectedRoom ? [selectedRoom] : filteredRooms;
+    
+    // Filter days based on week view mode
+    let daysToShow = dayOrder;
+    if (weekViewMode === 'mwf') daysToShow = ['M', 'W', 'F'];
+    else if (weekViewMode === 'tr') daysToShow = ['T', 'R'];
+    else if (weekViewMode === 'mw') daysToShow = ['M', 'W'];
+    else if (weekViewMode === 'trf') daysToShow = ['T', 'R', 'F'];
+    
+    roomsToShow.forEach(room => {
+      schedules[room] = {};
+      daysToShow.forEach(day => {
+        schedules[room][day] = scheduleData
+          .filter(item => {
+            const roomMatch = (item.Room || '').split(';').map(r => r.trim()).includes(room);
+            const dayMatch = item.Day === day;
+            const timeMatch = item['Start Time'] && item['End Time'];
+            return roomMatch && dayMatch && timeMatch;
+          })
+          .reduce((acc, item) => {
+            // Deduplicate identical sessions (e.g., cross-listed courses)
+            const key = `${item.Course}-${item['Start Time']}-${item['End Time']}`;
+            if (!acc.some(i => `${i.Course}-${i['Start Time']}-${i['End Time']}` === key)) {
+              acc.push(item);
+            }
+            return acc;
+          }, [])
+          .sort((a, b) => parseTime(a['Start Time']) - parseTime(b['Start Time']));
+      });
+    });
+    
+    return schedules;
+  }, [scheduleData, filteredRooms, selectedRoom, weekViewMode]);
+
+  // Get meeting pattern for a course
+  const getMeetingPattern = (courseCode, startTime, endTime) => {
+    const course = scheduleData.find(item => 
+      item.Course === courseCode && 
+      item['Start Time'] === startTime && 
+      item['End Time'] === endTime
+    );
+    
+    if (course && course.meetingPatterns) {
+      return course.meetingPatterns.map(p => p.day).join('');
+    }
+    
+    // Fallback to Day field
+    return course?.Day || '';
+  };
+
   // Calculate room utilization stats
   const roomStats = useMemo(() => {
     const stats = {};
@@ -180,6 +236,46 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
       setSelectedFacultyForCard(faculty);
     }
   };
+
+  // Export week view to CSV
+  const handleExportWeekView = () => {
+    const csvData = [];
+    const headers = ['Room', 'Day', 'Course', 'Instructor', 'Start Time', 'End Time', 'Meeting Pattern'];
+    csvData.push(headers);
+
+    Object.entries(weeklyRoomSchedules).forEach(([room, daySchedules]) => {
+      Object.entries(daySchedules).forEach(([day, schedules]) => {
+        schedules.forEach(schedule => {
+          const meetingPattern = getMeetingPattern(schedule.Course, schedule['Start Time'], schedule['End Time']);
+          csvData.push([
+            room,
+            dayNames[day],
+            schedule.Course,
+            schedule.Instructor,
+            schedule['Start Time'],
+            schedule['End Time'],
+            meetingPattern
+          ]);
+        });
+      });
+    });
+
+    const csvContent = csvData.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `room-schedules-week-${weekViewMode}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  // Print week view
+  const handlePrintWeekView = () => {
+    window.print();
+  };
+
+
 
   // Timeline view component
   const TimelineView = () => {
@@ -491,12 +587,23 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
                   <List className="mr-1" size={16} />
                   List
                 </button>
+                <button
+                  onClick={() => setViewMode('week')}
+                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors flex items-center flex-1 justify-center ${
+                    viewMode === 'week' 
+                      ? 'bg-baylor-green text-white shadow' 
+                      : 'text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  <Calendar className="mr-1" size={16} />
+                  Week
+                </button>
               </div>
             </div>
           </div>
 
-          {/* Row 3: Only-in-use, Density, Sort */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-center">
+          {/* Row 3: Only-in-use, Density, Sort, Week View Mode */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
             {/* Only In Use Toggle */}
             <div className="flex items-center gap-3">
               <label className="text-sm font-medium text-gray-700">Only rooms in use</label>
@@ -540,6 +647,27 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
                 </select>
               </div>
             </div>
+
+            {/* Week View Mode (only show when in week view) */}
+            {viewMode === 'week' && (
+              <div className="flex-1 max-w-full">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Week Pattern</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                  <select
+                    value={weekViewMode}
+                    onChange={(e) => setWeekViewMode(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white"
+                  >
+                    <option value="all">All Days</option>
+                    <option value="mwf">MWF</option>
+                    <option value="tr">TR</option>
+                    <option value="mw">MW</option>
+                    <option value="trf">TRF</option>
+                  </select>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -590,7 +718,21 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
         </div>
 
         {visibleRooms.length > 0 ? (
-          viewMode === 'timeline' ? <TimelineView /> : <ListView />
+          viewMode === 'timeline' ? <TimelineView /> : 
+          viewMode === 'list' ? <ListView /> :
+          viewMode === 'week' ? (
+            <WeekView
+              scheduleData={scheduleData}
+              filteredRooms={filteredRooms}
+              selectedRoom={selectedRoom}
+              selectedBuilding={selectedBuilding}
+              weekViewMode={weekViewMode}
+              density={density}
+              onShowContactCard={handleShowContactCard}
+              onExport={handleExportWeekView}
+              onPrint={handlePrintWeekView}
+            />
+          ) : <TimelineView />
         ) : (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
             <MapPin className="w-16 h-16 text-gray-400 mx-auto mb-4" />

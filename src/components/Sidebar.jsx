@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Menu, X, Home, Calendar, Users, BarChart3, Settings, Bell, Search, User, Database, Shield, Star } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext.jsx';
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: Home },
@@ -21,6 +22,7 @@ const menuItems = [
 
 const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggleCollapse, selectedSemester, pinnedPages, togglePinPage }) => {
   const [expandedSections, setExpandedSections] = useState([]); // Default expanded sections
+  const { canAccess } = useAuth();
 
   const toggleSection = (sectionId) => {
     setExpandedSections(prev => 
@@ -114,6 +116,11 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
             const hasChildren = item.children && item.children.length > 0;
             const isExpanded = expandedSections.includes(item.id);
             const itemIsActive = isActive(item.path || item.id);
+            const sectionAllowed = hasChildren ? (item.children || []).some(c => canAccess(c.path)) : canAccess(item.path || item.id);
+
+            if (!sectionAllowed) {
+              return null;
+            }
 
             return (
               <div key={item.id} className="space-y-1">
@@ -157,7 +164,7 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
                 {/* Sub-navigation Items */}
                 {!collapsed && hasChildren && isExpanded && (
                   <div className="space-y-1 pl-2">
-                    {item.children.map((child) => {
+                    {item.children.filter(child => canAccess(child.path)).map((child) => {
                       const isPinned = pinnedPages.includes(child.id);
                       return (
                         <div key={child.id} className="group flex items-center">

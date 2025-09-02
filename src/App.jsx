@@ -23,6 +23,9 @@ import RoomGridGenerator from './components/admin/RoomGridGenerator';
 import EmailLists from './components/EmailLists';
 import BuildingDirectory from './components/BuildingDirectory';
 import Login from './components/Login';
+import ProtectedContent from './components/ProtectedContent.jsx';
+import AccessControl from './components/admin/AccessControl.jsx';
+import { useAuth } from './contexts/AuthContext.jsx';
 import Notification from './components/Notification';
 import { 
   Home, 
@@ -53,6 +56,7 @@ import { logCreate, logUpdate, logDelete } from './utils/changeLogger';
 import { fetchRecentChanges } from './utils/recentChanges';
 
 function App() {
+  const { user, signOut, loading: authLoading, canAccess } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -255,7 +259,8 @@ function App() {
         { id: 'smart-import', label: 'Data Import', path: 'administration/smart-import' },
         { id: 'data-hygiene', label: 'Data Hygiene', path: 'administration/data-hygiene' },
         { id: 'recent-changes', label: 'Recent Changes', path: 'administration/recent-changes' },
-        { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' }
+        { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' },
+        { id: 'access-control', label: 'Access Control', path: 'administration/access-control' }
       ]
     }
   ];
@@ -1330,7 +1335,8 @@ function App() {
 
   const handleLogout = () => setShowLogoutConfirm(true);
 
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
+    await signOut();
     setIsAuthenticated(false);
     localStorage.removeItem('isAuthenticated');
     setShowLogoutConfirm(false);
@@ -1426,43 +1432,125 @@ function App() {
 
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard {...pageProps} />;
+        return (
+          <ProtectedContent pageId="dashboard">
+            <Dashboard {...pageProps} />
+          </ProtectedContent>
+        );
       case 'scheduling/faculty-schedules':
-        return <FacultySchedules {...pageProps} />;
+        return (
+          <ProtectedContent pageId="scheduling/faculty-schedules">
+            <FacultySchedules {...pageProps} />
+          </ProtectedContent>
+        );
       case 'scheduling/group-meeting-scheduler':
-        return <GroupMeetings {...pageProps} />;
+        return (
+          <ProtectedContent pageId="scheduling/group-meeting-scheduler">
+            <GroupMeetings {...pageProps} />
+          </ProtectedContent>
+        );
       case 'scheduling/individual-availability':
-        return <IndividualAvailability {...pageProps} />;
+        return (
+          <ProtectedContent pageId="scheduling/individual-availability">
+            <IndividualAvailability {...pageProps} />
+          </ProtectedContent>
+        );
       case 'scheduling/room-schedules':
-        return <RoomSchedules {...pageProps} />;
+        return (
+          <ProtectedContent pageId="scheduling/room-schedules">
+            <RoomSchedules {...pageProps} />
+          </ProtectedContent>
+        );
       case 'scheduling/student-schedules':
-        return <StudentSchedules {...pageProps} />;
+        return (
+          <ProtectedContent pageId="scheduling/student-schedules">
+            <StudentSchedules {...pageProps} />
+          </ProtectedContent>
+        );
       case 'people/people-directory':
-        return <PeopleDirectory {...pageProps} />;
+        return (
+          <ProtectedContent pageId="people/people-directory">
+            <PeopleDirectory {...pageProps} />
+          </ProtectedContent>
+        );
       case 'administration/program-management':
-        return <ProgramManagement {...pageProps} />;
+        return (
+          <ProtectedContent pageId="administration/program-management">
+            <ProgramManagement {...pageProps} />
+          </ProtectedContent>
+        );
       case 'people/email-lists':
-        return <EmailLists {...pageProps} />;
+        return (
+          <ProtectedContent pageId="people/email-lists">
+            <EmailLists {...pageProps} />
+          </ProtectedContent>
+        );
       case 'resources/building-directory':
-        return <BuildingDirectory {...pageProps} />;
+        return (
+          <ProtectedContent pageId="resources/building-directory">
+            <BuildingDirectory {...pageProps} />
+          </ProtectedContent>
+        );
       case 'analytics/department-insights':
-        return <DepartmentInsights {...pageProps} />;
+        return (
+          <ProtectedContent pageId="analytics/department-insights">
+            <DepartmentInsights {...pageProps} />
+          </ProtectedContent>
+        );
       case 'analytics/course-management':
-        return <CourseManagement {...pageProps} />;
+        return (
+          <ProtectedContent pageId="analytics/course-management">
+            <CourseManagement {...pageProps} />
+          </ProtectedContent>
+        );
       case 'administration/recent-changes':
-        return <RecentChangesPage {...pageProps} />;
+        return (
+          <ProtectedContent pageId="administration/recent-changes">
+            <RecentChangesPage {...pageProps} />
+          </ProtectedContent>
+        );
       case 'administration/smart-import':
-        return <SmartDataImportPage {...pageProps} />;
+        return (
+          <ProtectedContent pageId="administration/smart-import">
+            <SmartDataImportPage {...pageProps} />
+          </ProtectedContent>
+        );
       case 'administration/data-hygiene':
-        return <DataHygieneManager {...pageProps} />;
+        return (
+          <ProtectedContent pageId="administration/data-hygiene">
+            <DataHygieneManager {...pageProps} />
+          </ProtectedContent>
+        );
       case 'administration/baylor-systems':
-        return <SystemsPage {...pageProps} />;
+        return (
+          <ProtectedContent pageId="administration/baylor-systems">
+            <SystemsPage {...pageProps} />
+          </ProtectedContent>
+        );
       case 'administration/baylor-acronyms':
-        return <BaylorAcronyms {...pageProps} />;
+        return (
+          <ProtectedContent pageId="administration/baylor-acronyms">
+            <BaylorAcronyms {...pageProps} />
+          </ProtectedContent>
+        );
       case 'resources/room-grid-generator':
-        return <RoomGridGenerator {...pageProps} />;
+        return (
+          <ProtectedContent pageId="resources/room-grid-generator">
+            <RoomGridGenerator {...pageProps} />
+          </ProtectedContent>
+        );
+      case 'administration/access-control':
+        return (
+          <ProtectedContent pageId="administration/access-control">
+            <AccessControl {...pageProps} />
+          </ProtectedContent>
+        );
       default:
-        return <Dashboard {...pageProps} />;
+        return (
+          <ProtectedContent pageId="dashboard">
+            <Dashboard {...pageProps} />
+          </ProtectedContent>
+        );
     }
   };
 

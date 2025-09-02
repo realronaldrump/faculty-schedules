@@ -1,8 +1,13 @@
 import React, { useState } from 'react';
 import { Shield, GraduationCap, Users, Calendar } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext.jsx';
 
 function Login({ onLogin }) {
+  const { signIn, signUp } = useAuth();
+  const [mode, setMode] = useState('signin'); // signin | signup
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -10,18 +15,19 @@ function Login({ onLogin }) {
     e.preventDefault();
     setIsLoading(true);
     setError('');
-
-    // Simulate a small delay for better UX
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    if (password === 'baylorFall2025_hsd') {
+    try {
+      if (mode === 'signin') {
+        await signIn(email.trim(), password);
+      } else {
+        await signUp(email.trim(), password, displayName.trim());
+      }
       onLogin(true);
       localStorage.setItem('isAuthenticated', 'true');
-    } else {
-      setError('Incorrect password. Please try again.');
-      setPassword('');
+    } catch (err) {
+      setError(err?.message || 'Authentication failed.');
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (
@@ -57,26 +63,56 @@ function Login({ onLogin }) {
 
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="form-group">
-                <label htmlFor="password" className="form-label">
+                <label htmlFor="email" className="form-label">
                   <Shield className="w-4 h-4 inline mr-2" />
-                  Access Password
+                  Email Address
+                </label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  className={`form-input ${error ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+                  placeholder="you@baylor.edu"
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value); if (error) setError(''); }}
+                  disabled={isLoading}
+                  autoComplete="email"
+                />
+              </div>
+
+              {mode === 'signup' && (
+                <div className="form-group">
+                  <label htmlFor="displayName" className="form-label">Display Name</label>
+                  <input
+                    id="displayName"
+                    name="displayName"
+                    type="text"
+                    className="form-input"
+                    placeholder="Your name"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    disabled={isLoading}
+                    autoComplete="name"
+                  />
+                </div>
+              )}
+
+              <div className="form-group">
+                <label htmlFor="password" className="form-label">
+                  Password
                 </label>
                 <input
                   id="password"
                   name="password"
                   type="password"
                   required
-                  className={`form-input ${
-                    error ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20' : ''
-                  }`}
-                  placeholder="Enter system password"
+                  className={`form-input ${error ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+                  placeholder={mode === 'signin' ? 'Enter your password' : 'Create a strong password'}
                   value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (error) setError('');
-                  }}
+                  onChange={(e) => { setPassword(e.target.value); if (error) setError(''); }}
                   disabled={isLoading}
-                  autoComplete="current-password"
+                  autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
                 />
                 {error && (
                   <div className="form-error animate-shake flex items-center">
@@ -88,10 +124,8 @@ function Login({ onLogin }) {
 
               <button
                 type="submit"
-                disabled={isLoading || !password.trim()}
-                className={`btn-primary w-full justify-center ${
-                  isLoading || !password.trim() ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
+                disabled={isLoading || !email.trim() || !password.trim()}
+                className={`btn-primary w-full justify-center ${isLoading || !email.trim() || !password.trim() ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {isLoading ? (
                   <span className="flex items-center">
@@ -99,15 +133,27 @@ function Login({ onLogin }) {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Authenticating...
+                    {mode === 'signin' ? 'Signing in...' : 'Creating account...'}
                   </span>
                 ) : (
                   <>
                     <Shield className="w-4 h-4 mr-2" />
-                    Access System
+                    {mode === 'signin' ? 'Sign In' : 'Create Account'}
                   </>
                 )}
               </button>
+
+              <div className="text-center text-sm text-gray-600">
+                {mode === 'signin' ? (
+                  <button type="button" className="text-baylor-green hover:underline" onClick={() => setMode('signup')}>
+                    Need an account? Create one
+                  </button>
+                ) : (
+                  <button type="button" className="text-baylor-green hover:underline" onClick={() => setMode('signin')}>
+                    Already have an account? Sign in
+                  </button>
+                )}
+              </div>
             </form>
           </div>
         </div>

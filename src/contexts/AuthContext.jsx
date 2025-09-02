@@ -98,6 +98,20 @@ export const AuthProvider = ({ children }) => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       setLoadedProfile(false);
+      // Persist minimal user info for activity logger
+      try {
+        if (u) {
+          const persisted = {
+            userId: u.uid,
+            email: u.email || null,
+            role: (Array.isArray(userProfile?.roles) && userProfile.roles[0]) || 'unknown',
+            displayName: u.displayName || (u.email ? u.email.split('@')[0] : undefined)
+          };
+          localStorage.setItem('userInfo', JSON.stringify(persisted));
+        } else {
+          localStorage.removeItem('userInfo');
+        }
+      } catch (_) {}
       try {
         await bootstrapAccessControl();
       } finally {
@@ -108,6 +122,17 @@ export const AuthProvider = ({ children }) => {
         const userRef = doc(db, 'users', u.uid);
         const stop = onSnapshot(userRef, (snap) => {
           setUserProfile(snap.exists() ? snap.data() : null);
+          // Update cached role/email for activity logs when profile changes
+          try {
+            const existing = JSON.parse(localStorage.getItem('userInfo') || '{}');
+            const updated = {
+              ...existing,
+              userId: u.uid,
+              email: u.email || existing.email || null,
+              role: (snap.exists() && Array.isArray(snap.data().roles) ? snap.data().roles[0] : existing.role || 'unknown')
+            };
+            localStorage.setItem('userInfo', JSON.stringify(updated));
+          } catch (_) {}
           setLoadedProfile(true);
         }, () => {
           setUserProfile(null);

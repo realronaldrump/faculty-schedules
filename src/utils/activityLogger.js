@@ -6,7 +6,7 @@
  */
 
 import { collection, addDoc, query, where, orderBy, limit, getDocs, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 
 /**
  * Activity event types for consistent categorization
@@ -100,13 +100,34 @@ export const logActivity = async (activityData) => {
  */
 const getCurrentUserInfo = () => {
   try {
-    // Try to get from localStorage first (for immediate availability)
+    // Prefer live Firebase auth user when available
+    const currentUser = auth && auth.currentUser ? auth.currentUser : null;
+    if (currentUser) {
+      // Try to enrich with cached role if present
+      let cachedRole = 'unknown';
+      try {
+        const cached = localStorage.getItem('userInfo');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.role) cachedRole = parsed.role;
+        }
+      } catch (_) {}
+
+      return {
+        userId: currentUser.uid,
+        email: currentUser.email || null,
+        role: cachedRole,
+        displayName: currentUser.displayName || (currentUser.email ? currentUser.email.split('@')[0] : undefined)
+      };
+    }
+
+    // Fallback to cached user info from localStorage
     const cached = localStorage.getItem('userInfo');
     if (cached) {
       return JSON.parse(cached);
     }
 
-    // Fallback defaults
+    // Final fallback defaults
     return {
       userId: 'anonymous',
       email: null,

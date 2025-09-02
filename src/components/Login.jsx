@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, GraduationCap, Users, Calendar } from 'lucide-react';
+import { Shield, GraduationCap, Users, Calendar, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 
 function Login({ onLogin }) {
@@ -10,6 +10,7 @@ function Login({ onLogin }) {
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showModal, setShowModal] = useState(true);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -27,6 +28,16 @@ function Login({ onLogin }) {
       setError(err?.message || 'Authentication failed.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+  };
+
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) {
+      closeModal();
     }
   };
 
@@ -73,7 +84,7 @@ function Login({ onLogin }) {
                   type="email"
                   required
                   className={`form-input ${error ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20' : ''}`}
-                  placeholder="you@baylor.edu"
+                  placeholder="BearID@baylor.edu"
                   value={email}
                   onChange={(e) => { setEmail(e.target.value); if (error) setError(''); }}
                   disabled={isLoading}
@@ -158,6 +169,50 @@ function Login({ onLogin }) {
           </div>
         </div>
 
+        {/* Authentication Notice Modal */}
+        {showModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in"
+            style={{ animationDelay: '0.1s' }}
+            onClick={handleBackdropClick}
+          >
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full transform animate-scale-in border-2 border-baylor-green relative">
+              {/* Close Button */}
+              <button
+                onClick={closeModal}
+                className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors text-gray-600 hover:text-gray-800"
+                aria-label="Close modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="p-6 text-center">
+                <div className="mb-4">
+                  <div className="mx-auto w-16 h-16 bg-baylor-green rounded-full flex items-center justify-center mb-4">
+                    <Shield className="w-8 h-8 text-white" />
+                  </div>
+                  <h3 className="text-xl font-bold text-baylor-green mb-2">
+                    🚨 Important Notice
+                  </h3>
+                  <p className="text-sm font-semibold text-gray-900 mb-2">
+                    New Secure Authentication System
+                  </p>
+                </div>
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    Access to this application is now restricted. Please create an account and contact
+                    <span className="font-semibold text-baylor-green"> Davis </span>
+                    directly to gain access to the system.
+                  </p>
+                </div>
+                <div className="text-xs text-gray-500">
+                  Authorized personnel only • Enhanced security measures in place
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* System Information Card */}
         <div className="university-card animate-fade-in" style={{ animationDelay: '0.2s' }}>
           <div className="university-card-content">
@@ -179,21 +234,15 @@ function Login({ onLogin }) {
                   <p className="text-xs text-gray-600">Course and room scheduling tools</p>
                 </div>
               </div>
-              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                <Shield className="w-5 h-5 text-baylor-green flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Secure Access</p>
-                  <p className="text-xs text-gray-600">Protected university data</p>
-                </div>
-              </div>
+
             </div>
           </div>
         </div>
 
         {/* Footer */}
         <div className="text-center mt-6 text-sm text-gray-500">
-          <p>© 2024 Baylor University - Human Sciences & Design</p>
-          <p className="mt-1">Authorized personnel only</p>
+          <p>© 2025 Baylor University - Human Sciences & Design</p>
+          <p className="mt-1">Authorized HSD Faculty and Staff only</p>
         </div>
       </div>
     </div>

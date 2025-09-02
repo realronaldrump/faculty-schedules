@@ -109,55 +109,20 @@ export const withActivityTracking = (WrappedComponent, componentName, options = 
         });
       };
 
-      const handleInputFocus = (event) => {
-        const input = event.target;
-        if (input.tagName === 'INPUT' || input.tagName === 'TEXTAREA' || input.tagName === 'SELECT') {
-          logActivity({
-            type: ACTIVITY_TYPES.FEATURE_USAGE,
-            action: `Focused on ${input.type || input.tagName.toLowerCase()} field`,
-            component: componentName,
-            element: input.name || input.id || input.placeholder || 'input_field',
-            metadata: {
-              inputType: input.type,
-              inputName: input.name,
-              inputId: input.id,
-              placeholder: input.placeholder,
-              component: componentName
-            }
-          });
-        }
-      };
-
-      const handleScroll = (event) => {
-        // Throttle scroll events to avoid too many logs
-        if (!handleScroll.lastScroll || Date.now() - handleScroll.lastScroll > 1000) {
-          logActivity({
-            type: ACTIVITY_TYPES.FEATURE_USAGE,
-            action: `Scrolled in ${componentName}`,
-            component: componentName,
-            metadata: {
-              scrollTop: element.scrollTop,
-              scrollHeight: element.scrollHeight,
-              clientHeight: element.clientHeight,
-              component: componentName
-            }
-          });
-          handleScroll.lastScroll = Date.now();
-        }
-      };
+      // Removed focus and scroll logging to reduce noise/usage
+      const handleInputFocus = null;
+      const handleScroll = null;
 
       // Attach event listeners
       element.addEventListener('click', handleClick, true);
       element.addEventListener('submit', handleFormSubmit, true);
-      element.addEventListener('focusin', handleInputFocus, true);
-      element.addEventListener('scroll', handleScroll, true);
+      // focus/scroll handlers intentionally disabled
 
       // Cleanup
       return () => {
         element.removeEventListener('click', handleClick, true);
         element.removeEventListener('submit', handleFormSubmit, true);
-        element.removeEventListener('focusin', handleInputFocus, true);
-        element.removeEventListener('scroll', handleScroll, true);
+        // focus/scroll handlers intentionally disabled
       };
     }, [componentName, options.skipSelectors]);
 

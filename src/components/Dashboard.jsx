@@ -1,11 +1,11 @@
-import React, { useMemo } from 'react';
-import { 
-  Users, 
-  Calendar, 
-  MapPin, 
-  BookOpen, 
-  Clock, 
-  TrendingUp, 
+import React, { useMemo, useState, useEffect } from 'react';
+import {
+  Users,
+  Calendar,
+  MapPin,
+  BookOpen,
+  Clock,
+  TrendingUp,
   AlertCircle,
   ChevronRight,
   Plus,
@@ -16,8 +16,36 @@ import {
   Building
 } from 'lucide-react';
 import { formatChangeForDisplay } from '../utils/recentChanges';
+import { useAuth } from '../contexts/AuthContext';
+import ViewerAccessModal from './ViewerAccessModal';
 
 const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, selectedSemester }) => {
+  const { user, userProfile } = useAuth();
+  const [showViewerModal, setShowViewerModal] = useState(false);
+
+  // Check if user is a viewer and show modal if they haven't seen it
+  useEffect(() => {
+    if (user && userProfile && Array.isArray(userProfile.roles)) {
+      const isViewer = userProfile.roles.includes('viewer');
+      const hasSeenModal = localStorage.getItem(`viewerModalShown_${user.uid}`);
+
+      if (isViewer && !hasSeenModal) {
+        // Small delay to ensure smooth loading
+        const timer = setTimeout(() => {
+          setShowViewerModal(true);
+        }, 1000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [user, userProfile]);
+
+  const handleCloseViewerModal = () => {
+    setShowViewerModal(false);
+    // Mark as seen for this user
+    if (user?.uid) {
+      localStorage.setItem(`viewerModalShown_${user.uid}`, 'true');
+    }
+  };
 
   // Metrics are now derived from the centralized 'analytics' prop
   const metrics = useMemo(() => {
@@ -287,6 +315,13 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
           </div>
         </div>
       </div>
+
+      {/* Viewer Access Modal */}
+      <ViewerAccessModal
+        isOpen={showViewerModal}
+        onClose={handleCloseViewerModal}
+        user={user}
+      />
     </div>
   );
 };

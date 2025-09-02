@@ -211,7 +211,7 @@ function Login({ onLogin }) {
                   type="email"
                   required
                   className={`form-input ${error ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20' : ''}`}
-                  placeholder="BearID@baylor.edu"
+                  placeholder="Email Address"
                   value={email}
                   onChange={(e) => { setEmail(e.target.value); if (error) setError(''); }}
                   disabled={isLoading}
@@ -319,7 +319,7 @@ function Login({ onLogin }) {
                     <Shield className="w-8 h-8 text-white" />
                   </div>
                   <h3 className="text-xl font-bold text-baylor-green mb-2">
-                    🚨 Important Notice
+                    Important Notice
                   </h3>
                   <p className="text-sm font-semibold text-gray-900 mb-2">
                     New Secure Authentication System

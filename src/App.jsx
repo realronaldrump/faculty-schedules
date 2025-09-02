@@ -543,12 +543,22 @@ function App() {
         }
       });
       
-      // Load edit history (legacy)
-      const historySnapshot = await getDocs(query(collection(db, 'editHistory'), orderBy('timestamp', 'desc')));
-      const history = historySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      // Load recent changes from new centralized log
-      const recentChangesData = await fetchRecentChanges(100);
+      // Load edit history (legacy) - non-fatal if denied
+      let history = [];
+      try {
+        const historySnapshot = await getDocs(query(collection(db, 'editHistory'), orderBy('timestamp', 'desc')));
+        history = historySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      } catch (e) {
+        console.warn('editHistory read skipped:', e?.code || e);
+      }
+
+      // Load recent changes from new centralized log - non-fatal if denied
+      let recentChangesData = [];
+      try {
+        recentChangesData = await fetchRecentChanges(100);
+      } catch (e) {
+        console.warn('recentChanges read skipped:', e?.code || e);
+      }
       
       console.log('✅ Data loaded successfully:', {
         schedules: schedules.length,

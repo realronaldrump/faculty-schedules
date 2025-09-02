@@ -117,6 +117,12 @@ export const AuthProvider = ({ children }) => {
       } finally {
         // no-op
       }
+      // Ensure user profile document exists and update lastLoginAt
+      try {
+        if (u) {
+          await loadUserProfile(u);
+        }
+      } catch (_) {}
       // Subscribe to current user's profile
       if (u) {
         const userRef = doc(db, 'users', u.uid);

@@ -24,12 +24,15 @@ import {
   subscribeToActivities,
   ACTIVITY_TYPES
 } from '../utils/activityLogger';
+import { db } from '../firebase';
+import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 
 const UserActivityDashboard = () => {
   const [activities, setActivities] = useState([]);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [realTimeMode, setRealTimeMode] = useState(false);
+  const [userOptions, setUserOptions] = useState([]);
   const [filters, setFilters] = useState({
     userId: '',
     type: '',
@@ -57,11 +60,26 @@ const UserActivityDashboard = () => {
       unsubscribe = subscribeToActivities((newActivities) => {
         setActivities(newActivities);
         calculateStats(newActivities);
-      }, { limit: 100 });
+      }, { limit: 100, userId: filters.userId || undefined, type: filters.type || undefined });
     }
 
     return unsubscribe;
-  }, [realTimeMode]);
+  }, [realTimeMode, filters.userId, filters.type]);
+
+  // Load all users for the user filter
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const snap = await getDocs(query(collection(db, 'users'), orderBy('email')));
+        const options = snap.docs.map(d => ({ id: d.id, email: d.data().email || d.id }));
+        setUserOptions(options);
+      } catch (e) {
+        console.warn('Failed to load users for activity filter:', e?.code || e);
+        setUserOptions([]);
+      }
+    };
+    loadUsers();
+  }, []);
 
   const loadActivityData = async () => {
     setLoading(true);
@@ -137,15 +155,7 @@ const UserActivityDashboard = () => {
     return date.toLocaleDateString();
   };
 
-  // Get unique users and types for filters
-  const uniqueUsers = useMemo(() => {
-    const users = new Set();
-    activities.forEach(activity => {
-      if (activity.userEmail) users.add(activity.userEmail);
-    });
-    return Array.from(users).sort();
-  }, [activities]);
-
+  // Get unique types for filters
   const uniqueTypes = useMemo(() => {
     const types = new Set();
     activities.forEach(activity => types.add(activity.type));
@@ -281,8 +291,8 @@ const UserActivityDashboard = () => {
                 className="input-field"
               >
                 <option value="">All Users</option>
-                {uniqueUsers.map(user => (
-                  <option key={user} value={user}>{user}</option>
+                {userOptions.map(u => (
+                  <option key={u.id} value={u.id}>{u.email}</option>
                 ))}
               </select>
             </div>

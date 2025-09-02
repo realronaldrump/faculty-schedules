@@ -12,6 +12,152 @@ function Login({ onLogin }) {
   const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(true);
 
+  // Transform Firebase error messages into user-friendly messages
+  const getFriendlyErrorMessage = (error) => {
+    const message = error?.message || error?.toString() || 'An unexpected error occurred';
+
+    // Remove Firebase prefix if present
+    const cleanMessage = message.replace(/^Firebase: /i, '').replace(/^Error: /i, '');
+
+    // Map common Firebase auth error codes to friendly messages
+    const errorMappings = {
+      'auth/invalid-email': 'Please enter a valid email address.',
+      'auth/user-disabled': 'This account has been disabled. Please contact support.',
+      'auth/user-not-found': 'No account found with this email address.',
+      'auth/wrong-password': 'Incorrect password. Please try again.',
+      'auth/email-already-in-use': 'An account with this email already exists.',
+      'auth/weak-password': 'Password should be at least 6 characters long.',
+      'auth/network-request-failed': 'Network error. Please check your internet connection.',
+      'auth/too-many-requests': 'Too many failed attempts. Please wait a few minutes and try again.',
+      'auth/invalid-credential': 'Invalid email or password.',
+      'auth/invalid-login-credentials': 'Invalid email or password.',
+      'auth/missing-password': 'Please enter your password.',
+      'auth/missing-email': 'Please enter your email address.',
+      'auth/operation-not-allowed': 'This sign-in method is not enabled. Please contact support.',
+      'auth/account-exists-with-different-credential': 'An account already exists with this email using a different sign-in method.',
+      'auth/requires-recent-login': 'Please sign in again to complete this action.',
+      'auth/expired-action-code': 'This link has expired. Please request a new one.',
+      'auth/invalid-action-code': 'This link is invalid. Please request a new one.',
+      'auth/weak-password': 'Please choose a stronger password (at least 6 characters).',
+      'auth/password-does-not-meet-requirements': 'Password does not meet security requirements.',
+      'auth/invalid-verification-code': 'Invalid verification code.',
+      'auth/invalid-verification-id': 'Invalid verification ID.',
+      'auth/missing-verification-code': 'Please enter the verification code.',
+      'auth/quota-exceeded': 'Service temporarily unavailable. Please try again later.',
+      'auth/maximum-second-factor-count-exceeded': 'Maximum number of second factors exceeded.',
+      'auth/second-factor-already-in-use': 'This second factor is already in use.',
+      'auth/unsupported-first-factor': 'Unsupported first factor.',
+      'auth/unverified-email': 'Please verify your email address first.',
+      'auth/missing-continue-uri': 'Missing continue URI.',
+      'auth/invalid-continue-uri': 'Invalid continue URI.',
+      'auth/unauthorized-continue-uri': 'Unauthorized continue URI.',
+      'auth/missing-ios-bundle-id': 'Missing iOS bundle ID.',
+      'auth/missing-android-pkg-name': 'Missing Android package name.',
+      'auth/invalid-dynamic-link-domain': 'Invalid dynamic link domain.',
+      'auth/argument-error': 'Invalid argument provided.',
+      'auth/app-deleted': 'This app has been deleted.',
+      'auth/app-not-authorized': 'This app is not authorized.',
+      'auth/captcha-check-failed': 'CAPTCHA verification failed.',
+      'auth/code-expired': 'Code has expired.',
+      'auth/cordova-not-ready': 'Cordova is not ready.',
+      'auth/cors-unsupported': 'CORS is not supported.',
+      'auth/credential-already-in-use': 'This credential is already associated with another account.',
+      'auth/custom-token-mismatch': 'Custom token mismatch.',
+      'auth/dependent-sdk-initialized-before-auth': 'Dependent SDK initialized before Auth.',
+      'auth/dynamic-link-not-activated': 'Dynamic link not activated.',
+      'auth/email-change-needs-verification': 'Email change needs verification.',
+      'auth/emulator-config-failed': 'Emulator configuration failed.',
+      'auth/expired-action-code': 'Expired action code.',
+      'auth/invalid-action-code': 'Invalid action code.',
+      'auth/invalid-api-key': 'Invalid API key.',
+      'auth/invalid-cert-hash': 'Invalid certificate hash.',
+      'auth/invalid-credential': 'Invalid credential.',
+      'auth/invalid-custom-token': 'Invalid custom token.',
+      'auth/invalid-email': 'Invalid email.',
+      'auth/invalid-message-payload': 'Invalid message payload.',
+      'auth/invalid-multi-factor-session': 'Invalid multi-factor session.',
+      'auth/invalid-oauth-provider': 'Invalid OAuth provider.',
+      'auth/invalid-phone-number': 'Invalid phone number.',
+      'auth/invalid-photo-url': 'Invalid photo URL.',
+      'auth/invalid-provider-id': 'Invalid provider ID.',
+      'auth/invalid-recipient-email': 'Invalid recipient email.',
+      'auth/invalid-sender': 'Invalid sender.',
+      'auth/invalid-verification-code': 'Invalid verification code.',
+      'auth/invalid-verification-id': 'Invalid verification ID.',
+      'auth/missing-android-pkg-name': 'Missing Android package name.',
+      'auth/missing-app-credential': 'Missing app credential.',
+      'auth/missing-client-type': 'Missing client type.',
+      'auth/missing-continue-uri': 'Missing continue URI.',
+      'auth/missing-iframe-start': 'Missing iframe start.',
+      'auth/missing-ios-bundle-id': 'Missing iOS bundle ID.',
+      'auth/missing-multi-factor-info': 'Missing multi-factor info.',
+      'auth/missing-multi-factor-session': 'Missing multi-factor session.',
+      'auth/missing-or-invalid-nonce': 'Missing or invalid nonce.',
+      'auth/missing-password': 'Missing password.',
+      'auth/missing-phone-number': 'Missing phone number.',
+      'auth/missing-verification-code': 'Missing verification code.',
+      'auth/missing-verification-id': 'Missing verification ID.',
+      'auth/multi-factor-info-not-found': 'Multi-factor info not found.',
+      'auth/multi-factor-auth-required': 'Multi-factor authentication required.',
+      'auth/no-auth-event': 'No auth event.',
+      'auth/no-such-provider': 'No such provider.',
+      'auth/null-user': 'Null user.',
+      'auth/provider-already-linked': 'Provider already linked.',
+      'auth/quota-exceeded': 'Quota exceeded.',
+      'auth/redirect-cancelled-by-user': 'Redirect cancelled by user.',
+      'auth/redirect-operation-pending': 'Redirect operation pending.',
+      'auth/rejected-credential': 'Rejected credential.',
+      'auth/second-factor-already-in-use': 'Second factor already in use.',
+      'auth/second-factor-limit-exceeded': 'Second factor limit exceeded.',
+      'auth/tenant-id-mismatch': 'Tenant ID mismatch.',
+      'auth/timeout': 'Timeout.',
+      'auth/unsupported-first-factor': 'Unsupported first factor.',
+      'auth/unsupported-persistence-type': 'Unsupported persistence type.',
+      'auth/unsupported-tenant-operation': 'Unsupported tenant operation.',
+      'auth/unverified-email': 'Unverified email.',
+      'auth/user-cancelled': 'User cancelled.',
+      'auth/user-mismatch': 'User mismatch.',
+      'auth/user-not-found': 'User not found.',
+      'auth/user-signed-out': 'User signed out.',
+      'auth/user-token-expired': 'User token expired.',
+      'auth/user-token-revoked': 'User token revoked.',
+      'auth/web-storage-unsupported': 'Web storage unsupported.',
+      'auth/weak-password': 'Weak password.',
+      'auth/wrong-password': 'Wrong password.'
+    };
+
+    // Check for error code in the message
+    for (const [code, friendlyMessage] of Object.entries(errorMappings)) {
+      if (cleanMessage.includes(code) || error?.code === code) {
+        return friendlyMessage;
+      }
+    }
+
+    // If no specific mapping found, try to clean up the message
+    if (cleanMessage.includes('password') && cleanMessage.includes('6')) {
+      return 'Password should be at least 6 characters long.';
+    }
+
+    if (cleanMessage.includes('email') && cleanMessage.includes('invalid')) {
+      return 'Please enter a valid email address.';
+    }
+
+    if (cleanMessage.includes('network') || cleanMessage.includes('connection')) {
+      return 'Network error. Please check your internet connection.';
+    }
+
+    if (cleanMessage.includes('too many') || cleanMessage.includes('attempts')) {
+      return 'Too many failed attempts. Please wait a few minutes and try again.';
+    }
+
+    // Return the cleaned message if it's reasonably short, otherwise use a generic message
+    if (cleanMessage.length < 100 && cleanMessage.length > 0) {
+      return cleanMessage.charAt(0).toUpperCase() + cleanMessage.slice(1);
+    }
+
+    return 'Authentication failed. Please try again.';
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
@@ -25,7 +171,7 @@ function Login({ onLogin }) {
       onLogin(true);
       localStorage.setItem('isAuthenticated', 'true');
     } catch (err) {
-      setError(err?.message || 'Authentication failed.');
+      setError(getFriendlyErrorMessage(err));
     } finally {
       setIsLoading(false);
     }

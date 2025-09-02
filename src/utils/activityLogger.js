@@ -350,13 +350,28 @@ export const getRecentActivities = async (options = {}) => {
       constraints.push(limit(100)); // Default limit
     }
 
-    q = query(q, ...constraints);
-    const snapshot = await getDocs(q);
-
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    try {
+      q = query(q, ...constraints);
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (err) {
+      // Fallback: missing composite index or restricted read; fetch recent by timestamp and filter in memory
+      console.warn('Activity query fell back to client-side filtering:', err?.code || err);
+      const fallbackLimit = options.limit || 500;
+      const fallbackQuery = query(collection(db, 'userActivity'), orderBy('timestamp', 'desc'), limit(fallbackLimit));
+      const snap = await getDocs(fallbackQuery);
+      const items = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      return items.filter(a => {
+        if (options.userId && a.userId !== options.userId) return false;
+        if (options.type && a.type !== options.type) return false;
+        if (options.hours) {
+          const cutoff = Date.now() - (options.hours * 60 * 60 * 1000);
+          const ts = new Date(a.timestamp).getTime();
+          if (isFinite(ts) && ts < cutoff) return false;
+        }
+        return true;
+      });
+    }
   } catch (error) {
     console.error('Error fetching recent activities:', error);
     return [];
@@ -385,15 +400,26 @@ export const subscribeToActivities = (callback, options = {}) => {
     constraints.push(orderBy('timestamp', 'desc'));
     constraints.push(limit(options.limit || 50));
 
-    q = query(q, ...constraints);
-
-    return onSnapshot(q, (snapshot) => {
-      const activities = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      callback(activities);
-    });
+    try {
+      q = query(q, ...constraints);
+      return onSnapshot(q, (snapshot) => {
+        const activities = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        callback(activities);
+      });
+    } catch (err) {
+      // Fallback: subscribe to recent by timestamp and filter before callback
+      console.warn('Activity subscription fell back to client-side filtering:', err?.code || err);
+      const fbQuery = query(collection(db, 'userActivity'), orderBy('timestamp', 'desc'), limit(options.limit || 50));
+      return onSnapshot(fbQuery, (snapshot) => {
+        const raw = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const filtered = raw.filter(a => {
+          if (options.userId && a.userId !== options.userId) return false;
+          if (options.type && a.type !== options.type) return false;
+          return true;
+        });
+        callback(filtered);
+      });
+    }
   } catch (error) {
     console.error('Error subscribing to activities:', error);
     return () => {}; // Return no-op unsubscribe function

@@ -112,9 +112,6 @@ const ViewerAccessModal = ({ isOpen, onClose, user }) => {
                   <p className="font-medium text-gray-900">Davis Deaton</p>
                   <p className="text-sm text-gray-600">davis_deaton1@baylor.edu</p>
                 </div>
-                <p className="text-xs text-gray-600 mt-2">
-                  Include your name, email, and what access you need in your request.
-                </p>
               </div>
             </div>
           </div>

@@ -1,0 +1,84 @@
+// Firestore rules - FIXED VIEWER ACCESS
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() { return request.auth != null; }
+
+    // Treat someone as admin if they have a custom claim OR match your email
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.admin == true ||
+        request.auth.token.email == 'davis_deaton1@baylor.edu'
+      );
+    }
+
+    // Simplified access control - more permissive for testing
+    function canReadPage(pageId) {
+      return isSignedIn();
+    }
+
+    // Admin-only access for sensitive operations
+    function canWrite() {
+      return isAdmin();
+    }
+
+    // Access Control config: everyone signed-in can read; only admin writes
+    match /settings/accessControl {
+      allow read: if isSignedIn();
+      allow write: if canWrite();
+    }
+
+    // Users profiles: user can read/write own; admin can read/write all
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow write: if canWrite() || (isSignedIn() && request.auth.uid == userId);
+    }
+
+    // USER ACTIVITY TRACKING - Admin only for security
+    match /userActivity/{id} {
+      allow read, write: if canWrite();
+    }
+
+    // App data: ALL SIGNED-IN USERS can read; only admin can modify
+    match /people/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if canWrite();
+    }
+    match /schedules/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if canWrite();
+    }
+    match /programs/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if canWrite();
+    }
+    match /departments/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if canWrite();
+    }
+    match /courses/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if canWrite();
+    }
+    match /terms/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if canWrite();
+    }
+    match /rooms/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if canWrite();
+    }
+    match /baylorAcronyms/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if canWrite();
+    }
+
+    // Change logs/history: keep admin-only (sensitive)
+    match /changeLog/{id} {
+      allow read, write: if canWrite();
+    }
+    match /editHistory/{id} {
+      allow read, write: if canWrite();
+    }
+  }
+}

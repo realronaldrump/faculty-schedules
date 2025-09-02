@@ -19,6 +19,7 @@ import BaylorAcronyms from './pages/BaylorAcronyms';
 
 import RecentChangesPage from './components/RecentChangesPage';
 import RoomGridGenerator from './components/admin/RoomGridGenerator';
+import UserActivityDashboard from './components/UserActivityDashboard';
 
 import EmailLists from './components/EmailLists';
 import BuildingDirectory from './components/BuildingDirectory';
@@ -260,6 +261,7 @@ function App() {
       children: [
         { id: 'program-management', label: 'Program Management', path: 'administration/program-management' },
         { id: 'access-control', label: 'Access Control', path: 'administration/access-control' },
+        { id: 'user-activity', label: 'User Activity', path: 'administration/user-activity' },
         { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' }
       ]
     }
@@ -1553,6 +1555,12 @@ function App() {
         return (
           <ProtectedContent pageId="administration/access-control">
             <AccessControl {...pageProps} />
+          </ProtectedContent>
+        );
+      case 'administration/user-activity':
+        return (
+          <ProtectedContent pageId="administration/user-activity">
+            <UserActivityDashboard {...pageProps} />
           </ProtectedContent>
         );
       default:

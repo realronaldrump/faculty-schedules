@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Menu, X, Home, Calendar, Users, BarChart3, Settings, Bell, Search, User, Database, Shield, Star } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { logNavigation, logInteraction, ACTIVITY_TYPES } from '../utils/activityLogger';
 
 const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggleCollapse, selectedSemester, pinnedPages, togglePinPage }) => {
   const [expandedSections, setExpandedSections] = useState([]); // Default expanded sections
@@ -58,7 +59,13 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
             </div>
           )}
           <button
-            onClick={onToggleCollapse}
+            onClick={() => {
+              logInteraction('sidebar_toggle', `${collapsed ? 'Expanded' : 'Collapsed'} sidebar`, {
+                collapsed: !collapsed,
+                previousState: collapsed
+              });
+              onToggleCollapse();
+            }}
             className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/80 hover:text-white"
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
@@ -81,7 +88,10 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
                 return (
                   <button
                     key={`pinned-${item.id}`}
-                    onClick={() => onNavigate(item.path)}
+                    onClick={() => {
+                      logNavigation(currentPage, item.path, 'pinned_link');
+                      onNavigate(item.path);
+                    }}
                     className={`nav-sub-item w-full ${isCurrentPage(item.path) ? 'nav-sub-item-active' : 'nav-sub-item-inactive'}`}
                   >
                     <Icon size={16} className="mr-2" />
@@ -111,9 +121,14 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
                   onClick={() => {
                     if (hasChildren) {
                       if (!collapsed) {
+                        logInteraction(`section_toggle_${item.id}`, `Toggled ${item.label} section`, {
+                          sectionId: item.id,
+                          expanded: !isExpanded
+                        });
                         toggleSection(item.id);
                       }
                     } else {
+                      logNavigation(currentPage, item.path || item.id, 'sidebar_navigation');
                       onNavigate(item.path || item.id);
                     }
                   }}
@@ -151,7 +166,10 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
                       return (
                         <div key={child.id} className="group flex items-center">
                           <button
-                            onClick={() => onNavigate(child.path)}
+                            onClick={() => {
+                              logNavigation(currentPage, child.path, 'sidebar_sub_navigation');
+                              onNavigate(child.path);
+                            }}
                             className={`nav-sub-item w-full text-left ${
                               isCurrentPage(child.path) ? 'nav-sub-item-active' : 'nav-sub-item-inactive'
                             }`}
@@ -161,6 +179,11 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
+                              logInteraction(`pin_toggle_${child.id}`, `${isPinned ? 'Unpinned' : 'Pinned'} ${child.label} page`, {
+                                pageId: child.id,
+                                pageLabel: child.label,
+                                wasPinned: isPinned
+                              });
                               togglePinPage(child.id);
                             }}
                             className="p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-baylor-green/20"

@@ -2,24 +2,6 @@ import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Menu, X, Home, Calendar, Users, BarChart3, Settings, Bell, Search, User, Database, Shield, Star } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 
-const menuItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: Home },
-  { id: 'individual-availability', label: 'Individual Availability', icon: User },
-  { id: 'room-schedules', label: 'Room Schedules', icon: Calendar },
-  { id: 'faculty-schedules', label: 'Faculty Schedules', icon: Calendar },
-  { id: 'faculty-directory', label: 'Faculty Directory', icon: Users },
-  { id: 'staff-directory', label: 'Staff Directory', icon: Users },
-  { id: 'adjunct-directory', label: 'Adjunct Directory', icon: Users },
-  { id: 'program-management', label: 'Program Management', icon: BarChart3 },
-  { id: 'department-insights', label: 'Department Insights', icon: BarChart3 },
-  { id: 'course-management', label: 'Course Management', icon: BarChart3 },
-  { id: 'email-lists', label: 'Email Lists', icon: Users },
-  { id: 'building-directory', label: 'Office Directory', icon: Users },
-  { id: 'smart-data-import', label: 'Smart Data Import', icon: Database },
-  { id: 'data-hygiene', label: 'Data Hygiene', icon: Shield },
-  { id: 'systems', label: 'Systems', icon: Settings },
-];
-
 const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggleCollapse, selectedSemester, pinnedPages, togglePinPage }) => {
   const [expandedSections, setExpandedSections] = useState([]); // Default expanded sections
   const { canAccess } = useAuth();

@@ -219,31 +219,23 @@ function App() {
         { id: 'individual-availability', label: 'Individual Availability', path: 'scheduling/individual-availability' },
         { id: 'room-schedules', label: 'Room Schedules', path: 'scheduling/room-schedules' },
         { id: 'student-schedules', label: 'Student Worker Schedules', path: 'scheduling/student-schedules' },
-        { id: 'group-meeting-scheduler', label: 'Group Meeting Scheduler', path: 'scheduling/group-meeting-scheduler' }
+        { id: 'group-meeting-scheduler', label: 'Group Meetings', path: 'scheduling/group-meeting-scheduler' }
       ]
     },
     {
-      id: 'people',
-      label: 'People Management',
+      id: 'directory',
+      label: 'Directory',
       icon: Users,
       children: [
         { id: 'people-directory', label: 'People Directory', path: 'people/people-directory' },
-        { id: 'email-lists', label: 'Email Lists', path: 'people/email-lists' }
-      ]
-    },
-    {
-      id: 'resources',
-      label: 'Resources',
-      icon: Database,
-      children: [
-        { id: 'building-directory', label: 'Office Directory', path: 'resources/building-directory' },
-        { id: 'room-grid-generator', label: 'Room Grid Generator', path: 'resources/room-grid-generator' },
+        { id: 'email-lists', label: 'Email Lists', path: 'people/email-lists' },
+        { id: 'building-directory', label: 'Building Directory', path: 'resources/building-directory' },
         { id: 'baylor-acronyms', label: 'Baylor Acronyms', path: 'administration/baylor-acronyms' }
       ]
     },
     {
       id: 'analytics',
-      label: 'Data & Analytics',
+      label: 'Analytics',
       icon: BarChart3,
       children: [
         { id: 'department-insights', label: 'Department Insights', path: 'analytics/department-insights' },
@@ -251,16 +243,24 @@ function App() {
       ]
     },
     {
-      id: 'administration',
-      label: 'Administration',
+      id: 'tools',
+      label: 'Tools',
+      icon: Database,
+      children: [
+        { id: 'smart-import', label: 'Data Import', path: 'administration/smart-import' },
+        { id: 'data-hygiene', label: 'Data Hygiene', path: 'administration/data-hygiene' },
+        { id: 'room-grid-generator', label: 'Room Grid Generator', path: 'resources/room-grid-generator' },
+        { id: 'recent-changes', label: 'Recent Changes', path: 'administration/recent-changes' }
+      ]
+    },
+    {
+      id: 'system',
+      label: 'System',
       icon: Settings,
       children: [
         { id: 'program-management', label: 'Program Management', path: 'administration/program-management' },
-        { id: 'smart-import', label: 'Data Import', path: 'administration/smart-import' },
-        { id: 'data-hygiene', label: 'Data Hygiene', path: 'administration/data-hygiene' },
-        { id: 'recent-changes', label: 'Recent Changes', path: 'administration/recent-changes' },
-        { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' },
-        { id: 'access-control', label: 'Access Control', path: 'administration/access-control' }
+        { id: 'access-control', label: 'Access Control', path: 'administration/access-control' },
+        { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' }
       ]
     }
   ];

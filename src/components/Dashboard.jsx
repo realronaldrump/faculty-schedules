@@ -2,15 +2,10 @@ import React, { useMemo, useState, useEffect } from 'react';
 import {
   Users,
   Calendar,
-  MapPin,
-  BookOpen,
   TrendingUp,
   AlertCircle,
   ChevronRight,
-  Plus,
-  Search,
   FileText,
-  Settings,
   GraduationCap,
   Building
 } from 'lucide-react';
@@ -214,51 +209,7 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
         </div>
       </div>
 
-      {/* System Information */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="university-card">
-          <div className="university-card-header">
-            <h3 className="university-card-title">System Information</h3>
-          </div>
-          <div className="university-card-content">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                  <span className="text-sm font-medium text-gray-900">System Status</span>
-                </div>
-                <span className="status-badge status-success">Online</span>
-              </div>
-              
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <Users className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-medium text-gray-900">Active Faculty</span>
-                </div>
-                <span className="text-sm font-semibold text-blue-600">{metrics.facultyCount}</span>
-              </div>
-              
-              <div className="flex items-center justify-between p-3 bg-baylor-green/5 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <Calendar className="w-4 h-4 text-baylor-green" />
-                  <span className="text-sm font-medium text-gray-900">Current Semester</span>
-                </div>
-                <span className="text-sm font-semibold text-baylor-green">{selectedSemester}</span>
-              </div>
-              
-              <div className="pt-4 border-t border-gray-100">
-                <button 
-                  onClick={() => onNavigate('administration/baylor-systems')}
-                  className="btn-secondary w-full justify-center"
-                >
-                  <Settings className="w-4 h-4 mr-2" />
-                  System Administration
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+
 
       {/* Viewer Access Modal */}
       <ViewerAccessModal

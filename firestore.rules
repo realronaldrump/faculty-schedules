@@ -34,9 +34,12 @@ service cloud.firestore {
       allow write: if canWrite() || (isSignedIn() && request.auth.uid == userId);
     }
 
-    // USER ACTIVITY TRACKING - Admin only for security
+    // USER ACTIVITY TRACKING
+    // Allow any signed-in user to create their own activity records
+    // Keep reads/updates/deletes restricted to admins
     match /userActivity/{id} {
-      allow read, write: if canWrite();
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
+      allow read, update, delete: if canWrite();
     }
 
     // App data: ALL SIGNED-IN USERS can read; only admin can modify

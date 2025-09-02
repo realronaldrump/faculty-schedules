@@ -36,6 +36,14 @@ const UserActivityDashboard = () => {
     hours: 24
   });
 
+  // Helper function to convert 24-hour to 12-hour format
+  const formatHour12 = (hour24) => {
+    const hour = parseInt(hour24);
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+    return `${hour12}:00 ${period}`;
+  };
+
   // Load initial data
   useEffect(() => {
     loadActivityData();
@@ -221,7 +229,7 @@ const UserActivityDashboard = () => {
                 <p className="text-sm font-medium text-gray-600">Most Active Hour</p>
                 <p className="text-3xl font-bold text-baylor-green">
                   {Object.keys(stats.byHour || {}).length > 0 ?
-                    `${Math.max(...Object.keys(stats.byHour).map(h => parseInt(h)))}:00` :
+                    formatHour12(Math.max(...Object.keys(stats.byHour).map(h => parseInt(h)))) :
                     '--:--'
                   }
                 </p>

@@ -4,7 +4,6 @@ import {
   Calendar,
   MapPin,
   BookOpen,
-  Clock,
   TrendingUp,
   AlertCircle,
   ChevronRight,
@@ -15,7 +14,7 @@ import {
   GraduationCap,
   Building
 } from 'lucide-react';
-import { formatChangeForDisplay } from '../utils/recentChanges';
+// Recent changes removed from dashboard
 import { useAuth } from '../contexts/AuthContext';
 import ViewerAccessModal from './ViewerAccessModal';
 
@@ -57,10 +56,9 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
       roomsInUse: analytics.roomsInUse,
       totalSessions: analytics.totalSessions,
       uniqueCourses: analytics.uniqueCourses,
-      busiestDay: analytics.busiestDay,
-      recentChanges: recentChanges.slice(0, 5)
+      busiestDay: analytics.busiestDay
     };
-  }, [analytics, recentChanges]);
+  }, [analytics]);
 
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
 
@@ -216,62 +214,8 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
         </div>
       </div>
 
-      {/* Recent Activity & System Status */}
+      {/* System Information */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Changes */}
-        <div className="university-card">
-          <div className="university-card-header">
-            <h3 className="university-card-title">Recent Changes</h3>
-            <button 
-              onClick={() => onNavigate('analytics/recent-changes')}
-              className="btn-ghost text-sm"
-            >
-              View all
-            </button>
-          </div>
-          <div className="university-card-content">
-            <div className="space-y-4">
-              {metrics.recentChanges.length > 0 ? (
-                metrics.recentChanges.map((change, index) => {
-                  const formattedChange = formatChangeForDisplay(change);
-                  return (
-                    <div key={change.id || index} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
-                      <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 flex-shrink-0"></div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          <span className={`${formattedChange.actionColor} font-semibold`}>
-                            {formattedChange.displayAction}
-                          </span>
-                          {' '}- {formattedChange.displayEntity}
-                        </p>
-                        {formattedChange.detailedDescription && (
-                          <p className="text-xs text-gray-600 mt-1 truncate">
-                            {formattedChange.detailedDescription}
-                          </p>
-                        )}
-                        <div className="flex items-center justify-between mt-1">
-                          <p className="text-xs text-gray-500">
-                            {formattedChange.timeAgo}
-                          </p>
-                          <p className="text-xs text-gray-400">
-                            {formattedChange.displaySource}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="text-center py-8">
-                  <Clock className="w-8 h-8 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500 text-sm">No recent changes</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* System Information */}
         <div className="university-card">
           <div className="university-card-header">
             <h3 className="university-card-title">System Information</h3>

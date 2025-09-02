@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, GraduationCap, Users, Calendar, X } from 'lucide-react';
+import { Shield, GraduationCap, Users, Calendar, X, BarChart3, MapPin, Database } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 
 function Login({ onLogin }) {
@@ -223,18 +223,45 @@ function Login({ onLogin }) {
               <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
                 <Users className="w-5 h-5 text-baylor-green flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Faculty Directory</p>
-                  <p className="text-xs text-gray-600">Comprehensive faculty information</p>
+                  <p className="text-sm font-medium text-gray-900">Advanced Faculty Management</p>
+                  <p className="text-xs text-gray-600">Comprehensive faculty directory with contact cards and program assignments</p>
                 </div>
               </div>
               <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
                 <Calendar className="w-5 h-5 text-baylor-green flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Schedule Management</p>
-                  <p className="text-xs text-gray-600">Course and room scheduling tools</p>
+                  <p className="text-sm font-medium text-gray-900">Intelligent Scheduling System</p>
+                  <p className="text-xs text-gray-600">Multi-semester course scheduling with room assignments and conflict detection</p>
                 </div>
               </div>
-
+              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                <MapPin className="w-5 h-5 text-baylor-green flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Room & Resource Management</p>
+                  <p className="text-xs text-gray-600">Building directory, room grids, and availability tracking with capacity data</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                <BarChart3 className="w-5 h-5 text-baylor-green flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Department Analytics</p>
+                  <p className="text-xs text-gray-600">Real-time insights on faculty workload, room utilization, and course distribution</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                <Database className="w-5 h-5 text-baylor-green flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Smart Data Import/Export</p>
+                  <p className="text-xs text-gray-600">CLSS integration, CRN migration, data deduplication, and transaction rollback</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                <Shield className="w-5 h-5 text-baylor-green flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Access Control & Audit</p>
+                  <p className="text-xs text-gray-600">Role-based permissions with comprehensive change logging and activity tracking</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

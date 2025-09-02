@@ -70,7 +70,7 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
       title: 'Schedule Group Meeting',
       description: 'Find available times for multiple faculty members',
       icon: Users,
-              action: () => onNavigate('admin-tools/group-meeting-scheduler'),
+              action: () => onNavigate('scheduling/group-meeting-scheduler'),
       color: 'bg-blue-600',
       textColor: 'text-blue-600'
     },
@@ -86,7 +86,7 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
       title: 'Faculty Directory',
       description: 'Contact information and faculty details',
       icon: GraduationCap,
-      action: () => onNavigate('directory/faculty-directory'),
+      action: () => onNavigate('people/people-directory'),
       color: 'bg-purple-600',
       textColor: 'text-purple-600'
     },

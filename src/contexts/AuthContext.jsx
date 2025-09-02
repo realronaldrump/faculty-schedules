@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut, updateProfile } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, getDocFromCache } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { logCreate, logUpdate } from '../utils/changeLogger';
 
 const AuthContext = createContext(null);
@@ -11,6 +11,8 @@ export const AuthProvider = ({ children }) => {
   const [userProfile, setUserProfile] = useState(null);
   const [rolePermissions, setRolePermissions] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadedProfile, setLoadedProfile] = useState(false);
+  const [loadedAccess, setLoadedAccess] = useState(false);
 
   const ADMIN_EMAILS = useMemo(() => {
     const envEmails = (import.meta.env.VITE_ADMIN_EMAILS || import.meta.env.VITE_ADMIN_EMAIL || '').trim();
@@ -95,15 +97,52 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
+      setLoadedProfile(false);
       try {
         await bootstrapAccessControl();
-        await loadUserProfile(u);
       } finally {
-        setLoading(false);
+        // no-op
+      }
+      // Subscribe to current user's profile
+      if (u) {
+        const userRef = doc(db, 'users', u.uid);
+        const stop = onSnapshot(userRef, (snap) => {
+          setUserProfile(snap.exists() ? snap.data() : null);
+          setLoadedProfile(true);
+        }, () => {
+          setUserProfile(null);
+          setLoadedProfile(true);
+        });
+        return () => stop();
+      } else {
+        setUserProfile(null);
+        setLoadedProfile(true);
       }
     });
     return () => unsub();
   }, []);
+
+  // Subscribe to Access Control changes
+  useEffect(() => {
+    const ref = getAccessControlRef();
+    const stop = onSnapshot(ref, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() || {};
+        setRolePermissions(data.rolePermissions || { admin: { '*': true }, staff: {}, faculty: {}, viewer: { 'dashboard': true } });
+      } else {
+        setRolePermissions({ admin: { '*': true }, staff: {}, faculty: {}, viewer: { 'dashboard': true } });
+      }
+      setLoadedAccess(true);
+    }, () => {
+      setRolePermissions({ admin: { '*': true }, staff: {}, faculty: {}, viewer: { 'dashboard': true } });
+      setLoadedAccess(true);
+    });
+    return () => stop();
+  }, []);
+
+  useEffect(() => {
+    setLoading(!(loadedProfile && loadedAccess));
+  }, [loadedProfile, loadedAccess]);
 
   const signIn = async (email, password) => {
     const cred = await signInWithEmailAndPassword(auth, email, password);

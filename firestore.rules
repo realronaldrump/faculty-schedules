@@ -4,11 +4,28 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function isSignedIn() { return request.auth != null; }
 
+    // Check user's Firestore profile for admin role (supports array or map formats)
+    function userHasAdminRole() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles is list &&
+          'admin' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles
+        ) || (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles is map &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.admin == true
+        )
+      );
+    }
+
     // Treat someone as admin if they have a custom claim OR match your email
     function isAdmin() {
       return isSignedIn() && (
+        // Custom claim on the Auth token
         request.auth.token.admin == true ||
-        request.auth.token.email == 'davis_deaton1@baylor.edu'
+        // Case-insensitive direct email allowlist for bootstrap
+        lower(request.auth.token.email) == 'davis_deaton1@baylor.edu' ||
+        // Check Firestore user profile roles (supports array or map formats)
+        userHasAdminRole()
       );
     }
 
@@ -76,12 +93,19 @@ service cloud.firestore {
       allow create, update, delete: if canWrite();
     }
 
-    // Change logs/history: keep admin-only (sensitive)
+    // Change logs
+    // - Allow any signed-in user to READ recent changes (dashboard visibility)
+    // - Only admins can WRITE
     match /changeLog/{id} {
-      allow read, write: if canWrite();
+      allow read: if isSignedIn();
+      allow write: if canWrite();
     }
+    // Legacy edit history
+    // - Allow signed-in read to avoid noisy permission warnings in UI
+    // - Only admins can write
     match /editHistory/{id} {
-      allow read, write: if canWrite();
+      allow read: if isSignedIn();
+      allow write: if canWrite();
     }
   }
 }

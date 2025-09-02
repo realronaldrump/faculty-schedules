@@ -119,18 +119,16 @@ const SystemsPage = ({ onNavigate }) => {
       </div>
 
       {/* Quick Access Banner */}
-      <div className="bg-gradient-to-r from-baylor-green to-baylor-green/80 rounded-xl text-white p-8">
-        <div className="flex items-center justify-between">
+      <div className="university-header rounded-xl p-8">
+        <div className="university-brand">
+          <div className="university-logo">
+            <Settings className="w-6 h-6 text-white" />
+          </div>
           <div>
-            <h2 className="text-2xl font-bold mb-2">Official University Resources</h2>
-            <p className="text-baylor-gold/90 text-lg">
+            <h2 className="university-title">Official University Resources</h2>
+            <p className="university-subtitle">
               Direct links to essential Baylor systems for faculty and staff
             </p>
-          </div>
-          <div className="hidden md:block">
-            <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center">
-              <Settings className="w-10 h-10 text-baylor-gold" />
-            </div>
           </div>
         </div>
       </div>

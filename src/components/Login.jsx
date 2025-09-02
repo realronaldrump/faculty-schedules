@@ -332,9 +332,6 @@ function Login({ onLogin }) {
                     directly to gain access to the system.
                   </p>
                 </div>
-                <div className="text-xs text-gray-500">
-                  Authorized personnel only • Enhanced security measures in place
-                </div>
               </div>
             </div>
           </div>

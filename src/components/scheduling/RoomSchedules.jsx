@@ -324,12 +324,38 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
       const z = new Date(d.getTime());
       return `${z.getUTCFullYear()}${pad2(z.getUTCMonth() + 1)}${pad2(z.getUTCDate())}T${pad2(z.getUTCHours())}${pad2(z.getUTCMinutes())}${pad2(z.getUTCSeconds())}Z`;
     };
+    const formatUtcDateTime = (d) => {
+      const z = new Date(d.getTime());
+      return `${z.getUTCFullYear()}${pad2(z.getUTCMonth() + 1)}${pad2(z.getUTCDate())}T${pad2(z.getUTCHours())}${pad2(z.getUTCMinutes())}${pad2(z.getUTCSeconds())}Z`;
+    };
     const escapeICS = (text) => (text || '')
       .replace(/\\/g, '\\\\')
       .replace(/\n/g, '\\n')
       .replace(/\r/g, '')
       .replace(/,/g, '\\,')
       .replace(/;/g, '\\;');
+    const foldICSLines = (inputLines) => {
+      const maxLen = 75;
+      const folded = [];
+      inputLines.forEach((line) => {
+        if (typeof line !== 'string') {
+          folded.push(String(line || ''));
+          return;
+        }
+        if (line.length <= maxLen) {
+          folded.push(line);
+        } else {
+          folded.push(line.slice(0, maxLen));
+          let pos = maxLen;
+          const contMax = maxLen - 1;
+          while (pos < line.length) {
+            folded.push(' ' + line.slice(pos, pos + contMax));
+            pos += contMax;
+          }
+        }
+      });
+      return folded;
+    };
 
     const buildVTimezone = () => [
       'BEGIN:VTIMEZONE',
@@ -400,7 +426,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
 
             lines.push('BEGIN:VEVENT');
             lines.push(`UID:${escapeICS(uid)}`);
-            lines.push(`DTSTAMP:${formatLocalDateTime(new Date())}`);
+            lines.push(`DTSTAMP:${formatUtcDateTime(new Date())}`);
             lines.push(`SUMMARY:${escapeICS(summary)}`);
             lines.push(`LOCATION:${escapeICS(room)}`);
             if (description) lines.push(`DESCRIPTION:${escapeICS(description)}`);
@@ -415,7 +441,8 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
       });
 
       lines.push('END:VCALENDAR');
-      return lines.join('\r\n');
+      const finalLines = foldICSLines(lines);
+      return finalLines.join('\r\n') + '\r\n';
     };
 
     if (perRoom && (!selectedRoom) && roomsToExport.length > 1) {

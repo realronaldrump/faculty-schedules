@@ -3,6 +3,8 @@ import { MapPin, Calendar, Clock, Search, Grid, List, Filter, Building2, X, Slid
 import FacultyContactCard from '../FacultyContactCard';
 import WeekView from './WeekView';
 import CourseDetailModal from './CourseDetailModal';
+import ICSExportModal from './ICSExportModal';
+import { logExport } from '../../utils/activityLogger';
 
 const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate }) => {
   const [roomScheduleDay, setRoomScheduleDay] = useState('M');
@@ -20,6 +22,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
     return now.getHours() * 60 + now.getMinutes();
   });
   const [selectedCourseForModal, setSelectedCourseForModal] = useState(null);
+  const [showICSModal, setShowICSModal] = useState(false);
 
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
   const dayOrder = ['M', 'T', 'W', 'R', 'F'];
@@ -293,6 +296,151 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
   // Print week view
   const handlePrintWeekView = () => {
     window.print();
+  };
+
+
+  // Export to Outlook-compatible ICS (open modal)
+  const handleExportWeekViewICS = () => {
+    setShowICSModal(true);
+  };
+
+  const performICSExport = async ({ startDate, endDate, perRoom }) => {
+    const roomsToExport = selectedRoom ? [selectedRoom] : filteredRooms.slice();
+    if (!roomsToExport || roomsToExport.length === 0) {
+      console.warn('No rooms available to export.');
+      return;
+    }
+
+    const start = new Date(startDate + 'T00:00:00');
+    const end = new Date(endDate + 'T23:59:59');
+
+    const dayCodeToJs = { 'M': 1, 'T': 2, 'W': 3, 'R': 4, 'F': 5 };
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const formatLocalDate = (d) => `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
+    const formatLocalDateTime = (d) => `${formatLocalDate(d)}T${pad2(d.getHours())}${pad2(d.getMinutes())}00`;
+    const formatUtcUntil = (d) => {
+      const z = new Date(d.getTime());
+      return `${z.getUTCFullYear()}${pad2(z.getUTCMonth() + 1)}${pad2(z.getUTCDate())}T${pad2(z.getUTCHours())}${pad2(z.getUTCMinutes())}${pad2(z.getUTCSeconds())}Z`;
+    };
+    const escapeICS = (text) => (text || '')
+      .replace(/\\/g, '\\\\')
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '')
+      .replace(/,/g, '\\,')
+      .replace(/;/g, '\\;');
+
+    const buildVTimezone = () => [
+      'BEGIN:VTIMEZONE',
+      'TZID:America/Chicago',
+      'X-LIC-LOCATION:America/Chicago',
+      'BEGIN:DAYLIGHT',
+      'TZOFFSETFROM:-0600',
+      'TZOFFSETTO:-0500',
+      'TZNAME:CDT',
+      'DTSTART:19700308T020000',
+      'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU',
+      'END:DAYLIGHT',
+      'BEGIN:STANDARD',
+      'TZOFFSETFROM:-0500',
+      'TZOFFSETTO:-0600',
+      'TZNAME:CST',
+      'DTSTART:19701101T020000',
+      'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU',
+      'END:STANDARD',
+      'END:VTIMEZONE'
+    ];
+
+    let totalEvents = 0;
+
+    const createIcsForRooms = (rooms) => {
+      const lines = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//faculty-schedules//RoomSchedules//EN',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        'X-WR-TIMEZONE:America/Chicago'
+      ];
+      lines.push(...buildVTimezone());
+
+      rooms.forEach((room) => {
+        const daySchedules = weeklyRoomSchedules[room] || {};
+        Object.entries(daySchedules).forEach(([dayCode, schedules]) => {
+          const jsDay = dayCodeToJs[dayCode];
+          if (jsDay == null) return;
+
+          schedules.forEach((item, idx) => {
+            let first = new Date(start.getTime());
+            while (first.getDay() !== jsDay) {
+              first.setDate(first.getDate() + 1);
+            }
+
+            const startMin = parseTime(item['Start Time']);
+            const endMin = parseTime(item['End Time']);
+            if (startMin == null || endMin == null || endMin <= startMin) return;
+
+            const dtStart = new Date(first.getFullYear(), first.getMonth(), first.getDate(), Math.floor(startMin / 60), startMin % 60, 0);
+            const dtEnd = new Date(first.getFullYear(), first.getMonth(), first.getDate(), Math.floor(endMin / 60), endMin % 60, 0);
+
+            const bydayMap = { 1: 'MO', 2: 'TU', 3: 'WE', 4: 'TH', 5: 'FR' };
+            const byday = bydayMap[jsDay];
+            const untilUtc = formatUtcUntil(new Date(end.getTime()));
+
+            const uid = `${room}-${item.Course}-${item['Start Time']}-${item['End Time']}-${dayCode}-${idx}@faculty-schedules`;
+
+            const summary = `${item.Course || ''}${item['Course Title'] ? ' - ' + item['Course Title'] : ''}`.trim();
+            const descParts = [];
+            if (item.Instructor) descParts.push(`Instructor: ${item.Instructor}`);
+            if (item.Section) descParts.push(`Section: ${item.Section}`);
+            if (item.CRN || item.Crn || item.crn) descParts.push(`CRN: ${item.CRN || item.Crn || item.crn}`);
+            if (item.Term) descParts.push(`Term: ${item.Term}`);
+            const description = descParts.join('\n');
+
+            lines.push('BEGIN:VEVENT');
+            lines.push(`UID:${escapeICS(uid)}`);
+            lines.push(`DTSTAMP:${formatLocalDateTime(new Date())}`);
+            lines.push(`SUMMARY:${escapeICS(summary)}`);
+            lines.push(`LOCATION:${escapeICS(room)}`);
+            if (description) lines.push(`DESCRIPTION:${escapeICS(description)}`);
+            lines.push(`DTSTART;TZID=America/Chicago:${formatLocalDateTime(dtStart)}`);
+            lines.push(`DTEND;TZID=America/Chicago:${formatLocalDateTime(dtEnd)}`);
+            lines.push(`RRULE:FREQ=WEEKLY;BYDAY=${byday};UNTIL=${untilUtc}`);
+            lines.push('END:VEVENT');
+
+            totalEvents += 1;
+          });
+        });
+      });
+
+      lines.push('END:VCALENDAR');
+      return lines.join('\r\n');
+    };
+
+    if (perRoom && (!selectedRoom) && roomsToExport.length > 1) {
+      roomsToExport.forEach((room) => {
+        const ics = createIcsForRooms([room]);
+        const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${room.replace(/\s+/g, '_')}.ics`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      });
+    } else {
+      const ics = createIcsForRooms(roomsToExport);
+      const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `room-schedules${selectedBuilding ? '-' + selectedBuilding.replace(/\s+/g, '_') : ''}-${new Date().toISOString().split('T')[0]}.ics`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    }
+
+    try {
+      await logExport('ICS', 'Room schedules', totalEvents || 0);
+    } catch (_) {}
   };
 
 
@@ -752,6 +900,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
               onShowContactCard={handleShowContactCard}
               onExport={handleExportWeekView}
               onPrint={handlePrintWeekView}
+              onExportICS={handleExportWeekViewICS}
             />
           ) : <TimelineView />
         ) : (
@@ -787,6 +936,16 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
           onShowContactCard={(name) => handleShowContactCard(name)}
         />
       )}
+
+      {/* ICS Export Modal */}
+      <ICSExportModal
+        isOpen={showICSModal}
+        onClose={() => setShowICSModal(false)}
+        onConfirm={(vals) => { setShowICSModal(false); performICSExport(vals); }}
+        roomsCount={(selectedRoom ? 1 : filteredRooms.length) || 0}
+        selectedRoom={selectedRoom}
+        selectedBuilding={selectedBuilding}
+      />
     </div>
   );
 };

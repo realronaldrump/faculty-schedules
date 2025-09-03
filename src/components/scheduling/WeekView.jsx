@@ -11,7 +11,8 @@ const WeekView = ({
   density, 
   onShowContactCard,
   onExport,
-  onPrint 
+  onPrint,
+  onExportICS 
 }) => {
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
   const dayOrder = ['M', 'T', 'W', 'R', 'F'];
@@ -369,6 +370,16 @@ const WeekView = ({
             <Download className="w-4 h-4 mr-2" />
             Export CSV
           </button>
+          {onExportICS && (
+            <button
+              onClick={onExportICS}
+              className="inline-flex items-center px-3 py-2 text-sm font-medium text-baylor-green bg-white border border-baylor-green rounded-lg hover:bg-baylor-green hover:text-white transition-colors"
+              title="Export to Outlook (ICS)"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export ICS
+            </button>
+          )}
           <button
             onClick={onPrint}
             className="inline-flex items-center px-3 py-2 text-sm font-medium text-baylor-green bg-white border border-baylor-green rounded-lg hover:bg-baylor-green hover:text-white transition-colors"

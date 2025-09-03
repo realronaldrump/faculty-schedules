@@ -843,50 +843,54 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
         </div>
       </div>
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="text-sm text-gray-600">Rooms Shown</div>
-          <div className="text-2xl font-bold text-baylor-green">
-            {visibleStats.count}
+      {/* Summary Stats (hide in week view) */}
+      {viewMode !== 'week' && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div className="text-sm text-gray-600">Rooms Shown</div>
+            <div className="text-2xl font-bold text-baylor-green">
+              {visibleStats.count}
+            </div>
+            <div className="text-xs text-gray-500">of {uniqueRooms.length} total</div>
           </div>
-          <div className="text-xs text-gray-500">of {uniqueRooms.length} total</div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="text-sm text-gray-600">Total Sessions</div>
-          <div className="text-2xl font-bold text-baylor-green">
-            {visibleStats.sessions}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div className="text-sm text-gray-600">Total Sessions</div>
+            <div className="text-2xl font-bold text-baylor-green">
+              {visibleStats.sessions}
+            </div>
+            <div className="text-xs text-gray-500">on {dayNames[roomScheduleDay]}</div>
           </div>
-          <div className="text-xs text-gray-500">on {dayNames[roomScheduleDay]}</div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="text-sm text-gray-600">Total Hours</div>
-          <div className="text-2xl font-bold text-baylor-green">
-            {visibleStats.hours.toFixed(1)}h
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div className="text-sm text-gray-600">Total Hours</div>
+            <div className="text-2xl font-bold text-baylor-green">
+              {visibleStats.hours.toFixed(1)}h
+            </div>
+            <div className="text-xs text-gray-500">class time</div>
           </div>
-          <div className="text-xs text-gray-500">class time</div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="text-sm text-gray-600">Avg Utilization</div>
-          <div className="text-2xl font-bold text-baylor-green">
-            {visibleStats.count > 0 ? visibleStats.avgUtilization.toFixed(0) : 0}%
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div className="text-sm text-gray-600">Avg Utilization</div>
+            <div className="text-2xl font-bold text-baylor-green">
+              {visibleStats.count > 0 ? visibleStats.avgUtilization.toFixed(0) : 0}%
+            </div>
+            <div className="text-xs text-gray-500">of 9-hour day</div>
           </div>
-          <div className="text-xs text-gray-500">of 9-hour day</div>
         </div>
-      </div>
+      )}
 
       {/* Schedule Display */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-serif font-semibold text-baylor-green">
-            {dayNames[roomScheduleDay]} Schedule
-          </h2>
-          {searchTerm && (
-            <div className="text-sm text-gray-600">
-              Filtered by: "{searchTerm}"
-            </div>
-          )}
-        </div>
+        {viewMode !== 'week' && (
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-serif font-semibold text-baylor-green">
+              {dayNames[roomScheduleDay]} Schedule
+            </h2>
+            {searchTerm && (
+              <div className="text-sm text-gray-600">
+                Filtered by: "{searchTerm}"
+              </div>
+            )}
+          </div>
+        )}
 
         {visibleRooms.length > 0 ? (
           viewMode === 'timeline' ? <TimelineView /> : 

@@ -262,6 +262,17 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
 
   // Export week view to CSV
   const handleExportWeekView = () => {
+    // Extract semester from schedule data
+    const getSemesterFromData = () => {
+      const terms = scheduleData.map(item => item.Term).filter(Boolean);
+      const uniqueTerms = [...new Set(terms)];
+      return uniqueTerms.length === 1 ? uniqueTerms[0] : (uniqueTerms.length > 1 ? 'Multiple' : 'Unknown');
+    };
+
+    const semester = getSemesterFromData().replace(/\s+/g, '_');
+    const roomPart = selectedRoom ? selectedRoom.replace(/\s+/g, '_') : 'all_rooms';
+    const buildingPart = selectedBuilding ? `-${selectedBuilding.replace(/\s+/g, '_')}` : '';
+
     const csvData = [];
     const headers = ['Room', 'Day', 'Course', 'Instructor', 'Start Time', 'End Time', 'Meeting Pattern'];
     csvData.push(headers);
@@ -288,7 +299,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `room-schedules-week-${weekViewMode}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `${roomPart}${buildingPart}-${weekViewMode}-${semester}-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -380,13 +391,20 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
 
     let totalEvents = 0;
 
+    // Extract semester from schedule data
+    const getSemesterFromData = () => {
+      const terms = scheduleData.map(item => item.Term).filter(Boolean);
+      const uniqueTerms = [...new Set(terms)];
+      return uniqueTerms.length === 1 ? uniqueTerms[0] : (uniqueTerms.length > 1 ? 'Multiple' : 'Unknown');
+    };
+
     const createIcsForRooms = (rooms) => {
       const lines = [
         'BEGIN:VCALENDAR',
         'VERSION:2.0',
         'PRODID:-//faculty-schedules//RoomSchedules//EN',
         'CALSCALE:GREGORIAN',
-        'METHOD:PUBLISH',
+        'METHOD:REQUEST',
         'X-WR-TIMEZONE:America/Chicago'
       ];
       lines.push(...buildVTimezone());
@@ -445,6 +463,8 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
       return finalLines.join('\r\n') + '\r\n';
     };
 
+    const semester = getSemesterFromData().replace(/\s+/g, '_');
+
     if (perRoom && (!selectedRoom) && roomsToExport.length > 1) {
       roomsToExport.forEach((room) => {
         const ics = createIcsForRooms([room]);
@@ -452,17 +472,21 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${room.replace(/\s+/g, '_')}.ics`;
+        a.download = `${room.replace(/\s+/g, '_')}-${semester}-${new Date().toISOString().split('T')[0]}.ics`;
         a.click();
         window.URL.revokeObjectURL(url);
       });
     } else {
+      const roomPart = selectedRoom
+        ? selectedRoom.replace(/\s+/g, '_')
+        : (roomsToExport.length === 1 ? roomsToExport[0].replace(/\s+/g, '_') : 'multiple_rooms');
+      const buildingPart = selectedBuilding ? `-${selectedBuilding.replace(/\s+/g, '_')}` : '';
       const ics = createIcsForRooms(roomsToExport);
       const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `room-schedules${selectedBuilding ? '-' + selectedBuilding.replace(/\s+/g, '_') : ''}-${new Date().toISOString().split('T')[0]}.ics`;
+      a.download = `${roomPart}${buildingPart}-${semester}-${new Date().toISOString().split('T')[0]}.ics`;
       a.click();
       window.URL.revokeObjectURL(url);
     }

@@ -5,6 +5,7 @@ const ICSExportModal = ({
   isOpen,
   onClose,
   onConfirm,
+  rooms = [],
   roomsCount = 0,
   selectedRoom = '',
   selectedBuilding = ''
@@ -14,11 +15,19 @@ const ICSExportModal = ({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [perRoomFiles, setPerRoomFiles] = useState(false);
+  const [selectedRooms, setSelectedRooms] = useState([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
     setError('');
-  }, [startDate, endDate, perRoomFiles]);
+  }, [startDate, endDate, perRoomFiles, rooms]);
+
+  useEffect(() => {
+    // Initialize selection to all rooms when modal opens or rooms change
+    if (isOpen) {
+      setSelectedRooms(Array.isArray(rooms) ? rooms.slice() : []);
+    }
+  }, [isOpen, rooms]);
 
   const handleConfirm = () => {
     // Basic validation
@@ -36,11 +45,33 @@ const ICSExportModal = ({
       setError('End date must be on or after the start date.');
       return;
     }
+    const effectiveRooms = selectedRoom ? [selectedRoom] : selectedRooms;
+    if (!effectiveRooms || effectiveRooms.length === 0) {
+      setError('Please select at least one room to export.');
+      return;
+    }
 
-    onConfirm({ startDate, endDate, perRoom: perRoomFiles });
+    onConfirm({ startDate, endDate, perRoom: perRoomFiles, rooms: effectiveRooms });
   };
 
-  const showPerRoomToggle = !selectedRoom && roomsCount > 1;
+  const effectiveRoomsCount = Array.isArray(rooms) && rooms.length > 0 ? rooms.length : roomsCount;
+  const showPerRoomToggle = !selectedRoom && effectiveRoomsCount > 1;
+
+  const toggleRoom = (room) => {
+    setSelectedRooms(prev => prev.includes(room)
+      ? prev.filter(r => r !== room)
+      : [...prev, room]
+    );
+  };
+
+  const allSelected = selectedRooms.length === (rooms?.length || 0);
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelectedRooms([]);
+    } else {
+      setSelectedRooms(rooms.slice());
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -82,22 +113,51 @@ const ICSExportModal = ({
           </div>
 
           {showPerRoomToggle && (
-            <div className="flex items-center justify-between bg-gray-50 rounded-lg border border-gray-200 px-4 py-3">
-              <div>
-                <div className="text-sm font-medium text-gray-900">Create one file per room</div>
-                <div className="text-xs text-gray-600">{roomsCount} rooms currently visible</div>
-              </div>
-              <label className="inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="sr-only peer"
-                  checked={perRoomFiles}
-                  onChange={(e) => setPerRoomFiles(e.target.checked)}
-                />
-                <div className={`w-11 h-6 bg-gray-300 rounded-full peer peer-focus:outline-none peer-checked:bg-baylor-green relative transition-colors`}>
-                  <div className={`absolute top-0.5 left-0.5 h-5 w-5 bg-white rounded-full transition-transform ${perRoomFiles ? 'translate-x-5' : ''}`}></div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between bg-gray-50 rounded-lg border border-gray-200 px-4 py-3">
+                <div>
+                  <div className="text-sm font-medium text-gray-900">Create one file per room</div>
+                  <div className="text-xs text-gray-600">{effectiveRoomsCount} rooms currently visible</div>
                 </div>
-              </label>
+                <label className="inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={perRoomFiles}
+                    onChange={(e) => setPerRoomFiles(e.target.checked)}
+                  />
+                  <div className={`w-11 h-6 bg-gray-300 rounded-full peer peer-focus:outline-none peer-checked:bg-baylor-green relative transition-colors`}>
+                    <div className={`absolute top-0.5 left-0.5 h-5 w-5 bg-white rounded-full transition-transform ${perRoomFiles ? 'translate-x-5' : ''}`}></div>
+                  </div>
+                </label>
+              </div>
+
+              {/* Room selection list */}
+              <div className="bg-white rounded-lg border border-gray-200">
+                <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200">
+                  <div className="text-sm font-medium text-gray-900">Rooms to export</div>
+                  <button
+                    type="button"
+                    onClick={toggleAll}
+                    className="text-sm text-baylor-green hover:underline"
+                  >
+                    {allSelected ? 'Deselect all' : 'Select all'}
+                  </button>
+                </div>
+                <div className="max-h-56 overflow-auto px-4 py-2 space-y-1">
+                  {(rooms || []).map(room => (
+                    <label key={room} className="flex items-center gap-3 py-1">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 text-baylor-green border-gray-300 rounded"
+                        checked={selectedRooms.includes(room)}
+                        onChange={() => toggleRoom(room)}
+                      />
+                      <span className="text-sm text-gray-800">{room}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 

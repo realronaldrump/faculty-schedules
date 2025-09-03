@@ -304,8 +304,10 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
     setShowICSModal(true);
   };
 
-  const performICSExport = async ({ startDate, endDate, perRoom }) => {
-    const roomsToExport = selectedRoom ? [selectedRoom] : filteredRooms.slice();
+  const performICSExport = async ({ startDate, endDate, perRoom, rooms }) => {
+    const roomsToExport = Array.isArray(rooms) && rooms.length > 0
+      ? rooms
+      : (selectedRoom ? [selectedRoom] : filteredRooms.slice());
     if (!roomsToExport || roomsToExport.length === 0) {
       console.warn('No rooms available to export.');
       return;
@@ -942,6 +944,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
         isOpen={showICSModal}
         onClose={() => setShowICSModal(false)}
         onConfirm={(vals) => { setShowICSModal(false); performICSExport(vals); }}
+        rooms={selectedRoom ? [selectedRoom] : filteredRooms}
         roomsCount={(selectedRoom ? 1 : filteredRooms.length) || 0}
         selectedRoom={selectedRoom}
         selectedBuilding={selectedBuilding}

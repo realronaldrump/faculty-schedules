@@ -42,6 +42,9 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
   const [isCrnAnalyzing, setIsCrnAnalyzing] = useState(false);
   const [isCrnMigrating, setIsCrnMigrating] = useState(false);
   const [crnMigrationResults, setCrnMigrationResults] = useState(null);
+  
+  // Warning popup state
+  const [showWarningPopup, setShowWarningPopup] = useState(true);
 
   // Check for semester mismatches in schedule data
   const checkSemesterMismatch = (data) => {
@@ -703,6 +706,93 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      {/* Warning Popup for Non-Davis Users */}
+      {showWarningPopup && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 border border-red-200">
+            <div className="bg-gradient-to-r from-red-500 to-red-600 text-white p-6 rounded-t-xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="bg-white/20 p-2 rounded-lg">
+                    <AlertCircle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold">⚠️ STOP RIGHT THERE! ⚠️</h2>
+                    <p className="text-red-100 text-sm">Critical Import Warning</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowWarningPopup(false)}
+                  className="text-white/80 hover:text-white p-1 rounded-full hover:bg-white/20 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="text-center mb-6">
+                <div className="text-6xl mb-4">🚫</div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                  Are You Davis? 🤔
+                </h3>
+                <p className="text-gray-700 text-lg leading-relaxed mb-4">
+                  Unless your name is <span className="font-bold text-baylor-green">Davis</span>, please step away from the import button! 
+                  This isn't a playground, and the database has feelings too. 💔
+                </p>
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                  <div className="flex items-start space-x-3">
+                    <Shield className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-left">
+                      <p className="text-yellow-800 font-semibold text-sm mb-1">
+                        Permission Reality Check:
+                      </p>
+                      <p className="text-yellow-700 text-sm">
+                        You probably don't have the proper permissions anyway, but please resist the urge to test this theory.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-start space-x-3">
+                    <Database className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-left">
+                      <p className="text-blue-800 font-semibold text-sm mb-1">
+                        What You Should Do Instead:
+                      </p>
+                      <ul className="text-blue-700 text-sm space-y-1">
+                        <li>• Contact Davis if you need data imported</li>
+                        <li>• Explore the read-only features (they're pretty cool!)</li>
+                        <li>• Maybe grab some coffee ☕</li>
+                        <li>• Definitely don't click "Upload CSV File"</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => onNavigate('dashboard')}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Escape to Dashboard</span>
+                </button>
+                <button
+                  onClick={() => setShowWarningPopup(false)}
+                  className="flex-1 bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                >
+                  <AlertCircle className="w-4 h-4" />
+                  <span>I'm Davis (Proceed)</span>
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 text-center mt-3">
+                "With great power comes great responsibility." - Spider-Man (and also database administrators)
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="border-b border-gray-200 pb-6 mb-8">
         <div className="flex items-center justify-between">

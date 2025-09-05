@@ -256,15 +256,25 @@ const StudentSchedules = ({ studentData = [] }) => {
                 const { entry, start, end, col, columns } = item;
                 const top = ((start - minStart) / totalMinutes) * 100;
                 const height = Math.max(3, ((end - start) / totalMinutes) * 100);
+                const durationMinutes = end - start;
                 const bg = colorFromString(entry.student.id || entry.student.name || 'student');
                 const gap = 4; // px between columns
                 const widthCalc = `calc((100% - ${(columns - 1) * gap}px) / ${columns})`;
                 const leftCalc = `calc(${(col * 100) / columns}% + ${col * gap}px)`;
+
+                // Dynamic font sizing to fit text without scrollbars
+                const eventHeightPx = (durationMinutes / 60) * 48; // matches column scale (48px per hour)
+                let fontSizePx = 12;
+                if (eventHeightPx < 44) fontSizePx = 11;
+                if (eventHeightPx < 34) fontSizePx = 10;
+                if (eventHeightPx < 26) fontSizePx = 9;
+                if (eventHeightPx < 20) fontSizePx = 8;
+
                 return (
                   <div
                     key={idx}
-                    className="absolute rounded-md shadow-sm text-[11px] leading-snug p-1 bg-white/90"
-                    style={{ top: `${top}%`, height: `${height}%`, width: widthCalc, left: leftCalc, background: bg, overflowY: 'auto' }}
+                    className="absolute rounded-md shadow-sm p-1 bg-white/90"
+                    style={{ top: `${top}%`, height: `${height}%`, width: widthCalc, left: leftCalc, background: bg, overflow: 'hidden', fontSize: `${fontSizePx}px`, lineHeight: 1.15 }}
                     title={`${entry.student.name} • ${formatTimeLabel(start)} - ${formatTimeLabel(end)}${entry.student.jobTitle ? ` • ${entry.student.jobTitle}` : ''}`}
                   >
                     <div className="font-semibold">{entry.student.name}</div>

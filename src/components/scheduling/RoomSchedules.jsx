@@ -7,7 +7,12 @@ import ICSExportModal from './ICSExportModal';
 import { logExport } from '../../utils/activityLogger';
 
 const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate }) => {
-  const [roomScheduleDay, setRoomScheduleDay] = useState('M');
+  const getDefaultRoomScheduleDay = () => {
+    const jsDay = new Date().getDay(); // 0 Sun ... 6 Sat
+    const mapping = { 1: 'M', 2: 'T', 3: 'W', 4: 'R', 5: 'F' };
+    return mapping[jsDay] || 'M';
+  };
+  const [roomScheduleDay, setRoomScheduleDay] = useState(getDefaultRoomScheduleDay);
   const [viewMode, setViewMode] = useState('timeline'); // 'timeline', 'list', or 'week'
   const [selectedRoom, setSelectedRoom] = useState('');
   const [searchTerm, setSearchTerm] = useState('');

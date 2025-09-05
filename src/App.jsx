@@ -1413,12 +1413,44 @@ function App() {
       return false;
     });
 
+    // Backward compatible student adapter: introduce jobs[] while preserving legacy fields
+    const adaptedStudents = studentData.map((s) => {
+      const legacyWeekly = Array.isArray(s.weeklySchedule) ? s.weeklySchedule : [];
+      const legacyBuildings = Array.isArray(s.primaryBuildings)
+        ? s.primaryBuildings
+        : (s.primaryBuilding ? [s.primaryBuilding] : []);
+      const legacyJob = {
+        id: 'legacy',
+        jobTitle: s.jobTitle || '',
+        supervisor: s.supervisor || '',
+        hourlyRate: s.hourlyRate || '',
+        location: Array.isArray(s.primaryBuildings) ? s.primaryBuildings : legacyBuildings,
+        weeklySchedule: legacyWeekly,
+        startDate: s.startDate || '',
+        endDate: s.endDate || ''
+      };
+      const jobsArray = Array.isArray(s.jobs) && s.jobs.length > 0 ? s.jobs : [legacyJob];
+      // Compute unified weekly schedule for compatibility consumers
+      const unifiedWeekly = jobsArray.flatMap(j => Array.isArray(j.weeklySchedule) ? j.weeklySchedule : []);
+      const unifiedBuildings = Array.from(new Set(jobsArray.flatMap(j => Array.isArray(j.location) ? j.location : (j.location ? [j.location] : []))));
+      return {
+        ...s,
+        jobs: jobsArray,
+        // preserve legacy fields for components not yet migrated
+        weeklySchedule: unifiedWeekly,
+        primaryBuildings: unifiedBuildings.length > 0 ? unifiedBuildings : legacyBuildings,
+        jobTitle: s.jobTitle || (jobsArray[0]?.jobTitle || ''),
+        supervisor: s.supervisor || (jobsArray[0]?.supervisor || ''),
+        hourlyRate: s.hourlyRate || (jobsArray[0]?.hourlyRate || ''),
+      };
+    });
+
     const pageProps = {
       scheduleData,
       directoryData: rawPeople,
       facultyData: adaptPeopleToFaculty(rawPeople, rawScheduleData, rawPrograms),
       staffData: adaptPeopleToStaff(rawPeople, rawScheduleData, rawPrograms),
-      studentData: studentData,
+      studentData: adaptedStudents,
       programs: rawPrograms,
       analytics,
       editHistory,

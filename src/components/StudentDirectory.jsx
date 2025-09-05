@@ -34,6 +34,9 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     primaryBuildings: [], // e.g., ["Mary Gibbs Jones", "Goebel"]
     weeklySchedule: [], // [{ day: 'M', start: '09:00', end: '12:00' }]
     hasNoPhone: false,
+    jobs: [
+      { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] }
+    ]
   });
 
   // Undo functionality
@@ -57,7 +60,14 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
   // Extract departments and supervisors for filtering
   const availableJobTitles = useMemo(() => {
     const set = new Set();
-    studentData.forEach(student => { if (student.jobTitle) set.add(student.jobTitle); });
+    studentData.forEach(student => {
+      // include top-level for legacy
+      if (student.jobTitle) set.add(student.jobTitle);
+      // include each job title
+      if (Array.isArray(student.jobs)) {
+        student.jobs.forEach(j => { if (j?.jobTitle) set.add(j.jobTitle); });
+      }
+    });
     return Array.from(set).sort();
   }, [studentData]);
 
@@ -81,7 +91,8 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
           student.name?.toLowerCase().includes(searchText) ||
           student.email?.toLowerCase().includes(searchText) ||
           student.supervisor?.toLowerCase().includes(searchText) ||
-          student.jobTitle?.toLowerCase().includes(searchText)
+          student.jobTitle?.toLowerCase().includes(searchText) ||
+          (Array.isArray(student.jobs) && student.jobs.some(j => (j?.jobTitle || '').toLowerCase().includes(searchText) || (j?.supervisor || '').toLowerCase().includes(searchText)))
         );
         if (!matchesText) return false;
       }
@@ -140,7 +151,14 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     setEditFormData({
       ...student,
       weeklySchedule: Array.isArray(student.weeklySchedule) ? [...student.weeklySchedule] : [],
-      primaryBuildings: Array.isArray(student.primaryBuildings) ? [...student.primaryBuildings] : (student.primaryBuilding ? [student.primaryBuilding] : [])
+      primaryBuildings: Array.isArray(student.primaryBuildings) ? [...student.primaryBuildings] : (student.primaryBuilding ? [student.primaryBuilding] : []),
+      jobs: Array.isArray(student.jobs) && student.jobs.length > 0 ? student.jobs : [{
+        jobTitle: student.jobTitle || '',
+        supervisor: student.supervisor || '',
+        hourlyRate: student.hourlyRate || '',
+        location: Array.isArray(student.primaryBuildings) ? student.primaryBuildings : (student.primaryBuilding ? [student.primaryBuilding] : []),
+        weeklySchedule: Array.isArray(student.weeklySchedule) ? [...student.weeklySchedule] : []
+      }]
     });
     setErrors({});
   };
@@ -168,8 +186,10 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
       errors.phone = 'Phone number is required (or check "No Phone")';
     }
     
-    if (!Array.isArray(data.weeklySchedule) || data.weeklySchedule.length === 0) {
-      errors.weeklySchedule = 'At least one weekly schedule entry is required';
+    const hasTopLevel = Array.isArray(data.weeklySchedule) && data.weeklySchedule.length > 0;
+    const hasJobLevel = Array.isArray(data.jobs) && data.jobs.some(j => Array.isArray(j.weeklySchedule) && j.weeklySchedule.length > 0);
+    if (!hasTopLevel && !hasJobLevel) {
+      errors.weeklySchedule = 'At least one job must have a weekly schedule entry';
     }
     
     return errors;
@@ -192,7 +212,21 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
         newData: {...editFormData}
       }]);
 
-      await onStudentUpdate(editFormData);
+      const jobs = Array.isArray(editFormData.jobs) ? editFormData.jobs : [];
+      const firstJob = jobs[0] || {};
+      const unifiedWeekly = jobs.flatMap(j => Array.isArray(j.weeklySchedule) ? j.weeklySchedule : []);
+      const unifiedBuildings = Array.from(new Set(jobs.flatMap(j => Array.isArray(j.location) ? j.location : (j.location ? [j.location] : []))));
+      const payload = {
+        ...editFormData,
+        jobs,
+        weeklySchedule: unifiedWeekly.length > 0 ? unifiedWeekly : (editFormData.weeklySchedule || []),
+        primaryBuildings: unifiedBuildings.length > 0 ? unifiedBuildings : (editFormData.primaryBuildings || []),
+        jobTitle: firstJob.jobTitle || editFormData.jobTitle || '',
+        supervisor: firstJob.supervisor || editFormData.supervisor || '',
+        hourlyRate: firstJob.hourlyRate || editFormData.hourlyRate || ''
+      };
+
+      await onStudentUpdate(payload);
       setEditingId(null);
       setEditFormData({});
       setErrors({});
@@ -220,6 +254,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
       primaryBuildings: [],
       weeklySchedule: [],
       hasNoPhone: false,
+      jobs: [ { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] } ]
     });
     setErrors({});
   };
@@ -232,9 +267,19 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     }
 
     try {
+      const jobs = Array.isArray(newStudent.jobs) ? newStudent.jobs : [];
+      const firstJob = jobs[0] || {};
+      const unifiedWeekly = jobs.flatMap(j => Array.isArray(j.weeklySchedule) ? j.weeklySchedule : []);
+      const unifiedBuildings = Array.from(new Set(jobs.flatMap(j => Array.isArray(j.location) ? j.location : (j.location ? [j.location] : []))));
       const studentToCreate = {
         ...newStudent,
-        isActive: true
+        isActive: true,
+        jobs,
+        weeklySchedule: unifiedWeekly.length > 0 ? unifiedWeekly : (newStudent.weeklySchedule || []),
+        primaryBuildings: unifiedBuildings.length > 0 ? unifiedBuildings : (newStudent.primaryBuildings || []),
+        jobTitle: firstJob.jobTitle || newStudent.jobTitle || '',
+        supervisor: firstJob.supervisor || newStudent.supervisor || '',
+        hourlyRate: firstJob.hourlyRate || newStudent.hourlyRate || ''
       };
 
       await onStudentUpdate(studentToCreate);
@@ -243,12 +288,14 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
         name: '',
         email: '',
         phone: '',
-        workSchedule: '',
         startDate: '',
         hourlyRate: '',
         supervisor: '',
-        department: '',
+        jobTitle: '',
+        primaryBuildings: [],
+        weeklySchedule: [],
         hasNoPhone: false,
+        jobs: [ { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] } ]
       });
       setErrors({});
     } catch (error) {
@@ -295,6 +342,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
 
   // Helpers for weekly schedule editing
   const [scheduleDraft, setScheduleDraft] = useState({ day: 'M', start: '', end: '' });
+  const [newJobsDrafts, setNewJobsDrafts] = useState([{ day: 'M', start: '', end: '' }]);
   const addScheduleEntry = () => {
     if (!scheduleDraft.day || !scheduleDraft.start || !scheduleDraft.end) return;
     const startMin = scheduleDraft.start;
@@ -318,6 +366,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
   };
 
   const [editScheduleDraft, setEditScheduleDraft] = useState({ day: 'M', start: '', end: '' });
+  const [editJobsDrafts, setEditJobsDrafts] = useState([{ day: 'M', start: '', end: '' }]);
   const addEditScheduleEntry = () => {
     if (!editScheduleDraft.day || !editScheduleDraft.start || !editScheduleDraft.end) return;
     if (editScheduleDraft.start >= editScheduleDraft.end) {
@@ -581,34 +630,76 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Weekly Schedule *</label>
-              <div className="flex gap-2 items-end">
-                <select
-                  className="border rounded-md px-2 py-2"
-                  value={scheduleDraft.day}
-                  onChange={(e) => setScheduleDraft(prev => ({ ...prev, day: e.target.value }))}
-                >
-                  <option value="M">Mon</option>
-                  <option value="T">Tue</option>
-                  <option value="W">Wed</option>
-                  <option value="R">Thu</option>
-                  <option value="F">Fri</option>
-                </select>
-                <input type="time" className="border rounded-md px-2 py-2" value={scheduleDraft.start} onChange={e => setScheduleDraft(prev => ({ ...prev, start: e.target.value }))} />
-                <span className="text-gray-500">to</span>
-                <input type="time" className="border rounded-md px-2 py-2" value={scheduleDraft.end} onChange={e => setScheduleDraft(prev => ({ ...prev, end: e.target.value }))} />
-                <button onClick={addScheduleEntry} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-md text-sm">Add</button>
-              </div>
-              {errors.weeklySchedule && <p className="text-red-500 text-xs mt-1">{errors.weeklySchedule}</p>}
-              <div className="mt-2 flex flex-wrap gap-2">
-                {newStudent.weeklySchedule.map((entry, idx) => (
-                  <span key={idx} className="inline-flex items-center gap-1 text-xs bg-gray-100 px-2 py-1 rounded">
-                    {entry.day} {formatTime12h(entry.start)}-{formatTime12h(entry.end)}
-                    <button onClick={() => removeScheduleEntry(idx)} className="text-gray-500 hover:text-gray-700"><X className="h-3 w-3" /></button>
-                  </span>
+              <div className="space-y-4">
+                {(newStudent.jobs || []).map((job, idx) => (
+                  <div key={idx} className="border border-gray-200 rounded-md p-3">
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="font-medium text-gray-900">Job {idx + 1}</div>
+                      {(newStudent.jobs || []).length > 1 && (
+                        <button onClick={() => {
+                          setNewStudent(prev => ({ ...prev, jobs: prev.jobs.filter((_, i) => i !== idx) }));
+                          setNewJobsDrafts(prev => prev.filter((_, i) => i !== idx));
+                        }} className="text-red-600 text-xs">Remove</button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <input type="text" placeholder="Job Title" value={job.jobTitle || ''} onChange={e => setNewStudent(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, jobTitle: e.target.value } : j)}))} className="border rounded-md px-3 py-2" />
+                      <input type="text" placeholder="Supervisor" value={job.supervisor || ''} onChange={e => setNewStudent(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, supervisor: e.target.value } : j)}))} className="border rounded-md px-3 py-2" />
+                      <input type="number" step="0.01" placeholder="Hourly Rate" value={job.hourlyRate || ''} onChange={e => setNewStudent(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, hourlyRate: e.target.value } : j)}))} className="border rounded-md px-3 py-2" />
+                      <div className="flex gap-4 items-center text-sm">
+                        <label className="flex items-center gap-2">
+                          <input type="checkbox" checked={(job.location || []).includes('Mary Gibbs Jones')} onChange={(e) => setNewStudent(prev => ({
+                            ...prev,
+                            jobs: prev.jobs.map((j,i)=> i===idx? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Mary Gibbs Jones'])) : (j.location || []).filter(b => b !== 'Mary Gibbs Jones') } : j)
+                          }))} /> MGJ
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input type="checkbox" checked={(job.location || []).includes('Goebel')} onChange={(e) => setNewStudent(prev => ({
+                            ...prev,
+                            jobs: prev.jobs.map((j,i)=> i===idx? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Goebel'])) : (j.location || []).filter(b => b !== 'Goebel') } : j)
+                          }))} /> Goebel
+                        </label>
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <div className="flex gap-2 items-end">
+                        <select className="border rounded-md px-2 py-2" value={(newJobsDrafts[idx]||{}).day || 'M'} onChange={e => setNewJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), day: e.target.value } : d))}>
+                          <option value="M">Mon</option>
+                          <option value="T">Tue</option>
+                          <option value="W">Wed</option>
+                          <option value="R">Thu</option>
+                          <option value="F">Fri</option>
+                        </select>
+                        <input type="time" className="border rounded-md px-2 py-2" value={(newJobsDrafts[idx]||{}).start || ''} onChange={e => setNewJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), start: e.target.value } : d))} />
+                        <span className="text-gray-500">to</span>
+                        <input type="time" className="border rounded-md px-2 py-2" value={(newJobsDrafts[idx]||{}).end || ''} onChange={e => setNewJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), end: e.target.value } : d))} />
+                        <button onClick={() => {
+                          const draft = newJobsDrafts[idx] || { day: 'M', start: '', end: '' };
+                          if (!draft.day || !draft.start || !draft.end) return;
+                          if (draft.start >= draft.end) { setErrors(prev => ({ ...prev, weeklySchedule: 'End time must be after start time' })); return; }
+                          setNewStudent(prev => ({
+                            ...prev,
+                            jobs: prev.jobs.map((j,i)=> i===idx? { ...j, weeklySchedule: [...(j.weeklySchedule || []), { ...draft }] } : j)
+                          }));
+                          setNewJobsDrafts(prev => prev.map((d,i)=> i===idx? { day: 'M', start: '', end: '' } : d));
+                          setErrors(prev => ({ ...prev, weeklySchedule: undefined }));
+                        }} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-md text-sm">Add</button>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {(job.weeklySchedule || []).map((entry, k) => (
+                          <span key={k} className="inline-flex items-center gap-1 text-xs bg-gray-100 px-2 py-1 rounded">
+                            {entry.day} {formatTime12h(entry.start)}-{formatTime12h(entry.end)}
+                            <button onClick={() => setNewStudent(prev => ({ ...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, weeklySchedule: (j.weeklySchedule || []).filter((_, x) => x !== k) } : j) }))} className="text-gray-500 hover:text-gray-700"><X className="h-3 w-3" /></button>
+                          </span>
+                        ))}
+                        {(job.weeklySchedule || []).length === 0 && (
+                          <span className="text-xs text-gray-500">No entries added</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 ))}
-                {newStudent.weeklySchedule.length === 0 && (
-                  <span className="text-xs text-gray-500">No entries added</span>
-                )}
+                <button onClick={() => { setNewStudent(prev => ({ ...prev, jobs: [...(prev.jobs || []), { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] }] })); setNewJobsDrafts(prev => ([...prev, { day: 'M', start: '', end: '' }])); }} className="px-3 py-2 bg-baylor-green/10 text-baylor-green rounded-md text-sm">Add Job</button>
               </div>
             </div>
             
@@ -762,55 +853,80 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                         </div>
                         {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
                       </td>
-              <td className="p-2 align-top">
-                <div className="flex gap-2 items-end">
-                  <select
-                    className="border rounded px-2 py-1 text-sm"
-                    value={editScheduleDraft.day}
-                    onChange={(e) => setEditScheduleDraft(prev => ({ ...prev, day: e.target.value }))}
-                  >
-                    <option value="M">Mon</option>
-                    <option value="T">Tue</option>
-                    <option value="W">Wed</option>
-                    <option value="R">Thu</option>
-                    <option value="F">Fri</option>
-                  </select>
-                  <input type="time" className="border rounded px-2 py-1 text-sm" value={editScheduleDraft.start} onChange={e => setEditScheduleDraft(prev => ({ ...prev, start: e.target.value }))} />
-                  <span className="text-gray-500 text-xs">to</span>
-                  <input type="time" className="border rounded px-2 py-1 text-sm" value={editScheduleDraft.end} onChange={e => setEditScheduleDraft(prev => ({ ...prev, end: e.target.value }))} />
-                  <button onClick={addEditScheduleEntry} className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-xs">Add</button>
-                </div>
-                {errors.weeklySchedule && <p className="text-red-500 text-xs mt-1">{errors.weeklySchedule}</p>}
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {(editFormData.weeklySchedule || []).map((entry, idx) => (
-                    <span key={idx} className="inline-flex items-center gap-1 text-xs bg-gray-100 px-2 py-1 rounded">
-                      {entry.day} {formatTime12h(entry.start)}-{formatTime12h(entry.end)}
-                      <button onClick={() => removeEditScheduleEntry(idx)} className="text-gray-500 hover:text-gray-700"><X className="h-3 w-3" /></button>
-                    </span>
-                  ))}
-                  {(editFormData.weeklySchedule || []).length === 0 && (
-                    <span className="text-xs text-gray-500">No entries added</span>
-                  )}
+              <td className="p-2 align-top" colSpan={3}>
+                <div className="space-y-3">
+                  <div className="text-xs text-gray-500">Manage jobs, locations, pay rates, supervisors, and schedules below.</div>
+                  <div className="space-y-3">
+                    {(editFormData.jobs || []).map((job, idx) => (
+                      <div key={idx} className="border border-gray-200 rounded-md p-2">
+                        <div className="flex justify-between items-center mb-2">
+                          <div className="font-medium text-gray-900 text-sm">Job {idx + 1}</div>
+                          {(editFormData.jobs || []).length > 1 && (
+                            <button onClick={() => { setEditFormData(prev => ({ ...prev, jobs: prev.jobs.filter((_, i) => i !== idx) })); setEditJobsDrafts(prev => prev.filter((_, i) => i !== idx)); }} className="text-red-600 text-xs">Remove</button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                          <input type="text" placeholder="Job Title" value={job.jobTitle || ''} onChange={e => setEditFormData(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, jobTitle: e.target.value } : j)}))} className="border rounded px-2 py-1 text-sm" />
+                          <input type="text" placeholder="Supervisor" value={job.supervisor || ''} onChange={e => setEditFormData(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, supervisor: e.target.value } : j)}))} className="border rounded px-2 py-1 text-sm" />
+                          <input type="number" step="0.01" placeholder="Hourly Rate" value={job.hourlyRate || ''} onChange={e => setEditFormData(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, hourlyRate: e.target.value } : j)}))} className="border rounded px-2 py-1 text-sm" />
+                          <div className="flex gap-3 items-center text-xs">
+                            <label className="flex items-center gap-1">
+                              <input type="checkbox" checked={(job.location || []).includes('Mary Gibbs Jones')} onChange={(e) => setEditFormData(prev => ({
+                                ...prev,
+                                jobs: prev.jobs.map((j,i)=> i===idx? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Mary Gibbs Jones'])) : (j.location || []).filter(b => b !== 'Mary Gibbs Jones') } : j)
+                              }))} /> MGJ
+                            </label>
+                            <label className="flex items-center gap-1">
+                              <input type="checkbox" checked={(job.location || []).includes('Goebel')} onChange={(e) => setEditFormData(prev => ({
+                                ...prev,
+                                jobs: prev.jobs.map((j,i)=> i===idx? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Goebel'])) : (j.location || []).filter(b => b !== 'Goebel') } : j)
+                              }))} /> Goebel
+                            </label>
+                          </div>
+                        </div>
+                        <div className="mt-2">
+                          <div className="flex gap-2 items-end">
+                            <select className="border rounded px-2 py-1 text-sm" value={(editJobsDrafts[idx]||{}).day || 'M'} onChange={e => setEditJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), day: e.target.value } : d))}>
+                              <option value="M">Mon</option>
+                              <option value="T">Tue</option>
+                              <option value="W">Wed</option>
+                              <option value="R">Thu</option>
+                              <option value="F">Fri</option>
+                            </select>
+                            <input type="time" className="border rounded px-2 py-1 text-sm" value={(editJobsDrafts[idx]||{}).start || ''} onChange={e => setEditJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), start: e.target.value } : d))} />
+                            <span className="text-gray-500 text-xs">to</span>
+                            <input type="time" className="border rounded px-2 py-1 text-sm" value={(editJobsDrafts[idx]||{}).end || ''} onChange={e => setEditJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), end: e.target.value } : d))} />
+                            <button onClick={() => {
+                              const draft = editJobsDrafts[idx] || { day: 'M', start: '', end: '' };
+                              if (!draft.day || !draft.start || !draft.end) return;
+                              if (draft.start >= draft.end) { setErrors(prev => ({ ...prev, weeklySchedule: 'End time must be after start time' })); return; }
+                              setEditFormData(prev => ({
+                                ...prev,
+                                jobs: prev.jobs.map((j,i)=> i===idx? { ...j, weeklySchedule: [...(j.weeklySchedule || []), { ...draft }] } : j)
+                              }));
+                              setEditJobsDrafts(prev => prev.map((d,i)=> i===idx? { day: 'M', start: '', end: '' } : d));
+                              setErrors(prev => ({ ...prev, weeklySchedule: undefined }));
+                            }} className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-xs">Add</button>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {(job.weeklySchedule || []).map((entry, k) => (
+                              <span key={k} className="inline-flex items-center gap-1 text-xs bg-gray-100 px-2 py-1 rounded">
+                                {entry.day} {formatTime12h(entry.start)}-{formatTime12h(entry.end)}
+                                <button onClick={() => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, weeklySchedule: (j.weeklySchedule || []).filter((_, x) => x !== k) } : j) }))} className="text-gray-500 hover:text-gray-700"><X className="h-3 w-3" /></button>
+                              </span>
+                            ))}
+                            {(job.weeklySchedule || []).length === 0 && (
+                              <span className="text-xs text-gray-500">No entries added</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <button onClick={() => { setEditFormData(prev => ({ ...prev, jobs: [...(prev.jobs || []), { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] }] })); setEditJobsDrafts(prev => ([...prev, { day: 'M', start: '', end: '' }])); }} className="px-2 py-1 bg-baylor-green/10 text-baylor-green rounded text-xs">Add Job</button>
+                    {errors.weeklySchedule && <p className="text-red-500 text-xs mt-1">{errors.weeklySchedule}</p>}
+                  </div>
                 </div>
               </td>
-                      <td className="p-2 align-top">
-                <input
-                  list="jobtitle-options"
-                  type="text"
-                  value={editFormData.jobTitle || ''}
-                  onChange={(e) => setEditFormData(prev => ({ ...prev, jobTitle: e.target.value }))}
-                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                />
-                      </td>
-                      <td className="p-2 align-top">
-                        <input
-                          list="supervisor-options"
-                          type="text"
-                          value={editFormData.supervisor || ''}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, supervisor: e.target.value }))}
-                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                        />
-                      </td>
               <td className="p-2 align-top">
                 <div className="flex gap-3 text-xs">
                   <label className="flex items-center gap-1">

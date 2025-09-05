@@ -32,6 +32,8 @@ export const DEFAULT_PERSON_SCHEMA = {
   department: '',
   office: '',
   roles: [],
+  // For student workers with multiple jobs
+  jobs: [],
   // Employment status flags
   isAdjunct: false,
   isFullTime: true,

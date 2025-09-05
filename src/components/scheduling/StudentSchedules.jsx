@@ -34,17 +34,23 @@ const StudentSchedules = ({ studentData = [] }) => {
   const buildingOptions = useMemo(() => {
     const set = new Set();
     studentData.forEach(s => {
-      const buildings = Array.isArray(s.primaryBuildings)
-        ? s.primaryBuildings
-        : (s.primaryBuilding ? [s.primaryBuilding] : []);
-      buildings.forEach(b => { if (b) set.add(b); });
+      const jobs = Array.isArray(s.jobs) && s.jobs.length > 0
+        ? s.jobs
+        : [{ location: Array.isArray(s.primaryBuildings) ? s.primaryBuildings : (s.primaryBuilding ? [s.primaryBuilding] : []) }];
+      jobs.forEach(j => {
+        const buildings = Array.isArray(j.location) ? j.location : (j.location ? [j.location] : []);
+        buildings.forEach(b => { if (b) set.add(b); });
+      });
     });
     return Array.from(set).sort();
   }, [studentData]);
 
   const jobTitleOptions = useMemo(() => {
     const set = new Set();
-    studentData.forEach(s => { if (s.jobTitle) set.add(s.jobTitle); });
+    studentData.forEach(s => {
+      const jobs = Array.isArray(s.jobs) && s.jobs.length > 0 ? s.jobs : [{ jobTitle: s.jobTitle }];
+      jobs.forEach(j => { if (j?.jobTitle) set.add(j.jobTitle); });
+    });
     return Array.from(set).sort();
   }, [studentData]);
 
@@ -60,20 +66,31 @@ const StudentSchedules = ({ studentData = [] }) => {
 
   const filteredStudents = useMemo(() => {
     return studentData.filter(s => {
-      // Ensure we have a structured schedule
-      const hasSchedule = Array.isArray(s.weeklySchedule) && s.weeklySchedule.length > 0;
-      if (!hasSchedule) return false;
+      const jobs = Array.isArray(s.jobs) && s.jobs.length > 0
+        ? s.jobs
+        : [{
+            jobTitle: s.jobTitle,
+            location: Array.isArray(s.primaryBuildings) ? s.primaryBuildings : (s.primaryBuilding ? [s.primaryBuilding] : []),
+            weeklySchedule: Array.isArray(s.weeklySchedule) ? s.weeklySchedule : []
+          }];
 
-      // Buildings filter: match any
+      // Ensure at least one job has schedule entries
+      const hasAnySchedule = jobs.some(j => Array.isArray(j.weeklySchedule) && j.weeklySchedule.length > 0);
+      if (!hasAnySchedule) return false;
+
+      // Buildings filter: at least one job matches
       if (selectedBuildings.length > 0) {
-        const buildings = Array.isArray(s.primaryBuildings) ? s.primaryBuildings : (s.primaryBuilding ? [s.primaryBuilding] : []);
-        const matchesBuilding = buildings.some(b => selectedBuildings.includes(b));
+        const matchesBuilding = jobs.some(j => {
+          const buildings = Array.isArray(j.location) ? j.location : (j.location ? [j.location] : []);
+          return buildings.some(b => selectedBuildings.includes(b));
+        });
         if (!matchesBuilding) return false;
       }
 
-      // Job titles filter: match any
+      // Job titles filter: at least one job matches
       if (selectedJobTitles.length > 0) {
-        if (!selectedJobTitles.includes(s.jobTitle)) return false;
+        const matchesTitle = jobs.some(j => j?.jobTitle && selectedJobTitles.includes(j.jobTitle));
+        if (!matchesTitle) return false;
       }
 
       // Students filter: match any
@@ -90,11 +107,14 @@ const StudentSchedules = ({ studentData = [] }) => {
     let min = 8 * 60;
     let max = 18 * 60;
     filteredStudents.forEach(s => {
-      (s.weeklySchedule || []).forEach(entry => {
-        const start = minutesSinceStartOfDay(entry.start);
-        const end = minutesSinceStartOfDay(entry.end);
-        if (!isNaN(start)) min = Math.min(min, start);
-        if (!isNaN(end)) max = Math.max(max, end);
+      const jobs = Array.isArray(s.jobs) && s.jobs.length > 0 ? s.jobs : [{ weeklySchedule: s.weeklySchedule }];
+      jobs.forEach(j => {
+        (j.weeklySchedule || []).forEach(entry => {
+          const start = minutesSinceStartOfDay(entry.start);
+          const end = minutesSinceStartOfDay(entry.end);
+          if (!isNaN(start)) min = Math.min(min, start);
+          if (!isNaN(end)) max = Math.max(max, end);
+        });
       });
     });
     // Clamp to sensible bounds
@@ -154,8 +174,22 @@ const StudentSchedules = ({ studentData = [] }) => {
     // Build map by day
     const temp = { M: [], T: [], W: [], R: [], F: [] };
     filteredStudents.forEach(s => {
-      (s.weeklySchedule || []).forEach(e => {
-        if (temp[e.day]) temp[e.day].push({ ...e, student: s });
+      const jobs = Array.isArray(s.jobs) && s.jobs.length > 0
+        ? s.jobs
+        : [{ jobTitle: s.jobTitle, weeklySchedule: s.weeklySchedule, location: Array.isArray(s.primaryBuildings) ? s.primaryBuildings : (s.primaryBuilding ? [s.primaryBuilding] : []) }];
+      jobs.forEach(j => {
+        // Apply per-job filters
+        const jobTitleMatch = selectedJobTitles.length === 0 || (j?.jobTitle && selectedJobTitles.includes(j.jobTitle));
+        const buildingMatch = selectedBuildings.length === 0 || (() => {
+          const locs = Array.isArray(j.location) ? j.location : (j.location ? [j.location] : []);
+          return locs.some(b => selectedBuildings.includes(b));
+        })();
+        if (!jobTitleMatch || !buildingMatch) return;
+
+        (j.weeklySchedule || []).forEach(e => {
+          if (!e || !e.day) return;
+          if (temp[e.day]) temp[e.day].push({ ...e, student: s, jobTitle: j.jobTitle });
+        });
       });
     });
 
@@ -275,11 +309,11 @@ const StudentSchedules = ({ studentData = [] }) => {
                     key={idx}
                     className="absolute rounded-md shadow-sm p-1 bg-white/90"
                     style={{ top: `${top}%`, height: `${height}%`, width: widthCalc, left: leftCalc, background: bg, overflow: 'hidden', fontSize: `${fontSizePx}px`, lineHeight: 1.15 }}
-                    title={`${entry.student.name} • ${formatTimeLabel(start)} - ${formatTimeLabel(end)}${entry.student.jobTitle ? ` • ${entry.student.jobTitle}` : ''}`}
+                    title={`${entry.student.name} • ${formatTimeLabel(start)} - ${formatTimeLabel(end)}${item.entry?.jobTitle ? '' : ''}${item.jobTitle ? ` • ${item.jobTitle}` : ''}`}
                   >
                     <div className="font-semibold">{entry.student.name}</div>
                     <div>{formatTimeLabel(start)} - {formatTimeLabel(end)}</div>
-                    {entry.student.jobTitle && <div>{entry.student.jobTitle}</div>}
+                    {item.jobTitle && <div>{item.jobTitle}</div>}
                   </div>
                 );
               })}

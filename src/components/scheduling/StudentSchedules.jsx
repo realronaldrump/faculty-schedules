@@ -309,11 +309,11 @@ const StudentSchedules = ({ studentData = [] }) => {
                     key={idx}
                     className="absolute rounded-md shadow-sm p-1 bg-white/90"
                     style={{ top: `${top}%`, height: `${height}%`, width: widthCalc, left: leftCalc, background: bg, overflow: 'hidden', fontSize: `${fontSizePx}px`, lineHeight: 1.15 }}
-                    title={`${entry.student.name} • ${formatTimeLabel(start)} - ${formatTimeLabel(end)}${item.entry?.jobTitle ? '' : ''}${item.jobTitle ? ` • ${item.jobTitle}` : ''}`}
+                    title={`${entry.student.name} • ${formatTimeLabel(start)} - ${formatTimeLabel(end)}${entry.jobTitle ? ` • ${entry.jobTitle}` : ''}`}
                   >
                     <div className="font-semibold">{entry.student.name}</div>
                     <div>{formatTimeLabel(start)} - {formatTimeLabel(end)}</div>
-                    {item.jobTitle && <div>{item.jobTitle}</div>}
+                    {entry.jobTitle && <div>{entry.jobTitle}</div>}
                   </div>
                 );
               })}

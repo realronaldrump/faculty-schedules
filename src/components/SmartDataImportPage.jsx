@@ -786,7 +786,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
                 </button>
               </div>
               <p className="text-xs text-gray-500 text-center mt-3">
-                "With great power comes great responsibility." - Spider-Man (and also database administrators)
+                "With great power comes great responsibility."
               </p>
             </div>
           </div>

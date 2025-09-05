@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import MultiSelectDropdown from '../MultiSelectDropdown';
 
 const DAY_ORDER = ['M','T','W','R','F'];
 const DAY_LABELS = { M: 'Mon', T: 'Tue', W: 'Wed', R: 'Thu', F: 'Fri' };
@@ -25,19 +26,36 @@ const colorFromString = (str) => {
 };
 
 const StudentSchedules = ({ studentData = [] }) => {
-  const [selectedBuilding, setSelectedBuilding] = useState('All');
-  const [selectedJobTitle, setSelectedJobTitle] = useState('All');
-  const [selectedStudentId, setSelectedStudentId] = useState('All');
+  const [selectedBuildings, setSelectedBuildings] = useState([]);
+  const [selectedJobTitles, setSelectedJobTitles] = useState([]);
+  const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   const [dayView, setDayView] = useState('All'); // 'All' or one of DAY_ORDER
 
-  const jobTitles = useMemo(() => {
+  const buildingOptions = useMemo(() => {
     const set = new Set();
-    studentData.forEach(s => { if (s.jobTitle) set.add(s.jobTitle); });
-    return ['All', ...Array.from(set).sort()];
+    studentData.forEach(s => {
+      const buildings = Array.isArray(s.primaryBuildings)
+        ? s.primaryBuildings
+        : (s.primaryBuilding ? [s.primaryBuilding] : []);
+      buildings.forEach(b => { if (b) set.add(b); });
+    });
+    return Array.from(set).sort();
   }, [studentData]);
 
-  const studentsForFilter = useMemo(() => {
-    return ['All', ...studentData.map(s => ({ id: s.id, name: s.name }))];
+  const jobTitleOptions = useMemo(() => {
+    const set = new Set();
+    studentData.forEach(s => { if (s.jobTitle) set.add(s.jobTitle); });
+    return Array.from(set).sort();
+  }, [studentData]);
+
+  const studentIdOptions = useMemo(() => {
+    return studentData.map(s => s.id).filter(Boolean);
+  }, [studentData]);
+
+  const studentIdToNameMap = useMemo(() => {
+    const map = {};
+    studentData.forEach(s => { if (s.id) map[s.id] = s.name || s.id; });
+    return map;
   }, [studentData]);
 
   const filteredStudents = useMemo(() => {
@@ -46,15 +64,26 @@ const StudentSchedules = ({ studentData = [] }) => {
       const hasSchedule = Array.isArray(s.weeklySchedule) && s.weeklySchedule.length > 0;
       if (!hasSchedule) return false;
 
-      if (selectedBuilding !== 'All') {
+      // Buildings filter: match any
+      if (selectedBuildings.length > 0) {
         const buildings = Array.isArray(s.primaryBuildings) ? s.primaryBuildings : (s.primaryBuilding ? [s.primaryBuilding] : []);
-        if (!buildings.includes(selectedBuilding)) return false;
+        const matchesBuilding = buildings.some(b => selectedBuildings.includes(b));
+        if (!matchesBuilding) return false;
       }
-      if (selectedJobTitle !== 'All' && s.jobTitle !== selectedJobTitle) return false;
-      if (selectedStudentId !== 'All' && s.id !== selectedStudentId) return false;
+
+      // Job titles filter: match any
+      if (selectedJobTitles.length > 0) {
+        if (!selectedJobTitles.includes(s.jobTitle)) return false;
+      }
+
+      // Students filter: match any
+      if (selectedStudentIds.length > 0) {
+        if (!selectedStudentIds.includes(s.id)) return false;
+      }
+
       return true;
     });
-  }, [studentData, selectedBuilding, selectedJobTitle, selectedStudentId]);
+  }, [studentData, selectedBuildings, selectedJobTitles, selectedStudentIds]);
 
   // Determine time bounds for grid (default 8:00 - 18:00)
   const { minStart, maxEnd } = useMemo(() => {
@@ -76,77 +105,117 @@ const StudentSchedules = ({ studentData = [] }) => {
 
   const totalMinutes = Math.max(60, maxEnd - minStart);
 
-  const entriesByDay = useMemo(() => {
-    const map = { M: [], T: [], W: [], R: [], F: [] };
-    filteredStudents.forEach(s => {
-      (s.weeklySchedule || []).forEach(entry => {
-        if (map[entry.day]) {
-          map[entry.day].push({ ...entry, student: s });
+  const entriesByDayWithLayout = useMemo(() => {
+    const layoutMap = { M: [], T: [], W: [], R: [], F: [] };
+
+    const layoutDay = (entries) => {
+      const sorted = [...entries].sort((a, b) => minutesSinceStartOfDay(a.start) - minutesSinceStartOfDay(b.start));
+      const results = [];
+      let groupItems = [];
+      let groupEndMax = -Infinity;
+      let colEndTimes = [];
+      let maxCols = 0;
+
+      const finalizeGroup = () => {
+        groupItems.forEach(item => results.push({ ...item, columns: Math.max(1, maxCols) }));
+        groupItems = [];
+        groupEndMax = -Infinity;
+        colEndTimes = [];
+        maxCols = 0;
+      };
+
+      sorted.forEach(entry => {
+        const start = minutesSinceStartOfDay(entry.start);
+        const end = minutesSinceStartOfDay(entry.end);
+        if (groupItems.length > 0 && start >= groupEndMax) {
+          finalizeGroup();
         }
+
+        // assign column greedily
+        let assignedCol = -1;
+        for (let i = 0; i < colEndTimes.length; i++) {
+          if (colEndTimes[i] <= start) { assignedCol = i; break; }
+        }
+        if (assignedCol === -1) {
+          assignedCol = colEndTimes.length;
+          colEndTimes.push(end);
+        } else {
+          colEndTimes[assignedCol] = end;
+        }
+        maxCols = Math.max(maxCols, colEndTimes.length);
+        groupEndMax = Math.max(groupEndMax, end);
+        groupItems.push({ entry, start, end, col: assignedCol });
+      });
+
+      if (groupItems.length > 0) finalizeGroup();
+      return results;
+    };
+
+    // Build map by day
+    const temp = { M: [], T: [], W: [], R: [], F: [] };
+    filteredStudents.forEach(s => {
+      (s.weeklySchedule || []).forEach(e => {
+        if (temp[e.day]) temp[e.day].push({ ...e, student: s });
       });
     });
-    // sort by start time within each day
-    Object.keys(map).forEach(day => {
-      map[day].sort((a, b) => minutesSinceStartOfDay(a.start) - minutesSinceStartOfDay(b.start));
+
+    Object.keys(temp).forEach(day => {
+      layoutMap[day] = layoutDay(temp[day]);
     });
-    return map;
+
+    return layoutMap;
   }, [filteredStudents]);
 
   const visibleDays = dayView === 'All' ? DAY_ORDER : [dayView];
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Building</label>
-          <select
-            className="border rounded-md px-3 py-1"
-            value={selectedBuilding}
-            onChange={e => setSelectedBuilding(e.target.value)}
-          >
-            <option>All</option>
-            <option>Mary Gibbs Jones</option>
-            <option>Goebel</option>
-          </select>
+      <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-700">Filters</h3>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">View</label>
+            <select
+              className="border rounded-md px-3 py-1"
+              value={dayView}
+              onChange={e => setDayView(e.target.value)}
+            >
+              <option value="All">All Days</option>
+              {DAY_ORDER.map(d => (
+                <option key={d} value={d}>{DAY_LABELS[d]}</option>
+              ))}
+            </select>
+          </div>
         </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Job Title</label>
-          <select
-            className="border rounded-md px-3 py-1"
-            value={selectedJobTitle}
-            onChange={e => setSelectedJobTitle(e.target.value)}
-          >
-            {jobTitles.map(j => (
-              <option key={j} value={j}>{j}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Student</label>
-          <select
-            className="border rounded-md px-3 py-1"
-            value={selectedStudentId}
-            onChange={e => setSelectedStudentId(e.target.value)}
-          >
-            {studentsForFilter.map(s => (
-              typeof s === 'string'
-                ? <option key="All">All</option>
-                : <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">View</label>
-          <select
-            className="border rounded-md px-3 py-1"
-            value={dayView}
-            onChange={e => setDayView(e.target.value)}
-          >
-            <option value="All">All Days</option>
-            {DAY_ORDER.map(d => (
-              <option key={d} value={d}>{DAY_LABELS[d]}</option>
-            ))}
-          </select>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Buildings</label>
+            <MultiSelectDropdown
+              options={buildingOptions}
+              selected={selectedBuildings}
+              onChange={setSelectedBuildings}
+              placeholder="All Buildings"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Job Titles</label>
+            <MultiSelectDropdown
+              options={jobTitleOptions}
+              selected={selectedJobTitles}
+              onChange={setSelectedJobTitles}
+              placeholder="All Job Titles"
+            />
+          </div>
+          <div className="sm:col-span-2 lg:col-span-2">
+            <label className="block text-xs text-gray-500 mb-1">Students</label>
+            <MultiSelectDropdown
+              options={studentIdOptions}
+              selected={selectedStudentIds}
+              onChange={setSelectedStudentIds}
+              placeholder="All Students"
+              displayMap={studentIdToNameMap}
+            />
+          </div>
         </div>
       </div>
 
@@ -183,22 +252,24 @@ const StudentSchedules = ({ studentData = [] }) => {
                 );
               })}
               {/* Entries */}
-              {(entriesByDay[d] || []).map((entry, idx) => {
-                const start = minutesSinceStartOfDay(entry.start);
-                const end = minutesSinceStartOfDay(entry.end);
+              {(entriesByDayWithLayout[d] || []).map((item, idx) => {
+                const { entry, start, end, col, columns } = item;
                 const top = ((start - minStart) / totalMinutes) * 100;
-                const height = Math.max(2, ((end - start) / totalMinutes) * 100);
+                const height = Math.max(3, ((end - start) / totalMinutes) * 100);
                 const bg = colorFromString(entry.student.id || entry.student.name || 'student');
+                const gap = 4; // px between columns
+                const widthCalc = `calc((100% - ${(columns - 1) * gap}px) / ${columns})`;
+                const leftCalc = `calc(${(col * 100) / columns}% + ${col * gap}px)`;
                 return (
                   <div
                     key={idx}
-                    className="absolute left-1 right-1 rounded-md shadow-sm text-xs p-1 overflow-hidden"
-                    style={{ top: `${top}%`, height: `${height}%`, background: bg }}
+                    className="absolute rounded-md shadow-sm text-[11px] leading-snug p-1 bg-white/90"
+                    style={{ top: `${top}%`, height: `${height}%`, width: widthCalc, left: leftCalc, background: bg, overflowY: 'auto' }}
                     title={`${entry.student.name} • ${formatTimeLabel(start)} - ${formatTimeLabel(end)}${entry.student.jobTitle ? ` • ${entry.student.jobTitle}` : ''}`}
                   >
-                    <div className="font-medium truncate">{entry.student.name}</div>
-                    <div className="truncate">{formatTimeLabel(start)} - {formatTimeLabel(end)}</div>
-                    {entry.student.jobTitle && <div className="truncate">{entry.student.jobTitle}</div>}
+                    <div className="font-semibold">{entry.student.name}</div>
+                    <div>{formatTimeLabel(start)} - {formatTimeLabel(end)}</div>
+                    {entry.student.jobTitle && <div>{entry.student.jobTitle}</div>}
                   </div>
                 );
               })}

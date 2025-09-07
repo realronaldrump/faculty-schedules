@@ -1647,76 +1647,7 @@ const SmartDataImportPage = ({ onNavigate, showNotification, selectedSemester, a
         </div>
       )}
 
-      {/* System Overview */}
-      <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-8 border border-gray-200">
-        <div className="flex items-center mb-6">
-          <div className="bg-baylor-green/10 p-3 rounded-lg mr-4">
-            <Database className="w-6 h-6 text-baylor-green" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-baylor-green">System Architecture</h2>
-            <p className="text-gray-600">Understanding the unified data model and import capabilities</p>
-          </div>
-        </div>
-        <div className="grid md:grid-cols-2 gap-8">
-          <div className="bg-white rounded-lg p-6 border border-gray-200">
-            <div className="flex items-center mb-4">
-              <Users className="w-5 h-5 text-baylor-green mr-2" />
-              <h3 className="font-bold text-gray-900">People Collection</h3>
-            </div>
-            <div className="space-y-3 text-sm text-gray-700">
-              <div className="flex items-start">
-                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                <span>Unified storage for all personnel data</span>
-              </div>
-              <div className="flex items-start">
-                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                <span>Intelligent role determination (faculty/staff)</span>
-              </div>
-              <div className="flex items-start">
-                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                <span>Email-based duplicate detection</span>
-              </div>
-              <div className="flex items-start">
-                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                <span>Automated name parsing and normalization</span>
-              </div>
-              <div className="flex items-start">
-                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                <span>Job title classification system</span>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg p-6 border border-gray-200">
-            <div className="flex items-center mb-4">
-              <Calendar className="w-5 h-5 text-baylor-green mr-2" />
-              <h3 className="font-bold text-gray-900">Schedules Collection</h3>
-            </div>
-            <div className="space-y-3 text-sm text-gray-700">
-              <div className="flex items-start">
-                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                <span>ID-based instructor references</span>
-              </div>
-              <div className="flex items-start">
-                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                <span>Structured meeting pattern parsing</span>
-              </div>
-              <div className="flex items-start">
-                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                <span>Complex time format support</span>
-              </div>
-              <div className="flex items-start">
-                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                <span>Automatic instructor matching</span>
-              </div>
-              <div className="flex items-start">
-                <div className="w-2 h-2 bg-baylor-green rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                <span>Duplicate schedule prevention</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+
 
       {/* Data Deduplication Manager */}
       {showDeduplication && (

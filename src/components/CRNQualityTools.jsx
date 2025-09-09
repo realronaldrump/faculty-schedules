@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Database, AlertCircle, Save, Search } from 'lucide-react';
+import { Database, AlertCircle, Save, Search, Pencil, X } from 'lucide-react';
 import { analyzeCRNCoverage } from '../utils/crnMigrationUtils';
 import { fetchSchedulesWithRelationalData } from '../utils/dataImportUtils';
 import { db } from '../firebase';
@@ -131,6 +131,13 @@ const CRNQualityTools = ({ showNotification }) => {
     }
   };
 
+  const cancelCrnEdit = (id) => {
+    setEditingCrn(prev => {
+      const { [id]: _omit, ...rest } = prev;
+      return rest;
+    });
+  };
+
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-6">
@@ -178,10 +185,91 @@ const CRNQualityTools = ({ showNotification }) => {
                 <h4 className="font-semibold text-red-800">Duplicate CRNs Detected</h4>
               </div>
               <div className="text-sm text-red-700">
-                {analysis.duplicateCRNs.length} CRN(s) appear in multiple records from the import. Correct via CSV re-import or registrar-provided data.
+                {analysis.duplicateCRNs.length} CRN(s) appear in multiple records. Review the duplicates below and correct them here.
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {analysis && analysis.duplicateCRNs.length > 0 && (
+        <div className="mt-6 bg-white border border-gray-200 rounded-lg p-4">
+          <h3 className="text-md font-semibold text-gray-900 mb-3">Duplicate CRNs - Resolve</h3>
+          <div className="space-y-4">
+            {analysis.duplicateCRNs.map(group => (
+              <div key={group.crn} className="border border-red-200 rounded-md">
+                <div className="px-3 py-2 bg-red-50 flex items-center justify-between">
+                  <div className="text-sm text-red-800 font-medium">CRN {group.crn} — {group.count} records</div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Term</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Course</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Section</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">CRN</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {group.records.map(rec => {
+                        const row = (schedules || []).find(s => s.id === rec.id) || { id: rec.id, courseCode: rec.courseCode, section: rec.section, term: rec.term, crn: group.crn };
+                        const isEditing = Object.prototype.hasOwnProperty.call(editingCrn, row.id);
+                        const currentValue = isEditing ? (editingCrn[row.id] ?? '') : (row.crn || '');
+                        return (
+                          <tr key={row.id}>
+                            <td className="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">{row.term}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900 whitespace-nowrap font-medium">{row.courseCode}</td>
+                            <td className="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">{row.section}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900 whitespace-nowrap">
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="\\d{5}"
+                                  className="w-28 p-1 border border-gray-300 rounded-md focus:ring-baylor-green focus:border-baylor-green text-gray-900"
+                                  value={currentValue}
+                                  onChange={(e) => handleCrnInputChange(row.id, e.target.value)}
+                                />
+                              ) : (
+                                <span className="font-semibold">{row.crn}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">
+                              {isEditing ? (
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => handleCrnSave(row)}
+                                    className="inline-flex items-center px-2 py-1 bg-baylor-green text-white rounded-md hover:bg-baylor-green/90"
+                                  >
+                                    <Save className="w-4 h-4 mr-1" /> Save
+                                  </button>
+                                  <button
+                                    onClick={() => cancelCrnEdit(row.id)}
+                                    className="inline-flex items-center px-2 py-1 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+                                  >
+                                    <X className="w-4 h-4 mr-1" /> Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => setEditingCrn(prev => ({ ...prev, [row.id]: row.crn || '' }))}
+                                  className="inline-flex items-center px-2 py-1 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                                >
+                                  <Pencil className="w-4 h-4 mr-1" /> Edit CRN
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

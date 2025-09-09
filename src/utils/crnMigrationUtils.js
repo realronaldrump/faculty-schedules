@@ -39,20 +39,22 @@ export const analyzeCRNCoverage = async () => {
       recordsNeedingCRN: []
     };
 
-    // Track CRN occurrences for duplicate detection
-    const crnCounts = {};
+    // Track CRN occurrences for duplicate detection scoped by term
+    const crnTermCounts = {};
 
     schedules.forEach(schedule => {
       if (schedule.crn && schedule.crn.trim() !== '') {
         analysis.withCRN++;
         const trimmedCRN = schedule.crn.trim();
         analysis.uniqueCRNs.add(trimmedCRN);
-        
-        // Track for duplicates
-        if (!crnCounts[trimmedCRN]) {
-          crnCounts[trimmedCRN] = [];
+
+        // Track for duplicates within the same term
+        const termKey = (schedule.term || '').toString();
+        const key = `${trimmedCRN}__${termKey}`;
+        if (!crnTermCounts[key]) {
+          crnTermCounts[key] = [];
         }
-        crnCounts[trimmedCRN].push(schedule);
+        crnTermCounts[key].push(schedule);
       } else if (schedule.crn === '') {
         analysis.emptyCRN++;
         analysis.recordsNeedingCRN.push(schedule);
@@ -62,11 +64,13 @@ export const analyzeCRNCoverage = async () => {
       }
     });
 
-    // Find duplicates
-    Object.entries(crnCounts).forEach(([crn, records]) => {
+    // Find duplicates by CRN within the same term only
+    Object.entries(crnTermCounts).forEach(([key, records]) => {
       if (records.length > 1) {
+        const [crn, term] = key.split('__');
         analysis.duplicateCRNs.push({
           crn,
+          term,
           count: records.length,
           records: records.map(r => ({
             id: r.id,

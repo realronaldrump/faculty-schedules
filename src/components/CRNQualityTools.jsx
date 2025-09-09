@@ -185,7 +185,7 @@ const CRNQualityTools = ({ showNotification }) => {
                 <h4 className="font-semibold text-red-800">Duplicate CRNs Detected</h4>
               </div>
               <div className="text-sm text-red-700">
-                {analysis.duplicateCRNs.length} CRN(s) appear in multiple records. Review the duplicates below and correct them here.
+                {analysis.duplicateCRNs.length} CRN(s) appear in multiple records within the same term. Review the duplicates below and correct them here.
               </div>
             </div>
           )}
@@ -197,9 +197,9 @@ const CRNQualityTools = ({ showNotification }) => {
           <h3 className="text-md font-semibold text-gray-900 mb-3">Duplicate CRNs - Resolve</h3>
           <div className="space-y-4">
             {analysis.duplicateCRNs.map(group => (
-              <div key={group.crn} className="border border-red-200 rounded-md">
+              <div key={`${group.crn}__${group.term || ''}`} className="border border-red-200 rounded-md">
                 <div className="px-3 py-2 bg-red-50 flex items-center justify-between">
-                  <div className="text-sm text-red-800 font-medium">CRN {group.crn} — {group.count} records</div>
+                  <div className="text-sm text-red-800 font-medium">Term {group.term || 'Unknown'} — CRN {group.crn} — {group.count} records</div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">

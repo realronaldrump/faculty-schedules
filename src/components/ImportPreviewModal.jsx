@@ -47,6 +47,17 @@ const ImportPreviewModal = ({
     return groups;
   }, [allChanges]);
 
+  // Build index of groupKey -> changeIds for cascading select/deselect
+  const groupIndex = useMemo(() => {
+    const index = new Map();
+    allChanges.forEach((c) => {
+      if (!c.groupKey) return;
+      if (!index.has(c.groupKey)) index.set(c.groupKey, []);
+      index.get(c.groupKey).push(c.id);
+    });
+    return index;
+  }, [allChanges]);
+
   const stats = useMemo(() => {
     const selected = Array.from(selectedChanges);
     return {
@@ -67,11 +78,13 @@ const ImportPreviewModal = ({
 
   const toggleChange = (changeId) => {
     const newSelected = new Set(selectedChanges);
-    if (newSelected.has(changeId)) {
-      newSelected.delete(changeId);
-    } else {
-      newSelected.add(changeId);
-    }
+    const change = allChanges.find(c => c.id === changeId);
+    const related = change?.groupKey ? (groupIndex.get(change.groupKey) || []) : [changeId];
+
+    const removing = newSelected.has(changeId);
+    related.forEach((id) => {
+      if (removing) newSelected.delete(id); else newSelected.add(id);
+    });
     setSelectedChanges(newSelected);
     setSelectAll(newSelected.size === allChanges.length);
   };

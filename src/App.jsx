@@ -12,10 +12,11 @@ import ProgramManagement from './components/ProgramManagement';
 import DepartmentInsights from './components/analytics/DepartmentInsights.jsx';
 import CourseManagement from './components/analytics/CourseManagement';
 // Legacy import removed - using smart import only
-import SmartDataImportPage from './components/SmartDataImportPage';
+import ImportWizard from './components/ImportWizard';
 import SystemsPage from './components/SystemsPage';
 import DataHygieneManager from './components/DataHygieneManager';
 import BaylorAcronyms from './pages/BaylorAcronyms';
+import CRNQualityTools from './components/CRNQualityTools';
 
 import RecentChangesPage from './components/RecentChangesPage';
 import RoomGridGenerator from './components/admin/RoomGridGenerator';
@@ -248,8 +249,9 @@ function App() {
       label: 'Tools',
       icon: Database,
       children: [
-        { id: 'smart-import', label: 'Data Import', path: 'administration/smart-import' },
+        { id: 'smart-import', label: 'Import Wizard', path: 'administration/import-wizard' },
         { id: 'data-hygiene', label: 'Data Hygiene', path: 'administration/data-hygiene' },
+        { id: 'crn-tools', label: 'CRN Quality Tools', path: 'administration/crn-tools' },
         { id: 'room-grid-generator', label: 'Room Grid Generator', path: 'resources/room-grid-generator' },
         { id: 'recent-changes', label: 'Recent Changes', path: 'administration/recent-changes' }
       ]
@@ -1553,16 +1555,22 @@ function App() {
             <RecentChangesPage {...pageProps} />
           </ProtectedContent>
         );
-      case 'administration/smart-import':
+      case 'administration/import-wizard':
         return (
-          <ProtectedContent pageId="administration/smart-import">
-            <SmartDataImportPage {...pageProps} />
+          <ProtectedContent pageId="administration/import-wizard">
+            <ImportWizard {...pageProps} />
           </ProtectedContent>
         );
       case 'administration/data-hygiene':
         return (
           <ProtectedContent pageId="administration/data-hygiene">
             <DataHygieneManager {...pageProps} />
+          </ProtectedContent>
+        );
+      case 'administration/crn-tools':
+        return (
+          <ProtectedContent pageId="administration/crn-tools">
+            <CRNQualityTools {...pageProps} />
           </ProtectedContent>
         );
       case 'administration/baylor-systems':

@@ -107,5 +107,13 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if canWrite();
     }
+
+    // Import transactions (for preview, commit summary, and rollback)
+    match /importTransactions/{id} {
+      // Allow admins to read history and details for rollback
+      allow read: if isAdmin();
+      // Only admins can create/update/delete import transactions
+      allow write: if canWrite();
+    }
   }
 }

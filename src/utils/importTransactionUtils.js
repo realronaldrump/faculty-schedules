@@ -1,6 +1,7 @@
 import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, writeBatch, query, orderBy, setDoc } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
-import { findMatchingPerson } from './dataImportUtils';
+import { logCreate, logUpdate, logDelete, logBulkUpdate, logImport } from './changeLogger';
+import { findMatchingPerson, parseInstructorField } from './dataImportUtils';
 
 // Import transaction model for tracking changes
 export class ImportTransaction {
@@ -42,7 +43,7 @@ export class ImportTransaction {
   }
 
   // Add a change to the transaction
-  addChange(collection, action, newData, originalData = null) {
+  addChange(collection, action, newData, originalData = null, options = {}) {
     const change = {
       id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       collection,
@@ -50,7 +51,8 @@ export class ImportTransaction {
       newData,
       originalData,
       timestamp: new Date().toISOString(),
-      applied: false
+      applied: false,
+      groupKey: options.groupKey || null
     };
 
     this.changes[collection][action === 'add' ? 'added' : action === 'modify' ? 'modified' : 'deleted'].push(change);
@@ -145,7 +147,8 @@ export class ImportTransaction {
 }
 
 // Preview import changes without committing to database
-export const previewImportChanges = async (csvData, importType, selectedSemester) => {
+export const previewImportChanges = async (csvData, importType, selectedSemester, options = {}) => {
+  const { persist = true } = options;
   const transaction = new ImportTransaction(importType, `${importType} import preview`, selectedSemester);
   
   try {
@@ -166,8 +169,15 @@ export const previewImportChanges = async (csvData, importType, selectedSemester
       await previewDirectoryChanges(csvData, transaction, existingPeopleData);
     }
 
-    // Store transaction in database for cross-browser access
-    await saveTransactionToDatabase(transaction);
+    // Store transaction in database for cross-browser access (optional)
+    if (persist) {
+      try {
+        await saveTransactionToDatabase(transaction);
+      } catch (e) {
+        // If we don't have permission, continue with in-memory preview
+        console.warn('Skipping transaction persistence (preview only):', e?.message || e);
+      }
+    }
 
     return transaction;
   } catch (error) {
@@ -178,18 +188,21 @@ export const previewImportChanges = async (csvData, importType, selectedSemester
 
 const previewScheduleChanges = async (csvData, transaction, existingSchedules, existingPeople, existingRooms) => {
   // Create maps for quick lookup
-  const peopleMap = new Map();
+  const peopleMapByName = new Map();
+  const peopleMapByBaylorId = new Map();
   const roomsMap = new Map();
   const scheduleMap = new Map();
   
   existingPeople.forEach(person => {
-    const key = `${person.firstName?.toLowerCase()} ${person.lastName?.toLowerCase()}`.trim();
-    peopleMap.set(key, person);
+    const nameKey = `${(person.firstName || '').toLowerCase()} ${(person.lastName || '').toLowerCase()}`.trim();
+    if (nameKey) peopleMapByName.set(nameKey, person);
+    const baylorId = (person.baylorId || '').trim();
+    if (baylorId) peopleMapByBaylorId.set(baylorId, person);
   });
 
   existingRooms.forEach(room => {
-    const key = room.name?.toLowerCase() || room.displayName?.toLowerCase();
-    if (key) roomsMap.set(key, room);
+    const keys = [room.name, room.displayName].map((k) => (k || '').toLowerCase()).filter(Boolean);
+    keys.forEach((k) => roomsMap.set(k, room));
   });
 
   // Create map of existing schedules to avoid duplicates
@@ -198,70 +211,81 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
     scheduleMap.set(key, schedule);
   });
 
+  // Helper to normalize Section # (strip redundant CRN like "01 (33038)" -> "01")
+  const parseSectionField = (sectionField) => {
+    if (!sectionField) return '';
+    const raw = String(sectionField).trim();
+    const cut = raw.split(' ')[0];
+    const idx = cut.indexOf('(');
+    return idx > -1 ? cut.substring(0, idx).trim() : cut.trim();
+  };
+
   // Process each schedule entry
   for (const row of csvData) {
-    // Extract instructor information
-    const instructorName = row.Instructor || '';
-    const instructorParts = instructorName.split(',').map(p => p.trim());
-    let firstName = '', lastName = '';
-    
-    if (instructorParts.length >= 2) {
-      lastName = instructorParts[0];
-      firstName = instructorParts[1].split('(')[0].trim();
-    }
+    // Precompute key fields and group key for cascading selection
+    const preCourseCode = row.Course || '';
+    const preSection = parseSectionField(row['Section #'] || '');
+    const preTerm = row.Term || '';
+    const groupKey = `sched_${preCourseCode}_${preSection}_${preTerm}`;
+    // Extract instructor information (use Baylor ID match first)
+    const instructorField = row.Instructor || '';
+    const parsed = parseInstructorField(instructorField) || { firstName: '', lastName: '', id: null };
+    const nameKey = `${(parsed.firstName || '').toLowerCase()} ${(parsed.lastName || '').toLowerCase()}`.trim();
+    const baylorId = (parsed.id || '').trim();
 
-    const instructorKey = `${firstName.toLowerCase()} ${lastName.toLowerCase()}`.trim();
-    let instructor = peopleMap.get(instructorKey);
+    let instructor = null;
     let instructorId = null;
 
-    // Check if we need to add a new instructor
-    if (!instructor && firstName && lastName) {
+    if (baylorId && peopleMapByBaylorId.has(baylorId)) {
+      instructor = peopleMapByBaylorId.get(baylorId);
+      instructorId = instructor.id;
+    } else if (nameKey && peopleMapByName.has(nameKey)) {
+      instructor = peopleMapByName.get(nameKey);
+      instructorId = instructor.id;
+    } else if (parsed.firstName && parsed.lastName) {
       const newInstructor = {
-        firstName,
-        lastName,
+        firstName: parsed.firstName,
+        lastName: parsed.lastName,
         email: '',
-        roles: ['faculty', 'adjunct'],
-        contactInfo: { phone: '', office: '' },
+        baylorId: baylorId || '',
+        roles: ['faculty'],
         isActive: true
       };
-      transaction.addChange('people', 'add', newInstructor);
+      transaction.addChange('people', 'add', newInstructor, null, { groupKey });
       instructor = newInstructor;
-      peopleMap.set(instructorKey, instructor);
-      // For new instructors, ID will be set when committed
-    } else if (instructor) {
-      // Use existing instructor's ID
-      instructorId = instructor.id;
+      if (nameKey) peopleMapByName.set(nameKey, newInstructor);
+      if (baylorId) peopleMapByBaylorId.set(baylorId, newInstructor);
     }
 
-    // Extract room information
-    const roomName = row.Room || '';
-    const roomKey = roomName.toLowerCase();
-    let room = roomsMap.get(roomKey);
+    // Extract room information (support simultaneous multi-rooms)
+    const roomField = (row.Room || '').trim();
+    const splitRooms = roomField ? roomField.split(';').map((s) => s.trim()).filter(Boolean) : [];
     let roomId = null;
-
-    // Check if we need to add a new room
-    if (!room && roomName && roomName !== 'No Room Needed' && !roomName.includes('ONLINE')) {
-      const newRoom = {
-        name: roomName,
-        displayName: roomName,
-        building: roomName.includes('(') ? (roomName.split('(')[1] || '').replace(')', '') : '',
-        capacity: null,
-        type: 'Classroom',
-        isActive: true
-      };
-      transaction.addChange('rooms', 'add', newRoom);
-      room = newRoom;
-      roomsMap.set(roomKey, room);
-      // For new rooms, ID will be set when committed
-    } else if (room) {
-      // Use existing room's ID
-      roomId = room.id;
+    if (splitRooms.length > 0) {
+      for (const singleRoom of splitRooms) {
+        const key = singleRoom.toLowerCase();
+        let room = roomsMap.get(key);
+        if (!room && singleRoom && singleRoom !== 'No Room Needed' && !singleRoom.toUpperCase().includes('ONLINE')) {
+          const newRoom = {
+            name: singleRoom,
+            displayName: singleRoom,
+            building: singleRoom.includes('(') ? (singleRoom.split('(')[1] || '').replace(')', '') : '',
+            capacity: null,
+            type: 'Classroom',
+            isActive: true
+          };
+          transaction.addChange('rooms', 'add', newRoom, null, { groupKey });
+          roomsMap.set(key, newRoom);
+        } else if (room && !roomId) {
+          roomId = room.id || null; // first becomes legacy primary
+        }
+      }
     }
 
     // Create schedule key for duplicate detection
-    const courseCode = row.Course || '';
-    const section = row['Section #'] || ''; // Fix: Use correct CSV column name
-    const term = row.Term || '';
+    const courseCode = preCourseCode;
+    const section = preSection;
+    const term = preTerm;
     const scheduleKey = `${courseCode}-${section}-${term}`;
 
     // Check for duplicate schedules
@@ -276,17 +300,24 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
       courseCode,
       courseTitle: row['Course Title'] || '',
       section,
-      crn: row['CRN'] || '', // Add CRN field
-      credits: row['Credit Hrs'] || row['Credit Hrs Min'] || '', // Fix: Use correct CSV column name
+      crn: (row['CRN'] && String(row['CRN']).trim().match(/^\d{5}$/)) ? String(row['CRN']).trim() : '',
+      credits: row['Credit Hrs'] || row['Credit Hrs Min'] || '',
       term,
+      termCode: row['Term Code'] || '',
       academicYear: extractAcademicYear(term),
       instructorId: instructorId,
-      instructorName: instructorName,
-      // Multi-room preview support: split on ';' while retaining legacy fields
-      roomIds: roomName && roomName.includes(';') ? [] : (roomId ? [roomId] : []),
+      // Prefer normalized instructor name from existing DB record; fallback to parsed name; then raw field
+      instructorName: (instructor && (instructor.firstName || instructor.lastName))
+        ? `${(instructor.firstName || '').trim()} ${(instructor.lastName || '').trim()}`.trim()
+        : ((parsed.firstName || parsed.lastName)
+          ? `${parsed.firstName} ${parsed.lastName}`.trim()
+          : (row.Instructor || '')),
+      instructorBaylorId: (parsed.id || '').trim(),
+      // Multi-room fields
+      roomIds: splitRooms.length > 1 ? [] : (roomId ? [roomId] : []),
       roomId: roomId,
-      roomNames: roomName ? roomName.split(';').map(s => s.trim()).filter(Boolean) : [],
-      roomName: roomName,
+      roomNames: splitRooms,
+      roomName: splitRooms[0] || '',
       meetingPatterns: parseMeetingPatterns(row),
       scheduleType: row['Schedule Type'] || 'Class Instruction',
       status: row.Status || 'Active',
@@ -294,7 +325,7 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
       updatedAt: new Date().toISOString()
     };
 
-    transaction.addChange('schedules', 'add', scheduleData);
+    transaction.addChange('schedules', 'add', scheduleData, null, { groupKey });
     // Add to our local map to prevent duplicates within this import
     scheduleMap.set(scheduleKey, scheduleData);
   }
@@ -606,6 +637,104 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
     console.log(`✅ Transaction committed with ${changesToApply.length} changes`);
     console.log(`👤 Created ${newPeopleIds.size} new people`);
     console.log(`🏛️ Created ${newRoomIds.size} new rooms`);
+
+    // Centralized change logging for applied changes
+    try {
+      // Per-change logs (best-effort, non-blocking)
+      for (const change of changesToApply) {
+        const source = 'importTransactionUtils.js - commitTransaction';
+        if (change.collection === 'schedules') {
+          if (change.action === 'add') {
+            logCreate(
+              `Schedule - ${change.newData.courseCode} ${change.newData.section} (${change.newData.term})`,
+              COLLECTIONS.SCHEDULES,
+              change.documentId,
+              change.newData,
+              source
+            ).catch(() => {});
+          } else if (change.action === 'modify') {
+            logUpdate(
+              `Schedule - ${change.originalData?.courseCode || ''} ${change.originalData?.section || ''} (${change.originalData?.term || ''})`,
+              COLLECTIONS.SCHEDULES,
+              change.documentId,
+              change.newData,
+              change.originalData,
+              source
+            ).catch(() => {});
+          } else if (change.action === 'delete') {
+            logDelete(
+              `Schedule - ${change.originalData?.courseCode || ''} ${change.originalData?.section || ''} (${change.originalData?.term || ''})`,
+              COLLECTIONS.SCHEDULES,
+              change.documentId,
+              change.originalData,
+              source
+            ).catch(() => {});
+          }
+        } else if (change.collection === 'people') {
+          if (change.action === 'add') {
+            logCreate(
+              `Person - ${change.newData.firstName || ''} ${change.newData.lastName || ''}`.trim(),
+              COLLECTIONS.PEOPLE,
+              change.documentId,
+              change.newData,
+              source
+            ).catch(() => {});
+          } else if (change.action === 'modify') {
+            logUpdate(
+              `Person - ${change.originalData?.firstName || ''} ${change.originalData?.lastName || ''}`.trim(),
+              COLLECTIONS.PEOPLE,
+              change.documentId,
+              change.newData,
+              change.originalData,
+              source
+            ).catch(() => {});
+          } else if (change.action === 'delete') {
+            logDelete(
+              `Person - ${change.originalData?.firstName || ''} ${change.originalData?.lastName || ''}`.trim(),
+              COLLECTIONS.PEOPLE,
+              change.documentId,
+              change.originalData,
+              source
+            ).catch(() => {});
+          }
+        } else if (change.collection === 'rooms') {
+          if (change.action === 'add') {
+            logCreate(
+              `Room - ${change.newData.displayName || change.newData.name}`,
+              COLLECTIONS.ROOMS,
+              change.documentId,
+              change.newData,
+              source
+            ).catch(() => {});
+          } else if (change.action === 'modify') {
+            logUpdate(
+              `Room - ${change.originalData?.displayName || change.originalData?.name}`,
+              COLLECTIONS.ROOMS,
+              change.documentId,
+              change.newData,
+              change.originalData,
+              source
+            ).catch(() => {});
+          } else if (change.action === 'delete') {
+            logDelete(
+              `Room - ${change.originalData?.displayName || change.originalData?.name}`,
+              COLLECTIONS.ROOMS,
+              change.documentId,
+              change.originalData,
+              source
+            ).catch(() => {});
+          }
+        }
+      }
+      // Aggregate log for import
+      logImport(
+        `Import - ${transaction.description}`,
+        'multiple',
+        changesToApply.length,
+        'importTransactionUtils.js - commitTransaction',
+        { transactionId: transaction.id, semester: transaction.semester, stats: transaction.stats }
+      ).catch(() => {});
+    } catch (_) {}
     
     return transaction;
   } catch (error) {

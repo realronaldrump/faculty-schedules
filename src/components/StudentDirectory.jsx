@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Edit, Save, X, GraduationCap, Mail, Phone, PhoneOff, Clock, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, Filter } from 'lucide-react';
+import MultiSelectDropdown from './MultiSelectDropdown';
 import FacultyContactCard from './FacultyContactCard';
 
 const formatPhoneNumber = (phoneStr) => {
@@ -52,6 +53,8 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
   const [filters, setFilters] = useState({
     departments: { include: [], exclude: [] },
     supervisors: { include: [], exclude: [] },
+    jobTitles: { include: [], exclude: [] },
+    buildings: { include: [], exclude: [] },
     hasEmail: true,
     hasPhone: true,
     activeOnly: true
@@ -79,6 +82,27 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     return Array.from(supervisors).sort();
   }, [studentData]);
 
+  const availableBuildings = useMemo(() => {
+    const buildings = new Set();
+    (studentData || []).forEach(student => {
+      if (Array.isArray(student.primaryBuildings)) {
+        student.primaryBuildings.forEach(b => { if (b) buildings.add(b); });
+      } else if (student.primaryBuilding) {
+        buildings.add(student.primaryBuilding);
+      }
+      if (Array.isArray(student.jobs)) {
+        student.jobs.forEach(j => {
+          if (Array.isArray(j.location)) {
+            j.location.forEach(b => { if (b) buildings.add(b); });
+          } else if (j.location) {
+            buildings.add(j.location);
+          }
+        });
+      }
+    });
+    return Array.from(buildings).sort();
+  }, [studentData]);
+
   // Filter and sort data
   const filteredAndSortedData = useMemo(() => {
     let filtered = studentData.filter(student => {
@@ -95,6 +119,39 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
           (Array.isArray(student.jobs) && student.jobs.some(j => (j?.jobTitle || '').toLowerCase().includes(searchText) || (j?.supervisor || '').toLowerCase().includes(searchText)))
         );
         if (!matchesText) return false;
+      }
+
+      // Job Titles filter (include/exclude across top-level and job entries)
+      if ((filters.jobTitles?.include?.length || 0) > 0 || (filters.jobTitles?.exclude?.length || 0) > 0) {
+        const titlesSet = new Set();
+        if (student.jobTitle) titlesSet.add(student.jobTitle);
+        if (Array.isArray(student.jobs)) {
+          student.jobs.forEach(j => { if (j?.jobTitle) titlesSet.add(j.jobTitle); });
+        }
+        const titles = Array.from(titlesSet);
+        const includeOk = (filters.jobTitles.include.length === 0) || titles.some(t => filters.jobTitles.include.includes(t));
+        const excludeOk = (filters.jobTitles.exclude.length === 0) || !titles.some(t => filters.jobTitles.exclude.includes(t));
+        if (!(includeOk && excludeOk)) return false;
+      }
+
+      // Buildings filter (include/exclude across primaryBuildings/primaryBuilding and job locations)
+      if ((filters.buildings?.include?.length || 0) > 0 || (filters.buildings?.exclude?.length || 0) > 0) {
+        const bldgSet = new Set();
+        if (Array.isArray(student.primaryBuildings)) {
+          student.primaryBuildings.forEach(b => { if (b) bldgSet.add(b); });
+        } else if (student.primaryBuilding) {
+          bldgSet.add(student.primaryBuilding);
+        }
+        if (Array.isArray(student.jobs)) {
+          student.jobs.forEach(j => {
+            if (Array.isArray(j.location)) j.location.forEach(b => { if (b) bldgSet.add(b); });
+            else if (j.location) bldgSet.add(j.location);
+          });
+        }
+        const studentBuildings = Array.from(bldgSet);
+        const includeOk = (filters.buildings.include.length === 0) || studentBuildings.some(b => filters.buildings.include.includes(b));
+        const excludeOk = (filters.buildings.exclude.length === 0) || !studentBuildings.some(b => filters.buildings.exclude.includes(b));
+        if (!(includeOk && excludeOk)) return false;
       }
 
       return true;
@@ -542,6 +599,8 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                 setFilters({
                   departments: { include: [], exclude: [] },
                   supervisors: { include: [], exclude: [] },
+                  jobTitles: { include: [], exclude: [] },
+                  buildings: { include: [], exclude: [] },
                   hasEmail: true,
                   hasPhone: true,
                   activeOnly: true
@@ -573,6 +632,54 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                   <option key={supervisor} value={supervisor}>{supervisor}</option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Include Job Titles</label>
+              <MultiSelectDropdown
+                options={availableJobTitles}
+                selected={filters.jobTitles.include}
+                onChange={(selected) => setFilters(prev => ({
+                  ...prev,
+                  jobTitles: { ...prev.jobTitles, include: selected }
+                }))}
+                placeholder="Select job titles to include..."
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Exclude Job Titles</label>
+              <MultiSelectDropdown
+                options={availableJobTitles}
+                selected={filters.jobTitles.exclude}
+                onChange={(selected) => setFilters(prev => ({
+                  ...prev,
+                  jobTitles: { ...prev.jobTitles, exclude: selected }
+                }))}
+                placeholder="Select job titles to exclude..."
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Include Buildings</label>
+              <MultiSelectDropdown
+                options={availableBuildings}
+                selected={filters.buildings.include}
+                onChange={(selected) => setFilters(prev => ({
+                  ...prev,
+                  buildings: { ...prev.buildings, include: selected }
+                }))}
+                placeholder="Select buildings to include..."
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Exclude Buildings</label>
+              <MultiSelectDropdown
+                options={availableBuildings}
+                selected={filters.buildings.exclude}
+                onChange={(selected) => setFilters(prev => ({
+                  ...prev,
+                  buildings: { ...prev.buildings, exclude: selected }
+                }))}
+                placeholder="Select buildings to exclude..."
+              />
             </div>
           </div>
         </div>

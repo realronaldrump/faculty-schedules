@@ -1,17 +1,27 @@
 import React, { useMemo, useState } from 'react';
-import { IdCard, Search, Edit, Save, X, Filter, CheckCircle2, AlertCircle } from 'lucide-react';
+import { IdCard, Search, Edit, Save, X, Filter, CheckCircle2, AlertCircle, Download } from 'lucide-react';
 
-const getRoleLabels = (person) => {
-  const roles = person.roles;
-  if (!roles) return [];
-  if (Array.isArray(roles)) return roles;
-  if (typeof roles === 'object') return Object.keys(roles).filter((k) => roles[k]);
-  return [];
+const hasRole = (person, roleKey) => {
+  const roles = person?.roles;
+  if (!roles) return false;
+  if (Array.isArray(roles)) return roles.includes(roleKey);
+  if (typeof roles === 'object') return roles[roleKey] === true;
+  return false;
+};
+
+const getDisplayRoleLabels = (person) => {
+  const labels = [];
+  if (hasRole(person, 'faculty')) labels.push('Faculty');
+  if (hasRole(person, 'staff')) labels.push('Staff');
+  if (hasRole(person, 'student')) labels.push('Student');
+  if (person.isAdjunct) labels.push('Adjunct'); // derive adjunct only from explicit flag
+  return labels;
 };
 
 const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, onStudentUpdate, showNotification, canEdit }) => {
   const [filterText, setFilterText] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all'); // all | faculty | staff | student
+  const [roleChecks, setRoleChecks] = useState({ faculty: true, staff: true, student: true });
+  const [adjunctOnly, setAdjunctOnly] = useState(false);
   const [onlyMissing, setOnlyMissing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [baylorIdDraft, setBaylorIdDraft] = useState('');
@@ -19,19 +29,18 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
 
   const people = useMemo(() => Array.isArray(directoryData) ? directoryData : [], [directoryData]);
 
-  const uniqueRoles = useMemo(() => {
-    const set = new Set();
-    people.forEach((p) => getRoleLabels(p).forEach((r) => set.add(r)));
-    return Array.from(set);
-  }, [people]);
-
   const filtered = useMemo(() => {
     const term = filterText.trim().toLowerCase();
     return people
       .filter((p) => {
         if (!p) return false;
-        const roles = getRoleLabels(p);
-        if (roleFilter !== 'all' && !roles.includes(roleFilter)) return false;
+        const includeByRole = (
+          (roleChecks.faculty && hasRole(p, 'faculty')) ||
+          (roleChecks.staff && hasRole(p, 'staff')) ||
+          (roleChecks.student && hasRole(p, 'student'))
+        );
+        if (!includeByRole) return false;
+        if (adjunctOnly && !p.isAdjunct) return false;
         if (onlyMissing && (p.baylorId && p.baylorId.trim() !== '')) return false;
         if (!term) return true;
         const name = (p.name || '').toLowerCase();
@@ -40,7 +49,31 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
         return name.includes(term) || email.includes(term) || id.includes(term);
       })
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  }, [people, filterText, roleFilter, onlyMissing]);
+  }, [people, filterText, roleChecks, adjunctOnly, onlyMissing]);
+
+  const exportToCSV = () => {
+    const headers = ['Name', 'Email', 'Roles', 'Baylor ID'];
+    const rows = filtered.map(person => [
+      person.name || '',
+      person.email || '',
+      getDisplayRoleLabels(person).join('; '),
+      person.baylorId || ''
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `baylor-id-export-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const startEdit = (person) => {
     setEditingId(person.id);
@@ -115,18 +148,44 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
                 className="w-64 pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <Filter size={16} className="text-gray-500" />
-              <select
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-              >
-                <option value="all">All Roles</option>
-                <option value="faculty">Faculty</option>
-                <option value="staff">Staff</option>
-                <option value="student">Student</option>
-              </select>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={roleChecks.faculty}
+                  onChange={(e) => setRoleChecks(prev => ({ ...prev, faculty: e.target.checked }))}
+                  className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                />
+                Faculty
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={roleChecks.staff}
+                  onChange={(e) => setRoleChecks(prev => ({ ...prev, staff: e.target.checked }))}
+                  className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                />
+                Staff
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={roleChecks.student}
+                  onChange={(e) => setRoleChecks(prev => ({ ...prev, student: e.target.checked }))}
+                  className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                />
+                Student
+              </label>
+              <label className="flex items-center gap-2 text-sm ml-2">
+                <input
+                  type="checkbox"
+                  checked={adjunctOnly}
+                  onChange={(e) => setAdjunctOnly(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                />
+                Adjunct only
+              </label>
               <label className="flex items-center gap-2 text-sm ml-2">
                 <input
                   type="checkbox"
@@ -137,6 +196,13 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
                 Only show missing IDs
               </label>
             </div>
+            <button
+              onClick={exportToCSV}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Download size={18} />
+              Export CSV
+            </button>
           </div>
 
           <div className="overflow-x-auto">
@@ -151,7 +217,7 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filtered.map((person) => {
-                  const roles = getRoleLabels(person);
+                  const roles = getDisplayRoleLabels(person);
                   const isEditing = editingId === person.id;
                   const hasId = person.baylorId && person.baylorId.trim() !== '';
                   return (

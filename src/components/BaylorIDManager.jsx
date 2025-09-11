@@ -52,11 +52,9 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
   }, [people, filterText, roleChecks, adjunctOnly, onlyMissing]);
 
   const exportToCSV = () => {
-    const headers = ['Name', 'Email', 'Roles', 'Baylor ID'];
+    const headers = ['Name', 'Baylor ID'];
     const rows = filtered.map(person => [
       person.name || '',
-      person.email || '',
-      getDisplayRoleLabels(person).join('; '),
       person.baylorId || ''
     ]);
 

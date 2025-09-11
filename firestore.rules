@@ -17,6 +17,14 @@ service cloud.firestore {
       );
     }
 
+    // Check if user has a specific action permission in their user profile
+    function userHasAction(actionKey) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.actions != null) &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.actions[actionKey] == true);
+    }
+
     // Treat someone as admin if they have a custom claim OR match your email
     function isAdmin() {
       return isSignedIn() && (
@@ -114,6 +122,13 @@ service cloud.firestore {
       allow read: if isAdmin();
       // Only admins can create/update/delete import transactions
       allow write: if canWrite();
+    }
+
+    // Room grids: allow non-admin writes if the user has explicit action grants
+    match /roomGrids/{id} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() || userHasAction('roomGrids.save');
+      allow update, delete: if isAdmin() || userHasAction('roomGrids.delete');
     }
   }
 }

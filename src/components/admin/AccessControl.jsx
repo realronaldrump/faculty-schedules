@@ -3,6 +3,8 @@ import { db } from '../../firebase';
 import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, getDocs, query, orderBy, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { logUpdate, logDelete } from '../../utils/changeLogger';
+import { Shield } from 'lucide-react';
+import { getAllRegisteredActionKeys, registerActionKeys } from '../../utils/actionRegistry';
 
 const AccessControl = () => {
   const { userProfile, getAllPageIds, isAdmin } = useAuth();
@@ -15,6 +17,7 @@ const AccessControl = () => {
   const [userRoles, setUserRoles] = useState([]);
   const [search, setSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [actionKeys, setActionKeys] = useState(['roomGrids.save', 'roomGrids.delete']);
 
   const allPages = useMemo(() => getAllPageIds(), [getAllPageIds]);
 
@@ -54,6 +57,14 @@ const AccessControl = () => {
 
   useEffect(() => { loadData(); }, []);
 
+  // Merge any newly registered actions into the local list for display
+  useEffect(() => {
+    const keys = getAllRegisteredActionKeys();
+    if (Array.isArray(keys) && keys.length > 0) {
+      setActionKeys(prev => Array.from(new Set([...prev, ...keys])));
+    }
+  }, [users]);
+
   const toggleRolePage = (role, pageId) => {
     setRolePermissions(prev => {
       const current = prev[role] || {};
@@ -78,6 +89,9 @@ const AccessControl = () => {
     const data = uSnap.data() || {};
     setUserOverrides(data.permissions || {});
     setUserRoles(Array.isArray(data.roles) ? data.roles : []);
+    // Initialize actions map for UI toggles
+    const existingActions = (data.actions && typeof data.actions === 'object') ? data.actions : {};
+    setUserActions(existingActions);
   };
 
   const toggleUserPage = (pageId) => {
@@ -104,7 +118,7 @@ const AccessControl = () => {
     try {
       const uRef = doc(db, 'users', selectedUserId);
       const original = (await getDoc(uRef)).data() || {};
-      const payload = { permissions: userOverrides, updatedAt: serverTimestamp() };
+      const payload = { permissions: userOverrides, actions: userActions, updatedAt: serverTimestamp() };
       await updateDoc(uRef, payload);
       await logUpdate(`User Permissions - ${original.email}`, 'users', selectedUserId, payload, original, 'AccessControl.jsx - saveUserOverrides');
       await loadData();
@@ -147,6 +161,12 @@ const AccessControl = () => {
     if (!q) return users;
     return users.filter(u => (u.email || '').toLowerCase().includes(q));
   }, [users, search]);
+
+  // Per-user action toggles
+  const [userActions, setUserActions] = useState({});
+  const toggleUserAction = (key) => {
+    setUserActions(prev => ({ ...prev, [key]: !(prev[key] === true) }));
+  };
 
   const quickToggleRole = async (uid, role) => {
     try {
@@ -365,6 +385,23 @@ const AccessControl = () => {
               <button className="btn-ghost" onClick={saveUserRoles} disabled={saving}>
                 {saving ? 'Saving...' : 'Save User Roles'}
               </button>
+            </div>
+          </div>
+        )}
+        {selectedUserId && (
+          <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Shield className="w-4 h-4 text-baylor-green" />
+              <div className="font-medium">User Actions</div>
+            </div>
+            <p className="text-xs text-gray-600 mb-3">Grant specific actions. Admins automatically have all actions.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
+              {actionKeys.map(key => (
+                <label key={`act-${key}`} className="inline-flex items-center space-x-2">
+                  <input type="checkbox" checked={Boolean(userActions[key])} onChange={() => toggleUserAction(key)} />
+                  <span>{key}</span>
+                </label>
+              ))}
             </div>
           </div>
         )}

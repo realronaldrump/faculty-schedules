@@ -261,7 +261,19 @@ export const AuthProvider = ({ children }) => {
       const isEnvAdmin = ADMIN_EMAILS.includes(email);
       const hasRoleAdmin = Array.isArray(userProfile?.roles) && userProfile.roles.includes('admin');
       return isEnvAdmin || hasRoleAdmin;
-    })()
+    })(),
+    // Action-level permissions: simple extension so admins can grant specific actions by setting
+    // userProfile.actions[actionKey] === true. Admins always allowed.
+    canAction: (actionKey) => {
+      if (!actionKey) return false;
+      const email = (user?.email || '').toLowerCase();
+      if (ADMIN_EMAILS.includes(email)) return true;
+      if (Array.isArray(userProfile?.roles) && userProfile.roles.includes('admin')) return true;
+      if (userProfile && typeof userProfile.actions === 'object') {
+        return Boolean(userProfile.actions[actionKey]);
+      }
+      return false;
+    }
   };
 
   return (

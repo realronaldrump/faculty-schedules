@@ -7,10 +7,15 @@ import { collection, addDoc, getDocs, deleteDoc, doc, query, where, orderBy, lim
 import { logCreate, logDelete } from '../../utils/changeLogger';
 import { ConfirmationDialog } from '../CustomAlert';
 import { usePermissions } from '../../utils/permissions';
+import { registerActionKeys } from '../../utils/actionRegistry';
 
 
 const RoomGridGenerator = () => {
-    const { canEdit } = usePermissions();
+    const { canEdit, canAction } = usePermissions();
+    // Register actions for this feature so admin UI can see them
+    useEffect(() => {
+        registerActionKeys(['roomGrids.save', 'roomGrids.delete']);
+    }, []);
     const [allClassData, setAllClassData] = useState([]);
     const [buildings, setBuildings] = useState({});
     const [selectedBuilding, setSelectedBuilding] = useState('');
@@ -580,8 +585,9 @@ const RoomGridGenerator = () => {
     }, [fetchSavedGrids]);
 
     const saveGrid = async () => {
-        if (!canEdit()) {
-            showMessage('You do not have permission to save. Please contact an admin.', 'error');
+        const allowed = canEdit() || canAction('roomGrids.save');
+        if (!allowed) {
+            showMessage('You do not have permission to save grids. An admin can grant “Room Grids: Save” to your account.', 'error');
             return;
         }
         if (!scheduleHtml || !selectedBuilding || !selectedRoom) {
@@ -623,8 +629,9 @@ const RoomGridGenerator = () => {
     };
 
     const deleteSavedGrid = async (grid) => {
-        if (!canEdit()) {
-            showMessage('You do not have permission to delete. Please contact an admin.', 'error');
+        const allowed = canEdit() || canAction('roomGrids.delete');
+        if (!allowed) {
+            showMessage('You do not have permission to delete grids. An admin can grant “Room Grids: Delete” to your account.', 'error');
             return;
         }
         if (!grid) return;
@@ -736,7 +743,7 @@ const RoomGridGenerator = () => {
                             <FileText className="w-4 h-4 mr-2" />
                             Generate Schedule
                         </button>
-                        <button onClick={saveGrid} className="btn-secondary" disabled={!scheduleHtml || isSaving || !canEdit()}>
+                        <button onClick={saveGrid} className="btn-secondary" disabled={!scheduleHtml || isSaving}>
                             <SaveIcon className="w-4 h-4 mr-2" />
                             { isSaving ? 'Saving...' : 'Save Grid' }
                         </button>
@@ -781,7 +788,7 @@ const RoomGridGenerator = () => {
                                             </td>
                                             <td className="py-2 space-x-2">
                                                 <button onClick={() => loadGrid(g)} className="btn-secondary">Load</button>
-                                                <button onClick={() => deleteSavedGrid(g)} className="btn-danger" disabled={!canEdit()}>Delete</button>
+                                                <button onClick={() => deleteSavedGrid(g)} className="btn-danger">Delete</button>
                                             </td>
                                         </tr>
                                     ))}

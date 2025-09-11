@@ -2,6 +2,7 @@
 // Keep it intentionally simple for maintainability.
 
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { registerActionKey } from './actionRegistry';
 
 // Standard action keys the app cares about
 export const STANDARD_ACTIONS = {
@@ -13,12 +14,21 @@ export const STANDARD_ACTIONS = {
 
 // Hook to ask simple permission questions from components
 export function usePermissions() {
-  const { canAccess, isAdmin } = useAuth();
+  const { canAccess, isAdmin, canAction } = useAuth();
 
   const canView = (pageId) => canAccess(pageId);
   const canEdit = () => isAdmin; // Editing is admin-only by design (rules enforce this too)
   const canExport = (pageId) => canAccess(pageId);
   const canImport = () => isAdmin;
+
+  const canDoAction = (actionKey) => {
+    if (typeof actionKey === 'string' && actionKey.trim()) {
+      // Auto-register action key on first use so the admin UI can pick it up
+      registerActionKey(actionKey.trim());
+    }
+    if (typeof canAction === 'function') return canAction(actionKey);
+    return isAdmin;
+  };
 
   const canPerform = (pageId, action) => {
     switch (action) {
@@ -36,7 +46,7 @@ export function usePermissions() {
     }
   };
 
-  return { canView, canEdit, canExport, canImport, canPerform, isAdmin };
+  return { canView, canEdit, canExport, canImport, canPerform, canAction: canDoAction, isAdmin };
 }
 
 

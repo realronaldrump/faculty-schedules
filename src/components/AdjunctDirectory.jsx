@@ -33,8 +33,6 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
     programs: { include: [], exclude: [] },
     jobTitles: { include: [], exclude: [] },
     buildings: { include: [], exclude: [] },
-    tenured: 'all',
-    hasEmail: true,
     courseCount: 'all' // 'all', 'with-courses', 'without-courses'
   });
 
@@ -233,24 +231,7 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
       });
     }
 
-    // Tenured filter
-    if (filters.tenured !== 'all') {
-      data = data.filter(person => {
-        if (filters.tenured === 'include') {
-          return person.isTenured;
-        } else if (filters.tenured === 'exclude') {
-          return !person.isTenured;
-        }
-        return true;
-      });
-    }
-
     // Note: Adjuncts cannot be UPD; no UPD filter applied
-
-    // Has email filter
-    if (filters.hasEmail) {
-      data = data.filter(person => person.email && person.email.trim() !== '');
-    }
 
     // Course count filter (legacy support for the checkbox)
     if (showOnlyWithCourses) {
@@ -466,8 +447,6 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
       programs: { include: [], exclude: [] },
       jobTitles: { include: [], exclude: [] },
       buildings: { include: [], exclude: [] },
-      tenured: 'all',
-      hasEmail: true,
       courseCount: 'all'
     });
     setFilterText('');
@@ -684,34 +663,7 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
 
               {/* Status Filters */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Tenure Status
-                  </label>
-                  <select
-                    value={filters.tenured}
-                    onChange={(e) => setFilters(prev => ({ ...prev, tenured: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                  >
-                    <option value="all">All</option>
-                    <option value="include">Tenured Only</option>
-                    <option value="exclude">Exclude Tenured</option>
-                  </select>
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email Requirement
-                  </label>
-                  <select
-                    value={filters.hasEmail ? 'yes' : 'no'}
-                    onChange={(e) => setFilters(prev => ({ ...prev, hasEmail: e.target.value === 'yes' }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                  >
-                    <option value="yes">Has Email</option>
-                    <option value="no">Include No Email</option>
-                  </select>
-                </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">

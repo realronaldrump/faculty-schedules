@@ -51,8 +51,7 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
     jobTitles: { include: [], exclude: [] },
     buildings: { include: [], exclude: [] },
     isFullTime: 'all', // 'all', 'full-time', 'part-time'
-    isAlsoFaculty: 'all', // 'all', 'include', 'exclude'
-    hasEmail: true
+    isAlsoFaculty: 'all' // 'all', 'include', 'exclude'
   });
 
   // Replace direct directoryData usage with adapted data
@@ -486,10 +485,6 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
       });
     }
 
-    // Has email filter
-    if (filters.hasEmail) {
-      data = data.filter(person => person.email && person.email.trim() !== '');
-    }
 
     // Sorting
     data.sort((a, b) => {
@@ -531,8 +526,7 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
       jobTitles: { include: [], exclude: [] },
       buildings: { include: [], exclude: [] },
       isFullTime: 'all',
-      isAlsoFaculty: 'all',
-      hasEmail: true
+      isAlsoFaculty: 'all'
     });
     setFilterText('');
   };
@@ -743,19 +737,6 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email Requirement
-                  </label>
-                  <select
-                    value={filters.hasEmail ? 'yes' : 'no'}
-                    onChange={(e) => setFilters(prev => ({ ...prev, hasEmail: e.target.value === 'yes' }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                  >
-                    <option value="yes">Has Email</option>
-                    <option value="no">Include No Email</option>
-                  </select>
-                </div>
               </div>
             </div>
           </div>

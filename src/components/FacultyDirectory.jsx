@@ -57,7 +57,6 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
     adjunct: 'exclude', // 'all', 'include', 'exclude' - default to exclude adjunct
     tenured: 'all',
     upd: 'all',
-    hasEmail: true,
     courseCount: 'all', // 'all', 'with-courses', 'without-courses'
     isAlsoStaff: 'all', // 'all', 'include', 'exclude'
     hasPhD: 'all', // 'all', 'include', 'exclude'
@@ -312,10 +311,6 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
       });
     }
 
-    // Has email filter
-    if (filters.hasEmail) {
-      data = data.filter(person => person.email && person.email.trim() !== '');
-    }
 
     // Course count filter (legacy support for the checkbox)
     if (showOnlyWithCourses) {
@@ -654,7 +649,6 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
       adjunct: 'exclude', // Maintain default to exclude adjunct
       tenured: 'all',
       upd: 'all',
-      hasEmail: true,
       courseCount: 'all',
       isAlsoStaff: 'all',
       hasPhD: 'all',
@@ -984,19 +978,6 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email Requirement
-                  </label>
-                  <select
-                    value={filters.hasEmail ? 'yes' : 'no'}
-                    onChange={(e) => setFilters(prev => ({ ...prev, hasEmail: e.target.value === 'yes' }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                  >
-                    <option value="yes">Has Email</option>
-                    <option value="no">Include No Email</option>
-                  </select>
-                </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">

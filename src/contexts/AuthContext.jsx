@@ -3,6 +3,7 @@ import { auth, db } from '../firebase';
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut, updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { logCreate, logUpdate } from '../utils/changeLogger';
+import { getAllRegisteredPageIds } from '../utils/pageRegistry';
 
 const AuthContext = createContext(null);
 
@@ -194,6 +195,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   const getAllPageIds = () => {
+    const fromRegistry = getAllRegisteredPageIds();
+    if (Array.isArray(fromRegistry) && fromRegistry.length > 0) return fromRegistry;
+    // Fallback to known pages if registry is empty early in boot
     return [
       'dashboard',
       'scheduling/faculty-schedules',
@@ -208,7 +212,7 @@ export const AuthProvider = ({ children }) => {
       'analytics/department-insights',
       'analytics/course-management',
       'administration/program-management',
-      'administration/smart-import',
+      'administration/import-wizard',
       'administration/data-hygiene',
       'administration/recent-changes',
       'administration/baylor-systems',

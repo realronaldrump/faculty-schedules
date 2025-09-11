@@ -28,7 +28,9 @@ import Login from './components/Login';
 import ProtectedContent from './components/ProtectedContent.jsx';
 import AccessControl from './components/admin/AccessControl.jsx';
 import { useAuth } from './contexts/AuthContext.jsx';
+import { usePermissions } from './utils/permissions';
 import Notification from './components/Notification';
+import { registerNavigationPages } from './utils/pageRegistry';
 import { 
   Home, 
   Calendar, 
@@ -59,6 +61,7 @@ import { fetchRecentChanges } from './utils/recentChanges';
 
 function App() {
   const { user, signOut, loading: authLoading, canAccess } = useAuth();
+  const { canEdit } = usePermissions();
   const location = useLocation();
   const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -268,6 +271,11 @@ function App() {
       ]
     }
   ];
+
+  // Register pages for access control UI (one-time per mount)
+  useEffect(() => {
+    registerNavigationPages(navigationItems);
+  }, []);
 
   // Adapt relational data to flat structure for component compatibility
   const scheduleData = useMemo(() => {
@@ -604,6 +612,10 @@ function App() {
 
   // Data update handlers with enhanced relational integrity
   const handleDataUpdate = async (updatedRow) => {
+    if (!canEdit()) {
+      showNotification('warning', 'Permission Denied', 'Only admins can modify schedules.');
+      return;
+    }
     console.log('💾 Updating schedule data:', updatedRow);
     
     try {
@@ -862,6 +874,10 @@ function App() {
   };
 
   const handleFacultyUpdate = async (facultyToUpdate, originalData = null) => {
+    if (!canEdit()) {
+      showNotification('warning', 'Permission Denied', 'Only admins can modify faculty.');
+      return;
+    }
     console.log('👤 Updating faculty member:', facultyToUpdate);
     
     try {
@@ -947,6 +963,10 @@ function App() {
   };
 
   const handleStaffUpdate = async (staffToUpdate) => {
+    if (!canEdit()) {
+      showNotification('warning', 'Permission Denied', 'Only admins can modify staff.');
+      return;
+    }
     console.log('👥 Updating staff member:', staffToUpdate);
     
     try {
@@ -1038,6 +1058,10 @@ function App() {
   };
 
   const handleFacultyDelete = async (facultyToDelete) => {
+    if (!canEdit()) {
+      showNotification('warning', 'Permission Denied', 'Only admins can delete faculty.');
+      return;
+    }
     console.log('🗑️ Deleting faculty member:', facultyToDelete);
     
     try {
@@ -1073,6 +1097,10 @@ function App() {
   };
 
   const handleStaffDelete = async (staffToDelete) => {
+    if (!canEdit()) {
+      showNotification('warning', 'Permission Denied', 'Only admins can delete staff.');
+      return;
+    }
     console.log('🗑️ Deleting staff member:', staffToDelete);
     
     try {
@@ -1108,6 +1136,10 @@ function App() {
   };
 
   const handleStudentUpdate = async (studentToUpdate) => {
+    if (!canEdit()) {
+      showNotification('warning', 'Permission Denied', 'Only admins can modify students.');
+      return;
+    }
     console.log('🎓 Updating student worker:', studentToUpdate);
     
     try {
@@ -1237,6 +1269,10 @@ function App() {
   };
 
   const handleStudentDelete = async (studentToDelete) => {
+    if (!canEdit()) {
+      showNotification('warning', 'Permission Denied', 'Only admins can delete students.');
+      return;
+    }
     console.log('🗑️ Deleting student worker:', studentToDelete);
     
     try {
@@ -1277,6 +1313,10 @@ function App() {
   };
 
   const handleScheduleDelete = async (scheduleId) => {
+    if (!canEdit()) {
+      showNotification('warning', 'Permission Denied', 'Only admins can delete schedules.');
+      return;
+    }
     console.log('🗑️ Deleting schedule:', scheduleId);
     
     try {
@@ -1468,6 +1508,7 @@ function App() {
       onRevertChange: handleRevertChange,
       onNavigate: handleNavigate,
       showNotification,
+      canEdit,
       selectedSemester,
       availableSemesters,
       onSemesterDataImported: loadData,

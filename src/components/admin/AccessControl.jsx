@@ -116,7 +116,12 @@ const AccessControl = () => {
   const toggleUserRole = (role) => {
     setUserRoles(prev => {
       const has = prev.includes(role);
-      if (has) return prev.filter(r => r !== role);
+      if (has) {
+        if (role === 'admin' && selectedUserId === userProfile?.uid) {
+          return prev;
+        }
+        return prev.filter(r => r !== role);
+      }
       return [...prev, role];
     });
   };
@@ -149,6 +154,9 @@ const AccessControl = () => {
       const snap = await getDoc(uRef);
       const data = snap.data() || {};
       const roles = Array.isArray(data.roles) ? data.roles : [];
+      if (role === 'admin' && uid === userProfile?.uid && roles.includes('admin')) {
+        return;
+      }
       const next = roles.includes(role) ? roles.filter(r => r !== role) : [...roles, role];
       const finalRoles = next.length === 0 ? ['viewer'] : Array.from(new Set(next));
       await updateDoc(uRef, { roles: finalRoles, updatedAt: serverTimestamp() });
@@ -300,15 +308,13 @@ const AccessControl = () => {
                     </td>
                     <td className="py-2 pr-4">
                       <div className="flex items-center gap-3">
-                        {['viewer','staff','faculty'].map(r => (
+                        {['viewer','staff','faculty','admin'].map(r => (
                           <label key={`${u.id}-${r}`} className="inline-flex items-center space-x-1">
                             <input type="checkbox" checked={Array.isArray(u.roles) ? u.roles.includes(r) : false} onChange={() => quickToggleRole(u.id, r)} />
                             <span className="capitalize">{r}</span>
                           </label>
                         ))}
-                        {Array.isArray(u.roles) && u.roles.includes('admin') && (
-                          <span className="px-2 py-0.5 text-xs rounded-full bg-baylor-green/10 text-baylor-green">admin</span>
-                        )}
+                        
                       </div>
                     </td>
                     <td className="py-2 pr-4">
@@ -344,7 +350,7 @@ const AccessControl = () => {
           <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
             <div className="font-medium mb-3">User Roles</div>
             <div className="flex flex-wrap gap-4 text-sm">
-              {['viewer', 'staff', 'faculty'].map(role => (
+              {['viewer', 'staff', 'faculty', 'admin'].map(role => (
                 <label key={`role-${role}`} className="inline-flex items-center space-x-2">
                   <input
                     type="checkbox"

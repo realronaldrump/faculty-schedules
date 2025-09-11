@@ -6,9 +6,11 @@ import { db } from '../../firebase';
 import { collection, addDoc, getDocs, deleteDoc, doc, query, where, orderBy, limit } from 'firebase/firestore';
 import { logCreate, logDelete } from '../../utils/changeLogger';
 import { ConfirmationDialog } from '../CustomAlert';
+import { usePermissions } from '../../utils/permissions';
 
 
 const RoomGridGenerator = () => {
+    const { canEdit } = usePermissions();
     const [allClassData, setAllClassData] = useState([]);
     const [buildings, setBuildings] = useState({});
     const [selectedBuilding, setSelectedBuilding] = useState('');
@@ -578,6 +580,10 @@ const RoomGridGenerator = () => {
     }, [fetchSavedGrids]);
 
     const saveGrid = async () => {
+        if (!canEdit()) {
+            showMessage('You do not have permission to save. Please contact an admin.', 'error');
+            return;
+        }
         if (!scheduleHtml || !selectedBuilding || !selectedRoom) {
             showMessage('Generate a schedule first, and ensure building/room are selected.');
             return;
@@ -617,6 +623,10 @@ const RoomGridGenerator = () => {
     };
 
     const deleteSavedGrid = async (grid) => {
+        if (!canEdit()) {
+            showMessage('You do not have permission to delete. Please contact an admin.', 'error');
+            return;
+        }
         if (!grid) return;
         setDeleteConfirmDialog({ isOpen: true, grid });
     };
@@ -726,7 +736,7 @@ const RoomGridGenerator = () => {
                             <FileText className="w-4 h-4 mr-2" />
                             Generate Schedule
                         </button>
-                        <button onClick={saveGrid} className="btn-secondary" disabled={!scheduleHtml || isSaving}>
+                        <button onClick={saveGrid} className="btn-secondary" disabled={!scheduleHtml || isSaving || !canEdit()}>
                             <SaveIcon className="w-4 h-4 mr-2" />
                             { isSaving ? 'Saving...' : 'Save Grid' }
                         </button>
@@ -771,7 +781,7 @@ const RoomGridGenerator = () => {
                                             </td>
                                             <td className="py-2 space-x-2">
                                                 <button onClick={() => loadGrid(g)} className="btn-secondary">Load</button>
-                                                <button onClick={() => deleteSavedGrid(g)} className="btn-danger">Delete</button>
+                                                <button onClick={() => deleteSavedGrid(g)} className="btn-danger" disabled={!canEdit()}>Delete</button>
                                             </td>
                                         </tr>
                                     ))}

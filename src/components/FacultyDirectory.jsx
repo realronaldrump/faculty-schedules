@@ -51,9 +51,9 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
   // Advanced filters
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
-    programs: { include: [], exclude: [] },
-    jobTitles: { include: [], exclude: [] },
-    buildings: { include: [], exclude: [] },
+    programs: [],
+    jobTitles: [],
+    buildings: [],
     adjunct: 'exclude', // 'all', 'include', 'exclude' - default to exclude adjunct
     tenured: 'all',
     upd: 'all',
@@ -214,40 +214,27 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
       );
     }
 
-    // Program filter (include/exclude)
-    if (filters.programs.include.length > 0 || filters.programs.exclude.length > 0) {
+    // Program filter (include-only)
+    if ((filters.programs || []).length > 0) {
       data = data.filter(person => {
-        // Use normalized program data only (single source of truth)
         const programName = person.program && person.program.name ? person.program.name : '';
-        
-        const includeMatch = filters.programs.include.length === 0 || filters.programs.include.includes(programName);
-        const excludeMatch = filters.programs.exclude.length === 0 || !filters.programs.exclude.includes(programName);
-        
-        return includeMatch && excludeMatch;
+        return filters.programs.includes(programName);
       });
     }
 
-    // Job title filter (include/exclude)
-    if (filters.jobTitles.include.length > 0 || filters.jobTitles.exclude.length > 0) {
+    // Job title filter (include-only)
+    if ((filters.jobTitles || []).length > 0) {
       data = data.filter(person => {
         const jobTitle = person.jobTitle || '';
-        
-        const includeMatch = filters.jobTitles.include.length === 0 || filters.jobTitles.include.includes(jobTitle);
-        const excludeMatch = filters.jobTitles.exclude.length === 0 || !filters.jobTitles.exclude.includes(jobTitle);
-        
-        return includeMatch && excludeMatch;
+        return filters.jobTitles.includes(jobTitle);
       });
     }
 
-    // Building filter (include/exclude)
-    if (filters.buildings.include.length > 0 || filters.buildings.exclude.length > 0) {
+    // Building filter (include-only)
+    if ((filters.buildings || []).length > 0) {
       data = data.filter(person => {
         const buildingName = person.office ? extractBuildingName(person.office) : 'No Building';
-        
-        const includeMatch = filters.buildings.include.length === 0 || filters.buildings.include.includes(buildingName);
-        const excludeMatch = filters.buildings.exclude.length === 0 || !filters.buildings.exclude.includes(buildingName);
-        
-        return includeMatch && excludeMatch;
+        return filters.buildings.includes(buildingName);
       });
     }
 
@@ -643,9 +630,9 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
   
   const clearFilters = () => {
     setFilters({
-      programs: { include: [], exclude: [] },
-      jobTitles: { include: [], exclude: [] },
-      buildings: { include: [], exclude: [] },
+      programs: [],
+      jobTitles: [],
+      buildings: [],
       adjunct: 'exclude', // Maintain default to exclude adjunct
       tenured: 'all',
       upd: 'all',
@@ -821,99 +808,51 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
             
             <div className="space-y-4">
               {/* Programs Filter */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Include Programs
-                  </label>
-                  <MultiSelectDropdown
-                    options={filterOptions.programs}
-                    selected={filters.programs.include}
-                    onChange={(selected) => setFilters(prev => ({ 
-                      ...prev, 
-                      programs: { ...prev.programs, include: selected }
-                    }))}
-                    placeholder="Select programs to include..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Exclude Programs
-                  </label>
-                  <MultiSelectDropdown
-                    options={filterOptions.programs}
-                    selected={filters.programs.exclude}
-                    onChange={(selected) => setFilters(prev => ({ 
-                      ...prev, 
-                      programs: { ...prev.programs, exclude: selected }
-                    }))}
-                    placeholder="Select programs to exclude..."
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Programs
+                </label>
+                <MultiSelectDropdown
+                  options={filterOptions.programs}
+                  selected={filters.programs}
+                  onChange={(selected) => setFilters(prev => ({ 
+                    ...prev, 
+                    programs: selected
+                  }))}
+                  placeholder="Select programs..."
+                />
               </div>
 
               {/* Job Titles Filter */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Include Job Titles
-                  </label>
-                  <MultiSelectDropdown
-                    options={filterOptions.jobTitles}
-                    selected={filters.jobTitles.include}
-                    onChange={(selected) => setFilters(prev => ({ 
-                      ...prev, 
-                      jobTitles: { ...prev.jobTitles, include: selected }
-                    }))}
-                    placeholder="Select job titles to include..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Exclude Job Titles
-                  </label>
-                  <MultiSelectDropdown
-                    options={filterOptions.jobTitles}
-                    selected={filters.jobTitles.exclude}
-                    onChange={(selected) => setFilters(prev => ({ 
-                      ...prev, 
-                      jobTitles: { ...prev.jobTitles, exclude: selected }
-                    }))}
-                    placeholder="Select job titles to exclude..."
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Job Titles
+                </label>
+                <MultiSelectDropdown
+                  options={filterOptions.jobTitles}
+                  selected={filters.jobTitles}
+                  onChange={(selected) => setFilters(prev => ({ 
+                    ...prev, 
+                    jobTitles: selected
+                  }))}
+                  placeholder="Select job titles..."
+                />
               </div>
 
               {/* Buildings Filter */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Include Buildings
-                  </label>
-                  <MultiSelectDropdown
-                    options={filterOptions.buildings}
-                    selected={filters.buildings.include}
-                    onChange={(selected) => setFilters(prev => ({ 
-                      ...prev, 
-                      buildings: { ...prev.buildings, include: selected }
-                    }))}
-                    placeholder="Select buildings to include..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Exclude Buildings
-                  </label>
-                  <MultiSelectDropdown
-                    options={filterOptions.buildings}
-                    selected={filters.buildings.exclude}
-                    onChange={(selected) => setFilters(prev => ({ 
-                      ...prev, 
-                      buildings: { ...prev.buildings, exclude: selected }
-                    }))}
-                    placeholder="Select buildings to exclude..."
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Buildings
+                </label>
+                <MultiSelectDropdown
+                  options={filterOptions.buildings}
+                  selected={filters.buildings}
+                  onChange={(selected) => setFilters(prev => ({ 
+                    ...prev, 
+                    buildings: selected
+                  }))}
+                  placeholder="Select buildings..."
+                />
               </div>
 
               {/* Status Filters */}

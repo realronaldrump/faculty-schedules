@@ -21,6 +21,7 @@ import CRNQualityTools from './components/CRNQualityTools';
 import RecentChangesPage from './components/RecentChangesPage';
 import RoomGridGenerator from './components/admin/RoomGridGenerator';
 import UserActivityDashboard from './components/UserActivityDashboard';
+import BaylorIDManager from './components/BaylorIDManager';
 
 import EmailLists from './components/EmailLists';
 import BuildingDirectory from './components/BuildingDirectory';
@@ -233,6 +234,7 @@ function App() {
       icon: Users,
       children: [
         { id: 'people-directory', label: 'People Directory', path: 'people/people-directory' },
+        { id: 'baylor-id-manager', label: 'Baylor ID Manager', path: 'people/baylor-id-manager' },
         { id: 'email-lists', label: 'Email Lists', path: 'people/email-lists' },
         { id: 'building-directory', label: 'Building Directory', path: 'resources/building-directory' },
         { id: 'baylor-acronyms', label: 'Baylor Acronyms', path: 'administration/baylor-acronyms' }
@@ -1558,6 +1560,12 @@ function App() {
         return (
           <ProtectedContent pageId="people/people-directory">
             <PeopleDirectory {...pageProps} />
+          </ProtectedContent>
+        );
+      case 'people/baylor-id-manager':
+        return (
+          <ProtectedContent pageId="people/baylor-id-manager">
+            <BaylorIDManager {...pageProps} />
           </ProtectedContent>
         );
       case 'administration/program-management':

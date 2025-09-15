@@ -62,7 +62,17 @@ import { fetchRecentChanges } from './utils/recentChanges';
 
 function App() {
   const { user, signOut, loading: authLoading, canAccess } = useAuth();
-  const { canEdit } = usePermissions();
+  const {
+    canEdit,
+    canEditFaculty,
+    canCreateFaculty,
+    canDeleteFaculty,
+    canEditStaff,
+    canCreateStaff,
+    canEditStudent,
+    canCreateStudent,
+    canDeleteStudent
+  } = usePermissions();
   const location = useLocation();
   const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -612,6 +622,27 @@ function App() {
     checkAuthStatus();
   }, []);
 
+  // Expose effective action permissions globally for UI components that can't access hooks
+  useEffect(() => {
+    try {
+      const perms = {
+        canEditStudent: canEditStudent?.() || false,
+        canCreateStudent: canCreateStudent?.() || false,
+        canDeleteStudent: canDeleteStudent?.() || false,
+        canEditFaculty: canEditFaculty?.() || false,
+        canCreateFaculty: canCreateFaculty?.() || false,
+        canDeleteFaculty: canDeleteFaculty?.() || false,
+        canEditStaff: canEditStaff?.() || false,
+        canCreateStaff: canCreateStaff?.() || false,
+      };
+      window.appPermissions = perms;
+    } catch (_) {}
+  }, [
+    canEditStudent, canCreateStudent, canDeleteStudent,
+    canEditFaculty, canCreateFaculty, canDeleteFaculty,
+    canEditStaff, canCreateStaff
+  ]);
+
   // Data update handlers with enhanced relational integrity
   const handleDataUpdate = async (updatedRow) => {
     if (!canEdit()) {
@@ -877,6 +908,13 @@ function App() {
 
   const handleFacultyUpdate = async (facultyToUpdate, originalData = null) => {
     const isNewFaculty = !facultyToUpdate.id;
+    const requiredPermission = isNewFaculty ? canCreateFaculty() : canEditFaculty();
+
+    if (!requiredPermission) {
+      const actionName = isNewFaculty ? 'create' : 'modify';
+      showNotification('warning', 'Permission Denied', `You don't have permission to ${actionName} faculty members.`);
+      return;
+    }
     console.log('👤 Updating faculty member:', facultyToUpdate);
 
     try {
@@ -962,6 +1000,13 @@ function App() {
 
   const handleStaffUpdate = async (staffToUpdate) => {
     const isNewStaff = !staffToUpdate.id;
+    const requiredPermission = isNewStaff ? canCreateStaff() : canEditStaff();
+
+    if (!requiredPermission) {
+      const actionName = isNewStaff ? 'create' : 'modify';
+      showNotification('warning', 'Permission Denied', `You don't have permission to ${actionName} staff members.`);
+      return;
+    }
     console.log('👥 Updating staff member:', staffToUpdate);
     
     try {
@@ -1053,6 +1098,10 @@ function App() {
   };
 
   const handleFacultyDelete = async (facultyToDelete) => {
+    if (!canDeleteFaculty()) {
+      showNotification('warning', 'Permission Denied', 'You don\'t have permission to delete faculty members.');
+      return;
+    }
     console.log('🗑️ Deleting faculty member:', facultyToDelete);
     
     try {
@@ -1128,6 +1177,13 @@ function App() {
 
   const handleStudentUpdate = async (studentToUpdate) => {
     const isNewStudent = !studentToUpdate.id;
+    const requiredPermission = isNewStudent ? canCreateStudent() : canEditStudent();
+
+    if (!requiredPermission) {
+      const actionName = isNewStudent ? 'create' : 'modify';
+      showNotification('warning', 'Permission Denied', `You don't have permission to ${actionName} student workers.`);
+      return;
+    }
     console.log('🎓 Updating student worker:', studentToUpdate);
 
     try {
@@ -1160,6 +1216,16 @@ function App() {
       if (isNewStudent) {
         // Use setDoc for new student to ensure we get the generated ID
         await setDoc(studentRef, { ...updateData, createdAt: new Date().toISOString() });
+        // Non-blocking legacy history write
+        try {
+          await addDoc(collection(db, 'editHistory'), {
+            action: 'CREATE',
+            entity: `Student - ${studentToUpdate.name}`,
+            changes: { ...updateData, createdAt: new Date().toISOString() },
+            timestamp: new Date().toISOString(),
+            userId: 'system'
+          });
+        } catch (_) {}
       } else {
         // Use updateDoc for existing student if doc exists; otherwise, create a new one
         const originalData = rawPeople.find(p => p.id === studentToUpdate.id) || null;
@@ -1168,14 +1234,16 @@ function App() {
           const createRef = doc(collection(db, 'people'));
           await setDoc(createRef, { ...updateData, createdAt: new Date().toISOString() });
 
-          // Add to edit history (legacy)
-          await addDoc(collection(db, 'editHistory'), {
-            action: 'CREATE',
-            entity: `Student - ${studentToUpdate.name}`,
-            changes: { ...updateData, createdAt: new Date().toISOString() },
-            timestamp: new Date().toISOString(),
-            userId: 'system'
-          });
+          // Non-blocking legacy history write
+          try {
+            await addDoc(collection(db, 'editHistory'), {
+              action: 'CREATE',
+              entity: `Student - ${studentToUpdate.name}`,
+              changes: { ...updateData, createdAt: new Date().toISOString() },
+              timestamp: new Date().toISOString(),
+              userId: 'system'
+            });
+          } catch (_) {}
           // Log as create
           await logCreate(
             `Student - ${studentToUpdate.name}`,
@@ -1191,14 +1259,16 @@ function App() {
         }
 
         await updateDoc(studentRef, updateData);
-        // Add to edit history (legacy)
-        await addDoc(collection(db, 'editHistory'), {
-          action: actionType,
-          entity: `Student - ${studentToUpdate.name}`,
-          changes: updateData,
-          timestamp: new Date().toISOString(),
-          userId: 'system'
-        });
+        // Non-blocking legacy history write
+        try {
+          await addDoc(collection(db, 'editHistory'), {
+            action: actionType,
+            entity: `Student - ${studentToUpdate.name}`,
+            changes: updateData,
+            timestamp: new Date().toISOString(),
+            userId: 'system'
+          });
+        } catch (_) {}
         // Log with original for diffs
         await logUpdate(
           `Student - ${studentToUpdate.name}`,
@@ -1216,14 +1286,16 @@ function App() {
         return;
       }
 
-      // Add to edit history (legacy)
-      await addDoc(collection(db, 'editHistory'), {
-        action: actionType,
-        entity: `Student - ${studentToUpdate.name}`,
-        changes: updateData,
-        timestamp: new Date().toISOString(),
-        userId: 'system'
-      });
+      // Non-blocking legacy history write
+      try {
+        await addDoc(collection(db, 'editHistory'), {
+          action: actionType,
+          entity: `Student - ${studentToUpdate.name}`,
+          changes: updateData,
+          timestamp: new Date().toISOString(),
+          userId: 'system'
+        });
+      } catch (_) {}
 
       // Log change in centralized system
       if (isNewStudent) {
@@ -1247,14 +1319,23 @@ function App() {
       
     } catch (error) {
       console.error('❌ Error updating student:', error);
-      const errorMessage = !studentToUpdate.id
-        ? 'Failed to add student worker. Please try again.'
-        : 'Failed to update student worker. Please try again.';
-      showNotification('error', 'Operation Failed', errorMessage);
+      // Only show a hard error for true failures; suppress if write actually succeeded
+      const friendly = (error && error.message) ? error.message : 'Unexpected error';
+      const isPermission = (error && (error.code === 'permission-denied' || /insufficient permissions/i.test(error.message || '')));
+      const isNew = !studentToUpdate.id;
+      if (isPermission) {
+        showNotification('warning', 'Permission Denied', 'Your account is not permitted to perform this action.');
+      } else {
+        showNotification('error', 'Operation Failed', isNew ? 'Failed to add student worker. Please try again.' : `Failed to update student worker. ${friendly}`);
+      }
     }
   };
 
   const handleStudentDelete = async (studentToDelete) => {
+    if (!canDeleteStudent()) {
+      showNotification('warning', 'Permission Denied', 'You don\'t have permission to delete student workers.');
+      return;
+    }
     console.log('🗑️ Deleting student worker:', studentToDelete);
     
     try {

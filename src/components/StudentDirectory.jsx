@@ -200,6 +200,9 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
   };
 
   const startEdit = (student) => {
+    if (typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canEditStudent === false) {
+      return;
+    }
     setEditingId(student.id);
     setEditFormData({
       ...student,
@@ -290,6 +293,9 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
   };
 
   const startCreate = () => {
+    if (typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canCreateStudent === false) {
+      return;
+    }
     setIsCreating(true);
     setErrors({});
   };
@@ -358,6 +364,9 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
   };
 
   const confirmDelete = (student) => {
+    if (typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canDeleteStudent === false) {
+      return;
+    }
     setStudentToDelete(student);
     setShowDeleteConfirm(true);
   };
@@ -566,6 +575,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
             <button
               onClick={startCreate}
               className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+              disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canCreateStudent === false}
             >
               <Plus size={18} />
               Add Student
@@ -1101,6 +1111,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                             onClick={() => startEdit(student)}
                             className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
                             title="Edit"
+                            disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canEditStudent === false}
                           >
                             <Edit size={16} />
                           </button>
@@ -1108,6 +1119,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                             onClick={() => confirmDelete(student)}
                             className="p-2 text-red-600 hover:bg-red-100 rounded-full"
                             title="Delete"
+                            disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canDeleteStudent === false}
                           >
                             <Trash2 size={16} />
                           </button>

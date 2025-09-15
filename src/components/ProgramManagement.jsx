@@ -21,6 +21,7 @@ import FacultyContactCard from './FacultyContactCard';
 import { doc, updateDoc, getDocs, collection } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { logUpdate } from '../utils/changeLogger';
+import { usePermissions } from '../utils/permissions';
 
 const ProgramManagement = ({
   facultyData,
@@ -29,6 +30,7 @@ const ProgramManagement = ({
   showNotification,
   rawScheduleData
 }) => {
+  const { canAssignProgramUPD, canEditProgram } = usePermissions();
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [editingUPD, setEditingUPD] = useState(null);
   const [selectedProgram, setSelectedProgram] = useState('all');
@@ -164,6 +166,14 @@ const ProgramManagement = ({
 
   // Handle UPD designation - now updates the programs collection (supports up to two UPDs)
   const handleSetUPD = async (programName, faculty) => {
+    if (!canAssignProgramUPD()) {
+      showNotification(
+        'warning',
+        'Permission Denied',
+        'You do not have permission to assign Undergraduate Program Directors.'
+      );
+      return;
+    }
 
     try {
       // Validation: Only non-adjunct faculty can be UPD

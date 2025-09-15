@@ -786,6 +786,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                 <button
                   onClick={handleCreate}
                   className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+                  disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canAddFaculty === false}
                 >
                   <Plus size={18} />
                   Add Faculty
@@ -1244,7 +1245,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                         </td>
                       <td className="p-2 align-top text-right">
                         <div className="flex gap-2">
-                          <button onClick={handleSave} className="p-2 text-green-600 hover:bg-green-100 rounded-full"><Save size={16} /></button>
+                          <button onClick={handleSave} className="p-2 text-green-600 hover:bg-green-100 rounded-full" disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canEditFaculty === false}><Save size={16} /></button>
                           <button onClick={handleCancel} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
                         </div>
                       </td>
@@ -1309,8 +1310,8 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex gap-1 justify-end">
-                          <button onClick={(e) => { e.stopPropagation(); handleEdit(faculty); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><Edit size={16} /></button>
-                          <button onClick={(e) => { e.stopPropagation(); handleDelete(faculty); }} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><Trash2 size={16} /></button>
+                          <button onClick={(e) => { e.stopPropagation(); handleEdit(faculty); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full" disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canEditFaculty === false}><Edit size={16} /></button>
+                          <button onClick={(e) => { e.stopPropagation(); handleDelete(faculty); }} className="p-2 text-red-600 hover:bg-red-100 rounded-full" disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canDeleteFaculty === false}><Trash2 size={16} /></button>
                         </div>
                       </td>
                     </>

@@ -3,8 +3,10 @@ import { db } from '../firebase';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import { PlusCircle, Edit, Trash2, Save, XCircle, AlertTriangle } from 'lucide-react';
 import { logCreate, logUpdate, logDelete } from '../utils/changeLogger';
+import { usePermissions } from '../utils/permissions';
 
 const BaylorAcronyms = ({ showNotification }) => {
+    const { canCreateAcronym, canEditAcronym, canDeleteAcronym } = usePermissions();
     const [acronyms, setAcronyms] = useState([]);
     const [categories, setCategories] = useState([]);
     const [newAcronym, setNewAcronym] = useState({ acronym: '', standsFor: '', description: '', category: '' });
@@ -44,6 +46,10 @@ const BaylorAcronyms = ({ showNotification }) => {
     };
 
     const handleAddAcronym = async () => {
+        if (!canCreateAcronym()) {
+            showNotification('warning', 'Permission Denied', 'You do not have permission to create acronyms.');
+            return;
+        }
 
         if (!newAcronym.acronym || !newAcronym.standsFor || !newAcronym.category) {
             showNotification('error', 'Validation Error', 'Please fill out Acronym, Stands For, and Category.');
@@ -114,6 +120,10 @@ const BaylorAcronyms = ({ showNotification }) => {
     };
 
     const handleUpdateAcronym = async (id) => {
+        if (!canEditAcronym()) {
+            showNotification('warning', 'Permission Denied', 'You do not have permission to edit acronyms.');
+            return;
+        }
 
         const isDuplicate = acronyms.some(
             acronym =>
@@ -168,6 +178,10 @@ const BaylorAcronyms = ({ showNotification }) => {
     };
 
     const handleDeleteAcronym = async (id) => {
+        if (!canDeleteAcronym()) {
+            showNotification('warning', 'Permission Denied', 'You do not have permission to delete acronyms.');
+            return;
+        }
 
         setIsSubmitting(true);
         try {

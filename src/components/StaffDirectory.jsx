@@ -612,6 +612,7 @@ const StaffDirectory = ({ directoryData, onFacultyUpdate, onStaffUpdate, onStaff
                 <button
                   onClick={handleCreate}
                   className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+                  disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canCreateStaff === false}
                 >
                   <Plus size={18} />
                   Add Staff

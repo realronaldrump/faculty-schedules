@@ -1698,7 +1698,7 @@ function App() {
             <div className="p-6">
               <OrphanedDataCleanupModal
                 isOpen={true}
-                onClose={() => onNavigate('dashboard')}
+                onClose={() => handleNavigate('dashboard')}
                 showNotification={(type, title, message) => showNotification(type, title, message)}
               />
             </div>

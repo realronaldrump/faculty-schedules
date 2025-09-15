@@ -62,7 +62,17 @@ import { fetchRecentChanges } from './utils/recentChanges';
 
 function App() {
   const { user, signOut, loading: authLoading, canAccess } = useAuth();
-  const { canEdit } = usePermissions();
+  const {
+    canEdit,
+    canEditFaculty,
+    canCreateFaculty,
+    canDeleteFaculty,
+    canEditStaff,
+    canCreateStaff,
+    canEditStudent,
+    canCreateStudent,
+    canDeleteStudent
+  } = usePermissions();
   const location = useLocation();
   const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(false);

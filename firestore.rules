@@ -67,38 +67,87 @@ service cloud.firestore {
       allow read, update, delete: if canWrite();
     }
 
-    // App data: ALL SIGNED-IN USERS can read; only admin can modify
+    // People collection (faculty, staff, adjunct, students): granular permissions
     match /people/{id} {
       allow read: if isSignedIn();
-      allow create, update, delete: if canWrite();
+
+      // Create operations - check specific action permissions
+      allow create: if isAdmin() ||
+        userHasAction('directory.faculty.create') ||
+        userHasAction('directory.staff.create') ||
+        userHasAction('directory.adjunct.create') ||
+        userHasAction('directory.student.create');
+
+      // Update operations - check specific action permissions
+      allow update: if isAdmin() ||
+        userHasAction('directory.faculty.edit') ||
+        userHasAction('directory.staff.edit') ||
+        userHasAction('directory.adjunct.edit') ||
+        userHasAction('directory.student.edit') ||
+        userHasAction('crn.update') ||
+        userHasAction('missing.data.update');
+
+      // Delete operations - check specific action permissions
+      allow delete: if isAdmin() ||
+        userHasAction('directory.faculty.delete') ||
+        userHasAction('directory.staff.delete') ||
+        userHasAction('directory.adjunct.delete') ||
+        userHasAction('directory.student.delete');
     }
+    // Schedules collection: granular permissions
     match /schedules/{id} {
       allow read: if isSignedIn();
-      allow create, update, delete: if canWrite();
+      allow create: if isAdmin() || userHasAction('schedule.create');
+      allow update: if isAdmin() || userHasAction('schedule.edit') || userHasAction('schedule.bulk.edit');
+      allow delete: if isAdmin() || userHasAction('schedule.delete');
     }
+
+    // Programs collection: granular permissions
     match /programs/{id} {
       allow read: if isSignedIn();
-      allow create, update, delete: if canWrite();
+      allow create: if isAdmin() || userHasAction('program.create');
+      allow update: if isAdmin() || userHasAction('program.edit') || userHasAction('program.upd.assign');
+      allow delete: if isAdmin() || userHasAction('program.delete');
     }
+
+    // Departments collection: granular permissions
     match /departments/{id} {
       allow read: if isSignedIn();
-      allow create, update, delete: if canWrite();
+      allow create: if isAdmin() || userHasAction('department.create');
+      allow update: if isAdmin() || userHasAction('department.edit');
+      allow delete: if isAdmin() || userHasAction('department.delete');
     }
+
+    // Courses collection: granular permissions
     match /courses/{id} {
       allow read: if isSignedIn();
-      allow create, update, delete: if canWrite();
+      allow create: if isAdmin() || userHasAction('course.create');
+      allow update: if isAdmin() || userHasAction('course.edit');
+      allow delete: if isAdmin() || userHasAction('course.delete');
     }
+
+    // Terms collection: granular permissions
     match /terms/{id} {
       allow read: if isSignedIn();
-      allow create, update, delete: if canWrite();
+      allow create: if isAdmin() || userHasAction('term.create');
+      allow update: if isAdmin() || userHasAction('term.edit');
+      allow delete: if isAdmin() || userHasAction('term.delete');
     }
+
+    // Rooms collection: granular permissions
     match /rooms/{id} {
       allow read: if isSignedIn();
-      allow create, update, delete: if canWrite();
+      allow create: if isAdmin() || userHasAction('room.create');
+      allow update: if isAdmin() || userHasAction('room.edit');
+      allow delete: if isAdmin() || userHasAction('room.delete');
     }
+
+    // Acronyms collection: granular permissions
     match /baylorAcronyms/{id} {
       allow read: if isSignedIn();
-      allow create, update, delete: if canWrite();
+      allow create: if isAdmin() || userHasAction('acronym.create');
+      allow update: if isAdmin() || userHasAction('acronym.edit');
+      allow delete: if isAdmin() || userHasAction('acronym.delete');
     }
 
     // Change logs

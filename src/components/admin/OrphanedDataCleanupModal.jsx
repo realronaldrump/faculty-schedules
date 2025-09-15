@@ -104,7 +104,7 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Orphaned Data Cleanup</h2>
             <p className="text-gray-600 mt-1">
-              Find and remove imported data when transaction records are deleted
+              Find and remove imported schedules for a specific term. People and rooms are only eligible if not referenced by any other term.
             </p>
           </div>
           <button
@@ -207,8 +207,8 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
                             <span className="font-medium text-gray-900 capitalize">{collection}</span>
                             <span className="text-sm text-gray-500">({items.length} items)</span>
                           </div>
-                          <div className="space-y-1 max-h-32 overflow-y-auto">
-                            {items.slice(0, 10).map((item, index) => (
+                          <div className="space-y-1 max-h-56 overflow-y-auto">
+                            {(showDetails ? items : items.slice(0, 10)).map((item, index) => (
                               <div key={index} className="text-sm text-gray-600 bg-gray-50 px-2 py-1 rounded">
                                 {collection === 'schedules' && `${item.courseCode || 'Unknown'} - ${item.term || 'Unknown'}`}
                                 {collection === 'people' && `${item.firstName || ''} ${item.lastName || ''}`.trim()}
@@ -216,9 +216,9 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
                                 <span className="text-xs text-gray-400 ml-2">({item.reason})</span>
                               </div>
                             ))}
-                            {items.length > 10 && (
+                            {(!showDetails && items.length > 10) && (
                               <div className="text-sm text-gray-500 italic">
-                                ... and {items.length - 10} more items
+                                ... and {items.length - 10} more items (click Show Details to view all)
                               </div>
                             )}
                           </div>
@@ -238,7 +238,7 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Clean Up Data</h3>
                   <p className="text-sm text-gray-600">
-                    Permanently delete the {orphanedData.total} orphaned records
+                    Permanently delete the {orphanedData.total} orphaned records. People and rooms will only be deleted if unreferenced by other terms.
                   </p>
                 </div>
 
@@ -302,7 +302,7 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
               <span className="font-medium text-yellow-700">Important Warning</span>
             </div>
             <p className="text-sm text-yellow-600 mt-1">
-              This tool identifies data based on patterns and heuristics. It may incorrectly identify legitimate data as orphaned.
+              This tool targets schedules in the selected term. People/rooms only show as deletable if they are not used by any schedules in other terms.
               Always review the scan results carefully and consider backing up your data before cleanup.
             </p>
           </div>

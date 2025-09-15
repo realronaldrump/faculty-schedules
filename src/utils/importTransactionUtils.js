@@ -1,4 +1,4 @@
-import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, writeBatch, query, orderBy, setDoc } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, updateDoc, addDoc, deleteDoc, writeBatch, query, orderBy, setDoc } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { logCreate, logUpdate, logDelete, logBulkUpdate, logImport } from './changeLogger';
 import { findMatchingPerson, parseInstructorField } from './dataImportUtils';
@@ -954,27 +954,56 @@ export const findOrphanedImportedData = async (semesterFilter = null) => {
   };
 
   try {
-    // Scan schedules for imported patterns
+    // Scan schedules and build reference maps
     const schedulesRef = collection(db, COLLECTIONS.SCHEDULES);
     const schedulesSnap = await getDocs(schedulesRef);
 
     console.log(`📊 Found ${schedulesSnap.size} total schedules`);
 
+    const normalize = (v) => (typeof v === 'string' ? v.trim().toLowerCase() : '');
+    const termFilterNorm = normalize(semesterFilter || '');
+
+    const usedPeopleOutsideTerm = new Set();
+    const usedRoomsOutsideTerm = new Set();
+    const usedPeopleInSelectedTerm = new Set();
+    const usedRoomsInSelectedTerm = new Set();
+
+    // First pass: build sets of referenced people/rooms OUTSIDE selected term
+    schedulesSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      const termNorm = normalize(data.term || '');
+      const isInSelectedTerm = termFilterNorm && termNorm === termFilterNorm;
+
+      if (!isInSelectedTerm) {
+        if (data.instructorId) usedPeopleOutsideTerm.add(data.instructorId);
+        if (data.roomId) usedRoomsOutsideTerm.add(data.roomId);
+        if (Array.isArray(data.roomIds)) {
+          data.roomIds.forEach((rid) => rid && usedRoomsOutsideTerm.add(rid));
+        }
+      } else {
+        if (data.instructorId) usedPeopleInSelectedTerm.add(data.instructorId);
+        if (data.roomId) usedRoomsInSelectedTerm.add(data.roomId);
+        if (Array.isArray(data.roomIds)) {
+          data.roomIds.forEach((rid) => rid && usedRoomsInSelectedTerm.add(rid));
+        }
+      }
+    });
+
+    // Second pass: collect schedules to delete (only in selected term if provided)
     schedulesSnap.forEach(doc => {
       const data = doc.data();
       const docId = doc.id;
 
-      // Look for patterns that indicate imported data
-      const isLikelyImported = (
-        // Recent creation date (within last 30 days)
-        data.createdAt && (new Date() - new Date(data.createdAt)) < (30 * 24 * 60 * 60 * 1000) ||
-        // Deterministic ID pattern (TERM_CRNN format)
-        /^\w+_\d{5}$/.test(docId) ||
-        // Missing important fields that imported data often has
-        (data.instructorName && !data.instructorId) ||
-        // Semester filter if provided
-        (semesterFilter && data.term && data.term.toLowerCase().includes(semesterFilter.toLowerCase()))
-      );
+      const termNorm = normalize(data.term || '');
+      const inSelectedTerm = termFilterNorm ? termNorm === termFilterNorm : true;
+
+      // Schedules: only target the selected term (if provided). If no filter, fall back to heuristics
+      const isLikelyImported = termFilterNorm
+        ? inSelectedTerm
+        : (
+            (data.createdAt && (new Date() - new Date(data.createdAt)) < (30 * 24 * 60 * 60 * 1000)) ||
+            /^\w+_\d{5}$/.test(docId)
+          );
 
       if (isLikelyImported) {
         results.schedules.push({
@@ -985,7 +1014,7 @@ export const findOrphanedImportedData = async (semesterFilter = null) => {
       }
     });
 
-    // Scan people for imported patterns
+    // Scan people: only include if referenced in selected term AND not referenced outside term
     const peopleRef = collection(db, COLLECTIONS.PEOPLE);
     const peopleSnap = await getDocs(peopleRef);
 
@@ -995,26 +1024,21 @@ export const findOrphanedImportedData = async (semesterFilter = null) => {
       const data = doc.data();
       const docId = doc.id;
 
-      const isLikelyImported = (
-        // Recent creation and no roles (typical import pattern)
-        data.createdAt && !data.roles &&
-        (new Date() - new Date(data.createdAt)) < (30 * 24 * 60 * 60 * 1000) ||
-        // Email pattern that looks imported
-        data.email && data.email.includes('@') === false ||
-        // Semester-specific search
-        (semesterFilter && data.firstName && data.lastName)
-      );
+      const referencedOutsideTerm = usedPeopleOutsideTerm.has(docId);
+      const referencedInSelectedTerm = termFilterNorm ? usedPeopleInSelectedTerm.has(docId) : false;
+      // Only propose deletion if used in selected term and not used elsewhere
+      const isCandidate = termFilterNorm ? (referencedInSelectedTerm && !referencedOutsideTerm) : false;
 
-      if (isLikelyImported) {
+      if (isCandidate) {
         results.people.push({
           id: docId,
           ...data,
-          reason: 'likely_imported'
+          reason: referencedOutsideTerm ? 'referenced_elsewhere' : 'only_used_in_selected_term'
         });
       }
     });
 
-    // Scan rooms for imported patterns
+    // Scan rooms: only include if referenced in selected term AND not referenced outside term
     const roomsRef = collection(db, COLLECTIONS.ROOMS);
     const roomsSnap = await getDocs(roomsRef);
 
@@ -1024,18 +1048,15 @@ export const findOrphanedImportedData = async (semesterFilter = null) => {
       const data = doc.data();
       const docId = doc.id;
 
-      const isLikelyImported = (
-        // Recent creation
-        data.createdAt && (new Date() - new Date(data.createdAt)) < (30 * 24 * 60 * 60 * 1000) ||
-        // Room names that look like they were auto-generated
-        data.name && data.name.length > 10 && data.name.includes(' ')
-      );
+      const referencedOutsideTerm = usedRoomsOutsideTerm.has(docId);
+      const referencedInSelectedTerm = termFilterNorm ? usedRoomsInSelectedTerm.has(docId) : false;
+      const isCandidate = termFilterNorm ? (referencedInSelectedTerm && !referencedOutsideTerm) : false;
 
-      if (isLikelyImported) {
+      if (isCandidate) {
         results.rooms.push({
           id: docId,
           ...data,
-          reason: 'recent_creation'
+          reason: referencedOutsideTerm ? 'referenced_elsewhere' : 'only_used_in_selected_term'
         });
       }
     });

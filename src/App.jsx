@@ -71,7 +71,10 @@ function App() {
     canCreateStaff,
     canEditStudent,
     canCreateStudent,
-    canDeleteStudent
+    canDeleteStudent,
+    canEditSchedule,
+    canCreateSchedule,
+    canDeleteSchedule
   } = usePermissions();
   const location = useLocation();
   const navigate = useNavigate();
@@ -645,8 +648,12 @@ function App() {
 
   // Data update handlers with enhanced relational integrity
   const handleDataUpdate = async (updatedRow) => {
-    if (!canEdit()) {
-      showNotification('warning', 'Permission Denied', 'Only admins can modify schedules.');
+    const isNewSchedule = updatedRow.id && updatedRow.id.startsWith('new_');
+    const hasPermission = isNewSchedule ? (canCreateSchedule?.() || false) : (canEditSchedule?.() || false);
+
+    if (!hasPermission) {
+      const actionName = isNewSchedule ? 'create' : 'modify';
+      showNotification('warning', 'Permission Denied', `You don't have permission to ${actionName} schedules.`);
       return;
     }
     console.log('💾 Updating schedule data:', updatedRow);
@@ -1376,8 +1383,8 @@ function App() {
   };
 
   const handleScheduleDelete = async (scheduleId) => {
-    if (!canEdit()) {
-      showNotification('warning', 'Permission Denied', 'Only admins can delete schedules.');
+    if (!canDeleteSchedule?.()) {
+      showNotification('warning', 'Permission Denied', 'You don\'t have permission to delete schedules.');
       return;
     }
     console.log('🗑️ Deleting schedule:', scheduleId);

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { usePermissions } from '../utils/permissions';
 import { Upload, CheckCircle, AlertCircle, Eye, History, ChevronRight, Calendar, Users } from 'lucide-react';
 import { parseCLSSCSV } from '../utils/dataImportUtils';
 import { previewImportChanges, commitTransaction } from '../utils/importTransactionUtils';
@@ -6,6 +7,7 @@ import ImportPreviewModal from './ImportPreviewModal';
 import ImportHistoryModal from './ImportHistoryModal';
 
 const ImportWizard = ({ onNavigate, showNotification, selectedSemester, availableSemesters, onSemesterDataImported }) => {
+  const { canImportData, canImportSchedule } = usePermissions();
   const [step, setStep] = useState(1);
   const [fileName, setFileName] = useState('');
   const [rawText, setRawText] = useState('');
@@ -139,6 +141,14 @@ const ImportWizard = ({ onNavigate, showNotification, selectedSemester, availabl
   };
 
   const handleCommit = async (transactionId, selectedChanges = null, selectedFieldMap = null) => {
+    if (importType === 'schedule' && !canImportSchedule()) {
+      showNotification?.('warning', 'Permission Denied', 'You do not have permission to import schedules.');
+      return;
+    }
+    if (importType !== 'schedule' && !canImportData()) {
+      showNotification?.('warning', 'Permission Denied', 'You do not have permission to import data.');
+      return;
+    }
     setIsCommitting(true);
     try {
       const result = await commitTransaction(transactionId, selectedChanges, selectedFieldMap);

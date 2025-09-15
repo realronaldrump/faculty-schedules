@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { usePermissions } from '../utils/permissions';
 import { Database, AlertCircle, Save, Search, Pencil, X } from 'lucide-react';
 import { analyzeCRNCoverage } from '../utils/crnMigrationUtils';
 import { fetchSchedulesWithRelationalData } from '../utils/dataImportUtils';
@@ -8,6 +9,7 @@ import { logUpdate } from '../utils/changeLogger';
 import MultiSelectDropdown from './MultiSelectDropdown';
 
 const CRNQualityTools = ({ showNotification }) => {
+  const { canUpdateCRN } = usePermissions();
   const [analysis, setAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [schedules, setSchedules] = useState([]);
@@ -101,6 +103,10 @@ const CRNQualityTools = ({ showNotification }) => {
   };
 
   const handleCrnSave = async (row) => {
+    if (!canUpdateCRN()) {
+      showNotification?.('warning', 'Permission Denied', 'You do not have permission to update CRNs.');
+      return;
+    }
     const newCrn = (editingCrn[row.id] ?? '').trim();
     if (!/^\d{5}$/.test(newCrn)) {
       showNotification?.('warning', 'Invalid CRN', 'CRN must be exactly 5 digits.');

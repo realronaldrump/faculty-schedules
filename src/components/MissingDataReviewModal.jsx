@@ -4,6 +4,7 @@ import { doc, updateDoc, collection, getDocs, query, where } from 'firebase/fire
 import { db, COLLECTIONS } from '../firebase';
 import { DEFAULT_PERSON_SCHEMA } from '../utils/dataHygiene';
 import { logUpdate } from '../utils/changeLogger';
+import { usePermissions } from '../utils/permissions';
 
 const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataType = 'email' }) => {
   const [records, setRecords] = useState([]);
@@ -135,7 +136,13 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
     }));
   };
 
+  const { canUpdateMissingData } = usePermissions();
+
   const saveRecord = async () => {
+    if (!canUpdateMissingData()) {
+      setSaveResults({ success: false, message: 'You do not have permission to update records.' });
+      return;
+    }
     if (!editingRecord) return;
 
     setIsSaving(true);

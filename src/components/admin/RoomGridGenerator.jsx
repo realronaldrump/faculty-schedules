@@ -585,7 +585,7 @@ const RoomGridGenerator = () => {
     }, [fetchSavedGrids]);
 
     const saveGrid = async () => {
-        const allowed = canEdit() || canAction('roomGrids.save');
+        const allowed = canAction('roomGrids.save');
         if (!allowed) {
             showMessage('You do not have permission to save grids. An admin can grant “Room Grids: Save” to your account.', 'error');
             return;
@@ -640,6 +640,10 @@ const RoomGridGenerator = () => {
 
     const handleConfirmDelete = async () => {
         if (!deleteConfirmDialog.grid) return;
+        if (!canAction('roomGrids.delete')) {
+            showMessage('You do not have permission to delete grids. An admin can grant “Room Grids: Delete”.', 'error');
+            return;
+        }
         try {
             await deleteDoc(doc(collection(db, 'roomGrids'), deleteConfirmDialog.grid.id));
             logDelete(`Room Grid - ${deleteConfirmDialog.grid.title}`, 'roomGrids', deleteConfirmDialog.grid.id, deleteConfirmDialog.grid, 'RoomGridGenerator.jsx - deleteSavedGrid').catch(() => {});

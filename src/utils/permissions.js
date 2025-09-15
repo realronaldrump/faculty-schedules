@@ -3,6 +3,7 @@
 
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { registerActionKey } from './actionRegistry';
+import './actionDiscovery'; // Import to trigger action discovery
 
 // Standard action keys the app cares about
 export const STANDARD_ACTIONS = {
@@ -12,8 +13,10 @@ export const STANDARD_ACTIONS = {
   IMPORT: 'import'
 };
 
-// Granular action keys for specific operations
-export const DIRECTORY_ACTIONS = {
+// Comprehensive action registry - automatically registers ALL app actions
+// This is the master list of all possible operations in the app
+export const APP_ACTIONS = {
+  // ===== DIRECTORY OPERATIONS =====
   // Faculty directory actions
   FACULTY_EDIT: 'directory.faculty.edit',
   FACULTY_CREATE: 'directory.faculty.create',
@@ -38,26 +41,126 @@ export const DIRECTORY_ACTIONS = {
   STUDENT_DELETE: 'directory.student.delete',
   STUDENT_VIEW: 'directory.student.view',
 
-  // Room grid actions
-  ROOMGRIDS_SAVE: 'roomGrids.save',
-  ROOMGRIDS_DELETE: 'roomGrids.delete',
-
-  // Import/Export actions
-  DATA_IMPORT: 'data.import',
-  DATA_EXPORT: 'data.export',
-
-  // Schedule actions
+  // ===== SCHEDULE OPERATIONS =====
   SCHEDULE_EDIT: 'schedule.edit',
   SCHEDULE_CREATE: 'schedule.create',
   SCHEDULE_DELETE: 'schedule.delete',
+  SCHEDULE_VIEW: 'schedule.view',
+  SCHEDULE_BULK_EDIT: 'schedule.bulk.edit',
+  SCHEDULE_IMPORT: 'schedule.import',
+  SCHEDULE_EXPORT: 'schedule.export',
 
-  // Analytics actions
+  // ===== ROOM OPERATIONS =====
+  ROOM_EDIT: 'room.edit',
+  ROOM_CREATE: 'room.create',
+  ROOM_DELETE: 'room.delete',
+  ROOM_VIEW: 'room.view',
+
+  // ===== ROOM GRID OPERATIONS =====
+  ROOMGRIDS_SAVE: 'roomGrids.save',
+  ROOMGRIDS_DELETE: 'roomGrids.delete',
+  ROOMGRIDS_VIEW: 'roomGrids.view',
+  ROOMGRIDS_EDIT: 'roomGrids.edit',
+
+  // ===== PROGRAM OPERATIONS =====
+  PROGRAM_EDIT: 'program.edit',
+  PROGRAM_CREATE: 'program.create',
+  PROGRAM_DELETE: 'program.delete',
+  PROGRAM_VIEW: 'program.view',
+  PROGRAM_UPD_ASSIGN: 'program.upd.assign',
+  PROGRAM_UPD_REMOVE: 'program.upd.remove',
+
+  // ===== COURSE OPERATIONS =====
+  COURSE_EDIT: 'course.edit',
+  COURSE_CREATE: 'course.create',
+  COURSE_DELETE: 'course.delete',
+  COURSE_VIEW: 'course.view',
+
+  // ===== TERM OPERATIONS =====
+  TERM_EDIT: 'term.edit',
+  TERM_CREATE: 'term.create',
+  TERM_DELETE: 'term.delete',
+  TERM_VIEW: 'term.view',
+
+  // ===== DEPARTMENT OPERATIONS =====
+  DEPARTMENT_EDIT: 'department.edit',
+  DEPARTMENT_CREATE: 'department.create',
+  DEPARTMENT_DELETE: 'department.delete',
+  DEPARTMENT_VIEW: 'department.view',
+
+  // ===== ACRONYM OPERATIONS =====
+  ACRONYM_EDIT: 'acronym.edit',
+  ACRONYM_CREATE: 'acronym.create',
+  ACRONYM_DELETE: 'acronym.delete',
+  ACRONYM_VIEW: 'acronym.view',
+
+  // ===== DATA MANAGEMENT OPERATIONS =====
+  DATA_IMPORT: 'data.import',
+  DATA_EXPORT: 'data.export',
+  DATA_HYGIENE: 'data.hygiene',
+  DATA_DEDUPLICATION: 'data.deduplication',
+  DATA_MIGRATION: 'data.migration',
+  DATA_BACKUP: 'data.backup',
+
+  // ===== ANALYTICS OPERATIONS =====
   ANALYTICS_VIEW: 'analytics.view',
-  ANALYTICS_EDIT: 'analytics.edit'
+  ANALYTICS_EDIT: 'analytics.edit',
+  ANALYTICS_EXPORT: 'analytics.export',
+  ANALYTICS_DEPARTMENT: 'analytics.department.view',
+  ANALYTICS_COURSE: 'analytics.course.view',
+
+  // ===== SYSTEM OPERATIONS =====
+  SYSTEM_SETTINGS: 'system.settings',
+  SYSTEM_ACCESS_CONTROL: 'system.access.control',
+  SYSTEM_USER_MANAGE: 'system.user.manage',
+  SYSTEM_USER_DISABLE: 'system.user.disable',
+  SYSTEM_USER_DELETE: 'system.user.delete',
+  SYSTEM_ACTIVITY_MONITOR: 'system.activity.monitor',
+  SYSTEM_MAINTENANCE: 'system.maintenance',
+
+  // ===== CRN OPERATIONS =====
+  CRN_EDIT: 'crn.edit',
+  CRN_UPDATE: 'crn.update',
+  CRN_QUALITY_CHECK: 'crn.quality.check',
+  CRN_BULK_UPDATE: 'crn.bulk.update',
+
+  // ===== MISSING DATA OPERATIONS =====
+  MISSING_DATA_EDIT: 'missing.data.edit',
+  MISSING_DATA_UPDATE: 'missing.data.update',
+  MISSING_DATA_REVIEW: 'missing.data.review'
 };
 
-// Register all directory actions on module load
-Object.values(DIRECTORY_ACTIONS).forEach(action => registerActionKey(action));
+// Legacy alias for backward compatibility
+export const DIRECTORY_ACTIONS = {
+  FACULTY_EDIT: APP_ACTIONS.FACULTY_EDIT,
+  FACULTY_CREATE: APP_ACTIONS.FACULTY_CREATE,
+  FACULTY_DELETE: APP_ACTIONS.FACULTY_DELETE,
+  FACULTY_VIEW: APP_ACTIONS.FACULTY_VIEW,
+  STAFF_EDIT: APP_ACTIONS.STAFF_EDIT,
+  STAFF_CREATE: APP_ACTIONS.STAFF_CREATE,
+  STAFF_DELETE: APP_ACTIONS.STAFF_DELETE,
+  STAFF_VIEW: APP_ACTIONS.STAFF_VIEW,
+  ADJUNCT_EDIT: APP_ACTIONS.ADJUNCT_EDIT,
+  ADJUNCT_CREATE: APP_ACTIONS.ADJUNCT_CREATE,
+  ADJUNCT_DELETE: APP_ACTIONS.ADJUNCT_DELETE,
+  ADJUNCT_VIEW: APP_ACTIONS.ADJUNCT_VIEW,
+  STUDENT_EDIT: APP_ACTIONS.STUDENT_EDIT,
+  STUDENT_CREATE: APP_ACTIONS.STUDENT_CREATE,
+  STUDENT_DELETE: APP_ACTIONS.STUDENT_DELETE,
+  STUDENT_VIEW: APP_ACTIONS.STUDENT_VIEW,
+  ROOMGRIDS_SAVE: APP_ACTIONS.ROOMGRIDS_SAVE,
+  ROOMGRIDS_DELETE: APP_ACTIONS.ROOMGRIDS_DELETE,
+  DATA_IMPORT: APP_ACTIONS.DATA_IMPORT,
+  DATA_EXPORT: APP_ACTIONS.DATA_EXPORT,
+  SCHEDULE_EDIT: APP_ACTIONS.SCHEDULE_EDIT,
+  SCHEDULE_CREATE: APP_ACTIONS.SCHEDULE_CREATE,
+  SCHEDULE_DELETE: APP_ACTIONS.SCHEDULE_DELETE,
+  ANALYTICS_VIEW: APP_ACTIONS.ANALYTICS_VIEW,
+  ANALYTICS_EDIT: APP_ACTIONS.ANALYTICS_EDIT
+};
+
+// Register ALL app actions on module load - this ensures complete coverage
+Object.values(APP_ACTIONS).forEach(action => registerActionKey(action));
 
 // Hook to ask simple permission questions from components
 export function usePermissions() {
@@ -93,28 +196,116 @@ export function usePermissions() {
     }
   };
 
-  // Directory-specific permission helpers
-  const canEditFaculty = () => canDoAction(DIRECTORY_ACTIONS.FACULTY_EDIT);
-  const canCreateFaculty = () => canDoAction(DIRECTORY_ACTIONS.FACULTY_CREATE);
-  const canDeleteFaculty = () => canDoAction(DIRECTORY_ACTIONS.FACULTY_DELETE);
-  const canViewFaculty = () => canDoAction(DIRECTORY_ACTIONS.FACULTY_VIEW) || canEditFaculty() || canCreateFaculty() || canDeleteFaculty();
+  // ===== DIRECTORY PERMISSIONS =====
+  const canEditFaculty = () => canDoAction(APP_ACTIONS.FACULTY_EDIT);
+  const canCreateFaculty = () => canDoAction(APP_ACTIONS.FACULTY_CREATE);
+  const canDeleteFaculty = () => canDoAction(APP_ACTIONS.FACULTY_DELETE);
+  const canViewFaculty = () => canDoAction(APP_ACTIONS.FACULTY_VIEW) || canEditFaculty() || canCreateFaculty() || canDeleteFaculty();
 
-  const canEditStaff = () => canDoAction(DIRECTORY_ACTIONS.STAFF_EDIT);
-  const canCreateStaff = () => canDoAction(DIRECTORY_ACTIONS.STAFF_CREATE);
-  const canDeleteStaff = () => canDoAction(DIRECTORY_ACTIONS.STAFF_DELETE);
-  const canViewStaff = () => canDoAction(DIRECTORY_ACTIONS.STAFF_VIEW) || canEditStaff() || canCreateStaff() || canDeleteStaff();
+  const canEditStaff = () => canDoAction(APP_ACTIONS.STAFF_EDIT);
+  const canCreateStaff = () => canDoAction(APP_ACTIONS.STAFF_CREATE);
+  const canDeleteStaff = () => canDoAction(APP_ACTIONS.STAFF_DELETE);
+  const canViewStaff = () => canDoAction(APP_ACTIONS.STAFF_VIEW) || canEditStaff() || canCreateStaff() || canDeleteStaff();
 
-  const canEditAdjunct = () => canDoAction(DIRECTORY_ACTIONS.ADJUNCT_EDIT);
-  const canCreateAdjunct = () => canDoAction(DIRECTORY_ACTIONS.ADJUNCT_CREATE);
-  const canDeleteAdjunct = () => canDoAction(DIRECTORY_ACTIONS.ADJUNCT_DELETE);
-  const canViewAdjunct = () => canDoAction(DIRECTORY_ACTIONS.ADJUNCT_VIEW) || canEditAdjunct() || canCreateAdjunct() || canDeleteAdjunct();
+  const canEditAdjunct = () => canDoAction(APP_ACTIONS.ADJUNCT_EDIT);
+  const canCreateAdjunct = () => canDoAction(APP_ACTIONS.ADJUNCT_CREATE);
+  const canDeleteAdjunct = () => canDoAction(APP_ACTIONS.ADJUNCT_DELETE);
+  const canViewAdjunct = () => canDoAction(APP_ACTIONS.ADJUNCT_VIEW) || canEditAdjunct() || canCreateAdjunct() || canDeleteAdjunct();
 
-  const canEditStudent = () => canDoAction(DIRECTORY_ACTIONS.STUDENT_EDIT);
-  const canCreateStudent = () => canDoAction(DIRECTORY_ACTIONS.STUDENT_CREATE);
-  const canDeleteStudent = () => canDoAction(DIRECTORY_ACTIONS.STUDENT_DELETE);
-  const canViewStudent = () => canDoAction(DIRECTORY_ACTIONS.STUDENT_VIEW) || canEditStudent() || canCreateStudent() || canDeleteStudent();
+  const canEditStudent = () => canDoAction(APP_ACTIONS.STUDENT_EDIT);
+  const canCreateStudent = () => canDoAction(APP_ACTIONS.STUDENT_CREATE);
+  const canDeleteStudent = () => canDoAction(APP_ACTIONS.STUDENT_DELETE);
+  const canViewStudent = () => canDoAction(APP_ACTIONS.STUDENT_VIEW) || canEditStudent() || canCreateStudent() || canDeleteStudent();
 
-  // General directory permissions
+  // ===== SCHEDULE PERMISSIONS =====
+  const canEditSchedule = () => canDoAction(APP_ACTIONS.SCHEDULE_EDIT);
+  const canCreateSchedule = () => canDoAction(APP_ACTIONS.SCHEDULE_CREATE);
+  const canDeleteSchedule = () => canDoAction(APP_ACTIONS.SCHEDULE_DELETE);
+  const canViewSchedule = () => canDoAction(APP_ACTIONS.SCHEDULE_VIEW) || canEditSchedule() || canCreateSchedule() || canDeleteSchedule();
+  const canBulkEditSchedule = () => canDoAction(APP_ACTIONS.SCHEDULE_BULK_EDIT);
+  const canImportSchedule = () => canDoAction(APP_ACTIONS.SCHEDULE_IMPORT);
+  const canExportSchedule = () => canDoAction(APP_ACTIONS.SCHEDULE_EXPORT);
+
+  // ===== ROOM PERMISSIONS =====
+  const canEditRoom = () => canDoAction(APP_ACTIONS.ROOM_EDIT);
+  const canCreateRoom = () => canDoAction(APP_ACTIONS.ROOM_CREATE);
+  const canDeleteRoom = () => canDoAction(APP_ACTIONS.ROOM_DELETE);
+  const canViewRoom = () => canDoAction(APP_ACTIONS.ROOM_VIEW) || canEditRoom() || canCreateRoom() || canDeleteRoom();
+
+  // ===== ROOM GRID PERMISSIONS =====
+  const canSaveRoomGrid = () => canDoAction(APP_ACTIONS.ROOMGRIDS_SAVE);
+  const canDeleteRoomGrid = () => canDoAction(APP_ACTIONS.ROOMGRIDS_DELETE);
+  const canEditRoomGrid = () => canDoAction(APP_ACTIONS.ROOMGRIDS_EDIT);
+  const canViewRoomGrid = () => canDoAction(APP_ACTIONS.ROOMGRIDS_VIEW) || canSaveRoomGrid() || canEditRoomGrid() || canDeleteRoomGrid();
+
+  // ===== PROGRAM PERMISSIONS =====
+  const canEditProgram = () => canDoAction(APP_ACTIONS.PROGRAM_EDIT);
+  const canCreateProgram = () => canDoAction(APP_ACTIONS.PROGRAM_CREATE);
+  const canDeleteProgram = () => canDoAction(APP_ACTIONS.PROGRAM_DELETE);
+  const canViewProgram = () => canDoAction(APP_ACTIONS.PROGRAM_VIEW) || canEditProgram() || canCreateProgram() || canDeleteProgram();
+  const canAssignProgramUPD = () => canDoAction(APP_ACTIONS.PROGRAM_UPD_ASSIGN);
+  const canRemoveProgramUPD = () => canDoAction(APP_ACTIONS.PROGRAM_UPD_REMOVE);
+
+  // ===== COURSE PERMISSIONS =====
+  const canEditCourse = () => canDoAction(APP_ACTIONS.COURSE_EDIT);
+  const canCreateCourse = () => canDoAction(APP_ACTIONS.COURSE_CREATE);
+  const canDeleteCourse = () => canDoAction(APP_ACTIONS.COURSE_DELETE);
+  const canViewCourse = () => canDoAction(APP_ACTIONS.COURSE_VIEW) || canEditCourse() || canCreateCourse() || canDeleteCourse();
+
+  // ===== TERM PERMISSIONS =====
+  const canEditTerm = () => canDoAction(APP_ACTIONS.TERM_EDIT);
+  const canCreateTerm = () => canDoAction(APP_ACTIONS.TERM_CREATE);
+  const canDeleteTerm = () => canDoAction(APP_ACTIONS.TERM_DELETE);
+  const canViewTerm = () => canDoAction(APP_ACTIONS.TERM_VIEW) || canEditTerm() || canCreateTerm() || canDeleteTerm();
+
+  // ===== DEPARTMENT PERMISSIONS =====
+  const canEditDepartment = () => canDoAction(APP_ACTIONS.DEPARTMENT_EDIT);
+  const canCreateDepartment = () => canDoAction(APP_ACTIONS.DEPARTMENT_CREATE);
+  const canDeleteDepartment = () => canDoAction(APP_ACTIONS.DEPARTMENT_DELETE);
+  const canViewDepartment = () => canDoAction(APP_ACTIONS.DEPARTMENT_VIEW) || canEditDepartment() || canCreateDepartment() || canDeleteDepartment();
+
+  // ===== ACRONYM PERMISSIONS =====
+  const canEditAcronym = () => canDoAction(APP_ACTIONS.ACRONYM_EDIT);
+  const canCreateAcronym = () => canDoAction(APP_ACTIONS.ACRONYM_CREATE);
+  const canDeleteAcronym = () => canDoAction(APP_ACTIONS.ACRONYM_DELETE);
+  const canViewAcronym = () => canDoAction(APP_ACTIONS.ACRONYM_VIEW) || canEditAcronym() || canCreateAcronym() || canDeleteAcronym();
+
+  // ===== DATA MANAGEMENT PERMISSIONS =====
+  const canImportData = () => canDoAction(APP_ACTIONS.DATA_IMPORT);
+  const canExportData = () => canDoAction(APP_ACTIONS.DATA_EXPORT);
+  const canRunDataHygiene = () => canDoAction(APP_ACTIONS.DATA_HYGIENE);
+  const canDeduplicateData = () => canDoAction(APP_ACTIONS.DATA_DEDUPLICATION);
+  const canMigrateData = () => canDoAction(APP_ACTIONS.DATA_MIGRATION);
+  const canBackupData = () => canDoAction(APP_ACTIONS.DATA_BACKUP);
+
+  // ===== ANALYTICS PERMISSIONS =====
+  const canViewAnalytics = () => canDoAction(APP_ACTIONS.ANALYTICS_VIEW);
+  const canEditAnalytics = () => canDoAction(APP_ACTIONS.ANALYTICS_EDIT);
+  const canExportAnalytics = () => canDoAction(APP_ACTIONS.ANALYTICS_EXPORT);
+  const canViewDepartmentAnalytics = () => canDoAction(APP_ACTIONS.ANALYTICS_DEPARTMENT);
+  const canViewCourseAnalytics = () => canDoAction(APP_ACTIONS.ANALYTICS_COURSE);
+
+  // ===== SYSTEM PERMISSIONS =====
+  const canManageSystemSettings = () => canDoAction(APP_ACTIONS.SYSTEM_SETTINGS);
+  const canManageAccessControl = () => canDoAction(APP_ACTIONS.SYSTEM_ACCESS_CONTROL);
+  const canManageUsers = () => canDoAction(APP_ACTIONS.SYSTEM_USER_MANAGE);
+  const canDisableUsers = () => canDoAction(APP_ACTIONS.SYSTEM_USER_DISABLE);
+  const canDeleteUsers = () => canDoAction(APP_ACTIONS.SYSTEM_USER_DELETE);
+  const canMonitorActivity = () => canDoAction(APP_ACTIONS.SYSTEM_ACTIVITY_MONITOR);
+  const canPerformMaintenance = () => canDoAction(APP_ACTIONS.SYSTEM_MAINTENANCE);
+
+  // ===== CRN PERMISSIONS =====
+  const canEditCRN = () => canDoAction(APP_ACTIONS.CRN_EDIT);
+  const canUpdateCRN = () => canDoAction(APP_ACTIONS.CRN_UPDATE);
+  const canCheckCRNQuality = () => canDoAction(APP_ACTIONS.CRN_QUALITY_CHECK);
+  const canBulkUpdateCRN = () => canDoAction(APP_ACTIONS.CRN_BULK_UPDATE);
+
+  // ===== MISSING DATA PERMISSIONS =====
+  const canEditMissingData = () => canDoAction(APP_ACTIONS.MISSING_DATA_EDIT);
+  const canUpdateMissingData = () => canDoAction(APP_ACTIONS.MISSING_DATA_UPDATE);
+  const canReviewMissingData = () => canDoAction(APP_ACTIONS.MISSING_DATA_REVIEW);
+
+  // ===== GENERAL HELPER FUNCTIONS =====
   const canEditDirectory = (type) => {
     switch (type) {
       case 'faculty': return canEditFaculty();
@@ -155,7 +346,7 @@ export function usePermissions() {
     canAction: canDoAction,
     isAdmin,
 
-    // New granular directory permissions
+    // ===== DIRECTORY PERMISSIONS =====
     canEditFaculty,
     canCreateFaculty,
     canDeleteFaculty,
@@ -173,7 +364,95 @@ export function usePermissions() {
     canDeleteStudent,
     canViewStudent,
 
-    // General helpers
+    // ===== SCHEDULE PERMISSIONS =====
+    canEditSchedule,
+    canCreateSchedule,
+    canDeleteSchedule,
+    canViewSchedule,
+    canBulkEditSchedule,
+    canImportSchedule,
+    canExportSchedule,
+
+    // ===== ROOM PERMISSIONS =====
+    canEditRoom,
+    canCreateRoom,
+    canDeleteRoom,
+    canViewRoom,
+
+    // ===== ROOM GRID PERMISSIONS =====
+    canSaveRoomGrid,
+    canDeleteRoomGrid,
+    canEditRoomGrid,
+    canViewRoomGrid,
+
+    // ===== PROGRAM PERMISSIONS =====
+    canEditProgram,
+    canCreateProgram,
+    canDeleteProgram,
+    canViewProgram,
+    canAssignProgramUPD,
+    canRemoveProgramUPD,
+
+    // ===== COURSE PERMISSIONS =====
+    canEditCourse,
+    canCreateCourse,
+    canDeleteCourse,
+    canViewCourse,
+
+    // ===== TERM PERMISSIONS =====
+    canEditTerm,
+    canCreateTerm,
+    canDeleteTerm,
+    canViewTerm,
+
+    // ===== DEPARTMENT PERMISSIONS =====
+    canEditDepartment,
+    canCreateDepartment,
+    canDeleteDepartment,
+    canViewDepartment,
+
+    // ===== ACRONYM PERMISSIONS =====
+    canEditAcronym,
+    canCreateAcronym,
+    canDeleteAcronym,
+    canViewAcronym,
+
+    // ===== DATA MANAGEMENT PERMISSIONS =====
+    canImportData,
+    canExportData,
+    canRunDataHygiene,
+    canDeduplicateData,
+    canMigrateData,
+    canBackupData,
+
+    // ===== ANALYTICS PERMISSIONS =====
+    canViewAnalytics,
+    canEditAnalytics,
+    canExportAnalytics,
+    canViewDepartmentAnalytics,
+    canViewCourseAnalytics,
+
+    // ===== SYSTEM PERMISSIONS =====
+    canManageSystemSettings,
+    canManageAccessControl,
+    canManageUsers,
+    canDisableUsers,
+    canDeleteUsers,
+    canMonitorActivity,
+    canPerformMaintenance,
+
+    // ===== CRN PERMISSIONS =====
+    canEditCRN,
+    canUpdateCRN,
+    canCheckCRNQuality,
+    canBulkUpdateCRN,
+
+    // ===== MISSING DATA PERMISSIONS =====
+    canEditMissingData,
+    canUpdateMissingData,
+    canReviewMissingData,
+
+    // ===== GENERAL HELPER FUNCTIONS =====
     canEditDirectory,
     canCreateInDirectory,
     canDeleteFromDirectory

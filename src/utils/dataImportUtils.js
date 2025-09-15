@@ -1580,23 +1580,42 @@ const isValidScheduleRow = (rowData) => {
  */
 export const fetchSchedulesWithRelationalData = async () => {
   try {
-    const [schedulesSnapshot, peopleSnapshot, roomsSnapshot] = await Promise.all([
+    const [schedulesSnapshot, peopleSnapshot, roomsSnapshot, programsSnapshot] = await Promise.all([
       getDocs(collection(db, 'schedules')),
       getDocs(collection(db, 'people')),
-      getDocs(collection(db, 'rooms'))
+      getDocs(collection(db, 'rooms')),
+      getDocs(collection(db, COLLECTIONS.PROGRAMS))
     ]);
-    
+
     const schedules = schedulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     const people = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     const rooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    
+    const programs = programsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
     // Create lookup maps for performance
     const peopleMap = new Map(people.map(p => [p.id, p]));
     const roomsMap = new Map(rooms.map(r => [r.id, r]));
-    
+    const programsMap = new Map(programs.map(p => [p.id, p]));
+
     // Populate relational data
     const enrichedSchedules = schedules.map(schedule => {
       const instructor = schedule.instructorId ? peopleMap.get(schedule.instructorId) : null;
+
+      // Populate instructor program information
+      let instructorWithProgram = instructor;
+      if (instructor && instructor.programId) {
+        const program = programsMap.get(instructor.programId);
+        if (program) {
+          instructorWithProgram = {
+            ...instructor,
+            program: {
+              id: program.id,
+              name: program.name
+            }
+          };
+        }
+      }
+
       // Multi-room relational enrichment
       const resolvedRooms = Array.isArray(schedule.roomIds)
         ? schedule.roomIds.map((rid) => roomsMap.get(rid)).filter(Boolean)
@@ -1610,19 +1629,20 @@ export const fetchSchedulesWithRelationalData = async () => {
 
       return {
         ...schedule,
-        instructor,
+        instructor: instructorWithProgram,
         rooms: resolvedRooms, // new relational array
         room: primaryRoom || null, // maintain legacy singular field for older UIs
-        instructorName: instructor ? `${instructor.firstName} ${instructor.lastName}`.trim() : schedule.instructorName || 'Staff',
+        instructorName: instructorWithProgram ? `${instructorWithProgram.firstName} ${instructorWithProgram.lastName}`.trim() : schedule.instructorName || 'Staff',
         roomName: derivedRoomName,
         roomNames: Array.isArray(schedule.roomNames) ? schedule.roomNames : (derivedRoomName ? [derivedRoomName] : [])
       };
     });
-    
+
     return {
       schedules: enrichedSchedules,
       people,
-      rooms
+      rooms,
+      programs
     };
   } catch (error) {
     console.error('Error fetching relational schedule data:', error);

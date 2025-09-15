@@ -202,13 +202,6 @@ const ImportPreviewModal = ({
   const renderFieldDiffs = (change) => {
     if (!change.diff || change.diff.length === 0) return null;
     const selectedSet = selectedFieldsByChange[change.id] || new Set(change.diff.map(d => d.key));
-    // Ensure default selection
-    React.useEffect(() => {
-      if (!selectedFieldsByChange[change.id]) {
-        setSelectedFieldsByChange((prev) => ({ ...prev, [change.id]: new Set(change.diff.map(d => d.key)) }));
-      }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
 
     const toggleField = (key) => {
       setSelectedFieldsByChange((prev) => {

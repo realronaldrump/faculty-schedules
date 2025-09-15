@@ -129,7 +129,12 @@ const RealtimeActivityMonitor = ({
   // Filter activities
   const filteredActivities = activities.filter(activity => {
     if (filters.type && activity.type !== filters.type) return false;
-    if (filters.userId && activity.userId !== filters.userId) return false;
+    if (filters.userId) {
+      const needle = filters.userId.trim().toLowerCase();
+      const hayUserId = (activity.userId || '').toString().toLowerCase();
+      const hayEmail = (activity.userEmail || '').toString().toLowerCase();
+      if (!(hayUserId.includes(needle) || hayEmail.includes(needle))) return false;
+    }
     return true;
   });
 

@@ -10,6 +10,7 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
   const [semesterFilter, setSemesterFilter] = useState('');
   const [showDetails, setShowDetails] = useState(false);
   const [confirmCleanup, setConfirmCleanup] = useState(false);
+  const [skipConfirmation, setSkipConfirmation] = useState(false);
 
   const handleScan = async () => {
     setIsScanning(true);
@@ -70,34 +71,47 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
     }
 
     setIsCleaning(true);
+    let cleanupResult = null;
+
     try {
       console.log('🧹 Starting cleanup of orphaned data...');
 
-      // First do a dry run to show what would be deleted
-      const dryRunResult = await cleanupOrphanedImportedData(selectedData, false);
-      console.log('Dry run result:', dryRunResult);
+      // Skip dry run and confirmation if user opted out
+      if (skipConfirmation) {
+        console.log('⏭️ Skipping dry run and confirmation as requested');
+        cleanupResult = await cleanupOrphanedImportedData(selectedData, true);
+        console.log('Cleanup result:', cleanupResult);
+      } else {
+        // Check if we need to show confirmation first
+        if (!confirmCleanup) {
+          console.log('🔍 Showing confirmation dialog...');
+          // First do a dry run to show what would be deleted
+          const dryRunResult = await cleanupOrphanedImportedData(selectedData, false);
+          console.log('Dry run result:', dryRunResult);
 
-      // Ask for confirmation
-      if (!confirmCleanup) {
-        setConfirmCleanup(true);
-        setIsCleaning(false);
-        return;
+          // Ask for confirmation
+          setConfirmCleanup(true);
+          setIsCleaning(false);
+          return;
+        } else {
+          console.log('✅ Confirmation already given, proceeding with deletion...');
+          // Actually perform the cleanup
+          cleanupResult = await cleanupOrphanedImportedData(selectedData, true);
+          console.log('Cleanup result:', cleanupResult);
+        }
       }
 
-      // Actually perform the cleanup
-      const cleanupResult = await cleanupOrphanedImportedData(selectedData, true);
-      console.log('Cleanup result:', cleanupResult);
-
-      if (cleanupResult.deleted > 0) {
+      // Handle results only if we actually performed cleanup
+      if (cleanupResult && cleanupResult.deleted > 0) {
         showNotification('success', 'Cleanup Complete',
           `Successfully deleted ${cleanupResult.deleted} orphaned records`);
         // Refresh the scan results
         setOrphanedData(null);
         setConfirmCleanup(false);
-      } else if (cleanupResult.errors > 0) {
+      } else if (cleanupResult && cleanupResult.errors > 0) {
         showNotification('warning', 'Cleanup Completed with Errors',
           `${cleanupResult.errors} records could not be deleted`);
-      } else {
+      } else if (cleanupResult) {
         showNotification('info', 'Nothing Deleted', 'No records were found to delete');
       }
     } catch (error) {
@@ -282,6 +296,17 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
                   <p className="text-sm text-gray-600">
                     Permanently delete the {orphanedData.total} orphaned records. People and rooms will only be deleted if unreferenced by other terms.
                   </p>
+                  <div className="mt-2">
+                    <label className="flex items-center space-x-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={skipConfirmation}
+                        onChange={(e) => setSkipConfirmation(e.target.checked)}
+                        className="rounded border-gray-300"
+                      />
+                      <span className="text-gray-700">Skip confirmation (advanced users only)</span>
+                    </label>
+                  </div>
                 </div>
 
                 {!confirmCleanup ? (
@@ -295,7 +320,7 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
                     ) : (
                       <Trash2 className="w-4 h-4" />
                     )}
-                    <span>{isCleaning ? 'Scanning...' : 'Clean Up Data'}</span>
+                    <span>{isCleaning ? 'Processing...' : skipConfirmation ? 'Delete Immediately' : 'Clean Up Data'}</span>
                   </button>
                 ) : (
                   <div className="flex items-center space-x-3">

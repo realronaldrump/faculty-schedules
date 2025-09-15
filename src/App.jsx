@@ -887,13 +887,6 @@ function App() {
 
   const handleFacultyUpdate = async (facultyToUpdate, originalData = null) => {
     const isNewFaculty = !facultyToUpdate.id;
-    const requiredPermission = isNewFaculty ? canCreateFaculty() : canEditFaculty();
-
-    if (!requiredPermission) {
-      const actionName = isNewFaculty ? 'create' : 'modify';
-      showNotification('warning', 'Permission Denied', `You don't have permission to ${actionName} faculty members.`);
-      return;
-    }
     console.log('👤 Updating faculty member:', facultyToUpdate);
 
     try {
@@ -979,13 +972,6 @@ function App() {
 
   const handleStaffUpdate = async (staffToUpdate) => {
     const isNewStaff = !staffToUpdate.id;
-    const requiredPermission = isNewStaff ? canCreateStaff() : canEditStaff();
-
-    if (!requiredPermission) {
-      const actionName = isNewStaff ? 'create' : 'modify';
-      showNotification('warning', 'Permission Denied', `You don't have permission to ${actionName} staff members.`);
-      return;
-    }
     console.log('👥 Updating staff member:', staffToUpdate);
     
     try {
@@ -1077,10 +1063,6 @@ function App() {
   };
 
   const handleFacultyDelete = async (facultyToDelete) => {
-    if (!canDeleteFaculty()) {
-      showNotification('warning', 'Permission Denied', 'You don\'t have permission to delete faculty members.');
-      return;
-    }
     console.log('🗑️ Deleting faculty member:', facultyToDelete);
     
     try {
@@ -1156,13 +1138,6 @@ function App() {
 
   const handleStudentUpdate = async (studentToUpdate) => {
     const isNewStudent = !studentToUpdate.id;
-    const requiredPermission = isNewStudent ? canCreateStudent() : canEditStudent();
-
-    if (!requiredPermission) {
-      const actionName = isNewStudent ? 'create' : 'modify';
-      showNotification('warning', 'Permission Denied', `You don't have permission to ${actionName} student workers.`);
-      return;
-    }
     console.log('🎓 Updating student worker:', studentToUpdate);
 
     try {

@@ -747,10 +747,12 @@ const RoomGridGenerator = () => {
                             <FileText className="w-4 h-4 mr-2" />
                             Generate Schedule
                         </button>
-                        <button onClick={saveGrid} className="btn-secondary" disabled={!scheduleHtml || isSaving}>
-                            <SaveIcon className="w-4 h-4 mr-2" />
-                            { isSaving ? 'Saving...' : 'Save Grid' }
-                        </button>
+                        { (canAction('roomGrids.save')) && (
+                          <button onClick={saveGrid} className="btn-secondary" disabled={!scheduleHtml || isSaving}>
+                              <SaveIcon className="w-4 h-4 mr-2" />
+                              { isSaving ? 'Saving...' : 'Save Grid' }
+                          </button>
+                        )}
                     </div>
                 </div>
             </div>

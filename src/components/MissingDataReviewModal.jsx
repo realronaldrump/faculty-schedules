@@ -472,14 +472,16 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                         )}
                         
                         <div className="flex space-x-2">
-                          <button
-                            onClick={saveRecord}
-                            disabled={isSaving}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center"
-                          >
-                            <Save className="w-4 h-4 mr-2" />
-                            {isSaving ? 'Saving...' : 'Save'}
-                          </button>
+                          {canUpdateMissingData() && (
+                            <button
+                              onClick={saveRecord}
+                              disabled={isSaving}
+                              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center"
+                            >
+                              <Save className="w-4 h-4 mr-2" />
+                              {isSaving ? 'Saving...' : 'Save'}
+                            </button>
+                          )}
                           <button
                             onClick={cancelEditing}
                             disabled={isSaving}

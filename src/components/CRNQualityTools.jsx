@@ -245,12 +245,14 @@ const CRNQualityTools = ({ showNotification }) => {
                             <td className="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">
                               {isEditing ? (
                                 <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={() => handleCrnSave(row)}
-                                    className="inline-flex items-center px-2 py-1 bg-baylor-green text-white rounded-md hover:bg-baylor-green/90"
-                                  >
-                                    <Save className="w-4 h-4 mr-1" /> Save
-                                  </button>
+                                  {canUpdateCRN() && (
+                                    <button
+                                      onClick={() => handleCrnSave(row)}
+                                      className="inline-flex items-center px-2 py-1 bg-baylor-green text-white rounded-md hover:bg-baylor-green/90"
+                                    >
+                                      <Save className="w-4 h-4 mr-1" /> Save
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => cancelCrnEdit(row.id)}
                                     className="inline-flex items-center px-2 py-1 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
@@ -259,12 +261,16 @@ const CRNQualityTools = ({ showNotification }) => {
                                   </button>
                                 </div>
                               ) : (
-                                <button
-                                  onClick={() => setEditingCrn(prev => ({ ...prev, [row.id]: row.crn || '' }))}
-                                  className="inline-flex items-center px-2 py-1 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
-                                >
-                                  <Pencil className="w-4 h-4 mr-1" /> Edit CRN
-                                </button>
+                                <>
+                                  {canUpdateCRN() && (
+                                    <button
+                                      onClick={() => setEditingCrn(prev => ({ ...prev, [row.id]: row.crn || '' }))}
+                                      className="inline-flex items-center px-2 py-1 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                                    >
+                                      <Pencil className="w-4 h-4 mr-1" /> Edit CRN
+                                    </button>
+                                  )}
+                                </>
                               )}
                             </td>
                           </tr>

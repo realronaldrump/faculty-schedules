@@ -784,21 +784,21 @@ const DataHygieneManager = ({ showNotification }) => {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-serif font-semibold text-baylor-green">Data Health Score</h2>
             <div className="flex items-center">
-              <span className={`text-3xl font-bold ${getHealthScoreColor(healthReport.summary.healthScore)}`}>
-                {healthReport.summary.healthScore}%
+              <span className={`text-3xl font-bold ${getHealthScoreColor(healthReport?.summary?.healthScore || 0)}`}>
+                {healthReport?.summary?.healthScore || 0}%
               </span>
               <span className="ml-2 text-gray-600">
-                ({getHealthScoreDescription(healthReport.summary.healthScore)})
+                ({getHealthScoreDescription(healthReport?.summary?.healthScore || 0)})
               </span>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="text-center p-4 bg-blue-50 rounded-lg">
-              <div className="text-2xl font-bold text-blue-600">{healthReport.summary.totalPeople}</div>
+              <div className="text-2xl font-bold text-blue-600">{healthReport?.summary?.totalPeople || 0}</div>
               <div className="text-sm text-gray-600">People</div>
             </div>
             <div className="text-center p-4 bg-green-50 rounded-lg">
-              <div className="text-2xl font-bold text-green-600">{healthReport.summary.totalSchedules}</div>
+              <div className="text-2xl font-bold text-green-600">{healthReport?.summary?.totalSchedules || 0}</div>
               <div className="text-sm text-gray-600">Schedules</div>
             </div>
             <div className="text-center p-4 bg-yellow-50 rounded-lg">
@@ -861,12 +861,13 @@ const DataHygieneManager = ({ showNotification }) => {
       </div>
 
       {/* Interactive Missing Data Summary */}
-      <div className="bg-white rounded-lg shadow-sm border p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Missing Contact Information</h3>
-        <p className="text-sm text-gray-600 mb-4">
-          Click on any category below to review and manually add the missing information.
-        </p>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      {healthReport && (
+        <div className="bg-white rounded-lg shadow-sm border p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Missing Contact Information</h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Click on any category below to review and manually add the missing information.
+          </p>
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <button
             onClick={() => openMissingDataReview('email')}
             className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border-2 border-transparent hover:border-blue-200"
@@ -875,7 +876,7 @@ const DataHygieneManager = ({ showNotification }) => {
               <Mail className="w-5 h-5 text-blue-600 mr-2" />
               <span className="text-gray-700">Missing Email</span>
             </div>
-            <span className="font-medium text-red-600">{healthReport.summary.missingEmail}</span>
+            <span className="font-medium text-red-600">{healthReport?.summary?.missingEmail || 0}</span>
           </button>
           <button
             onClick={() => openMissingDataReview('phone')}
@@ -885,7 +886,7 @@ const DataHygieneManager = ({ showNotification }) => {
               <Phone className="w-5 h-5 text-green-600 mr-2" />
               <span className="text-gray-700">Missing Phone</span>
             </div>
-            <span className="font-medium text-red-600">{healthReport.summary.missingPhone}</span>
+            <span className="font-medium text-red-600">{healthReport?.summary?.missingPhone || 0}</span>
           </button>
           <button
             onClick={() => openMissingDataReview('office')}
@@ -895,7 +896,7 @@ const DataHygieneManager = ({ showNotification }) => {
               <Building className="w-5 h-5 text-purple-600 mr-2" />
               <span className="text-gray-700">Missing Office</span>
             </div>
-            <span className="font-medium text-red-600">{healthReport.summary.missingOffice || 0}</span>
+            <span className="font-medium text-red-600">{healthReport?.summary?.missingOffice || 0}</span>
           </button>
           <button
             onClick={() => openMissingDataReview('jobTitle')}
@@ -905,7 +906,7 @@ const DataHygieneManager = ({ showNotification }) => {
               <User className="w-5 h-5 text-orange-600 mr-2" />
               <span className="text-gray-700">Missing Job Title</span>
             </div>
-            <span className="font-medium text-red-600">{healthReport.summary.missingJobTitle || 0}</span>
+            <span className="font-medium text-red-600">{healthReport?.summary?.missingJobTitle || 0}</span>
           </button>
           <button
             onClick={() => openMissingDataReview('program')}
@@ -915,10 +916,11 @@ const DataHygieneManager = ({ showNotification }) => {
               <BookUser className="w-5 h-5 text-indigo-600 mr-2" />
               <span className="text-gray-700">Missing Program</span>
             </div>
-            <span className="font-medium text-red-600">{healthReport.summary.missingProgram || 0}</span>
+            <span className="font-medium text-red-600">{healthReport?.summary?.missingProgram || 0}</span>
           </button>
         </div>
       </div>
+      )}
 
       {/* Duplicates Step */}
       {wizardStep === 'duplicates' && (

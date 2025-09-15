@@ -26,6 +26,8 @@ import {
   linkScheduleToPerson
 } from '../utils/dataHygiene';
 import { generateDataHygieneReport, mergeScheduleRecords, mergeRoomRecords } from '../utils/comprehensiveDataHygiene';
+import { collection as fbCollection, getDocs as fbGetDocs, writeBatch as fbWriteBatch, doc as fbDoc } from 'firebase/firestore';
+import { logBulkUpdate } from '../utils/changeLogger';
 import { fetchPeople } from '../utils/dataAdapter';
 import MissingDataReviewModal from './MissingDataReviewModal';
 // DeduplicationReviewModal removed from wizard-first UI
@@ -723,6 +725,50 @@ const DataHygieneManager = ({ showNotification }) => {
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh Analysis
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                const snap = await fbGetDocs(fbCollection(db, 'schedules'));
+                const batch = fbWriteBatch(db);
+                let updated = 0;
+                for (const d of snap.docs) {
+                  const s = d.data();
+                  const rawSection = (s.section || '').toString();
+                  const match = rawSection.match(/\((\d{5,6})\)/);
+                  const parsedCrn = match ? match[1] : '';
+                  const normalizedSection = (() => {
+                    const cut = rawSection.split(' ')[0];
+                    const idx = cut.indexOf('(');
+                    return idx > -1 ? cut.substring(0, idx).trim() : cut.trim();
+                  })();
+                  const newCrn = (s.crn && /^\d{5,6}$/.test(String(s.crn))) ? s.crn : parsedCrn;
+                  const shouldUpdate = (normalizedSection !== s.section) || (!!newCrn && String(newCrn) !== String(s.crn || ''));
+                  if (shouldUpdate) {
+                    batch.update(fbDoc(db, 'schedules', d.id), {
+                      section: normalizedSection,
+                      crn: newCrn || '',
+                      updatedAt: new Date().toISOString()
+                    });
+                    updated++;
+                  }
+                }
+                if (updated > 0) {
+                  await batch.commit();
+                  await logBulkUpdate('Normalize section/CRN', 'schedules', updated, 'DataHygieneManager.jsx - normalizeSectionCrn');
+                  showNotification('success', 'Sections/CRN Normalized', `Updated ${updated} schedules`);
+                  await loadHealthReport();
+                } else {
+                  showNotification('info', 'No Changes Needed', 'All schedules already normalized');
+                }
+              } catch (e) {
+                console.error('Normalization error:', e);
+                showNotification('error', 'Normalization Failed', e.message || 'Could not normalize sections/CRN');
+              }
+            }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            Clean Up Section/CRN
           </button>
           
           {/* legacy header buttons removed to focus on wizard */}

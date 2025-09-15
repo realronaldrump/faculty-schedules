@@ -224,7 +224,8 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
   for (const row of csvData) {
     // Precompute key fields and group key for cascading selection
     const preCourseCode = row.Course || '';
-    const preSection = parseSectionField(row['Section #'] || '');
+    const rawSectionField = row['Section #'] || '';
+    const preSection = parseSectionField(rawSectionField);
     const preTerm = row.Term || '';
     const groupKey = `sched_${preCourseCode}_${preSection}_${preTerm}`;
     // Extract instructor information (use Baylor ID match first)
@@ -296,11 +297,21 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
     }
 
     // Create schedule entry
+    const crnFromSection = (() => {
+      const m = String(rawSectionField).match(/\((\d{5,6})\)/);
+      return m ? m[1] : '';
+    })();
+    const finalCrn = (() => {
+      const direct = String(row['CRN'] || '').trim();
+      if (/^\d{5,6}$/.test(direct)) return direct;
+      if (/^\d{5,6}$/.test(crnFromSection)) return crnFromSection;
+      return '';
+    })();
     const scheduleData = {
       courseCode,
       courseTitle: row['Course Title'] || '',
       section,
-      crn: (row['CRN'] && String(row['CRN']).trim().match(/^\d{5}$/)) ? String(row['CRN']).trim() : '',
+      crn: finalCrn,
       credits: row['Credit Hrs'] || row['Credit Hrs Min'] || '',
       term,
       termCode: row['Term Code'] || '',

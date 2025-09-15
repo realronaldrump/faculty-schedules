@@ -6,6 +6,7 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
   const [orphanedData, setOrphanedData] = useState(null);
+  const [selected, setSelected] = useState({ schedules: {}, people: {}, rooms: {} });
   const [semesterFilter, setSemesterFilter] = useState('');
   const [showDetails, setShowDetails] = useState(false);
   const [confirmCleanup, setConfirmCleanup] = useState(false);
@@ -16,6 +17,11 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
       console.log('🔍 Starting scan for orphaned data...');
       const results = await findOrphanedImportedData(semesterFilter || null);
       setOrphanedData(results);
+      const nextSelected = { schedules: {}, people: {}, rooms: {} };
+      results.schedules.forEach((it) => { if (it?.id) nextSelected.schedules[it.id] = true; });
+      results.people.forEach((it) => { if (it?.id) nextSelected.people[it.id] = true; });
+      results.rooms.forEach((it) => { if (it?.id) nextSelected.rooms[it.id] = true; });
+      setSelected(nextSelected);
 
       if (results.total > 0) {
         showNotification('warning', 'Orphaned Data Found', `Found ${results.total} potentially orphaned records`);
@@ -30,8 +36,35 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
     }
   };
 
+  const toggleItem = (collection, id) => {
+    setSelected((prev) => ({
+      ...prev,
+      [collection]: { ...prev[collection], [id]: !prev[collection]?.[id] }
+    }));
+  };
+
+  const setAllInCollection = (collection, value) => {
+    if (!orphanedData) return;
+    setSelected((prev) => {
+      const next = { ...prev, [collection]: {} };
+      orphanedData[collection].forEach((it) => { if (it?.id) next[collection][it.id] = value; });
+      return next;
+    });
+  };
+
+  const countSelected = (collection) => Object.values(selected[collection] || {}).filter(Boolean).length;
+
+  const getSelectedData = () => {
+    if (!orphanedData) return { schedules: [], people: [], rooms: [], total: 0 };
+    const selSchedules = orphanedData.schedules.filter((it) => selected.schedules[it.id]);
+    const selPeople = orphanedData.people.filter((it) => selected.people[it.id]);
+    const selRooms = orphanedData.rooms.filter((it) => selected.rooms[it.id]);
+    return { schedules: selSchedules, people: selPeople, rooms: selRooms, total: selSchedules.length + selPeople.length + selRooms.length };
+  };
+
   const handleCleanup = async () => {
-    if (!orphanedData || orphanedData.total === 0) {
+    const selectedData = getSelectedData();
+    if (!orphanedData || selectedData.total === 0) {
       showNotification('info', 'Nothing to Clean', 'No orphaned data to clean up');
       return;
     }
@@ -41,7 +74,7 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
       console.log('🧹 Starting cleanup of orphaned data...');
 
       // First do a dry run to show what would be deleted
-      const dryRunResult = await cleanupOrphanedImportedData(orphanedData, false);
+      const dryRunResult = await cleanupOrphanedImportedData(selectedData, false);
       console.log('Dry run result:', dryRunResult);
 
       // Ask for confirmation
@@ -52,7 +85,7 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
       }
 
       // Actually perform the cleanup
-      const cleanupResult = await cleanupOrphanedImportedData(orphanedData, true);
+      const cleanupResult = await cleanupOrphanedImportedData(selectedData, true);
       console.log('Cleanup result:', cleanupResult);
 
       if (cleanupResult.deleted > 0) {
@@ -157,13 +190,21 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
                       Found {orphanedData.total} potentially orphaned records
                     </p>
                   </div>
-                  <button
-                    onClick={() => setShowDetails(!showDetails)}
-                    className="px-3 py-1 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center space-x-1"
-                  >
-                    {showDetails ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                    <span>{showDetails ? 'Hide' : 'Show'} Details</span>
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => setShowDetails(!showDetails)}
+                      className="px-3 py-1 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center space-x-1"
+                    >
+                      {showDetails ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                      <span>{showDetails ? 'Hide' : 'Show'} Details</span>
+                    </button>
+                    <button onClick={() => setAllInCollection('schedules', true)} className="px-2 py-1 text-xs border border-gray-300 rounded">All Schedules</button>
+                    <button onClick={() => setAllInCollection('schedules', false)} className="px-2 py-1 text-xs border border-gray-300 rounded">No Schedules</button>
+                    <button onClick={() => setAllInCollection('people', true)} className="px-2 py-1 text-xs border border-gray-300 rounded">All People</button>
+                    <button onClick={() => setAllInCollection('people', false)} className="px-2 py-1 text-xs border border-gray-300 rounded">No People</button>
+                    <button onClick={() => setAllInCollection('rooms', true)} className="px-2 py-1 text-xs border border-gray-300 rounded">All Rooms</button>
+                    <button onClick={() => setAllInCollection('rooms', false)} className="px-2 py-1 text-xs border border-gray-300 rounded">No Rooms</button>
+                  </div>
                 </div>
 
                 {/* Summary Cards */}
@@ -173,21 +214,21 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
                       <Calendar className="w-4 h-4 text-blue-600" />
                       <span className="text-sm font-medium">Schedules</span>
                     </div>
-                    <div className="text-lg font-bold text-blue-600">{orphanedData.schedules.length}</div>
+                    <div className="text-lg font-bold text-blue-600">{countSelected('schedules')} / {orphanedData.schedules.length} selected</div>
                   </div>
                   <div className="bg-white p-3 rounded-lg border border-gray-200">
                     <div className="flex items-center space-x-2">
                       <Users className="w-4 h-4 text-green-600" />
                       <span className="text-sm font-medium">People</span>
                     </div>
-                    <div className="text-lg font-bold text-green-600">{orphanedData.people.length}</div>
+                    <div className="text-lg font-bold text-green-600">{countSelected('people')} / {orphanedData.people.length} selected</div>
                   </div>
                   <div className="bg-white p-3 rounded-lg border border-gray-200">
                     <div className="flex items-center space-x-2">
                       <MapPin className="w-4 h-4 text-purple-600" />
                       <span className="text-sm font-medium">Rooms</span>
                     </div>
-                    <div className="text-lg font-bold text-purple-600">{orphanedData.rooms.length}</div>
+                    <div className="text-lg font-bold text-purple-600">{countSelected('rooms')} / {orphanedData.rooms.length} selected</div>
                   </div>
                 </div>
 
@@ -209,12 +250,13 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
                           </div>
                           <div className="space-y-1 max-h-56 overflow-y-auto">
                             {(showDetails ? items : items.slice(0, 10)).map((item, index) => (
-                              <div key={index} className="text-sm text-gray-600 bg-gray-50 px-2 py-1 rounded">
+                              <label key={index} className="flex items-center space-x-2 text-sm text-gray-600 bg-gray-50 px-2 py-1 rounded">
+                                <input type="checkbox" className="rounded border-gray-300" checked={!!selected[collection]?.[item.id]} onChange={() => toggleItem(collection, item.id)} />
                                 {collection === 'schedules' && `${item.courseCode || 'Unknown'} - ${item.term || 'Unknown'}`}
                                 {collection === 'people' && `${item.firstName || ''} ${item.lastName || ''}`.trim()}
                                 {collection === 'rooms' && `${item.name || item.displayName || 'Unknown'}`}
                                 <span className="text-xs text-gray-400 ml-2">({item.reason})</span>
-                              </div>
+                              </label>
                             ))}
                             {(!showDetails && items.length > 10) && (
                               <div className="text-sm text-gray-500 italic">

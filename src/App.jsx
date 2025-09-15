@@ -28,7 +28,6 @@ import BuildingDirectory from './components/BuildingDirectory';
 import Login from './components/Login';
 import ProtectedContent from './components/ProtectedContent.jsx';
 import AccessControl from './components/admin/AccessControl.jsx';
-import OrphanedDataCleanupModal from './components/admin/OrphanedDataCleanupModal';
 import { useAuth } from './contexts/AuthContext.jsx';
 import { usePermissions } from './utils/permissions';
 import Notification from './components/Notification';
@@ -271,7 +270,6 @@ function App() {
         { id: 'smart-import', label: 'Import Wizard', path: 'administration/import-wizard' },
         { id: 'data-hygiene', label: 'Data Hygiene', path: 'administration/data-hygiene' },
         { id: 'crn-tools', label: 'CRN Quality Tools', path: 'administration/crn-tools' },
-        { id: 'orphaned-data-cleanup', label: 'Orphaned Data Cleanup', path: 'administration/orphaned-data-cleanup' },
         { id: 'room-grid-generator', label: 'Room Grid Generator', path: 'resources/room-grid-generator' },
         { id: 'recent-changes', label: 'Recent Changes', path: 'administration/recent-changes' }
       ]

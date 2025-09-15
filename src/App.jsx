@@ -876,14 +876,17 @@ function App() {
   };
 
   const handleFacultyUpdate = async (facultyToUpdate, originalData = null) => {
-    if (!canEdit()) {
-      showNotification('warning', 'Permission Denied', 'Only admins can modify faculty.');
+    const isNewFaculty = !facultyToUpdate.id;
+    const requiredPermission = isNewFaculty ? canCreateFaculty() : canEditFaculty();
+
+    if (!requiredPermission) {
+      const actionName = isNewFaculty ? 'create' : 'modify';
+      showNotification('warning', 'Permission Denied', `You don't have permission to ${actionName} faculty members.`);
       return;
     }
     console.log('👤 Updating faculty member:', facultyToUpdate);
-    
+
     try {
-      const isNewFaculty = !facultyToUpdate.id;
       let facultyRef;
       let actionType;
       
@@ -965,8 +968,12 @@ function App() {
   };
 
   const handleStaffUpdate = async (staffToUpdate) => {
-    if (!canEdit()) {
-      showNotification('warning', 'Permission Denied', 'Only admins can modify staff.');
+    const isNewStaff = !staffToUpdate.id;
+    const requiredPermission = isNewStaff ? canCreateStaff() : canEditStaff();
+
+    if (!requiredPermission) {
+      const actionName = isNewStaff ? 'create' : 'modify';
+      showNotification('warning', 'Permission Denied', `You don't have permission to ${actionName} staff members.`);
       return;
     }
     console.log('👥 Updating staff member:', staffToUpdate);
@@ -1060,8 +1067,8 @@ function App() {
   };
 
   const handleFacultyDelete = async (facultyToDelete) => {
-    if (!canEdit()) {
-      showNotification('warning', 'Permission Denied', 'Only admins can delete faculty.');
+    if (!canDeleteFaculty()) {
+      showNotification('warning', 'Permission Denied', 'You don\'t have permission to delete faculty members.');
       return;
     }
     console.log('🗑️ Deleting faculty member:', facultyToDelete);
@@ -1138,15 +1145,17 @@ function App() {
   };
 
   const handleStudentUpdate = async (studentToUpdate) => {
-    if (!canEdit()) {
-      showNotification('warning', 'Permission Denied', 'Only admins can modify students.');
+    const isNewStudent = !studentToUpdate.id;
+    const requiredPermission = isNewStudent ? canCreateStudent() : canEditStudent();
+
+    if (!requiredPermission) {
+      const actionName = isNewStudent ? 'create' : 'modify';
+      showNotification('warning', 'Permission Denied', `You don't have permission to ${actionName} student workers.`);
       return;
     }
     console.log('🎓 Updating student worker:', studentToUpdate);
-    
+
     try {
-      const hasProvidedId = Boolean(studentToUpdate.id);
-      const isNewStudent = !hasProvidedId;
       let studentRef;
       let actionType;
       
@@ -1271,8 +1280,8 @@ function App() {
   };
 
   const handleStudentDelete = async (studentToDelete) => {
-    if (!canEdit()) {
-      showNotification('warning', 'Permission Denied', 'Only admins can delete students.');
+    if (!canDeleteStudent()) {
+      showNotification('warning', 'Permission Denied', 'You don\'t have permission to delete student workers.');
       return;
     }
     console.log('🗑️ Deleting student worker:', studentToDelete);

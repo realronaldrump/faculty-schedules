@@ -57,13 +57,19 @@ const AccessControl = () => {
 
   useEffect(() => { loadData(); }, []);
 
-  // Merge any newly registered actions into the local list for display
+  // Load all registered actions on component mount and when users change
   useEffect(() => {
     const keys = getAllRegisteredActionKeys();
     if (Array.isArray(keys) && keys.length > 0) {
       setActionKeys(prev => Array.from(new Set([...prev, ...keys])));
     }
   }, [users]);
+
+  // Also load actions on component mount to ensure we have the latest
+  useEffect(() => {
+    const keys = getAllRegisteredActionKeys();
+    setActionKeys(Array.from(new Set(keys)));
+  }, []);
 
   const toggleRolePage = (role, pageId) => {
     setRolePermissions(prev => {

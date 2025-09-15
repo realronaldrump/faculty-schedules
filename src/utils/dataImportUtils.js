@@ -838,13 +838,51 @@ export const processScheduleImport = async (csvData) => {
   
   console.log(`📊 Found ${existingPeople.length} existing people, ${existingRooms.length} rooms`);
   
+  // Normalize section strings like "01 (33070)" → "01"
+  const normalizeSection = (sectionField) => {
+    const raw = (sectionField || '').toString().trim();
+    if (!raw) return '';
+    const cut = raw.split(' ')[0];
+    const idx = cut.indexOf('(');
+    return idx > -1 ? cut.substring(0, idx).trim() : cut.trim();
+  };
+
+  // Build a deterministic composite key for schedules when CRN/section are missing
+  const toMeetingKey = (patterns) => {
+    if (!Array.isArray(patterns) || patterns.length === 0) return '';
+    const norm = patterns.map(p => ({
+      d: (p?.day || '').toString().trim().toUpperCase(),
+      s: (p?.startTime || '').toString().trim(),
+      e: (p?.endTime || '').toString().trim()
+    }));
+    // Sort by day then start time for stability
+    norm.sort((a,b) => (a.d.localeCompare(b.d) || a.s.localeCompare(b.s) || a.e.localeCompare(b.e)));
+    return norm.map(p => `${p.d}|${p.s}|${p.e}`).join('~');
+  };
+  const toRoomKey = (schedule) => {
+    const names = Array.isArray(schedule?.roomNames)
+      ? schedule.roomNames
+      : ((schedule?.roomName ? [schedule.roomName] : []));
+    if (!names || names.length === 0) return '';
+    const cleaned = names.map(n => (n || '').toString().trim().toLowerCase()).filter(Boolean).sort();
+    return cleaned.join('|');
+  };
+  const buildCompositeKey = (s) => {
+    const course = (s.courseCode || '').toString().trim().toUpperCase();
+    const termVal = (s.term || '').toString().trim();
+    const mp = toMeetingKey(s.meetingPatterns);
+    const rm = toRoomKey(s);
+    if (!course || !termVal || !mp || !rm) return '';
+    return `${course}__${termVal}__${mp}__${rm}`;
+  };
+
   for (const row of csvData) {
     try {
       // Extract key fields
       const instructorField = row['Instructor'] || '';
       const courseCode = row['Course'] || '';
       const courseTitle = row['Course Title'] || row['Long Title'] || '';
-      const section = row['Section #'] || '';
+      const section = normalizeSection(row['Section #'] || '');
       const crn = row['CRN'] || ''; // Extract CRN field
       const meetingPattern = row['Meeting Pattern'] || '';
       const meetings = row['Meetings'] || '';
@@ -1099,10 +1137,17 @@ export const processScheduleImport = async (csvData) => {
       }
       if (!existingMatch) {
         existingMatch = existingSchedules.find(s => 
-          s.courseCode === scheduleData.courseCode &&
-          s.section === scheduleData.section &&
-          s.term === scheduleData.term
+          (s.courseCode || '') === (scheduleData.courseCode || '') &&
+          normalizeSection(s.section) === normalizeSection(scheduleData.section) &&
+          (s.term || '') === (scheduleData.term || '')
         );
+      }
+      // Final fallback: deterministic composite of course + term + meeting time + room
+      if (!existingMatch) {
+        const incomingComposite = buildCompositeKey(scheduleData);
+        if (incomingComposite) {
+          existingMatch = existingSchedules.find(s => buildCompositeKey(s) === incomingComposite);
+        }
       }
       
       if (existingMatch) {

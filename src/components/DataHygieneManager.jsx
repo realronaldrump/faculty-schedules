@@ -25,7 +25,7 @@ import {
   mergePeople,
   linkScheduleToPerson
 } from '../utils/dataHygiene';
-import { generateDataHygieneReport } from '../utils/comprehensiveDataHygiene';
+import { generateDataHygieneReport, mergeScheduleRecords, mergeRoomRecords } from '../utils/comprehensiveDataHygiene';
 import { fetchPeople } from '../utils/dataAdapter';
 import MissingDataReviewModal from './MissingDataReviewModal';
 // DeduplicationReviewModal removed from wizard-first UI
@@ -454,6 +454,30 @@ const DataHygieneManager = ({ showNotification }) => {
     } catch (error) {
       console.error('Error merging records:', error);
       showNotification('error', 'Merge Failed', `Error merging records: ${error.message}`);
+    }
+  };
+
+  // Merge duplicate schedules
+  const handleMergeSchedules = async (duplicateGroup) => {
+    try {
+      await mergeScheduleRecords(duplicateGroup);
+      showNotification('success', 'Schedules Merged', 'Duplicate schedules merged successfully');
+      await loadHealthReport();
+    } catch (e) {
+      console.error('Error merging schedules:', e);
+      showNotification('error', 'Merge Failed', e.message || 'Could not merge schedules');
+    }
+  };
+
+  // Merge duplicate rooms
+  const handleMergeRooms = async (duplicateGroup) => {
+    try {
+      await mergeRoomRecords(duplicateGroup);
+      showNotification('success', 'Rooms Merged', 'Duplicate rooms merged successfully');
+      await loadHealthReport();
+    } catch (e) {
+      console.error('Error merging rooms:', e);
+      showNotification('error', 'Merge Failed', e.message || 'Could not merge rooms');
     }
   };
 
@@ -905,10 +929,12 @@ const DataHygieneManager = ({ showNotification }) => {
       {wizardStep === 'duplicates' && (
         <div className="bg-white rounded-lg shadow-sm border">
           <div className="p-6 border-b">
-            <h3 className="text-lg font-semibold text-gray-900">Duplicate People</h3>
-            <p className="text-gray-600">Review and merge duplicate records</p>
+            <h3 className="text-lg font-semibold text-gray-900">Review Duplicates</h3>
+            <p className="text-gray-600">Deterministic duplicates across people, schedules, and rooms</p>
           </div>
           <div className="p-6">
+            {/* People duplicates */}
+            <h4 className="text-md font-semibold text-gray-900 mb-3">People</h4>
             {duplicates.length === 0 ? (
               <div className="text-center py-8">
                 <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-4" />
@@ -923,9 +949,6 @@ const DataHygieneManager = ({ showNotification }) => {
                       <div className="flex items-center">
                         <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
                         <span className="font-medium text-gray-900">{duplicate.reason}</span>
-                        <span className="ml-2 px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
-                          {duplicate.confidence}% match
-                        </span>
                       </div>
                       <button
                         onClick={() => handleMergePeople(duplicate.primary.id, duplicate.duplicate.id)}
@@ -957,6 +980,98 @@ const DataHygieneManager = ({ showNotification }) => {
                 ))}
               </div>
             )}
+
+            {/* Schedule duplicates */}
+            <div className="mt-10">
+              <h4 className="text-md font-semibold text-gray-900 mb-3">Schedules</h4>
+              {duplicateSchedules.length === 0 ? (
+                <div className="text-center py-6 text-gray-600">No duplicate schedules</div>
+              ) : (
+                <div className="space-y-4">
+                  {duplicateSchedules.slice(0, 20).map((dup, idx) => (
+                    <div key={idx} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center">
+                          <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
+                          <span className="font-medium text-gray-900">{dup.reason}</span>
+                        </div>
+                        <button
+                          onClick={() => handleMergeSchedules(dup)}
+                          className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                        >
+                          Merge Schedules
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div className="border rounded p-3">
+                          <div className="font-medium text-gray-900 mb-1">Record 1</div>
+                          <div>Course: <span className="font-medium">{dup.records[0].courseCode}</span></div>
+                          <div>Section: <span className="font-medium">{dup.records[0].section}</span></div>
+                          <div>Term: <span className="font-medium">{dup.records[0].term}</span></div>
+                          <div>Instructor: <span className="font-medium">{dup.records[0].instructorName}</span></div>
+                          <div>Room: <span className="font-medium">{(dup.records[0].roomNames || [dup.records[0].roomName]).filter(Boolean).join('; ')}</span></div>
+                        </div>
+                        <div className="border rounded p-3 bg-blue-50">
+                          <div className="font-medium text-gray-900 mb-1">Record 2</div>
+                          <div>Course: <span className="font-medium">{dup.records[1].courseCode}</span></div>
+                          <div>Section: <span className="font-medium">{dup.records[1].section}</span></div>
+                          <div>Term: <span className="font-medium">{dup.records[1].term}</span></div>
+                          <div>Instructor: <span className="font-medium">{dup.records[1].instructorName}</span></div>
+                          <div>Room: <span className="font-medium">{(dup.records[1].roomNames || [dup.records[1].roomName]).filter(Boolean).join('; ')}</span></div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {duplicateSchedules.length > 20 && (
+                    <div className="text-center text-gray-500">Showing 20 of {duplicateSchedules.length}</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Room duplicates */}
+            <div className="mt-10">
+              <h4 className="text-md font-semibold text-gray-900 mb-3">Rooms</h4>
+              {duplicateRooms.length === 0 ? (
+                <div className="text-center py-6 text-gray-600">No duplicate rooms</div>
+              ) : (
+                <div className="space-y-4">
+                  {duplicateRooms.slice(0, 20).map((dup, idx) => (
+                    <div key={idx} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center">
+                          <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
+                          <span className="font-medium text-gray-900">{dup.reason}</span>
+                        </div>
+                        <button
+                          onClick={() => handleMergeRooms(dup)}
+                          className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                        >
+                          Merge Rooms
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div className="border rounded p-3">
+                          <div className="font-medium text-gray-900 mb-1">Record 1</div>
+                          <div>Name: <span className="font-medium">{dup.records[0].displayName || dup.records[0].name}</span></div>
+                          <div>Building: <span className="font-medium">{dup.records[0].building}</span></div>
+                          <div>Room #: <span className="font-medium">{dup.records[0].roomNumber}</span></div>
+                        </div>
+                        <div className="border rounded p-3 bg-blue-50">
+                          <div className="font-medium text-gray-900 mb-1">Record 2</div>
+                          <div>Name: <span className="font-medium">{dup.records[1].displayName || dup.records[1].name}</span></div>
+                          <div>Building: <span className="font-medium">{dup.records[1].building}</span></div>
+                          <div>Room #: <span className="font-medium">{dup.records[1].roomNumber}</span></div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {duplicateRooms.length > 20 && (
+                    <div className="text-center text-gray-500">Showing 20 of {duplicateRooms.length}</div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

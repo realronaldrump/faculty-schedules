@@ -148,6 +148,7 @@ export const detectScheduleDuplicates = (schedules) => {
   const duplicates = [];
   const seenByKey = new Map();
   const seenByCrnTerm = new Map();
+  const seenByComposite = new Map();
 
   const normalize = (v) => (v || '').toString().trim().toLowerCase();
   const parseCrnFromSection = (section) => {
@@ -167,6 +168,41 @@ export const detectScheduleDuplicates = (schedules) => {
       return crnFromField;
     }
     return crnFromSection || '';
+  };
+
+  const normalizeSection = (section) => {
+    const raw = (section || '').toString().trim();
+    if (!raw) return '';
+    const cut = raw.split(' ')[0];
+    const idx = cut.indexOf('(');
+    return idx > -1 ? cut.substring(0, idx).trim() : cut.trim();
+  };
+
+  const toMeetingKey = (patterns) => {
+    if (!Array.isArray(patterns) || patterns.length === 0) return '';
+    const norm = patterns.map(p => ({
+      d: (p?.day || '').toString().trim().toUpperCase(),
+      s: (p?.startTime || '').toString().trim(),
+      e: (p?.endTime || '').toString().trim()
+    }));
+    norm.sort((a,b) => (a.d.localeCompare(b.d) || a.s.localeCompare(b.s) || a.e.localeCompare(b.e)));
+    return norm.map(p => `${p.d}|${p.s}|${p.e}`).join('~');
+  };
+  const toRoomKey = (s) => {
+    const names = Array.isArray(s?.roomNames)
+      ? s.roomNames
+      : ((s?.roomName ? [s.roomName] : []));
+    if (!names || names.length === 0) return '';
+    const cleaned = names.map(n => (n || '').toString().trim().toLowerCase()).filter(Boolean).sort();
+    return cleaned.join('|');
+  };
+  const buildCompositeKey = (s) => {
+    const course = (s.courseCode || '').toString().trim().toUpperCase();
+    const termVal = (s.term || '').toString().trim();
+    const mp = toMeetingKey(s.meetingPatterns);
+    const rm = toRoomKey(s);
+    if (!course || !termVal || !mp || !rm) return '';
+    return `${course}__${termVal}__${mp}__${rm}`;
   };
 
   schedules.forEach((schedule) => {
@@ -207,7 +243,7 @@ export const detectScheduleDuplicates = (schedules) => {
     // Secondary signal when CRN is missing: consider course+section+term as the identity
     // Include instructor if present to reduce false positives.
     const courseCode = normalize(schedule.courseCode);
-    const section = normalize(schedule.section);
+    const section = normalize(normalizeSection(schedule.section));
     const instructorId = normalize(schedule.instructorId);
     const scheduleKey = `${courseCode}__${section}__${normalize(schedule.term)}__${instructorId}`;
 
@@ -229,6 +265,26 @@ export const detectScheduleDuplicates = (schedules) => {
         }
       } else {
         seenByKey.set(scheduleKey, schedule);
+      }
+    }
+
+    // Tertiary signal: identical course+term with identical meeting pattern and room(s)
+    // Useful when CRN/section are blank in one of the duplicates.
+    const compositeKey = buildCompositeKey(schedule);
+    if (compositeKey) {
+      if (seenByComposite.has(compositeKey)) {
+        const existing = seenByComposite.get(compositeKey);
+        if (existing.id !== schedule.id) {
+          duplicates.push({
+            type: 'composite_meeting_room',
+            confidence: 1.0,
+            records: [existing, schedule],
+            reason: 'Identical course, term, meeting time, and room(s)',
+            mergeStrategy: 'merge_schedules'
+          });
+        }
+      } else {
+        seenByComposite.set(compositeKey, schedule);
       }
     }
   });

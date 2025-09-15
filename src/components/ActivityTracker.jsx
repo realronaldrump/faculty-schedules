@@ -23,22 +23,6 @@ export const withActivityTracking = (WrappedComponent, componentName, options = 
           options: options
         }
       });
-
-      // Track time spent on component
-      const trackTimeSpent = () => {
-        const timeSpent = Date.now() - startTimeRef.current;
-        logActivity({
-          type: ACTIVITY_TYPES.TIME_SPENT,
-          action: `Spent ${Math.round(timeSpent / 1000)}s on ${componentName}`,
-          component: componentName,
-          metadata: {
-            timeSpentMs: timeSpent,
-            timeSpentSeconds: Math.round(timeSpent / 1000)
-          }
-        });
-      };
-
-      return trackTimeSpent;
     }, [componentName]);
 
     // Track component unmount

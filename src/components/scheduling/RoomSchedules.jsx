@@ -578,7 +578,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
 
                   return (
                     <div
-                      key={item.id}
+                      key={`${item.Course}-${item['Start Time']}-${item['End Time']}-${room}`}
                       style={{ 
                         position: 'absolute', 
                         left: `${left}%`, 

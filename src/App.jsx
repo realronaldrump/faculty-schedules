@@ -1692,18 +1692,7 @@ function App() {
             <CRNQualityTools {...pageProps} />
           </ProtectedContent>
         );
-      case 'administration/orphaned-data-cleanup':
-        return (
-          <ProtectedContent pageId="administration/orphaned-data-cleanup">
-            <div className="p-6">
-              <OrphanedDataCleanupModal
-                isOpen={true}
-                onClose={() => handleNavigate('dashboard')}
-                showNotification={(type, title, message) => showNotification(type, title, message)}
-              />
-            </div>
-          </ProtectedContent>
-        );
+      // removed orphaned-data-cleanup standalone page; use Data Hygiene wizard
       case 'administration/baylor-systems':
         return (
           <ProtectedContent pageId="administration/baylor-systems">

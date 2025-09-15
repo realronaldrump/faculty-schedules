@@ -1,51 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Database, 
-  CheckCircle, 
-  AlertTriangle, 
-  Trash2, 
-  Link, 
+import {
+  CheckCircle,
+  AlertTriangle,
+  Link,
   MapPin,
   RefreshCw,
-  Shield,
-  Settings,
-  TrendingUp,
   Users,
   Calendar,
   Mail,
   Phone,
   Building,
   User,
-  Edit,
   BookUser,
-  Eye,
-  FileText,
-  ChevronDown,
   ChevronRight,
   Search,
-  X
+  X,
+  Edit
 } from 'lucide-react';
 import { collection, getDocs, doc, updateDoc, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import {
   getDataHealthReport,
-  findDuplicatePeople,
   findOrphanedSchedules,
   mergePeople,
-  linkScheduleToPerson,
-  previewStandardization,
-  applyTargetedStandardization
+  linkScheduleToPerson
 } from '../utils/dataHygiene';
-import {
-  generateDataHygieneReport,
-  mergePeopleRecords,
-  mergeScheduleRecords,
-  mergeRoomRecords,
-  standardizeAllData as standardizeAllDataComprehensive
-} from '../utils/comprehensiveDataHygiene';
+import { generateDataHygieneReport } from '../utils/comprehensiveDataHygiene';
 import { fetchPeople } from '../utils/dataAdapter';
 import MissingDataReviewModal from './MissingDataReviewModal';
-import DeduplicationReviewModal from './DeduplicationReviewModal';
+// DeduplicationReviewModal removed from wizard-first UI
 import { ConfirmationDialog } from './CustomAlert';
 import OrphanedDataCleanupModal from './admin/OrphanedDataCleanupModal';
 import { logUpdate } from '../utils/changeLogger';
@@ -390,140 +373,22 @@ const LinkRoomModal = ({ isOpen, onClose, onConfirm, schedule }) => {
   );
 };
 
-// Standardization Preview Component
-const StandardizationPreview = ({ preview, onClose, onConfirm, isLoading }) => {
-  const [expandedChanges, setExpandedChanges] = useState(new Set());
-  
-  const toggleExpanded = (personId) => {
-    const newExpanded = new Set(expandedChanges);
-    if (newExpanded.has(personId)) {
-      newExpanded.delete(personId);
-    } else {
-      newExpanded.add(personId);
-    }
-    setExpandedChanges(newExpanded);
-  };
-
-  if (!preview) return null;
-
-  return (
-    <ConfirmationDialog
-      isOpen={true}
-      title="Data Standardization Preview"
-      message={`Found ${preview.recordsToChange} records that can be improved. Review the changes below:`}
-      type="info"
-      confirmText={isLoading ? "Applying..." : `Apply ${preview.recordsToChange} Changes`}
-      cancelText="Cancel"
-      onConfirm={onConfirm}
-      onCancel={onClose}
-    >
-      <div className="max-h-96 overflow-y-auto">
-        {/* Summary */}
-        <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-          <h4 className="font-medium text-blue-900 mb-2">Summary of Changes</h4>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            {preview.summary.nameParsingFixes > 0 && (
-              <div>• Name parsing fixes: {preview.summary.nameParsingFixes}</div>
-            )}
-            {preview.summary.brokenNameFixes > 0 && (
-              <div>• Broken name fixes: {preview.summary.brokenNameFixes}</div>
-            )}
-            {preview.summary.phoneFormatFixes > 0 && (
-              <div>• Phone formatting: {preview.summary.phoneFormatFixes}</div>
-            )}
-            {preview.summary.emailFormatFixes > 0 && (
-              <div>• Email formatting: {preview.summary.emailFormatFixes}</div>
-            )}
-            {preview.summary.rolesFormatFixes > 0 && (
-              <div>• Roles format fixes: {preview.summary.rolesFormatFixes}</div>
-            )}
-          </div>
-        </div>
-
-        {/* Detailed Changes */}
-        <div className="space-y-2">
-          {preview.changes.slice(0, 10).map((change) => (
-            <div key={change.personId} className="border rounded-lg p-3">
-              <div 
-                className="flex items-center justify-between cursor-pointer"
-                onClick={() => toggleExpanded(change.personId)}
-              >
-                <div className="flex items-center">
-                  <User className="w-4 h-4 text-blue-600 mr-2" />
-                  <span className="font-medium">{change.personName}</span>
-                  <span className="text-sm text-gray-500 ml-2">
-                    ({change.differences.length} change{change.differences.length !== 1 ? 's' : ''})
-                  </span>
-                </div>
-                {expandedChanges.has(change.personId) ? (
-                  <ChevronDown className="w-4 h-4 text-gray-400" />
-                ) : (
-                  <ChevronRight className="w-4 h-4 text-gray-400" />
-                )}
-              </div>
-              
-              {expandedChanges.has(change.personId) && (
-                <div className="mt-3 space-y-2">
-                  {change.differences.map((diff, index) => (
-                    <div key={index} className="text-sm bg-gray-50 p-2 rounded">
-                      <div className="font-medium text-gray-700 mb-1">{diff.description}</div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <div className="text-xs text-red-600 font-medium">Before:</div>
-                          <div className="text-xs font-mono bg-red-50 p-1 rounded">
-                            {JSON.stringify(diff.before, null, 1)}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-green-600 font-medium">After:</div>
-                          <div className="text-xs font-mono bg-green-50 p-1 rounded">
-                            {JSON.stringify(diff.after, null, 1)}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-          
-          {preview.changes.length > 10 && (
-            <div className="text-center text-sm text-gray-500 py-2">
-              ... and {preview.changes.length - 10} more records
-            </div>
-          )}
-        </div>
-
-        {preview.recordsToChange === 0 && (
-          <div className="text-center py-4 text-gray-500">
-            <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-500" />
-            All records are already properly formatted!
-          </div>
-        )}
-      </div>
-    </ConfirmationDialog>
-  );
-};
+// Standardization preview removed
 
 const DataHygieneManager = ({ showNotification }) => {
   const [healthReport, setHealthReport] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview');
   const [duplicates, setDuplicates] = useState([]);
   const [duplicateSchedules, setDuplicateSchedules] = useState([]);
   const [duplicateRooms, setDuplicateRooms] = useState([]);
   const [relationshipIssues, setRelationshipIssues] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
-  const [selectedDuplicates, setSelectedDuplicates] = useState([]);
-  const [mergeProgress, setMergeProgress] = useState(null);
-  const [showConfirmMerge, setShowConfirmMerge] = useState(false);
   const [orphanedSchedules, setOrphanedSchedules] = useState([]);
   
   // Professional modal states
   const [showMissingDataModal, setShowMissingDataModal] = useState(false);
   const [missingDataType, setMissingDataType] = useState('email');
-  const [showDeduplicationModal, setShowDeduplicationModal] = useState(false);
+  // removed: legacy deduplication modal state
   
   // Link person modal states
   const [showLinkPersonModal, setShowLinkPersonModal] = useState(false);
@@ -532,14 +397,12 @@ const DataHygieneManager = ({ showNotification }) => {
   const [scheduleToLinkRoom, setScheduleToLinkRoom] = useState(null);
   
   // Standardization states
-  const [showStandardizationPreview, setShowStandardizationPreview] = useState(false);
-  const [standardizationPreview, setStandardizationPreview] = useState(null);
-  const [isStandardizing, setIsStandardizing] = useState(false);
+  // removed: standardization preview state
 
   // Wizard state
   const steps = ['analyze', 'duplicates', 'orphaned', 'missing', 'links', 'finish'];
   const [wizardStep, setWizardStep] = useState('analyze');
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  // advanced tabs removed
   const [showCleanupModal, setShowCleanupModal] = useState(false);
 
   // Load health report
@@ -669,9 +532,7 @@ const DataHygieneManager = ({ showNotification }) => {
     setShowMissingDataModal(true);
   };
 
-  const openDeduplicationReview = () => {
-    setShowDeduplicationModal(true);
-  };
+  // removed: deduplication review modal opener
 
   const handleDataUpdated = () => {
     // Refresh health report when data is updated
@@ -679,22 +540,7 @@ const DataHygieneManager = ({ showNotification }) => {
   };
 
   // Preview standardization changes
-  const handlePreviewStandardization = async () => {
-    setIsLoading(true);
-    try {
-      const preview = await previewStandardization();
-      setStandardizationPreview(preview);
-      setShowStandardizationPreview(true);
-    } catch (error) {
-      console.error('Error previewing standardization:', error);
-      showNotification(
-        'error',
-        'Preview Error',
-        'Failed to generate standardization preview. Please try again.'
-      );
-    }
-    setIsLoading(false);
-  };
+  // removed: preview standardization
 
   // Apply standardization changes
   const handleApplyStandardization = async () => {
@@ -726,64 +572,7 @@ const DataHygieneManager = ({ showNotification }) => {
     };
 
   // ==== Duplicate Selection & Bulk Merge ====
-  const toggleDuplicateSelection = (duplicate) => {
-    setSelectedDuplicates(prev => {
-      const exists = prev.find(d =>
-        d.type === duplicate.type &&
-        d.records[0].id === duplicate.records[0].id &&
-        d.records[1].id === duplicate.records[1].id
-      );
-      if (exists) {
-        return prev.filter(d => d !== exists);
-      } else {
-        return [...prev, duplicate];
-      }
-    });
-  };
-
-  const handleBulkMerge = () => {
-    if (selectedDuplicates.length === 0) {
-      showNotification('warning', 'No Selection', 'Please select duplicates to merge');
-      return;
-    }
-    setShowConfirmMerge(true);
-  };
-
-  const executeBulkMerge = async () => {
-    setShowConfirmMerge(false);
-    setMergeProgress({ current: 0, total: selectedDuplicates.length, type: 'merge' });
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (let i = 0; i < selectedDuplicates.length; i++) {
-      const duplicate = selectedDuplicates[i];
-      setMergeProgress({ current: i + 1, total: selectedDuplicates.length, type: 'merge' });
-      try {
-        switch (duplicate.mergeStrategy) {
-          case 'merge_people':
-            await mergePeopleRecords(duplicate);
-            break;
-          case 'merge_schedules':
-            await mergeScheduleRecords(duplicate);
-            break;
-          case 'merge_rooms':
-            await mergeRoomRecords(duplicate);
-            break;
-          default:
-            console.warn('Unknown merge strategy:', duplicate.mergeStrategy);
-        }
-        successCount++;
-      } catch (error) {
-        console.error('Error merging duplicate:', error);
-        errorCount++;
-      }
-    }
-
-    setMergeProgress(null);
-    showNotification('success', 'Bulk Merge Complete', `${successCount} successful, ${errorCount} failed`);
-    await loadHealthReport();
-    setSelectedDuplicates([]);
-  };
+  // removed: bulk merge selection and progress UI
 
   const handleStandardizeAllData = async () => {
     // Reuse merge confirmation modal for standardization flow
@@ -911,52 +700,13 @@ const DataHygieneManager = ({ showNotification }) => {
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh Analysis
           </button>
-          <button
-            onClick={handlePreviewStandardization}
-            disabled={isLoading}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center"
-          >
-            <Eye className="w-4 h-4 mr-2" />
-            Preview Data Cleanup
-          </button>
-          <button
-            onClick={openDeduplicationReview}
-            disabled={isLoading}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center"
-          >
-            <Users className="w-4 h-4 mr-2" />
-            Review Duplicates
-          </button>
-          <button
-            onClick={() => openMissingDataReview('all')}
-            disabled={isLoading}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center"
-          >
-            <Edit className="w-4 h-4 mr-2" />
-            Fix Missing Data
-          </button>
+          
+          {/* legacy header buttons removed to focus on wizard */}
         </div>
       </div>
 
       {/* Progress Indicator */}
-      {mergeProgress && (
-        <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-medium text-blue-900">
-              {mergeProgress.type === 'merge' ? 'Merging Duplicates' : 'Standardizing Data'}
-            </span>
-            <span className="text-sm text-blue-700">
-              {mergeProgress.current} / {mergeProgress.total}
-            </span>
-          </div>
-          <div className="w-full bg-blue-200 rounded-full h-2">
-            <div
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${(mergeProgress.current / mergeProgress.total) * 100}%` }}
-            />
-          </div>
-        </div>
-      )}
+      {/* merge progress removed */}
 
       {/* Health Score Card */}
       {healthReport && (
@@ -1006,12 +756,7 @@ const DataHygieneManager = ({ showNotification }) => {
                 <p className="text-sm text-gray-600 mb-3">
                   {duplicates.length} potential duplicate records found. Review and manually merge.
                 </p>
-                <button
-                  onClick={openDeduplicationReview}
-                  className="w-full px-3 py-2 bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200"
-                >
-                  Review & Merge Duplicates
-                </button>
+                {/* legacy duplicate modal button removed */}
               </div>
               
               <div className="p-4 border rounded-lg">
@@ -1022,12 +767,7 @@ const DataHygieneManager = ({ showNotification }) => {
                 <p className="text-sm text-gray-600 mb-3">
                   {orphanedSchedules.length} schedules need to be linked to faculty
                 </p>
-                <button
-                  onClick={() => setActiveTab('orphaned')}
-                  className="w-full px-3 py-2 bg-red-100 text-red-800 rounded-lg hover:bg-red-200"
-                >
-                  Fix Orphaned Schedules
-                </button>
+                {/* legacy tab navigation removed */}
               </div>
               
               <div className="p-4 border rounded-lg">
@@ -1038,70 +778,16 @@ const DataHygieneManager = ({ showNotification }) => {
                 <p className="text-sm text-gray-600 mb-3">
                   Review records and manually add missing contact information
                 </p>
-                <button
-                  onClick={() => openMissingDataReview('all')}
-                  className="w-full px-3 py-2 bg-purple-100 text-purple-800 rounded-lg hover:bg-purple-200"
-                >
-                  Review Missing Data
-                </button>
+                {/* legacy modal shortcut removed */}
               </div>
 
-              {/* Safe Data Cleanup card */}
-              <div className="p-4 border rounded-lg">
-                <div className="flex items-center mb-2">
-                  <Eye className="w-5 h-5 text-blue-600 mr-2" />
-                  <h4 className="font-medium text-gray-900">Smart Data Cleanup</h4>
-                </div>
-                <p className="text-sm text-gray-600 mb-3">
-                  Preview and apply safe formatting fixes like name parsing and phone numbers
-                </p>
-                <button
-                  onClick={handlePreviewStandardization}
-                  disabled={isLoading}
-                  className="w-full px-3 py-2 bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200 disabled:opacity-50"
-                >
-                  {isLoading ? 'Analyzing...' : 'Preview Cleanup Changes'}
-                </button>
-              </div>
+              
             </div>
           </div>
         </>
       )}
 
-      {/* Advanced Tabs Toggle */}
-      <div className="mb-4">
-        <button
-          onClick={() => setShowAdvanced(!showAdvanced)}
-          className="text-sm text-blue-700 underline"
-        >
-          {showAdvanced ? 'Hide advanced analysis' : 'Show advanced analysis'}
-        </button>
-      </div>
-      {showAdvanced && (
-        <div className="flex space-x-1 mb-6">
-          {[
-            { id: 'overview', label: 'Overview' },
-            { id: 'duplicates', label: `People (${duplicates.length})` },
-            { id: 'duplicateSchedules', label: `Schedules (${duplicateSchedules.length})` },
-            { id: 'duplicateRooms', label: `Rooms (${duplicateRooms.length})` },
-            { id: 'orphaned', label: `Orphaned (${orphanedSchedules.length})` },
-            { id: 'relationships', label: `Broken Links (${relationshipIssues.length})` },
-            { id: 'recommendations', label: 'Fix Guide' }
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 rounded-lg font-medium ${
-                activeTab === tab.id
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Advanced tabs removed */}
 
       {/* Wizard Content */}
       {wizardStep === 'analyze' && healthReport && (
@@ -1118,12 +804,7 @@ const DataHygieneManager = ({ showNotification }) => {
                 <p className="text-sm text-gray-600 mb-3">
                   {duplicates.length} potential duplicate records found. Review and manually merge.
                 </p>
-                <button
-                  onClick={openDeduplicationReview}
-                  className="w-full px-3 py-2 bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200"
-                >
-                  Review & Merge Duplicates
-                </button>
+                
               </div>
               
               <div className="p-4 border rounded-lg">
@@ -1134,12 +815,7 @@ const DataHygieneManager = ({ showNotification }) => {
                 <p className="text-sm text-gray-600 mb-3">
                   {orphanedSchedules.length} schedules need to be linked to faculty
                 </p>
-                <button
-                  onClick={() => setActiveTab('orphaned')}
-                  className="w-full px-3 py-2 bg-red-100 text-red-800 rounded-lg hover:bg-red-200"
-                >
-                  Fix Orphaned Schedules
-                </button>
+                
               </div>
               
               <div className="p-4 border rounded-lg">
@@ -1159,22 +835,7 @@ const DataHygieneManager = ({ showNotification }) => {
               </div>
 
               {/* Clean Up Formatting card */}
-              <div className="p-4 border rounded-lg">
-                <div className="flex items-center mb-2">
-                  <Settings className="w-5 h-5 text-blue-600 mr-2" />
-                  <h4 className="font-medium text-gray-900">Standardize All Data</h4>
-                </div>
-                <p className="text-sm text-gray-600 mb-3">
-                  Enforce a consistent schema for all records. Adds missing fields, removes obsolete ones, and cleans up formatting.
-                </p>
-                <button
-                  onClick={handlePreviewStandardization}
-                  disabled={isLoading}
-                  className="w-full px-3 py-2 bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200"
-                >
-                  Preview Standardization
-                </button>
-              </div>
+              {/* standardization card removed */}
             </div>
           </div>
 
@@ -1300,27 +961,7 @@ const DataHygieneManager = ({ showNotification }) => {
         </div>
       )}
 
-      {/* Advanced: Duplicate Schedules Tab */}
-      {showAdvanced && activeTab === 'duplicateSchedules' && (
-        <DuplicateList
-          title="Schedule Duplicates"
-          duplicates={duplicateSchedules}
-          selectedDuplicates={selectedDuplicates}
-          onToggleSelection={toggleDuplicateSelection}
-          recordType="schedules"
-        />
-      )}
-
-      {/* Advanced: Duplicate Rooms Tab */}
-      {showAdvanced && activeTab === 'duplicateRooms' && (
-        <DuplicateList
-          title="Room Duplicates"
-          duplicates={duplicateRooms}
-          selectedDuplicates={selectedDuplicates}
-          onToggleSelection={toggleDuplicateSelection}
-          recordType="rooms"
-        />
-      )}
+      {/* Advanced duplicates sections removed */}
 
       {/* Broken Links Step */}
       {wizardStep === 'links' && (
@@ -1332,22 +973,12 @@ const DataHygieneManager = ({ showNotification }) => {
         />
       )}
 
-      {/* Advanced: Relationship Issues Tab */}
-      {showAdvanced && activeTab === 'relationships' && (
-        <RelationshipIssues
-          issues={relationshipIssues}
-          onLinkPerson={openLinkPersonModal}
-          onLinkRoom={openLinkRoomModal}
-          onStandardizeInstructorName={standardizeInstructorNameForId}
-        />
-      )}
+      {/* Advanced relationship tab removed */}
 
       {/* Finish Step */}
       {wizardStep === 'finish' && (
         <Recommendations
           recommendations={recommendations}
-          onBulkMerge={handleBulkMerge}
-          selectedCount={selectedDuplicates.length}
         />
       )}
 
@@ -1420,37 +1051,7 @@ const DataHygieneManager = ({ showNotification }) => {
         </div>
       )}
 
-      {/* Confirm Merge Modal */}
-      {showConfirmMerge && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Fix These Issues?</h3>
-            <p className="text-gray-600 mb-4">
-              You're about to merge {selectedDuplicates.length} duplicate records into single, clean records.
-            </p>
-            <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-6">
-              <p className="text-blue-800 text-sm">
-                <strong>What this does:</strong> Combines duplicate records and updates all references. 
-                The duplicates will be removed, keeping the most complete information.
-              </p>
-            </div>
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setShowConfirmMerge(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={executeBulkMerge}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-              >
-                Fix {selectedDuplicates.length} Issues
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Merge confirmation removed */}
 
       {/* Professional Review Modals */}
       <MissingDataReviewModal
@@ -1460,24 +1061,9 @@ const DataHygieneManager = ({ showNotification }) => {
         onDataUpdated={handleDataUpdated}
       />
 
-      <DeduplicationReviewModal
-        isOpen={showDeduplicationModal}
-        onClose={() => setShowDeduplicationModal(false)}
-        onDuplicatesResolved={handleDataUpdated}
-      />
+      {/* Deduplication modal removed */}
 
-      {/* Standardization Preview */}
-      {showStandardizationPreview && (
-        <StandardizationPreview
-          preview={standardizationPreview}
-          onClose={() => {
-            setShowStandardizationPreview(false);
-            setStandardizationPreview(null);
-          }}
-          onConfirm={handleApplyStandardization}
-          isLoading={isStandardizing}
-        />
-      )}
+      {/* standardization preview removed */}
 
       {/* Link Person Modal */}
       <LinkPersonModal
@@ -1705,7 +1291,7 @@ const RelationshipIssues = ({ issues, onLinkPerson, onLinkRoom, onStandardizeIns
   );
 };
 
-const Recommendations = ({ recommendations, onStandardizeData, onBulkMerge, selectedCount }) => {
+const Recommendations = ({ recommendations }) => {
   if (recommendations.length === 0) {
     return (
       <div className="p-6 text-center">
@@ -1747,35 +1333,7 @@ const Recommendations = ({ recommendations, onStandardizeData, onBulkMerge, sele
           </div>
         ))}
       </div>
-      <div className="border-t pt-6 bg-blue-50 -mx-6 px-6 -mb-6 pb-6">
-        <h4 className="font-medium mb-2">How to Fix These Issues</h4>
-        <p className="text-sm text-gray-600 mb-4">
-          Select the duplicates you want to merge using the checkboxes in the tabs above, then click "Fix Selected Issues"
-          below.
-        </p>
-        <div className="flex space-x-3">
-          <button
-            onClick={onBulkMerge}
-            disabled={selectedCount === 0}
-            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
-          >
-            <CheckCircle className="w-4 h-4 mr-2" />
-            Fix Selected Issues ({selectedCount})
-          </button>
-          <button
-            onClick={onStandardizeData}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center font-medium"
-          >
-            <Settings className="w-4 h-4 mr-2" />
-            Clean Up Formatting
-          </button>
-        </div>
-        {selectedCount === 0 && (
-          <p className="text-sm text-gray-500 mt-2">
-            Go to the People, Schedules, or Rooms tabs above to select items to fix.
-          </p>
-        )}
-      </div>
+      
     </div>
   );
 };

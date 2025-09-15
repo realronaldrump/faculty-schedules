@@ -54,7 +54,7 @@ const CRNQualityTools = ({ showNotification }) => {
   }, [schedules]);
 
   const uniquePrograms = useMemo(() => {
-    return Array.from(new Set((schedules || []).map(s => (s.program || s.instructor?.program?.name || '')).filter(Boolean))).sort();
+    return Array.from(new Set((schedules || []).map(s => (s.instructor?.program?.name || s.program || '')).filter(Boolean))).sort();
   }, [schedules]);
 
   const filteredSchedules = useMemo(() => {
@@ -69,7 +69,7 @@ const CRNQualityTools = ({ showNotification }) => {
           item.term,
           item.crn || item.CRN || '',
           item.instructorName || '',
-          item.program || item.instructor?.program?.name || ''
+          item.instructor?.program?.name || item.program || ''
         ].map(v => (v || '').toString().toLowerCase());
         return values.some(v => v.includes(term));
       });
@@ -81,7 +81,7 @@ const CRNQualityTools = ({ showNotification }) => {
     // Program filter
     if (filters.programs.length > 0) {
       data = data.filter(item => {
-        const programName = item.program || item.instructor?.program?.name || '';
+        const programName = item.instructor?.program?.name || item.program || '';
         return filters.programs.includes(programName);
       });
     }
@@ -363,7 +363,7 @@ const CRNQualityTools = ({ showNotification }) => {
                 {filteredSchedules.map((row) => {
                   const effectiveCrn = (row.crn || row.CRN || '').toString();
                   const isMissing = !effectiveCrn.trim();
-                  const programName = row.program || row.instructor?.program?.name || '';
+                  const programName = row.instructor?.program?.name || row.program || '';
                   return (
                     <tr key={row.id} className={isMissing ? 'bg-red-50/40' : ''}>
                       <td className="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">{row.term}</td>

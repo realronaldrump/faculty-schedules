@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import DOMPurify from 'dompurify';
 import Papa from 'papaparse';
 import { Upload, X, Trash2, FileText, Download, Save as SaveIcon } from 'lucide-react';
 import ExportModal from './ExportModal';
@@ -244,7 +245,7 @@ const RoomGridGenerator = () => {
             `;
         }).join('');
 
-        setScheduleHtml(`
+        const htmlUnsafe = `
             <div class="schedule-sheet">
                 <table class="schedule-table">
                     <thead>
@@ -257,7 +258,8 @@ const RoomGridGenerator = () => {
                     </tbody>
                 </table>
             </div>
-        `);
+        `;
+        setScheduleHtml(DOMPurify.sanitize(htmlUnsafe, { USE_PROFILES: { html: true } }));
         showMessage("Schedule generated. Click on fields to edit before printing.", 'success');
     };
 
@@ -369,12 +371,13 @@ const RoomGridGenerator = () => {
             </div>
         `;
 
-        setScheduleHtml(`
+        const htmlUnsafe = `
             <div class="schedule-sheet weekly-sheet">
                 ${header}
                 ${grid}
             </div>
-        `);
+        `;
+        setScheduleHtml(DOMPurify.sanitize(htmlUnsafe, { USE_PROFILES: { html: true } }));
         showMessage("Weekly grid generated. Click on fields to edit before printing.", 'success');
     };
 
@@ -596,7 +599,8 @@ const RoomGridGenerator = () => {
         }
         setIsSaving(true);
         try {
-            const html = printRef.current ? printRef.current.innerHTML : scheduleHtml;
+            const htmlRaw = printRef.current ? printRef.current.innerHTML : scheduleHtml;
+            const html = DOMPurify.sanitize(htmlRaw, { USE_PROFILES: { html: true } });
             const payload = {
                 title: `${selectedBuilding}-${selectedRoom}-${selectedDayType}-${semester}`,
                 building: selectedBuilding,
@@ -624,7 +628,7 @@ const RoomGridGenerator = () => {
         setSelectedRoom(grid.room || selectedRoom);
         setSelectedDayType(grid.dayType || selectedDayType);
         setSemester(grid.semester || semester);
-        setScheduleHtml(grid.html || '');
+        setScheduleHtml(DOMPurify.sanitize(grid.html || '', { USE_PROFILES: { html: true } }));
         showMessage('Loaded saved grid.', 'success');
     };
 

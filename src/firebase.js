@@ -1,6 +1,6 @@
 // src/firebase.js
 import { initializeApp } from "firebase/app";
-import { getFirestore, connectFirestoreEmulator, enableNetwork, disableNetwork } from "firebase/firestore";
+import { getFirestore, connectFirestoreEmulator, enableNetwork, disableNetwork, enableIndexedDbPersistence, enableMultiTabIndexedDbPersistence } from "firebase/firestore";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
 
 // Firebase configuration
@@ -50,9 +50,20 @@ export const firestoreUtils = {
   // Enable offline persistence
   async enableOffline() {
     try {
-      await disableNetwork(db);
-      await enableNetwork(db);
-      console.log('📴 Offline persistence enabled');
+      try {
+        await enableIndexedDbPersistence(db);
+        console.log('📦 IndexedDB persistence enabled');
+      } catch (err) {
+        if (err && err.code === 'failed-precondition') {
+          // Fallback for multi-tab environments
+          await enableMultiTabIndexedDbPersistence(db);
+          console.log('📦 Multi-tab IndexedDB persistence enabled');
+        } else if (err && err.code === 'unimplemented') {
+          console.warn('⚠️  Persistence not available in this environment');
+        } else {
+          throw err;
+        }
+      }
       return true;
     } catch (error) {
       console.error('❌ Could not enable offline persistence:', error);

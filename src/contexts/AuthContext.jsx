@@ -96,7 +96,14 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     setLoading(true);
+    let stopUserProfile = null;
     const unsub = onAuthStateChanged(auth, async (u) => {
+      // Clean up any existing profile subscription before handling new user
+      if (typeof stopUserProfile === 'function') {
+        try { stopUserProfile(); } catch (_) {}
+        stopUserProfile = null;
+      }
+
       setUser(u);
       setLoadedProfile(false);
       // Persist minimal user info for activity logger
@@ -127,7 +134,7 @@ export const AuthProvider = ({ children }) => {
       // Subscribe to current user's profile
       if (u) {
         const userRef = doc(db, 'users', u.uid);
-        const stop = onSnapshot(userRef, (snap) => {
+        stopUserProfile = onSnapshot(userRef, (snap) => {
           setUserProfile(snap.exists() ? snap.data() : null);
           // Update cached role/email for activity logs when profile changes
           try {
@@ -145,13 +152,17 @@ export const AuthProvider = ({ children }) => {
           setUserProfile(null);
           setLoadedProfile(true);
         });
-        return () => stop();
       } else {
         setUserProfile(null);
         setLoadedProfile(true);
       }
     });
-    return () => unsub();
+    return () => {
+      try { unsub(); } catch (_) {}
+      if (typeof stopUserProfile === 'function') {
+        try { stopUserProfile(); } catch (_) {}
+      }
+    };
   }, []);
 
   // Subscribe to Access Control changes

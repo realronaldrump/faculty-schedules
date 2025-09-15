@@ -10,9 +10,9 @@
 
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, deleteDoc, writeBatch, addDoc, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
+import { logUpdate, logStandardization, logMerge } from './changeLogger';
 import { normalizedSchema } from './normalizedSchema';
 import { detectScheduleDuplicates, detectRoomDuplicates, mergeScheduleRecords, mergeRoomRecords } from './comprehensiveDataHygiene';
-import { logUpdate, logStandardization, logMerge } from './changeLogger';
 
 // ---------------------------------------------------------------------------
 // PERSON SCHEMA CONSISTENCY
@@ -552,11 +552,28 @@ export const linkScheduleToPerson = async (scheduleId, personId) => {
   const person = { id: personDoc.id, ...personDoc.data() };
   const instructorName = `${person.firstName} ${person.lastName}`.trim();
   
-  await updateDoc(doc(db, 'schedules', scheduleId), {
+  const scheduleRef = doc(db, 'schedules', scheduleId);
+  const beforeSnap = await getDoc(scheduleRef);
+  const before = beforeSnap.exists() ? beforeSnap.data() : null;
+  const updates = {
     instructorId: personId,
     instructorName: instructorName,
     updatedAt: new Date().toISOString()
-  });
+  };
+  await updateDoc(scheduleRef, updates);
+  // Change log
+  try {
+    await logUpdate(
+      `Schedule Instructor Link - ${before?.courseCode || ''} ${before?.section || ''}`.trim(),
+      'schedules',
+      scheduleId,
+      updates,
+      before,
+      'dataHygiene.js - linkScheduleToPerson'
+    );
+  } catch (e) {
+    console.error('Change logging error (link schedule to person):', e);
+  }
 };
 
 /**

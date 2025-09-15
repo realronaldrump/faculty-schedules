@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { IdCard, Search, Edit, Save, X, Filter, CheckCircle2, AlertCircle, Download } from 'lucide-react';
+import FacultyContactCard from './FacultyContactCard';
 
 const hasRole = (person, roleKey) => {
   const roles = person?.roles;
@@ -18,14 +19,20 @@ const getDisplayRoleLabels = (person) => {
   return labels;
 };
 
+const getPersonType = (person) => {
+  if (hasRole(person, 'student')) return 'student';
+  if (hasRole(person, 'staff')) return 'staff';
+  return 'faculty'; // default to faculty
+};
+
 const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, onStudentUpdate, showNotification, canEdit }) => {
   const [filterText, setFilterText] = useState('');
-  const [roleChecks, setRoleChecks] = useState({ faculty: true, staff: true, student: true });
-  const [adjunctOnly, setAdjunctOnly] = useState(false);
+  const [roleChecks, setRoleChecks] = useState({ faculty: true, adjunct: true, staff: true, studentWorkers: true });
   const [onlyMissing, setOnlyMissing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [baylorIdDraft, setBaylorIdDraft] = useState('');
   const [error, setError] = useState('');
+  const [selectedPersonForCard, setSelectedPersonForCard] = useState(null);
 
   const people = useMemo(() => Array.isArray(directoryData) ? directoryData : [], [directoryData]);
 
@@ -35,12 +42,12 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
       .filter((p) => {
         if (!p) return false;
         const includeByRole = (
-          (roleChecks.faculty && hasRole(p, 'faculty')) ||
+          (roleChecks.faculty && hasRole(p, 'faculty') && !p.isAdjunct) ||
+          (roleChecks.adjunct && p.isAdjunct) ||
           (roleChecks.staff && hasRole(p, 'staff')) ||
-          (roleChecks.student && hasRole(p, 'student'))
+          (roleChecks.studentWorkers && hasRole(p, 'student'))
         );
         if (!includeByRole) return false;
-        if (adjunctOnly && !p.isAdjunct) return false;
         if (onlyMissing && (p.baylorId && p.baylorId.trim() !== '')) return false;
         if (!term) return true;
         const name = (p.name || '').toLowerCase();
@@ -49,7 +56,7 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
         return name.includes(term) || email.includes(term) || id.includes(term);
       })
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  }, [people, filterText, roleChecks, adjunctOnly, onlyMissing]);
+  }, [people, filterText, roleChecks, onlyMissing]);
 
   const exportToCSV = () => {
     const headers = ['Name', 'Baylor ID'];
@@ -160,6 +167,15 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
+                  checked={roleChecks.adjunct}
+                  onChange={(e) => setRoleChecks(prev => ({ ...prev, adjunct: e.target.checked }))}
+                  className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                />
+                Adjunct
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
                   checked={roleChecks.staff}
                   onChange={(e) => setRoleChecks(prev => ({ ...prev, staff: e.target.checked }))}
                   className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
@@ -169,20 +185,11 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
-                  checked={roleChecks.student}
-                  onChange={(e) => setRoleChecks(prev => ({ ...prev, student: e.target.checked }))}
+                  checked={roleChecks.studentWorkers}
+                  onChange={(e) => setRoleChecks(prev => ({ ...prev, studentWorkers: e.target.checked }))}
                   className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                 />
-                Student
-              </label>
-              <label className="flex items-center gap-2 text-sm ml-2">
-                <input
-                  type="checkbox"
-                  checked={adjunctOnly}
-                  onChange={(e) => setAdjunctOnly(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                />
-                Adjunct only
+                Student Workers
               </label>
               <label className="flex items-center gap-2 text-sm ml-2">
                 <input
@@ -221,7 +228,12 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
                   return (
                     <tr key={person.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
-                        <div className="text-gray-900 font-medium">{person.name || '-'}</div>
+                        <div
+                          className="text-gray-900 font-medium cursor-pointer hover:text-baylor-green"
+                          onClick={() => setSelectedPersonForCard(person)}
+                        >
+                          {person.name || '-'}
+                        </div>
                         <div className="text-xs text-gray-500">{person.email || ''}</div>
                       </td>
                       <td className="px-4 py-3">
@@ -310,6 +322,14 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
           )}
         </div>
       </div>
+
+      {selectedPersonForCard && (
+        <FacultyContactCard
+          person={selectedPersonForCard}
+          onClose={() => setSelectedPersonForCard(null)}
+          personType={getPersonType(selectedPersonForCard)}
+        />
+      )}
     </div>
   );
 };

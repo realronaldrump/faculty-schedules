@@ -65,28 +65,18 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
           });
           break;
         default:
-          // Identify any record where at least one schema field is "empty"
+          // Only flag actionable, high-signal items to avoid overwhelming noise
           missingRecords = people.filter(person => {
-            return Object.keys(DEFAULT_PERSON_SCHEMA).some(key => {
-              // Skip timestamps and boolean flags when checking for emptiness
-              if (['createdAt', 'updatedAt', 'isAdjunct', 'isFullTime', 'isTenured', 'isUPD', 'hasNoPhone', 'hasNoOffice', 'isActive', 'roles', 'department', 'programId'].includes(key)) {
-                return false;
-              }
+            const roles = person.roles || [];
+            const isFaculty = Array.isArray(roles) ? roles.includes('faculty') : !!roles.faculty;
 
-              // Special handling for fields with corresponding "hasNo..." flags
-              if (key === 'phone') {
-                return (!person.phone || person.phone.trim() === '') && !person.hasNoPhone;
-              }
-              if (key === 'office') {
-                return (!person.office || person.office.trim() === '') && !person.hasNoOffice;
-              }
+            const missingEmail = !person.email || person.email.trim() === '';
+            const missingPhone = (!person.phone || person.phone.trim() === '') && !person.hasNoPhone;
+            const missingOffice = (!person.office || person.office.trim() === '') && !person.hasNoOffice;
+            const missingJob = (!person.jobTitle || person.jobTitle.trim() === '');
+            const missingProg = isFaculty && !person.programId;
 
-              const value = person[key];
-              if (value === undefined || value === null) return true;
-              if (typeof value === 'string') return value.trim() === '';
-              if (Array.isArray(value)) return value.length === 0;
-              return false;
-            });
+            return missingEmail || missingPhone || missingOffice || missingJob || missingProg;
           });
       }
 

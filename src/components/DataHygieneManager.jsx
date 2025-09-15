@@ -25,6 +25,8 @@ import {
   Search,
   X
 } from 'lucide-react';
+import { collection, getDocs, doc, updateDoc, query, where } from 'firebase/firestore';
+import { db } from '../firebase';
 import {
   getDataHealthReport,
   findDuplicatePeople,
@@ -45,6 +47,8 @@ import { fetchPeople } from '../utils/dataAdapter';
 import MissingDataReviewModal from './MissingDataReviewModal';
 import DeduplicationReviewModal from './DeduplicationReviewModal';
 import { ConfirmationDialog } from './CustomAlert';
+import OrphanedDataCleanupModal from './admin/OrphanedDataCleanupModal';
+import { logUpdate } from '../utils/changeLogger';
 
 // Link Person Modal Component
 const LinkPersonModal = ({ isOpen, onClose, onConfirm, schedule }) => {
@@ -236,6 +240,156 @@ const LinkPersonModal = ({ isOpen, onClose, onConfirm, schedule }) => {
   );
 };
 
+// Link Room Modal Component
+const LinkRoomModal = ({ isOpen, onClose, onConfirm, schedule }) => {
+  const [rooms, setRooms] = useState([]);
+  const [filteredRooms, setFilteredRooms] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedRoom, setSelectedRoom] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadRooms();
+      setSearchTerm('');
+      setSelectedRoom(null);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredRooms(rooms);
+    } else {
+      const search = searchTerm.toLowerCase();
+      const filtered = rooms.filter(room => {
+        const name = (room.displayName || room.name || '').toLowerCase();
+        const building = (room.building || '').toLowerCase();
+        const roomNumber = (room.roomNumber || '').toString().toLowerCase();
+        return name.includes(search) || building.includes(search) || roomNumber.includes(search);
+      });
+      setFilteredRooms(filtered);
+    }
+  }, [searchTerm, rooms]);
+
+  const loadRooms = async () => {
+    setIsLoading(true);
+    try {
+      const snap = await getDocs(collection(db, 'rooms'));
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const sorted = data.sort((a, b) => {
+        const aName = `${a.displayName || a.name || ''}`.trim();
+        const bName = `${b.displayName || b.name || ''}`.trim();
+        return aName.localeCompare(bName);
+      });
+      setRooms(sorted);
+      setFilteredRooms(sorted);
+    } catch (e) {
+      console.error('Error loading rooms:', e);
+    }
+    setIsLoading(false);
+  };
+
+  const handleConfirm = () => {
+    if (selectedRoom) {
+      onConfirm(selectedRoom.id, selectedRoom);
+      onClose();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] mx-4">
+        <div className="flex items-center justify-between p-6 border-b">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Link Schedule to Room</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Select a room for: <span className="font-medium">{schedule?.courseCode} - {schedule?.courseTitle}</span>
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-4 border-b">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search by name, building, or room number..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto max-h-96">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
+              <span className="ml-2 text-gray-600">Loading rooms...</span>
+            </div>
+          ) : filteredRooms.length === 0 ? (
+            <div className="flex items-center justify-center h-32 text-gray-500">
+              {searchTerm ? 'No rooms found matching your search' : 'No rooms available'}
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-200">
+              {filteredRooms.map((room) => (
+                <div
+                  key={room.id}
+                  className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${
+                    selectedRoom?.id === room.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                  }`}
+                  onClick={() => setSelectedRoom(room)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center">
+                        <MapPin className="w-4 h-4 text-gray-400 mr-2" />
+                        <h4 className="font-medium text-gray-900">
+                          {room.displayName || room.name}
+                        </h4>
+                        {selectedRoom?.id === room.id && (
+                          <CheckCircle className="w-4 h-4 text-blue-600 ml-2" />
+                        )}
+                      </div>
+                      <div className="mt-1 text-sm text-gray-600">
+                        {room.building}{room.roomNumber ? ` ${room.roomNumber}` : ''}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between p-6 border-t bg-gray-50">
+          <div className="text-sm text-gray-600">
+            {selectedRoom ? (
+              <span>Selected: <strong>{selectedRoom.displayName || selectedRoom.name}</strong></span>
+            ) : (
+              'Please select a room'
+            )}
+          </div>
+          <div className="flex space-x-3">
+            <button onClick={onClose} className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+              Cancel
+            </button>
+            <button onClick={handleConfirm} disabled={!selectedRoom} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+              Link Room
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Standardization Preview Component
 const StandardizationPreview = ({ preview, onClose, onConfirm, isLoading }) => {
   const [expandedChanges, setExpandedChanges] = useState(new Set());
@@ -374,11 +528,19 @@ const DataHygieneManager = ({ showNotification }) => {
   // Link person modal states
   const [showLinkPersonModal, setShowLinkPersonModal] = useState(false);
   const [scheduleToLink, setScheduleToLink] = useState(null);
+  const [showLinkRoomModal, setShowLinkRoomModal] = useState(false);
+  const [scheduleToLinkRoom, setScheduleToLinkRoom] = useState(null);
   
   // Standardization states
   const [showStandardizationPreview, setShowStandardizationPreview] = useState(false);
   const [standardizationPreview, setStandardizationPreview] = useState(null);
   const [isStandardizing, setIsStandardizing] = useState(false);
+
+  // Wizard state
+  const steps = ['analyze', 'duplicates', 'orphaned', 'missing', 'links', 'finish'];
+  const [wizardStep, setWizardStep] = useState('analyze');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showCleanupModal, setShowCleanupModal] = useState(false);
 
   // Load health report
   const loadHealthReport = async () => {
@@ -459,6 +621,45 @@ const DataHygieneManager = ({ showNotification }) => {
         'Link Failed',
         'Failed to link schedule to person. Please try again.'
       );
+    }
+  };
+
+  // Open link room modal
+  const openLinkRoomModal = (schedule) => {
+    setScheduleToLinkRoom(schedule);
+    setShowLinkRoomModal(true);
+  };
+
+  // Link schedule to room (single selection for now)
+  const handleLinkRoom = async (roomId, roomObj) => {
+    if (!scheduleToLinkRoom) return;
+    try {
+      const scheduleRef = doc(db, 'schedules', scheduleToLinkRoom.id);
+      const displayName = roomObj?.displayName || roomObj?.name || '';
+      await updateDoc(scheduleRef, {
+        roomId: roomId,
+        roomIds: [roomId],
+        roomName: displayName,
+        roomNames: [displayName],
+        updatedAt: new Date().toISOString()
+      });
+
+      await logUpdate(
+        `Schedule Room Link - ${scheduleToLinkRoom.courseCode} ${scheduleToLinkRoom.section}`,
+        'schedules',
+        scheduleToLinkRoom.id,
+        { roomId, roomIds: [roomId], roomName: displayName, roomNames: [displayName] },
+        scheduleToLinkRoom,
+        'DataHygieneManager.jsx - handleLinkRoom'
+      );
+
+      showNotification('success', 'Room Linked', 'Room linked to schedule');
+      setShowLinkRoomModal(false);
+      setScheduleToLinkRoom(null);
+      loadHealthReport();
+    } catch (error) {
+      console.error('Error linking room:', error);
+      showNotification('error', 'Link Failed', 'Failed to link room to schedule.');
     }
   };
 
@@ -600,6 +801,45 @@ const DataHygieneManager = ({ showNotification }) => {
       showNotification('error', 'Standardization Error', `Error: ${error.message}`);
     }
   };
+
+  const goNext = () => {
+    const idx = steps.indexOf(wizardStep);
+    if (idx < steps.length - 1) setWizardStep(steps[idx + 1]);
+  };
+  const goBack = () => {
+    const idx = steps.indexOf(wizardStep);
+    if (idx > 0) setWizardStep(steps[idx - 1]);
+  };
+
+  // Fix inconsistent instructor name across schedules
+  const standardizeInstructorNameForId = async (instructorId) => {
+    try {
+      const personSnap = await getDocs(query(collection(db, 'people'), where('__name__', '==', instructorId)));
+      const person = personSnap.docs[0]?.data();
+      if (!person) throw new Error('Instructor not found');
+      const instructorName = `${person.firstName || ''} ${person.lastName || ''}`.trim();
+      const schedulesSnap = await getDocs(query(collection(db, 'schedules'), where('instructorId', '==', instructorId)));
+      let updated = 0;
+      for (const sDoc of schedulesSnap.docs) {
+        const before = sDoc.data();
+        await updateDoc(sDoc.ref, { instructorName, updatedAt: new Date().toISOString() });
+        await logUpdate(
+          `Standardize Instructor Name - ${instructorName}`,
+          'schedules',
+          sDoc.id,
+          { instructorName },
+          before,
+          'DataHygieneManager.jsx - standardizeInstructorNameForId'
+        );
+        updated++;
+      }
+      showNotification('success', 'Instructor Names Standardized', `Updated ${updated} schedules`);
+      await loadHealthReport();
+    } catch (e) {
+      console.error('Error standardizing instructor names:', e);
+      showNotification('error', 'Action Failed', e.message);
+    }
+  };
   
   // Get health score color
   const getHealthScoreColor = (score) => {
@@ -629,6 +869,33 @@ const DataHygieneManager = ({ showNotification }) => {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
+      {/* Wizard Stepper */}
+      <div className="mb-4">
+        <div className="flex items-center overflow-x-auto">
+          {steps.map((s, i) => {
+            const labels = {
+              analyze: 'Analyze',
+              duplicates: 'Duplicates',
+              orphaned: 'Orphaned',
+              missing: 'Missing Data',
+              links: 'Broken Links',
+              finish: 'Finish'
+            };
+            const active = wizardStep === s;
+            return (
+              <div key={s} className="flex items-center">
+                <button
+                  onClick={() => setWizardStep(s)}
+                  className={`px-3 py-1 rounded-full text-sm font-medium ${active ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                >
+                  {labels[s]}
+                </button>
+                {i < steps.length - 1 && <ChevronRight className="w-4 h-4 text-gray-400 mx-2" />}
+              </div>
+            );
+          })}
+        </div>
+      </div>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -801,33 +1068,43 @@ const DataHygieneManager = ({ showNotification }) => {
         </>
       )}
 
-      {/* Tab Navigation */}
-      <div className="flex space-x-1 mb-6">
-        {[
-          { id: 'overview', label: 'Overview' },
-          { id: 'duplicates', label: `People (${duplicates.length})` },
-          { id: 'duplicateSchedules', label: `Schedules (${duplicateSchedules.length})` },
-          { id: 'duplicateRooms', label: `Rooms (${duplicateRooms.length})` },
-          { id: 'orphaned', label: `Orphaned (${orphanedSchedules.length})` },
-          { id: 'relationships', label: `Broken Links (${relationshipIssues.length})` },
-          { id: 'recommendations', label: 'Fix Guide' }
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 rounded-lg font-medium ${
-              activeTab === tab.id
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* Advanced Tabs Toggle */}
+      <div className="mb-4">
+        <button
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="text-sm text-blue-700 underline"
+        >
+          {showAdvanced ? 'Hide advanced analysis' : 'Show advanced analysis'}
+        </button>
       </div>
+      {showAdvanced && (
+        <div className="flex space-x-1 mb-6">
+          {[
+            { id: 'overview', label: 'Overview' },
+            { id: 'duplicates', label: `People (${duplicates.length})` },
+            { id: 'duplicateSchedules', label: `Schedules (${duplicateSchedules.length})` },
+            { id: 'duplicateRooms', label: `Rooms (${duplicateRooms.length})` },
+            { id: 'orphaned', label: `Orphaned (${orphanedSchedules.length})` },
+            { id: 'relationships', label: `Broken Links (${relationshipIssues.length})` },
+            { id: 'recommendations', label: 'Fix Guide' }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-2 rounded-lg font-medium ${
+                activeTab === tab.id
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* Tab Content */}
-      {activeTab === 'overview' && healthReport && (
+      {/* Wizard Content */}
+      {wizardStep === 'analyze' && healthReport && (
         <div className="space-y-6">
           {/* Professional Data Review Actions */}
           <div className="bg-white rounded-lg shadow-sm border p-6">
@@ -963,8 +1240,8 @@ const DataHygieneManager = ({ showNotification }) => {
         </div>
       )}
 
-      {/* Duplicates Tab */}
-      {activeTab === 'duplicates' && (
+      {/* Duplicates Step */}
+      {wizardStep === 'duplicates' && (
         <div className="bg-white rounded-lg shadow-sm border">
           <div className="p-6 border-b">
             <h3 className="text-lg font-semibold text-gray-900">Duplicate People</h3>
@@ -1023,8 +1300,8 @@ const DataHygieneManager = ({ showNotification }) => {
         </div>
       )}
 
-      {/* Duplicate Schedules Tab */}
-      {activeTab === 'duplicateSchedules' && (
+      {/* Advanced: Duplicate Schedules Tab */}
+      {showAdvanced && activeTab === 'duplicateSchedules' && (
         <DuplicateList
           title="Schedule Duplicates"
           duplicates={duplicateSchedules}
@@ -1034,8 +1311,8 @@ const DataHygieneManager = ({ showNotification }) => {
         />
       )}
 
-      {/* Duplicate Rooms Tab */}
-      {activeTab === 'duplicateRooms' && (
+      {/* Advanced: Duplicate Rooms Tab */}
+      {showAdvanced && activeTab === 'duplicateRooms' && (
         <DuplicateList
           title="Room Duplicates"
           duplicates={duplicateRooms}
@@ -1045,23 +1322,37 @@ const DataHygieneManager = ({ showNotification }) => {
         />
       )}
 
-      {/* Relationship Issues Tab */}
-      {activeTab === 'relationships' && (
-        <RelationshipIssues issues={relationshipIssues} />
+      {/* Broken Links Step */}
+      {wizardStep === 'links' && (
+        <RelationshipIssues
+          issues={relationshipIssues}
+          onLinkPerson={openLinkPersonModal}
+          onLinkRoom={openLinkRoomModal}
+          onStandardizeInstructorName={standardizeInstructorNameForId}
+        />
       )}
 
-      {/* Recommendations Tab */}
-      {activeTab === 'recommendations' && (
+      {/* Advanced: Relationship Issues Tab */}
+      {showAdvanced && activeTab === 'relationships' && (
+        <RelationshipIssues
+          issues={relationshipIssues}
+          onLinkPerson={openLinkPersonModal}
+          onLinkRoom={openLinkRoomModal}
+          onStandardizeInstructorName={standardizeInstructorNameForId}
+        />
+      )}
+
+      {/* Finish Step */}
+      {wizardStep === 'finish' && (
         <Recommendations
           recommendations={recommendations}
-          onStandardizeData={handleStandardizeAllData}
           onBulkMerge={handleBulkMerge}
           selectedCount={selectedDuplicates.length}
         />
       )}
 
-      {/* Orphaned Schedules Tab */}
-      {activeTab === 'orphaned' && (
+      {/* Orphaned Step */}
+      {wizardStep === 'orphaned' && (
         <div className="bg-white rounded-lg shadow-sm border">
           <div className="p-6 border-b">
             <h3 className="text-lg font-semibold text-gray-900">Orphaned Schedules</h3>
@@ -1090,12 +1381,20 @@ const DataHygieneManager = ({ showNotification }) => {
                           Term: {schedule.term} | Section: {schedule.section}
                         </p>
                       </div>
-                      <button
-                        onClick={() => openLinkPersonModal(schedule)}
-                        className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                      >
-                        Link to Person
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => openLinkPersonModal(schedule)}
+                          className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                          Link Person
+                        </button>
+                        <button
+                          onClick={() => openLinkRoomModal(schedule)}
+                          className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700"
+                        >
+                          Link Room
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1106,6 +1405,17 @@ const DataHygieneManager = ({ showNotification }) => {
                 )}
               </div>
             )}
+            {/* Cleanup orphaned imported data */}
+            <div className="mt-8 border-t pt-6">
+              <h4 className="text-md font-semibold text-gray-900 mb-2">Cleanup Orphaned Imported Data (by term)</h4>
+              <p className="text-sm text-gray-600 mb-3">Remove imported schedules, people, and rooms that are only used in a selected term and not referenced elsewhere.</p>
+              <button
+                onClick={() => setShowCleanupModal(true)}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+              >
+                Open Cleanup Tool
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1179,6 +1489,42 @@ const DataHygieneManager = ({ showNotification }) => {
         onConfirm={handleLinkSchedule}
         schedule={scheduleToLink}
       />
+
+      {/* Link Room Modal */}
+      <LinkRoomModal
+        isOpen={showLinkRoomModal}
+        onClose={() => {
+          setShowLinkRoomModal(false);
+          setScheduleToLinkRoom(null);
+        }}
+        onConfirm={handleLinkRoom}
+        schedule={scheduleToLinkRoom}
+      />
+
+      {/* Orphaned Data Cleanup Modal */}
+      <OrphanedDataCleanupModal
+        isOpen={showCleanupModal}
+        onClose={() => setShowCleanupModal(false)}
+        showNotification={showNotification}
+      />
+
+      {/* Wizard Controls */}
+      <div className="mt-8 flex items-center justify-between">
+        <button
+          onClick={goBack}
+          disabled={wizardStep === steps[0]}
+          className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg disabled:opacity-50"
+        >
+          Back
+        </button>
+        <button
+          onClick={goNext}
+          disabled={wizardStep === steps[steps.length - 1]}
+          className="px-4 py-2 bg-baylor-green text-white rounded-lg disabled:opacity-50"
+        >
+          Next
+        </button>
+      </div>
     </div>
   );
 };
@@ -1302,7 +1648,7 @@ const RecordDisplay = ({ record, type }) => {
   );
 };
 
-const RelationshipIssues = ({ issues }) => {
+const RelationshipIssues = ({ issues, onLinkPerson, onLinkRoom, onStandardizeInstructorName }) => {
   if (issues.length === 0) {
     return (
       <div className="p-6 text-center">
@@ -1325,9 +1671,32 @@ const RelationshipIssues = ({ issues }) => {
                 <p className="text-red-700 text-sm mb-2">{issue.reason}</p>
                 <p className="text-red-600 text-xs">Severity: {issue.severity}</p>
               </div>
-              <span className="text-xs text-red-600 bg-red-100 px-2 py-1 rounded">
-                {issue.fix.replace(/_/g, ' ')}
-              </span>
+              <div className="flex items-center gap-2">
+                {issue.type === 'orphaned_schedule' && (
+                  <button
+                    onClick={() => onLinkPerson(issue.record)}
+                    className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs"
+                  >
+                    Link Person
+                  </button>
+                )}
+                {issue.type === 'orphaned_room' && (
+                  <button
+                    onClick={() => onLinkRoom(issue.record)}
+                    className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs"
+                  >
+                    Link Room
+                  </button>
+                )}
+                {issue.type === 'inconsistent_instructor_name' && issue.record?.instructorId && (
+                  <button
+                    onClick={() => onStandardizeInstructorName(issue.record.instructorId)}
+                    className="px-3 py-1 bg-orange-600 text-white rounded hover:bg-orange-700 text-xs"
+                  >
+                    Standardize Names
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ))}

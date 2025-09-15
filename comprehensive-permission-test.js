@@ -17,7 +17,7 @@ console.log('\n🎯 === COMPREHENSIVE APP ACTIONS ===');
 const appActionKeys = Object.keys(APP_ACTIONS);
 console.log('📊 Total APP_ACTIONS defined:', appActionKeys.length);
 
-// Group actions by category for better display
+// Group actions by category for better display (ACTION-BASED only, no view permissions)
 const actionCategories = {
   'Directory': ['FACULTY_', 'STAFF_', 'ADJUNCT_', 'STUDENT_'],
   'Schedule': ['SCHEDULE_'],

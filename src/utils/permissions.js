@@ -3,7 +3,6 @@
 
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { registerActionKey } from './actionRegistry';
-import './actionDiscovery'; // Import to trigger action discovery
 
 // Standard action keys the app cares about
 export const STANDARD_ACTIONS = {
@@ -15,37 +14,33 @@ export const STANDARD_ACTIONS = {
 
 // Comprehensive action registry - automatically registers ALL app actions
 // This is the master list of all possible operations in the app
+// NOTE: View permissions are handled by Role-Based Access (page access), not user actions
 export const APP_ACTIONS = {
   // ===== DIRECTORY OPERATIONS =====
   // Faculty directory actions
   FACULTY_EDIT: 'directory.faculty.edit',
   FACULTY_CREATE: 'directory.faculty.create',
   FACULTY_DELETE: 'directory.faculty.delete',
-  FACULTY_VIEW: 'directory.faculty.view',
 
   // Staff directory actions
   STAFF_EDIT: 'directory.staff.edit',
   STAFF_CREATE: 'directory.staff.create',
   STAFF_DELETE: 'directory.staff.delete',
-  STAFF_VIEW: 'directory.staff.view',
 
   // Adjunct directory actions
   ADJUNCT_EDIT: 'directory.adjunct.edit',
   ADJUNCT_CREATE: 'directory.adjunct.create',
   ADJUNCT_DELETE: 'directory.adjunct.delete',
-  ADJUNCT_VIEW: 'directory.adjunct.view',
 
   // Student directory actions
   STUDENT_EDIT: 'directory.student.edit',
   STUDENT_CREATE: 'directory.student.create',
   STUDENT_DELETE: 'directory.student.delete',
-  STUDENT_VIEW: 'directory.student.view',
 
   // ===== SCHEDULE OPERATIONS =====
   SCHEDULE_EDIT: 'schedule.edit',
   SCHEDULE_CREATE: 'schedule.create',
   SCHEDULE_DELETE: 'schedule.delete',
-  SCHEDULE_VIEW: 'schedule.view',
   SCHEDULE_BULK_EDIT: 'schedule.bulk.edit',
   SCHEDULE_IMPORT: 'schedule.import',
   SCHEDULE_EXPORT: 'schedule.export',
@@ -54,19 +49,16 @@ export const APP_ACTIONS = {
   ROOM_EDIT: 'room.edit',
   ROOM_CREATE: 'room.create',
   ROOM_DELETE: 'room.delete',
-  ROOM_VIEW: 'room.view',
 
   // ===== ROOM GRID OPERATIONS =====
   ROOMGRIDS_SAVE: 'roomGrids.save',
   ROOMGRIDS_DELETE: 'roomGrids.delete',
-  ROOMGRIDS_VIEW: 'roomGrids.view',
   ROOMGRIDS_EDIT: 'roomGrids.edit',
 
   // ===== PROGRAM OPERATIONS =====
   PROGRAM_EDIT: 'program.edit',
   PROGRAM_CREATE: 'program.create',
   PROGRAM_DELETE: 'program.delete',
-  PROGRAM_VIEW: 'program.view',
   PROGRAM_UPD_ASSIGN: 'program.upd.assign',
   PROGRAM_UPD_REMOVE: 'program.upd.remove',
 
@@ -74,25 +66,21 @@ export const APP_ACTIONS = {
   COURSE_EDIT: 'course.edit',
   COURSE_CREATE: 'course.create',
   COURSE_DELETE: 'course.delete',
-  COURSE_VIEW: 'course.view',
 
   // ===== TERM OPERATIONS =====
   TERM_EDIT: 'term.edit',
   TERM_CREATE: 'term.create',
   TERM_DELETE: 'term.delete',
-  TERM_VIEW: 'term.view',
 
   // ===== DEPARTMENT OPERATIONS =====
   DEPARTMENT_EDIT: 'department.edit',
   DEPARTMENT_CREATE: 'department.create',
   DEPARTMENT_DELETE: 'department.delete',
-  DEPARTMENT_VIEW: 'department.view',
 
   // ===== ACRONYM OPERATIONS =====
   ACRONYM_EDIT: 'acronym.edit',
   ACRONYM_CREATE: 'acronym.create',
   ACRONYM_DELETE: 'acronym.delete',
-  ACRONYM_VIEW: 'acronym.view',
 
   // ===== DATA MANAGEMENT OPERATIONS =====
   DATA_IMPORT: 'data.import',
@@ -103,7 +91,6 @@ export const APP_ACTIONS = {
   DATA_BACKUP: 'data.backup',
 
   // ===== ANALYTICS OPERATIONS =====
-  ANALYTICS_VIEW: 'analytics.view',
   ANALYTICS_EDIT: 'analytics.edit',
   ANALYTICS_EXPORT: 'analytics.export',
   ANALYTICS_DEPARTMENT: 'analytics.department.view',
@@ -130,24 +117,20 @@ export const APP_ACTIONS = {
   MISSING_DATA_REVIEW: 'missing.data.review'
 };
 
-// Legacy alias for backward compatibility
+// Legacy alias for backward compatibility - only action-based permissions
 export const DIRECTORY_ACTIONS = {
   FACULTY_EDIT: APP_ACTIONS.FACULTY_EDIT,
   FACULTY_CREATE: APP_ACTIONS.FACULTY_CREATE,
   FACULTY_DELETE: APP_ACTIONS.FACULTY_DELETE,
-  FACULTY_VIEW: APP_ACTIONS.FACULTY_VIEW,
   STAFF_EDIT: APP_ACTIONS.STAFF_EDIT,
   STAFF_CREATE: APP_ACTIONS.STAFF_CREATE,
   STAFF_DELETE: APP_ACTIONS.STAFF_DELETE,
-  STAFF_VIEW: APP_ACTIONS.STAFF_VIEW,
   ADJUNCT_EDIT: APP_ACTIONS.ADJUNCT_EDIT,
   ADJUNCT_CREATE: APP_ACTIONS.ADJUNCT_CREATE,
   ADJUNCT_DELETE: APP_ACTIONS.ADJUNCT_DELETE,
-  ADJUNCT_VIEW: APP_ACTIONS.ADJUNCT_VIEW,
   STUDENT_EDIT: APP_ACTIONS.STUDENT_EDIT,
   STUDENT_CREATE: APP_ACTIONS.STUDENT_CREATE,
   STUDENT_DELETE: APP_ACTIONS.STUDENT_DELETE,
-  STUDENT_VIEW: APP_ACTIONS.STUDENT_VIEW,
   ROOMGRIDS_SAVE: APP_ACTIONS.ROOMGRIDS_SAVE,
   ROOMGRIDS_DELETE: APP_ACTIONS.ROOMGRIDS_DELETE,
   DATA_IMPORT: APP_ACTIONS.DATA_IMPORT,
@@ -155,7 +138,6 @@ export const DIRECTORY_ACTIONS = {
   SCHEDULE_EDIT: APP_ACTIONS.SCHEDULE_EDIT,
   SCHEDULE_CREATE: APP_ACTIONS.SCHEDULE_CREATE,
   SCHEDULE_DELETE: APP_ACTIONS.SCHEDULE_DELETE,
-  ANALYTICS_VIEW: APP_ACTIONS.ANALYTICS_VIEW,
   ANALYTICS_EDIT: APP_ACTIONS.ANALYTICS_EDIT
 };
 
@@ -200,28 +182,23 @@ export function usePermissions() {
   const canEditFaculty = () => canDoAction(APP_ACTIONS.FACULTY_EDIT);
   const canCreateFaculty = () => canDoAction(APP_ACTIONS.FACULTY_CREATE);
   const canDeleteFaculty = () => canDoAction(APP_ACTIONS.FACULTY_DELETE);
-  const canViewFaculty = () => canDoAction(APP_ACTIONS.FACULTY_VIEW) || canEditFaculty() || canCreateFaculty() || canDeleteFaculty();
 
   const canEditStaff = () => canDoAction(APP_ACTIONS.STAFF_EDIT);
   const canCreateStaff = () => canDoAction(APP_ACTIONS.STAFF_CREATE);
   const canDeleteStaff = () => canDoAction(APP_ACTIONS.STAFF_DELETE);
-  const canViewStaff = () => canDoAction(APP_ACTIONS.STAFF_VIEW) || canEditStaff() || canCreateStaff() || canDeleteStaff();
 
   const canEditAdjunct = () => canDoAction(APP_ACTIONS.ADJUNCT_EDIT);
   const canCreateAdjunct = () => canDoAction(APP_ACTIONS.ADJUNCT_CREATE);
   const canDeleteAdjunct = () => canDoAction(APP_ACTIONS.ADJUNCT_DELETE);
-  const canViewAdjunct = () => canDoAction(APP_ACTIONS.ADJUNCT_VIEW) || canEditAdjunct() || canCreateAdjunct() || canDeleteAdjunct();
 
   const canEditStudent = () => canDoAction(APP_ACTIONS.STUDENT_EDIT);
   const canCreateStudent = () => canDoAction(APP_ACTIONS.STUDENT_CREATE);
   const canDeleteStudent = () => canDoAction(APP_ACTIONS.STUDENT_DELETE);
-  const canViewStudent = () => canDoAction(APP_ACTIONS.STUDENT_VIEW) || canEditStudent() || canCreateStudent() || canDeleteStudent();
 
   // ===== SCHEDULE PERMISSIONS =====
   const canEditSchedule = () => canDoAction(APP_ACTIONS.SCHEDULE_EDIT);
   const canCreateSchedule = () => canDoAction(APP_ACTIONS.SCHEDULE_CREATE);
   const canDeleteSchedule = () => canDoAction(APP_ACTIONS.SCHEDULE_DELETE);
-  const canViewSchedule = () => canDoAction(APP_ACTIONS.SCHEDULE_VIEW) || canEditSchedule() || canCreateSchedule() || canDeleteSchedule();
   const canBulkEditSchedule = () => canDoAction(APP_ACTIONS.SCHEDULE_BULK_EDIT);
   const canImportSchedule = () => canDoAction(APP_ACTIONS.SCHEDULE_IMPORT);
   const canExportSchedule = () => canDoAction(APP_ACTIONS.SCHEDULE_EXPORT);
@@ -230,19 +207,16 @@ export function usePermissions() {
   const canEditRoom = () => canDoAction(APP_ACTIONS.ROOM_EDIT);
   const canCreateRoom = () => canDoAction(APP_ACTIONS.ROOM_CREATE);
   const canDeleteRoom = () => canDoAction(APP_ACTIONS.ROOM_DELETE);
-  const canViewRoom = () => canDoAction(APP_ACTIONS.ROOM_VIEW) || canEditRoom() || canCreateRoom() || canDeleteRoom();
 
   // ===== ROOM GRID PERMISSIONS =====
   const canSaveRoomGrid = () => canDoAction(APP_ACTIONS.ROOMGRIDS_SAVE);
   const canDeleteRoomGrid = () => canDoAction(APP_ACTIONS.ROOMGRIDS_DELETE);
   const canEditRoomGrid = () => canDoAction(APP_ACTIONS.ROOMGRIDS_EDIT);
-  const canViewRoomGrid = () => canDoAction(APP_ACTIONS.ROOMGRIDS_VIEW) || canSaveRoomGrid() || canEditRoomGrid() || canDeleteRoomGrid();
 
   // ===== PROGRAM PERMISSIONS =====
   const canEditProgram = () => canDoAction(APP_ACTIONS.PROGRAM_EDIT);
   const canCreateProgram = () => canDoAction(APP_ACTIONS.PROGRAM_CREATE);
   const canDeleteProgram = () => canDoAction(APP_ACTIONS.PROGRAM_DELETE);
-  const canViewProgram = () => canDoAction(APP_ACTIONS.PROGRAM_VIEW) || canEditProgram() || canCreateProgram() || canDeleteProgram();
   const canAssignProgramUPD = () => canDoAction(APP_ACTIONS.PROGRAM_UPD_ASSIGN);
   const canRemoveProgramUPD = () => canDoAction(APP_ACTIONS.PROGRAM_UPD_REMOVE);
 
@@ -250,25 +224,21 @@ export function usePermissions() {
   const canEditCourse = () => canDoAction(APP_ACTIONS.COURSE_EDIT);
   const canCreateCourse = () => canDoAction(APP_ACTIONS.COURSE_CREATE);
   const canDeleteCourse = () => canDoAction(APP_ACTIONS.COURSE_DELETE);
-  const canViewCourse = () => canDoAction(APP_ACTIONS.COURSE_VIEW) || canEditCourse() || canCreateCourse() || canDeleteCourse();
 
   // ===== TERM PERMISSIONS =====
   const canEditTerm = () => canDoAction(APP_ACTIONS.TERM_EDIT);
   const canCreateTerm = () => canDoAction(APP_ACTIONS.TERM_CREATE);
   const canDeleteTerm = () => canDoAction(APP_ACTIONS.TERM_DELETE);
-  const canViewTerm = () => canDoAction(APP_ACTIONS.TERM_VIEW) || canEditTerm() || canCreateTerm() || canDeleteTerm();
 
   // ===== DEPARTMENT PERMISSIONS =====
   const canEditDepartment = () => canDoAction(APP_ACTIONS.DEPARTMENT_EDIT);
   const canCreateDepartment = () => canDoAction(APP_ACTIONS.DEPARTMENT_CREATE);
   const canDeleteDepartment = () => canDoAction(APP_ACTIONS.DEPARTMENT_DELETE);
-  const canViewDepartment = () => canDoAction(APP_ACTIONS.DEPARTMENT_VIEW) || canEditDepartment() || canCreateDepartment() || canDeleteDepartment();
 
   // ===== ACRONYM PERMISSIONS =====
   const canEditAcronym = () => canDoAction(APP_ACTIONS.ACRONYM_EDIT);
   const canCreateAcronym = () => canDoAction(APP_ACTIONS.ACRONYM_CREATE);
   const canDeleteAcronym = () => canDoAction(APP_ACTIONS.ACRONYM_DELETE);
-  const canViewAcronym = () => canDoAction(APP_ACTIONS.ACRONYM_VIEW) || canEditAcronym() || canCreateAcronym() || canDeleteAcronym();
 
   // ===== DATA MANAGEMENT PERMISSIONS =====
   const canImportData = () => canDoAction(APP_ACTIONS.DATA_IMPORT);
@@ -350,25 +320,20 @@ export function usePermissions() {
     canEditFaculty,
     canCreateFaculty,
     canDeleteFaculty,
-    canViewFaculty,
     canEditStaff,
     canCreateStaff,
     canDeleteStaff,
-    canViewStaff,
     canEditAdjunct,
     canCreateAdjunct,
     canDeleteAdjunct,
-    canViewAdjunct,
     canEditStudent,
     canCreateStudent,
     canDeleteStudent,
-    canViewStudent,
 
     // ===== SCHEDULE PERMISSIONS =====
     canEditSchedule,
     canCreateSchedule,
     canDeleteSchedule,
-    canViewSchedule,
     canBulkEditSchedule,
     canImportSchedule,
     canExportSchedule,
@@ -377,19 +342,16 @@ export function usePermissions() {
     canEditRoom,
     canCreateRoom,
     canDeleteRoom,
-    canViewRoom,
 
     // ===== ROOM GRID PERMISSIONS =====
     canSaveRoomGrid,
     canDeleteRoomGrid,
     canEditRoomGrid,
-    canViewRoomGrid,
 
     // ===== PROGRAM PERMISSIONS =====
     canEditProgram,
     canCreateProgram,
     canDeleteProgram,
-    canViewProgram,
     canAssignProgramUPD,
     canRemoveProgramUPD,
 
@@ -397,25 +359,21 @@ export function usePermissions() {
     canEditCourse,
     canCreateCourse,
     canDeleteCourse,
-    canViewCourse,
 
     // ===== TERM PERMISSIONS =====
     canEditTerm,
     canCreateTerm,
     canDeleteTerm,
-    canViewTerm,
 
     // ===== DEPARTMENT PERMISSIONS =====
     canEditDepartment,
     canCreateDepartment,
     canDeleteDepartment,
-    canViewDepartment,
 
     // ===== ACRONYM PERMISSIONS =====
     canEditAcronym,
     canCreateAcronym,
     canDeleteAcronym,
-    canViewAcronym,
 
     // ===== DATA MANAGEMENT PERMISSIONS =====
     canImportData,
@@ -426,7 +384,6 @@ export function usePermissions() {
     canBackupData,
 
     // ===== ANALYTICS PERMISSIONS =====
-    canViewAnalytics,
     canEditAnalytics,
     canExportAnalytics,
     canViewDepartmentAnalytics,

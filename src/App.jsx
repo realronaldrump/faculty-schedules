@@ -62,17 +62,7 @@ import { fetchRecentChanges } from './utils/recentChanges';
 
 function App() {
   const { user, signOut, loading: authLoading, canAccess } = useAuth();
-  const {
-    canEdit,
-    canEditFaculty,
-    canCreateFaculty,
-    canDeleteFaculty,
-    canEditStaff,
-    canCreateStaff,
-    canEditStudent,
-    canCreateStudent,
-    canDeleteStudent
-  } = usePermissions();
+  const { canEdit } = usePermissions();
   const location = useLocation();
   const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -1265,10 +1255,6 @@ function App() {
   };
 
   const handleStudentDelete = async (studentToDelete) => {
-    if (!canDeleteStudent()) {
-      showNotification('warning', 'Permission Denied', 'You don\'t have permission to delete student workers.');
-      return;
-    }
     console.log('🗑️ Deleting student worker:', studentToDelete);
     
     try {

@@ -27,6 +27,7 @@
     "date-fns": "^3.6.0",
     "exceljs": "^4.4.0",
     "firebase": "^10.14.1",
+    "dompurify": "^3.0.9",
     "html2canvas": "^1.4.1",
     "html2pdf.js": "^0.10.3",
     "jspdf": "^3.0.1",

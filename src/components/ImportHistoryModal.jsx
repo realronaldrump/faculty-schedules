@@ -13,12 +13,13 @@ import {
   Database,
   AlertTriangle
 } from 'lucide-react';
-import { getImportTransactions, rollbackTransaction, deleteTransaction } from '../utils/importTransactionUtils';
+import { getImportTransactions, rollbackTransaction, deleteTransaction, diagnoseRollbackEffectiveness, manualCleanupImportedData } from '../utils/importTransactionUtils';
 
 const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
   const [transactions, setTransactions] = useState([]);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [isRollingBack, setIsRollingBack] = useState(false);
+  const [isCleaningUp, setIsCleaningUp] = useState(false);
   const [showConfirmRollback, setShowConfirmRollback] = useState(null);
 
   useEffect(() => {
@@ -61,6 +62,40 @@ const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
     } catch (error) {
       console.error('Error deleting transaction:', error);
       showNotification('error', 'Delete Failed', 'Failed to delete the transaction record');
+    }
+  };
+
+  const handleDiagnoseRollback = async (transactionId) => {
+    try {
+      console.log('🔍 Starting rollback diagnosis...');
+      await diagnoseRollbackEffectiveness(transactionId);
+      showNotification('info', 'Diagnosis Complete', 'Check browser console for rollback diagnostic results');
+    } catch (error) {
+      console.error('Error diagnosing rollback:', error);
+      showNotification('error', 'Diagnosis Failed', 'Failed to diagnose rollback effectiveness');
+    }
+  };
+
+  const handleManualCleanup = async (transactionId) => {
+    setIsCleaningUp(true);
+    try {
+      console.log('🧹 Starting manual cleanup...');
+      const result = await manualCleanupImportedData(transactionId);
+      console.log('✅ Manual cleanup result:', result);
+
+      if (result.cleaned > 0) {
+        showNotification('success', 'Manual Cleanup Complete', `Successfully deleted ${result.cleaned} documents`);
+        onDataRefresh?.();
+      } else if (result.errors > 0) {
+        showNotification('warning', 'Cleanup Completed with Errors', `${result.errors} documents could not be deleted. Check console for details.`);
+      } else {
+        showNotification('info', 'Nothing to Clean Up', 'No documents were found that needed deletion');
+      }
+    } catch (error) {
+      console.error('Error during manual cleanup:', error);
+      showNotification('error', 'Manual Cleanup Failed', error.message || 'Failed to clean up imported data');
+    } finally {
+      setIsCleaningUp(false);
     }
   };
 
@@ -320,7 +355,30 @@ const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
                               <span>Roll Back</span>
                             </button>
                           )}
-                          {selectedTransaction.status !== 'committed' && (
+                          {selectedTransaction.status === 'rolled_back' && (
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => handleDiagnoseRollback(selectedTransaction.id)}
+                                className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm flex items-center space-x-1"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>Diagnose</span>
+                              </button>
+                              <button
+                                onClick={() => handleManualCleanup(selectedTransaction.id)}
+                                disabled={isCleaningUp}
+                                className="px-3 py-1 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 disabled:opacity-50 transition-colors text-sm flex items-center space-x-1"
+                              >
+                                {isCleaningUp ? (
+                                  <div className="w-3 h-3 border border-orange-700 border-t-transparent rounded-full animate-spin"></div>
+                                ) : (
+                                  <Database className="w-3 h-3" />
+                                )}
+                                <span>{isCleaningUp ? 'Cleaning...' : 'Manual Cleanup'}</span>
+                              </button>
+                            </div>
+                          )}
+                          {selectedTransaction.status !== 'committed' && selectedTransaction.status !== 'rolled_back' && (
                             <button
                               onClick={() => handleDeleteTransaction(selectedTransaction.id)}
                               className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm flex items-center space-x-1"
@@ -359,15 +417,16 @@ const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
                         <TransactionDetails transaction={selectedTransaction} />
 
                         {selectedTransaction.status === 'rolled_back' && (
-                          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                             <div className="flex items-center space-x-2">
-                              <RotateCcw className="w-4 h-4 text-red-600" />
-                              <span className="text-sm font-medium text-red-700">
-                                This import has been rolled back
+                              <AlertTriangle className="w-4 h-4 text-yellow-600" />
+                              <span className="text-sm font-medium text-yellow-700">
+                                Transaction marked as rolled back
                               </span>
                             </div>
-                            <p className="text-sm text-red-600 mt-1">
-                              All changes from this import have been reversed and removed from the database.
+                            <p className="text-sm text-yellow-600 mt-1">
+                              This transaction shows as rolled back, but the actual data may still exist in the database.
+                              Use the "Diagnose" button to check and "Manual Cleanup" to remove any remaining data.
                             </p>
                           </div>
                         )}

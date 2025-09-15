@@ -745,48 +745,381 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
 
 // Rollback committed transaction
 export const rollbackTransaction = async (transactionId) => {
+  console.log('🔄 Starting rollback for transaction:', transactionId);
+
   const transactions = await getImportTransactions();
+  console.log('📋 Found transactions:', transactions.length);
+
   const transaction = transactions.find(t => t.id === transactionId);
-  
+  console.log('🎯 Transaction found:', transaction ? 'YES' : 'NO');
+
   if (!transaction) {
     throw new Error('Transaction not found');
   }
+
+  console.log('📊 Transaction status:', transaction.status);
+  console.log('📊 Transaction stats:', transaction.stats);
 
   if (transaction.status !== 'committed') {
     throw new Error('Transaction is not committed');
   }
 
+  const allChanges = transaction.getAllChanges();
+  console.log('📋 Total changes in transaction:', allChanges.length);
+
+  const appliedChanges = allChanges.filter(change => change.applied);
+  console.log('✅ Applied changes to rollback:', appliedChanges.length);
+
+  // Log details of applied changes
+  appliedChanges.forEach(change => {
+    console.log(`   - ${change.action} ${change.collection}: ${change.documentId || 'no-doc-id'}`);
+  });
+
+  if (appliedChanges.length === 0) {
+    console.warn('⚠️ No applied changes found to rollback!');
+    // Still mark as rolled back to prevent further attempts
+    transaction.status = 'rolled_back';
+    await updateTransactionInStorage(transaction);
+    return transaction;
+  }
+
   const batch = writeBatch(db);
-  const appliedChanges = transaction.getAllChanges().filter(change => change.applied);
 
   try {
+    console.log('🔄 Processing changes in reverse order...');
+
     // Reverse changes in opposite order
     for (const change of appliedChanges.reverse()) {
+      console.log(`   Processing ${change.action} on ${change.collection}/${change.documentId}`);
+
       if (change.action === 'add' && change.documentId) {
         // Delete added documents
-        batch.delete(doc(db, change.collection, change.documentId));
+        const collectionName = change.collection;
+        const docRef = doc(db, collectionName, change.documentId);
+        console.log(`     🗑️ Deleting ${collectionName}/${change.documentId}`);
+        batch.delete(docRef);
       } else if (change.action === 'modify' && change.originalData) {
         // Restore original data
-        batch.update(doc(db, change.collection, change.documentId), change.originalData);
+        const collectionName = change.collection;
+        console.log(`     🔄 Restoring ${collectionName}/${change.documentId}`);
+        batch.update(doc(db, collectionName, change.documentId), change.originalData);
       } else if (change.action === 'delete' && change.originalData) {
         // Re-add deleted documents
-        batch.set(doc(db, change.collection, change.originalData.id), change.originalData);
+        const collectionName = change.collection;
+        console.log(`     ➕ Re-adding ${collectionName}/${change.originalData.id}`);
+        batch.set(doc(db, collectionName, change.originalData.id), change.originalData);
       }
     }
 
+    console.log('💾 Committing rollback batch...');
     await batch.commit();
-    
+    console.log('✅ Rollback batch committed successfully');
+
     transaction.status = 'rolled_back';
+    console.log('💾 Updating transaction status...');
     await updateTransactionInStorage(transaction);
-    
+
+    console.log('🎉 Rollback completed successfully');
     return transaction;
   } catch (error) {
-    console.error('Error rolling back transaction:', error);
+    console.error('❌ Error rolling back transaction:', error);
+    console.error('Error details:', error.message);
+    console.error('Error stack:', error.stack);
     throw error;
   }
 };
 
 // Database-backed utility functions
+
+// Diagnostic function to check rollback effectiveness
+export const diagnoseRollbackEffectiveness = async (transactionId) => {
+  console.log('🔍 Diagnosing rollback effectiveness for transaction:', transactionId);
+
+  const transactions = await getImportTransactions();
+  const transaction = transactions.find(t => t.id === transactionId);
+
+  if (!transaction) {
+    console.log('❌ Transaction not found');
+    return;
+  }
+
+  console.log('📊 Transaction status:', transaction.status);
+  console.log('📊 Transaction stats:', transaction.stats);
+
+  const appliedChanges = transaction.getAllChanges().filter(change => change.applied);
+  console.log('✅ Applied changes:', appliedChanges.length);
+
+  // Check if documents still exist in database
+  console.log('🔍 Checking if rolled back documents still exist...');
+
+  for (const change of appliedChanges) {
+    if (change.action === 'add' && change.documentId) {
+      try {
+        const collectionName = change.collection;
+        const docRef = doc(db, collectionName, change.documentId);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          console.log(`❌ Document still exists: ${collectionName}/${change.documentId}`);
+          console.log('   Data:', docSnap.data());
+        } else {
+          console.log(`✅ Document successfully deleted: ${collectionName}/${change.documentId}`);
+        }
+      } catch (error) {
+        console.log(`❌ Error checking document ${change.collection}/${change.documentId}:`, error.message);
+      }
+    }
+  }
+
+  return appliedChanges;
+};
+
+// Manual cleanup function for failed rollbacks
+export const manualCleanupImportedData = async (transactionId) => {
+  console.log('🧹 Starting manual cleanup for transaction:', transactionId);
+
+  const transactions = await getImportTransactions();
+  const transaction = transactions.find(t => t.id === transactionId);
+
+  if (!transaction) {
+    throw new Error('Transaction not found');
+  }
+
+  const appliedChanges = transaction.getAllChanges().filter(change => change.applied);
+  console.log('🗑️ Found', appliedChanges.length, 'applied changes to clean up');
+
+  if (appliedChanges.length === 0) {
+    console.log('✅ No applied changes to clean up');
+    return { cleaned: 0, errors: 0 };
+  }
+
+  const batch = writeBatch(db);
+  let cleanedCount = 0;
+  let errorCount = 0;
+
+  console.log('🔄 Processing manual cleanup...');
+
+  for (const change of appliedChanges) {
+    if (change.action === 'add' && change.documentId) {
+      try {
+        const collectionName = change.collection;
+        const docRef = doc(db, collectionName, change.documentId);
+
+        // Check if document exists before attempting to delete
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          console.log(`   🗑️ Deleting ${collectionName}/${change.documentId}`);
+          batch.delete(docRef);
+          cleanedCount++;
+        } else {
+          console.log(`   ✅ Already deleted: ${collectionName}/${change.documentId}`);
+        }
+      } catch (error) {
+        console.error(`❌ Error deleting ${change.collection}/${change.documentId}:`, error.message);
+        errorCount++;
+      }
+    }
+  }
+
+  if (cleanedCount > 0) {
+    console.log('💾 Committing manual cleanup batch...');
+    await batch.commit();
+    console.log('✅ Manual cleanup completed successfully');
+  }
+
+  return { cleaned: cleanedCount, errors: errorCount };
+};
+
+// Get all transactions and their current status
+export const getAllTransactionStatuses = async () => {
+  const transactions = await getImportTransactions();
+  console.log('📋 All transaction statuses:');
+  transactions.forEach(t => {
+    console.log(`   ${t.id}: ${t.status} (${t.stats.totalChanges} changes, ${t.semester})`);
+  });
+  return transactions;
+};
+
+// Orphaned data cleanup functions for when transaction records are deleted
+
+// Find potentially orphaned imported data based on patterns
+export const findOrphanedImportedData = async (semesterFilter = null) => {
+  console.log('🔍 Scanning for orphaned imported data...');
+
+  const results = {
+    schedules: [],
+    people: [],
+    rooms: [],
+    total: 0
+  };
+
+  try {
+    // Scan schedules for imported patterns
+    const schedulesRef = collection(db, COLLECTIONS.SCHEDULES);
+    const schedulesSnap = await getDocs(schedulesRef);
+
+    console.log(`📊 Found ${schedulesSnap.size} total schedules`);
+
+    schedulesSnap.forEach(doc => {
+      const data = doc.data();
+      const docId = doc.id;
+
+      // Look for patterns that indicate imported data
+      const isLikelyImported = (
+        // Recent creation date (within last 30 days)
+        data.createdAt && (new Date() - new Date(data.createdAt)) < (30 * 24 * 60 * 60 * 1000) ||
+        // Deterministic ID pattern (TERM_CRNN format)
+        /^\w+_\d{5}$/.test(docId) ||
+        // Missing important fields that imported data often has
+        (data.instructorName && !data.instructorId) ||
+        // Semester filter if provided
+        (semesterFilter && data.term && data.term.toLowerCase().includes(semesterFilter.toLowerCase()))
+      );
+
+      if (isLikelyImported) {
+        results.schedules.push({
+          id: docId,
+          ...data,
+          reason: data.createdAt ? 'recent_creation' : 'deterministic_id'
+        });
+      }
+    });
+
+    // Scan people for imported patterns
+    const peopleRef = collection(db, COLLECTIONS.PEOPLE);
+    const peopleSnap = await getDocs(peopleRef);
+
+    console.log(`👥 Found ${peopleSnap.size} total people`);
+
+    peopleSnap.forEach(doc => {
+      const data = doc.data();
+      const docId = doc.id;
+
+      const isLikelyImported = (
+        // Recent creation and no roles (typical import pattern)
+        data.createdAt && !data.roles &&
+        (new Date() - new Date(data.createdAt)) < (30 * 24 * 60 * 60 * 1000) ||
+        // Email pattern that looks imported
+        data.email && data.email.includes('@') === false ||
+        // Semester-specific search
+        (semesterFilter && data.firstName && data.lastName)
+      );
+
+      if (isLikelyImported) {
+        results.people.push({
+          id: docId,
+          ...data,
+          reason: 'likely_imported'
+        });
+      }
+    });
+
+    // Scan rooms for imported patterns
+    const roomsRef = collection(db, COLLECTIONS.ROOMS);
+    const roomsSnap = await getDocs(roomsRef);
+
+    console.log(`🏢 Found ${roomsSnap.size} total rooms`);
+
+    roomsSnap.forEach(doc => {
+      const data = doc.data();
+      const docId = doc.id;
+
+      const isLikelyImported = (
+        // Recent creation
+        data.createdAt && (new Date() - new Date(data.createdAt)) < (30 * 24 * 60 * 60 * 1000) ||
+        // Room names that look like they were auto-generated
+        data.name && data.name.length > 10 && data.name.includes(' ')
+      );
+
+      if (isLikelyImported) {
+        results.rooms.push({
+          id: docId,
+          ...data,
+          reason: 'recent_creation'
+        });
+      }
+    });
+
+    results.total = results.schedules.length + results.people.length + results.rooms.length;
+
+    console.log(`🎯 Found ${results.total} potentially orphaned records:`);
+    console.log(`   - ${results.schedules.length} schedules`);
+    console.log(`   - ${results.people.length} people`);
+    console.log(`   - ${results.rooms.length} rooms`);
+
+    return results;
+
+  } catch (error) {
+    console.error('Error scanning for orphaned data:', error);
+    throw error;
+  }
+};
+
+// Clean up orphaned imported data
+export const cleanupOrphanedImportedData = async (orphanedData, confirmDelete = false) => {
+  console.log('🧹 Starting cleanup of orphaned imported data...');
+
+  if (!confirmDelete) {
+    console.log('⚠️  DRY RUN - No actual deletions will be performed');
+    console.log('   Set confirmDelete=true to actually delete the data');
+    return { dryRun: true, wouldDelete: orphanedData.total };
+  }
+
+  const batch = writeBatch(db);
+  let deletedCount = 0;
+  let errorCount = 0;
+
+  // Delete orphaned schedules
+  for (const schedule of orphanedData.schedules) {
+    try {
+      const docRef = doc(db, COLLECTIONS.SCHEDULES, schedule.id);
+      batch.delete(docRef);
+      deletedCount++;
+      console.log(`   🗑️ Marked schedule ${schedule.id} for deletion`);
+    } catch (error) {
+      console.error(`❌ Error marking schedule ${schedule.id} for deletion:`, error);
+      errorCount++;
+    }
+  }
+
+  // Delete orphaned people
+  for (const person of orphanedData.people) {
+    try {
+      const docRef = doc(db, COLLECTIONS.PEOPLE, person.id);
+      batch.delete(docRef);
+      deletedCount++;
+      console.log(`   🗑️ Marked person ${person.id} (${person.firstName} ${person.lastName}) for deletion`);
+    } catch (error) {
+      console.error(`❌ Error marking person ${person.id} for deletion:`, error);
+      errorCount++;
+    }
+  }
+
+  // Delete orphaned rooms
+  for (const room of orphanedData.rooms) {
+    try {
+      const docRef = doc(db, COLLECTIONS.ROOMS, room.id);
+      batch.delete(docRef);
+      deletedCount++;
+      console.log(`   🗑️ Marked room ${room.id} (${room.name}) for deletion`);
+    } catch (error) {
+      console.error(`❌ Error marking room ${room.id} for deletion:`, error);
+      errorCount++;
+    }
+  }
+
+  if (deletedCount > 0) {
+    console.log('💾 Committing batch deletion...');
+    await batch.commit();
+    console.log(`✅ Successfully deleted ${deletedCount} orphaned records`);
+  }
+
+  return {
+    deleted: deletedCount,
+    errors: errorCount,
+    totalFound: orphanedData.total
+  };
+};
 
 // Save transaction to database
 const saveTransactionToDatabase = async (transaction) => {

@@ -1,5 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
+import { Download } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
+import ExportModal from '../admin/ExportModal';
+import { logExport } from '../../utils/activityLogger';
 
 const DAY_ORDER = ['M','T','W','R','F'];
 const DAY_LABELS = { M: 'Mon', T: 'Tue', W: 'Wed', R: 'Thu', F: 'Fri' };
@@ -30,6 +33,8 @@ const StudentSchedules = ({ studentData = [] }) => {
   const [selectedJobTitles, setSelectedJobTitles] = useState([]);
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   const [dayView, setDayView] = useState('All'); // 'All' or one of DAY_ORDER
+  const [showExportModal, setShowExportModal] = useState(false);
+  const scheduleGridRef = useRef(null);
 
   const buildingOptions = useMemo(() => {
     const set = new Set();
@@ -202,11 +207,34 @@ const StudentSchedules = ({ studentData = [] }) => {
 
   const visibleDays = dayView === 'All' ? DAY_ORDER : [dayView];
 
+  const handleExport = async (format) => {
+    const title = `Student Worker Schedules - ${dayView === 'All' ? 'All Days' : DAY_LABELS[dayView]}`;
+    try {
+      await logExport(format.toUpperCase(), 'Student worker schedules', filteredStudents.length);
+    } catch (error) {
+      console.error('Failed to log export:', error);
+    }
+    // The actual export is handled by the ExportModal
+  };
+
   return (
     <div className="space-y-4">
       <div className="bg-white border border-gray-200 rounded-lg p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-gray-700">Filters</h3>
+          <div>
+            <button
+              onClick={() => setShowExportModal(true)}
+              className="inline-flex items-center px-3 py-2 text-sm font-medium text-baylor-green bg-white border border-baylor-green rounded-lg hover:bg-baylor-green hover:text-white transition-colors"
+              title="Export schedule"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export
+            </button>
+          </div>
+        </div>
+        <div className="flex items-center justify-between mb-3">
+          <div></div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">View</label>
             <select
@@ -253,7 +281,7 @@ const StudentSchedules = ({ studentData = [] }) => {
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-4">
+      <div className="bg-white border border-gray-200 rounded-lg p-4" ref={scheduleGridRef}>
         {/* Time scale header */}
         <div className="grid" style={{ gridTemplateColumns: `80px repeat(${visibleDays.length}, 1fr)` }}>
           <div></div>
@@ -321,6 +349,15 @@ const StudentSchedules = ({ studentData = [] }) => {
           ))}
         </div>
       </div>
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        scheduleTableRef={scheduleGridRef}
+        title={`Student Worker Schedules - ${dayView === 'All' ? 'All Days' : DAY_LABELS[dayView]}`}
+        onExport={handleExport}
+      />
     </div>
   );
 };

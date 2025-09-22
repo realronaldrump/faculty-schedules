@@ -7,13 +7,13 @@ import html2canvas from 'html2canvas';
 import html2pdf from 'html2pdf.js';
 // Excel export removed per request
 
-const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
+const ExportModal = ({ isOpen, onClose, scheduleTableRef, title, onExport }) => {
     if (!isOpen) return null;
 
-    const [presetSize, setPresetSize] = useState('7x5');
+    const [presetSize, setPresetSize] = useState('letter');
     const [customUnit, setCustomUnit] = useState('in');
-    const [customWidth, setCustomWidth] = useState(7);
-    const [customHeight, setCustomHeight] = useState(5);
+    const [customWidth, setCustomWidth] = useState(8.5);
+    const [customHeight, setCustomHeight] = useState(11);
     const [orientation, setOrientation] = useState('portrait');
     const [margin, setMargin] = useState(0.25);
 
@@ -38,6 +38,11 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
             console.error('Nothing to export.');
             onClose();
             return;
+        }
+
+        // Call the onExport callback if provided
+        if (onExport) {
+            await onExport(format);
         }
 
         try {
@@ -77,11 +82,64 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title }) => {
                     jsPDF: { unit, format: finalFormat, orientation }
                 }).from(container).save();
             } else if (format === 'png') {
-                const canvas = await html2canvas(container, { scale: 2, backgroundColor: null, ignoreElements: (el) => el && el.classList && el.classList.contains('export-ignore') });
-                const dataUrl = canvas.toDataURL('image/png');
-                const res = await fetch(dataUrl);
-                const blob = await res.blob();
-                downloadBlob(blob, `${title}.png`);
+                // Calculate target dimensions for PNG export
+                const DPI = 96; // Standard screen DPI
+                let targetWidthPx, targetHeightPx;
+
+                if (presetSize === 'letter') {
+                    targetWidthPx = 8.5 * DPI;
+                    targetHeightPx = 11 * DPI;
+                } else if (presetSize === 'custom') {
+                    const unitMultiplier = customUnit === 'mm' ? 0.0393701 : customUnit === 'pt' ? 0.0138889 : 1; // Convert to inches, then to pixels
+                    targetWidthPx = (Number(customWidth) || 8.5) * unitMultiplier * DPI;
+                    targetHeightPx = (Number(customHeight) || 11) * unitMultiplier * DPI;
+                } else {
+                    // Default 7x5
+                    targetWidthPx = 7 * DPI;
+                    targetHeightPx = 5 * DPI;
+                }
+
+                // Apply orientation
+                if (orientation === 'landscape') {
+                    [targetWidthPx, targetHeightPx] = [targetHeightPx, targetWidthPx];
+                }
+
+                // Store original styles
+                const originalWidth = container.style.width;
+                const originalHeight = container.style.height;
+                const originalMaxWidth = container.style.maxWidth;
+                const originalMaxHeight = container.style.maxHeight;
+
+                // Temporarily set container to target size
+                container.style.width = `${targetWidthPx}px`;
+                container.style.height = `${targetHeightPx}px`;
+                container.style.maxWidth = `${targetWidthPx}px`;
+                container.style.maxHeight = `${targetHeightPx}px`;
+                container.style.overflow = 'hidden';
+
+                try {
+                    // Capture with size constraints
+                    const canvas = await html2canvas(container, {
+                        width: targetWidthPx,
+                        height: targetHeightPx,
+                        scale: 2,
+                        backgroundColor: null,
+                        useCORS: true,
+                        ignoreElements: (el) => el && el.classList && el.classList.contains('export-ignore')
+                    });
+
+                    const dataUrl = canvas.toDataURL('image/png');
+                    const res = await fetch(dataUrl);
+                    const blob = await res.blob();
+                    downloadBlob(blob, `${title}.png`);
+                } finally {
+                    // Restore original styles
+                    container.style.width = originalWidth;
+                    container.style.height = originalHeight;
+                    container.style.maxWidth = originalMaxWidth;
+                    container.style.maxHeight = originalMaxHeight;
+                    container.style.overflow = '';
+                }
             }
         } catch (err) {
             console.error('Export failed:', err);

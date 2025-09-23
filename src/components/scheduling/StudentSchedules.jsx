@@ -2,6 +2,7 @@ import React, { useMemo, useState, useRef } from 'react';
 import { Download } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import ExportModal from '../admin/ExportModal';
+import FacultyContactCard from '../FacultyContactCard';
 import { logExport } from '../../utils/activityLogger';
 
 const DAY_ORDER = ['M','T','W','R','F'];
@@ -50,6 +51,7 @@ const StudentSchedules = ({ studentData = [] }) => {
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   const [dayView, setDayView] = useState('All'); // 'All' or one of DAY_ORDER
   const [showExportModal, setShowExportModal] = useState(false);
+  const [selectedStudentForCard, setSelectedStudentForCard] = useState(null);
   const scheduleGridRef = useRef(null);
 
   const buildingOptions = useMemo(() => {
@@ -252,6 +254,10 @@ const StudentSchedules = ({ studentData = [] }) => {
     // The actual export is handled by the ExportModal
   };
 
+  const handleScheduleClick = (student) => {
+    setSelectedStudentForCard(student);
+  };
+
   return (
     <div className="space-y-4">
       <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
@@ -380,9 +386,13 @@ const StudentSchedules = ({ studentData = [] }) => {
                   <div
                     key={idx}
                     lang="en"
-                    className="absolute rounded-md shadow-sm p-1.5 ring-1 ring-black/5 text-gray-900 bg-white hover:shadow-md flex flex-col justify-center items-center text-center"
+                    className="absolute rounded-md shadow-sm p-1.5 ring-1 ring-black/5 text-gray-900 bg-white hover:shadow-md cursor-pointer flex flex-col justify-center items-center text-center"
                     style={{ top: `${top}%`, height: `${height}%`, width: widthCalc, left: leftCalc, background: accent.bg, borderLeft: `4px solid ${accent.border}`, overflow: 'hidden', fontSize: `${fontSizePx}px` }}
-                    title={`${entry.student.name} • ${formatTimeLabel(start)} - ${formatTimeLabel(end)}${entry.jobTitle ? ` • ${entry.jobTitle}` : ''}`}
+                    title={`Click to view ${entry.student.name}'s contact information • ${formatTimeLabel(start)} - ${formatTimeLabel(end)}${entry.jobTitle ? ` • ${entry.jobTitle}` : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleScheduleClick(entry.student);
+                    }}
                   >
                     <div className="font-semibold leading-tight whitespace-normal break-normal" style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'auto' }}>{entry.student.name}</div>
                     <div className="leading-tight whitespace-normal break-normal" style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'auto' }}>{formatTimeLabel(start)} - {formatTimeLabel(end)}</div>
@@ -403,6 +413,19 @@ const StudentSchedules = ({ studentData = [] }) => {
         title={`Student Worker Schedules - ${dayView === 'All' ? 'All Days' : DAY_LABELS[dayView]}`}
         onExport={handleExport}
       />
+
+      {/* Contact Card Modal */}
+      {selectedStudentForCard && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <FacultyContactCard
+              person={selectedStudentForCard}
+              onClose={() => setSelectedStudentForCard(null)}
+              personType="student"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

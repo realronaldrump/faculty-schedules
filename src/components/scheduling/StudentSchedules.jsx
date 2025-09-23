@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef } from 'react';
-import { Download } from 'lucide-react';
+import { Download, Calendar, List, ZoomIn, ZoomOut } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import ExportModal from '../admin/ExportModal';
 import FacultyContactCard from '../FacultyContactCard';
@@ -11,7 +11,7 @@ const DAY_LABELS = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F
 // Layout tuning for readability and export quality
 const TIME_COLUMN_WIDTH = 104; // px, wide enough for full time labels
 const BASE_PX_PER_HOUR = 56;   // default visual density
-const MAX_PX_PER_HOUR = 120;   // cap to avoid excessively tall views
+const MAX_PX_PER_HOUR = 220;   // increased cap to improve readability
 const MIN_EVENT_HEIGHT_PX = 44; // ensure at least ~3 short lines + padding
 
 function minutesSinceStartOfDay(timeStr) {
@@ -61,7 +61,10 @@ const StudentSchedules = ({ studentData = [] }) => {
   const [dayView, setDayView] = useState('All'); // 'All' or one of DAY_ORDER
   const [showExportModal, setShowExportModal] = useState(false);
   const [selectedStudentForCard, setSelectedStudentForCard] = useState(null);
-  const scheduleGridRef = useRef(null);
+  const [viewMode, setViewMode] = useState('calendar'); // 'calendar' | 'list'
+  const [zoom, setZoom] = useState(1);
+  const calendarRef = useRef(null);
+  const listRef = useRef(null);
 
   const buildingOptions = useMemo(() => {
     const set = new Set();
@@ -251,6 +254,12 @@ const StudentSchedules = ({ studentData = [] }) => {
     return Math.min(MAX_PX_PER_HOUR, Math.max(BASE_PX_PER_HOUR, required));
   }, [entriesByDayWithLayout, dayView]);
 
+  // Apply user zoom to computed pixels-per-hour, with generous bounds for readability
+  const calendarPxPerHour = useMemo(() => {
+    const scaled = Math.round(pixelsPerHour * zoom);
+    return Math.min(MAX_PX_PER_HOUR * 2, Math.max(Math.floor(BASE_PX_PER_HOUR / 2), scaled));
+  }, [pixelsPerHour, zoom]);
+
   const visibleDays = dayView === 'All' ? DAY_ORDER : [dayView];
 
   const handleExport = async (format) => {
@@ -284,7 +293,50 @@ const StudentSchedules = ({ studentData = [] }) => {
           </div>
         </div>
         <div className="flex items-center justify-between mb-4">
-          <div></div>
+          <div className="flex items-center gap-2">
+            <label className="block text-xs text-gray-600 mb-1">Display</label>
+            <div className="flex rounded-md border">
+              <button
+                onClick={() => setViewMode('calendar')}
+                className={`px-3 py-1 text-xs rounded-l-md flex items-center gap-1 ${
+                  viewMode === 'calendar' ? 'bg-baylor-green text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+                title="Calendar view - compact grid"
+              >
+                <Calendar size={14} />
+                Calendar
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`px-3 py-1 text-xs rounded-r-md flex items-center gap-1 ${
+                  viewMode === 'list' ? 'bg-baylor-green text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+                title="List view - detailed and readable"
+              >
+                <List size={14} />
+                List
+              </button>
+            </div>
+            {viewMode === 'calendar' && (
+              <div className="ml-3 inline-flex items-center gap-1">
+                <button
+                  onClick={() => setZoom(z => Math.min(2.5, Math.round((z + 0.1) * 10) / 10))}
+                  className="px-2 py-1 text-xs border rounded hover:bg-gray-50 text-gray-700"
+                  title="Zoom in (increase hour height)"
+                >
+                  <ZoomIn size={14} />
+                </button>
+                <button
+                  onClick={() => setZoom(z => Math.max(0.5, Math.round((z - 0.1) * 10) / 10))}
+                  className="px-2 py-1 text-xs border rounded hover:bg-gray-50 text-gray-700"
+                  title="Zoom out (decrease hour height)"
+                >
+                  <ZoomOut size={14} />
+                </button>
+                <span className="text-xs text-gray-600 ml-1">{Math.round(zoom * 100)}%</span>
+              </div>
+            )}
+          </div>
           <div>
             <label className="block text-xs text-gray-600 mb-1">View</label>
             <select
@@ -331,7 +383,8 @@ const StudentSchedules = ({ studentData = [] }) => {
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm" ref={scheduleGridRef}>
+      {viewMode === 'calendar' && (
+      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm" ref={calendarRef}>
         {/* Time scale header */}
         <div className="grid gap-x-2" style={{ gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(${visibleDays.length}, 1fr)` }}>
           <div></div>
@@ -341,7 +394,7 @@ const StudentSchedules = ({ studentData = [] }) => {
         </div>
         <div className="grid gap-x-2" style={{ gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(${visibleDays.length}, 1fr)` }}>
           {/* Time scale */}
-          <div className="relative" style={{ height: `${(totalMinutes/60)*pixelsPerHour}px` }}>
+          <div className="relative" style={{ height: `${(totalMinutes/60)*calendarPxPerHour}px` }}>
             {Array.from({ length: Math.floor(totalMinutes / 60) + 1 }).map((_, i) => {
               const m = minStart + i * 60;
               const top = (i * 60) / totalMinutes * 100;
@@ -355,7 +408,7 @@ const StudentSchedules = ({ studentData = [] }) => {
 
           {/* Day columns */}
           {visibleDays.map(d => (
-            <div key={d} className="relative border-l border-gray-100" style={{ height: `${(totalMinutes/60)*pixelsPerHour}px` }}>
+            <div key={d} className="relative border-l border-gray-100" style={{ height: `${(totalMinutes/60)*calendarPxPerHour}px` }}>
               {/* Hour lines */}
               {Array.from({ length: Math.floor(totalMinutes / 60) + 1 }).map((_, i) => {
                 const top = (i * 60) / totalMinutes * 100;
@@ -382,30 +435,86 @@ const StudentSchedules = ({ studentData = [] }) => {
                 const gap = 6; // px between columns
                 const widthCalc = `calc((100% - ${(columns - 1) * gap}px) / ${columns})`;
                 const leftCalc = `calc(${(col * 100) / columns}% + ${col * gap}px)`;
-
-                // Dynamic font sizing to fit text without scrollbars
-                const eventHeightPx = (durationMinutes / 60) * pixelsPerHour; // matches column scale
+                // Readability-first text sizing with zoom support
+                const eventHeightPx = (durationMinutes / 60) * calendarPxPerHour;
                 let fontSizePx = 12;
                 if (eventHeightPx < 44) fontSizePx = 11;
                 if (eventHeightPx < 34) fontSizePx = 10;
                 if (eventHeightPx < 26) fontSizePx = 9;
                 if (eventHeightPx < 20) fontSizePx = 8;
+                fontSizePx = Math.max(10, fontSizePx); // enforce minimum legible size
+                const dynamicPadding = Math.max(2, Math.min(4, eventHeightPx / 12));
+                const lineHeight = 1.2;
+                const studentName = entry.student.name || '';
+                const timeRange = `${formatTimeLabel(start)} - ${formatTimeLabel(end)}`;
+                const showJob = !!entry.jobTitle && eventHeightPx >= 52;
 
                 return (
                   <div
                     key={idx}
                     lang="en"
-                    className="absolute rounded-md shadow-sm p-1.5 ring-1 ring-black/5 text-gray-900 bg-white hover:shadow-md cursor-pointer flex flex-col justify-center items-center text-center"
-                    style={{ top: `${top}%`, height: `${height}%`, width: widthCalc, left: leftCalc, background: accent.bg, borderLeft: `4px solid ${accent.border}`, overflow: 'hidden', fontSize: `${fontSizePx}px` }}
+                    className="absolute rounded-md shadow-sm ring-1 ring-black/5 text-gray-900 bg-white hover:shadow-md cursor-pointer flex flex-col justify-start items-stretch"
+                    style={{
+                      top: `${top}%`,
+                      height: `${height}%`,
+                      width: widthCalc,
+                      left: leftCalc,
+                      background: accent.bg,
+                      borderLeft: `4px solid ${accent.border}`,
+                      fontSize: `${fontSizePx}px`,
+                      padding: `${dynamicPadding}px`,
+                      lineHeight: lineHeight,
+                      overflow: 'hidden'
+                    }}
                     title={`Click to view ${entry.student.name}'s contact information • ${formatTimeLabel(start)} - ${formatTimeLabel(end)}${entry.jobTitle ? ` • ${entry.jobTitle}` : ''} (Color-coded by student + job title)`}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleScheduleClick(entry.student);
                     }}
                   >
-                    <div className="font-semibold leading-tight whitespace-normal break-normal" style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'auto' }}>{entry.student.name}</div>
-                    <div className="leading-tight whitespace-normal break-normal" style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'auto' }}>{formatTimeLabel(start)} - {formatTimeLabel(end)}</div>
-                    {entry.jobTitle && <div className="leading-tight whitespace-normal break-normal" style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'auto' }}>{entry.jobTitle}</div>}
+                    <div
+                      className="font-semibold leading-none text-center"
+                      style={{
+                        wordBreak: 'break-word',
+                        overflowWrap: 'break-word',
+                        hyphens: 'auto',
+                        fontSize: `${fontSizePx}px`,
+                        lineHeight: lineHeight
+                      }}
+                      title={entry.student.name}
+                    >
+                      {studentName}
+                    </div>
+                    <div
+                      className="leading-none text-center"
+                      style={{
+                        wordBreak: 'break-word',
+                        overflowWrap: 'break-word',
+                        hyphens: 'auto',
+                        fontSize: `${fontSizePx}px`,
+                        lineHeight: lineHeight,
+                        fontWeight: fontSizePx <= 9 ? 'normal' : 'medium'
+                      }}
+                      title={timeRange}
+                    >
+                      {timeRange}
+                    </div>
+                    {showJob && (
+                      <div
+                        className="leading-none text-center"
+                        style={{
+                          wordBreak: 'break-word',
+                          overflowWrap: 'break-word',
+                          hyphens: 'auto',
+                          fontSize: `${Math.max(10, fontSizePx - 1)}px`,
+                          lineHeight: lineHeight,
+                          opacity: 0.85
+                        }}
+                        title={entry.jobTitle}
+                      >
+                        {entry.jobTitle}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -413,13 +522,57 @@ const StudentSchedules = ({ studentData = [] }) => {
           ))}
         </div>
       </div>
+      )}
+
+      {viewMode === 'list' && (
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm" ref={listRef}>
+          <div className="p-6">
+            <h3 className="text-lg font-serif font-semibold text-baylor-green mb-4">Student Schedule Details</h3>
+            {visibleDays.map(day => {
+              const dayEntries = (entriesByDayWithLayout[day] || []).slice().sort((a, b) => a.start - b.start);
+              if (dayEntries.length === 0) return null;
+              return (
+                <div key={day} className="mb-6 last:mb-0">
+                  <h4 className="text-md font-semibold text-gray-800 mb-3 pb-2 border-b border-gray-200">{DAY_LABELS[day]}</h4>
+                  <div className="space-y-3">
+                    {dayEntries.map((item, idx) => {
+                      const { entry, start, end } = item;
+                      const accent = accentForStudentAndJob(entry.student.id, entry.jobTitle);
+                      return (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between p-4 rounded-lg border border-gray-200 hover:shadow-md cursor-pointer transition-shadow"
+                          style={{ background: accent.bg, borderLeft: `4px solid ${accent.border}` }}
+                          onClick={() => handleScheduleClick(entry.student)}
+                          title={`Click to view ${entry.student.name}'s contact information`}
+                        >
+                          <div className="flex-1">
+                            <div className="font-semibold text-gray-900 text-base">{entry.student.name}</div>
+                            <div className="text-sm text-gray-600 mt-1">
+                              {formatTimeLabel(start)} - {formatTimeLabel(end)}
+                              {entry.jobTitle && <span className="ml-2 text-gray-500">• {entry.jobTitle}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+            {filteredStudents.length === 0 && (
+              <div className="text-center text-gray-500 py-8">No schedule entries found with current filters.</div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Export Modal */}
       <ExportModal
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
-        scheduleTableRef={scheduleGridRef}
-        title={`Student Worker Schedules - ${dayView === 'All' ? 'All Days' : DAY_LABELS[dayView]}`}
+        scheduleTableRef={viewMode === 'calendar' ? calendarRef : listRef}
+        title={`Student Worker Schedules - ${dayView === 'All' ? 'All Days' : DAY_LABELS[dayView]} (${viewMode === 'calendar' ? 'Calendar' : 'List'} View)`}
         onExport={handleExport}
       />
 

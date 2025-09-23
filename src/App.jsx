@@ -539,6 +539,51 @@ function App() {
     return schedules;
   };
 
+  // Auto-inactivate student workers whose endDate has passed (one-time per record)
+  const autoInactivateExpiredStudents = async (people) => {
+    try {
+      const now = new Date();
+      const candidates = (people || []).filter(p => {
+        // Must be a student
+        const hasStudentRole = Array.isArray(p.roles) ? p.roles.includes('student') : (typeof p.roles === 'object' && p.roles?.student === true);
+        if (!hasStudentRole) return false;
+        const endStr = p.endDate || (Array.isArray(p.jobs) && p.jobs[0]?.endDate) || '';
+        if (!endStr) return false;
+        const end = new Date(`${endStr}T23:59:59`);
+        if (isNaN(end.getTime())) return false;
+        // Only inactivate if end in past and not already inactive
+        return end < now && p.isActive !== false;
+      });
+
+      for (const person of candidates) {
+        try {
+          const personRef = doc(db, 'people', person.id);
+          const updates = { isActive: false, updatedAt: new Date().toISOString() };
+          await updateDoc(personRef, updates);
+          // Non-blocking change log
+          logUpdate(
+            `Student - ${person.name || person.id}`,
+            'people',
+            person.id,
+            updates,
+            person,
+            'App.jsx - autoInactivateExpiredStudents'
+          ).catch(() => {});
+          // Reflect locally for immediate UX
+          person.isActive = false;
+        } catch (e) {
+          console.warn('Auto-inactivate failed for person', person.id, e);
+        }
+      }
+      if (candidates.length > 0) {
+        console.log(`🔁 Auto-inactivated ${candidates.length} expired student workers`);
+      }
+    } catch (err) {
+      console.warn('Auto-inactivate expired students encountered an error:', err);
+    }
+    return people;
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -596,6 +641,8 @@ function App() {
       });
       
       setRawScheduleData(schedules);
+      // Auto-inactivate any expired students (non-blocking, but we await to keep local state consistent)
+      await autoInactivateExpiredStudents(mergedPeople);
       setRawPeople(mergedPeople);
       setRawPrograms(programs);
       setEditHistory(history);
@@ -1214,9 +1261,24 @@ function App() {
         Object.entries(studentToUpdate).filter(([_, value]) => value !== undefined)
       );
       
+      // Derive isActive based on endDate unless explicitly set
+      let derivedIsActive = cleanStudentData.isActive;
+      try {
+        const endDateStr = cleanStudentData.endDate || null;
+        if (endDateStr) {
+          const end = new Date(`${endDateStr}T23:59:59`);
+          if (!isNaN(end.getTime())) {
+            derivedIsActive = end >= new Date();
+          }
+        }
+      } catch (_) {}
+
       const updateData = {
         ...cleanStudentData,
-        roles: ['student'], // Ensure student role is set
+        // Ensure student role is set
+        roles: ['student'],
+        // If user provided isActive, respect it; otherwise use derived value or default true
+        isActive: (cleanStudentData.isActive !== undefined ? cleanStudentData.isActive : (derivedIsActive !== undefined ? derivedIsActive : true)),
         updatedAt: new Date().toISOString()
       };
 
@@ -1545,8 +1607,21 @@ function App() {
       // Compute unified weekly schedule for compatibility consumers
       const unifiedWeekly = jobsArray.flatMap(j => Array.isArray(j.weeklySchedule) ? j.weeklySchedule : []);
       const unifiedBuildings = Array.from(new Set(jobsArray.flatMap(j => Array.isArray(j.location) ? j.location : (j.location ? [j.location] : []))));
+      // Compute effective active state if missing: endDate in past => inactive
+      let effectiveIsActive = s.isActive;
+      try {
+        const endStr = s.endDate || (jobsArray[0]?.endDate) || '';
+        if (endStr) {
+          const end = new Date(`${endStr}T23:59:59`);
+          if (!isNaN(end.getTime())) {
+            effectiveIsActive = end >= new Date();
+          }
+        }
+      } catch (_) {}
+
       return {
         ...s,
+        isActive: (s.isActive !== undefined ? s.isActive : (effectiveIsActive !== undefined ? effectiveIsActive : true)),
         jobs: jobsArray,
         // preserve legacy fields for components not yet migrated
         weeklySchedule: unifiedWeekly,

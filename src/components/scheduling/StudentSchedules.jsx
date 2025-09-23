@@ -63,6 +63,7 @@ const StudentSchedules = ({ studentData = [] }) => {
   const [selectedStudentForCard, setSelectedStudentForCard] = useState(null);
   const [viewMode, setViewMode] = useState('calendar'); // 'calendar' | 'list'
   const [zoom, setZoom] = useState(1);
+  const [includeInactive, setIncludeInactive] = useState(false);
   const calendarRef = useRef(null);
   const listRef = useRef(null);
 
@@ -100,7 +101,24 @@ const StudentSchedules = ({ studentData = [] }) => {
   }, [studentData]);
 
   const filteredStudents = useMemo(() => {
+    const isEffectivelyActive = (s) => {
+      if (s && s.isActive === false) return false;
+      const now = new Date();
+      const startStr = s?.startDate || (Array.isArray(s.jobs) && s.jobs[0]?.startDate) || '';
+      const endStr = s?.endDate || (Array.isArray(s.jobs) && s.jobs[0]?.endDate) || '';
+      if (startStr) {
+        const start = new Date(`${startStr}T00:00:00`);
+        if (!isNaN(start.getTime()) && start > now) return false;
+      }
+      if (endStr) {
+        const end = new Date(`${endStr}T23:59:59`);
+        if (!isNaN(end.getTime()) && end < now) return false;
+      }
+      return true;
+    };
+
     return studentData.filter(s => {
+      if (!includeInactive && !isEffectivelyActive(s)) return false;
       const jobs = Array.isArray(s.jobs) && s.jobs.length > 0
         ? s.jobs
         : [{
@@ -135,7 +153,7 @@ const StudentSchedules = ({ studentData = [] }) => {
 
       return true;
     });
-  }, [studentData, selectedBuildings, selectedJobTitles, selectedStudentIds]);
+  }, [studentData, selectedBuildings, selectedJobTitles, selectedStudentIds, includeInactive]);
 
   // Determine time bounds for grid (default 8:00 - 18:00)
   const { minStart, maxEnd } = useMemo(() => {
@@ -290,6 +308,17 @@ const StudentSchedules = ({ studentData = [] }) => {
               <Download className="w-4 h-4 mr-2" />
               Export
             </button>
+          </div>
+          <div className="ml-4 inline-flex items-center gap-2">
+            <label className="inline-flex items-center text-xs text-gray-700">
+              <input
+                type="checkbox"
+                className="mr-2"
+                checked={includeInactive}
+                onChange={e => setIncludeInactive(e.target.checked)}
+              />
+              Include inactive
+            </label>
           </div>
         </div>
         <div className="flex items-center justify-between mb-4">

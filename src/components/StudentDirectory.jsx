@@ -29,12 +29,14 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     email: '',
     phone: '',
     startDate: '',
+    endDate: '',
     hourlyRate: '',
     supervisor: '',
     jobTitle: '',
     primaryBuildings: [], // e.g., ["Mary Gibbs Jones", "Goebel"]
     weeklySchedule: [], // [{ day: 'M', start: '09:00', end: '12:00' }]
     hasNoPhone: false,
+    isActive: true,
     jobs: [
       { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] }
     ]
@@ -57,7 +59,8 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     buildings: [],
     hasEmail: true,
     hasPhone: true,
-    activeOnly: true
+    activeOnly: true,
+    includeEnded: false
   });
 
   // Extract departments and supervisors for filtering
@@ -119,6 +122,19 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
           (Array.isArray(student.jobs) && student.jobs.some(j => (j?.jobTitle || '').toLowerCase().includes(searchText) || (j?.supervisor || '').toLowerCase().includes(searchText)))
         );
         if (!matchesText) return false;
+      }
+
+      // Status filters: activeOnly and includeEnded
+      if (filters.activeOnly) {
+        const now = new Date();
+        const endStr = student.endDate || (Array.isArray(student.jobs) && student.jobs[0]?.endDate) || '';
+        const ended = (() => {
+          if (!endStr) return false;
+          const end = new Date(`${endStr}T23:59:59`);
+          return !isNaN(end.getTime()) && end < now;
+        })();
+        const inactive = student.isActive === false;
+        if ((inactive || ended) && !filters.includeEnded) return false;
       }
 
       // Job Titles filter (include-only across top-level and job entries)
@@ -307,12 +323,14 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
       email: '',
       phone: '',
       startDate: '',
+      endDate: '',
       hourlyRate: '',
       supervisor: '',
       jobTitle: '',
       primaryBuildings: [],
       weeklySchedule: [],
       hasNoPhone: false,
+      isActive: true,
       jobs: [ { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] } ]
     });
     setErrors({});
@@ -332,7 +350,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
       const unifiedBuildings = Array.from(new Set(jobs.flatMap(j => Array.isArray(j.location) ? j.location : (j.location ? [j.location] : []))));
       const studentToCreate = {
         ...newStudent,
-        isActive: true,
+        isActive: newStudent.isActive !== undefined ? newStudent.isActive : true,
         jobs,
         weeklySchedule: unifiedWeekly.length > 0 ? unifiedWeekly : (newStudent.weeklySchedule || []),
         primaryBuildings: unifiedBuildings.length > 0 ? unifiedBuildings : (newStudent.primaryBuildings || []),
@@ -572,6 +590,42 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                 Undo
               </button>
             )}
+            <div className="flex items-center gap-3 text-sm">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={filters.activeOnly}
+                  onChange={(e) => setFilters(prev => ({ ...prev, activeOnly: e.target.checked }))}
+                />
+                Active only
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={filters.includeEnded}
+                  onChange={(e) => setFilters(prev => ({ ...prev, includeEnded: e.target.checked }))}
+                />
+                Include ended
+              </label>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={filters.activeOnly}
+                  onChange={(e) => setFilters(prev => ({ ...prev, activeOnly: e.target.checked }))}
+                />
+                Active only
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={filters.includeEnded}
+                  onChange={(e) => setFilters(prev => ({ ...prev, includeEnded: e.target.checked }))}
+                />
+                Include ended
+              </label>
+            </div>
             <button
               onClick={startCreate}
               className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
@@ -850,6 +904,15 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
               />
             </div>
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+              <input
+                type="date"
+                value={newStudent.endDate || ''}
+                onChange={(e) => setNewStudent(prev => ({ ...prev, endDate: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2"
+              />
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Hourly Rate</label>
               <input
                 type="number"
@@ -859,6 +922,15 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                 className="w-full border border-gray-300 rounded-md px-3 py-2"
                 placeholder="10.00"
               />
+            </div>
+            <div className="flex items-center gap-2 mt-6">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={newStudent.isActive !== false} onChange={e => setNewStudent(prev => ({ ...prev, isActive: e.target.checked }))} />
+                Active
+              </label>
+              {newStudent.endDate && (
+                <span className="text-xs text-gray-500">(Auto-inactivates after end date)</span>
+              )}
             </div>
           </div>
           {errors.general && (
@@ -941,6 +1013,25 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                           </label>
                         </div>
                         {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
+                        <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+                          <div>
+                            <label className="block text-gray-600 mb-1">Start</label>
+                            <input type="date" className="border rounded px-2 py-1 w-full" value={editFormData.startDate || ''} onChange={e => setEditFormData(prev => ({ ...prev, startDate: e.target.value }))} />
+                          </div>
+                          <div>
+                            <label className="block text-gray-600 mb-1">End</label>
+                            <input type="date" className="border rounded px-2 py-1 w-full" value={editFormData.endDate || ''} onChange={e => setEditFormData(prev => ({ ...prev, endDate: e.target.value }))} />
+                          </div>
+                          <div className="col-span-2 flex items-center gap-2 mt-1">
+                            <label className="flex items-center gap-1">
+                              <input type="checkbox" checked={editFormData.isActive !== false} onChange={e => setEditFormData(prev => ({ ...prev, isActive: e.target.checked }))} />
+                              Active
+                            </label>
+                            {editFormData.endDate && (
+                              <span className="text-gray-500">(Auto-inactivates after end date)</span>
+                            )}
+                          </div>
+                        </div>
                       </td>
               <td className="p-2 align-top" colSpan={3}>
                 <div className="space-y-3">
@@ -1064,11 +1155,17 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                             <div className="text-sm font-medium text-gray-900">
                               {student.name}
                             </div>
-                            {student.startDate && (
-                              <div className="text-sm text-gray-500">
-                                Started: {new Date(student.startDate).toLocaleDateString()}
-                              </div>
-                            )}
+                            <div className="text-xs text-gray-500 space-x-2">
+                              {student.startDate && (
+                                <span>Start: {new Date(student.startDate).toLocaleDateString()}</span>
+                              )}
+                              {student.endDate && (
+                                <span>End: {new Date(student.endDate).toLocaleDateString()}</span>
+                              )}
+                              {student.isActive === false && (
+                                <span className="text-red-600 font-medium">Inactive</span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>

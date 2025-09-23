@@ -453,7 +453,7 @@ const StudentSchedules = ({ studentData = [] }) => {
                   <div
                     key={idx}
                     lang="en"
-                    className="absolute rounded-md shadow-sm ring-1 ring-black/5 text-gray-900 bg-white hover:shadow-md cursor-pointer flex flex-col justify-start items-stretch"
+                    className="absolute rounded-md shadow-sm ring-1 ring-black/5 text-gray-900 bg-white hover:shadow-md cursor-pointer flex flex-col justify-center items-stretch"
                     style={{
                       top: `${top}%`,
                       height: `${height}%`,

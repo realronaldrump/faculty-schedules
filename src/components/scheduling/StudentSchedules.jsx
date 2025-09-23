@@ -45,6 +45,15 @@ const accentForString = (str) => {
   return ACCENTS[idx];
 };
 
+const accentForStudentAndJob = (studentId, jobTitle) => {
+  // Enhanced color coding: combines student ID and job title for unique color assignment
+  // - Same student with different job titles gets different colors
+  // - Different students with the same job title get different colors (based on student ID)
+  // - Provides more granular visual distinction than student-only coloring
+  const combinedKey = `${studentId || 'unknown'}|${jobTitle || 'no-title'}`;
+  return accentForString(combinedKey);
+};
+
 const StudentSchedules = ({ studentData = [] }) => {
   const [selectedBuildings, setSelectedBuildings] = useState([]);
   const [selectedJobTitles, setSelectedJobTitles] = useState([]);
@@ -369,7 +378,7 @@ const StudentSchedules = ({ studentData = [] }) => {
                 const top = ((start - minStart) / totalMinutes) * 100;
                 const height = Math.max(3, ((end - start) / totalMinutes) * 100);
                 const durationMinutes = end - start;
-                const accent = accentForString(entry.student.id || entry.student.name || 'student');
+                const accent = accentForStudentAndJob(entry.student.id, entry.jobTitle);
                 const gap = 6; // px between columns
                 const widthCalc = `calc((100% - ${(columns - 1) * gap}px) / ${columns})`;
                 const leftCalc = `calc(${(col * 100) / columns}% + ${col * gap}px)`;
@@ -388,7 +397,7 @@ const StudentSchedules = ({ studentData = [] }) => {
                     lang="en"
                     className="absolute rounded-md shadow-sm p-1.5 ring-1 ring-black/5 text-gray-900 bg-white hover:shadow-md cursor-pointer flex flex-col justify-center items-center text-center"
                     style={{ top: `${top}%`, height: `${height}%`, width: widthCalc, left: leftCalc, background: accent.bg, borderLeft: `4px solid ${accent.border}`, overflow: 'hidden', fontSize: `${fontSizePx}px` }}
-                    title={`Click to view ${entry.student.name}'s contact information • ${formatTimeLabel(start)} - ${formatTimeLabel(end)}${entry.jobTitle ? ` • ${entry.jobTitle}` : ''}`}
+                    title={`Click to view ${entry.student.name}'s contact information • ${formatTimeLabel(start)} - ${formatTimeLabel(end)}${entry.jobTitle ? ` • ${entry.jobTitle}` : ''} (Color-coded by student + job title)`}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleScheduleClick(entry.student);

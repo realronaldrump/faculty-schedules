@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Copy, Plus, Minus, Settings, UserCog, BookOpen } from 'lucide-react';
+import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Plus, Minus, Settings, UserCog, BookOpen } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import FacultyContactCard from './FacultyContactCard';
 import CustomAlert from './CustomAlert';
@@ -503,13 +503,9 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
         emailString = generateOutlookFormat(selectedData);
         break;
       case 'gmail':
+      default:
         emailString = generateGmailFormat(selectedData);
         break;
-      case 'text':
-        emailString = generateTextFormat(selectedData);
-        break;
-      default:
-        emailString = generateTextFormat(selectedData);
     }
     
     copyToClipboard(emailString);
@@ -534,14 +530,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
     return emails.join(separator);
   };
 
-  const generateTextFormat = (peopleData) => {
-    const emailList = peopleData
-      .filter(person => person.email && person.email.trim() !== '')
-      .map(person => `${person.name} - ${person.email}`)
-      .join('\n');
-    
-    return emailList;
-  };
+  
 
   const copyToClipboard = async (text) => {
     try {
@@ -942,14 +931,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
               Copy Emails
             </button>
             
-            <button
-              onClick={() => generateEmailList('text')}
-              disabled={selectedPeople.length === 0}
-              className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            >
-              <Copy className="w-4 h-4 mr-2" />
-              Copy as Text
-            </button>
+            
             
             <button
               onClick={downloadCSV}

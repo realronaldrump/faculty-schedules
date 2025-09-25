@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, GraduationCap, Users, Calendar, X, BarChart3, MapPin, Database } from 'lucide-react';
+import { Shield, GraduationCap, Users, Calendar, BarChart3, MapPin, Database } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 
 function Login({ onLogin }) {
@@ -10,7 +10,6 @@ function Login({ onLogin }) {
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showModal, setShowModal] = useState(true);
 
   // Transform Firebase error messages into user-friendly messages
   const getFriendlyErrorMessage = (error) => {
@@ -158,15 +157,6 @@ function Login({ onLogin }) {
     }
   };
 
-  const closeModal = () => {
-    setShowModal(false);
-  };
-
-  const handleBackdropClick = (e) => {
-    if (e.target === e.currentTarget) {
-      closeModal();
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center px-4">
@@ -295,50 +285,6 @@ function Login({ onLogin }) {
             </form>
           </div>
         </div>
-
-        {/* Authentication Notice Modal */}
-        {showModal && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in"
-            style={{ animationDelay: '0.1s' }}
-            onClick={handleBackdropClick}
-          >
-            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full transform animate-scale-in border-2 border-baylor-green relative">
-              {/* Close Button */}
-              <button
-                onClick={closeModal}
-                className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors text-gray-600 hover:text-gray-800"
-                aria-label="Close modal"
-              >
-                <X className="w-4 h-4" />
-              </button>
-
-              <div className="p-6 text-center">
-                <div className="mb-4">
-                  <div className="mx-auto w-16 h-16 bg-baylor-green rounded-full flex items-center justify-center mb-4">
-                    <Shield className="w-8 h-8 text-white" />
-                  </div>
-                  <h3 className="text-xl font-bold text-baylor-green mb-2">
-                    Important Notice
-                  </h3>
-                  <p className="text-sm font-semibold text-gray-900 mb-2">
-                    New Secure Authentication System
-                  </p>
-                </div>
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                  <p className="text-sm text-gray-700 leading-relaxed">
-                    Access to this application is now restricted. Please create an account and contact
-                    <span className="font-semibold text-baylor-green"> Davis </span>
-                    directly to gain access to the system.
-                  </p>
-                </div>
-                <div className="text-xs text-gray-500">
-                  Authorized personnel only • Enhanced security measures in place
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* System Information Card */}
         <div className="university-card animate-fade-in" style={{ animationDelay: '0.2s' }}>

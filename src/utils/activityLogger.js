@@ -83,15 +83,11 @@ export const logActivity = async (activityData) => {
 
     await addDoc(collection(db, 'userActivity'), activityEntry);
 
-    // Also log to console in development
-    if (process.env.NODE_ENV === 'development') {
-      console.log('📊 Activity logged:', activityEntry);
-    }
+    // Do not log activity to console in any environment
 
     return activityEntry;
-  } catch (error) {
-    console.error('❌ Error logging activity:', error);
-    // Don't throw error to prevent breaking user interactions
+  } catch (_) {
+    // Silently ignore logging errors to avoid any leaks/console output
   }
 };
 
@@ -354,9 +350,8 @@ export const getRecentActivities = async (options = {}) => {
       q = query(q, ...constraints);
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    } catch (err) {
+    } catch (_) {
       // Fallback: missing composite index or restricted read; fetch recent by timestamp and filter in memory
-      console.warn('Activity query fell back to client-side filtering:', err?.code || err);
       const fallbackLimit = options.limit || 500;
       const fallbackQuery = query(collection(db, 'userActivity'), orderBy('timestamp', 'desc'), limit(fallbackLimit));
       const snap = await getDocs(fallbackQuery);
@@ -406,9 +401,8 @@ export const subscribeToActivities = (callback, options = {}) => {
         const activities = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         callback(activities);
       });
-    } catch (err) {
+    } catch (_) {
       // Fallback: subscribe to recent by timestamp and filter before callback
-      console.warn('Activity subscription fell back to client-side filtering:', err?.code || err);
       const fbQuery = query(collection(db, 'userActivity'), orderBy('timestamp', 'desc'), limit(options.limit || 50));
       return onSnapshot(fbQuery, (snapshot) => {
         const raw = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -420,8 +414,7 @@ export const subscribeToActivities = (callback, options = {}) => {
         callback(filtered);
       });
     }
-  } catch (error) {
-    console.error('Error subscribing to activities:', error);
+  } catch (_) {
     return () => {}; // Return no-op unsubscribe function
   }
 };
@@ -459,8 +452,7 @@ export const getActivityStats = async (options = {}) => {
     });
 
     return stats;
-  } catch (error) {
-    console.error('Error calculating activity stats:', error);
+  } catch (_) {
     return { total: 0, byType: {}, byUser: {}, byHour: {}, recentActivity: [] };
   }
 };

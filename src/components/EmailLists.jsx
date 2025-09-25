@@ -28,6 +28,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
   const [activeFilterPreset, setActiveFilterPreset] = useState('');
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
   const [showOnlyWithCourses, setShowOnlyWithCourses] = useState(false);
+  const [outlookVersion, setOutlookVersion] = useState('new'); // 'new' uses commas, 'old' uses semicolons
 
   // Helper function to extract building name from office location
   const extractBuildingName = (officeLocation) => {
@@ -528,10 +529,9 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
   const generateGmailFormat = (peopleData) => {
     const emails = peopleData
       .filter(person => person.email && person.email.trim() !== '')
-      .map(person => person.email)
-      .join(', ');
-    
-    return emails;
+      .map(person => person.email);
+    const separator = outlookVersion === 'old' ? '; ' : ', ';
+    return emails.join(separator);
   };
 
   const generateTextFormat = (peopleData) => {
@@ -658,7 +658,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Email Lists</h1>
           <p className="text-gray-600 mt-1">
-            Filter and select faculty and staff to create comma-separated email lists for any email client
+            Filter and select faculty and staff to create email lists for any email client
           </p>
         </div>
         <div className="flex items-center space-x-4">
@@ -922,6 +922,17 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
           </div>
           
           <div className="flex items-center space-x-3">
+            <div className="hidden sm:flex items-center space-x-2">
+              <span className="text-sm text-gray-600 whitespace-nowrap">Outlook version:</span>
+              <select
+                value={outlookVersion}
+                onChange={(e) => setOutlookVersion(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+              >
+                <option value="new">New (comma)</option>
+                <option value="old">Old (semicolon)</option>
+              </select>
+            </div>
             <button
               onClick={() => generateEmailList('gmail')}
               disabled={selectedPeople.length === 0}

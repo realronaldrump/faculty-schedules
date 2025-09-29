@@ -259,7 +259,14 @@ const FacultyContactCard = ({ person, faculty, onClose, personType = 'faculty' }
                     </div>
                     <div className="flex items-center">
                         <Building size={18} className="text-baylor-green mr-4" />
-                        <span className="text-gray-700">{contactPerson.office || 'Not specified'}</span>
+                        <span className="text-gray-700">
+                            {personType === 'student'
+                                ? (Array.isArray(contactPerson.primaryBuildings) && contactPerson.primaryBuildings.length > 0
+                                    ? contactPerson.primaryBuildings.join(', ')
+                                    : 'Not specified')
+                                : (contactPerson.office || 'Not specified')
+                            }
+                        </span>
                     </div>
                     <div className="flex items-start">
                         <span className="inline-flex items-center justify-center w-5 h-5 mr-4 mt-0.5 rounded bg-baylor-green text-white text-[10px] font-bold">ID</span>

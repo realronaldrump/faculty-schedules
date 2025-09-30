@@ -35,6 +35,102 @@ const calculateWeeklyHoursFromSchedule = (schedule) => {
   return totalMinutes / 60;
 };
 
+const WEEKDAY_OPTIONS = [
+  { value: 'M', label: 'Mon' },
+  { value: 'T', label: 'Tue' },
+  { value: 'W', label: 'Wed' },
+  { value: 'R', label: 'Thu' },
+  { value: 'F', label: 'Fri' },
+  { value: 'S', label: 'Sat' },
+  { value: 'U', label: 'Sun' },
+];
+
+const createEmptyAssignment = () => ({
+  jobTitle: '',
+  supervisor: '',
+  hourlyRate: '',
+  location: [],
+  weeklySchedule: [],
+  startDate: '',
+  endDate: ''
+});
+
+const createEmptyStudentDraft = () => ({
+  name: '',
+  email: '',
+  phone: '',
+  hasNoPhone: false,
+  startDate: '',
+  endDate: '',
+  isActive: true,
+  primaryBuildings: [],
+  weeklySchedule: [],
+  jobs: [createEmptyAssignment()]
+});
+
+const trimValue = (value) => (typeof value === 'string' ? value.trim() : value);
+
+const sanitizeWeeklyEntries = (entries) => {
+  if (!Array.isArray(entries)) return [];
+  return entries
+    .map((entry) => ({
+      day: entry?.day || '',
+      start: entry?.start || '',
+      end: entry?.end || ''
+    }))
+    .filter((entry) => entry.day && entry.start && entry.end && entry.start < entry.end);
+};
+
+const prepareStudentPayload = (student) => {
+  if (!student) return {};
+
+  const jobsArray = Array.isArray(student.jobs) ? student.jobs : [];
+  const normalizedJobs = jobsArray
+    .map((job) => {
+      if (!job) return createEmptyAssignment();
+      const rawLocations = Array.isArray(job.location)
+        ? job.location
+        : (job.location ? [job.location] : []);
+      const locations = Array.from(new Set(rawLocations.map((loc) => trimValue(loc)).filter(Boolean)));
+      return {
+        jobTitle: trimValue(job.jobTitle || ''),
+        supervisor: trimValue(job.supervisor || ''),
+        hourlyRate: trimValue(job.hourlyRate || ''),
+        location: locations,
+        weeklySchedule: sanitizeWeeklyEntries(job.weeklySchedule)
+      };
+    })
+    .filter((job) =>
+      job.jobTitle ||
+      job.supervisor ||
+      job.hourlyRate ||
+      (Array.isArray(job.location) && job.location.length > 0) ||
+      (Array.isArray(job.weeklySchedule) && job.weeklySchedule.length > 0)
+    );
+
+  const aggregatedWeeklySchedule = normalizedJobs.flatMap((job) => job.weeklySchedule);
+  const aggregatedBuildings = Array.from(new Set(normalizedJobs.flatMap((job) => job.location)));
+  const fallbackBuildings = Array.isArray(student.primaryBuildings)
+    ? student.primaryBuildings.map((b) => trimValue(b)).filter(Boolean)
+    : (student.primaryBuilding ? [trimValue(student.primaryBuilding)] : []);
+  const fallbackWeekly = sanitizeWeeklyEntries(student.weeklySchedule);
+
+  const primaryJob = normalizedJobs[0] || {};
+
+  return {
+    ...student,
+    name: trimValue(student.name || ''),
+    email: trimValue(student.email || ''),
+    phone: student.hasNoPhone ? '' : trimValue(student.phone || ''),
+    jobs: normalizedJobs,
+    weeklySchedule: aggregatedWeeklySchedule.length > 0 ? aggregatedWeeklySchedule : fallbackWeekly,
+    primaryBuildings: aggregatedBuildings.length > 0 ? aggregatedBuildings : fallbackBuildings,
+    jobTitle: primaryJob.jobTitle || trimValue(student.jobTitle || ''),
+    supervisor: primaryJob.supervisor || trimValue(student.supervisor || ''),
+    hourlyRate: primaryJob.hourlyRate || trimValue(student.hourlyRate || ''),
+  };
+};
+
 const getStudentAssignments = (student) => {
   if (!student) return [];
 
@@ -114,23 +210,160 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
   const [selectedStudentForCard, setSelectedStudentForCard] = useState(null);
   const [errors, setErrors] = useState({});
   const [isCreating, setIsCreating] = useState(false);
-  const [newStudent, setNewStudent] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    startDate: '',
-    endDate: '',
-    hourlyRate: '',
-    supervisor: '',
-    jobTitle: '',
-    primaryBuildings: [], // e.g., ["Mary Gibbs Jones", "Goebel"]
-    weeklySchedule: [], // [{ day: 'M', start: '09:00', end: '12:00' }]
-    hasNoPhone: false,
-    isActive: true,
-    jobs: [
-      { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] }
-    ]
-  });
+  const [newStudent, setNewStudent] = useState(createEmptyStudentDraft);
+  const [assignmentDrafts, setAssignmentDrafts] = useState([{ day: 'M', start: '', end: '' }]);
+  const [assignmentBuildingDrafts, setAssignmentBuildingDrafts] = useState(['']);
+
+  const assignmentBuildingOptions = useMemo(() => {
+    const existingSelections = (newStudent.jobs || []).flatMap((job) =>
+      Array.isArray(job.location) ? job.location.filter(Boolean) : []
+    );
+    return Array.from(new Set([...(availableBuildings || []), ...existingSelections]))
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+  }, [availableBuildings, newStudent.jobs]);
+
+  const updateAssignmentField = (index, field, value) => {
+    setNewStudent((prev) => ({
+      ...prev,
+      jobs: prev.jobs.map((job, jobIndex) =>
+        jobIndex === index ? { ...job, [field]: value } : job
+      )
+    }));
+    if (field === 'jobTitle') {
+      setErrors((prev) => ({ ...prev, assignments: undefined }));
+    }
+  };
+
+  const updateAssignmentLocations = (index, locations) => {
+    setNewStudent((prev) => {
+      const nextJobs = prev.jobs.map((job, jobIndex) =>
+        jobIndex === index ? { ...job, location: locations } : job
+      );
+      return {
+        ...prev,
+        jobs: nextJobs,
+        primaryBuildings: deriveBuildingsFromJobs(nextJobs)
+      };
+    });
+  };
+
+  const updateAssignmentDraft = (index, updates) => {
+    setAssignmentDrafts((prev) =>
+      prev.map((draft, draftIndex) =>
+        draftIndex === index ? { ...draft, ...updates } : draft
+      )
+    );
+  };
+
+  const updateCustomLocationDraft = (index, value) => {
+    setAssignmentBuildingDrafts((prev) =>
+      prev.map((draft, draftIndex) => (draftIndex === index ? value : draft))
+    );
+  };
+
+  const addCustomLocation = (index) => {
+    const value = (assignmentBuildingDrafts[index] || '').trim();
+    if (!value) return;
+    setAssignmentBuildingDrafts((prev) =>
+      prev.map((draft, draftIndex) => (draftIndex === index ? '' : draft))
+    );
+    setNewStudent((prev) => {
+      const nextJobs = prev.jobs.map((job, jobIndex) => {
+        if (jobIndex !== index) return job;
+        const existing = Array.isArray(job.location) ? job.location : [];
+        return {
+          ...job,
+          location: Array.from(new Set([...existing.filter(Boolean), value]))
+        };
+      });
+      return {
+        ...prev,
+        jobs: nextJobs,
+        primaryBuildings: deriveBuildingsFromJobs(nextJobs)
+      };
+    });
+  };
+
+  const addScheduleEntryToAssignment = (index) => {
+    const draft = assignmentDrafts[index] || { day: 'M', start: '', end: '' };
+    if (!draft.day || !draft.start || !draft.end) {
+      setErrors((prev) => ({
+        ...prev,
+        weeklySchedule: 'Provide a day, start time, and end time before adding.'
+      }));
+      return;
+    }
+    if (draft.start >= draft.end) {
+      setErrors((prev) => ({
+        ...prev,
+        weeklySchedule: 'End time must be after start time.'
+      }));
+      return;
+    }
+    setNewStudent((prev) => ({
+      ...prev,
+      jobs: prev.jobs.map((job, jobIndex) =>
+        jobIndex === index
+          ? {
+              ...job,
+              weeklySchedule: [
+                ...(Array.isArray(job.weeklySchedule) ? job.weeklySchedule : []),
+                { day: draft.day, start: draft.start, end: draft.end }
+              ]
+            }
+          : job
+      )
+    }));
+    setAssignmentDrafts((prev) =>
+      prev.map((item, draftIndex) =>
+        draftIndex === index ? { day: draft.day, start: '', end: '' } : item
+      )
+    );
+    setErrors((prev) => ({ ...prev, weeklySchedule: undefined }));
+  };
+
+  const removeScheduleEntryFromAssignment = (assignmentIndex, entryIndex) => {
+    setNewStudent((prev) => ({
+      ...prev,
+      jobs: prev.jobs.map((job, jobIndex) =>
+        jobIndex === assignmentIndex
+          ? {
+              ...job,
+              weeklySchedule: (job.weeklySchedule || []).filter((_, i) => i !== entryIndex)
+            }
+          : job
+      )
+    }));
+  };
+
+  const addAssignment = () => {
+    setNewStudent((prev) => ({
+      ...prev,
+      jobs: [...prev.jobs, createEmptyAssignment()]
+    }));
+    setAssignmentDrafts((prev) => [...prev, { day: 'M', start: '', end: '' }]);
+    setAssignmentBuildingDrafts((prev) => [...prev, '']);
+    setErrors((prev) => ({ ...prev, assignments: undefined }));
+  };
+
+  const removeAssignment = (index) => {
+    setNewStudent((prev) => {
+      const nextJobs = prev.jobs.filter((_, jobIndex) => jobIndex !== index);
+      return {
+        ...prev,
+        jobs: nextJobs,
+        primaryBuildings: deriveBuildingsFromJobs(nextJobs)
+      };
+    });
+    setAssignmentDrafts((prev) => prev.filter((_, draftIndex) => draftIndex !== index));
+    setAssignmentBuildingDrafts((prev) => prev.filter((_, draftIndex) => draftIndex !== index));
+  };
+
+  const assignmentBuildingsPreview = useMemo(
+    () => deriveBuildingsFromJobs(newStudent.jobs),
+    [newStudent.jobs]
+  );
 
   // Undo functionality
   const [changeHistory, setChangeHistory] = useState([]);
@@ -443,33 +676,55 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
   };
 
   const validateStudentData = (data) => {
+    const prepared = prepareStudentPayload(data);
     const errors = {};
-    
-    if (!data.name?.trim()) {
+
+    if (!prepared.name?.trim()) {
       errors.name = 'Name is required';
     }
-    
-    if (!data.email?.trim()) {
+
+    if (!prepared.email?.trim()) {
       errors.email = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(prepared.email)) {
       errors.email = 'Please enter a valid email address';
     }
-    
-    if (!data.hasNoPhone && !data.phone?.trim()) {
+
+    if (!prepared.hasNoPhone && !prepared.phone?.trim()) {
       errors.phone = 'Phone number is required (or check "No Phone")';
     }
-    
-    const hasTopLevel = Array.isArray(data.weeklySchedule) && data.weeklySchedule.length > 0;
-    const hasJobLevel = Array.isArray(data.jobs) && data.jobs.some(j => Array.isArray(j.weeklySchedule) && j.weeklySchedule.length > 0);
-    if (!hasTopLevel && !hasJobLevel) {
-      errors.weeklySchedule = 'At least one job must have a weekly schedule entry';
+
+    const jobs = Array.isArray(prepared.jobs) ? prepared.jobs : [];
+    if (jobs.length === 0) {
+      errors.assignments = 'Add at least one job assignment for the student worker.';
     }
-    
+
+    const missingTitle = jobs.some(job => !job.jobTitle?.trim());
+    if (missingTitle) {
+      errors.assignments = errors.assignments
+        ? `${errors.assignments} Each assignment needs a job title.`
+        : 'Each assignment needs a job title.';
+    }
+
+    const hasTopLevel = Array.isArray(prepared.weeklySchedule) && prepared.weeklySchedule.length > 0;
+    const hasJobLevel = jobs.some(j => Array.isArray(j.weeklySchedule) && j.weeklySchedule.length > 0);
+    if (!hasTopLevel && !hasJobLevel) {
+      errors.weeklySchedule = 'Add at least one scheduled time block for this student.';
+    }
+
+    const assignmentMissingSchedule = jobs.some((job) =>
+      (job.jobTitle || (Array.isArray(job.location) && job.location.length > 0) || job.supervisor || job.hourlyRate) &&
+      (!Array.isArray(job.weeklySchedule) || job.weeklySchedule.length === 0)
+    );
+    if (assignmentMissingSchedule && !errors.weeklySchedule) {
+      errors.weeklySchedule = 'Each job assignment needs at least one scheduled time block.';
+    }
+
     return errors;
   };
 
   const saveEdit = async () => {
-    const validationErrors = validateStudentData(editFormData);
+    const payload = prepareStudentPayload(editFormData);
+    const validationErrors = validateStudentData(payload);
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       return;
@@ -485,20 +740,6 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
         newData: {...editFormData}
       }]);
 
-      const jobs = Array.isArray(editFormData.jobs) ? editFormData.jobs : [];
-      const firstJob = jobs[0] || {};
-      const unifiedWeekly = jobs.flatMap(j => Array.isArray(j.weeklySchedule) ? j.weeklySchedule : []);
-      const unifiedBuildings = Array.from(new Set(jobs.flatMap(j => Array.isArray(j.location) ? j.location : (j.location ? [j.location] : []))));
-      const payload = {
-        ...editFormData,
-        jobs,
-        weeklySchedule: unifiedWeekly.length > 0 ? unifiedWeekly : (editFormData.weeklySchedule || []),
-        primaryBuildings: unifiedBuildings.length > 0 ? unifiedBuildings : (editFormData.primaryBuildings || []),
-        jobTitle: firstJob.jobTitle || editFormData.jobTitle || '',
-        supervisor: firstJob.supervisor || editFormData.supervisor || '',
-        hourlyRate: firstJob.hourlyRate || editFormData.hourlyRate || ''
-      };
-
       await onStudentUpdate(payload);
       setEditingId(null);
       setEditFormData({});
@@ -509,72 +750,39 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     }
   };
 
+  const resetCreateState = () => {
+    setNewStudent(createEmptyStudentDraft());
+    setAssignmentDrafts([{ day: 'M', start: '', end: '' }]);
+    setAssignmentBuildingDrafts(['']);
+  };
+
   const startCreate = () => {
     if (typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canCreateStudent === false) {
       return;
     }
     setIsCreating(true);
+    resetCreateState();
     setErrors({});
   };
 
   const cancelCreate = () => {
     setIsCreating(false);
-    setNewStudent({
-      name: '',
-      email: '',
-      phone: '',
-      startDate: '',
-      endDate: '',
-      hourlyRate: '',
-      supervisor: '',
-      jobTitle: '',
-      primaryBuildings: [],
-      weeklySchedule: [],
-      hasNoPhone: false,
-      isActive: true,
-      jobs: [ { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] } ]
-    });
+    resetCreateState();
     setErrors({});
   };
 
   const saveCreate = async () => {
-    const validationErrors = validateStudentData(newStudent);
+    const payload = prepareStudentPayload(newStudent);
+    const validationErrors = validateStudentData(payload);
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       return;
     }
 
     try {
-      const jobs = Array.isArray(newStudent.jobs) ? newStudent.jobs : [];
-      const firstJob = jobs[0] || {};
-      const unifiedWeekly = jobs.flatMap(j => Array.isArray(j.weeklySchedule) ? j.weeklySchedule : []);
-      const unifiedBuildings = Array.from(new Set(jobs.flatMap(j => Array.isArray(j.location) ? j.location : (j.location ? [j.location] : []))));
-      const studentToCreate = {
-        ...newStudent,
-        isActive: newStudent.isActive !== undefined ? newStudent.isActive : true,
-        jobs,
-        weeklySchedule: unifiedWeekly.length > 0 ? unifiedWeekly : (newStudent.weeklySchedule || []),
-        primaryBuildings: unifiedBuildings.length > 0 ? unifiedBuildings : (newStudent.primaryBuildings || []),
-        jobTitle: firstJob.jobTitle || newStudent.jobTitle || '',
-        supervisor: firstJob.supervisor || newStudent.supervisor || '',
-        hourlyRate: firstJob.hourlyRate || newStudent.hourlyRate || ''
-      };
-
-      await onStudentUpdate(studentToCreate);
+      await onStudentUpdate({ ...payload, isActive: payload.isActive !== undefined ? payload.isActive : true });
       setIsCreating(false);
-      setNewStudent({
-        name: '',
-        email: '',
-        phone: '',
-        startDate: '',
-        hourlyRate: '',
-        supervisor: '',
-        jobTitle: '',
-        primaryBuildings: [],
-        weeklySchedule: [],
-        hasNoPhone: false,
-        jobs: [ { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] } ]
-      });
+      resetCreateState();
       setErrors({});
     } catch (error) {
       console.error('Error creating student:', error);
@@ -622,29 +830,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
   };
 
   // Helpers for weekly schedule editing
-  const [scheduleDraft, setScheduleDraft] = useState({ day: 'M', start: '', end: '' });
-  const [newJobsDrafts, setNewJobsDrafts] = useState([{ day: 'M', start: '', end: '' }]);
-  const addScheduleEntry = () => {
-    if (!scheduleDraft.day || !scheduleDraft.start || !scheduleDraft.end) return;
-    const startMin = scheduleDraft.start;
-    const endMin = scheduleDraft.end;
-    if (startMin >= endMin) {
-      setErrors(prev => ({ ...prev, weeklySchedule: 'End time must be after start time' }));
-      return;
-    }
-    setNewStudent(prev => ({
-      ...prev,
-      weeklySchedule: [...prev.weeklySchedule, { ...scheduleDraft }]
-    }));
-    setScheduleDraft({ day: 'M', start: '', end: '' });
-    setErrors(prev => ({ ...prev, weeklySchedule: undefined }));
-  };
-  const removeScheduleEntry = (index) => {
-    setNewStudent(prev => ({
-      ...prev,
-      weeklySchedule: prev.weeklySchedule.filter((_, i) => i !== index)
-    }));
-  };
+  const deriveBuildingsFromJobs = (jobs) => Array.from(new Set((jobs || []).flatMap(job => Array.isArray(job.location) ? job.location.filter(Boolean) : [])));
 
   const [editScheduleDraft, setEditScheduleDraft] = useState({ day: 'M', start: '', end: '' });
   const [editJobsDrafts, setEditJobsDrafts] = useState([{ day: 'M', start: '', end: '' }]);
@@ -1124,237 +1310,332 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
 
         {/* Create New Student Form */}
         {isCreating && (
-        <div className="bg-baylor-gold/5 border border-baylor-gold/30 rounded-lg p-4">
-          <h4 className="font-medium text-gray-900 mb-4">Add New Student Worker</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-              <input
-                type="text"
-                value={newStudent.name}
-                onChange={(e) => setNewStudent(prev => ({ ...prev, name: e.target.value }))}
-                className={`w-full border rounded-md px-3 py-2 ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
-                placeholder="Full name"
-              />
-              {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
+          <div className="bg-white border border-baylor-gold/40 rounded-lg p-6 shadow-sm">
+            <div className="mb-6">
+              <h4 className="text-lg font-semibold text-gray-900">Add Student Worker</h4>
+              <p className="text-sm text-gray-600 mt-1">
+                Provide contact information and define at least one job assignment with scheduled hours.
+              </p>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-              <input
-                type="email"
-                value={newStudent.email}
-                onChange={(e) => setNewStudent(prev => ({ ...prev, email: e.target.value }))}
-                className={`w-full border rounded-md px-3 py-2 ${errors.email ? 'border-red-500' : 'border-gray-300'}`}
-                placeholder="student@baylor.edu"
-              />
-              {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="tel"
-                  value={newStudent.phone}
-                  onChange={(e) => setNewStudent(prev => ({ ...prev, phone: e.target.value }))}
-                  disabled={newStudent.hasNoPhone}
-                  className={`flex-1 border rounded-md px-3 py-2 ${errors.phone ? 'border-red-500' : 'border-gray-300'} ${newStudent.hasNoPhone ? 'bg-gray-100' : ''}`}
-                  placeholder="(254) 710-1234"
-                />
-                <label className="flex items-center text-sm">
-                  <input
-                    type="checkbox"
-                    checked={newStudent.hasNoPhone}
-                    onChange={(e) => setNewStudent(prev => ({ ...prev, hasNoPhone: e.target.checked, phone: e.target.checked ? '' : prev.phone }))}
-                    className="mr-1"
-                  />
-                  No Phone
-                </label>
-              </div>
-              {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Weekly Schedule *</label>
-              <div className="space-y-4">
-                {(newStudent.jobs || []).map((job, idx) => (
-                  <div key={idx} className="border border-gray-200 rounded-md p-3">
-                    <div className="flex justify-between items-center mb-2">
-                      <div className="font-medium text-gray-900">Job {idx + 1}</div>
-                      {(newStudent.jobs || []).length > 1 && (
-                        <button onClick={() => {
-                          setNewStudent(prev => ({ ...prev, jobs: prev.jobs.filter((_, i) => i !== idx) }));
-                          setNewJobsDrafts(prev => prev.filter((_, i) => i !== idx));
-                        }} className="text-red-600 text-xs">Remove</button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                      <input type="text" placeholder="Job Title" value={job.jobTitle || ''} onChange={e => setNewStudent(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, jobTitle: e.target.value } : j)}))} className="border rounded-md px-3 py-2" />
-                      <input type="text" placeholder="Supervisor" value={job.supervisor || ''} onChange={e => setNewStudent(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, supervisor: e.target.value } : j)}))} className="border rounded-md px-3 py-2" />
-                      <input type="number" step="0.01" placeholder="Hourly Rate" value={job.hourlyRate || ''} onChange={e => setNewStudent(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, hourlyRate: e.target.value } : j)}))} className="border rounded-md px-3 py-2" />
-                      <div className="flex gap-4 items-center text-sm">
-                        <label className="flex items-center gap-2">
-                          <input type="checkbox" checked={(job.location || []).includes('Mary Gibbs Jones')} onChange={(e) => setNewStudent(prev => ({
-                            ...prev,
-                            jobs: prev.jobs.map((j,i)=> i===idx? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Mary Gibbs Jones'])) : (j.location || []).filter(b => b !== 'Mary Gibbs Jones') } : j)
-                          }))} /> MGJ
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input type="checkbox" checked={(job.location || []).includes('Goebel')} onChange={(e) => setNewStudent(prev => ({
-                            ...prev,
-                            jobs: prev.jobs.map((j,i)=> i===idx? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Goebel'])) : (j.location || []).filter(b => b !== 'Goebel') } : j)
-                          }))} /> Goebel
-                        </label>
-                      </div>
-                    </div>
-                    <div className="mt-3">
-                      <div className="flex gap-2 items-end">
-                        <select className="border rounded-md px-2 py-2" value={(newJobsDrafts[idx]||{}).day || 'M'} onChange={e => setNewJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), day: e.target.value } : d))}>
-                          <option value="M">Mon</option>
-                          <option value="T">Tue</option>
-                          <option value="W">Wed</option>
-                          <option value="R">Thu</option>
-                          <option value="F">Fri</option>
-                        </select>
-                        <input type="time" className="border rounded-md px-2 py-2" value={(newJobsDrafts[idx]||{}).start || ''} onChange={e => setNewJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), start: e.target.value } : d))} />
-                        <span className="text-gray-500">to</span>
-                        <input type="time" className="border rounded-md px-2 py-2" value={(newJobsDrafts[idx]||{}).end || ''} onChange={e => setNewJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), end: e.target.value } : d))} />
-                        <button onClick={() => {
-                          const draft = newJobsDrafts[idx] || { day: 'M', start: '', end: '' };
-                          if (!draft.day || !draft.start || !draft.end) return;
-                          if (draft.start >= draft.end) { setErrors(prev => ({ ...prev, weeklySchedule: 'End time must be after start time' })); return; }
-                          setNewStudent(prev => ({
-                            ...prev,
-                            jobs: prev.jobs.map((j,i)=> i===idx? { ...j, weeklySchedule: [...(j.weeklySchedule || []), { ...draft }] } : j)
-                          }));
-                          setNewJobsDrafts(prev => prev.map((d,i)=> i===idx? { day: 'M', start: '', end: '' } : d));
-                          setErrors(prev => ({ ...prev, weeklySchedule: undefined }));
-                        }} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-md text-sm">Add</button>
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {(job.weeklySchedule || []).map((entry, k) => (
-                          <span key={k} className="inline-flex items-center gap-1 text-xs bg-gray-100 px-2 py-1 rounded">
-                            {entry.day} {formatTime12h(entry.start)}-{formatTime12h(entry.end)}
-                            <button onClick={() => setNewStudent(prev => ({ ...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, weeklySchedule: (j.weeklySchedule || []).filter((_, x) => x !== k) } : j) }))} className="text-gray-500 hover:text-gray-700"><X className="h-3 w-3" /></button>
-                          </span>
-                        ))}
-                        {(job.weeklySchedule || []).length === 0 && (
-                          <span className="text-xs text-gray-500">No entries added</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                <button onClick={() => { setNewStudent(prev => ({ ...prev, jobs: [...(prev.jobs || []), { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] }] })); setNewJobsDrafts(prev => ([...prev, { day: 'M', start: '', end: '' }])); }} className="px-3 py-2 bg-baylor-green/10 text-baylor-green rounded-md text-sm">Add Job</button>
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Supervisor</label>
-              <input
-                list="supervisor-options"
-                type="text"
-                value={newStudent.supervisor}
-                onChange={(e) => setNewStudent(prev => ({ ...prev, supervisor: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-                placeholder="Supervisor name (select or type new)"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Job Title</label>
-              <input
-                list="jobtitle-options"
-                type="text"
-                value={newStudent.jobTitle}
-                onChange={(e) => setNewStudent(prev => ({ ...prev, jobTitle: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-                placeholder="Select or type a title"
-              />
-              <datalist id="jobtitle-options">
-                {availableJobTitles.map(t => (
-                  <option key={t} value={t} />
-                ))}
-              </datalist>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Primary Building(s)</label>
-              <div className="flex gap-4 items-center text-sm">
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={newStudent.primaryBuildings.includes('Mary Gibbs Jones')} onChange={(e) => setNewStudent(prev => ({
-                    ...prev,
-                    primaryBuildings: e.target.checked
-                      ? Array.from(new Set([...(prev.primaryBuildings || []), 'Mary Gibbs Jones']))
-                      : (prev.primaryBuildings || []).filter(b => b !== 'Mary Gibbs Jones')
-                  }))} /> Mary Gibbs Jones
-                </label>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={newStudent.primaryBuildings.includes('Goebel')} onChange={(e) => setNewStudent(prev => ({
-                    ...prev,
-                    primaryBuildings: e.target.checked
-                      ? Array.from(new Set([...(prev.primaryBuildings || []), 'Goebel']))
-                      : (prev.primaryBuildings || []).filter(b => b !== 'Goebel')
-                  }))} /> Goebel
-                </label>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-              <input
-                type="date"
-                value={newStudent.startDate}
-                onChange={(e) => setNewStudent(prev => ({ ...prev, startDate: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-              <input
-                type="date"
-                value={newStudent.endDate || ''}
-                onChange={(e) => setNewStudent(prev => ({ ...prev, endDate: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Hourly Rate</label>
-              <input
-                type="number"
-                step="0.01"
-                value={newStudent.hourlyRate}
-                onChange={(e) => setNewStudent(prev => ({ ...prev, hourlyRate: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-                placeholder="10.00"
-              />
-            </div>
-            <div className="flex items-center gap-2 mt-6">
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={newStudent.isActive !== false} onChange={e => setNewStudent(prev => ({ ...prev, isActive: e.target.checked }))} />
-                Active
-              </label>
-              {newStudent.endDate && (
-                <span className="text-xs text-gray-500">(Auto-inactivates after end date)</span>
-              )}
-            </div>
-          </div>
-          {errors.general && (
-            <p className="text-red-500 text-sm mt-2">{errors.general}</p>
-          )}
-          <div className="flex justify-end gap-2 mt-4">
-            <button
-              onClick={cancelCreate}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={saveCreate}
-              className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90"
-            >
-              <Save className="h-4 w-4 inline mr-2" />
-              Save Student
-            </button>
-          </div>
-        </div>
-        )}
 
+            <div className="space-y-6">
+              <section className="space-y-3">
+                <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Student Details</h5>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                    <input
+                      type="text"
+                      value={newStudent.name}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setNewStudent(prev => ({ ...prev, name: value }));
+                        if (errors.name) setErrors(prev => ({ ...prev, name: undefined }));
+                      }}
+                      className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
+                      placeholder="Full name"
+                    />
+                    {errors.name && <p className="text-xs text-red-600 mt-1">{errors.name}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                    <input
+                      type="email"
+                      value={newStudent.email}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setNewStudent(prev => ({ ...prev, email: value }));
+                        if (errors.email) setErrors(prev => ({ ...prev, email: undefined }));
+                      }}
+                      className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.email ? 'border-red-500' : 'border-gray-300'}`}
+                      placeholder="student@baylor.edu"
+                    />
+                    {errors.email && <p className="text-xs text-red-600 mt-1">{errors.email}</p>}
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                      <input
+                        type="tel"
+                        value={newStudent.phone}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setNewStudent(prev => ({ ...prev, phone: value }));
+                          if (errors.phone) setErrors(prev => ({ ...prev, phone: undefined }));
+                        }}
+                        disabled={newStudent.hasNoPhone}
+                        className={`flex-1 border rounded-md px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.phone ? 'border-red-500' : 'border-gray-300'} ${newStudent.hasNoPhone ? 'bg-gray-100 text-gray-500' : ''}`}
+                        placeholder="(254) 710-1234"
+                      />
+                      <label className="inline-flex items-center gap-2 text-sm text-gray-600">
+                        <input
+                          type="checkbox"
+                          checked={newStudent.hasNoPhone}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setNewStudent(prev => ({ ...prev, hasNoPhone: checked, phone: checked ? '' : prev.phone }));
+                            if (checked) setErrors(prev => ({ ...prev, phone: undefined }));
+                          }}
+                          className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                        />
+                        No phone on file
+                      </label>
+                    </div>
+                    {errors.phone && <p className="text-xs text-red-600 mt-1">{errors.phone}</p>}
+                  </div>
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Employment Window</h5>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                    <input
+                      type="date"
+                      value={newStudent.startDate || ''}
+                      onChange={(e) => setNewStudent(prev => ({ ...prev, startDate: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                    <input
+                      type="date"
+                      value={newStudent.endDate || ''}
+                      onChange={(e) => setNewStudent(prev => ({ ...prev, endDate: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-sm text-gray-700">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={newStudent.isActive !== false}
+                      onChange={(e) => setNewStudent(prev => ({ ...prev, isActive: e.target.checked }))}
+                      className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                    />
+                    Active student worker
+                  </label>
+                  {newStudent.endDate && (
+                    <span className="text-xs text-gray-500">Automatically inactivates after {new Date(newStudent.endDate).toLocaleDateString()}</span>
+                  )}
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div>
+                    <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Job Assignments</h5>
+                    <p className="text-sm text-gray-600">List each job along with buildings covered and the weekly schedule.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addAssignment}
+                    className="self-start inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-baylor-green border border-baylor-green/40 rounded-md hover:bg-baylor-green/10"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Assignment
+                  </button>
+                </div>
+
+                {errors.assignments && <p className="text-sm text-red-600">{errors.assignments}</p>}
+
+                <div className="space-y-4">
+                  {(newStudent.jobs || []).map((job, idx) => {
+                    const draft = assignmentDrafts[idx] || { day: 'M', start: '', end: '' };
+                    const locations = Array.isArray(job.location) ? job.location.filter(Boolean) : [];
+                    const weeklyEntries = Array.isArray(job.weeklySchedule) ? job.weeklySchedule : [];
+                    const weeklyHours = calculateWeeklyHoursFromSchedule(weeklyEntries);
+                    return (
+                      <div key={idx} className="border border-gray-200 rounded-lg bg-gray-50/80 p-4 shadow-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">Assignment {idx + 1}</p>
+                            {locations.length > 0 && (
+                              <p className="text-xs text-gray-500 mt-1">{locations.join(', ')}</p>
+                            )}
+                          </div>
+                          {(newStudent.jobs || []).length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeAssignment(idx)}
+                              className="text-xs font-medium text-red-600 hover:text-red-700"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Job Title *</label>
+                            <input
+                              type="text"
+                              list="jobtitle-options"
+                              value={job.jobTitle || ''}
+                              onChange={(e) => updateAssignmentField(idx, 'jobTitle', e.target.value)}
+                              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                              placeholder="e.g., Front Desk Assistant"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Supervisor</label>
+                            <input
+                              type="text"
+                              list="supervisor-options"
+                              value={job.supervisor || ''}
+                              onChange={(e) => updateAssignmentField(idx, 'supervisor', e.target.value)}
+                              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                              placeholder="Supervisor name"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Hourly Rate</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={job.hourlyRate || ''}
+                              onChange={(e) => updateAssignmentField(idx, 'hourlyRate', e.target.value)}
+                              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                              placeholder="12.00"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Primary Location(s)</label>
+                            <MultiSelectDropdown
+                              options={assignmentBuildingOptions}
+                              selected={locations}
+                              onChange={(selected) => updateAssignmentLocations(idx, selected)}
+                              placeholder="Select building(s)"
+                            />
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-2">
+                              <input
+                                type="text"
+                                value={assignmentBuildingDrafts[idx] || ''}
+                                onChange={(e) => updateCustomLocationDraft(idx, e.target.value)}
+                                className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                placeholder="Add another location"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => addCustomLocation(idx)}
+                                className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white hover:bg-gray-50"
+                              >
+                                Add
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 border-t border-gray-200 pt-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                            <h6 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Weekly Schedule</h6>
+                            {weeklyEntries.length > 0 && (
+                              <span className="text-xs text-gray-500">≈ {formatHoursValue(weeklyHours)} hrs/week</span>
+                            )}
+                          </div>
+                          {weeklyEntries.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {weeklyEntries.map((entry, entryIdx) => (
+                                <span key={entryIdx} className="inline-flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 text-xs text-gray-700">
+                                  {entry.day} {formatTime12h(entry.start)} - {formatTime12h(entry.end)}
+                                  <button
+                                    type="button"
+                                    onClick={() => removeScheduleEntryFromAssignment(idx, entryIdx)}
+                                    className="text-gray-400 hover:text-gray-600"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-gray-500">No time blocks added yet.</p>
+                          )}
+
+                          <div className="mt-3 flex flex-wrap items-end gap-3">
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">Day</label>
+                              <select
+                                className="border border-gray-300 rounded-md px-2 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                value={draft.day || 'M'}
+                                onChange={(e) => updateAssignmentDraft(idx, { day: e.target.value })}
+                              >
+                                {WEEKDAY_OPTIONS.map(option => (
+                                  <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">Start</label>
+                              <input
+                                type="time"
+                                className="border border-gray-300 rounded-md px-2 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                value={draft.start || ''}
+                                onChange={(e) => updateAssignmentDraft(idx, { start: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">End</label>
+                              <input
+                                type="time"
+                                className="border border-gray-300 rounded-md px-2 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                value={draft.end || ''}
+                                onChange={(e) => updateAssignmentDraft(idx, { end: e.target.value })}
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => addScheduleEntryToAssignment(idx)}
+                              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium bg-baylor-green text-white rounded-md hover:bg-baylor-green/90"
+                            >
+                              <Plus className="h-4 w-4" />
+                              Add Time
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {errors.weeklySchedule && <p className="text-sm text-red-600">{errors.weeklySchedule}</p>}
+
+                <div className="rounded-lg bg-gray-50 border border-dashed border-gray-300 px-4 py-3 text-xs text-gray-600">
+                  <span className="font-medium text-gray-700">Buildings covered:</span>{' '}
+                  {assignmentBuildingsPreview.length > 0
+                    ? assignmentBuildingsPreview.join(', ')
+                    : 'Add locations to each assignment to populate this list.'}
+                </div>
+              </section>
+            </div>
+
+            {errors.general && (
+              <p className="text-red-500 text-sm mt-4">{errors.general}</p>
+            )}
+
+            <div className="mt-6 flex flex-col md:flex-row md:items-center md:justify-end gap-3">
+              <button
+                type="button"
+                onClick={cancelCreate}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveCreate}
+                className="px-4 py-2 bg-baylor-green text-white rounded-lg text-sm font-medium hover:bg-baylor-green/90"
+              >
+                <Save className="h-4 w-4 inline mr-2" />
+                Save Student
+              </button>
+            </div>
+          </div>
+        )}
         {/* Students Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

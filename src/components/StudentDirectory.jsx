@@ -68,6 +68,15 @@ const createEmptyStudentDraft = () => ({
   jobs: [createEmptyAssignment()]
 });
 
+const deriveBuildingsFromJobs = (jobs) =>
+  Array.from(
+    new Set(
+      (jobs || []).flatMap((job) =>
+        Array.isArray(job.location) ? job.location.filter(Boolean) : []
+      )
+    )
+  );
+
 const trimValue = (value) => (typeof value === 'string' ? value.trim() : value);
 
 const sanitizeWeeklyEntries = (entries) => {
@@ -213,6 +222,31 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
   const [newStudent, setNewStudent] = useState(createEmptyStudentDraft);
   const [assignmentDrafts, setAssignmentDrafts] = useState([{ day: 'M', start: '', end: '' }]);
   const [assignmentBuildingDrafts, setAssignmentBuildingDrafts] = useState(['']);
+
+  const availableBuildings = useMemo(() => {
+    const buildings = new Set();
+    (studentData || []).forEach((student) => {
+      if (Array.isArray(student.primaryBuildings)) {
+        student.primaryBuildings.forEach((b) => {
+          if (b) buildings.add(b);
+        });
+      } else if (student.primaryBuilding) {
+        buildings.add(student.primaryBuilding);
+      }
+      if (Array.isArray(student.jobs)) {
+        student.jobs.forEach((job) => {
+          if (Array.isArray(job.location)) {
+            job.location.forEach((b) => {
+              if (b) buildings.add(b);
+            });
+          } else if (job.location) {
+            buildings.add(job.location);
+          }
+        });
+      }
+    });
+    return Array.from(buildings).sort();
+  }, [studentData]);
 
   const assignmentBuildingOptions = useMemo(() => {
     const existingSelections = (newStudent.jobs || []).flatMap((job) =>
@@ -409,26 +443,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     return Array.from(supervisors).sort();
   }, [studentData]);
 
-  const availableBuildings = useMemo(() => {
-    const buildings = new Set();
-    (studentData || []).forEach(student => {
-      if (Array.isArray(student.primaryBuildings)) {
-        student.primaryBuildings.forEach(b => { if (b) buildings.add(b); });
-      } else if (student.primaryBuilding) {
-        buildings.add(student.primaryBuilding);
-      }
-      if (Array.isArray(student.jobs)) {
-        student.jobs.forEach(j => {
-          if (Array.isArray(j.location)) {
-            j.location.forEach(b => { if (b) buildings.add(b); });
-          } else if (j.location) {
-            buildings.add(j.location);
-          }
-        });
-      }
-    });
-    return Array.from(buildings).sort();
-  }, [studentData]);
+
 
   // Filter and sort data
   const filteredAndSortedData = useMemo(() => {
@@ -829,8 +844,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     }
   };
 
-  // Helpers for weekly schedule editing
-  const deriveBuildingsFromJobs = (jobs) => Array.from(new Set((jobs || []).flatMap(job => Array.isArray(job.location) ? job.location.filter(Boolean) : [])));
+
 
   const [editScheduleDraft, setEditScheduleDraft] = useState({ day: 'M', start: '', end: '' });
   const [editJobsDrafts, setEditJobsDrafts] = useState([{ day: 'M', start: '', end: '' }]);

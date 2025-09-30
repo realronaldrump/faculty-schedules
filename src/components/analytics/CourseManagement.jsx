@@ -1652,9 +1652,19 @@ const CourseManagement = ({
                         <td className="px-4 py-3 text-gray-700">{row.Term}</td>
                         <td className="px-4 py-3 text-gray-700">{row.Section}</td>
                         <td className="px-4 py-3 text-gray-700 text-center">
-                          <span className="px-2 py-1 bg-baylor-green/10 text-baylor-green rounded text-xs font-medium">
-                            {row.Day}
-                          </span>
+                          {row.isOnline ? (
+                            <span className="px-2 py-1 bg-blue-50 text-blue-600 rounded text-xs font-medium border border-blue-200">
+                              Online
+                            </span>
+                            ) : !row['Start Time'] || !row['End Time'] ? (
+                              <span className="px-1.5 py-0.5 bg-gray-25 text-gray-400 rounded text-xs border border-gray-100">
+                                No Meeting Time
+                              </span>
+                          ) : (
+                            <span className="px-2 py-1 bg-baylor-green/10 text-baylor-green rounded text-xs font-medium">
+                              {row.Day}
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-gray-700">{row['Start Time']}</td>
                         <td className="px-4 py-3 text-gray-700">{row['End Time']}</td>

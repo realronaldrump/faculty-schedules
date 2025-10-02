@@ -60,6 +60,22 @@ import { parseCourseCode } from './utils/courseUtils';
 import { logCreate, logUpdate, logDelete } from './utils/changeLogger';
 import { fetchRecentChanges } from './utils/recentChanges';
 
+const deriveCreditsFromSchedule = (courseCode, credits) => {
+  if (credits !== undefined && credits !== null && credits !== '') {
+    const numericCredits = Number(credits);
+    if (!Number.isNaN(numericCredits)) {
+      return numericCredits;
+    }
+  }
+
+  const parsed = parseCourseCode(courseCode || '');
+  if (parsed && !parsed.error && parsed.credits !== undefined && parsed.credits !== null) {
+    return parsed.credits;
+  }
+
+  return null;
+};
+
 function App() {
   const { user, signOut, loading: authLoading, canAccess } = useAuth();
   const {
@@ -323,6 +339,13 @@ function App() {
             return schedule.room ? (schedule.room.displayName || schedule.room.name) : (schedule.roomName || '');
           })();
 
+          const baseCourseCode = schedule.courseCode || schedule.Course || '';
+          const creditsValue = deriveCreditsFromSchedule(baseCourseCode, schedule.credits ?? schedule.Credits);
+          const programCode = (() => {
+            const rawProgram = schedule.program ?? schedule.subjectCode ?? schedule.subject ?? '';
+            return rawProgram ? String(rawProgram).trim().toUpperCase() : '';
+          })();
+
           flattenedData.push({
             id: `${schedule.id}-${index}`,
             // Basic schedule info
@@ -330,7 +353,8 @@ function App() {
             'Course Title': schedule.courseTitle || '',
             Instructor: schedule.instructor ? `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim() : (schedule.instructorName || ''),
             Section: schedule.section || '',
-            Credits: schedule.credits || '',
+            Credits: creditsValue ?? '',
+            Program: programCode,
             Term: schedule.term || '',
             
             // Meeting pattern info
@@ -345,7 +369,7 @@ function App() {
             // Course details
             CRN: schedule.crn || schedule.CRN || '',
             'Course Level': schedule.courseLevel || '',
-            'Course Type': schedule.program || '',
+            'Course Type': programCode,
             'Schedule Type': schedule.scheduleType || 'Class Instruction',
             Status: schedule.status || 'Active',
             
@@ -367,17 +391,26 @@ function App() {
           return schedule.room ? (schedule.room.displayName || schedule.room.name) : (schedule.roomName || '');
         })();
 
+        const baseCourseCode = schedule.courseCode || schedule.Course || '';
+        const creditsValue = deriveCreditsFromSchedule(baseCourseCode, schedule.credits ?? schedule.Credits);
+        const programCode = (() => {
+          const rawProgram = schedule.program ?? schedule.subjectCode ?? schedule.subject ?? '';
+          return rawProgram ? String(rawProgram).trim().toUpperCase() : '';
+        })();
+
         flattenedData.push({
           id: schedule.id,
           Course: schedule.courseCode || '',
           'Course Title': schedule.courseTitle || '',
           Instructor: schedule.instructor ? `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim() : (schedule.instructorName || ''),
           Section: schedule.section || '',
-          Credits: schedule.credits || '',
+          Credits: creditsValue ?? '',
+          Program: programCode,
           Term: schedule.term || '',
           Room: roomDisplay,
           CRN: schedule.crn || schedule.CRN || '',
           'Schedule Type': schedule.scheduleType || 'Class Instruction',
+          'Course Type': programCode,
           Status: schedule.status || 'Active',
           ...schedule,
           _originalId: schedule.id
@@ -784,17 +817,26 @@ function App() {
       // Parse the course code to get program, level, and credits
       const courseCode = updatedRow.Course || (referenceSchedule?.courseCode || '');
       const parsedCourse = parseCourseCode(courseCode);
+      const parsedProgram = parsedCourse.error ? '' : (parsedCourse.program || '');
+      const subjectCodeRaw = parsedProgram || referenceSchedule?.subjectCode || referenceSchedule?.program || '';
+      const subjectCode = subjectCodeRaw ? subjectCodeRaw.toString().toUpperCase() : '';
+      const catalogNumber = parsedCourse.catalogNumber || referenceSchedule?.catalogNumber || courseCode.replace(/^[A-Z]{2,4}\s?/, '').toUpperCase();
+      const derivedCredits = parsedCourse.error ? null : parsedCourse.credits;
+      const computedCredits = derivedCredits ?? referenceSchedule?.credits ?? 0;
 
       // Prepare update data with proper relational structure
       const updateData = {
         courseCode: courseCode,
         courseTitle: updatedRow['Course Title'] || (referenceSchedule?.courseTitle || ''),
-        program: parsedCourse.program,
+        program: subjectCode || parsedProgram,
+        subjectCode,
+        subject: subjectCode,
+        catalogNumber,
         courseLevel: parsedCourse.level,
         section: updatedRow.Section || (referenceSchedule?.section || ''),
         crn: updatedRow.CRN || (referenceSchedule?.crn || ''),
         term: updatedRow.Term || (referenceSchedule?.term || ''),
-        credits: parseInt(updatedRow.Credits) || parsedCourse.credits || (referenceSchedule?.credits || 0),
+        credits: computedCredits,
         scheduleType: updatedRow['Schedule Type'] || (referenceSchedule?.scheduleType || 'Class Instruction'),
         status: updatedRow.Status || (referenceSchedule?.status || 'Active'),
         

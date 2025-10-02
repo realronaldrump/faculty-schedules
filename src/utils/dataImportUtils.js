@@ -6,7 +6,7 @@
 import { collection, addDoc, getDocs, query, where, doc, updateDoc, writeBatch, setDoc } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { standardizePerson, standardizeSchedule, validateAndCleanBeforeSave, autoMergeObviousDuplicates } from './dataHygiene';
-import { parseCourseCode } from './courseUtils';
+import { parseCourseCode, deriveCreditsFromCatalogNumber } from './courseUtils';
 import { logCreate, logUpdate, logImport, logBulkUpdate } from './changeLogger';
 
 // ==================== PROGRAM MAPPING ====================
@@ -92,14 +92,19 @@ export const createPersonModel = (rawData) => {
  * Schedule Model with ID-based references
  */
 export const createScheduleModel = (rawData) => {
+  const toTrimmedString = (value) => (value === undefined || value === null ? '' : String(value).trim());
+
   // Create basic schedule model
   const schedule = {
     instructorId: rawData.instructorId || '',
     instructorName: (rawData.instructorName || '').trim(),
     courseId: (rawData.courseId || '').trim(),
     courseCode: (rawData.courseCode || '').trim(),
-    courseTitle: (rawData.courseTitle || '').trim(),
-    program: rawData.program || '',
+    courseTitle: toTrimmedString(rawData.courseTitle),
+    program: toTrimmedString(rawData.program),
+    subjectCode: toTrimmedString(rawData.subjectCode),
+    subject: toTrimmedString(rawData.subject || rawData.subjectCode || rawData.program),
+    catalogNumber: toTrimmedString(rawData.catalogNumber),
     courseLevel: rawData.courseLevel || 0,
     section: (rawData.section || '').trim(),
     crn: rawData.crn || '', // Add CRN field
@@ -890,6 +895,7 @@ export const processScheduleImport = async (csvData) => {
       const instructionMethod = (row['Inst. Method'] || row['Instruction Method'] || '').trim();
       const term = row['Term'] || '';
       const termCode = row['Term Code'] || '';
+      const catalogNumber = (row['Catalog Number'] || '').trim();
       const creditsFromCsv = row['Credit Hrs'] || row['Credit Hrs Min'];
       const scheduleType = row['Schedule Type'] || 'Class Instruction';
       const status = row['Status'] || 'Active';
@@ -1033,7 +1039,13 @@ export const processScheduleImport = async (csvData) => {
       
       // Parse course code for additional details
       const parsedCourse = parseCourseCode(courseCode);
-      const finalCredits = creditsFromCsv ? parseInt(creditsFromCsv) : parsedCourse.credits;
+      const parsedProgram = parsedCourse?.error ? '' : (parsedCourse?.program || '');
+      const subjectCode = ((row['Subject Code'] || '').trim().toUpperCase()) || parsedProgram;
+      const programCode = parsedProgram || subjectCode;
+
+      const rawCatalogForCredits = catalogNumber || courseCode.replace(/^[A-Z]{2,4}\s?/, '');
+      const derivedCredits = deriveCreditsFromCatalogNumber(rawCatalogForCredits, creditsFromCsv);
+      const finalCredits = (derivedCredits ?? parsedCourse.credits ?? null);
 
       // === COURSE UPSERT WITH DETERMINISTIC ID ===
       let courseId = '';
@@ -1044,10 +1056,10 @@ export const processScheduleImport = async (csvData) => {
           courseCode,
           title: courseTitle,
           departmentCode: (row['Department Code'] || '').trim(),
-          subjectCode: (row['Subject Code'] || '').trim(),
-          catalogNumber: (row['Catalog Number'] || '').trim(),
-          credits: finalCredits || null,
-          program: parsedCourse.program || null,
+          subjectCode: subjectCode || null,
+          catalogNumber,
+          credits: finalCredits ?? null,
+          program: programCode || null,
           updatedAt: new Date().toISOString(),
         };
         if (!existingCourse) {
@@ -1101,7 +1113,10 @@ export const processScheduleImport = async (csvData) => {
         courseId,
         courseCode,
         courseTitle,
-        program: parsedCourse.program,
+        program: programCode,
+        subjectCode,
+        subject: subjectCode,
+        catalogNumber,
         courseLevel: parsedCourse.level,
         section,
         crn, // Pass CRN to the model

@@ -3,6 +3,7 @@ import { Edit, Save, X, History, RotateCcw, Filter, Search, ChevronsUpDown, Plus
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import FacultyContactCard from '../FacultyContactCard';
 import { formatChangeForDisplay } from '../../utils/recentChanges';
+import { parseCourseCode } from '../../utils/courseUtils';
 
 const CourseManagement = ({ 
   scheduleData, 
@@ -29,8 +30,6 @@ const CourseManagement = ({
     searchTerm: '',
     // Advanced filters 
     programs: { include: [], exclude: [] },
-    courseTypes: [],
-    terms: [],
     sections: [],
     buildings: { include: [], exclude: [] },
     adjunct: 'all', // 'all', 'include', 'exclude'
@@ -48,6 +47,27 @@ const CourseManagement = ({
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [selectedExportFields, setSelectedExportFields] = useState([]);
   const [selectedRows, setSelectedRows] = useState(new Set());
+
+  const computeCourseMetadata = (courseCode) => {
+    if (!courseCode || typeof courseCode !== 'string') {
+      return { credits: '', program: '', catalogNumber: '' };
+    }
+    const parsed = parseCourseCode(courseCode);
+    if (parsed?.error) {
+      return { credits: '', program: '', catalogNumber: '' };
+    }
+    const programCode = parsed.program ? parsed.program.toUpperCase() : '';
+    return {
+      credits: parsed.credits,
+      program: programCode,
+      catalogNumber: parsed.catalogNumber || ''
+    };
+  };
+
+  const computedNewCourseCredits = useMemo(
+    () => computeCourseMetadata(newCourseData.Course || '').credits,
+    [newCourseData.Course]
+  );
 
   const sortedFaculty = useMemo(() => {
     if (!facultyData) return [];
@@ -168,30 +188,19 @@ const CourseManagement = ({
   // Extract unique filter options
   const filterOptions = useMemo(() => {
     const programs = new Set();
-    const courseTypes = new Set();
-    const terms = new Set();
     const buildings = new Set();
 
     scheduleData.forEach(item => {
-      // Extract program from faculty data if available
-      if (item.Instructor && facultyData) {
-        const faculty = facultyData.find(f => f.name === item.Instructor);
-        if (faculty?.program?.name) {
-          programs.add(faculty.program.name);
+      if (!item) return;
+
+      const rawProgram = item.program ?? item.Program ?? item.subjectCode ?? item.subject ?? item['Course Type'];
+      if (rawProgram !== undefined && rawProgram !== null) {
+        const normalizedProgram = String(rawProgram).trim().toUpperCase();
+        if (normalizedProgram) {
+          programs.add(normalizedProgram);
         }
       }
 
-      // Extract course type from course code (e.g., "ADM" from "ADM 3330")
-      if (item['Course Type']) {
-        courseTypes.add(item['Course Type']);
-      }
-
-      // Extract terms
-      if (item.Term) {
-        terms.add(item.Term);
-      }
-
-      // Extract building from room name
       if (item.Room) {
         const buildingMatch = item.Room.match(/^([A-Z]+)/);
         if (buildingMatch) {
@@ -204,11 +213,9 @@ const CourseManagement = ({
 
     return {
       programs: Array.from(programs).sort(),
-      courseTypes: Array.from(courseTypes).sort(),
-      terms: Array.from(terms).sort(),
       buildings: Array.from(buildings).sort()
     };
-  }, [scheduleData, facultyData]);
+  }, [scheduleData]);
 
   // Filter presets for common use cases
   const filterPresets = {
@@ -217,7 +224,7 @@ const CourseManagement = ({
       filters: {
         instructor: [], day: [], room: [], searchTerm: '',
         programs: { include: [], exclude: [] },
-        courseTypes: [], terms: [], sections: [], buildings: { include: [], exclude: [] },
+        sections: [], buildings: { include: [], exclude: [] },
         adjunct: 'all', tenured: 'all', credits: 'all', timeOfDay: 'all',
         scheduleType: 'all', status: 'all'
       }
@@ -227,7 +234,7 @@ const CourseManagement = ({
       filters: {
         instructor: [], day: [], room: [], searchTerm: '',
         programs: { include: [], exclude: [] },
-        courseTypes: [], terms: [], sections: [], buildings: { include: [], exclude: [] },
+        sections: [], buildings: { include: [], exclude: [] },
         adjunct: 'include', tenured: 'all', credits: 'all', timeOfDay: 'all',
         scheduleType: 'all', status: 'all'
       }
@@ -237,7 +244,7 @@ const CourseManagement = ({
       filters: {
         instructor: [], day: [], room: [], searchTerm: '',
         programs: { include: [], exclude: [] },
-        courseTypes: [], terms: [], sections: [], buildings: { include: [], exclude: [] },
+        sections: [], buildings: { include: [], exclude: [] },
         adjunct: 'all', tenured: 'all', credits: 'all', timeOfDay: 'all',
         scheduleType: 'all', status: 'Active'
       }
@@ -247,7 +254,7 @@ const CourseManagement = ({
       filters: {
         instructor: [], day: [], room: [], searchTerm: '',
         programs: { include: [], exclude: [] },
-        courseTypes: [], terms: [], sections: [], buildings: { include: [], exclude: [] },
+        sections: [], buildings: { include: [], exclude: [] },
         adjunct: 'all', tenured: 'all', credits: 'all', timeOfDay: 'morning',
         scheduleType: 'all', status: 'all'
       }
@@ -257,7 +264,7 @@ const CourseManagement = ({
       filters: {
         instructor: [], day: [], room: [], searchTerm: '',
         programs: { include: [], exclude: [] },
-        courseTypes: [], terms: [], sections: [], buildings: { include: [], exclude: [] },
+        sections: [], buildings: { include: [], exclude: [] },
         adjunct: 'all', tenured: 'all', credits: '4+', timeOfDay: 'all',
         scheduleType: 'all', status: 'all'
       }
@@ -337,22 +344,9 @@ const CourseManagement = ({
       });
     }
 
-    // Apply term filter
-    if (filters.terms && Array.isArray(filters.terms) && filters.terms.length > 0) {
-      data = data.filter(item => item && item.Term && filters.terms.includes(item.Term));
-    }
-
     // Apply section filter
     if (filters.sections && Array.isArray(filters.sections) && filters.sections.length > 0) {
       data = data.filter(item => item && item.Section && filters.sections.includes(item.Section));
-    }
-
-    // Apply course type filters
-    if (filters.courseTypes && Array.isArray(filters.courseTypes) && filters.courseTypes.length > 0) {
-      data = data.filter(item => {
-        if (!item || !item['Course Type']) return false;
-        return filters.courseTypes.includes(item['Course Type']);
-      });
     }
 
     // Apply schedule type filter
@@ -372,14 +366,16 @@ const CourseManagement = ({
     // Apply program filters
     if (filters.programs && (filters.programs.include.length > 0 || filters.programs.exclude.length > 0)) {
       data = data.filter(item => {
-        if (!item || !item.Instructor || !facultyData) return true;
-        
-        const faculty = facultyData.find(f => f.name === item.Instructor);
-        const programName = faculty?.program?.name || '';
-        
-        const includeMatch = filters.programs.include.length === 0 || filters.programs.include.includes(programName);
-        const excludeMatch = filters.programs.exclude.length === 0 || !filters.programs.exclude.includes(programName);
-        
+        if (!item) return false;
+
+        const rawProgram = item.program ?? item.Program ?? item.subjectCode ?? item.subject ?? item['Course Type'];
+        const normalizedProgram = rawProgram !== undefined && rawProgram !== null
+          ? String(rawProgram).trim().toUpperCase()
+          : '';
+
+        const includeMatch = filters.programs.include.length === 0 || filters.programs.include.includes(normalizedProgram);
+        const excludeMatch = filters.programs.exclude.length === 0 || !filters.programs.exclude.includes(normalizedProgram);
+
         return includeMatch && excludeMatch;
       });
     }
@@ -564,7 +560,16 @@ const CourseManagement = ({
   // Event handlers
   const handleEditClick = (row) => {
     setEditingRowId(row.id);
-    setEditFormData({ ...row });
+    const metadata = computeCourseMetadata(row.Course || row.courseCode || '');
+    setEditFormData({
+      ...row,
+      Credits: metadata.credits !== '' ? metadata.credits : (row.Credits ?? ''),
+      Program: metadata.program || row.Program || '',
+      program: metadata.program || row.program || '',
+      subjectCode: metadata.program || row.subjectCode || '',
+      catalogNumber: metadata.catalogNumber || row.catalogNumber || '',
+      'Course Type': metadata.program || row['Course Type'] || ''
+    });
   };
 
   const handleEditCancel = () => {
@@ -588,7 +593,22 @@ const CourseManagement = ({
 
   const handleEditFormChange = (e) => {
     const { name, value } = e.target;
-    setEditFormData(prev => ({ ...prev, [name]: value }));
+    setEditFormData(prev => {
+      if (name === 'Course') {
+        const metadata = computeCourseMetadata(value);
+        return {
+          ...prev,
+          Course: value,
+          Credits: metadata.credits !== '' ? metadata.credits : (prev.Credits ?? ''),
+          Program: metadata.program || prev.Program || '',
+          program: metadata.program || prev.program || '',
+          subjectCode: metadata.program || prev.subjectCode || '',
+          catalogNumber: metadata.catalogNumber || prev.catalogNumber || '',
+          'Course Type': metadata.program || prev['Course Type'] || ''
+        };
+      }
+      return { ...prev, [name]: value };
+    });
   };
 
   const handleSort = (key) => {
@@ -630,6 +650,7 @@ const CourseManagement = ({
       return;
     }
     // Create new course with unique ID
+    const { credits, program, catalogNumber } = computeCourseMetadata(newCourseData.Course || '');
     const courseWithId = {
       ...newCourseData,
       Day: dayPattern,
@@ -639,7 +660,12 @@ const CourseManagement = ({
       CRN: newCourseData.CRN || '',
       Status: newCourseData.Status || 'Active',
       'Schedule Type': newCourseData['Schedule Type'] || 'Class Instruction',
-      Credits: newCourseData.Credits || '3'
+      Credits: credits !== '' ? credits : '',
+      Program: program,
+      program,
+      subjectCode: program,
+      catalogNumber,
+      'Course Type': program
     };
     onDataUpdate(courseWithId);
     setNewCourseData({});
@@ -648,7 +674,22 @@ const CourseManagement = ({
 
   const handleNewCourseChange = (e) => {
     const { name, value } = e.target;
-    setNewCourseData(prev => ({ ...prev, [name]: value }));
+    setNewCourseData(prev => {
+      if (name === 'Course') {
+        const metadata = computeCourseMetadata(value);
+        return {
+          ...prev,
+          Course: value,
+          Credits: metadata.credits !== '' ? metadata.credits : '',
+          Program: metadata.program,
+          program: metadata.program,
+          subjectCode: metadata.program,
+          catalogNumber: metadata.catalogNumber,
+          'Course Type': metadata.program
+        };
+      }
+      return { ...prev, [name]: value };
+    });
   };
 
   // Filter preset handlers
@@ -670,7 +711,7 @@ const CourseManagement = ({
     const clearedFilters = {
       instructor: [], day: [], room: [], searchTerm: '',
       programs: { include: [], exclude: [] },
-      courseTypes: [], terms: [], sections: [], buildings: { include: [], exclude: [] },
+      sections: [], buildings: { include: [], exclude: [] },
       adjunct: 'all', tenured: 'all', credits: 'all', timeOfDay: 'all',
       scheduleType: 'all', status: 'all'
     };
@@ -719,8 +760,6 @@ const CourseManagement = ({
     if (filters.room.length > 0) count++;
     if (filters.programs.include.length > 0) count++;
     if (filters.programs.exclude.length > 0) count++;
-    if (filters.courseTypes.length > 0) count++;
-    if (filters.terms.length > 0) count++;
     if (filters.sections.length > 0) count++;
     if (filters.buildings.include.length > 0) count++;
     if (filters.buildings.exclude.length > 0) count++;
@@ -1014,19 +1053,10 @@ const CourseManagement = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Credits</label>
-                <select
-                  name="Credits"
-                  value={newCourseData.Credits || '3'}
-                  onChange={handleNewCourseChange}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
-                >
-                  <option value="1">1 Credit</option>
-                  <option value="2">2 Credits</option>
-                  <option value="3">3 Credits</option>
-                  <option value="4">4 Credits</option>
-                  <option value="5">5 Credits</option>
-                  <option value="6">6 Credits</option>
-                </select>
+                <div className="w-full p-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
+                  {computedNewCourseCredits !== '' ? computedNewCourseCredits : '—'}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Auto-calculated from catalog number</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Schedule Type</label>
@@ -1180,32 +1210,6 @@ const CourseManagement = ({
                       programs: { ...prev.programs, exclude: selected }
                     }))}
                     placeholder="Select programs to exclude..."
-                  />
-                </div>
-              </div>
-
-              {/* Course Types and Terms */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Course Types
-                  </label>
-                  <MultiSelectDropdown
-                    options={filterOptions.courseTypes}
-                    selected={filters.courseTypes}
-                    onChange={(selected) => setFilters(prev => ({ ...prev, courseTypes: selected }))}
-                    placeholder="Select course types (ADM, CFS, etc.)..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Terms
-                  </label>
-                  <MultiSelectDropdown
-                    options={uniqueTerms}
-                    selected={filters.terms}
-                    onChange={(selected) => setFilters(prev => ({ ...prev, terms: selected }))}
-                    placeholder="Select terms..."
                   />
                 </div>
               </div>
@@ -1558,13 +1562,13 @@ const CourseManagement = ({
                           />
                         </td>
                         <td className="p-1">
-                          <input
-                            name="Credits"
-                            value={editFormData.Credits || ''}
-                            onChange={handleEditFormChange}
-                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
-                            placeholder="Credits"
-                          />
+                          <div className="w-full p-1 border border-baylor-gold rounded bg-gray-50 text-sm text-gray-700">
+                            {(() => {
+                              const metadata = computeCourseMetadata(editFormData.Course || row.Course);
+                              return metadata.credits !== '' ? metadata.credits : '—';
+                            })()}
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">Auto-calculated</p>
                         </td>
                         <td className="p-1">
                           <select

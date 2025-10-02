@@ -64,6 +64,37 @@ const CourseManagement = ({
     };
   };
 
+  const extractBuildingNameFromRoom = (roomName) => {
+    if (!roomName || typeof roomName !== 'string') {
+      return 'Other';
+    }
+
+    const cleaned = roomName.trim();
+    if (!cleaned) return 'Other';
+
+    const lowered = cleaned.toLowerCase();
+    if (lowered.includes('online')) {
+      return 'Online';
+    }
+    if (lowered.includes('no room needed')) {
+      return 'No Room Needed';
+    }
+    if (lowered.includes('off campus')) {
+      return 'Off Campus';
+    }
+
+    const buildingMatch = cleaned.match(/^([^0-9]+)/);
+    if (buildingMatch) {
+      const withoutParens = buildingMatch[1].replace(/\([^)]*\)/g, '').trim();
+      if (withoutParens) {
+        return withoutParens;
+      }
+    }
+
+    const fallback = cleaned.replace(/\([^)]*\)/g, '').trim();
+    return fallback || 'Other';
+  };
+
   const computedNewCourseCredits = useMemo(
     () => computeCourseMetadata(newCourseData.Course || '').credits,
     [newCourseData.Course]
@@ -202,9 +233,14 @@ const CourseManagement = ({
       }
 
       if (item.Room) {
-        const buildingMatch = item.Room.match(/^([A-Z]+)/);
-        if (buildingMatch) {
-          buildings.add(buildingMatch[1]);
+        const rooms = item.Room.split(';').map(s => s.trim()).filter(Boolean);
+        if (rooms.length > 0) {
+          rooms.forEach(room => {
+            const buildingName = extractBuildingNameFromRoom(room);
+            if (buildingName) {
+              buildings.add(buildingName);
+            }
+          });
         } else {
           buildings.add('Other');
         }
@@ -382,20 +418,24 @@ const CourseManagement = ({
 
     // Apply building filters
     if (filters.buildings && (filters.buildings.include.length > 0 || filters.buildings.exclude.length > 0)) {
+      const includeNormalized = filters.buildings.include.map(name => name.toUpperCase());
+      const excludeNormalized = filters.buildings.exclude.map(name => name.toUpperCase());
+
       data = data.filter(item => {
-        if (!item || !item.Room) return true;
-        
-        // For multi-room rows, consider a match if ANY room's building matches
+        if (!item || !item.Room) {
+          return filters.buildings.include.length === 0;
+        }
+
         const rooms = item.Room.split(';').map(s => s.trim()).filter(Boolean);
-        const buildingForAny = rooms.map(r => {
-          const m = r.match(/^([^0-9]+)/);
-          return m ? m[1].trim().toUpperCase().replace(/\s+$/,'') : 'Other';
-        });
-        const buildingName = buildingForAny[0] || 'Other';
-        
-        const includeMatch = filters.buildings.include.length === 0 || filters.buildings.include.includes(buildingName);
-        const excludeMatch = filters.buildings.exclude.length === 0 || !filters.buildings.exclude.includes(buildingName);
-        
+        if (rooms.length === 0) {
+          return filters.buildings.include.length === 0;
+        }
+
+        const normalizedBuildings = rooms.map(room => extractBuildingNameFromRoom(room).toUpperCase());
+
+        const includeMatch = includeNormalized.length === 0 || normalizedBuildings.some(building => includeNormalized.includes(building));
+        const excludeMatch = excludeNormalized.length === 0 || !normalizedBuildings.some(building => excludeNormalized.includes(building));
+
         return includeMatch && excludeMatch;
       });
     }

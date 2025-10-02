@@ -1,8 +1,7 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import {
   Users,
   Calendar,
-  TrendingUp,
   AlertCircle,
   ChevronRight,
   FileText,
@@ -13,83 +12,73 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 
 const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, selectedSemester }) => {
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, canAccess } = useAuth();
 
-  // Metrics are now derived from the centralized 'analytics' prop
-  const metrics = useMemo(() => {
-    if (!analytics) return null;
+  const displayName = userProfile?.displayName || user?.displayName || (user?.email ? user.email.split('@')[0] : '');
+  const firstName = displayName ? displayName.split(' ')[0] : 'there';
 
-    return {
-      facultyCount: analytics.facultyCount,
-      adjunctTaughtCourses: analytics.adjunctTaughtSessions,
-      roomsInUse: analytics.roomsInUse,
-      totalSessions: analytics.totalSessions,
-      uniqueCourses: analytics.uniqueCourses,
-      busiestDay: analytics.busiestDay
-    };
-  }, [analytics]);
+  const hasAccess = useCallback((pageId) => {
+    if (!pageId) return true;
+    if (typeof canAccess !== 'function') return true;
+    return canAccess(pageId);
+  }, [canAccess]);
 
-  const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
+  const quickActions = useMemo(() => {
+    const actions = [
+      {
+        title: 'Faculty Directory',
+        description: 'Contact information and faculty details',
+        icon: GraduationCap,
+        path: 'people/people-directory',
+        color: 'bg-purple-600',
+        textColor: 'text-purple-600',
+        requiredAccess: 'people/people-directory'
+      },
+      {
+        title: 'Student Worker Schedules',
+        description: 'See student assignments and availability',
+        icon: Users,
+        path: 'scheduling/student-schedules',
+        color: 'bg-amber-500',
+        textColor: 'text-amber-600',
+        requiredAccess: 'scheduling/student-schedules'
+      },
+      {
+        title: 'Schedule Group Meeting',
+        description: 'Find overlapping availability across faculty',
+        icon: Calendar,
+        path: 'scheduling/group-meeting-scheduler',
+        color: 'bg-blue-600',
+        textColor: 'text-blue-600',
+        requiredAccess: 'scheduling/group-meeting-scheduler'
+      },
+      {
+        title: 'Check Room Availability',
+        description: 'View classroom schedules in real time',
+        icon: Building,
+        path: 'scheduling/room-schedules',
+        color: 'bg-green-600',
+        textColor: 'text-green-600',
+        requiredAccess: 'scheduling/room-schedules'
+      }
+    ];
 
-  // Quick action cards with updated styling
-  const quickActions = [
-    {
-      title: 'Schedule Group Meeting',
-      description: 'Find available times for multiple faculty members',
-      icon: Users,
-              action: () => onNavigate('scheduling/group-meeting-scheduler'),
-      color: 'bg-blue-600',
-      textColor: 'text-blue-600'
-    },
-    {
-      title: 'Check Room Availability',
-      description: 'View room schedules and classroom availability',
-      icon: Building,
-      action: () => onNavigate('scheduling/room-schedules'),
-      color: 'bg-green-600',
-      textColor: 'text-green-600'
-    },
-    {
-      title: 'Faculty Directory',
-      description: 'Contact information and faculty details',
-      icon: GraduationCap,
-      action: () => onNavigate('people/people-directory'),
-      color: 'bg-purple-600',
-      textColor: 'text-purple-600'
-    },
-    {
-      title: 'Import Data',
-      description: 'Update faculty information and schedules',
-      icon: FileText,
-      action: () => onNavigate('administration/smart-import'),
-      color: 'bg-baylor-gold',
-      textColor: 'text-baylor-green'
+    if (hasAccess('administration/import-wizard')) {
+      actions.push({
+        title: 'Import Data',
+        description: 'Refresh faculty information and schedules',
+        icon: FileText,
+        path: 'administration/import-wizard',
+        color: 'bg-baylor-gold',
+        textColor: 'text-baylor-green',
+        requiredAccess: 'administration/import-wizard'
+      });
     }
-  ];
 
-  const MetricCard = ({ title, value, subtitle, icon: Icon, onClick, trend }) => (
-    <div 
-      className={`metric-card group ${onClick ? 'cursor-pointer' : ''}`}
-      onClick={onClick}
-    >
-      <div className="flex items-center justify-between">
-        <div className="flex-1">
-          <p className="metric-label">{title}</p>
-          <p className="metric-value">{value}</p>
-          {subtitle && <p className="metric-subtitle">{subtitle}</p>}
-        </div>
-        <div className="metric-icon">
-          <Icon className="w-6 h-6 text-baylor-green" />
-        </div>
-      </div>
-      {trend && (
-        <div className="flex items-center mt-4 text-sm">
-          <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
-          <span className="text-green-500 font-medium">{trend}</span>
-        </div>
-      )}
-    </div>
-  );
+    return actions
+      .filter(action => !action.requiredAccess || hasAccess(action.requiredAccess))
+      .map(action => ({ ...action, action: () => onNavigate(action.path) }));
+  }, [hasAccess, onNavigate]);
 
   const QuickActionCard = ({ title, description, icon: Icon, action, color, textColor }) => (
     <div 
@@ -116,7 +105,7 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
     </div>
   );
 
-  if (!metrics) {
+  if (!analytics) {
     return (
       <div className="page-content">
         {/* University System Header */}
@@ -132,15 +121,21 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
             </div>
             <h2 className="text-2xl font-semibold text-gray-900 mb-3">No Data Available</h2>
             <p className="text-gray-600 mb-8 max-w-md mx-auto leading-relaxed">
-              Import schedule data to see dashboard metrics and faculty information
+              Once schedule data is available you&apos;ll see tailored quick links here.
             </p>
-            <button 
-              onClick={() => onNavigate('administration/smart-import')}
-              className="btn-primary"
-            >
-              <FileText className="w-4 h-4 mr-2 inline-block" />
-              Import Data
-            </button>
+            {hasAccess('administration/import-wizard') ? (
+              <button 
+                onClick={() => onNavigate('administration/import-wizard')}
+                className="btn-primary"
+              >
+                <FileText className="w-4 h-4 mr-2 inline-block" />
+                Import Data
+              </button>
+            ) : (
+              <p className="text-gray-500 text-sm">
+                Need this data? Reach out to an administrator to trigger the next import.
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -162,25 +157,33 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
             </p>
           </div>
         </div>
-        <div className="flex items-center mt-6 text-white/90">
-          <Calendar className="w-5 h-5 mr-2" />
-          <span className="font-medium">{selectedSemester || 'No semester selected'} Semester</span>
+        <div className="mt-6 text-white/90 space-y-3">
+          <div className="flex items-center">
+            <Calendar className="w-5 h-5 mr-2" />
+            <span className="font-medium">{selectedSemester || 'No semester selected'} Semester</span>
+          </div>
+          <p className="text-sm md:text-base">
+            Welcome back, {firstName}! Jump into the tools you use most below.
+          </p>
         </div>
       </div>
-
-
-
       {/* Quick Actions Section */}
       <div className="mb-8">
         <div className="university-card-header">
           <h2 className="university-card-title">Quick Actions</h2>
           <p className="university-card-subtitle">Common administrative tasks and tools</p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-          {quickActions.map((action, index) => (
-            <QuickActionCard key={index} {...action} />
-          ))}
-        </div>
+        {quickActions.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            {quickActions.map((action, index) => (
+              <QuickActionCard key={`${action.title}-${index}`} {...action} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-500 text-sm mt-6">
+            No shortcuts are assigned to your role yet. Let us know what you use most and we&apos;ll add it here.
+          </p>
+        )}
       </div>
     </div>
   );

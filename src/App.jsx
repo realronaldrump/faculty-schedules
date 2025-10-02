@@ -247,7 +247,6 @@ function App() {
       icon: Users,
       children: [
         { id: 'people-directory', label: 'People Directory', path: 'people/people-directory' },
-        { id: 'baylor-id-manager', label: 'Baylor ID Manager', path: 'people/baylor-id-manager' },
         { id: 'email-lists', label: 'Email Lists', path: 'people/email-lists' },
         { id: 'building-directory', label: 'Building Directory', path: 'resources/building-directory' },
         { id: 'baylor-acronyms', label: 'Baylor Acronyms', path: 'administration/baylor-acronyms' }
@@ -271,7 +270,8 @@ function App() {
         { id: 'data-hygiene', label: 'Data Hygiene', path: 'administration/data-hygiene' },
         { id: 'crn-tools', label: 'CRN Quality Tools', path: 'administration/crn-tools' },
         { id: 'room-grid-generator', label: 'Room Grid Generator', path: 'resources/room-grid-generator' },
-        { id: 'recent-changes', label: 'Recent Changes', path: 'administration/recent-changes' }
+        { id: 'recent-changes', label: 'Recent Changes', path: 'administration/recent-changes' },
+        { id: 'baylor-id-manager', label: 'Baylor ID Manager', path: 'people/baylor-id-manager' },
       ]
     },
     {

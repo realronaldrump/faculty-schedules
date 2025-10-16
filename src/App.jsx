@@ -428,48 +428,6 @@ function App() {
 
     console.log('📊 Calculating analytics for', scheduleData.length, 'schedule entries');
 
-    const parseTimeToMinutes = (timeStr) => {
-      if (!timeStr) return null;
-      const cleaned = timeStr.toString().trim().toLowerCase();
-      if (!cleaned) return null;
-      const match = cleaned.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
-      if (!match) return null;
-
-      let hour = parseInt(match[1], 10);
-      const minute = match[2] ? parseInt(match[2], 10) : 0;
-      const meridiem = match[3];
-
-      if (meridiem === 'pm' && hour !== 12) hour += 12;
-      if (meridiem === 'am' && hour === 12) hour = 0;
-
-      if (!meridiem && cleaned.includes(':')) {
-        // Handle 24-hour format such as 13:30
-        const parts = cleaned.split(':');
-        const maybeHour = parseInt(parts[0], 10);
-        if (!Number.isNaN(maybeHour)) {
-          hour = maybeHour;
-        }
-      }
-
-      if (Number.isNaN(hour) || Number.isNaN(minute)) return null;
-      return hour * 60 + minute;
-    };
-
-    const now = new Date();
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
-    const dayCodeMap = ['U', 'M', 'T', 'W', 'R', 'F', 'S'];
-    const dayNameMap = {
-      U: 'Sunday',
-      M: 'Monday',
-      T: 'Tuesday',
-      W: 'Wednesday',
-      R: 'Thursday',
-      F: 'Friday',
-      S: 'Saturday'
-    };
-    const todayCode = dayCodeMap[now.getDay()] || 'M';
-    const todayLabel = dayNameMap[todayCode] || 'Today';
-
     // Faculty count
     const instructors = new Set();
     scheduleData.forEach(schedule => {
@@ -480,13 +438,21 @@ function App() {
 
     // Session counts
     const totalSessions = scheduleData.length;
-
+    
     // Adjunct-taught sessions
     const adjunctTaughtSessions = scheduleData.filter(schedule => {
       const instructorName = schedule.Instructor || '';
       const facultyMember = rawPeople.find(person => person.name === instructorName);
       return facultyMember && facultyMember.isAdjunct;
     }).length;
+
+    // Rooms in use (exclude Online)
+    const rooms = new Set();
+    scheduleData.forEach(schedule => {
+      if (schedule.Room && schedule.Room.trim() && schedule.Room.trim().toLowerCase() !== 'online') {
+        rooms.add(schedule.Room.trim());
+      }
+    });
 
     // Unique courses
     const courses = new Set();
@@ -497,226 +463,25 @@ function App() {
     });
 
     // Busiest day calculation
-    const daySchedules = { U: 0, M: 0, T: 0, W: 0, R: 0, F: 0, S: 0 };
+    const daySchedules = { M: 0, T: 0, W: 0, R: 0, F: 0 };
     scheduleData.forEach(schedule => {
-      const dayValue = (schedule.Day || '').toString();
-      Object.keys(daySchedules).forEach(dayKey => {
-        if (dayValue.includes(dayKey)) {
-          daySchedules[dayKey]++;
-        }
-      });
+      if (schedule.Day && daySchedules.hasOwnProperty(schedule.Day)) {
+        daySchedules[schedule.Day]++;
+      }
     });
 
     const busiestDay = Object.entries(daySchedules).reduce(
       (max, [day, count]) => count > max.count ? { day, count } : max,
-      { day: todayCode, count: 0 }
+      { day: 'M', count: 0 }
     );
-
-    const liveActiveClasses = [];
-    const liveEndingSoon = [];
-    const upcomingWithinHour = [];
-    const roomMap = new Map();
-    const facultyMap = new Map();
-
-    scheduleData.forEach(schedule => {
-      const dayValue = (schedule.Day || '').toString();
-      if (!dayValue) return;
-      if (!dayValue.includes(todayCode)) return;
-
-      const startMinutes = parseTimeToMinutes(schedule['Start Time']);
-      const endMinutes = parseTimeToMinutes(schedule['End Time']);
-      if (startMinutes === null || endMinutes === null) return;
-
-      const minutesUntilStart = startMinutes - nowMinutes;
-      const minutesUntilEnd = endMinutes - nowMinutes;
-      const roomValue = (schedule.Room || '').toString();
-      const courseTitle = schedule['Course Title'] || schedule.Course || '';
-      const courseCode = schedule.Course || '';
-      const instructorName = (schedule.Instructor || '').toString().trim();
-      const sectionLabel = schedule.Section ? schedule.Section.toString() : '';
-
-      const classInfo = {
-        id: schedule.id,
-        courseCode,
-        courseTitle,
-        instructor: instructorName || 'TBD',
-        room: roomValue || (schedule.isOnline ? 'Online' : 'TBD'),
-        startTime: schedule['Start Time'] || '',
-        endTime: schedule['End Time'] || '',
-        minutesUntilStart,
-        minutesUntilEnd,
-        section: sectionLabel
-      };
-
-      if (startMinutes <= nowMinutes && nowMinutes < endMinutes) {
-        liveActiveClasses.push(classInfo);
-        if (minutesUntilEnd <= 30) {
-          liveEndingSoon.push(classInfo);
-        }
-      } else if (minutesUntilStart > 0 && minutesUntilStart <= 60) {
-        upcomingWithinHour.push(classInfo);
-      }
-
-      // Room analytics (skip online rooms)
-      const normalizedRoomNames = roomValue
-        .split(';')
-        .map(name => name.trim())
-        .filter(name => name && name.toLowerCase() !== 'online');
-
-      normalizedRoomNames.forEach(roomName => {
-        if (!roomMap.has(roomName)) {
-          roomMap.set(roomName, {
-            room: roomName,
-            active: false,
-            minutesUntilFree: null,
-            endTime: null,
-            currentCourse: null,
-            currentInstructor: null,
-            minutesUntilNext: null,
-            nextStartTime: null,
-            nextCourse: null,
-            nextInstructor: null
-          });
-        }
-
-        const roomEntry = roomMap.get(roomName);
-        if (startMinutes <= nowMinutes && nowMinutes < endMinutes) {
-          roomEntry.active = true;
-          const timeUntilFree = Math.max(0, minutesUntilEnd);
-          if (roomEntry.minutesUntilFree === null || timeUntilFree < roomEntry.minutesUntilFree) {
-            roomEntry.minutesUntilFree = timeUntilFree;
-            roomEntry.endTime = schedule['End Time'] || '';
-            roomEntry.currentCourse = courseCode || courseTitle;
-            roomEntry.currentInstructor = instructorName;
-          }
-        } else if (minutesUntilStart >= 0) {
-          if (roomEntry.minutesUntilNext === null || minutesUntilStart < roomEntry.minutesUntilNext) {
-            roomEntry.minutesUntilNext = minutesUntilStart;
-            roomEntry.nextStartTime = schedule['Start Time'] || '';
-            roomEntry.nextCourse = courseCode || courseTitle;
-            roomEntry.nextInstructor = instructorName;
-          }
-        }
-      });
-
-      // Faculty analytics
-      if (instructorName) {
-        if (!facultyMap.has(instructorName)) {
-          facultyMap.set(instructorName, {
-            name: instructorName,
-            current: false,
-            minutesUntilFree: null,
-            currentCourse: null,
-            currentRoom: null,
-            currentEndTime: null,
-            nextStartMinutes: null,
-            nextStartTime: null,
-            nextCourse: null,
-            nextRoom: null
-          });
-        }
-
-        const facultyEntry = facultyMap.get(instructorName);
-        if (startMinutes <= nowMinutes && nowMinutes < endMinutes) {
-          facultyEntry.current = true;
-          const timeUntilFree = Math.max(0, minutesUntilEnd);
-          if (facultyEntry.minutesUntilFree === null || timeUntilFree < facultyEntry.minutesUntilFree) {
-            facultyEntry.minutesUntilFree = timeUntilFree;
-            facultyEntry.currentCourse = courseCode || courseTitle;
-            facultyEntry.currentRoom = normalizedRoomNames[0] || roomValue || 'Online';
-            facultyEntry.currentEndTime = schedule['End Time'] || '';
-          }
-        } else if (minutesUntilStart >= 0) {
-          if (facultyEntry.nextStartMinutes === null || minutesUntilStart < facultyEntry.nextStartMinutes) {
-            facultyEntry.nextStartMinutes = minutesUntilStart;
-            facultyEntry.nextStartTime = schedule['Start Time'] || '';
-            facultyEntry.nextCourse = courseCode || courseTitle;
-            facultyEntry.nextRoom = normalizedRoomNames[0] || roomValue || 'Online';
-          }
-        }
-      }
-    });
-
-    const sortedActiveClasses = [...liveActiveClasses].sort((a, b) => a.minutesUntilEnd - b.minutesUntilEnd);
-    const sortedUpcomingClasses = [...upcomingWithinHour].sort((a, b) => a.minutesUntilStart - b.minutesUntilStart);
-    const sortedEndingSoon = [...liveEndingSoon].sort((a, b) => a.minutesUntilEnd - b.minutesUntilEnd);
-
-    const roomStatsArray = Array.from(roomMap.values());
-    const totalRoomsToday = roomStatsArray.length;
-    const roomsInUseNow = roomStatsArray.filter(room => room.active).length;
-    const occupancyRate = totalRoomsToday > 0 ? Math.round((roomsInUseNow / totalRoomsToday) * 100) : 0;
-    const freeRooms = roomStatsArray
-      .filter(room => !room.active)
-      .sort((a, b) => {
-        const aNext = a.minutesUntilNext ?? Number.POSITIVE_INFINITY;
-        const bNext = b.minutesUntilNext ?? Number.POSITIVE_INFINITY;
-        return aNext - bNext;
-      })
-      .slice(0, 6);
-    const releasingSoonRooms = roomStatsArray
-      .filter(room => room.active && room.minutesUntilFree !== null)
-      .sort((a, b) => a.minutesUntilFree - b.minutesUntilFree)
-      .slice(0, 6);
-
-    const facultyEntries = Array.from(facultyMap.values());
-    const currentlyTeaching = facultyEntries
-      .filter(entry => entry.current)
-      .sort((a, b) => (a.minutesUntilFree ?? Number.POSITIVE_INFINITY) - (b.minutesUntilFree ?? Number.POSITIVE_INFINITY));
-    const availableSoon = currentlyTeaching
-      .filter(entry => entry.minutesUntilFree !== null && entry.minutesUntilFree <= 30)
-      .slice(0, 5);
-    const availableNow = facultyEntries
-      .filter(entry => !entry.current)
-      .sort((a, b) => {
-        const aNext = a.nextStartMinutes ?? Number.POSITIVE_INFINITY;
-        const bNext = b.nextStartMinutes ?? Number.POSITIVE_INFINITY;
-        return aNext - bNext;
-      })
-      .slice(0, 6);
-
-    const liveSnapshot = {
-      currentDayCode: todayCode,
-      currentDayLabel: todayLabel,
-      generatedAt: now.toISOString(),
-      totals: {
-        activeClasses: liveActiveClasses.length,
-        upcomingClasses: upcomingWithinHour.length,
-        endingSoon: liveEndingSoon.length
-      },
-      classesInSession: sortedActiveClasses.slice(0, 6),
-      upcomingClasses: sortedUpcomingClasses.slice(0, 6),
-      endingSoon: sortedEndingSoon.slice(0, 3)
-    };
-
-    const roomStats = {
-      totalRoomsToday,
-      roomsInUseNow,
-      occupancyRate,
-      freeRooms,
-      releasingSoon: releasingSoonRooms,
-      roomsIdleNow: Math.max(0, totalRoomsToday - roomsInUseNow)
-    };
-
-    const facultyStats = {
-      totalScheduledToday: facultyEntries.length,
-      currentlyTeachingCount: currentlyTeaching.length,
-      availableNowCount: availableNow.length,
-      returningSoonCount: availableSoon.length,
-      currentlyTeaching: currentlyTeaching.slice(0, 6),
-      availableNow,
-      availableSoon
-    };
 
     const result = {
       facultyCount: instructors.size,
       totalSessions,
       adjunctTaughtSessions,
-      roomsInUse: roomStats.roomsInUseNow,
+      roomsInUse: rooms.size,
       uniqueCourses: courses.size,
-      busiestDay,
-      liveSnapshot,
-      roomStats,
-      facultyStats
+      busiestDay
     };
 
     console.log('📊 Analytics calculated:', result);

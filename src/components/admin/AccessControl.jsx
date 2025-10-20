@@ -27,7 +27,7 @@ const AccessControl = () => {
       { name: 'Scheduling', pages: ['scheduling/faculty-schedules','scheduling/individual-availability','scheduling/room-schedules','scheduling/student-schedules','scheduling/group-meeting-scheduler'] },
       { name: 'Directory', pages: ['people/people-directory','people/email-lists','resources/building-directory','administration/baylor-acronyms'] },
       { name: 'Analytics', pages: ['analytics/department-insights','analytics/course-management'] },
-      { name: 'Tools', pages: ['administration/smart-import','administration/data-hygiene','resources/room-grid-generator','administration/recent-changes'] },
+      { name: 'Tools', pages: ['administration/smart-import','administration/data-hygiene','administration/outlook-export','resources/room-grid-generator','administration/recent-changes'] },
       { name: 'System', pages: ['administration/program-management','administration/access-control','administration/baylor-systems'] }
     ];
     // Include any pages not covered above as Other

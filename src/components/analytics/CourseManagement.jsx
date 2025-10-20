@@ -2,19 +2,23 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Edit, Save, X, History, RotateCcw, Filter, Search, ChevronsUpDown, Plus, Trash2, ChevronDown, Settings, Download } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import FacultyContactCard from '../FacultyContactCard';
+import ICSExportPanel from '../export/ICSExportPanel';
 import { formatChangeForDisplay } from '../../utils/recentChanges';
 import { parseCourseCode } from '../../utils/courseUtils';
+import { logExport } from '../../utils/activityLogger';
 
-const CourseManagement = ({ 
-  scheduleData, 
-  facultyData, 
-  rawScheduleData, 
-  editHistory, 
+const CourseManagement = ({
+  scheduleData,
+  facultyData,
+  rawScheduleData,
+  editHistory,
   recentChanges = [],
-  onDataUpdate, 
+  onDataUpdate,
   onScheduleDelete,
   onRevertChange,
-  showNotification
+  showNotification,
+  availableSemesters = [],
+  selectedSemester = ''
 }) => {
   const [editingRowId, setEditingRowId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
@@ -47,6 +51,12 @@ const CourseManagement = ({
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [selectedExportFields, setSelectedExportFields] = useState([]);
   const [selectedRows, setSelectedRows] = useState(new Set());
+
+  const handleICSDownloadComplete = ({ eventCount }) => {
+    try {
+      logExport('ICS', 'Term schedules', eventCount || 0);
+    } catch (_) {}
+  };
 
   const computeCourseMetadata = (courseCode) => {
     if (!courseCode || typeof courseCode !== 'string') {
@@ -892,6 +902,15 @@ const CourseManagement = ({
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Course Management</h1>
         <p className="text-gray-600">View, edit, and manage course schedule information</p>
       </div>
+
+      <ICSExportPanel
+        availableTerms={availableSemesters}
+        defaultTerm={selectedSemester}
+        rooms={uniqueRooms}
+        description="Export Outlook-compatible calendars for the selected term. Choose one room for an .ics file or multiple rooms for a ZIP archive."
+        emptyMessage={uniqueRooms.length > 0 ? 'Use the filters to choose rooms to export.' : 'No rooms are available for the selected term.'}
+        onDownloadComplete={handleICSDownloadComplete}
+      />
 
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

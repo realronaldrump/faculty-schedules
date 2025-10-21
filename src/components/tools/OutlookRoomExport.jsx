@@ -160,28 +160,42 @@ const getMeetingPatterns = (schedule) => {
   return [];
 };
 
+const splitRoomString = (value) => {
+  if (!value || typeof value !== 'string') return [];
+  return value
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean);
+};
+
 const extractRoomNames = (schedule) => {
   const rooms = new Set();
+  const addRoom = (value) => {
+    if (!value) return;
+    if (typeof value === 'string') {
+      splitRoomString(value).forEach((room) => rooms.add(room));
+      return;
+    }
+    const display = value?.displayName || value?.name;
+    if (display) {
+      splitRoomString(display).forEach((room) => rooms.add(room));
+    }
+  };
+
   if (Array.isArray(schedule?.roomNames)) {
-    schedule.roomNames.forEach((r) => {
-      if (r) rooms.add(r);
-    });
+    schedule.roomNames.forEach(addRoom);
   }
   if (Array.isArray(schedule?.rooms)) {
-    schedule.rooms.forEach((room) => {
-      const display = room?.displayName || room?.name;
-      if (display) rooms.add(display);
-    });
+    schedule.rooms.forEach(addRoom);
   }
   if (schedule?.room) {
-    const display = schedule.room.displayName || schedule.room.name;
-    if (display) rooms.add(display);
+    addRoom(schedule.room);
   }
   if (schedule?.roomName) {
-    rooms.add(schedule.roomName);
+    addRoom(schedule.roomName);
   }
   if (schedule?.Room) {
-    schedule.Room.split(';').map((r) => r.trim()).filter(Boolean).forEach((r) => rooms.add(r));
+    splitRoomString(schedule.Room).forEach((room) => rooms.add(room));
   }
   return Array.from(rooms);
 };

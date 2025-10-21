@@ -17,6 +17,7 @@ import SystemsPage from './components/SystemsPage';
 import DataHygieneManager from './components/DataHygieneManager';
 import BaylorAcronyms from './pages/BaylorAcronyms';
 import CRNQualityTools from './components/CRNQualityTools';
+import OutlookRoomExport from './components/tools/OutlookRoomExport.jsx';
 
 import RecentChangesPage from './components/RecentChangesPage';
 import RoomGridGenerator from './components/admin/RoomGridGenerator';
@@ -285,6 +286,7 @@ function App() {
         { id: 'smart-import', label: 'Import Wizard', path: 'administration/import-wizard' },
         { id: 'data-hygiene', label: 'Data Hygiene', path: 'administration/data-hygiene' },
         { id: 'crn-tools', label: 'CRN Quality Tools', path: 'administration/crn-tools' },
+        { id: 'outlook-export', label: 'Outlook Room Export', path: 'administration/outlook-export' },
         { id: 'room-grid-generator', label: 'Room Grid Generator', path: 'resources/room-grid-generator' },
         { id: 'recent-changes', label: 'Recent Changes', path: 'administration/recent-changes' },
         { id: 'baylor-id-manager', label: 'Baylor ID Manager', path: 'people/baylor-id-manager' },
@@ -1805,6 +1807,12 @@ function App() {
         return (
           <ProtectedContent pageId="administration/crn-tools">
             <CRNQualityTools {...pageProps} />
+          </ProtectedContent>
+        );
+      case 'administration/outlook-export':
+        return (
+          <ProtectedContent pageId="administration/outlook-export">
+            <OutlookRoomExport {...pageProps} />
           </ProtectedContent>
         );
       // removed orphaned-data-cleanup standalone page; use Data Hygiene wizard

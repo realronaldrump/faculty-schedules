@@ -10,6 +10,7 @@ import FacultySchedules from './components/FacultySchedules';
 import PeopleDirectory from './components/PeopleDirectory';
 import ProgramManagement from './components/ProgramManagement';
 import DepartmentInsights from './components/analytics/DepartmentInsights.jsx';
+import StudentWorkerAnalytics from './components/analytics/StudentWorkerAnalytics.jsx';
 import CourseManagement from './components/analytics/CourseManagement';
 // Legacy import removed - using smart import only
 import ImportWizard from './components/ImportWizard';
@@ -275,6 +276,7 @@ function App() {
       icon: BarChart3,
       children: [
         { id: 'department-insights', label: 'Department Insights', path: 'analytics/department-insights' },
+        { id: 'student-worker-analytics', label: 'Student Worker Analytics', path: 'analytics/student-worker-analytics' },
         { id: 'course-management', label: 'Course Management', path: 'analytics/course-management' }
       ]
     },
@@ -1777,6 +1779,12 @@ function App() {
         return (
           <ProtectedContent pageId="analytics/department-insights">
             <DepartmentInsights {...pageProps} />
+          </ProtectedContent>
+        );
+      case 'analytics/student-worker-analytics':
+        return (
+          <ProtectedContent pageId="analytics/student-worker-analytics">
+            <StudentWorkerAnalytics {...pageProps} />
           </ProtectedContent>
         );
       case 'analytics/course-management':

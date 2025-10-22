@@ -1,39 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { Edit, Save, X, GraduationCap, Mail, Phone, PhoneOff, Clock, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, Filter, Download, BarChart3, DollarSign } from 'lucide-react';
+import { Edit, Save, X, GraduationCap, Mail, Phone, PhoneOff, Clock, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, Filter, Download, DollarSign } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import FacultyContactCard from './FacultyContactCard';
-
-const parseHourlyRate = (value) => {
-  if (value === null || value === undefined) return 0;
-  if (typeof value === 'number') return isFinite(value) ? value : 0;
-  const cleaned = String(value).replace(/[^0-9.-]/g, '');
-  const parsed = parseFloat(cleaned);
-  return isFinite(parsed) ? parsed : 0;
-};
-
-const calculateEntryMinutes = (entry) => {
-  if (!entry || !entry.start || !entry.end) return 0;
-  const parseTime = (timeStr) => {
-    if (typeof timeStr !== 'string') return null;
-    const [hourStr, minuteStr = '0'] = timeStr.split(':');
-    const hour = parseInt(hourStr, 10);
-    const minute = parseInt(minuteStr, 10);
-    if (Number.isNaN(hour) || Number.isNaN(minute)) return null;
-    return hour * 60 + minute;
-  };
-
-  const startMinutes = parseTime(entry.start);
-  const endMinutes = parseTime(entry.end);
-  if (startMinutes === null || endMinutes === null) return 0;
-  const diff = endMinutes - startMinutes;
-  return diff > 0 ? diff : 0;
-};
-
-const calculateWeeklyHoursFromSchedule = (schedule) => {
-  if (!Array.isArray(schedule) || schedule.length === 0) return 0;
-  const totalMinutes = schedule.reduce((sum, entry) => sum + calculateEntryMinutes(entry), 0);
-  return totalMinutes / 60;
-};
+import {
+  calculateWeeklyHoursFromSchedule,
+  formatCurrency,
+  formatHoursValue,
+  getStudentAssignments,
+  getStudentTotalWeeklyHours
+} from '../utils/studentWorkers';
 
 const WEEKDAY_OPTIONS = [
   { value: 'M', label: 'Mon' },
@@ -138,55 +113,6 @@ const prepareStudentPayload = (student) => {
     supervisor: primaryJob.supervisor || trimValue(student.supervisor || ''),
     hourlyRate: primaryJob.hourlyRate || trimValue(student.hourlyRate || ''),
   };
-};
-
-const getStudentAssignments = (student) => {
-  if (!student) return [];
-
-  const fallbackSchedule = Array.isArray(student.weeklySchedule) ? student.weeklySchedule : [];
-  const fallbackBuildings = Array.isArray(student.primaryBuildings)
-    ? student.primaryBuildings.filter(Boolean)
-    : (student.primaryBuilding ? [student.primaryBuilding] : []);
-
-  const jobs = Array.isArray(student.jobs) && student.jobs.length > 0
-    ? student.jobs
-    : [{
-        jobTitle: student.jobTitle || '',
-        supervisor: student.supervisor || '',
-        hourlyRate: student.hourlyRate,
-        location: fallbackBuildings,
-        weeklySchedule: fallbackSchedule
-      }];
-
-  return jobs.map((job, index) => {
-    const schedule = Array.isArray(job.weeklySchedule) && job.weeklySchedule.length > 0
-      ? job.weeklySchedule
-      : fallbackSchedule;
-
-    const buildings = Array.isArray(job.location)
-      ? job.location.filter(Boolean)
-      : (job.location ? [job.location] : fallbackBuildings);
-
-    const hourlyRateNumber = parseHourlyRate(job.hourlyRate ?? student.hourlyRate);
-    const weeklyHours = calculateWeeklyHoursFromSchedule(schedule);
-    const weeklyPay = hourlyRateNumber * weeklyHours;
-
-    return {
-      ...job,
-      jobTitle: job.jobTitle || student.jobTitle || `Assignment ${index + 1}`,
-      supervisor: job.supervisor || student.supervisor || '',
-      schedule,
-      buildings,
-      hourlyRateNumber,
-      hourlyRateDisplay: hourlyRateNumber ? `$${hourlyRateNumber.toFixed(2)}` : (job.hourlyRate || student.hourlyRate || ''),
-      weeklyHours,
-      weeklyPay,
-    };
-  });
-};
-
-const getStudentTotalWeeklyHours = (student) => {
-  return getStudentAssignments(student).reduce((sum, assignment) => sum + assignment.weeklyHours, 0);
 };
 
 const toComparableValue = (value) => {
@@ -419,7 +345,6 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     activeOnly: true,
     includeEnded: false
   });
-  const [metricsFilters, setMetricsFilters] = useState({ jobTitles: [], buildings: [] });
 
   // Extract departments and supervisors for filtering
   const availableJobTitles = useMemo(() => {
@@ -562,100 +487,6 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
       return sortConfig.direction === 'ascending' ? comparison : -comparison;
     });
   }, [studentData, filterText, sortConfig, nameSort, filters]);
-
-  const filteredAssignments = useMemo(() => {
-    return filteredAndSortedData.flatMap(student =>
-      getStudentAssignments(student).map(assignment => ({
-        ...assignment,
-        student,
-      }))
-    );
-  }, [filteredAndSortedData]);
-
-  const metricsAssignments = useMemo(() => {
-    return filteredAssignments.filter(assignment => {
-      if ((metricsFilters.jobTitles || []).length > 0 && assignment.jobTitle) {
-        if (!metricsFilters.jobTitles.includes(assignment.jobTitle)) {
-          return false;
-        }
-      } else if ((metricsFilters.jobTitles || []).length > 0 && !assignment.jobTitle) {
-        return false;
-      }
-
-      if ((metricsFilters.buildings || []).length > 0) {
-        const assignmentBuildings = (assignment.buildings || []).length > 0
-          ? assignment.buildings
-          : (assignment.student?.primaryBuildings || assignment.student?.primaryBuilding
-              ? Array.isArray(assignment.student?.primaryBuildings)
-                ? assignment.student.primaryBuildings
-                : [assignment.student.primaryBuilding]
-              : []);
-
-        if (!assignmentBuildings.some(b => metricsFilters.buildings.includes(b))) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [filteredAssignments, metricsFilters]);
-
-  const metricsTotals = useMemo(() => {
-    const totalHours = metricsAssignments.reduce((sum, assignment) => sum + assignment.weeklyHours, 0);
-    const totalPay = metricsAssignments.reduce((sum, assignment) => sum + assignment.weeklyPay, 0);
-    const studentCount = new Set(metricsAssignments.map(a => a.student?.id || a.student?.email || a.student?.name)).size;
-    const avgRate = totalHours > 0 ? totalPay / totalHours : 0;
-    return { totalHours, totalPay, studentCount, avgRate };
-  }, [metricsAssignments]);
-
-  const jobTitleBreakdown = useMemo(() => {
-    const map = new Map();
-    metricsAssignments.forEach(assignment => {
-      const key = assignment.jobTitle || 'Unassigned';
-      const existing = map.get(key) || { hours: 0, pay: 0 };
-      existing.hours += assignment.weeklyHours;
-      existing.pay += assignment.weeklyPay;
-      map.set(key, existing);
-    });
-    return Array.from(map.entries())
-      .map(([label, data]) => ({ label, ...data }))
-      .sort((a, b) => b.hours - a.hours);
-  }, [metricsAssignments]);
-
-  const buildingBreakdown = useMemo(() => {
-    const map = new Map();
-    metricsAssignments.forEach(assignment => {
-      const buildings = (assignment.buildings && assignment.buildings.length > 0)
-        ? assignment.buildings
-        : (assignment.student?.primaryBuildings && assignment.student.primaryBuildings.length > 0
-            ? assignment.student.primaryBuildings
-            : assignment.student?.primaryBuilding
-              ? [assignment.student.primaryBuilding]
-              : ['Unassigned']);
-
-      buildings.forEach(building => {
-        const key = building || 'Unassigned';
-        const existing = map.get(key) || { hours: 0, pay: 0 };
-        existing.hours += assignment.weeklyHours;
-        existing.pay += assignment.weeklyPay;
-        map.set(key, existing);
-      });
-    });
-
-    return Array.from(map.entries())
-      .map(([label, data]) => ({ label, ...data }))
-      .sort((a, b) => b.hours - a.hours);
-  }, [metricsAssignments]);
-
-  const formatCurrency = (value) => {
-    const numberValue = Number(value || 0);
-    return `$${numberValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
-  const formatHoursValue = (value) => {
-    const numberValue = Number(value || 0);
-    return numberValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
 
   const handleSort = (key) => {
     setSortConfig(prev => ({
@@ -1210,117 +1041,6 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
           </div>
         </div>
         )}
-
-        {/* Metrics Overview */}
-        <div className="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-full bg-baylor-green/10 text-baylor-green">
-                <BarChart3 size={20} />
-              </div>
-              <div>
-                <h3 className="text-base font-semibold text-gray-900">Student Worker Hours &amp; Payroll</h3>
-                <p className="text-sm text-gray-600">Metrics update automatically based on the directory filters.</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="min-w-[200px]">
-                <MultiSelectDropdown
-                  options={availableJobTitles}
-                  selected={metricsFilters.jobTitles}
-                  onChange={(selected) => setMetricsFilters(prev => ({
-                    ...prev,
-                    jobTitles: selected
-                  }))}
-                  placeholder="Metrics by title"
-                />
-              </div>
-              <div className="min-w-[200px]">
-                <MultiSelectDropdown
-                  options={availableBuildings}
-                  selected={metricsFilters.buildings}
-                  onChange={(selected) => setMetricsFilters(prev => ({
-                    ...prev,
-                    buildings: selected
-                  }))}
-                  placeholder="Metrics by building"
-                />
-              </div>
-              {(metricsFilters.jobTitles.length > 0 || metricsFilters.buildings.length > 0) && (
-                <button
-                  onClick={() => setMetricsFilters({ jobTitles: [], buildings: [] })}
-                  className="px-3 py-2 text-sm text-baylor-green font-medium rounded-lg border border-baylor-green/30 hover:bg-baylor-green/10"
-                >
-                  Reset metrics filters
-                </button>
-              )}
-            </div>
-          </div>
-
-          {metricsAssignments.length === 0 ? (
-            <div className="text-sm text-gray-600 bg-white border border-dashed border-gray-300 rounded-lg p-4">
-              No assignments match the current filters. Adjust the directory or metrics filters to see totals.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Total Weekly Hours</p>
-                  <p className="text-2xl font-semibold text-gray-900">{formatHoursValue(metricsTotals.totalHours)} hrs</p>
-                  <p className="text-xs text-gray-500 mt-1">Across {metricsTotals.studentCount} student worker{metricsTotals.studentCount === 1 ? '' : 's'}</p>
-                </div>
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Estimated Weekly Payroll</p>
-                  <p className="text-2xl font-semibold text-gray-900">{formatCurrency(metricsTotals.totalPay)}</p>
-                  <p className="text-xs text-gray-500 mt-1">Sum of hourly rate × hours for each assignment</p>
-                </div>
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Average Hourly Rate</p>
-                  <p className="text-2xl font-semibold text-gray-900">{formatCurrency(metricsTotals.avgRate)}</p>
-                  <p className="text-xs text-gray-500 mt-1">Weighted by assignment hours</p>
-                </div>
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Assignments Count</p>
-                  <p className="text-2xl font-semibold text-gray-900">{metricsAssignments.length}</p>
-                  <p className="text-xs text-gray-500 mt-1">Active assignments in view</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Hours by Job Title</h4>
-                  {jobTitleBreakdown.length === 0 ? (
-                    <p className="text-sm text-gray-500">No job title information available.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {jobTitleBreakdown.map((item) => (
-                        <li key={item.label} className="flex items-center justify-between text-sm">
-                          <span className="text-gray-700">{item.label}</span>
-                          <span className="text-gray-900 font-medium">{formatHoursValue(item.hours)} hrs <span className="text-gray-400">·</span> {formatCurrency(item.pay)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Hours by Building</h4>
-                  {buildingBreakdown.length === 0 ? (
-                    <p className="text-sm text-gray-500">No building assignments recorded.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {buildingBreakdown.map((item) => (
-                        <li key={item.label} className="flex items-center justify-between text-sm">
-                          <span className="text-gray-700">{item.label}</span>
-                          <span className="text-gray-900 font-medium">{formatHoursValue(item.hours)} hrs <span className="text-gray-400">·</span> {formatCurrency(item.pay)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* Create New Student Form */}
         {isCreating && (

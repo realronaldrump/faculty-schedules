@@ -3,6 +3,7 @@ import { X, Mail, Phone, Building, BookOpen, Clock, GraduationCap, User } from '
 import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { logUpdate } from '../utils/changeLogger';
+import StudentWorkerScheduleView from './analytics/StudentWorkerScheduleView';
 
 // Simple in-memory cache to avoid re-fetching schedules between openings
 const scheduleCache = new Map();
@@ -19,7 +20,14 @@ const formatPhoneNumber = (phoneStr) => {
     return phoneStr;
 };
 
-const FacultyContactCard = ({ person, faculty, onClose, personType = 'faculty' }) => {
+const FacultyContactCard = ({
+    person,
+    faculty,
+    onClose,
+    personType = 'faculty',
+    showStudentSchedule = false,
+    studentAssignments = [],
+}) => {
     // Use either person or faculty prop (for backwards compatibility)
     const contactPerson = person || faculty;
 
@@ -219,9 +227,21 @@ const FacultyContactCard = ({ person, faculty, onClose, personType = 'faculty' }
         }
     };
 
+    const resolvedStudentAssignments = useMemo(
+        () => (Array.isArray(studentAssignments) ? studentAssignments : []),
+        [studentAssignments]
+    );
+
+    const shouldShowStudentSchedule = personType === 'student' && showStudentSchedule;
+
+    const cardWidthClass = shouldShowStudentSchedule ? 'max-w-4xl' : 'max-w-md';
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fade-in" onClick={onClose}>
-            <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full mx-4 relative max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div
+                className={`bg-white rounded-lg shadow-xl p-8 ${cardWidthClass} w-full mx-4 relative max-h-[90vh] overflow-y-auto`}
+                onClick={e => e.stopPropagation()}
+            >
                 <button onClick={onClose} className="absolute top-2 right-2 p-2 text-gray-500 hover:bg-gray-100 rounded-full">
                     <X size={20} />
                 </button>
@@ -405,6 +425,12 @@ const FacultyContactCard = ({ person, faculty, onClose, personType = 'faculty' }
                         <p className="text-sm text-baylor-green font-medium">
                             Program: {contactPerson.program.name}
                         </p>
+                    </div>
+                )}
+
+                {shouldShowStudentSchedule && (
+                    <div className="mt-8 border-t border-gray-200 pt-4">
+                        <StudentWorkerScheduleView student={contactPerson} assignments={resolvedStudentAssignments} />
                     </div>
                 )}
             </div>

@@ -15,6 +15,7 @@ import {
   formatHoursValue,
   getStudentAssignments
 } from '../../utils/studentWorkers';
+import FacultyContactCard from '../FacultyContactCard';
 
 const DEFAULT_FILTERS = {
   jobTitles: [],
@@ -28,6 +29,8 @@ const StudentWorkerAnalytics = ({ studentData = [], onNavigate }) => {
   const [searchText, setSearchText] = useState('');
   const [filters, setFilters] = useState(() => ({ ...DEFAULT_FILTERS }));
   const [sortConfig, setSortConfig] = useState({ key: 'weeklyHours', direction: 'desc' });
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [selectedAssignments, setSelectedAssignments] = useState([]);
 
   const assignments = useMemo(() => {
     if (!Array.isArray(studentData)) return [];
@@ -282,6 +285,17 @@ const StudentWorkerAnalytics = ({ studentData = [], onNavigate }) => {
     });
   };
 
+  const handleStudentClick = useCallback((student) => {
+    if (!student) return;
+    setSelectedStudent(student);
+    setSelectedAssignments(getStudentAssignments(student));
+  }, []);
+
+  const handleCloseContactCard = useCallback(() => {
+    setSelectedStudent(null);
+    setSelectedAssignments([]);
+  }, []);
+
   const handleResetFilters = () => {
     setFilters({ ...DEFAULT_FILTERS });
     setSearchText('');
@@ -527,7 +541,11 @@ const StudentWorkerAnalytics = ({ studentData = [], onNavigate }) => {
                       : '—';
 
                     return (
-                      <tr key={assignment.id} className="hover:bg-baylor-green/5">
+                      <tr
+                        key={assignment.id}
+                        className="hover:bg-baylor-green/5 cursor-pointer"
+                        onClick={() => handleStudentClick(student)}
+                      >
                         <td className="px-4 py-3 text-sm text-gray-900">
                           <div className="font-medium text-gray-900">{student?.name || 'Unknown Student'}</div>
                           <div className="text-xs text-gray-500">{student?.email || 'No email on file'}</div>
@@ -565,6 +583,16 @@ const StudentWorkerAnalytics = ({ studentData = [], onNavigate }) => {
             </div>
           </div>
         </>
+      )}
+
+      {selectedStudent && (
+        <FacultyContactCard
+          person={selectedStudent}
+          onClose={handleCloseContactCard}
+          personType="student"
+          showStudentSchedule
+          studentAssignments={selectedAssignments}
+        />
       )}
     </div>
   );

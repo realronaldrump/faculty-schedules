@@ -621,8 +621,10 @@ function App() {
     return people;
   };
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async ({ silent = false } = {}) => {
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       console.log('📡 Loading data from Firebase...');
       
@@ -688,9 +690,15 @@ function App() {
       
     } catch (error) {
       console.error('❌ Error loading data:', error);
-      showNotification('error', 'Data Loading Error', 'Failed to load application data. Please refresh the page.');
+      const title = silent ? 'Data Refresh Error' : 'Data Loading Error';
+      const message = silent
+        ? 'Failed to refresh application data. Recent changes may not appear until you manually refresh.'
+        : 'Failed to load application data. Please refresh the page.';
+      showNotification('error', title, message);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -987,7 +995,7 @@ function App() {
       }
 
       // Refresh data to reflect changes
-      await loadData();
+      await loadData({ silent: true });
       
       if (isNewCourse) {
         showNotification('success', 'Schedule Created', 
@@ -1081,7 +1089,7 @@ function App() {
       }
 
       // Refresh data
-      await loadData();
+      await loadData({ silent: true });
       
       const successMessage = isNewFaculty 
         ? `${facultyToUpdate.name} has been added to the directory successfully.`
@@ -1183,7 +1191,7 @@ function App() {
       }
 
       // Refresh data
-      await loadData();
+      await loadData({ silent: true });
       
       const successMessage = action === 'CREATE' 
         ? `${staffToUpdate.name} has been created successfully.`
@@ -1226,7 +1234,7 @@ function App() {
       );
 
       // Refresh data
-      await loadData();
+      await loadData({ silent: true });
       
       showNotification('success', 'Faculty Deleted', `${facultyToDelete.name} has been removed from the directory.`);
       
@@ -1265,7 +1273,7 @@ function App() {
       );
 
       // Refresh data
-      await loadData();
+      await loadData({ silent: true });
       
       showNotification('success', 'Staff Deleted', `${staffToDelete.name} has been removed from the directory.`);
       
@@ -1368,7 +1376,7 @@ function App() {
             'App.jsx - handleStudentUpdate'
           );
 
-          await loadData();
+          await loadData({ silent: true });
           showNotification('success', 'Student Added', `${studentToUpdate.name} has been added to the student worker directory successfully.`);
           return;
         }
@@ -1395,7 +1403,7 @@ function App() {
         );
         
         // Refresh data and notify below as usual
-        await loadData();
+        await loadData({ silent: true });
         const successMessage = `${studentToUpdate.name} has been updated successfully.`;
         showNotification('success', 'Student Updated', successMessage);
         return;
@@ -1424,7 +1432,7 @@ function App() {
       }
 
       // Refresh data
-      await loadData();
+      await loadData({ silent: true });
       
       const successMessage = isNewStudent 
         ? `${studentToUpdate.name} has been added to the student worker directory successfully.`
@@ -1480,7 +1488,7 @@ function App() {
       );
 
       // Refresh data
-      await loadData();
+      await loadData({ silent: true });
       
       showNotification('success', 'Student Deleted', `${studentToDelete.name} has been removed from the directory.`);
       
@@ -1527,7 +1535,7 @@ function App() {
       );
 
       // Refresh data
-      await loadData();
+      await loadData({ silent: true });
       
       showNotification('success', 'Schedule Deleted', 
         `Course ${scheduleToDelete.courseCode} ${scheduleToDelete.section} has been removed successfully.`);
@@ -1702,7 +1710,7 @@ function App() {
       canEdit,
       selectedSemester,
       availableSemesters,
-      onSemesterDataImported: loadData,
+      onSemesterDataImported: () => loadData({ silent: true }),
       pinnedPages,
       togglePinPage,
       rawScheduleData,

@@ -110,7 +110,7 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
       return;
     }
     const payload = { id: person.id, baylorId: baylorIdDraft.replace(/\D/g, '') };
-    const roles = getRoleLabels(person);
+    const roles = getDisplayRoleLabels(person);
     try {
       if (roles.includes('student') && onStudentUpdate) {
         await onStudentUpdate(payload);

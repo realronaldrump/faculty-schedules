@@ -1,39 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { Edit, Save, X, GraduationCap, Mail, Phone, PhoneOff, Clock, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, Filter, Download, BarChart3, DollarSign } from 'lucide-react';
+import { Edit, Save, X, GraduationCap, Mail, Phone, PhoneOff, Clock, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, Filter, Download, BarChart3, ArrowRight } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import FacultyContactCard from './FacultyContactCard';
-
-const parseHourlyRate = (value) => {
-  if (value === null || value === undefined) return 0;
-  if (typeof value === 'number') return isFinite(value) ? value : 0;
-  const cleaned = String(value).replace(/[^0-9.-]/g, '');
-  const parsed = parseFloat(cleaned);
-  return isFinite(parsed) ? parsed : 0;
-};
-
-const calculateEntryMinutes = (entry) => {
-  if (!entry || !entry.start || !entry.end) return 0;
-  const parseTime = (timeStr) => {
-    if (typeof timeStr !== 'string') return null;
-    const [hourStr, minuteStr = '0'] = timeStr.split(':');
-    const hour = parseInt(hourStr, 10);
-    const minute = parseInt(minuteStr, 10);
-    if (Number.isNaN(hour) || Number.isNaN(minute)) return null;
-    return hour * 60 + minute;
-  };
-
-  const startMinutes = parseTime(entry.start);
-  const endMinutes = parseTime(entry.end);
-  if (startMinutes === null || endMinutes === null) return 0;
-  const diff = endMinutes - startMinutes;
-  return diff > 0 ? diff : 0;
-};
-
-const calculateWeeklyHoursFromSchedule = (schedule) => {
-  if (!Array.isArray(schedule) || schedule.length === 0) return 0;
-  const totalMinutes = schedule.reduce((sum, entry) => sum + calculateEntryMinutes(entry), 0);
-  return totalMinutes / 60;
-};
+import {
+  calculateWeeklyHoursFromSchedule,
+  formatHoursValue,
+  getStudentAssignments
+} from '../utils/studentWorkers';
 
 const WEEKDAY_OPTIONS = [
   { value: 'M', label: 'Mon' },
@@ -140,55 +113,6 @@ const prepareStudentPayload = (student) => {
   };
 };
 
-const getStudentAssignments = (student) => {
-  if (!student) return [];
-
-  const fallbackSchedule = Array.isArray(student.weeklySchedule) ? student.weeklySchedule : [];
-  const fallbackBuildings = Array.isArray(student.primaryBuildings)
-    ? student.primaryBuildings.filter(Boolean)
-    : (student.primaryBuilding ? [student.primaryBuilding] : []);
-
-  const jobs = Array.isArray(student.jobs) && student.jobs.length > 0
-    ? student.jobs
-    : [{
-        jobTitle: student.jobTitle || '',
-        supervisor: student.supervisor || '',
-        hourlyRate: student.hourlyRate,
-        location: fallbackBuildings,
-        weeklySchedule: fallbackSchedule
-      }];
-
-  return jobs.map((job, index) => {
-    const schedule = Array.isArray(job.weeklySchedule) && job.weeklySchedule.length > 0
-      ? job.weeklySchedule
-      : fallbackSchedule;
-
-    const buildings = Array.isArray(job.location)
-      ? job.location.filter(Boolean)
-      : (job.location ? [job.location] : fallbackBuildings);
-
-    const hourlyRateNumber = parseHourlyRate(job.hourlyRate ?? student.hourlyRate);
-    const weeklyHours = calculateWeeklyHoursFromSchedule(schedule);
-    const weeklyPay = hourlyRateNumber * weeklyHours;
-
-    return {
-      ...job,
-      jobTitle: job.jobTitle || student.jobTitle || `Assignment ${index + 1}`,
-      supervisor: job.supervisor || student.supervisor || '',
-      schedule,
-      buildings,
-      hourlyRateNumber,
-      hourlyRateDisplay: hourlyRateNumber ? `$${hourlyRateNumber.toFixed(2)}` : (job.hourlyRate || student.hourlyRate || ''),
-      weeklyHours,
-      weeklyPay,
-    };
-  });
-};
-
-const getStudentTotalWeeklyHours = (student) => {
-  return getStudentAssignments(student).reduce((sum, assignment) => sum + assignment.weeklyHours, 0);
-};
-
 const toComparableValue = (value) => {
   if (value === null || value === undefined) return '';
   if (typeof value === 'number') return value;
@@ -210,7 +134,7 @@ const formatPhoneNumber = (phoneStr) => {
     return phoneStr;
 };
 
-const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStudentDelete, showNotification }) => {
+const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStudentDelete, showNotification, onNavigate }) => {
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [filterText, setFilterText] = useState('');
@@ -419,7 +343,6 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     activeOnly: true,
     includeEnded: false
   });
-  const [metricsFilters, setMetricsFilters] = useState({ jobTitles: [], buildings: [] });
 
   // Extract departments and supervisors for filtering
   const availableJobTitles = useMemo(() => {
@@ -510,14 +433,6 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
 
     // Sort data
     return filtered.sort((a, b) => {
-      if (sortConfig.key === 'weeklyHours') {
-        const aHours = getStudentTotalWeeklyHours(a);
-        const bHours = getStudentTotalWeeklyHours(b);
-        const diff = aHours - bHours;
-        if (diff !== 0) {
-          return sortConfig.direction === 'ascending' ? diff : -diff;
-        }
-      }
 
       let aValue;
       let bValue;
@@ -563,105 +478,19 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     });
   }, [studentData, filterText, sortConfig, nameSort, filters]);
 
-  const filteredAssignments = useMemo(() => {
-    return filteredAndSortedData.flatMap(student =>
-      getStudentAssignments(student).map(assignment => ({
-        ...assignment,
-        student,
-      }))
-    );
-  }, [filteredAndSortedData]);
-
-  const metricsAssignments = useMemo(() => {
-    return filteredAssignments.filter(assignment => {
-      if ((metricsFilters.jobTitles || []).length > 0 && assignment.jobTitle) {
-        if (!metricsFilters.jobTitles.includes(assignment.jobTitle)) {
-          return false;
-        }
-      } else if ((metricsFilters.jobTitles || []).length > 0 && !assignment.jobTitle) {
-        return false;
-      }
-
-      if ((metricsFilters.buildings || []).length > 0) {
-        const assignmentBuildings = (assignment.buildings || []).length > 0
-          ? assignment.buildings
-          : (assignment.student?.primaryBuildings || assignment.student?.primaryBuilding
-              ? Array.isArray(assignment.student?.primaryBuildings)
-                ? assignment.student.primaryBuildings
-                : [assignment.student.primaryBuilding]
-              : []);
-
-        if (!assignmentBuildings.some(b => metricsFilters.buildings.includes(b))) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [filteredAssignments, metricsFilters]);
-
-  const metricsTotals = useMemo(() => {
-    const totalHours = metricsAssignments.reduce((sum, assignment) => sum + assignment.weeklyHours, 0);
-    const totalPay = metricsAssignments.reduce((sum, assignment) => sum + assignment.weeklyPay, 0);
-    const studentCount = new Set(metricsAssignments.map(a => a.student?.id || a.student?.email || a.student?.name)).size;
-    const avgRate = totalHours > 0 ? totalPay / totalHours : 0;
-    return { totalHours, totalPay, studentCount, avgRate };
-  }, [metricsAssignments]);
-
-  const jobTitleBreakdown = useMemo(() => {
-    const map = new Map();
-    metricsAssignments.forEach(assignment => {
-      const key = assignment.jobTitle || 'Unassigned';
-      const existing = map.get(key) || { hours: 0, pay: 0 };
-      existing.hours += assignment.weeklyHours;
-      existing.pay += assignment.weeklyPay;
-      map.set(key, existing);
-    });
-    return Array.from(map.entries())
-      .map(([label, data]) => ({ label, ...data }))
-      .sort((a, b) => b.hours - a.hours);
-  }, [metricsAssignments]);
-
-  const buildingBreakdown = useMemo(() => {
-    const map = new Map();
-    metricsAssignments.forEach(assignment => {
-      const buildings = (assignment.buildings && assignment.buildings.length > 0)
-        ? assignment.buildings
-        : (assignment.student?.primaryBuildings && assignment.student.primaryBuildings.length > 0
-            ? assignment.student.primaryBuildings
-            : assignment.student?.primaryBuilding
-              ? [assignment.student.primaryBuilding]
-              : ['Unassigned']);
-
-      buildings.forEach(building => {
-        const key = building || 'Unassigned';
-        const existing = map.get(key) || { hours: 0, pay: 0 };
-        existing.hours += assignment.weeklyHours;
-        existing.pay += assignment.weeklyPay;
-        map.set(key, existing);
-      });
-    });
-
-    return Array.from(map.entries())
-      .map(([label, data]) => ({ label, ...data }))
-      .sort((a, b) => b.hours - a.hours);
-  }, [metricsAssignments]);
-
-  const formatCurrency = (value) => {
-    const numberValue = Number(value || 0);
-    return `$${numberValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
-  const formatHoursValue = (value) => {
-    const numberValue = Number(value || 0);
-    return numberValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
-
   const handleSort = (key) => {
     setSortConfig(prev => ({
       key,
       direction: prev.key === key && prev.direction === 'ascending' ? 'descending' : 'ascending'
     }));
+  };
+
+  const goToAnalyticsPage = () => {
+    if (typeof onNavigate === 'function') {
+      onNavigate('analytics/student-worker-analytics');
+    } else if (typeof window !== 'undefined') {
+      window.location.hash = '#analytics/student-worker-analytics';
+    }
   };
 
   const startEdit = (student) => {
@@ -1127,17 +956,41 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
           </div>
         </div>
 
+        <div className="mb-6">
+          <div className="flex flex-col gap-3 rounded-lg border border-baylor-gold/60 bg-baylor-gold/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="rounded-full bg-baylor-gold/20 p-2 text-baylor-gold">
+                <BarChart3 className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-baylor-green">Payroll insights moved!</p>
+                <p className="text-sm text-gray-700">
+                  View wages, hours, and analytics for student workers on the Student Worker Analytics page.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={goToAnalyticsPage}
+              className="inline-flex items-center gap-2 self-start rounded-lg bg-baylor-green px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-baylor-green/90 focus:outline-none focus:ring-2 focus:ring-baylor-gold focus:ring-offset-2"
+            >
+              Open analytics
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
         {/* Shared datalists for suggestions */}
-      <datalist id="supervisor-options">
-        {availableSupervisors.map(s => (
-          <option key={s} value={s} />
-        ))}
-      </datalist>
-      <datalist id="jobtitle-options">
-        {availableJobTitles.map(t => (
-          <option key={t} value={t} />
-        ))}
-      </datalist>
+        <datalist id="supervisor-options">
+          {availableSupervisors.map(s => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
+        <datalist id="jobtitle-options">
+          {availableJobTitles.map(t => (
+            <option key={t} value={t} />
+          ))}
+        </datalist>
 
         {/* Advanced Filters */}
         {showFilters && (
@@ -1210,117 +1063,6 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
           </div>
         </div>
         )}
-
-        {/* Metrics Overview */}
-        <div className="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-full bg-baylor-green/10 text-baylor-green">
-                <BarChart3 size={20} />
-              </div>
-              <div>
-                <h3 className="text-base font-semibold text-gray-900">Student Worker Hours &amp; Payroll</h3>
-                <p className="text-sm text-gray-600">Metrics update automatically based on the directory filters.</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="min-w-[200px]">
-                <MultiSelectDropdown
-                  options={availableJobTitles}
-                  selected={metricsFilters.jobTitles}
-                  onChange={(selected) => setMetricsFilters(prev => ({
-                    ...prev,
-                    jobTitles: selected
-                  }))}
-                  placeholder="Metrics by title"
-                />
-              </div>
-              <div className="min-w-[200px]">
-                <MultiSelectDropdown
-                  options={availableBuildings}
-                  selected={metricsFilters.buildings}
-                  onChange={(selected) => setMetricsFilters(prev => ({
-                    ...prev,
-                    buildings: selected
-                  }))}
-                  placeholder="Metrics by building"
-                />
-              </div>
-              {(metricsFilters.jobTitles.length > 0 || metricsFilters.buildings.length > 0) && (
-                <button
-                  onClick={() => setMetricsFilters({ jobTitles: [], buildings: [] })}
-                  className="px-3 py-2 text-sm text-baylor-green font-medium rounded-lg border border-baylor-green/30 hover:bg-baylor-green/10"
-                >
-                  Reset metrics filters
-                </button>
-              )}
-            </div>
-          </div>
-
-          {metricsAssignments.length === 0 ? (
-            <div className="text-sm text-gray-600 bg-white border border-dashed border-gray-300 rounded-lg p-4">
-              No assignments match the current filters. Adjust the directory or metrics filters to see totals.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Total Weekly Hours</p>
-                  <p className="text-2xl font-semibold text-gray-900">{formatHoursValue(metricsTotals.totalHours)} hrs</p>
-                  <p className="text-xs text-gray-500 mt-1">Across {metricsTotals.studentCount} student worker{metricsTotals.studentCount === 1 ? '' : 's'}</p>
-                </div>
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Estimated Weekly Payroll</p>
-                  <p className="text-2xl font-semibold text-gray-900">{formatCurrency(metricsTotals.totalPay)}</p>
-                  <p className="text-xs text-gray-500 mt-1">Sum of hourly rate × hours for each assignment</p>
-                </div>
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Average Hourly Rate</p>
-                  <p className="text-2xl font-semibold text-gray-900">{formatCurrency(metricsTotals.avgRate)}</p>
-                  <p className="text-xs text-gray-500 mt-1">Weighted by assignment hours</p>
-                </div>
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Assignments Count</p>
-                  <p className="text-2xl font-semibold text-gray-900">{metricsAssignments.length}</p>
-                  <p className="text-xs text-gray-500 mt-1">Active assignments in view</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Hours by Job Title</h4>
-                  {jobTitleBreakdown.length === 0 ? (
-                    <p className="text-sm text-gray-500">No job title information available.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {jobTitleBreakdown.map((item) => (
-                        <li key={item.label} className="flex items-center justify-between text-sm">
-                          <span className="text-gray-700">{item.label}</span>
-                          <span className="text-gray-900 font-medium">{formatHoursValue(item.hours)} hrs <span className="text-gray-400">·</span> {formatCurrency(item.pay)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Hours by Building</h4>
-                  {buildingBreakdown.length === 0 ? (
-                    <p className="text-sm text-gray-500">No building assignments recorded.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {buildingBreakdown.map((item) => (
-                        <li key={item.label} className="flex items-center justify-between text-sm">
-                          <span className="text-gray-700">{item.label}</span>
-                          <span className="text-gray-900 font-medium">{formatHoursValue(item.hours)} hrs <span className="text-gray-400">·</span> {formatCurrency(item.pay)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* Create New Student Form */}
         {isCreating && (
@@ -1659,8 +1401,6 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                 <SortableHeader label="Email" columnKey="email" />
                 <SortableHeader label="Phone" columnKey="phone" />
                 <SortableHeader label="Weekly Schedule" columnKey="weeklySchedule" />
-                <SortableHeader label="Weekly Hours" columnKey="weeklyHours" />
-                <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">Wage</th>
                 <SortableHeader label="Job Title" columnKey="jobTitle" />
                 <SortableHeader label="Supervisor" columnKey="supervisor" />
                 <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">Building(s)</th>
@@ -1669,9 +1409,6 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredAndSortedData.map((student) => {
-                const assignments = getStudentAssignments(student);
-                const totalWeeklyHours = assignments.reduce((sum, assignment) => sum + assignment.weeklyHours, 0);
-                const totalWeeklyPay = assignments.reduce((sum, assignment) => sum + assignment.weeklyPay, 0);
                 return (
                   <tr key={student.id} className="hover:bg-gray-50">
                   {editingId === student.id ? (
@@ -1761,191 +1498,191 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                           </div>
                         </div>
                       </td>
-              <td className="p-2 align-top" colSpan={5}>
-                <div className="space-y-4">
-                  {/* Job Management Header */}
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-medium text-gray-900">Job Management</h4>
-                    <button 
-                      onClick={() => { 
-                        setEditFormData(prev => ({ ...prev, jobs: [...(prev.jobs || []), { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] }] })); 
-                        setEditJobsDrafts(prev => ([...prev, { day: 'M', start: '', end: '' }])); 
-                      }} 
-                      className="px-3 py-1 bg-baylor-green text-white text-xs rounded hover:bg-baylor-green/90 transition-colors"
-                    >
-                      + Add Job
-                    </button>
-                  </div>
-
-                  {/* Jobs List */}
-                  <div className="space-y-3">
-                    {(editFormData.jobs || []).map((job, idx) => (
-                      <div key={idx} className="border border-gray-200 rounded-lg p-4 bg-gray-50/50">
-                        {/* Job Header */}
-                        <div className="flex items-center justify-between mb-3">
-                          <h5 className="font-medium text-gray-900 text-sm">Job {idx + 1}</h5>
-                          {(editFormData.jobs || []).length > 1 && (
-                            <button 
-                              onClick={() => { 
-                                setEditFormData(prev => ({ ...prev, jobs: prev.jobs.filter((_, i) => i !== idx) })); 
-                                setEditJobsDrafts(prev => prev.filter((_, i) => i !== idx)); 
-                              }} 
-                              className="text-red-600 hover:text-red-800 text-xs font-medium"
-                            >
-                              Remove Job
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Job Details */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Job Title</label>
-                            <input 
-                              type="text" 
-                              placeholder="e.g., Administrative Assistant" 
-                              value={job.jobTitle || ''} 
-                              onChange={e => setEditFormData(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, jobTitle: e.target.value } : j)}))} 
-                              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Supervisor</label>
-                            <input 
-                              type="text" 
-                              placeholder="Supervisor name" 
-                              value={job.supervisor || ''} 
-                              onChange={e => setEditFormData(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, supervisor: e.target.value } : j)}))} 
-                              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Hourly Rate ($)</label>
-                            <input 
-                              type="number" 
-                              step="0.01" 
-                              placeholder="0.00" 
-                              value={job.hourlyRate || ''} 
-                              onChange={e => setEditFormData(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, hourlyRate: e.target.value } : j)}))} 
-                              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Location</label>
-                            <div className="flex gap-4 items-center text-sm">
-                              <label className="flex items-center gap-2">
-                                <input 
-                                  type="checkbox" 
-                                  checked={(job.location || []).includes('Mary Gibbs Jones')} 
-                                  onChange={(e) => setEditFormData(prev => ({
-                                    ...prev,
-                                    jobs: prev.jobs.map((j,i)=> i===idx? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Mary Gibbs Jones'])) : (j.location || []).filter(b => b !== 'Mary Gibbs Jones') } : j)
-                                  }))} 
-                                  className="rounded"
-                                />
-                                Mary Gibbs Jones
-                              </label>
-                              <label className="flex items-center gap-2">
-                                <input 
-                                  type="checkbox" 
-                                  checked={(job.location || []).includes('Goebel')} 
-                                  onChange={(e) => setEditFormData(prev => ({
-                                    ...prev,
-                                    jobs: prev.jobs.map((j,i)=> i===idx? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Goebel'])) : (j.location || []).filter(b => b !== 'Goebel') } : j)
-                                  }))} 
-                                  className="rounded"
-                                />
-                                Goebel
-                              </label>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Schedule Section */}
-                        <div className="border-t pt-3">
-                          <label className="block text-xs font-medium text-gray-700 mb-2">Weekly Schedule</label>
-                          
-                          {/* Add Schedule Entry */}
-                          <div className="flex items-end gap-2 mb-3">
-                            <div>
-                              <label className="block text-xs text-gray-600 mb-1">Day</label>
-                              <select 
-                                className="border border-gray-300 rounded px-2 py-1 text-sm" 
-                                value={(editJobsDrafts[idx]||{}).day || 'M'} 
-                                onChange={e => setEditJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), day: e.target.value } : d))}
-                              >
-                                <option value="M">Monday</option>
-                                <option value="T">Tuesday</option>
-                                <option value="W">Wednesday</option>
-                                <option value="R">Thursday</option>
-                                <option value="F">Friday</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label className="block text-xs text-gray-600 mb-1">Start Time</label>
-                              <input 
-                                type="time" 
-                                className="border border-gray-300 rounded px-2 py-1 text-sm" 
-                                value={(editJobsDrafts[idx]||{}).start || ''} 
-                                onChange={e => setEditJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), start: e.target.value } : d))} 
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs text-gray-600 mb-1">End Time</label>
-                              <input 
-                                type="time" 
-                                className="border border-gray-300 rounded px-2 py-1 text-sm" 
-                                value={(editJobsDrafts[idx]||{}).end || ''} 
-                                onChange={e => setEditJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), end: e.target.value } : d))} 
-                              />
-                            </div>
-                            <button 
+                      <td className="p-2 align-top" colSpan={3}>
+                        <div className="space-y-4">
+                          {/* Job Management Header */}
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-medium text-gray-900">Job Management</h4>
+                            <button
                               onClick={() => {
-                                const draft = editJobsDrafts[idx] || { day: 'M', start: '', end: '' };
-                                if (!draft.day || !draft.start || !draft.end) return;
-                                if (draft.start >= draft.end) { setErrors(prev => ({ ...prev, weeklySchedule: 'End time must be after start time' })); return; }
-                                setEditFormData(prev => ({
-                                  ...prev,
-                                  jobs: prev.jobs.map((j,i)=> i===idx? { ...j, weeklySchedule: [...(j.weeklySchedule || []), { ...draft }] } : j)
-                                }));
-                                setEditJobsDrafts(prev => prev.map((d,i)=> i===idx? { day: 'M', start: '', end: '' } : d));
-                                setErrors(prev => ({ ...prev, weeklySchedule: undefined }));
-                              }} 
+                                setEditFormData(prev => ({ ...prev, jobs: [...(prev.jobs || []), { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] }] }));
+                                setEditJobsDrafts(prev => ([...prev, { day: 'M', start: '', end: '' }]));
+                              }}
                               className="px-3 py-1 bg-baylor-green text-white text-xs rounded hover:bg-baylor-green/90 transition-colors"
                             >
-                              Add Time
+                              + Add Job
                             </button>
                           </div>
 
-                          {/* Schedule Entries */}
-                          <div className="space-y-2">
-                            {(job.weeklySchedule || []).map((entry, k) => (
-                              <div key={k} className="flex items-center justify-between bg-white border border-gray-200 rounded px-3 py-2">
-                                <span className="text-sm">
-                                  {entry.day === 'M' ? 'Monday' : entry.day === 'T' ? 'Tuesday' : entry.day === 'W' ? 'Wednesday' : entry.day === 'R' ? 'Thursday' : 'Friday'} 
-                                  {' '}{formatTime12h(entry.start)} - {formatTime12h(entry.end)}
-                                </span>
-                                <button 
-                                  onClick={() => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, weeklySchedule: (j.weeklySchedule || []).filter((_, x) => x !== k) } : j) }))} 
-                                  className="text-red-500 hover:text-red-700 p-1"
-                                >
-                                  <X className="h-4 w-4" />
-                                </button>
+                          {/* Jobs List */}
+                          <div className="space-y-3">
+                            {(editFormData.jobs || []).map((job, idx) => (
+                              <div key={idx} className="border border-gray-200 rounded-lg p-4 bg-gray-50/50">
+                                {/* Job Header */}
+                                <div className="flex items-center justify-between mb-3">
+                                  <h5 className="font-medium text-gray-900 text-sm">Job {idx + 1}</h5>
+                                  {(editFormData.jobs || []).length > 1 && (
+                                    <button
+                                      onClick={() => {
+                                        setEditFormData(prev => ({ ...prev, jobs: prev.jobs.filter((_, i) => i !== idx) }));
+                                        setEditJobsDrafts(prev => prev.filter((_, i) => i !== idx));
+                                      }}
+                                      className="text-red-600 hover:text-red-800 text-xs font-medium"
+                                    >
+                                      Remove Job
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Job Details */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Job Title</label>
+                                    <input
+                                      type="text"
+                                      placeholder="e.g., Administrative Assistant"
+                                      value={job.jobTitle || ''}
+                                      onChange={e => setEditFormData(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, jobTitle: e.target.value } : j)}))}
+                                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Supervisor</label>
+                                    <input
+                                      type="text"
+                                      placeholder="Supervisor name"
+                                      value={job.supervisor || ''}
+                                      onChange={e => setEditFormData(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, supervisor: e.target.value } : j)}))}
+                                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Hourly Rate ($)</label>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      placeholder="0.00"
+                                      value={job.hourlyRate || ''}
+                                      onChange={e => setEditFormData(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, hourlyRate: e.target.value } : j)}))}
+                                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Location</label>
+                                    <div className="flex gap-4 items-center text-sm">
+                                      <label className="flex items-center gap-2">
+                                        <input
+                                          type="checkbox"
+                                          checked={(job.location || []).includes('Mary Gibbs Jones')}
+                                          onChange={(e) => setEditFormData(prev => ({
+                                            ...prev,
+                                            jobs: prev.jobs.map((j,i)=> i===idx? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Mary Gibbs Jones'])) : (j.location || []).filter(b => b !== 'Mary Gibbs Jones') } : j)
+                                          }))}
+                                          className="rounded"
+                                        />
+                                        Mary Gibbs Jones
+                                      </label>
+                                      <label className="flex items-center gap-2">
+                                        <input
+                                          type="checkbox"
+                                          checked={(job.location || []).includes('Goebel')}
+                                          onChange={(e) => setEditFormData(prev => ({
+                                            ...prev,
+                                            jobs: prev.jobs.map((j,i)=> i===idx? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Goebel'])) : (j.location || []).filter(b => b !== 'Goebel') } : j)
+                                          }))}
+                                          className="rounded"
+                                        />
+                                        Goebel
+                                      </label>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Schedule Section */}
+                                <div className="border-t pt-3">
+                                  <label className="block text-xs font-medium text-gray-700 mb-2">Weekly Schedule</label>
+
+                                  {/* Add Schedule Entry */}
+                                  <div className="flex items-end gap-2 mb-3">
+                                    <div>
+                                      <label className="block text-xs text-gray-600 mb-1">Day</label>
+                                      <select
+                                        className="border border-gray-300 rounded px-2 py-1 text-sm"
+                                        value={(editJobsDrafts[idx]||{}).day || 'M'}
+                                        onChange={e => setEditJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), day: e.target.value } : d))}
+                                      >
+                                        <option value="M">Monday</option>
+                                        <option value="T">Tuesday</option>
+                                        <option value="W">Wednesday</option>
+                                        <option value="R">Thursday</option>
+                                        <option value="F">Friday</option>
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs text-gray-600 mb-1">Start Time</label>
+                                      <input
+                                        type="time"
+                                        className="border border-gray-300 rounded px-2 py-1 text-sm"
+                                        value={(editJobsDrafts[idx]||{}).start || ''}
+                                        onChange={e => setEditJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), start: e.target.value } : d))}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs text-gray-600 mb-1">End Time</label>
+                                      <input
+                                        type="time"
+                                        className="border border-gray-300 rounded px-2 py-1 text-sm"
+                                        value={(editJobsDrafts[idx]||{}).end || ''}
+                                        onChange={e => setEditJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), end: e.target.value } : d))}
+                                      />
+                                    </div>
+                                    <button
+                                      onClick={() => {
+                                        const draft = editJobsDrafts[idx] || { day: 'M', start: '', end: '' };
+                                        if (!draft.day || !draft.start || !draft.end) return;
+                                        if (draft.start >= draft.end) { setErrors(prev => ({ ...prev, weeklySchedule: 'End time must be after start time' })); return; }
+                                        setEditFormData(prev => ({
+                                          ...prev,
+                                          jobs: prev.jobs.map((j,i)=> i===idx? { ...j, weeklySchedule: [...(j.weeklySchedule || []), { ...draft }] } : j)
+                                        }));
+                                        setEditJobsDrafts(prev => prev.map((d,i)=> i===idx? { day: 'M', start: '', end: '' } : d));
+                                        setErrors(prev => ({ ...prev, weeklySchedule: undefined }));
+                                      }}
+                                      className="px-3 py-1 bg-baylor-green text-white text-xs rounded hover:bg-baylor-green/90 transition-colors"
+                                    >
+                                      Add Time
+                                    </button>
+                                  </div>
+
+                                  {/* Schedule Entries */}
+                                  <div className="space-y-2">
+                                    {(job.weeklySchedule || []).map((entry, k) => (
+                                      <div key={k} className="flex items-center justify-between bg-white border border-gray-200 rounded px-3 py-2">
+                                        <span className="text-sm">
+                                          {entry.day === 'M' ? 'Monday' : entry.day === 'T' ? 'Tuesday' : entry.day === 'W' ? 'Wednesday' : entry.day === 'R' ? 'Thursday' : 'Friday'}
+                                          {' '}{formatTime12h(entry.start)} - {formatTime12h(entry.end)}
+                                        </span>
+                                        <button
+                                          onClick={() => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, weeklySchedule: (j.weeklySchedule || []).filter((_, x) => x !== k) } : j) }))}
+                                          className="text-red-500 hover:text-red-700 p-1"
+                                        >
+                                          <X className="h-4 w-4" />
+                                        </button>
+                                      </div>
+                                    ))}
+                                    {(job.weeklySchedule || []).length === 0 && (
+                                      <div className="text-center text-gray-500 text-sm py-4 border border-gray-200 rounded bg-gray-50">
+                                        No schedule entries yet
+                                      </div>
+                                    )}
+                                  </div>
+                                  {errors.weeklySchedule && <p className="text-red-500 text-xs mt-2">{errors.weeklySchedule}</p>}
+                                </div>
                               </div>
                             ))}
-                            {(job.weeklySchedule || []).length === 0 && (
-                              <div className="text-center text-gray-500 text-sm py-4 border border-gray-200 rounded bg-gray-50">
-                                No schedule entries yet
-                              </div>
-                            )}
                           </div>
-                          {errors.weeklySchedule && <p className="text-red-500 text-xs mt-2">{errors.weeklySchedule}</p>}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </td>
+                      </td>
               <td className="p-2 align-top">
                 <div className="flex gap-3 text-xs">
                   <label className="flex items-center gap-1">
@@ -2030,37 +1767,6 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                         <div className="flex items-center">
                           <Clock className="h-4 w-4 text-gray-400 mr-2" />
                           <span className="text-sm text-gray-900">{formatWeeklySchedule(student.weeklySchedule) || '-'}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap align-top">
-                        <div className="text-sm text-gray-900 font-medium">
-                          {totalWeeklyHours > 0 ? `${formatHoursValue(totalWeeklyHours)} hrs` : '-'}
-                        </div>
-                        {assignments.length > 1 && (
-                          <div className="mt-1 space-y-1 text-xs text-gray-500">
-                            {assignments.map((assignment, idx) => (
-                              <div key={idx}>
-                                {(assignment.jobTitle || `Assignment ${idx + 1}`)}: {formatHoursValue(assignment.weeklyHours)} hrs
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap align-top">
-                        <div className="flex items-center gap-2 text-sm text-gray-900 font-medium">
-                          <DollarSign className="h-4 w-4 text-gray-400" />
-                          {assignments.length === 0 ? '-' : `${formatCurrency(totalWeeklyPay)} / wk`}
-                        </div>
-                        <div className="mt-1 space-y-1 text-xs text-gray-500">
-                          {assignments.length === 0 ? (
-                            <span>No wage data</span>
-                          ) : (
-                            assignments.map((assignment, idx) => (
-                              <div key={idx}>
-                                {(assignment.jobTitle || `Assignment ${idx + 1}`)}: {assignment.hourlyRateNumber ? `${formatCurrency(assignment.hourlyRateNumber)} / hr` : (assignment.hourlyRateDisplay || 'Rate N/A')}
-                              </div>
-                            ))
-                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import DOMPurify from 'dompurify';
 import Papa from 'papaparse';
 import { Upload, X, Trash2, FileText, Download, Save as SaveIcon } from 'lucide-react';
@@ -9,14 +9,274 @@ import { logCreate, logDelete } from '../../utils/changeLogger';
 import { ConfirmationDialog } from '../CustomAlert';
 import { usePermissions } from '../../utils/permissions';
 import { registerActionKeys } from '../../utils/actionRegistry';
+import { parseMeetingPatterns } from '../../utils/dataImportUtils';
 
+const DAY_ORDER = ['M', 'T', 'W', 'R', 'F', 'S', 'U'];
 
-const RoomGridGenerator = () => {
+const normalizeTimeLabel = (time) => {
+    if (!time) return '';
+    const str = time.toString().trim();
+    const match = str.match(/^(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?|am|pm|AM|PM)?$/);
+    if (!match) return str;
+    const hour = parseInt(match[1], 10);
+    const minutes = match[2] ? match[2].padStart(2, '0') : '00';
+    const meridiemRaw = match[3];
+    if (!meridiemRaw) {
+        return `${hour}:${minutes}`.replace(':00', '');
+    }
+    const meridiem = meridiemRaw.replace(/\./g, '').toLowerCase();
+    return `${hour}:${minutes} ${meridiem}`;
+};
+
+const isInvalidRoomName = (roomName) => {
+    if (!roomName) return true;
+    const lowered = roomName.toLowerCase();
+    return lowered.includes('no room needed') || lowered.includes('online') || lowered.includes('general assignment');
+};
+
+const ROOM_KEYWORDS = ['room', 'rm', 'suite', 'ste', 'lab', 'auditorium', 'aud', 'gym'];
+
+const extractBuildingAndRoom = (roomString) => {
+    if (!roomString) return null;
+    const trimmed = roomString.trim();
+    if (!trimmed) return null;
+    if (isInvalidRoomName(trimmed)) return null;
+
+    const segments = trimmed.split(';').map(part => part.trim()).filter(Boolean);
+    const candidate = segments.find(part => /\d/.test(part)) || segments[0];
+    if (!candidate) return null;
+
+    const withoutParens = candidate.replace(/\s*\([^)]*\)/g, (match) => (/\d/.test(match) ? match : ' '));
+    const normalized = withoutParens.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!normalized) return null;
+
+    const hyphenRoomMatch = normalized.match(/^(?:room|rm)\s+([^\s]+)\s*[-–—]\s*(.+)$/i);
+    if (hyphenRoomMatch) {
+        const [, roomPart, buildingPart] = hyphenRoomMatch;
+        const buildingName = buildingPart.trim();
+        const roomName = roomPart.trim();
+        if (buildingName && roomName) {
+            return { building: buildingName, room: roomName };
+        }
+    }
+
+    const tokens = normalized.split(' ');
+    let roomStartIndex = -1;
+
+    for (let i = tokens.length - 1; i >= 0; i -= 1) {
+        const token = tokens[i];
+        if (/\d/.test(token)) {
+            roomStartIndex = i;
+            break;
+        }
+        if (ROOM_KEYWORDS.includes(token.toLowerCase())) {
+            roomStartIndex = i;
+            break;
+        }
+    }
+
+    if (roomStartIndex > 0) {
+        let roomTokens = tokens.slice(roomStartIndex);
+        if (roomTokens.length > 1 && ROOM_KEYWORDS.includes(roomTokens[0].toLowerCase())) {
+            roomTokens = roomTokens.slice(1);
+        }
+        const buildingTokens = tokens.slice(0, roomStartIndex);
+        const buildingName = buildingTokens.join(' ').trim();
+        const roomName = roomTokens.join(' ').trim();
+        if (buildingName && roomName) {
+            return { building: buildingName, room: roomName };
+        }
+    }
+
+    if (tokens.length > 1) {
+        const roomName = tokens[tokens.length - 1];
+        if (/\d/.test(roomName) || ROOM_KEYWORDS.includes(roomName.toLowerCase())) {
+            let buildingName = tokens.slice(0, tokens.length - 1).join(' ').trim();
+            let normalizedRoom = roomName;
+            if (ROOM_KEYWORDS.includes(roomName.toLowerCase())) {
+                normalizedRoom = roomName;
+            }
+            if (buildingName && normalizedRoom) {
+                return { building: buildingName, room: normalizedRoom };
+            }
+        }
+    }
+
+    return {
+        building: normalized,
+        room: normalized
+    };
+};
+
+const deduplicateClassEntries = (entries) => {
+    const dedupedMap = new Map();
+    for (const item of entries) {
+        const key = [
+            item.building,
+            item.room,
+            (item.days || '').replace(/\s/g, ''),
+            (item.time || '').replace(/\s/g, ''),
+            item.class,
+            item.section,
+            item.professor
+        ].join('|');
+        if (!dedupedMap.has(key)) dedupedMap.set(key, item);
+    }
+    return Array.from(dedupedMap.values());
+};
+
+const buildBuildingsIndex = (entries) => {
+    return entries.reduce((acc, item) => {
+        if (!item.building || !item.room) return acc;
+        if (!acc[item.building]) acc[item.building] = new Set();
+        acc[item.building].add(item.room);
+        return acc;
+    }, {});
+};
+
+const combineMeetingPatternsByTime = (patterns) => {
+    const map = new Map();
+    patterns.forEach((pattern) => {
+        if (!pattern) return;
+        const day = (pattern.day || pattern.Day || '').toString().trim().toUpperCase();
+        const startTimeRaw = pattern.startTime || pattern.start || pattern['Start Time'] || '';
+        const endTimeRaw = pattern.endTime || pattern.end || pattern['End Time'] || '';
+        if (!day || !startTimeRaw || !endTimeRaw) return;
+        const startTime = normalizeTimeLabel(startTimeRaw);
+        const endTime = normalizeTimeLabel(endTimeRaw);
+        if (!startTime || !endTime) return;
+        const key = `${startTime}|${endTime}`;
+        if (!map.has(key)) {
+            map.set(key, {
+                time: `${startTime} - ${endTime}`,
+                days: new Set()
+            });
+        }
+        map.get(key).days.add(day);
+    });
+    return Array.from(map.values()).map(({ time, days }) => {
+        const orderedDays = DAY_ORDER.filter((d) => days.has(d)).concat(
+            Array.from(days).filter((d) => !DAY_ORDER.includes(d))
+        );
+        return {
+            time,
+            days: orderedDays.join('')
+        };
+    }).filter(entry => entry.days && entry.time);
+};
+
+const gatherMeetingPatterns = (schedule) => {
+    const directPatterns = Array.isArray(schedule?.meetingPatterns)
+        ? schedule.meetingPatterns
+        : [];
+    if (directPatterns.length > 0) {
+        return directPatterns;
+    }
+
+    const fallbackPattern = schedule?.meetingPattern || schedule?.['Meeting Pattern'];
+    if (fallbackPattern) {
+        try {
+            return parseMeetingPatterns(fallbackPattern);
+        } catch (err) {
+            console.warn('Unable to parse meeting pattern string for schedule', schedule?.id, err);
+        }
+    }
+
+    const fallbackDay = schedule?.day || schedule?.Day;
+    const fallbackStart = schedule?.startTime || schedule?.['Start Time'];
+    const fallbackEnd = schedule?.endTime || schedule?.['End Time'];
+    if (fallbackDay && fallbackStart && fallbackEnd) {
+        const chars = fallbackDay.replace(/\s+/g, '').split('');
+        return chars.map((day) => ({ day, startTime: fallbackStart, endTime: fallbackEnd }));
+    }
+
+    return [];
+};
+
+const splitRoomString = (value) => {
+    if (!value || typeof value !== 'string') return [];
+    const parts = value.split(';').map(part => part.trim()).filter(Boolean);
+    if (parts.length > 1) {
+        const partsWithDigits = parts.filter(part => /\d/.test(part));
+        if (partsWithDigits.length > 0) {
+            return partsWithDigits;
+        }
+    }
+    return parts;
+};
+
+const gatherRoomNames = (schedule) => {
+    const rooms = new Set();
+    const addRoom = (value) => {
+        if (!value) return;
+        if (typeof value === 'string') {
+            splitRoomString(value).forEach(part => {
+                const normalized = part.trim();
+                if (!normalized || isInvalidRoomName(normalized)) return;
+                rooms.add(normalized);
+            });
+            return;
+        }
+        const display = value?.displayName || value?.name;
+        if (display) {
+            splitRoomString(display).forEach(part => {
+                const normalized = part.trim();
+                if (!normalized || isInvalidRoomName(normalized)) return;
+                rooms.add(normalized);
+            });
+        }
+    };
+
+    if (Array.isArray(schedule?.roomNames)) {
+        schedule.roomNames.forEach(addRoom);
+    }
+    if (Array.isArray(schedule?.rooms)) {
+        schedule.rooms.forEach(addRoom);
+    }
+    addRoom(schedule?.room);
+    addRoom(schedule?.roomName);
+
+    const rawRoom = schedule?.Room;
+    if (typeof rawRoom === 'string') {
+        splitRoomString(rawRoom).forEach(addRoom);
+    }
+
+    return Array.from(rooms);
+};
+
+const buildCourseCode = (schedule) => {
+    const direct = schedule?.courseCode || schedule?.Course;
+    if (direct) return direct.trim();
+    const subject = (schedule?.subjectCode || schedule?.Subject || schedule?.subject || '').toString().trim();
+    const catalog = (schedule?.catalogNumber || schedule?.Catalog || '').toString().trim();
+    return [subject, catalog].filter(Boolean).join(' ').trim();
+};
+
+const buildSection = (schedule) => {
+    const raw = (schedule?.section || schedule?.Section || schedule?.['Section #'] || '').toString();
+    return raw.split(' ')[0].trim();
+};
+
+const buildInstructorName = (schedule) => {
+    if (schedule?.instructor) {
+        const preferred = schedule.instructor.preferredName?.trim();
+        if (preferred) return preferred;
+        const composed = `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim();
+        if (composed) return composed;
+    }
+    const raw = (schedule?.instructorName || schedule?.Instructor || '').toString().trim();
+    if (raw.includes(',')) {
+        return raw.split(',')[0].trim();
+    }
+    return raw || 'Staff';
+};
+const RoomGridGenerator = ({ scheduleData = [], rawScheduleData = [], selectedSemester = '', availableSemesters = [] }) => {
     const { canEdit, canAction } = usePermissions();
     // Register actions for this feature so admin UI can see them
     useEffect(() => {
         registerActionKeys(['roomGrids.save', 'roomGrids.delete']);
     }, []);
+    const [dataSource, setDataSource] = useState('upload');
     const [allClassData, setAllClassData] = useState([]);
     const [buildings, setBuildings] = useState({});
     const [selectedBuilding, setSelectedBuilding] = useState('');
@@ -26,11 +286,14 @@ const RoomGridGenerator = () => {
     const [message, setMessage] = useState({ text: '', type: '' });
     const [scheduleHtml, setScheduleHtml] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isLoadingAutomatic, setIsLoadingAutomatic] = useState(false);
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [isLoadingSaved, setIsLoadingSaved] = useState(false);
     const [savedGrids, setSavedGrids] = useState([]);
-    
+    const [autoTerm, setAutoTerm] = useState(() => selectedSemester || '');
+    const [autoTermManuallySet, setAutoTermManuallySet] = useState(false);
+
     // Dialog states
     const [alertDialog, setAlertDialog] = useState({ isOpen: false, message: '', title: '' });
     const [deleteConfirmDialog, setDeleteConfirmDialog] = useState({ isOpen: false, grid: null });
@@ -69,12 +332,113 @@ const RoomGridGenerator = () => {
         setMessage({ text: '', type: '' });
     };
 
+    const termOptions = useMemo(() => {
+        if (Array.isArray(availableSemesters) && availableSemesters.length > 0) {
+            return availableSemesters;
+        }
+        const source = (Array.isArray(rawScheduleData) && rawScheduleData.length > 0) ? rawScheduleData : scheduleData;
+        const terms = new Set();
+        source.forEach((item) => {
+            const term = (item?.term || item?.Term || '').toString().trim();
+            if (term) terms.add(term);
+        });
+        return Array.from(terms).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    }, [availableSemesters, rawScheduleData, scheduleData]);
+
+    useEffect(() => {
+        if (dataSource === 'automatic' && !autoTermManuallySet) {
+            setAutoTerm(selectedSemester || '');
+        }
+    }, [selectedSemester, dataSource, autoTermManuallySet]);
+
+    const loadAutomaticData = useCallback(() => {
+        const baseSchedules = (Array.isArray(rawScheduleData) && rawScheduleData.length > 0)
+            ? rawScheduleData
+            : scheduleData;
+        if (!baseSchedules || baseSchedules.length === 0) {
+            setAllClassData([]);
+            setBuildings({});
+            showMessage('No schedule data is available in the application. Try uploading a CSV export instead.');
+            return;
+        }
+
+        const termToUse = (autoTerm || selectedSemester || '').trim();
+        const filteredSchedules = termToUse
+            ? baseSchedules.filter((item) => (item?.term || item?.Term || '').toString().trim().toLowerCase() === termToUse.toLowerCase())
+            : baseSchedules;
+
+        if (filteredSchedules.length === 0) {
+            setAllClassData([]);
+            setBuildings({});
+            showMessage(termToUse ? `No class data found for ${termToUse}.` : 'No class data found in the current dataset.');
+            return;
+        }
+
+        setIsLoadingAutomatic(true);
+        try {
+            const items = filteredSchedules.flatMap((schedule) => {
+                if (schedule?.isOnline) return [];
+                const roomNames = gatherRoomNames(schedule);
+                if (!roomNames.length) return [];
+                const patterns = gatherMeetingPatterns(schedule);
+                const combined = combineMeetingPatternsByTime(patterns);
+                if (!combined.length) return [];
+
+                const classCode = buildCourseCode(schedule);
+                const section = buildSection(schedule);
+                const professor = buildInstructorName(schedule);
+
+                return roomNames.flatMap((roomName) => {
+                    const parsedRoom = extractBuildingAndRoom(roomName);
+                    if (!parsedRoom) return [];
+                    return combined.map(({ time, days }) => ({
+                        class: classCode,
+                        section,
+                        professor,
+                        building: parsedRoom.building,
+                        room: parsedRoom.room,
+                        days,
+                        time
+                    }));
+                });
+            });
+
+            const processedClassData = deduplicateClassEntries(items);
+            setSelectedBuilding('');
+            setSelectedRoom('');
+            setAllClassData(processedClassData);
+            setBuildings(buildBuildingsIndex(processedClassData));
+            if (processedClassData.length > 0) {
+                if (termToUse) {
+                    setSemester(termToUse);
+                }
+                showMessage(`Loaded ${processedClassData.length} classes from application data${termToUse ? ` for ${termToUse}` : ''}.`, 'success');
+            } else {
+                showMessage('No valid classes found after processing the application data.');
+            }
+        } catch (err) {
+            console.error('Failed to process application schedule data:', err);
+            showMessage('Failed to process application schedule data. Check the console for details.');
+        } finally {
+            setIsLoadingAutomatic(false);
+        }
+    }, [autoTerm, selectedSemester, rawScheduleData, scheduleData]);
+
+    useEffect(() => {
+        if (dataSource === 'automatic') {
+            loadAutomaticData();
+        }
+    }, [dataSource, loadAutomaticData]);
+
     const handleFileUpload = (file) => {
         if (!file) return;
 
+        if (dataSource !== 'upload') {
+            setDataSource('upload');
+        }
         resetUI(true);
         setIsProcessing(true);
-        
+
         Papa.parse(file, {
             header: true,
             skipEmptyLines: "greedy",
@@ -125,24 +489,16 @@ const RoomGridGenerator = () => {
 
                 return roomsList.map((roomString, i) => {
                     const patternString = patternsList[i] || patternsList[0];
-                    let buildingName, roomNumber;
-                    const roomMatch = roomString.match(/(.+?)\s+([\w\d\-\/]+)$/);
-                    if (roomMatch) {
-                        buildingName = roomMatch[1].trim();
-                        roomNumber = roomMatch[2].trim();
-                    } else {
-                        if (roomString.toLowerCase().includes('general assignment')) return null;
-                        buildingName = roomString.trim();
-                        roomNumber = "N/A";
-                    }
-                    
+                    const parsedRoom = extractBuildingAndRoom(roomString);
+                    if (!parsedRoom) return null;
+
                     const mp = patternString.trim().match(/^([A-Za-z]+)\s+(.+)$/);
                     const days = mp ? mp[1] : (patternString.split(/\s+/)[0] || '');
                     const time = mp ? mp[2].trim() : patternString.replace(days, '').trim();
 
-                    if (!buildingName || !roomNumber || !days || !time) return null;
+                    if (!parsedRoom.building || !parsedRoom.room || !days || !time) return null;
 
-                    return { ...baseInfo, building: buildingName, room: roomNumber, days: days, time: time };
+                    return { ...baseInfo, building: parsedRoom.building, room: parsedRoom.room, days: days, time: time };
                 }).filter(Boolean);
 
             } catch (e) {
@@ -151,34 +507,14 @@ const RoomGridGenerator = () => {
             }
         });
 
-        // Deduplicate identical entries that sometimes occur in CLSS exports
-        const dedupedMap = new Map();
-        for (const item of items) {
-            const key = [
-                item.building,
-                item.room,
-                item.days.replace(/\s/g, ''),
-                item.time.replace(/\s/g, ''),
-                item.class,
-                item.section,
-                item.professor
-            ].join('|');
-            if (!dedupedMap.has(key)) dedupedMap.set(key, item);
-        }
-        const processedClassData = Array.from(dedupedMap.values());
+        const processedClassData = deduplicateClassEntries(items);
 
         setAllClassData(processedClassData);
 
-        const newBuildings = processedClassData.reduce((acc, item) => {
-            if (!acc[item.building]) {
-                acc[item.building] = new Set();
-            }
-            acc[item.building].add(item.room);
-            return acc;
-        }, {});
+        const newBuildings = buildBuildingsIndex(processedClassData);
 
         setBuildings(newBuildings);
-        
+
         if (Object.keys(newBuildings).length === 0) {
             showMessage("CSV processed, but no valid class data with rooms was found.");
         } else {
@@ -680,16 +1016,16 @@ const RoomGridGenerator = () => {
         <div className="page-content">
             <div className="university-header rounded-xl p-8 mb-8">
                 <h1 className="university-title">Room Schedule Generator</h1>
-                <p className="university-subtitle">Upload a CLSS export CSV to generate printable room schedules.</p>
+                <p className="university-subtitle">Generate printable room schedules from CLSS exports or the schedules already stored in the dashboard.</p>
             </div>
 
             <div className="university-card mb-8">
                 <div className="university-card-content">
                     <h3 className="text-lg font-semibold text-baylor-green mb-2">Instructions</h3>
                     <ul className="list-disc list-inside text-gray-700 space-y-1 text-sm">
-                        <li>Currently, this tool requires a CSV export from CLSS.</li>
-                        <li>In CLSS: select the semester, choose the HSD department, and export the entire CSV with all fields selected. The app will handle the rest.</li>
-                        <li><strong>Coming Soon:</strong> This tool will be integrated directly with the dashboard's data, removing the need for manual CSV uploads.</li>
+                        <li>Select whether to upload a CLSS CSV export or load schedules from the dashboard's data.</li>
+                        <li>When using automatic mode, choose the term you want to load; changing the term refreshes the class list.</li>
+                        <li>If you upload a CSV, export the CLSS file with all fields selected—the app will handle the rest.</li>
                     </ul>
                 </div>
             </div>
@@ -708,15 +1044,83 @@ const RoomGridGenerator = () => {
                 <div className="university-card-content">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                         <div className="md:col-span-2 lg:col-span-1">
-                            <label htmlFor="csvFile" className="block text-sm font-medium text-gray-700 mb-1">1. Upload CLSS Export</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">1. Choose Data Source</label>
                             <input type="file" ref={fileUploaderRef} onChange={handleFileChange} className="hidden" accept=".csv" />
-                            <button onClick={triggerFileUpload} className="btn-secondary w-full justify-center">
-                                <Upload className="w-4 h-4 mr-2" />
-                                { isProcessing ? 'Processing...' : 'Upload CSV' }
-                            </button>
+                            <div className="space-y-3">
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (dataSource !== 'upload') {
+                                                resetUI();
+                                                setDataSource('upload');
+                                            }
+                                            setAutoTermManuallySet(false);
+                                        }}
+                                        className={`${dataSource === 'upload' ? 'btn-primary' : 'btn-secondary'} flex-1`}
+                                    >
+                                        Manual Upload
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (dataSource !== 'automatic') {
+                                                resetUI();
+                                                setDataSource('automatic');
+                                                setAutoTerm(selectedSemester || '');
+                                            }
+                                            setAutoTermManuallySet(false);
+                                        }}
+                                        className={`${dataSource === 'automatic' ? 'btn-primary' : 'btn-secondary'} flex-1`}
+                                    >
+                                        Automatic (App Data)
+                                    </button>
+                                </div>
+                                {dataSource === 'upload' ? (
+                                    <>
+                                        <button onClick={triggerFileUpload} className="btn-secondary w-full justify-center" disabled={isProcessing}>
+                                            <Upload className="w-4 h-4 mr-2" />
+                                            { isProcessing ? 'Processing...' : 'Select CSV File' }
+                                        </button>
+                                        <p className="text-xs text-gray-500">Upload the CLSS CSV export to populate buildings and rooms.</p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="flex gap-2">
+                                            <select
+                                                value={autoTerm}
+                                                onChange={e => {
+                                                    setAutoTerm(e.target.value);
+                                                    setAutoTermManuallySet(true);
+                                                }}
+                                                className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                {termOptions.length === 0 && <option value="">No terms available</option>}
+                                                {termOptions.length > 0 && (
+                                                    <>
+                                                        <option value="">All Available Terms</option>
+                                                        {termOptions.map(term => (
+                                                            <option key={term} value={term}>{term}</option>
+                                                        ))}
+                                                    </>
+                                                )}
+                                            </select>
+                                            <button
+                                                type="button"
+                                                onClick={loadAutomaticData}
+                                                className="btn-secondary whitespace-nowrap"
+                                                disabled={isLoadingAutomatic}
+                                            >
+                                                {isLoadingAutomatic ? 'Loading…' : 'Refresh'}
+                                            </button>
+                                        </div>
+                                        <p className="text-xs text-gray-500">Classes load automatically whenever you adjust the selected term.</p>
+                                    </>
+                                )}
+                            </div>
                         </div>
                         <div>
-                            <label htmlFor="semesterInput" className="block text-sm font-medium text-gray-700 mb-1">2. Semester</label>
+                            <label htmlFor="semesterInput" className="block text-sm font-medium text-gray-700 mb-1">2. Semester Label</label>
                             <input type="text" id="semesterInput" value={semester} onChange={e => setSemester(e.target.value)} className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., Fall 2025" />
                         </div>
                         <div>
@@ -743,7 +1147,15 @@ const RoomGridGenerator = () => {
                         </div>
                     </div>
                     <div className="mt-6 flex justify-end space-x-4">
-                         <button onClick={() => resetUI()} className="btn-danger">
+                         <button
+                            onClick={() => {
+                                resetUI();
+                                if (dataSource === 'automatic') {
+                                    loadAutomaticData();
+                                }
+                            }}
+                            className="btn-danger"
+                        >
                             <Trash2 className="w-4 h-4 mr-2" />
                             Clear
                         </button>

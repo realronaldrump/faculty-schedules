@@ -170,13 +170,35 @@ const ImportPreviewModal = ({
 
   const formatChangeDetails = (change) => {
     if (change.collection === 'schedules') {
+      const meetingSummary = Array.isArray(change.newData.meetingPatterns)
+        ? change.newData.meetingPatterns
+            .map((pattern) => {
+              if (pattern.day && pattern.startTime && pattern.endTime) {
+                return `${pattern.day} ${pattern.startTime}-${pattern.endTime}`;
+              }
+              return pattern.raw || '';
+            })
+            .filter(Boolean)
+            .join('\n')
+        : '';
+
       return {
-        'Course': change.newData.courseCode,
-        'Title': change.newData.courseTitle,
-        'Instructor': change.newData.instructorName,
-        'Room': change.newData.roomName,
-        'Term': change.newData.term,
-        'Credits': change.newData.credits
+        'Course Code': change.newData.courseCode || '',
+        'Course Title': change.newData.courseTitle || '',
+        'Section': change.newData.section || '',
+        'CRN': change.newData.crn || '',
+        'Credits': change.newData.credits ?? '',
+        'Term': change.newData.term || '',
+        'Term Code': change.newData.termCode || '',
+        'Academic Year': change.newData.academicYear || '',
+        'Instructor Name': change.newData.instructorName || '',
+        'Instructor Baylor ID': change.newData.instructorBaylorId || '',
+        'Instructor ID (linked)': change.newData.instructorId || '',
+        'Room Names': Array.isArray(change.newData.roomNames) ? change.newData.roomNames.join(', ') : (change.newData.roomName || ''),
+        'Room IDs': Array.isArray(change.newData.roomIds) ? change.newData.roomIds.join(', ') : '',
+        'Schedule Type': change.newData.scheduleType || '',
+        'Status': change.newData.status || '',
+        'Meeting Patterns': meetingSummary
       };
     } else if (change.collection === 'people') {
       return {

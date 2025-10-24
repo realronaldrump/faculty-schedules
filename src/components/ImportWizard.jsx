@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { usePermissions } from '../utils/permissions';
 import { Upload, CheckCircle, AlertCircle, Eye, History, ChevronRight, Calendar, Users } from 'lucide-react';
 import { parseCLSSCSV } from '../utils/dataImportUtils';
-import { previewImportChanges, commitTransaction } from '../utils/importTransactionUtils';
+import { previewImportChanges, commitTransaction, projectSchedulePreviewRow } from '../utils/importTransactionUtils';
 import ImportPreviewModal from './ImportPreviewModal';
 import ImportHistoryModal from './ImportHistoryModal';
 
@@ -29,22 +29,30 @@ const ImportWizard = ({ onNavigate, showNotification, selectedSemester, availabl
 
   const parsedPreviewRows = useMemo(() => {
     if (!csvData || csvData.length === 0) return [];
-    const rows = csvData.slice(0, 5).map((row) => {
-      const sectionRaw = row['Section #'] || '';
-      const section = String(sectionRaw).includes('(') ? String(sectionRaw).split('(')[0].trim() : String(sectionRaw).trim();
-      const crn = (row['CRN'] && String(row['CRN']).trim().match(/^\d{5}$/)) ? String(row['CRN']).trim() : '';
-      return {
-        Course: row['Course'] || '',
-        'Course Title': row['Course Title'] || row['Long Title'] || '',
-        CRN: crn,
-        Instructor: row['Instructor'] || '',
-        'Section #': section,
-        Room: row['Room'] || '',
-        Term: row['Term'] || detectedTerm || ''
-      };
+    if (importType === 'schedule') {
+      const fallbackTerm = detectedTerm || selectedSemester || '';
+      return csvData.map((row) => projectSchedulePreviewRow(row, fallbackTerm));
+    }
+    if (importType === 'directory') {
+      return csvData.map((row) => ({
+        'First Name': row['First Name'] || '',
+        'Last Name': row['Last Name'] || '',
+        'Preferred Name': row['Preferred First Name'] || row['Preferred Name'] || '',
+        'E-mail Address': row['E-mail Address'] || '',
+        'Phone': row['Phone'] || row['Business Phone'] || row['Home Phone'] || '',
+        'Office': row['Office'] || row['Office Location'] || ''
+      }));
+    }
+    return [];
+  }, [csvData, importType, detectedTerm, selectedSemester]);
+
+  const previewHeaders = useMemo(() => {
+    const headerSet = new Set();
+    parsedPreviewRows.forEach((row) => {
+      Object.keys(row).forEach((key) => headerSet.add(key));
     });
-    return rows;
-  }, [csvData, detectedTerm]);
+    return Array.from(headerSet);
+  }, [parsedPreviewRows]);
 
   const handleFileChange = (event) => {
     const file = event.target.files?.[0];
@@ -264,22 +272,28 @@ const ImportWizard = ({ onNavigate, showNotification, selectedSemester, availabl
 
           {parsedPreviewRows.length > 0 && (
             <div className="bg-white border border-gray-200 rounded-xl p-6">
-              <div className="text-md font-semibold text-baylor-green mb-3">Data Preview (first 5 rows)</div>
+              <div className="text-md font-semibold text-baylor-green mb-3">Data Preview (all rows)</div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-xs">
                   <thead>
                     <tr className="border-b">
-                      {Object.keys(parsedPreviewRows[0]).map((h) => (
-                        <th key={h} className="text-left py-2 px-3 font-medium text-gray-700">{h}</th>
+                      {previewHeaders.map((h) => (
+                        <th key={h} className="text-left py-2 px-3 font-medium text-gray-700 align-top">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {parsedPreviewRows.map((row, idx) => (
                       <tr key={idx} className="border-b border-gray-100">
-                        {Object.values(row).map((v, vidx) => (
-                          <td key={vidx} className="py-2 px-3 text-gray-800 max-w-40 truncate">{v}</td>
-                        ))}
+                        {previewHeaders.map((header) => {
+                          const value = row[header];
+                          const display = value === null || value === undefined ? '' : String(value);
+                          return (
+                            <td key={header} className="py-2 px-3 text-gray-800 whitespace-pre-wrap break-words align-top">
+                              {display}
+                            </td>
+                          );
+                        })}
                       </tr>
                     ))}
                   </tbody>

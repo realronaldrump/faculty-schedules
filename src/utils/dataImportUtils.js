@@ -1457,122 +1457,143 @@ const extractRoomNumberFromRoom = (roomName) => {
  */
 export const parseCLSSCSV = (csvText) => {
   console.log('🔍 Starting CLSS CSV parsing...');
-  
-  const lines = csvText.split('\n');
+
+  const rows = parseCSVRecords(csvText || '');
   let headerRowIndex = -1;
-  let scheduleData = [];
+  const scheduleData = [];
   let detectedSemester = null;
-  
-  // Extract semester from the first line (e.g., "Fall 2025")
-  if (lines.length > 0) {
-    const firstLine = lines[0].trim().replace(/"/g, '');
-    // Check if first line looks like a semester (e.g., "Fall 2025", "Spring 2024")
-    const semesterPattern = /^(Fall|Spring|Summer|Winter)\s+\d{4}$/i;
-    if (semesterPattern.test(firstLine)) {
-      detectedSemester = firstLine;
-      console.log('🎓 Detected semester from first line:', detectedSemester);
-    }
+
+  if (rows.length === 0) {
+    console.log('⚠️ No rows detected in CSV payload.');
+    return scheduleData;
   }
-  
+
+  // Extract semester from the very first cell (CLSS exports typically include it)
+  const firstCell = (rows[0]?.[0] || '').replace(/"/g, '').trim();
+  const semesterPattern = /^(Fall|Spring|Summer|Winter)\s+\d{4}$/i;
+  if (semesterPattern.test(firstCell)) {
+    detectedSemester = firstCell;
+    console.log('🎓 Detected semester from first line:', detectedSemester);
+  }
+
   // Find the actual header row (contains column definitions)
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (line.includes('CLSS ID') && line.includes('Instructor') && line.includes('Course')) {
+  for (let i = 0; i < rows.length; i++) {
+    const rowValues = rows[i].map(cell => (cell || '').toLowerCase());
+    const includesRequiredHeaders =
+      rowValues.some(cell => cell.includes('clss id')) &&
+      rowValues.some(cell => cell.includes('instructor')) &&
+      rowValues.some(cell => cell.includes('course'));
+    if (includesRequiredHeaders) {
       headerRowIndex = i;
       console.log('📋 Found header row at index:', i);
       break;
     }
   }
-  
+
   if (headerRowIndex === -1) {
     throw new Error('Could not find CLSS header row. Expected headers: CLSS ID, Instructor, Course');
   }
-  
+
   // Parse header row
-  const headerLine = lines[headerRowIndex];
-  const headers = parseCSVLine(headerLine).map(h => h.replace(/"/g, '').trim());
+  const headers = rows[headerRowIndex].map(h => (h || '').replace(/"/g, '').trim());
   console.log('📊 CLSS Headers found:', headers.slice(0, 10), '... (showing first 10)');
-  
+
   // Process data rows (skip header and any rows before it)
-  for (let i = headerRowIndex + 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    
-    // Skip empty lines
-    if (!line) continue;
-    
-    // Skip course title rows (these contain only course names, no actual data)
-    if (isCourseTitleRow(line)) {
-      console.log('📚 Skipping course title row:', line.substring(0, 50));
+  for (let i = headerRowIndex + 1; i < rows.length; i++) {
+    const values = rows[i];
+    const isCompletelyEmpty = values.every(value => !String(value || '').trim());
+    if (isCompletelyEmpty) continue;
+
+    if (isCourseTitleRow(values)) {
+      console.log('📚 Skipping course title row:', values[0]?.substring(0, 50) || '');
       continue;
     }
-    
-    // Parse the data row
-    const values = parseCSVLine(line);
-    
-    // Create row object
+
     const rowData = {};
     headers.forEach((header, index) => {
-      rowData[header] = (values[index] || '').replace(/"/g, '').trim();
+      const rawValue = values[index] ?? '';
+      rowData[header] = String(rawValue).replace(/\r/g, '').trim();
     });
-    
-    // Add the detected semester to each row if we found one
-    if (detectedSemester) {
+
+    if (detectedSemester && !rowData['Term']) {
       rowData['Term'] = detectedSemester;
     }
-    
-    // Only include rows that have meaningful schedule data
+
     if (isValidScheduleRow(rowData)) {
       scheduleData.push(rowData);
     }
   }
-  
+
   console.log('✅ CLSS CSV parsing complete. Found', scheduleData.length, 'schedule records');
   console.log('🎓 All records tagged with semester:', detectedSemester);
   return scheduleData;
 };
 
 /**
- * Robust CSV line parser that handles empty fields and quoted values
+ * Robust CSV parser that handles escaped quotes and multiline fields
  */
-const parseCSVLine = (line) => {
-  const result = [];
-  let current = '';
+const parseCSVRecords = (text) => {
+  const rows = [];
+  let currentRow = [];
+  let currentValue = '';
   let inQuotes = false;
-  
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    
+  let lastCharWasLineBreak = false;
+
+  for (let i = 0; i < text.length; i++) {
+    let char = text[i];
+
+    if (i === 0 && char === '\ufeff') {
+      // Strip BOM if present
+      continue;
+    }
+
     if (char === '"') {
-      inQuotes = !inQuotes;
+      if (inQuotes && text[i + 1] === '"') {
+        currentValue += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      lastCharWasLineBreak = false;
     } else if (char === ',' && !inQuotes) {
-      result.push(current);
-      current = '';
+      currentRow.push(currentValue);
+      currentValue = '';
+      lastCharWasLineBreak = false;
+    } else if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && text[i + 1] === '\n') {
+        i++;
+      }
+      currentRow.push(currentValue);
+      rows.push(currentRow);
+      currentRow = [];
+      currentValue = '';
+      lastCharWasLineBreak = true;
     } else {
-      current += char;
+      currentValue += char;
+      lastCharWasLineBreak = false;
     }
   }
-  
-  // Add the last field
-  result.push(current);
-  return result;
+
+  if (!lastCharWasLineBreak || currentRow.length > 0 || currentValue) {
+    currentRow.push(currentValue);
+    rows.push(currentRow);
+  }
+
+  return rows;
 };
 
 /**
  * Check if a line is a course title row (not actual schedule data)
  */
-const isCourseTitleRow = (line) => {
-  // Course title rows typically have the course name in the first column
-  // and are followed by many empty columns
-  const values = parseCSVLine(line);
-  
-  // If first column has a course pattern like "ADM 1241 - Apparel Aesthetics"
-  // and most other columns are empty, it's likely a title row
-  if (values[0] && values[0].match(/^[A-Z]{2,4}\s+\d{4}\s*-/)) {
-    const nonEmptyCount = values.filter(v => v && v.trim()).length;
-    // If only a few columns have data, it's probably a title row
+const isCourseTitleRow = (values) => {
+  if (!Array.isArray(values) || values.length === 0) return false;
+
+  const firstValue = (values[0] || '').trim();
+  if (firstValue && firstValue.match(/^[A-Z]{2,4}\s+\d{4}\s*-/)) {
+    const nonEmptyCount = values.filter(v => v && String(v).trim()).length;
     return nonEmptyCount < 5;
   }
-  
+
   return false;
 };
 

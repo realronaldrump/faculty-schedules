@@ -238,6 +238,22 @@ export const createRoomModel = ({
   updatedAt
 });
 
+/**
+ * Normalize a raw room string into an array of individual room names.
+ * Mirrors room splitting behaviour used across scheduling tools so imports
+ * understand simultaneous multi-room assignments.
+ */
+const splitRoomNames = (roomValue) => {
+  if (!roomValue || typeof roomValue !== 'string') return [];
+
+  return Array.from(new Set(
+    roomValue
+      .split(/;|\n|\s{0,}\/\s{0,}/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+  ));
+};
+
 // ==================== NAME PARSING UTILITIES ====================
 
 /**
@@ -993,11 +1009,11 @@ export const processScheduleImport = async (csvData) => {
         (instructionMethod && instructionMethod.toLowerCase().includes('online'))
       );
 
-      // === ENHANCED ROOM LINKING (supports multiple rooms separated by ';') ===
+      // === ENHANCED ROOM LINKING (supports multiple rooms separated by ';', newlines, etc.) ===
       let roomIds = [];
       let roomNames = [];
       if (!inferredIsOnline && roomName && roomName.toLowerCase() !== 'online' && roomName !== 'No Room Needed') {
-        const splitRooms = roomName.split(';').map(s => s.trim()).filter(Boolean);
+        const splitRooms = splitRoomNames(roomName);
         for (const singleRoom of splitRooms) {
           roomNames.push(singleRoom);
           // Deterministic room ID: buildingCode_roomNumber (fallback to sanitized name)
@@ -1033,6 +1049,10 @@ export const processScheduleImport = async (csvData) => {
           }
         }
       }
+
+      // Deduplicate to guard against repeated room references
+      roomIds = Array.from(new Set(roomIds));
+      roomNames = Array.from(new Set(roomNames));
       
       // Parse meeting patterns
       const meetingPatterns = parseMeetingPatterns(meetingPattern, meetings);

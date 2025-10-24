@@ -2,6 +2,7 @@ import { collection, getDocs, getDoc, doc, updateDoc, addDoc, deleteDoc, writeBa
 import { db, COLLECTIONS } from '../firebase';
 import { logCreate, logUpdate, logDelete, logBulkUpdate, logImport } from './changeLogger';
 import { findMatchingPerson, parseFullName, parseInstructorField } from './dataImportUtils';
+import { parseCourseCode, deriveCreditsFromCatalogNumber } from './courseUtils';
 
 // Import transaction model for tracking changes
 export class ImportTransaction {
@@ -63,15 +64,15 @@ export class ImportTransaction {
 
   updateStats() {
     this.stats = {
-      totalChanges: 
-        this.changes.schedules.added.length + 
-        this.changes.schedules.modified.length + 
+      totalChanges:
+        this.changes.schedules.added.length +
+        this.changes.schedules.modified.length +
         this.changes.schedules.deleted.length +
-        this.changes.people.added.length + 
-        this.changes.people.modified.length + 
+        this.changes.people.added.length +
+        this.changes.people.modified.length +
         this.changes.people.deleted.length +
-        this.changes.rooms.added.length + 
-        this.changes.rooms.modified.length + 
+        this.changes.rooms.added.length +
+        this.changes.rooms.modified.length +
         this.changes.rooms.deleted.length,
       schedulesAdded: this.changes.schedules.added.length,
       peopleAdded: this.changes.people.added.length,
@@ -150,7 +151,7 @@ export class ImportTransaction {
 export const previewImportChanges = async (csvData, importType, selectedSemester, options = {}) => {
   const { persist = true } = options;
   const transaction = new ImportTransaction(importType, `${importType} import preview`, selectedSemester);
-  
+
   try {
     // Load existing data for comparison
     const [existingSchedules, existingPeople, existingRooms] = await Promise.all([
@@ -214,6 +215,152 @@ const deriveNameKeyFromDisplayName = (displayName) => {
 
 const normalizeRoomName = (name) => (name || '').replace(/\s+/g, ' ').trim().toLowerCase();
 
+export const normalizeSectionIdentifier = (sectionField) => {
+  if (!sectionField) return '';
+  const raw = String(sectionField).trim();
+  if (!raw) return '';
+  const cut = raw.split(' ')[0];
+  const idx = cut.indexOf('(');
+  return idx > -1 ? cut.substring(0, idx).trim() : cut.trim();
+};
+
+export const extractCrnFromSectionField = (sectionField) => {
+  if (!sectionField) return '';
+  const match = String(sectionField).match(/\((\d{5,6})\)/);
+  return match ? match[1] : '';
+};
+
+export const extractAcademicYear = (term) => {
+  const match = String(term || '').match(/(\d{4})/);
+  if (match) {
+    const parsed = Number.parseInt(match[1], 10);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return new Date().getFullYear();
+};
+
+export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
+  const courseCode = row.Course || '';
+  const courseTitle = row['Course Title'] || row['Long Title'] || '';
+  const section = normalizeSectionIdentifier(row['Section #'] || '');
+
+  const directCrn = (row['CRN'] || '').toString().trim();
+  const sectionCrn = extractCrnFromSectionField(row['Section #'] || '');
+  const crn = /^\d{5,6}$/.test(directCrn)
+    ? directCrn
+    : (/^\d{5,6}$/.test(sectionCrn) ? sectionCrn : '');
+
+  const rawCredits = row['Credit Hrs'] ?? row['Credit Hrs Min'] ?? row['Credit Hrs Max'] ?? null;
+  const catalogNumber = (row['Catalog Number'] || '').toString().trim();
+  const parsedCourse = parseCourseCode(courseCode || '');
+  const catalogForCredits = catalogNumber || parsedCourse?.catalogNumber || '';
+  const derivedCredits = deriveCreditsFromCatalogNumber(catalogForCredits, rawCredits);
+  const numericFallback = rawCredits === null || rawCredits === undefined
+    ? null
+    : Number.parseFloat(rawCredits);
+  const credits = derivedCredits ?? (Number.isNaN(numericFallback) ? null : numericFallback) ?? (parsedCourse?.credits ?? null);
+
+  const term = row.Term || fallbackTerm || '';
+  const termCode = row['Term Code'] || '';
+  const academicYear = extractAcademicYear(term);
+
+  const instructorField = row.Instructor || '';
+  const parsedInstructor = parseInstructorField(instructorField) || { firstName: '', lastName: '', id: '' };
+  const normalizedInstructorName = (() => {
+    const firstName = (parsedInstructor.firstName || '').trim();
+    const lastName = (parsedInstructor.lastName || '').trim();
+    if (firstName && lastName) return `${lastName}, ${firstName}`;
+    if (lastName) return lastName;
+    if (firstName) return firstName;
+    return instructorField.trim();
+  })();
+  const instructorBaylorId = (parsedInstructor.id || '').toString().trim();
+
+  const meetingPatternRaw = (row['Meeting Pattern'] || row['Meetings'] || '').toString().trim();
+  const meetingPatterns = parseMeetingPatterns(row);
+
+  const roomRaw = (row.Room || '').toString().trim();
+  const roomNames = roomRaw
+    ? Array.from(new Set(roomRaw.split(/;|\n/).map((s) => s.trim()).filter(Boolean)))
+    : [];
+
+  return {
+    courseCode,
+    courseTitle,
+    section,
+    crn,
+    credits: credits ?? null,
+    creditRaw: rawCredits,
+    term,
+    termCode,
+    academicYear,
+    instructorField,
+    parsedInstructor,
+    normalizedInstructorName,
+    instructorBaylorId,
+    meetingPatternRaw,
+    meetingPatterns,
+    roomRaw,
+    roomNames,
+    subjectCode: row['Subject Code'] || '',
+    catalogNumber,
+    departmentCode: row['Department Code'] || '',
+    scheduleType: row['Schedule Type'] || 'Class Instruction',
+    status: row.Status || 'Active',
+    partOfTerm: row['Part of Term'] || '',
+    instructionMethod: row['Inst. Method'] || row['Instruction Method'] || '',
+    campus: row.Campus || '',
+    visibleOnWeb: row['Visible on Web'] || '',
+    specialApproval: row['Special Approval'] || ''
+  };
+};
+
+export const projectSchedulePreviewRow = (row, fallbackTerm = '') => {
+  const base = extractScheduleRowBaseData(row, fallbackTerm);
+  const meetingSummary = Array.isArray(base.meetingPatterns)
+    ? base.meetingPatterns
+        .map((pattern) => {
+          if (pattern.day && pattern.startTime && pattern.endTime) {
+            return `${pattern.day} ${pattern.startTime}-${pattern.endTime}`;
+          }
+          return pattern.raw || '';
+        })
+        .filter(Boolean)
+        .join('\n')
+    : '';
+
+  return {
+    'Course Code': base.courseCode,
+    'Course Title': base.courseTitle,
+    'Section': base.section,
+    'CRN': base.crn,
+    'Credits (parsed)': base.credits ?? '',
+    'Credits (raw)': base.creditRaw ?? '',
+    'Term': base.term,
+    'Term Code': base.termCode,
+    'Academic Year': base.academicYear ?? '',
+    'Department Code': base.departmentCode,
+    'Subject Code': base.subjectCode,
+    'Catalog Number': base.catalogNumber,
+    'Instructor (parsed)': base.normalizedInstructorName,
+    'Instructor Baylor ID': base.instructorBaylorId,
+    'Instructor (raw)': base.instructorField,
+    'Schedule Type': base.scheduleType,
+    'Status': base.status,
+    'Part of Term': base.partOfTerm,
+    'Instruction Method': base.instructionMethod,
+    'Campus': base.campus,
+    'Rooms (raw)': base.roomRaw,
+    'Rooms (parsed)': base.roomNames.join('; '),
+    'Meeting Pattern (raw)': base.meetingPatternRaw,
+    'Meeting Pattern (parsed)': meetingSummary,
+    'Visible on Web': base.visibleOnWeb,
+    'Special Approval': base.specialApproval
+  };
+};
+
 const buildRoomNameKeys = (roomData) => {
   const keys = new Set();
   const candidates = [roomData.name, roomData.displayName];
@@ -242,7 +389,7 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
   const peopleMapByBaylorId = new Map();
   const roomsMap = new Map();
   const scheduleMap = new Map();
-  
+
   existingPeople.forEach(person => {
     const nameKey = makeNameKey(person.firstName, person.lastName);
     if (nameKey) peopleMapByName.set(nameKey, person);
@@ -261,28 +408,19 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
     scheduleMap.set(key, schedule);
   });
 
-  // Helper to normalize Section # (strip redundant CRN like "01 (33038)" -> "01")
-  const parseSectionField = (sectionField) => {
-    if (!sectionField) return '';
-    const raw = String(sectionField).trim();
-    const cut = raw.split(' ')[0];
-    const idx = cut.indexOf('(');
-    return idx > -1 ? cut.substring(0, idx).trim() : cut.trim();
-  };
-
   // Process each schedule entry
   for (const row of csvData) {
+    const baseData = extractScheduleRowBaseData(row);
     // Precompute key fields and group key for cascading selection
-    const preCourseCode = row.Course || '';
-    const rawSectionField = row['Section #'] || '';
-    const preSection = parseSectionField(rawSectionField);
-    const preTerm = row.Term || '';
+    const preCourseCode = baseData.courseCode;
+    const preSection = baseData.section;
+    const preTerm = baseData.term;
     const groupKey = `sched_${preCourseCode}_${preSection}_${preTerm}`;
     // Extract instructor information (use Baylor ID match first)
-    const instructorField = row.Instructor || '';
-    const parsed = parseInstructorField(instructorField) || { firstName: '', lastName: '', id: null };
+    const instructorField = baseData.instructorField;
+    const parsed = baseData.parsedInstructor || { firstName: '', lastName: '', id: null };
     const nameKey = makeNameKey(parsed.firstName, parsed.lastName);
-    const baylorId = (parsed.id || '').trim();
+    const baylorId = baseData.instructorBaylorId;
 
     let instructor = null;
     let instructorId = null;
@@ -309,10 +447,7 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
     }
 
     // Extract room information (support simultaneous multi-rooms)
-    const roomField = (row.Room || '').trim();
-    const splitRooms = roomField
-      ? Array.from(new Set(roomField.split(/;|\n/).map((s) => s.trim()).filter(Boolean)))
-      : [];
+    const splitRooms = baseData.roomNames;
     const resolvedRoomIds = [];
     let primaryRoomId = null;
     if (splitRooms.length > 0) {
@@ -367,40 +502,31 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
     }
 
     // Create schedule entry
-    const crnFromSection = (() => {
-      const m = String(rawSectionField).match(/\((\d{5,6})\)/);
-      return m ? m[1] : '';
-    })();
-    const finalCrn = (() => {
-      const direct = String(row['CRN'] || '').trim();
-      if (/^\d{5,6}$/.test(direct)) return direct;
-      if (/^\d{5,6}$/.test(crnFromSection)) return crnFromSection;
-      return '';
-    })();
+    const finalCrn = baseData.crn;
     const instructorDisplayName = normalizeInstructorDisplayName(instructor, parsed, instructorField);
     const uniqueRoomIds = Array.from(new Set(resolvedRoomIds));
 
     const scheduleData = {
       courseCode,
-      courseTitle: row['Course Title'] || '',
+      courseTitle: baseData.courseTitle,
       section,
       crn: finalCrn,
-      credits: row['Credit Hrs'] || row['Credit Hrs Min'] || '',
+      credits: baseData.credits ?? null,
       term,
-      termCode: row['Term Code'] || '',
-      academicYear: extractAcademicYear(term),
+      termCode: baseData.termCode,
+      academicYear: baseData.academicYear,
       instructorId: instructorId,
       // Prefer normalized instructor name in "Last, First" format
       instructorName: instructorDisplayName,
-      instructorBaylorId: (parsed.id || '').trim(),
+      instructorBaylorId: baylorId,
       // Multi-room fields
       roomIds: uniqueRoomIds,
       roomId: primaryRoomId || uniqueRoomIds[0] || null,
       roomNames: splitRooms,
       roomName: splitRooms[0] || '',
-      meetingPatterns: parseMeetingPatterns(row),
-      scheduleType: row['Schedule Type'] || 'Class Instruction',
-      status: row.Status || 'Active',
+      meetingPatterns: baseData.meetingPatterns,
+      scheduleType: baseData.scheduleType,
+      status: baseData.status,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -426,12 +552,12 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople) => 
     const firstName = (row['First Name'] || '').trim();
     const lastName = (row['Last Name'] || '').trim();
     const email = (row['E-mail Address'] || '').trim();
-    
+
     if (!firstName && !lastName && !email) continue;
 
     const nameKey = `${firstName.toLowerCase()} ${lastName.toLowerCase()}`.trim();
     const emailKey = email.toLowerCase();
-    
+
     let existingPerson = existingPeopleMap.get(nameKey) || existingPeopleMap.get(emailKey);
     // Attempt smart matching across existing people
     if (!existingPerson) {
@@ -455,18 +581,18 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople) => 
       // Build minimal updates and diff with from/to pairs
       const updates = {};
       const diff = [];
-      if (email && existingPerson.email !== email) { 
-        updates.email = email; 
-        diff.push({ key: 'email', from: existingPerson.email || '', to: email }); 
+      if (email && existingPerson.email !== email) {
+        updates.email = email;
+        diff.push({ key: 'email', from: existingPerson.email || '', to: email });
       }
       const existingPhone = existingPerson.phone || '';
       const existingOffice = existingPerson.office || '';
-      if ((personData.phone || '') && existingPhone !== personData.phone) { 
-        updates.phone = personData.phone; 
+      if ((personData.phone || '') && existingPhone !== personData.phone) {
+        updates.phone = personData.phone;
         diff.push({ key: 'phone', from: existingPhone, to: personData.phone });
       }
-      if ((personData.office || '') && existingOffice !== personData.office) { 
-        updates.office = personData.office; 
+      if ((personData.office || '') && existingOffice !== personData.office) {
+        updates.office = personData.office;
         diff.push({ key: 'office', from: existingOffice, to: personData.office });
       }
       if (diff.length > 0) {
@@ -482,12 +608,7 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople) => 
 };
 
 // Helper functions
-const extractAcademicYear = (term) => {
-  const match = term.match(/(\d{4})/);
-  return match ? parseInt(match[1]) : new Date().getFullYear();
-};
-
-const parseMeetingPatterns = (row) => {
+export const parseMeetingPatterns = (row) => {
   const meetingPattern = (row['Meeting Pattern'] || row['Meetings'] || '').trim();
   if (!meetingPattern) return [];
 
@@ -661,7 +782,7 @@ const getValueByPath = (obj, path) => {
 export const commitTransaction = async (transactionId, selectedChanges = null, selectedFieldMap = null) => {
   const transactions = await getImportTransactions();
   const transaction = transactions.find(t => t.id === transactionId);
-  
+
   if (!transaction) {
     throw new Error('Transaction not found');
   }
@@ -671,7 +792,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
   }
 
   const batch = writeBatch(db);
-  const changesToApply = selectedChanges ? 
+  const changesToApply = selectedChanges ?
     transaction.getAllChanges().filter(change => selectedChanges.includes(change.id)) :
     transaction.getAllChanges();
 
@@ -722,7 +843,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
     for (const change of changesToApply) {
       if (change.collection === 'schedules' && change.action === 'add') {
         const scheduleData = { ...change.newData };
-        
+
         // Update instructor ID if this references a newly created person
         if (!scheduleData.instructorId && scheduleData.instructorName) {
           const baylorKey = (scheduleData.instructorBaylorId || '').trim().toLowerCase();
@@ -774,7 +895,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
         const schedRef = doc(db, COLLECTIONS.SCHEDULES, scheduleDeterministicId);
         batch.set(schedRef, scheduleData, { merge: true });
         change.documentId = schedRef.id;
-        
+
       } else if (change.collection !== 'people' && change.collection !== 'rooms') {
         // Handle other types of changes (modify, delete)
         if (change.action === 'modify') {
@@ -797,15 +918,15 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
           change.documentId = change.originalData.id;
         }
       }
-      
+
       change.applied = true;
     }
 
     await batch.commit();
-    
+
     transaction.status = 'committed';
     await updateTransactionInStorage(transaction);
-    
+
     console.log(`✅ Transaction committed with ${changesToApply.length} changes`);
     console.log(`👤 Created ${createdPeopleCount} new people`);
     console.log(`🏛️ Created ${createdRoomsCount} new rooms`);
@@ -907,7 +1028,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
         { transactionId: transaction.id, semester: transaction.semester, stats: transaction.stats }
       ).catch(() => {});
     } catch (_) {}
-    
+
     return transaction;
   } catch (error) {
     console.error('Error committing transaction:', error);
@@ -1322,7 +1443,7 @@ const saveTransactionToDatabase = async (transaction) => {
     const transactionData = transaction.toFirestore();
     // Add cleaning
     const cleanedData = cleanObject(transactionData);
-    
+
     // Use setDoc which can both create and update documents
     await setDoc(transactionRef, cleanedData, { merge: true });
     console.log(`💾 Saved transaction ${transaction.id} to database`);
@@ -1346,17 +1467,17 @@ const updateTransactionInStorage = async (updatedTransaction) => {
 export const getImportTransactions = async () => {
   try {
     const transactionsQuery = query(
-      collection(db, 'importTransactions'), 
+      collection(db, 'importTransactions'),
       orderBy('timestamp', 'desc')
     );
     const snapshot = await getDocs(transactionsQuery);
-    
+
     // Reconstruct ImportTransaction objects with methods
     const transactions = snapshot.docs.map(doc => {
       const data = { id: doc.id, ...doc.data() };
       return ImportTransaction.fromFirestore(data);
     });
-    
+
     console.log(`📋 Loaded ${transactions.length} transactions from database`);
     return transactions;
   } catch (error) {
@@ -1375,4 +1496,4 @@ export const deleteTransaction = async (transactionId) => {
     console.error('Error deleting transaction from database:', error);
     throw error;
   }
-}; 
+};

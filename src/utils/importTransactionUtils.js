@@ -1,7 +1,7 @@
 import { collection, getDocs, getDoc, doc, updateDoc, addDoc, deleteDoc, writeBatch, query, orderBy, setDoc } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { logCreate, logUpdate, logDelete, logBulkUpdate, logImport } from './changeLogger';
-import { findMatchingPerson, parseInstructorField } from './dataImportUtils';
+import { findMatchingPerson, parseFullName, parseInstructorField } from './dataImportUtils';
 
 // Import transaction model for tracking changes
 export class ImportTransaction {
@@ -186,6 +186,56 @@ export const previewImportChanges = async (csvData, importType, selectedSemester
   }
 };
 
+const toLowerTrim = (value) => (value || '').toLowerCase().trim();
+
+const makeNameKey = (firstName, lastName) => {
+  const first = toLowerTrim(firstName).split(/\s+/)[0] || '';
+  const last = toLowerTrim(lastName);
+  return [first, last].filter(Boolean).join(' ').trim();
+};
+
+const deriveNameKeyFromDisplayName = (displayName) => {
+  if (!displayName) return '';
+  const cleaned = displayName.replace(/\([^)]*\)/g, '').trim();
+  if (!cleaned) return '';
+
+  if (cleaned.includes(',')) {
+    const [lastPart, firstPartRaw] = cleaned.split(',', 2);
+    const last = lastPart.trim();
+    const first = (firstPartRaw || '').trim().split(/\s+/)[0] || '';
+    return makeNameKey(first, last);
+  }
+
+  const parsed = parseFullName(cleaned);
+  const primary = makeNameKey(parsed.firstName, parsed.lastName);
+  if (primary) return primary;
+  return makeNameKey(parsed.lastName, parsed.firstName);
+};
+
+const normalizeRoomName = (name) => (name || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+const buildRoomNameKeys = (roomData) => {
+  const keys = new Set();
+  const candidates = [roomData.name, roomData.displayName];
+  candidates.forEach((candidate) => {
+    const key = normalizeRoomName(candidate);
+    if (key) keys.add(key);
+  });
+  return Array.from(keys);
+};
+
+const normalizeInstructorDisplayName = (instructorRecord, parsedInstructor, fallback) => {
+  const firstName = (instructorRecord?.firstName || parsedInstructor?.firstName || '').trim();
+  const lastName = (instructorRecord?.lastName || parsedInstructor?.lastName || '').trim();
+
+  if (firstName && lastName) {
+    return `${lastName}, ${firstName}`;
+  }
+  if (lastName) return lastName;
+  if (firstName) return firstName;
+  return fallback || '';
+};
+
 const previewScheduleChanges = async (csvData, transaction, existingSchedules, existingPeople, existingRooms) => {
   // Create maps for quick lookup
   const peopleMapByName = new Map();
@@ -194,14 +244,14 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
   const scheduleMap = new Map();
   
   existingPeople.forEach(person => {
-    const nameKey = `${(person.firstName || '').toLowerCase()} ${(person.lastName || '').toLowerCase()}`.trim();
+    const nameKey = makeNameKey(person.firstName, person.lastName);
     if (nameKey) peopleMapByName.set(nameKey, person);
     const baylorId = (person.baylorId || '').trim();
     if (baylorId) peopleMapByBaylorId.set(baylorId, person);
   });
 
   existingRooms.forEach(room => {
-    const keys = [room.name, room.displayName].map((k) => (k || '').toLowerCase()).filter(Boolean);
+    const keys = [room.name, room.displayName].map((k) => normalizeRoomName(k)).filter(Boolean);
     keys.forEach((k) => roomsMap.set(k, room));
   });
 
@@ -231,7 +281,7 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
     // Extract instructor information (use Baylor ID match first)
     const instructorField = row.Instructor || '';
     const parsed = parseInstructorField(instructorField) || { firstName: '', lastName: '', id: null };
-    const nameKey = `${(parsed.firstName || '').toLowerCase()} ${(parsed.lastName || '').toLowerCase()}`.trim();
+    const nameKey = makeNameKey(parsed.firstName, parsed.lastName);
     const baylorId = (parsed.id || '').trim();
 
     let instructor = null;
@@ -260,13 +310,25 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
 
     // Extract room information (support simultaneous multi-rooms)
     const roomField = (row.Room || '').trim();
-    const splitRooms = roomField ? roomField.split(';').map((s) => s.trim()).filter(Boolean) : [];
-    let roomId = null;
+    const splitRooms = roomField
+      ? Array.from(new Set(roomField.split(/;|\n/).map((s) => s.trim()).filter(Boolean)))
+      : [];
+    const resolvedRoomIds = [];
+    let primaryRoomId = null;
     if (splitRooms.length > 0) {
       for (const singleRoom of splitRooms) {
-        const key = singleRoom.toLowerCase();
+        const key = normalizeRoomName(singleRoom);
+        if (!key) continue;
         let room = roomsMap.get(key);
-        if (!room && singleRoom && singleRoom !== 'No Room Needed' && !singleRoom.toUpperCase().includes('ONLINE')) {
+        const roomNameUpper = singleRoom.toUpperCase();
+        const shouldAttemptCreation =
+          singleRoom &&
+          roomNameUpper !== 'NO ROOM NEEDED' &&
+          !roomNameUpper.includes('ONLINE') &&
+          !roomNameUpper.includes('ZOOM') &&
+          !roomNameUpper.includes('VIRTUAL');
+
+        if (!room && shouldAttemptCreation) {
           const newRoom = {
             name: singleRoom,
             displayName: singleRoom,
@@ -276,9 +338,17 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
             isActive: true
           };
           transaction.addChange('rooms', 'add', newRoom, null, { groupKey });
-          roomsMap.set(key, newRoom);
-        } else if (room && !roomId) {
-          roomId = room.id || null; // first becomes legacy primary
+          roomsMap.set(key, { ...newRoom });
+          room = roomsMap.get(key);
+        }
+
+        if (room && room.id) {
+          if (!resolvedRoomIds.includes(room.id)) {
+            resolvedRoomIds.push(room.id);
+          }
+          if (!primaryRoomId) {
+            primaryRoomId = room.id;
+          }
         }
       }
     }
@@ -307,6 +377,9 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
       if (/^\d{5,6}$/.test(crnFromSection)) return crnFromSection;
       return '';
     })();
+    const instructorDisplayName = normalizeInstructorDisplayName(instructor, parsed, instructorField);
+    const uniqueRoomIds = Array.from(new Set(resolvedRoomIds));
+
     const scheduleData = {
       courseCode,
       courseTitle: row['Course Title'] || '',
@@ -317,16 +390,12 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
       termCode: row['Term Code'] || '',
       academicYear: extractAcademicYear(term),
       instructorId: instructorId,
-      // Prefer normalized instructor name from existing DB record; fallback to parsed name; then raw field
-      instructorName: (instructor && (instructor.firstName || instructor.lastName))
-        ? `${(instructor.firstName || '').trim()} ${(instructor.lastName || '').trim()}`.trim()
-        : ((parsed.firstName || parsed.lastName)
-          ? `${parsed.firstName} ${parsed.lastName}`.trim()
-          : (row.Instructor || '')),
+      // Prefer normalized instructor name in "Last, First" format
+      instructorName: instructorDisplayName,
       instructorBaylorId: (parsed.id || '').trim(),
       // Multi-room fields
-      roomIds: splitRooms.length > 1 ? [] : (roomId ? [roomId] : []),
-      roomId: roomId,
+      roomIds: uniqueRoomIds,
+      roomId: primaryRoomId || uniqueRoomIds[0] || null,
       roomNames: splitRooms,
       roomName: splitRooms[0] || '',
       meetingPatterns: parseMeetingPatterns(row),
@@ -419,92 +488,148 @@ const extractAcademicYear = (term) => {
 };
 
 const parseMeetingPatterns = (row) => {
-  const meetingPattern = row['Meeting Pattern'] || row['Meetings'] || '';
+  const meetingPattern = (row['Meeting Pattern'] || row['Meetings'] || '').trim();
+  if (!meetingPattern) return [];
+
+  const segments = meetingPattern
+    .replace(/\r/g, '\n')
+    .split(/;|\n/)
+    .map(segment => segment.trim())
+    .filter(Boolean);
+
   const patterns = [];
-  
-  if (meetingPattern && meetingPattern !== 'Does Not Meet') {
-    // Handle CLSS format like "TR 12:30pm-1:45pm" or "MW 8:30am-11am"
-    const timePattern = /([MTWRF]+)\s+(\d{1,2}:\d{2}(?:am|pm)?)\s*-\s*(\d{1,2}:\d{2}(?:am|pm)?)/i;
-    const match = meetingPattern.match(timePattern);
-    
-    if (match) {
-      const [, daysStr, startTime, endTime] = match;
-      
-      // Parse individual days
-      const dayMap = { 'M': 'M', 'T': 'T', 'W': 'W', 'R': 'R', 'F': 'F' };
-      for (let i = 0; i < daysStr.length; i++) {
-        const day = dayMap[daysStr[i]];
-        if (day) {
-          patterns.push({
-            day,
-            startTime: normalizeTime(startTime),
-            endTime: normalizeTime(endTime),
-            startDate: null,
-            endDate: null
-          });
-        }
+  const dayMap = { M: 'M', T: 'T', W: 'W', R: 'R', F: 'F', S: 'S', U: 'U' };
+
+  const pushTimedPattern = (daysStr, startToken, endToken, raw) => {
+    const startTime = normalizeTime(startToken);
+    const endTime = normalizeTime(endToken);
+    if (!startTime || !endTime) return false;
+
+    let pushed = false;
+    for (const char of daysStr) {
+      const day = dayMap[char.toUpperCase()];
+      if (day) {
+        patterns.push({
+          day,
+          startTime,
+          endTime,
+          startDate: null,
+          endDate: null,
+          raw
+        });
+        pushed = true;
       }
-    } else {
-      // Fallback: try simple parsing
-      const parts = meetingPattern.split(' ');
-      if (parts.length >= 2) {
-        const days = parts[0];
-        const times = parts.slice(1).join(' ');
-        const timeParts = times.split('-');
-        
-        if (timeParts.length === 2) {
-          const [startTime, endTime] = timeParts;
-          
-          for (const char of days) {
-            if (['M', 'T', 'W', 'R', 'F'].includes(char)) {
-              patterns.push({
-                day: char,
-                startTime: normalizeTime(startTime?.trim()),
-                endTime: normalizeTime(endTime?.trim()),
-                startDate: null,
-                endDate: null
-              });
-            }
-          }
+    }
+    return pushed;
+  };
+
+  for (const segment of segments) {
+    if (!segment || /does not meet/i.test(segment)) {
+      continue;
+    }
+
+    const normalized = segment.replace(/\s+/g, ' ').trim();
+    const dayMatch = normalized.match(/^([MTWRFSU]+)\s+/i);
+    if (dayMatch) {
+      const daysStr = dayMatch[1].toUpperCase();
+      const remainder = normalized.slice(dayMatch[0].length).trim();
+      const timeSplit = remainder.split(/\s*(?:-|to)\s*/i);
+      if (timeSplit.length >= 2) {
+        const startToken = extractTimeToken(timeSplit[0]);
+        const endToken = extractTimeToken(timeSplit[1]);
+        if (pushTimedPattern(daysStr, startToken, endToken, normalized)) {
+          continue;
         }
       }
     }
+
+    // Attempt to recover times even if day parsing failed
+    const timeMatches = normalized.match(/(\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{3,4})/gi);
+    if (dayMatch && timeMatches && timeMatches.length >= 2) {
+      const startToken = timeMatches[0];
+      const endToken = timeMatches[1];
+      if (pushTimedPattern(dayMatch[1].toUpperCase(), startToken, endToken, normalized)) {
+        continue;
+      }
+    }
+
+    if (/online/i.test(normalized) || /asynch/i.test(normalized)) {
+      patterns.push({
+        day: null,
+        startTime: '',
+        endTime: '',
+        startDate: null,
+        endDate: null,
+        mode: 'online',
+        raw: normalized
+      });
+      continue;
+    }
+
+    if (/arranged/i.test(normalized) || /tba/i.test(normalized) || /independent/i.test(normalized)) {
+      patterns.push({
+        day: null,
+        startTime: '',
+        endTime: '',
+        startDate: null,
+        endDate: null,
+        mode: 'arranged',
+        raw: normalized
+      });
+      continue;
+    }
+
+    // Preserve unparsed segments for downstream visibility
+    patterns.push({
+      day: null,
+      startTime: '',
+      endTime: '',
+      startDate: null,
+      endDate: null,
+      raw: normalized
+    });
   }
-  
+
   return patterns;
+};
+
+const extractTimeToken = (value) => {
+  if (!value) return '';
+  const match = String(value).match(/(\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{3,4})/i);
+  return match ? match[0] : String(value).trim();
 };
 
 // Helper function to normalize time format
 const normalizeTime = (timeStr) => {
   if (!timeStr) return '';
-  
-  // Handle formats like "12:30pm", "8:30am", "8am", "17:00"
-  const cleaned = timeStr.toLowerCase().trim();
-  
-  // If already in 24-hour format, convert to 12-hour
-  if (/^\d{1,2}:\d{2}$/.test(cleaned)) {
-    const [hour, minute] = cleaned.split(':').map(Number);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
+
+  const cleaned = String(timeStr).toLowerCase().replace(/[^0-9apm:]/g, '').trim();
+  if (!cleaned) return '';
+
+  const match = cleaned.match(/^(\d{1,2})(?::?(\d{2}))?(am|pm)?$/);
+  if (!match) {
+    return String(timeStr).trim();
+  }
+
+  let [, hourStr, minuteStr, ampm] = match;
+  let hour = parseInt(hourStr, 10);
+  if (Number.isNaN(hour)) {
+    return String(timeStr).trim();
+  }
+  let minute = Number.parseInt(minuteStr ?? '0', 10);
+  if (Number.isNaN(minute)) minute = 0;
+
+  if (!ampm) {
+    if (hour > 23) {
+      return String(timeStr).trim();
+    }
     const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-    return `${displayHour}:${minute.toString().padStart(2, '0')} ${ampm}`;
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    return `${displayHour}:${minute.toString().padStart(2, '0')} ${suffix}`;
   }
-  
-  // If already has am/pm, standardize format
-  if (/\d{1,2}:\d{2}(am|pm)/i.test(cleaned)) {
-    return cleaned.replace(/(\d{1,2}:\d{2})(am|pm)/i, (match, time, ampm) => {
-      const [hour, minute] = time.split(':').map(Number);
-      return `${hour}:${minute.toString().padStart(2, '0')} ${ampm.toUpperCase()}`;
-    });
-  }
-  
-  // Handle formats like "8am", "12pm"
-  if (/^\d{1,2}(am|pm)$/i.test(cleaned)) {
-    return cleaned.replace(/(\d{1,2})(am|pm)/i, (match, hour, ampm) => {
-      return `${hour}:00 ${ampm.toUpperCase()}`;
-    });
-  }
-  
-  return timeStr; // Return as-is if can't parse
+
+  const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  return `${displayHour}:${minute.toString().padStart(2, '0')} ${ampm.toUpperCase()}`;
 };
 
 // Add this after the imports
@@ -522,6 +647,14 @@ const cleanObject = (obj) => {
     }
   });
   return cleaned;
+};
+
+const getValueByPath = (obj, path) => {
+  if (!path) return undefined;
+  return path.split('.').reduce((acc, key) => {
+    if (acc === undefined || acc === null) return undefined;
+    return acc[key];
+  }, obj);
 };
 
 // Commit transaction changes to database
@@ -543,8 +676,11 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
     transaction.getAllChanges();
 
   // Maps to track newly created IDs
-  const newPeopleIds = new Map(); // firstName+lastName -> documentId
-  const newRoomIds = new Map(); // roomName -> documentId
+  const newPeopleIdsByName = new Map();
+  const newPeopleIdsByBaylorId = new Map();
+  const newRoomIdsByName = new Map();
+  let createdPeopleCount = 0;
+  let createdRoomsCount = 0;
 
   try {
     // First pass: Create people and rooms, collect their IDs
@@ -553,24 +689,32 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
         const docRef = doc(collection(db, COLLECTIONS.PEOPLE));
         batch.set(docRef, change.newData);
         change.documentId = docRef.id;
-        
+        createdPeopleCount += 1;
+
         // Map name to ID for schedule linking
-        const nameKey = `${change.newData.firstName?.toLowerCase()} ${change.newData.lastName?.toLowerCase()}`.trim();
-        newPeopleIds.set(nameKey, docRef.id);
-        
-        console.log(`👤 Created person mapping: ${nameKey} -> ${docRef.id}`);
-        
+        const nameKey = makeNameKey(change.newData.firstName, change.newData.lastName);
+        if (nameKey) {
+          newPeopleIdsByName.set(nameKey, docRef.id);
+          console.log(`👤 Created person mapping: ${nameKey} -> ${docRef.id}`);
+        }
+
+        const baylorKey = (change.newData.baylorId || '').trim().toLowerCase();
+        if (baylorKey) {
+          newPeopleIdsByBaylorId.set(baylorKey, docRef.id);
+        }
+
       } else if (change.collection === 'rooms' && change.action === 'add') {
         const docRef = doc(collection(db, COLLECTIONS.ROOMS));
         batch.set(docRef, change.newData);
         change.documentId = docRef.id;
-        
+        createdRoomsCount += 1;
+
         // Map room name to ID for schedule linking
-        const roomKey = change.newData.name?.toLowerCase() || change.newData.displayName?.toLowerCase();
-        if (roomKey) {
-          newRoomIds.set(roomKey, docRef.id);
+        const roomKeys = buildRoomNameKeys(change.newData);
+        roomKeys.forEach((roomKey) => {
+          newRoomIdsByName.set(roomKey, docRef.id);
           console.log(`🏛️ Created room mapping: ${roomKey} -> ${docRef.id}`);
-        }
+        });
       }
     }
 
@@ -581,31 +725,52 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
         
         // Update instructor ID if this references a newly created person
         if (!scheduleData.instructorId && scheduleData.instructorName) {
-          // Parse instructor name to match against newly created people
-          const instructorParts = scheduleData.instructorName.split(',').map(p => p.trim());
-          if (instructorParts.length >= 2) {
-            const lastName = instructorParts[0];
-            const firstName = instructorParts[1].split('(')[0].trim();
-            const nameKey = `${firstName.toLowerCase()} ${lastName.toLowerCase()}`.trim();
-            
-            if (newPeopleIds.has(nameKey)) {
-              scheduleData.instructorId = newPeopleIds.get(nameKey);
+          const baylorKey = (scheduleData.instructorBaylorId || '').trim().toLowerCase();
+          if (baylorKey && newPeopleIdsByBaylorId.has(baylorKey)) {
+            scheduleData.instructorId = newPeopleIdsByBaylorId.get(baylorKey);
+            console.log(`🔗 Linked schedule to instructor (Baylor ID): ${baylorKey} -> ${scheduleData.instructorId}`);
+          }
+
+          if (!scheduleData.instructorId) {
+            const nameKey = deriveNameKeyFromDisplayName(scheduleData.instructorName);
+            if (nameKey && newPeopleIdsByName.has(nameKey)) {
+              scheduleData.instructorId = newPeopleIdsByName.get(nameKey);
               console.log(`🔗 Linked schedule to instructor: ${nameKey} -> ${scheduleData.instructorId}`);
             }
           }
         }
-        
+
         // Update room ID if this references a newly created room
-        if (!scheduleData.roomId && scheduleData.roomName) {
-          const roomKey = scheduleData.roomName.toLowerCase();
-          if (newRoomIds.has(roomKey)) {
-            scheduleData.roomId = newRoomIds.get(roomKey);
-            console.log(`🔗 Linked schedule to room: ${roomKey} -> ${scheduleData.roomId}`);
+        const roomNames = Array.isArray(scheduleData.roomNames) ? scheduleData.roomNames : [];
+        const resolvedRoomIds = new Set(scheduleData.roomIds || []);
+
+        roomNames.forEach((roomName) => {
+          const roomKey = normalizeRoomName(roomName);
+          if (roomKey && newRoomIdsByName.has(roomKey)) {
+            resolvedRoomIds.add(newRoomIdsByName.get(roomKey));
+          }
+        });
+
+        if (scheduleData.roomName) {
+          const primaryRoomKey = normalizeRoomName(scheduleData.roomName);
+          if (primaryRoomKey && newRoomIdsByName.has(primaryRoomKey)) {
+            resolvedRoomIds.add(newRoomIdsByName.get(primaryRoomKey));
           }
         }
-        
+
+        const uniqueResolvedRoomIds = Array.from(resolvedRoomIds);
+        if (uniqueResolvedRoomIds.length > 0) {
+          scheduleData.roomIds = uniqueResolvedRoomIds;
+          if (!scheduleData.roomId) {
+            scheduleData.roomId = uniqueResolvedRoomIds[0];
+          }
+        }
+
         // Deterministic schedule ID: termCode_crn (fallback term_crn)
-        const scheduleDeterministicId = (scheduleData.termCode || scheduleData.term || 'TERM') + '_' + (scheduleData.crn || 'CRN');
+        const baseTerm = scheduleData.termCode || scheduleData.term || 'TERM';
+        const scheduleDeterministicId = scheduleData.crn
+          ? `${baseTerm}_${scheduleData.crn}`
+          : `${baseTerm}_${(scheduleData.courseCode || 'COURSE').replace(/[^A-Za-z0-9]+/g, '-')}_${(scheduleData.section || 'SEC').replace(/[^A-Za-z0-9]+/g, '-')}`;
         const schedRef = doc(db, COLLECTIONS.SCHEDULES, scheduleDeterministicId);
         batch.set(schedRef, scheduleData, { merge: true });
         change.documentId = schedRef.id;
@@ -619,13 +784,9 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
           if (selectedKeys && Array.isArray(selectedKeys) && selectedKeys.length > 0) {
             updates = {};
             selectedKeys.forEach((key) => {
-              // Support dotted keys like 'contactInfo.phone'
-              if (key.includes('.')) {
-                const [parent, child] = key.split('.');
-                const val = change.newData[key];
-                if (val !== undefined) updates[key] = val;
-              } else if (change.newData[key] !== undefined) {
-                updates[key] = change.newData[key];
+              const val = getValueByPath(change.newData, key);
+              if (val !== undefined) {
+                updates[key] = val;
               }
             });
           }
@@ -646,8 +807,8 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
     await updateTransactionInStorage(transaction);
     
     console.log(`✅ Transaction committed with ${changesToApply.length} changes`);
-    console.log(`👤 Created ${newPeopleIds.size} new people`);
-    console.log(`🏛️ Created ${newRoomIds.size} new rooms`);
+    console.log(`👤 Created ${createdPeopleCount} new people`);
+    console.log(`🏛️ Created ${createdRoomsCount} new rooms`);
 
     // Centralized change logging for applied changes
     try {

@@ -3,7 +3,6 @@ import { MapPin, Calendar, Clock, Search, Grid, List, Filter, Building2, X, Slid
 import FacultyContactCard from '../FacultyContactCard';
 import WeekView from './WeekView';
 import CourseDetailModal from './CourseDetailModal';
-import ICSExportModal from './ICSExportModal';
 import { logExport } from '../../utils/activityLogger';
 
 const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate }) => {
@@ -27,7 +26,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
     return now.getHours() * 60 + now.getMinutes();
   });
   const [selectedCourseForModal, setSelectedCourseForModal] = useState(null);
-  const [showICSModal, setShowICSModal] = useState(false);
+  
 
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
   const dayOrder = ['M', 'T', 'W', 'R', 'F'];
@@ -315,229 +314,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
   };
 
 
-  // Export to Outlook-compatible ICS (open modal)
-  const handleExportWeekViewICS = () => {
-    setShowICSModal(true);
-  };
-
-  const performICSExport = async ({ startDate, endDate, perRoom, rooms }) => {
-    const roomsToExport = Array.isArray(rooms) && rooms.length > 0
-      ? rooms
-      : (selectedRoom ? [selectedRoom] : filteredRooms.slice());
-    if (!roomsToExport || roomsToExport.length === 0) {
-      console.warn('No rooms available to export.');
-      return;
-    }
-
-    const start = new Date(startDate + 'T00:00:00');
-    const end = new Date(endDate + 'T23:59:59');
-
-    const dayCodeToJs = { 'M': 1, 'T': 2, 'W': 3, 'R': 4, 'F': 5 };
-    const pad2 = (n) => String(n).padStart(2, '0');
-    const formatLocalDate = (d) => `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
-    const formatLocalDateTime = (d) => `${formatLocalDate(d)}T${pad2(d.getHours())}${pad2(d.getMinutes())}00`;
-    const formatUtcUntil = (d) => {
-      const z = new Date(d.getTime());
-      return `${z.getUTCFullYear()}${pad2(z.getUTCMonth() + 1)}${pad2(z.getUTCDate())}T${pad2(z.getUTCHours())}${pad2(z.getUTCMinutes())}${pad2(z.getUTCSeconds())}Z`;
-    };
-    const formatUtcDateTime = (d) => {
-      const z = new Date(d.getTime());
-      return `${z.getUTCFullYear()}${pad2(z.getUTCMonth() + 1)}${pad2(z.getUTCDate())}T${pad2(z.getUTCHours())}${pad2(z.getUTCMinutes())}${pad2(z.getUTCSeconds())}Z`;
-    };
-    const escapeICS = (text) => (text || '')
-      .replace(/\\/g, '\\\\')
-      .replace(/\n/g, '\\n')
-      .replace(/\r/g, '')
-      .replace(/,/g, '\\,')
-      .replace(/;/g, '\\;');
-    const foldICSLines = (inputLines) => {
-      const maxLen = 75;
-      const folded = [];
-      inputLines.forEach((line) => {
-        if (typeof line !== 'string') {
-          folded.push(String(line || ''));
-          return;
-        }
-        if (line.length <= maxLen) {
-          folded.push(line);
-        } else {
-          folded.push(line.slice(0, maxLen));
-          let pos = maxLen;
-          const contMax = maxLen - 1;
-          while (pos < line.length) {
-            folded.push(' ' + line.slice(pos, pos + contMax));
-            pos += contMax;
-          }
-        }
-      });
-      return folded;
-    };
-
-    const buildVTimezone = () => [
-      'BEGIN:VTIMEZONE',
-      'TZID:America/Chicago',
-      'X-LIC-LOCATION:America/Chicago',
-      'BEGIN:DAYLIGHT',
-      'TZOFFSETFROM:-0600',
-      'TZOFFSETTO:-0500',
-      'TZNAME:CDT',
-      'DTSTART:19700308T020000',
-      'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU',
-      'END:DAYLIGHT',
-      'BEGIN:STANDARD',
-      'TZOFFSETFROM:-0500',
-      'TZOFFSETTO:-0600',
-      'TZNAME:CST',
-      'DTSTART:19701101T020000',
-      'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU',
-      'END:STANDARD',
-      'END:VTIMEZONE'
-    ];
-
-    let totalEvents = 0;
-
-    // Extract semester from schedule data
-    const getSemesterFromData = () => {
-      const terms = scheduleData.map(item => item.Term).filter(Boolean);
-      const uniqueTerms = [...new Set(terms)];
-      return uniqueTerms.length === 1 ? uniqueTerms[0] : (uniqueTerms.length > 1 ? 'Multiple' : 'Unknown');
-    };
-
-    const createIcsForRooms = (rooms) => {
-      const lines = [
-        'BEGIN:VCALENDAR',
-        'VERSION:2.0',
-        'PRODID:-//faculty-schedules//RoomSchedules//EN',
-        'CALSCALE:GREGORIAN',
-        'METHOD:REQUEST',
-        'X-WR-TIMEZONE:America/Chicago'
-      ];
-      lines.push(...buildVTimezone());
-
-      const bydayMap = { 1: 'MO', 2: 'TU', 3: 'WE', 4: 'TH', 5: 'FR' };
-      const icsOrder = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
-
-      const firstOccurrenceForDays = (startDate, jsDays) => {
-        const allow = new Set(jsDays);
-        const cur = new Date(startDate.getTime());
-        for (let i = 0; i < 14; i++) {
-          if (allow.has(cur.getDay())) return cur;
-          cur.setDate(cur.getDate() + 1);
-        }
-        return cur;
-      };
-
-      rooms.forEach((room) => {
-        const daySchedules = weeklyRoomSchedules[room] || {};
-
-        // Group items across days by course/time/(section/instructor/crn) so we can make one BYDAY event
-        const groups = new Map();
-        Object.entries(daySchedules).forEach(([dayCode, schedules]) => {
-          const jsDay = dayCodeToJs[dayCode];
-          if (jsDay == null) return;
-          schedules.forEach((item) => {
-            const startMin = parseTime(item['Start Time']);
-            const endMin = parseTime(item['End Time']);
-            if (startMin == null || endMin == null || endMin <= startMin) return;
-
-            const key = [
-              item.Course || '',
-              item['Course Title'] || '',
-              item.Instructor || '',
-              item.Section || '',
-              item.CRN || item.Crn || item.crn || '',
-              item['Start Time'] || '',
-              item['End Time'] || ''
-            ].join('|');
-
-            const existing = groups.get(key) || {
-              item,
-              startMin,
-              endMin,
-              jsDays: new Set(),
-              icsDays: new Set()
-            };
-            existing.jsDays.add(jsDay);
-            const by = bydayMap[jsDay];
-            if (by) existing.icsDays.add(by);
-            groups.set(key, existing);
-          });
-        });
-
-        Array.from(groups.values()).forEach((group) => {
-          const jsDaysArr = Array.from(group.jsDays);
-          if (jsDaysArr.length === 0) return;
-
-          const first = firstOccurrenceForDays(start, jsDaysArr);
-          const dtStart = new Date(first.getFullYear(), first.getMonth(), first.getDate(), Math.floor(group.startMin / 60), group.startMin % 60, 0);
-          const dtEnd = new Date(first.getFullYear(), first.getMonth(), first.getDate(), Math.floor(group.endMin / 60), group.endMin % 60, 0);
-
-          const byday = icsOrder.filter((d) => group.icsDays.has(d)).join(',');
-          const untilUtc = formatUtcUntil(new Date(end.getTime()));
-
-          const item = group.item;
-          const summary = `${item.Course || ''}${item['Course Title'] ? ' - ' + item['Course Title'] : ''}`.trim();
-          const descParts = [];
-          if (item.Instructor) descParts.push(`Instructor: ${item.Instructor}`);
-          if (item.Section) descParts.push(`Section: ${item.Section}`);
-          if (item.CRN || item.Crn || item.crn) descParts.push(`CRN: ${item.CRN || item.Crn || item.crn}`);
-          if (item.Term) descParts.push(`Term: ${item.Term}`);
-          const description = descParts.join('\n');
-
-          const uid = `${room}-${item.Course}-${item['Start Time']}-${item['End Time']}-${byday}@faculty-schedules`;
-
-          lines.push('BEGIN:VEVENT');
-          lines.push(`UID:${escapeICS(uid)}`);
-          lines.push(`DTSTAMP:${formatUtcDateTime(new Date())}`);
-          lines.push(`SUMMARY:${escapeICS(summary)}`);
-          if (description) lines.push(`DESCRIPTION:${escapeICS(description)}`);
-          lines.push(`LOCATION:${escapeICS(room)}`);
-          lines.push(`DTSTART;TZID=America/Chicago:${formatLocalDateTime(dtStart)}`);
-          lines.push(`DTEND;TZID=America/Chicago:${formatLocalDateTime(dtEnd)}`);
-          lines.push(`RRULE:FREQ=WEEKLY;BYDAY=${byday};UNTIL=${untilUtc}`);
-          lines.push('END:VEVENT');
-
-          totalEvents += 1;
-        });
-      });
-
-      lines.push('END:VCALENDAR');
-      const finalLines = foldICSLines(lines);
-      return finalLines.join('\r\n') + '\r\n';
-    };
-
-    const semester = getSemesterFromData().replace(/\s+/g, '_');
-
-    if (perRoom && (!selectedRoom) && roomsToExport.length > 1) {
-      roomsToExport.forEach((room) => {
-        const ics = createIcsForRooms([room]);
-        const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${room.replace(/\s+/g, '_')}-${semester}-${new Date().toISOString().split('T')[0]}.ics`;
-        a.click();
-        window.URL.revokeObjectURL(url);
-      });
-    } else {
-      const roomPart = selectedRoom
-        ? selectedRoom.replace(/\s+/g, '_')
-        : (roomsToExport.length === 1 ? roomsToExport[0].replace(/\s+/g, '_') : 'multiple_rooms');
-      const buildingPart = selectedBuilding ? `-${selectedBuilding.replace(/\s+/g, '_')}` : '';
-      const ics = createIcsForRooms(roomsToExport);
-      const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${roomPart}${buildingPart}-${semester}-${new Date().toISOString().split('T')[0]}.ics`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-    }
-
-    try {
-      await logExport('ICS', 'Room schedules', totalEvents || 0);
-    } catch (_) {}
-  };
+  // legacy ICS export removed (use OutlookRoomExport tool)
 
 
 
@@ -1000,7 +777,6 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
               onShowContactCard={handleShowContactCard}
               onExport={handleExportWeekView}
               onPrint={handlePrintWeekView}
-              onExportICS={handleExportWeekViewICS}
             />
           ) : <TimelineView />
         ) : (
@@ -1037,16 +813,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
         />
       )}
 
-      {/* ICS Export Modal */}
-      <ICSExportModal
-        isOpen={showICSModal}
-        onClose={() => setShowICSModal(false)}
-        onConfirm={(vals) => { setShowICSModal(false); performICSExport(vals); }}
-        rooms={selectedRoom ? [selectedRoom] : filteredRooms}
-        roomsCount={(selectedRoom ? 1 : filteredRooms.length) || 0}
-        selectedRoom={selectedRoom}
-        selectedBuilding={selectedBuilding}
-      />
+      
     </div>
   );
 };

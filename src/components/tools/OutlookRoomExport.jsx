@@ -462,9 +462,11 @@ const OutlookRoomExport = ({ rawScheduleData = [], availableSemesters = [], show
         return `EXDATE;TZID=America/Chicago:${formatLocalDateTime(exDateTime)}`;
       });
 
-    const summaryParts = [schedule?.courseCode || schedule?.Course || schedule?.title || 'Class'];
-    if (schedule?.section) summaryParts.push(`Section ${schedule.section}`);
-    const summary = summaryParts.filter(Boolean).join(' - ');
+    const baseName = schedule?.courseCode || schedule?.Course || schedule?.title || 'Class';
+    const summary = [
+      baseName,
+      schedule?.section ? String(schedule.section) : null
+    ].filter(Boolean).join(' - ');
 
     const descriptionLines = [];
     if (schedule?.courseTitle || schedule?.['Course Title']) descriptionLines.push(`Title: ${schedule.courseTitle || schedule['Course Title']}`);

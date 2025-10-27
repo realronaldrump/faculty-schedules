@@ -296,7 +296,8 @@ function App() {
       children: [
         { id: 'department-insights', label: 'Department Insights', path: 'analytics/department-insights' },
         { id: 'student-worker-analytics', label: 'Student Worker Analytics', path: 'analytics/student-worker-analytics' },
-        { id: 'course-management', label: 'Course Management', path: 'analytics/course-management' }
+        { id: 'course-management', label: 'Course Management', path: 'analytics/course-management' },
+        { id: 'program-management', label: 'Program Management', path: 'analytics/program-management' }
       ]
     },
     {
@@ -318,7 +319,6 @@ function App() {
       label: 'System',
       icon: Settings,
       children: [
-        { id: 'program-management', label: 'Program Management', path: 'administration/program-management' },
         { id: 'access-control', label: 'Access Control', path: 'administration/access-control' },
         { id: 'user-activity', label: 'User Activity', path: 'administration/user-activity' },
         { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' }
@@ -1784,9 +1784,9 @@ function App() {
             <BaylorIDManager {...pageProps} />
           </ProtectedContent>
         );
-      case 'administration/program-management':
+      case 'analytics/program-management':
         return (
-          <ProtectedContent pageId="administration/program-management">
+          <ProtectedContent pageId="analytics/program-management">
             <ProgramManagement {...pageProps} />
           </ProtectedContent>
         );

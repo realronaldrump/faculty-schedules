@@ -373,45 +373,92 @@ const OutlookRoomExport = ({ rawScheduleData = [], availableSemesters = [], show
     return first;
   };
 
-  const generateEventLines = (room, schedule, pattern, config, exceptions) => {
-    const metadata = dayMetadata[(pattern?.day || '').toString().trim().toUpperCase()];
-    if (!metadata) return { lines: [], count: 0 };
-
-    const startMinutes = parseTimeToMinutes(pattern?.startTime);
-    const endMinutes = parseTimeToMinutes(pattern?.endTime);
-    if (startMinutes == null || endMinutes == null || endMinutes <= startMinutes) {
-      return { lines: [], count: 0 };
+  const computeFirstOccurrenceForDays = (startDate, jsDays) => {
+    const allowed = new Set(jsDays);
+    const first = new Date(startDate.getTime());
+    for (let i = 0; i < 14; i++) {
+      if (allowed.has(first.getDay())) return first;
+      first.setDate(first.getDate() + 1);
     }
+    return first;
+  };
+
+  const groupPatternsByTime = (patterns, schedule, config) => {
+    const termStart = ensureDate(config.startDate);
+    const termEnd = ensureDate(config.endDate);
+    if (!termStart || !termEnd || termEnd < termStart) return [];
+
+    const groups = new Map();
+    patterns.forEach((p) => {
+      const startMinutes = parseTimeToMinutes(p?.startTime);
+      const endMinutes = parseTimeToMinutes(p?.endTime);
+      const dayKey = (p?.day || '').toString().trim().toUpperCase();
+      const meta = dayMetadata[dayKey];
+      if (!meta || startMinutes == null || endMinutes == null || endMinutes <= startMinutes) return;
+
+      const key = `${startMinutes}-${endMinutes}`;
+      const patternStart = ensureDate(p?.startDate) || ensureDate(schedule?.startDate) || termStart;
+      const patternEnd = ensureDate(p?.endDate) || ensureDate(schedule?.endDate) || termEnd;
+
+      const existing = groups.get(key) || {
+        startMinutes,
+        endMinutes,
+        jsDays: new Set(),
+        icsDays: new Set(),
+        effectiveStart: termStart,
+        effectiveEnd: termEnd
+      };
+
+      existing.jsDays.add(meta.js);
+      existing.icsDays.add(meta.ics);
+      // Intersect date ranges across patterns in this group
+      existing.effectiveStart = (patternStart > existing.effectiveStart) ? patternStart : existing.effectiveStart;
+      existing.effectiveEnd = (patternEnd < existing.effectiveEnd) ? patternEnd : existing.effectiveEnd;
+
+      groups.set(key, existing);
+    });
+
+    return Array.from(groups.values()).filter((g) => g.effectiveEnd >= g.effectiveStart);
+  };
+
+  const generateCombinedEventLines = (room, schedule, group, config, exceptions) => {
+    if (!group || !group.jsDays || group.jsDays.size === 0) return { lines: [], count: 0 };
 
     const termStart = ensureDate(config.startDate);
     const termEnd = ensureDate(config.endDate);
-    if (!termStart || !termEnd || termEnd < termStart) {
-      return { lines: [], count: 0 };
-    }
+    if (!termStart || !termEnd || termEnd < termStart) return { lines: [], count: 0 };
 
-    const patternStart = ensureDate(pattern?.startDate) || ensureDate(schedule?.startDate) || termStart;
-    const patternEnd = ensureDate(pattern?.endDate) || ensureDate(schedule?.endDate) || termEnd;
-    const effectiveStart = patternStart > termStart ? patternStart : termStart;
-    const effectiveEnd = patternEnd < termEnd ? patternEnd : termEnd;
-    if (effectiveEnd < effectiveStart) {
-      return { lines: [], count: 0 };
-    }
+    const effectiveStart = group.effectiveStart > termStart ? group.effectiveStart : termStart;
+    const effectiveEnd = group.effectiveEnd < termEnd ? group.effectiveEnd : termEnd;
+    if (effectiveEnd < effectiveStart) return { lines: [], count: 0 };
 
-    const firstOccurrence = computeFirstOccurrence(effectiveStart, metadata.js);
-    if (firstOccurrence > effectiveEnd) {
-      return { lines: [], count: 0 };
-    }
+    const firstOccurrence = computeFirstOccurrenceForDays(effectiveStart, Array.from(group.jsDays));
+    if (firstOccurrence > effectiveEnd) return { lines: [], count: 0 };
 
-    const startDateTime = new Date(firstOccurrence.getFullYear(), firstOccurrence.getMonth(), firstOccurrence.getDate(), Math.floor(startMinutes / 60), startMinutes % 60, 0);
-    const endDateTime = new Date(firstOccurrence.getFullYear(), firstOccurrence.getMonth(), firstOccurrence.getDate(), Math.floor(endMinutes / 60), endMinutes % 60, 0);
+    const startDateTime = new Date(
+      firstOccurrence.getFullYear(),
+      firstOccurrence.getMonth(),
+      firstOccurrence.getDate(),
+      Math.floor(group.startMinutes / 60),
+      group.startMinutes % 60,
+      0
+    );
+    const endDateTime = new Date(
+      firstOccurrence.getFullYear(),
+      firstOccurrence.getMonth(),
+      firstOccurrence.getDate(),
+      Math.floor(group.endMinutes / 60),
+      group.endMinutes % 60,
+      0
+    );
 
     const untilDate = new Date(effectiveEnd.getFullYear(), effectiveEnd.getMonth(), effectiveEnd.getDate(), 23, 59, 59, 0);
 
     const exceptionLines = (exceptions || [])
       .map((ex) => ensureDate(ex.date))
-      .filter((date) => date && date >= effectiveStart && date <= effectiveEnd && date.getDay() === metadata.js)
+      .filter((date) => date && date >= effectiveStart && date <= effectiveEnd && group.jsDays.has(date.getDay()))
       .map((date) => {
-        const exDateTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), Math.floor(startMinutes / 60), startMinutes % 60, 0);
+        const exDateTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), Math.floor(group.startMinutes / 60), group.startMinutes % 60, 0);
         return `EXDATE;TZID=America/Chicago:${formatLocalDateTime(exDateTime)}`;
       });
 
@@ -426,7 +473,10 @@ const OutlookRoomExport = ({ rawScheduleData = [], availableSemesters = [], show
     if (schedule?.term) descriptionLines.push(`Term: ${schedule.term}`);
     if (schedule?.notes) descriptionLines.push(schedule.notes);
 
-    const uid = `${sanitizeForFile(room)}-${schedule?.id || schedule?._originalId || 'schedule'}-${metadata.ics}-${formatLocalDate(startDateTime)}-${pad2(startDateTime.getHours())}${pad2(startDateTime.getMinutes())}`;
+    const icsDaysSorted = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'].filter((d) => group.icsDays.has(d));
+    const byday = icsDaysSorted.join(',');
+
+    const uid = `${sanitizeForFile(room)}-${schedule?.id || schedule?._originalId || 'schedule'}-${byday}-${formatLocalDate(startDateTime)}-${pad2(startDateTime.getHours())}${pad2(startDateTime.getMinutes())}`;
 
     const lines = [
       'BEGIN:VEVENT',
@@ -436,7 +486,7 @@ const OutlookRoomExport = ({ rawScheduleData = [], availableSemesters = [], show
       `LOCATION:${escapeICS(room)}`,
       `DTSTART;TZID=America/Chicago:${formatLocalDateTime(startDateTime)}`,
       `DTEND;TZID=America/Chicago:${formatLocalDateTime(endDateTime)}`,
-      `RRULE:FREQ=WEEKLY;BYDAY=${metadata.ics};UNTIL=${formatUtcDateTime(untilDate)}`
+      `RRULE:FREQ=WEEKLY;BYDAY=${byday};UNTIL=${formatUtcDateTime(untilDate)}`
     ];
 
     if (descriptionLines.length > 0) {
@@ -474,8 +524,9 @@ const OutlookRoomExport = ({ rawScheduleData = [], availableSemesters = [], show
         return;
       }
       const patterns = getMeetingPatterns(schedule);
-      patterns.forEach((pattern) => {
-        const { lines: eventLines, count } = generateEventLines(room, schedule, pattern, config, exceptions);
+      const groups = groupPatternsByTime(patterns, schedule, config);
+      groups.forEach((group) => {
+        const { lines: eventLines, count } = generateCombinedEventLines(room, schedule, group, config, exceptions);
         if (count > 0) {
           lines.push(...eventLines);
           eventCount += count;

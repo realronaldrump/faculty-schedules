@@ -1,7 +1,130 @@
-import React from 'react';
-import { ArrowLeft, ExternalLink, Settings, GraduationCap, Calendar, IdCard, BookOpen } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, ExternalLink, Settings, GraduationCap, Calendar, IdCard, BookOpen, Save } from 'lucide-react';
+import { db } from '../firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { logUpdate, logCreate } from '../utils/changeLogger';
+import { useAuth } from '../contexts/AuthContext';
 
-const SystemsPage = ({ onNavigate }) => {
+const SystemsPage = ({ onNavigate, availableSemesters, showNotification }) => {
+  const { canAccess } = useAuth();
+  const [defaultTerm, setDefaultTerm] = useState('');
+  const [selectedTerm, setSelectedTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  // Check if user is admin
+  const isAdmin = canAccess && canAccess('administration/baylor-systems');
+
+  // Load current default term setting
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const settingsRef = doc(db, 'settings', 'app');
+        const settingsSnap = await getDoc(settingsRef);
+        
+        if (settingsSnap.exists()) {
+          const data = settingsSnap.data();
+          setDefaultTerm(data.defaultTerm || '');
+          setSelectedTerm(data.defaultTerm || '');
+        }
+      } catch (error) {
+        console.error('Error loading settings:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadSettings();
+  }, []);
+
+  // Save default term setting
+  const handleSaveDefaultTerm = async () => {
+    if (!selectedTerm) {
+      showNotification?.('warning', 'No Term Selected', 'Please select a term to set as default.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const settingsRef = doc(db, 'settings', 'app');
+      const settingsSnap = await getDoc(settingsRef);
+      const originalData = settingsSnap.exists() ? settingsSnap.data() : null;
+      
+      const newSettings = {
+        defaultTerm: selectedTerm,
+        updatedAt: new Date().toISOString()
+      };
+
+      if (!settingsSnap.exists()) {
+        newSettings.createdAt = new Date().toISOString();
+      }
+
+      await setDoc(settingsRef, newSettings, { merge: true });
+
+      // Log the change
+      if (originalData) {
+        await logUpdate(
+          `App Settings - Default Term changed to ${selectedTerm}`,
+          'settings',
+          'app',
+          newSettings,
+          originalData,
+          'SystemsPage.jsx - handleSaveDefaultTerm'
+        );
+      } else {
+        await logCreate(
+          `App Settings - Default Term set to ${selectedTerm}`,
+          'settings',
+          'app',
+          newSettings,
+          'SystemsPage.jsx - handleSaveDefaultTerm'
+        );
+      }
+
+      setDefaultTerm(selectedTerm);
+      showNotification?.('success', 'Default Term Updated', `The default term has been set to ${selectedTerm}. This will be the default view for all users.`);
+    } catch (error) {
+      console.error('Error saving default term:', error);
+      showNotification?.('error', 'Save Failed', 'Failed to save default term setting. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClearDefaultTerm = async () => {
+    setSaving(true);
+    try {
+      const settingsRef = doc(db, 'settings', 'app');
+      const settingsSnap = await getDoc(settingsRef);
+      const originalData = settingsSnap.exists() ? settingsSnap.data() : null;
+      
+      const newSettings = {
+        defaultTerm: null,
+        updatedAt: new Date().toISOString()
+      };
+
+      await setDoc(settingsRef, newSettings, { merge: true });
+
+      // Log the change
+      await logUpdate(
+        'App Settings - Default Term cleared (will use most recent)',
+        'settings',
+        'app',
+        newSettings,
+        originalData,
+        'SystemsPage.jsx - handleClearDefaultTerm'
+      );
+
+      setDefaultTerm('');
+      setSelectedTerm('');
+      showNotification?.('success', 'Default Term Cleared', 'The app will now default to the most recent term.');
+    } catch (error) {
+      console.error('Error clearing default term:', error);
+      showNotification?.('error', 'Clear Failed', 'Failed to clear default term setting. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
   const systems = [
     { 
       name: 'Schedule of Classes', 
@@ -114,15 +237,117 @@ const SystemsPage = ({ onNavigate }) => {
 
       {/* Page Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">University Systems</h1>
-        <p className="text-gray-600">Access official Baylor University tools and resources</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">System Settings & Resources</h1>
+        <p className="text-gray-600">Configure app settings and access official Baylor University tools</p>
       </div>
+
+      {/* Admin Settings Section - Default Term */}
+      {isAdmin && (
+        <div className="bg-white rounded-lg shadow-sm border-2 border-baylor-green/20 p-6">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-baylor-green/10 rounded-lg">
+                <Settings className="w-5 h-5 text-baylor-green" />
+              </div>
+              <div>
+                <h2 className="text-lg font-serif font-semibold text-baylor-green">
+                  Default Term Setting
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Control which term is shown by default to all users when they first access the app
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <Calendar className="w-5 h-5 text-blue-600 mt-0.5" />
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-blue-800 mb-1">
+                  How Default Term Works
+                </h3>
+                <p className="text-sm text-blue-700">
+                  By default, the app shows the most recent term (based on year and semester). As an admin, you can override this 
+                  to show a specific term instead. This is useful when you want to highlight a particular semester, such as the 
+                  upcoming term instead of the current one.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="loading-shimmer w-8 h-8 rounded"></div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Default Term
+                  {defaultTerm && (
+                    <span className="ml-2 text-xs text-baylor-green font-normal">
+                      (Currently: {defaultTerm})
+                    </span>
+                  )}
+                </label>
+                <select
+                  value={selectedTerm}
+                  onChange={(e) => setSelectedTerm(e.target.value)}
+                  className="w-full md:w-96 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  disabled={saving}
+                >
+                  <option value="">Use most recent term (automatic)</option>
+                  {availableSemesters && availableSemesters.map((semester) => (
+                    <option key={semester} value={semester}>
+                      {semester}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-2">
+                  {selectedTerm 
+                    ? `When set, all users will see "${selectedTerm}" by default when they log in.`
+                    : 'The app will automatically show the most recent term based on the data.'}
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-3 pt-2">
+                <button
+                  onClick={handleSaveDefaultTerm}
+                  disabled={saving || !selectedTerm || selectedTerm === defaultTerm}
+                  className="btn-primary flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  {saving ? 'Saving...' : 'Save Default Term'}
+                </button>
+
+                {defaultTerm && (
+                  <button
+                    onClick={handleClearDefaultTerm}
+                    disabled={saving}
+                    className="btn-ghost flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Clear Override
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Divider */}
+      {isAdmin && (
+        <div className="border-t border-gray-200"></div>
+      )}
 
       {/* Quick Access Banner */}
       <div className="university-header rounded-xl p-8">
         <div className="university-brand">
           <div className="university-logo">
-            <Settings className="w-6 h-6 text-white" />
+            <ExternalLink className="w-6 h-6 text-white" />
           </div>
           <div>
             <h2 className="university-title">Official University Resources</h2>

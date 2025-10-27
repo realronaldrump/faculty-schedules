@@ -47,8 +47,8 @@ service cloud.firestore {
       return isAdmin();
     }
 
-    // Access Control config: everyone signed-in can read; only admin writes
-    match /settings/accessControl {
+    // Settings collection: everyone signed-in can read; only admin writes
+    match /settings/{docId} {
       allow read: if isSignedIn();
       allow write: if canWrite();
     }

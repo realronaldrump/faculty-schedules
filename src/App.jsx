@@ -53,7 +53,7 @@ import {
   Database
 } from 'lucide-react';
 import { db } from './firebase';
-import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, setDoc, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, setDoc, query, orderBy, onSnapshot, getDoc } from 'firebase/firestore';
 import { adaptPeopleToFaculty, adaptPeopleToStaff, fetchPrograms } from './utils/dataAdapter';
 import { fetchSchedulesWithRelationalData } from './utils/dataImportUtils';
 import { autoMigrateIfNeeded } from './utils/importTransactionMigration';
@@ -182,8 +182,8 @@ function App() {
 
 
 
-  // Extract available semesters from schedule data and auto-select most recent
-  const updateAvailableSemesters = (scheduleData) => {
+  // Extract available semesters from schedule data and auto-select default or most recent
+  const updateAvailableSemesters = async (scheduleData) => {
     const semesters = new Set();
     scheduleData.forEach(schedule => {
       if (schedule.term && schedule.term.trim()) {
@@ -216,11 +216,30 @@ function App() {
     console.log('🎓 Available semesters:', semesterList);
     setAvailableSemesters(semesterList);
     
-    // Always auto-select the most recent semester (first in sorted list)
-    const mostRecentSemester = semesterList[0];
-    if (mostRecentSemester !== selectedSemester) {
-      console.log(`🎓 Auto-selecting most recent semester: ${mostRecentSemester}`);
-      setSelectedSemester(mostRecentSemester);
+    // Check if admin has set a default term
+    let defaultTermToUse = semesterList[0]; // Fallback to most recent
+    try {
+      const settingsRef = doc(db, 'settings', 'app');
+      const settingsSnap = await getDoc(settingsRef);
+      
+      if (settingsSnap.exists()) {
+        const adminDefaultTerm = settingsSnap.data()?.defaultTerm;
+        // Only use admin default if it exists in the available semesters
+        if (adminDefaultTerm && semesterList.includes(adminDefaultTerm)) {
+          defaultTermToUse = adminDefaultTerm;
+          console.log(`🎓 Using admin-configured default term: ${adminDefaultTerm}`);
+        } else if (adminDefaultTerm) {
+          console.warn(`⚠️ Admin default term "${adminDefaultTerm}" not found in available semesters, using most recent instead`);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load default term setting, using most recent:', error);
+    }
+    
+    // Set the selected semester if not already set or if different from current
+    if (defaultTermToUse !== selectedSemester) {
+      console.log(`🎓 Setting semester to: ${defaultTermToUse}`);
+      setSelectedSemester(defaultTermToUse);
     }
   };
 

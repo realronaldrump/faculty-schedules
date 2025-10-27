@@ -414,52 +414,90 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
       ];
       lines.push(...buildVTimezone());
 
+      const bydayMap = { 1: 'MO', 2: 'TU', 3: 'WE', 4: 'TH', 5: 'FR' };
+      const icsOrder = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
+
+      const firstOccurrenceForDays = (startDate, jsDays) => {
+        const allow = new Set(jsDays);
+        const cur = new Date(startDate.getTime());
+        for (let i = 0; i < 14; i++) {
+          if (allow.has(cur.getDay())) return cur;
+          cur.setDate(cur.getDate() + 1);
+        }
+        return cur;
+      };
+
       rooms.forEach((room) => {
         const daySchedules = weeklyRoomSchedules[room] || {};
+
+        // Group items across days by course/time/(section/instructor/crn) so we can make one BYDAY event
+        const groups = new Map();
         Object.entries(daySchedules).forEach(([dayCode, schedules]) => {
           const jsDay = dayCodeToJs[dayCode];
           if (jsDay == null) return;
-
-          schedules.forEach((item, idx) => {
-            let first = new Date(start.getTime());
-            while (first.getDay() !== jsDay) {
-              first.setDate(first.getDate() + 1);
-            }
-
+          schedules.forEach((item) => {
             const startMin = parseTime(item['Start Time']);
             const endMin = parseTime(item['End Time']);
             if (startMin == null || endMin == null || endMin <= startMin) return;
 
-            const dtStart = new Date(first.getFullYear(), first.getMonth(), first.getDate(), Math.floor(startMin / 60), startMin % 60, 0);
-            const dtEnd = new Date(first.getFullYear(), first.getMonth(), first.getDate(), Math.floor(endMin / 60), endMin % 60, 0);
+            const key = [
+              item.Course || '',
+              item['Course Title'] || '',
+              item.Instructor || '',
+              item.Section || '',
+              item.CRN || item.Crn || item.crn || '',
+              item['Start Time'] || '',
+              item['End Time'] || ''
+            ].join('|');
 
-            const bydayMap = { 1: 'MO', 2: 'TU', 3: 'WE', 4: 'TH', 5: 'FR' };
-            const byday = bydayMap[jsDay];
-            const untilUtc = formatUtcUntil(new Date(end.getTime()));
-
-            const uid = `${room}-${item.Course}-${item['Start Time']}-${item['End Time']}-${dayCode}-${idx}@faculty-schedules`;
-
-            const summary = `${item.Course || ''}${item['Course Title'] ? ' - ' + item['Course Title'] : ''}`.trim();
-            const descParts = [];
-            if (item.Instructor) descParts.push(`Instructor: ${item.Instructor}`);
-            if (item.Section) descParts.push(`Section: ${item.Section}`);
-            if (item.CRN || item.Crn || item.crn) descParts.push(`CRN: ${item.CRN || item.Crn || item.crn}`);
-            if (item.Term) descParts.push(`Term: ${item.Term}`);
-            const description = descParts.join('\n');
-
-            lines.push('BEGIN:VEVENT');
-            lines.push(`UID:${escapeICS(uid)}`);
-            lines.push(`DTSTAMP:${formatUtcDateTime(new Date())}`);
-            lines.push(`SUMMARY:${escapeICS(summary)}`);
-            lines.push(`LOCATION:${escapeICS(room)}`);
-            if (description) lines.push(`DESCRIPTION:${escapeICS(description)}`);
-            lines.push(`DTSTART;TZID=America/Chicago:${formatLocalDateTime(dtStart)}`);
-            lines.push(`DTEND;TZID=America/Chicago:${formatLocalDateTime(dtEnd)}`);
-            lines.push(`RRULE:FREQ=WEEKLY;BYDAY=${byday};UNTIL=${untilUtc}`);
-            lines.push('END:VEVENT');
-
-            totalEvents += 1;
+            const existing = groups.get(key) || {
+              item,
+              startMin,
+              endMin,
+              jsDays: new Set(),
+              icsDays: new Set()
+            };
+            existing.jsDays.add(jsDay);
+            const by = bydayMap[jsDay];
+            if (by) existing.icsDays.add(by);
+            groups.set(key, existing);
           });
+        });
+
+        Array.from(groups.values()).forEach((group) => {
+          const jsDaysArr = Array.from(group.jsDays);
+          if (jsDaysArr.length === 0) return;
+
+          const first = firstOccurrenceForDays(start, jsDaysArr);
+          const dtStart = new Date(first.getFullYear(), first.getMonth(), first.getDate(), Math.floor(group.startMin / 60), group.startMin % 60, 0);
+          const dtEnd = new Date(first.getFullYear(), first.getMonth(), first.getDate(), Math.floor(group.endMin / 60), group.endMin % 60, 0);
+
+          const byday = icsOrder.filter((d) => group.icsDays.has(d)).join(',');
+          const untilUtc = formatUtcUntil(new Date(end.getTime()));
+
+          const item = group.item;
+          const summary = `${item.Course || ''}${item['Course Title'] ? ' - ' + item['Course Title'] : ''}`.trim();
+          const descParts = [];
+          if (item.Instructor) descParts.push(`Instructor: ${item.Instructor}`);
+          if (item.Section) descParts.push(`Section: ${item.Section}`);
+          if (item.CRN || item.Crn || item.crn) descParts.push(`CRN: ${item.CRN || item.Crn || item.crn}`);
+          if (item.Term) descParts.push(`Term: ${item.Term}`);
+          const description = descParts.join('\n');
+
+          const uid = `${room}-${item.Course}-${item['Start Time']}-${item['End Time']}-${byday}@faculty-schedules`;
+
+          lines.push('BEGIN:VEVENT');
+          lines.push(`UID:${escapeICS(uid)}`);
+          lines.push(`DTSTAMP:${formatUtcDateTime(new Date())}`);
+          lines.push(`SUMMARY:${escapeICS(summary)}`);
+          if (description) lines.push(`DESCRIPTION:${escapeICS(description)}`);
+          lines.push(`LOCATION:${escapeICS(room)}`);
+          lines.push(`DTSTART;TZID=America/Chicago:${formatLocalDateTime(dtStart)}`);
+          lines.push(`DTEND;TZID=America/Chicago:${formatLocalDateTime(dtEnd)}`);
+          lines.push(`RRULE:FREQ=WEEKLY;BYDAY=${byday};UNTIL=${untilUtc}`);
+          lines.push('END:VEVENT');
+
+          totalEvents += 1;
         });
       });
 

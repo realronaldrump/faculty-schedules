@@ -156,6 +156,18 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
     };
   }, []);
 
+  // Handle custom event for showing faculty card
+  useEffect(() => {
+    const handleShowFacultyCard = (event) => {
+      setSelectedFacultyForCard(event.detail);
+    };
+
+    window.addEventListener('showFacultyCard', handleShowFacultyCard);
+    return () => {
+      window.removeEventListener('showFacultyCard', handleShowFacultyCard);
+    };
+  }, []);
+
   // Remove adjunct faculty from selected list when adjunct filter is disabled
   useEffect(() => {
     if (!showAdjuncts) {
@@ -275,7 +287,10 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
                     <button
                       onClick={() => {
                         const faculty = facultyData.find(f => f.name === facultyName);
-                        if (faculty) setSelectedFacultyForCard(faculty);
+                        if (faculty) {
+                          setSelectedFacultyForCard(faculty);
+                          setSelectedCourse(null); // Close course modal if open
+                        }
                       }}
                       className="font-semibold text-baylor-green hover:underline text-left"
                     >
@@ -307,11 +322,15 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
                             bottom: '8px' 
                           }}
                           className="px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green shadow-sm transition-all cursor-pointer"
-                          onClick={() => setSelectedCourse({ ...course, facultyName })}
+                          onClick={() => {
+                            setSelectedCourse({ ...course, facultyName });
+                            setSelectedFacultyForCard(null); // Close faculty card if open
+                          }}
                           title={`${course.course} - ${course.title}\n${formatMinutesToTime(course.start)} - ${formatMinutesToTime(course.end)}\nRoom: ${course.room}`}
                         >
                           <div className="font-bold truncate">{course.course}</div>
                           <div className="text-xs opacity-75 truncate">{course.room}</div>
+                          <div className="text-xs opacity-75 truncate">{formatMinutesToTime(course.start)} - {formatMinutesToTime(course.end)}</div>
                         </div>
                       );
                     })}
@@ -382,8 +401,27 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
 
           {faculty && (
             <div className="mt-8 pt-6 border-t border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-800 mb-3">Instructor</h3>
-              <FacultyContactCard faculty={faculty} showNotification={() => {}} compact={true} />
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-800">Instructor</h3>
+                <button
+                  onClick={() => {
+                    onClose();
+                    // Trigger showing the faculty contact card
+                    setTimeout(() => {
+                      const event = new CustomEvent('showFacultyCard', { detail: faculty });
+                      window.dispatchEvent(event);
+                    }, 100);
+                  }}
+                  className="text-sm text-baylor-green hover:text-baylor-gold font-medium flex items-center gap-1"
+                >
+                  View Contact Card
+                  <Eye size={16} />
+                </button>
+              </div>
+              <p className="mt-2 text-gray-700">{facultyName}</p>
+              {faculty.email && (
+                <p className="text-sm text-gray-600 mt-1">{faculty.email}</p>
+              )}
             </div>
           )}
         </div>

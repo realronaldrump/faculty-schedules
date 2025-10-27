@@ -46,6 +46,9 @@ const SystemsPage = ({ onNavigate, availableSemesters, showNotification }) => {
 
     setSaving(true);
     try {
+      console.log('🔒 Attempting to save default term setting...');
+      console.log('🔒 isAdmin check result:', isAdmin);
+      
       const settingsRef = doc(db, 'settings', 'app');
       const settingsSnap = await getDoc(settingsRef);
       const originalData = settingsSnap.exists() ? settingsSnap.data() : null;
@@ -59,7 +62,9 @@ const SystemsPage = ({ onNavigate, availableSemesters, showNotification }) => {
         newSettings.createdAt = new Date().toISOString();
       }
 
+      console.log('🔒 Writing to settings/app with data:', newSettings);
       await setDoc(settingsRef, newSettings, { merge: true });
+      console.log('✅ Successfully saved default term setting');
 
       // Log the change
       if (originalData) {
@@ -84,8 +89,17 @@ const SystemsPage = ({ onNavigate, availableSemesters, showNotification }) => {
       setDefaultTerm(selectedTerm);
       showNotification?.('success', 'Default Term Updated', `The default term has been set to ${selectedTerm}. This will be the default view for all users.`);
     } catch (error) {
-      console.error('Error saving default term:', error);
-      showNotification?.('error', 'Save Failed', 'Failed to save default term setting. Please try again.');
+      console.error('❌ Error saving default term:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      
+      let errorMessage = 'Failed to save default term setting.';
+      
+      if (error.code === 'permission-denied') {
+        errorMessage = 'Permission denied. Please ensure:\n1. You are logged in as an admin\n2. Firestore security rules have been deployed\n3. Your admin privileges are properly configured';
+      }
+      
+      showNotification?.('error', 'Save Failed', errorMessage);
     } finally {
       setSaving(false);
     }

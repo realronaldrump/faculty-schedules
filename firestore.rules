@@ -31,15 +31,10 @@ service cloud.firestore {
         // Custom claim on the Auth token
         request.auth.token.admin == true ||
         // Case-insensitive direct email allowlist for bootstrap
-        lower(request.auth.token.email) == 'davis_deaton1@baylor.edu' ||
+        request.auth.token.email.lower() == 'davis_deaton1@baylor.edu' ||
         // Check Firestore user profile roles (supports array or map formats)
         userHasAdminRole()
       );
-    }
-
-    // Simplified access control - more permissive for testing
-    function canReadPage(pageId) {
-      return isSignedIn();
     }
 
     // Admin-only access for sensitive operations

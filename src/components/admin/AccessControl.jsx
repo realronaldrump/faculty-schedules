@@ -801,18 +801,39 @@ const AccessControl = () => {
                         Array.isArray(selectedUser.roles) && selectedUser.roles.includes('admin') ? 'opacity-50 pointer-events-none' : ''
                       }`}>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                          {actionKeys.map(key => (
-                            <label key={`user-act-${key}`} className="inline-flex items-center gap-2 text-xs cursor-pointer hover:bg-white rounded px-2 py-1">
-                              <input 
-                                type="checkbox"
-                                checked={Boolean(userActions[key])}
-                                onChange={() => toggleUserAction(key)}
-                                disabled={Array.isArray(selectedUser.roles) && selectedUser.roles.includes('admin')}
-                                className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green disabled:opacity-50 disabled:cursor-not-allowed"
-                              />
-                              <span className="text-gray-700 font-mono">{key}</span>
-                            </label>
-                          ))}
+                          {actionKeys.map(key => {
+                            // Check if user already has this action via their role
+                            const hasViaRole = (() => {
+                              if (!selectedUser.roles || selectedUser.roles.length === 0) return false;
+                              for (const role of selectedUser.roles) {
+                                const roleActions = ((rolePermissions[role] || {}).actions || {});
+                                if (roleActions['*'] === true || roleActions[key] === true) return true;
+                              }
+                              return false;
+                            })();
+                            
+                            return (
+                              <label 
+                                key={`user-act-${key}`} 
+                                className={`inline-flex items-center gap-2 text-xs rounded px-2 py-1 ${
+                                  hasViaRole ? 'bg-green-50 cursor-not-allowed' : 'cursor-pointer hover:bg-white'
+                                }`}
+                                title={hasViaRole ? `Already granted via ${selectedUser.roles[0]} role` : ''}
+                              >
+                                <input 
+                                  type="checkbox"
+                                  checked={hasViaRole || Boolean(userActions[key])}
+                                  onChange={() => toggleUserAction(key)}
+                                  disabled={hasViaRole || (Array.isArray(selectedUser.roles) && selectedUser.roles.includes('admin'))}
+                                  className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green disabled:opacity-50 disabled:cursor-not-allowed"
+                                />
+                                <span className={`font-mono ${hasViaRole ? 'text-green-700' : 'text-gray-700'}`}>
+                                  {key}
+                                  {hasViaRole && <span className="ml-1 text-green-600">✓</span>}
+                                </span>
+                              </label>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>
@@ -831,18 +852,39 @@ const AccessControl = () => {
                         Array.isArray(selectedUser.roles) && selectedUser.roles.includes('admin') ? 'opacity-50 pointer-events-none' : ''
                       }`}>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                          {allPages.map(pid => (
-                            <label key={`user-page-${pid}`} className="inline-flex items-center gap-2 text-xs cursor-pointer hover:bg-white rounded px-2 py-1">
-                              <input
-                                type="checkbox"
-                                checked={Boolean(userOverrides[pid])}
-                                onChange={() => toggleUserPage(pid)}
-                                disabled={Array.isArray(selectedUser.roles) && selectedUser.roles.includes('admin')}
-                                className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green disabled:opacity-50 disabled:cursor-not-allowed"
-                              />
-                              <span className="text-gray-700">{pid}</span>
-                            </label>
-                          ))}
+                          {allPages.map(pid => {
+                            // Check if user already has this page via their role
+                            const hasViaRole = (() => {
+                              if (!selectedUser.roles || selectedUser.roles.length === 0) return false;
+                              for (const role of selectedUser.roles) {
+                                const rolePages = ((rolePermissions[role] || {}).pages || {});
+                                if (rolePages['*'] === true || rolePages[pid] === true) return true;
+                              }
+                              return false;
+                            })();
+                            
+                            return (
+                              <label 
+                                key={`user-page-${pid}`} 
+                                className={`inline-flex items-center gap-2 text-xs rounded px-2 py-1 ${
+                                  hasViaRole ? 'bg-green-50 cursor-not-allowed' : 'cursor-pointer hover:bg-white'
+                                }`}
+                                title={hasViaRole ? `Already granted via ${selectedUser.roles[0]} role` : ''}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={hasViaRole || Boolean(userOverrides[pid])}
+                                  onChange={() => toggleUserPage(pid)}
+                                  disabled={hasViaRole || (Array.isArray(selectedUser.roles) && selectedUser.roles.includes('admin'))}
+                                  className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green disabled:opacity-50 disabled:cursor-not-allowed"
+                                />
+                                <span className={hasViaRole ? 'text-green-700' : 'text-gray-700'}>
+                                  {pid}
+                                  {hasViaRole && <span className="ml-1 text-green-600">✓</span>}
+                                </span>
+                              </label>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>

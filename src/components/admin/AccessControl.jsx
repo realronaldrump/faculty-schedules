@@ -206,25 +206,27 @@ const AccessControl = () => {
   };
 
   const toggleUserRole = (role) => {
-    setUserRoles(prev => {
-      const has = prev.includes(role);
-      if (has) {
-        if (role === 'admin' && selectedUserId === userProfile?.uid) {
-          return prev;
-        }
-        return prev.filter(r => r !== role);
-      }
-      return [...prev, role];
-    });
+    // Prevent self-demotion from admin
+    if (role === 'admin' && selectedUserId === userProfile?.uid && userRoles.includes('admin')) {
+      return;
+    }
+    // Only one role at a time - selecting a role replaces all others
+    setUserRoles([role]);
   };
 
   const saveUserRoles = async () => {
     if (!selectedUserId) return;
+    if (userRoles.length === 0) {
+      // Default to viewer if no role selected
+      setUserRoles(['viewer']);
+      return;
+    }
     setSaving(true);
     try {
       const uRef = doc(db, 'users', selectedUserId);
       const original = (await getDoc(uRef)).data() || {};
-      const rolesToSave = userRoles.length === 0 ? ['viewer'] : Array.from(new Set(userRoles));
+      // Ensure only one role is saved
+      const rolesToSave = [userRoles[0]];
       const payload = { roles: rolesToSave, updatedAt: serverTimestamp() };
       await updateDoc(uRef, payload);
       await logUpdate(`User Roles - ${original.email}`, 'users', selectedUserId, payload, original, 'AccessControl.jsx - saveUserRoles');
@@ -246,11 +248,14 @@ const AccessControl = () => {
       const snap = await getDoc(uRef);
       const data = snap.data() || {};
       const roles = Array.isArray(data.roles) ? data.roles : [];
+      
+      // Prevent self-demotion from admin
       if (role === 'admin' && uid === userProfile?.uid && roles.includes('admin')) {
         return;
       }
-      const next = roles.includes(role) ? roles.filter(r => r !== role) : [...roles, role];
-      const finalRoles = next.length === 0 ? ['viewer'] : Array.from(new Set(next));
+      
+      // Only one role at a time - clicking a role sets it as the only role
+      const finalRoles = [role];
       await updateDoc(uRef, { roles: finalRoles, updatedAt: serverTimestamp() });
       await logUpdate(`User Roles - ${data.email}`, 'users', uid, { roles: finalRoles }, data, 'AccessControl.jsx - quickToggleRole');
       await loadData();
@@ -337,16 +342,7 @@ const AccessControl = () => {
         <p className="text-white/90">Manage role-based permissions and user access across the application</p>
       </div>
 
-      {/* Info Banner */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-          <div className="text-sm text-blue-900">
-            <p className="font-medium mb-1">Dynamic Permission System</p>
-            <p className="text-blue-700">Pages and actions are automatically detected from the app. Admins always have full access to everything.</p>
-          </div>
-        </div>
-      </div>
+
 
       {/* Main Tabs */}
       <div className="bg-white rounded-lg border border-gray-200">
@@ -624,12 +620,14 @@ const AccessControl = () => {
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2 flex-wrap">
                               {['viewer','staff','faculty','admin'].map(r => (
-                                <label key={`${u.id}-${r}`} className="inline-flex items-center gap-1 text-xs">
+                                <label key={`${u.id}-${r}`} className="inline-flex items-center gap-1 text-xs cursor-pointer">
                                   <input 
-                                    type="checkbox" 
+                                    type="radio"
+                                    name={`role-${u.id}`}
                                     checked={Array.isArray(u.roles) ? u.roles.includes(r) : false}
                                     onChange={() => quickToggleRole(u.id, r)}
-                                    className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                                    className="border-gray-300 text-baylor-green focus:ring-baylor-green"
+                                    disabled={r === 'admin' && u.id === userProfile?.uid && Array.isArray(u.roles) && u.roles.includes('admin')}
                                   />
                                   <span className="capitalize text-gray-700">{r}</span>
                                 </label>
@@ -695,15 +693,18 @@ const AccessControl = () => {
                   <div className="p-6 space-y-6">
                     {/* User Roles */}
                     <div>
-                      <h4 className="font-medium text-gray-900 mb-3">Roles</h4>
+                      <h4 className="font-medium text-gray-900 mb-3">Role Assignment</h4>
+                      <p className="text-xs text-gray-600 mb-3">Each user can only have one role. Select the role that best describes their access level.</p>
                       <div className="flex items-center gap-4">
                         {['viewer', 'staff', 'faculty', 'admin'].map(role => (
                           <label key={`sel-role-${role}`} className="inline-flex items-center gap-2 cursor-pointer">
                             <input
-                              type="checkbox"
+                              type="radio"
+                              name="user-role"
                               checked={userRoles.includes(role)}
                               onChange={() => toggleUserRole(role)}
-                              className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                              className="border-gray-300 text-baylor-green focus:ring-baylor-green"
+                              disabled={role === 'admin' && selectedUserId === userProfile?.uid && userRoles.includes('admin')}
                             />
                             <span className="capitalize text-sm font-medium text-gray-700">{role}</span>
                           </label>
@@ -714,7 +715,7 @@ const AccessControl = () => {
                         onClick={saveUserRoles}
                         disabled={saving}
                       >
-                        Save Roles
+                        Save Role
                       </button>
                     </div>
 
@@ -742,7 +743,7 @@ const AccessControl = () => {
                           <div>
                             <h4 className="font-semibold text-blue-900 mb-1">Current Role Permissions</h4>
                             <p className="text-sm text-blue-800 mb-2">
-                              This user has the following role{selectedUser.roles.length > 1 ? 's' : ''}: <strong>{selectedUser.roles.join(', ')}</strong>
+                              This user has the <strong className="capitalize">{selectedUser.roles[0] || 'viewer'}</strong> role.
                             </p>
                             <p className="text-xs text-blue-700">
                               Pages: {(() => {

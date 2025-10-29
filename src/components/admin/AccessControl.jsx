@@ -53,8 +53,8 @@ const AccessControl = () => {
       { name: 'Scheduling', pages: ['scheduling/faculty-schedules','scheduling/individual-availability','scheduling/room-schedules','scheduling/student-schedules','scheduling/group-meeting-scheduler'] },
       { name: 'Directory', pages: ['people/people-directory','people/email-lists','resources/building-directory','administration/baylor-acronyms','people/baylor-id-manager'] },
       { name: 'Analytics', pages: ['analytics/department-insights','analytics/student-worker-analytics','analytics/course-management','analytics/program-management'] },
-      { name: 'Tools', pages: ['administration/import-wizard','administration/data-hygiene','administration/crn-tools','administration/outlook-export','resources/room-grid-generator','administration/recent-changes'] },
-      { name: 'System', pages: ['administration/access-control','administration/user-activity','administration/baylor-systems'] }
+      { name: 'Tools', pages: ['administration/import-wizard','administration/data-hygiene','administration/crn-tools','administration/outlook-export','resources/room-grid-generator'] },
+      { name: 'System', pages: ['administration/access-control','administration/user-activity','administration/recent-changes','administration/baylor-systems'] }
     ];
     const grouped = new Set(groups.flatMap(g => g.pages));
     const others = allPages.filter(p => !grouped.has(p));

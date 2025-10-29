@@ -310,7 +310,6 @@ function App() {
         { id: 'crn-tools', label: 'CRN Quality Tools', path: 'administration/crn-tools' },
         { id: 'outlook-export', label: 'Outlook Room Export', path: 'administration/outlook-export' },
         { id: 'room-grid-generator', label: 'Room Grid Generator', path: 'resources/room-grid-generator' },
-        { id: 'recent-changes', label: 'Recent Changes', path: 'administration/recent-changes' },
         { id: 'baylor-id-manager', label: 'Baylor ID Manager', path: 'people/baylor-id-manager' },
       ]
     },
@@ -321,6 +320,7 @@ function App() {
       children: [
         { id: 'access-control', label: 'Access Control', path: 'administration/access-control' },
         { id: 'user-activity', label: 'User Activity', path: 'administration/user-activity' },
+        { id: 'recent-changes', label: 'Recent Changes', path: 'administration/recent-changes' },
         { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' }
       ]
     }

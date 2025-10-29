@@ -337,7 +337,7 @@ const AccessControl = () => {
       <div className="bg-gradient-to-r from-baylor-green to-baylor-green/80 rounded-lg p-6 text-white">
         <div className="flex items-center gap-3 mb-2">
           <Shield className="w-8 h-8" />
-          <h1 className="text-2xl font-bold">Access Control</h1>
+          <h1 className="text-2xl font-bold text-white">Access Control</h1>
         </div>
         <p className="text-white/90">Manage role-based permissions and user access across the application</p>
       </div>
@@ -603,6 +603,7 @@ const AccessControl = () => {
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Roles</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Last Login</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Date Created</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
                       </tr>
                     </thead>
@@ -650,6 +651,9 @@ const AccessControl = () => {
                           <td className="px-4 py-3 text-sm text-gray-600">
                             {u.lastLoginAt ? new Date(u.lastLoginAt.seconds ? u.lastLoginAt.seconds * 1000 : u.lastLoginAt).toLocaleString() : '-'}
                           </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {u.createdAt ? new Date(u.createdAt.seconds ? u.createdAt.seconds * 1000 : u.createdAt).toLocaleString() : '-'}
+                          </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <button 
@@ -678,7 +682,7 @@ const AccessControl = () => {
                 <div className="border border-baylor-green rounded-lg overflow-hidden">
                   <div className="bg-baylor-green text-white px-4 py-3 flex items-center justify-between">
                     <div>
-                      <h3 className="font-semibold">User Overrides</h3>
+                      <h3 className="font-semibold text-white">User Overrides</h3>
                       <p className="text-sm text-white/80">{selectedUser.email}</p>
                     </div>
                     <button

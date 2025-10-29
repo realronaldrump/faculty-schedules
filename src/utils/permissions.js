@@ -91,6 +91,7 @@ export const APP_ACTIONS = {
   DATA_BACKUP: 'data.backup',
 
   // ===== ANALYTICS OPERATIONS =====
+  ANALYTICS_VIEW: 'analytics.view',
   ANALYTICS_EDIT: 'analytics.edit',
   ANALYTICS_EXPORT: 'analytics.export',
   ANALYTICS_DEPARTMENT: 'analytics.department.view',

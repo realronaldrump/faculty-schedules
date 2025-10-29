@@ -22,19 +22,64 @@ export const AuthProvider = ({ children }) => {
 
   const getAccessControlRef = () => doc(db, 'settings', 'accessControl');
 
+  // Normalize role permissions into new schema { [role]: { pages: {}, actions: {} } }
+  const normalizeRolePermissions = (raw) => {
+    const input = raw || {};
+    const roleKeys = new Set([
+      'admin',
+      'staff',
+      'faculty',
+      'viewer',
+      ...Object.keys(input)
+    ]);
+
+    const normalized = {};
+    roleKeys.forEach((role) => {
+      const value = input[role];
+      if (value && typeof value === 'object' && (value.pages || value.actions)) {
+        normalized[role] = {
+          pages: (value.pages && typeof value.pages === 'object') ? { ...value.pages } : {},
+          actions: (value.actions && typeof value.actions === 'object') ? { ...value.actions } : {}
+        };
+      } else if (value && typeof value === 'object') {
+        // Legacy shape treated as page permissions
+        normalized[role] = { pages: { ...value }, actions: {} };
+      } else {
+        normalized[role] = { pages: {}, actions: {} };
+      }
+    });
+
+    // Ensure admin wildcards
+    if (!normalized.admin) normalized.admin = { pages: {}, actions: {} };
+    if (!normalized.admin.pages || Object.keys(normalized.admin.pages).length === 0) {
+      normalized.admin.pages = { '*': true };
+    }
+    if (!normalized.admin.actions || Object.keys(normalized.admin.actions).length === 0) {
+      normalized.admin.actions = { '*': true };
+    }
+
+    // Viewer default: dashboard view if not explicitly set
+    if (!normalized.viewer) normalized.viewer = { pages: {}, actions: {} };
+    if (!normalized.viewer.pages) normalized.viewer.pages = {};
+    if (!Object.prototype.hasOwnProperty.call(normalized.viewer.pages, 'dashboard')) {
+      normalized.viewer.pages['dashboard'] = true;
+    }
+
+    return normalized;
+  };
+
   const bootstrapAccessControl = async () => {
     // Ensure settings/accessControl exists with safe defaults
     try {
       const ref = getAccessControlRef();
       const snap = await getDoc(ref);
       if (!snap.exists()) {
-        const allWildcard = { '*': true };
         const defaults = {
           rolePermissions: {
-            admin: allWildcard,
-            staff: {},
-            faculty: {},
-            viewer: { 'dashboard': true }
+            admin: { pages: { '*': true }, actions: { '*': true } },
+            staff: { pages: {}, actions: {} },
+            faculty: { pages: {}, actions: {} },
+            viewer: { pages: { 'dashboard': true }, actions: {} }
           },
           updatedAt: serverTimestamp(),
         };
@@ -43,11 +88,16 @@ export const AuthProvider = ({ children }) => {
         setRolePermissions(defaults.rolePermissions);
       } else {
         const data = snap.data() || {};
-        setRolePermissions(data.rolePermissions || { admin: { '*': true }, staff: {}, faculty: {}, viewer: { 'dashboard': true } });
+        setRolePermissions(normalizeRolePermissions(data.rolePermissions));
       }
     } catch (e) {
-      // Fallback to in-memory defaults
-      setRolePermissions({ admin: { '*': true }, staff: {}, faculty: {} });
+      // Fallback to in-memory defaults (normalized shape)
+      setRolePermissions({
+        admin: { pages: { '*': true }, actions: { '*': true } },
+        staff: { pages: {}, actions: {} },
+        faculty: { pages: {}, actions: {} },
+        viewer: { pages: { 'dashboard': true }, actions: {} }
+      });
       console.warn('Failed to load access control. Using defaults.', e);
     }
   };
@@ -171,9 +221,9 @@ export const AuthProvider = ({ children }) => {
     const stop = onSnapshot(ref, (snap) => {
       if (snap.exists()) {
         const data = snap.data() || {};
-        setRolePermissions(data.rolePermissions || { admin: { '*': true }, staff: {}, faculty: {}, viewer: { 'dashboard': true } });
+        setRolePermissions(normalizeRolePermissions(data.rolePermissions));
       } else {
-        setRolePermissions({ admin: { '*': true }, staff: {}, faculty: {}, viewer: { 'dashboard': true } });
+        setRolePermissions(normalizeRolePermissions());
       }
       setLoadedAccess(true);
     }, () => {
@@ -246,13 +296,19 @@ export const AuthProvider = ({ children }) => {
     const userPerm = userProfile.permissions && Object.prototype.hasOwnProperty.call(userProfile.permissions, pageId)
       ? Boolean(userProfile.permissions[pageId])
       : undefined;
+    // New-style per-user overrides
+    const userOverridePages = (userProfile.overrides && userProfile.overrides.pages) || {};
+    const hasUserOverride = Object.prototype.hasOwnProperty.call(userOverridePages, pageId);
     if (typeof userPerm === 'boolean') return userPerm;
+    if (hasUserOverride) return Boolean(userOverridePages[pageId]);
     // Role-based permissions
     if (!rolePermissions) return false;
+    const normalized = normalizeRolePermissions(rolePermissions);
     for (const role of roles) {
-      const rp = rolePermissions[role] || {};
-      if (rp['*'] === true) return true;
-      if (rp[pageId] === true) return true;
+      const rp = normalized[role] || { pages: {}, actions: {} };
+      const pages = rp.pages || {};
+      if (pages['*'] === true) return true;
+      if (pages[pageId] === true) return true;
     }
     return false;
   };
@@ -279,9 +335,24 @@ export const AuthProvider = ({ children }) => {
       if (!actionKey) return false;
       const email = (user?.email || '').toLowerCase();
       if (ADMIN_EMAILS.includes(email)) return true;
-      if (Array.isArray(userProfile?.roles) && userProfile.roles.includes('admin')) return true;
-      if (userProfile && typeof userProfile.actions === 'object') {
-        return Boolean(userProfile.actions[actionKey]);
+      const roles = Array.isArray(userProfile?.roles) ? userProfile.roles : [];
+      if (roles.includes('admin')) return true;
+      // User-specific overrides (legacy and new)
+      if (userProfile) {
+        if (userProfile.actions && typeof userProfile.actions === 'object') {
+          if (userProfile.actions[actionKey] === true) return true;
+        }
+        const userOverrideActions = (userProfile.overrides && userProfile.overrides.actions) || {};
+        if (userOverrideActions[actionKey] === true) return true;
+      }
+      // Role-based action permissions
+      if (!rolePermissions) return false;
+      const normalized = normalizeRolePermissions(rolePermissions);
+      for (const role of roles) {
+        const rp = normalized[role] || { pages: {}, actions: {} };
+        const actions = rp.actions || {};
+        if (actions['*'] === true) return true;
+        if (actions[actionKey] === true) return true;
       }
       return false;
     }

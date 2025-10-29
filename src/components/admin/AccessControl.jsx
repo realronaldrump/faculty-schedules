@@ -684,9 +684,9 @@ const AccessControl = () => {
                       <p className="text-sm text-white/80">{selectedUser.email}</p>
                     </div>
                     <button
-                      className="px-4 py-2 bg-white text-baylor-green rounded hover:bg-gray-100 font-medium text-sm"
+                      className="px-4 py-2 bg-white text-baylor-green rounded hover:bg-gray-100 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       onClick={saveUserOverrides}
-                      disabled={saving}
+                      disabled={saving || (Array.isArray(selectedUser.roles) && selectedUser.roles.includes('admin'))}
                     >
                       {saving ? 'Saving...' : 'Save Overrides'}
                     </button>
@@ -718,14 +718,83 @@ const AccessControl = () => {
                       </button>
                     </div>
 
+                    {/* Admin Notice */}
+                    {Array.isArray(selectedUser.roles) && selectedUser.roles.includes('admin') && (
+                      <div className="bg-baylor-green/10 border border-baylor-green/30 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                          <Shield className="w-5 h-5 text-baylor-green mt-0.5 flex-shrink-0" />
+                          <div>
+                            <h4 className="font-semibold text-baylor-green mb-1">Administrator Access</h4>
+                            <p className="text-sm text-gray-700">
+                              This user has the <strong>Admin</strong> role and automatically has access to all pages and actions. 
+                              Overrides are not needed and are disabled below.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Show current role permissions */}
+                    {Array.isArray(selectedUser.roles) && !selectedUser.roles.includes('admin') && selectedUser.roles.length > 0 && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                          <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <h4 className="font-semibold text-blue-900 mb-1">Current Role Permissions</h4>
+                            <p className="text-sm text-blue-800 mb-2">
+                              This user has the following role{selectedUser.roles.length > 1 ? 's' : ''}: <strong>{selectedUser.roles.join(', ')}</strong>
+                            </p>
+                            <p className="text-xs text-blue-700">
+                              Pages: {(() => {
+                                const grantedPages = new Set();
+                                selectedUser.roles.forEach(role => {
+                                  const rolePages = ((rolePermissions[role] || {}).pages || {});
+                                  if (rolePages['*']) {
+                                    allPages.forEach(p => grantedPages.add(p));
+                                  } else {
+                                    Object.entries(rolePages).forEach(([page, val]) => {
+                                      if (val === true) grantedPages.add(page);
+                                    });
+                                  }
+                                });
+                                return grantedPages.size;
+                              })()} granted via role • 
+                              Actions: {(() => {
+                                const grantedActions = new Set();
+                                selectedUser.roles.forEach(role => {
+                                  const roleActions = ((rolePermissions[role] || {}).actions || {});
+                                  if (roleActions['*']) {
+                                    actionKeys.forEach(a => grantedActions.add(a));
+                                  } else {
+                                    Object.entries(roleActions).forEach(([action, val]) => {
+                                      if (val === true) grantedActions.add(action);
+                                    });
+                                  }
+                                });
+                                return grantedActions.size;
+                              })()} granted via role
+                            </p>
+                            <p className="text-xs text-blue-700 mt-1">
+                              Use overrides below to grant <em>additional</em> permissions beyond what their role provides.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* User Actions */}
                     <div>
                       <div className="flex items-center gap-2 mb-3">
                         <Key className="w-4 h-4 text-baylor-green" />
                         <h4 className="font-medium text-gray-900">Action Overrides</h4>
-                        <span className="text-xs text-gray-500">({Object.values(userActions).filter(v => v === true).length} granted)</span>
+                        <span className="text-xs text-gray-500">({Object.values(userActions).filter(v => v === true).length} additional granted)</span>
+                        {Array.isArray(selectedUser.roles) && selectedUser.roles.includes('admin') && (
+                          <span className="text-xs text-amber-600 font-medium">⚠️ Disabled (Admin role)</span>
+                        )}
                       </div>
-                      <div className="bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto baylor-scrollbar">
+                      <div className={`bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto baylor-scrollbar ${
+                        Array.isArray(selectedUser.roles) && selectedUser.roles.includes('admin') ? 'opacity-50 pointer-events-none' : ''
+                      }`}>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                           {actionKeys.map(key => (
                             <label key={`user-act-${key}`} className="inline-flex items-center gap-2 text-xs cursor-pointer hover:bg-white rounded px-2 py-1">
@@ -733,7 +802,8 @@ const AccessControl = () => {
                                 type="checkbox"
                                 checked={Boolean(userActions[key])}
                                 onChange={() => toggleUserAction(key)}
-                                className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                                disabled={Array.isArray(selectedUser.roles) && selectedUser.roles.includes('admin')}
+                                className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green disabled:opacity-50 disabled:cursor-not-allowed"
                               />
                               <span className="text-gray-700 font-mono">{key}</span>
                             </label>
@@ -747,9 +817,14 @@ const AccessControl = () => {
                       <div className="flex items-center gap-2 mb-3">
                         <Eye className="w-4 h-4 text-baylor-green" />
                         <h4 className="font-medium text-gray-900">Page Access Overrides</h4>
-                        <span className="text-xs text-gray-500">({Object.values(userOverrides).filter(v => v === true).length} granted)</span>
+                        <span className="text-xs text-gray-500">({Object.values(userOverrides).filter(v => v === true).length} additional granted)</span>
+                        {Array.isArray(selectedUser.roles) && selectedUser.roles.includes('admin') && (
+                          <span className="text-xs text-amber-600 font-medium">⚠️ Disabled (Admin role)</span>
+                        )}
                       </div>
-                      <div className="bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto baylor-scrollbar">
+                      <div className={`bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto baylor-scrollbar ${
+                        Array.isArray(selectedUser.roles) && selectedUser.roles.includes('admin') ? 'opacity-50 pointer-events-none' : ''
+                      }`}>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                           {allPages.map(pid => (
                             <label key={`user-page-${pid}`} className="inline-flex items-center gap-2 text-xs cursor-pointer hover:bg-white rounded px-2 py-1">
@@ -757,7 +832,8 @@ const AccessControl = () => {
                                 type="checkbox"
                                 checked={Boolean(userOverrides[pid])}
                                 onChange={() => toggleUserPage(pid)}
-                                className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                                disabled={Array.isArray(selectedUser.roles) && selectedUser.roles.includes('admin')}
+                                className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green disabled:opacity-50 disabled:cursor-not-allowed"
                               />
                               <span className="text-gray-700">{pid}</span>
                             </label>

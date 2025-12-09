@@ -13,6 +13,7 @@ import {
   Filter,
   X
 } from 'lucide-react';
+import { getBuildingFromRoom, normalizeBuildingName, getCanonicalBuildingList, buildingMatches } from '../utils/buildingUtils';
 
 const CommandCenter = ({
   scheduleData = [],
@@ -76,13 +77,7 @@ const CommandCenter = ({
   const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
   const currentDayCode = getCurrentDayCode();
 
-  // Helper to extract building from room string
-  const getBuildingFromRoom = (room) => {
-    if (!room || room.toLowerCase() === 'online' || room.toLowerCase() === 'tba') return '';
-    // Extract building code (e.g., "MMSCI 301" -> "MMSCI")
-    const match = room.match(/^([A-Z]+)/i);
-    return match ? match[1].toUpperCase() : '';
-  };
+  // getBuildingFromRoom is imported from buildingUtils
 
   // Helper to check if schedule meets on a given day
   const scheduleMeetsOnDay = (schedule, dayCode) => {
@@ -144,23 +139,35 @@ const CommandCenter = ({
     });
   }, [scheduleData, selectedSemester, currentDayCode]);
 
-  // Get unique buildings for filter
+  // Get unique buildings for filter - use canonical list + any found in data
   const availableBuildings = useMemo(() => {
-    const buildings = new Set();
+    const buildings = new Set(getCanonicalBuildingList());
+
+    // Also add any non-canonical buildings found in schedule data
     todaySchedules.forEach(s => {
       const room = getScheduleRoom(s);
       const building = getBuildingFromRoom(room);
-      if (building) buildings.add(building);
+      if (building && building !== 'Online' && building !== 'Off Campus') {
+        buildings.add(building);
+      }
     });
-    // Also add buildings from student workers
+
+    // Also add normalized buildings from student workers
     studentData.forEach(student => {
       const buildings_arr = student.primaryBuildings || [];
-      buildings_arr.forEach(b => { if (b) buildings.add(b); });
+      buildings_arr.forEach(b => {
+        const normalized = normalizeBuildingName(b);
+        if (normalized && normalized !== 'Online') buildings.add(normalized);
+      });
       (student.jobs || []).forEach(job => {
         const locs = Array.isArray(job.location) ? job.location : [job.location];
-        locs.forEach(loc => { if (loc) buildings.add(loc); });
+        locs.forEach(loc => {
+          const normalized = normalizeBuildingName(loc);
+          if (normalized && normalized !== 'Online') buildings.add(normalized);
+        });
       });
     });
+
     return Array.from(buildings).sort();
   }, [todaySchedules, studentData]);
 

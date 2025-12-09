@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { MapPin, Calendar, Clock, Search, Grid, List, Filter, Building2, X, SlidersHorizontal, ArrowUpDown, Download, Printer } from 'lucide-react';
+import { MapPin, Calendar, CalendarDays, Clock, Search, Grid, List, Filter, Building2, X, SlidersHorizontal, ArrowUpDown, Download, Printer } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
 import WeekView from './WeekView';
+import RoomCalendarView from './RoomCalendarView';
 import CourseDetailModal from './CourseDetailModal';
 import { logExport } from '../../utils/activityLogger';
 
@@ -26,7 +27,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
     return now.getHours() * 60 + now.getMinutes();
   });
   const [selectedCourseForModal, setSelectedCourseForModal] = useState(null);
-  
+
 
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
   const dayOrder = ['M', 'T', 'W', 'R', 'F'];
@@ -91,7 +92,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
   const uniqueRooms = useMemo(() => {
     const allRooms = scheduleData.flatMap(item => (item.Room || '').split(';').map(r => r.trim()));
     return [...new Set(allRooms)]
-      .filter(room => 
+      .filter(room =>
         room &&
         room.toLowerCase() !== 'online' &&
         !room.toLowerCase().includes('no room needed') &&
@@ -121,13 +122,13 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
   const dailyRoomSchedules = useMemo(() => {
     const schedules = {};
     const roomsToShow = selectedRoom ? [selectedRoom] : filteredRooms;
-    
+
     roomsToShow.forEach(room => {
       schedules[room] = scheduleData
-        .filter(item => 
-          (item.Room || '').split(';').map(r => r.trim()).includes(room) && 
-          item.Day === roomScheduleDay && 
-          item['Start Time'] && 
+        .filter(item =>
+          (item.Room || '').split(';').map(r => r.trim()).includes(room) &&
+          item.Day === roomScheduleDay &&
+          item['Start Time'] &&
           item['End Time']
         )
         .reduce((acc, item) => {
@@ -140,7 +141,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
         }, [])
         .sort((a, b) => parseTime(a['Start Time']) - parseTime(b['Start Time']));
     });
-    
+
     return schedules;
   }, [scheduleData, filteredRooms, selectedRoom, roomScheduleDay]);
 
@@ -148,14 +149,14 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
   const weeklyRoomSchedules = useMemo(() => {
     const schedules = {};
     const roomsToShow = selectedRoom ? [selectedRoom] : filteredRooms;
-    
+
     // Filter days based on week view mode
     let daysToShow = dayOrder;
     if (weekViewMode === 'mwf') daysToShow = ['M', 'W', 'F'];
     else if (weekViewMode === 'tr') daysToShow = ['T', 'R'];
     else if (weekViewMode === 'mw') daysToShow = ['M', 'W'];
     else if (weekViewMode === 'trf') daysToShow = ['T', 'R', 'F'];
-    
+
     roomsToShow.forEach(room => {
       schedules[room] = {};
       daysToShow.forEach(day => {
@@ -177,22 +178,22 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
           .sort((a, b) => parseTime(a['Start Time']) - parseTime(b['Start Time']));
       });
     });
-    
+
     return schedules;
   }, [scheduleData, filteredRooms, selectedRoom, weekViewMode]);
 
   // Get meeting pattern for a course
   const getMeetingPattern = (courseCode, startTime, endTime) => {
-    const course = scheduleData.find(item => 
-      item.Course === courseCode && 
-      item['Start Time'] === startTime && 
+    const course = scheduleData.find(item =>
+      item.Course === courseCode &&
+      item['Start Time'] === startTime &&
       item['End Time'] === endTime
     );
-    
+
     if (course && course.meetingPatterns) {
       return course.meetingPatterns.map(p => p.day).join('');
     }
-    
+
     // Fallback to Day field
     return course?.Day || '';
   };
@@ -210,7 +211,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
   // Calculate room utilization stats
   const roomStats = useMemo(() => {
     const stats = {};
-    
+
     Object.keys(dailyRoomSchedules).forEach(room => {
       const sessions = dailyRoomSchedules[room];
       const totalHours = sessions.reduce((sum, session) => {
@@ -218,14 +219,14 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
         const end = parseTime(session['End Time']);
         return sum + ((end - start) / 60);
       }, 0);
-      
+
       stats[room] = {
         sessions: sessions.length,
         hours: totalHours,
         utilization: (totalHours / 9) * 100 // 9 hours = 8AM to 5PM
       };
     });
-    
+
     return stats;
   }, [dailyRoomSchedules]);
 
@@ -323,7 +324,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
     const dayStart = 8 * 60; // 8:00 AM
     const dayEnd = 18 * 60; // 6:00 PM
     const totalMinutes = dayEnd - dayStart;
-    const timeLabels = Array.from({length: (dayEnd - dayStart) / 60 + 1}, (_, i) => dayStart + i * 60);
+    const timeLabels = Array.from({ length: (dayEnd - dayStart) / 60 + 1 }, (_, i) => dayStart + i * 60);
     const rowHeight = density === 'compact' ? '44px' : '60px';
 
     return (
@@ -336,17 +337,17 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
             </div>
             <div className="flex-grow flex">
               {timeLabels.slice(0, -1).map(time => (
-                <div 
-                  key={time} 
-                  style={{width: `${(60 / totalMinutes) * 100}%`}} 
+                <div
+                  key={time}
+                  style={{ width: `${(60 / totalMinutes) * 100}%` }}
                   className="text-center text-xs font-medium p-2 border-l border-gray-200 text-baylor-green"
                 >
-                  {formatMinutesToTime(time).replace(':00','')}
+                  {formatMinutesToTime(time).replace(':00', '')}
                 </div>
               ))}
             </div>
           </div>
-          
+
           {/* Room Rows */}
           {visibleRooms.map(room => (
             <div key={room} className="relative flex items-center border-t border-gray-200 hover:bg-gray-50" style={{ height: rowHeight }}>
@@ -362,13 +363,13 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
                   />
                 </div>
               </div>
-              
+
               <div className="absolute top-0 left-40 right-0 h-full bg-gray-50/30">
                 {/* Grid lines */}
                 {timeLabels.slice(1, -1).map(time => (
-                  <div 
-                    key={time} 
-                    style={{ left: `${((time - dayStart) / totalMinutes) * 100}%` }} 
+                  <div
+                    key={time}
+                    style={{ left: `${((time - dayStart) / totalMinutes) * 100}%` }}
                     className="absolute top-0 bottom-0 w-px bg-gray-200"
                   ></div>
                 ))}
@@ -379,7 +380,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
                     style={{ left: `${((nowMinutes - dayStart) / totalMinutes) * 100}%` }}
                   />
                 )}
-                
+
                 {/* Scheduled Items */}
                 {dailyRoomSchedules[room].map(item => {
                   const start = parseTime(item['Start Time']);
@@ -394,12 +395,12 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
                   return (
                     <div
                       key={`${item.Course}-${item['Start Time']}-${item['End Time']}-${room}`}
-                      style={{ 
-                        position: 'absolute', 
-                        left: `${left}%`, 
-                        width: `${width}%`, 
-                        top: density === 'compact' ? '4px' : '6px', 
-                        bottom: density === 'compact' ? '4px' : '6px' 
+                      style={{
+                        position: 'absolute',
+                        left: `${left}%`,
+                        width: `${width}%`,
+                        top: density === 'compact' ? '4px' : '6px',
+                        bottom: density === 'compact' ? '4px' : '6px'
                       }}
                       className={`px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md shadow-sm transition-all cursor-pointer group ${nowMinutes >= start && nowMinutes <= end ? 'bg-baylor-gold text-baylor-green ring-2 ring-baylor-gold/40' : 'bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green'}`}
                       onClick={() => openCourseCard(item, room)}
@@ -441,7 +442,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
               </div>
             </div>
           </div>
-          
+
           <div className="p-6">
             {dailyRoomSchedules[room].length > 0 ? (
               <div className="space-y-3">
@@ -537,11 +538,10 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
                   <button
                     key={dayCode}
                     onClick={() => setRoomScheduleDay(dayCode)}
-                    className={`px-4 py-2 text-sm font-medium rounded-md transition-colors flex-1 ${
-                      roomScheduleDay === dayCode 
-                        ? 'bg-baylor-green text-white shadow' 
-                        : 'text-gray-600 hover:bg-gray-200'
-                    }`}
+                    className={`px-4 py-2 text-sm font-medium rounded-md transition-colors flex-1 ${roomScheduleDay === dayCode
+                      ? 'bg-baylor-green text-white shadow'
+                      : 'text-gray-600 hover:bg-gray-200'
+                      }`}
                   >
                     {dayName}
                   </button>
@@ -606,39 +606,46 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
             {/* View Mode Toggle */}
             <div className="flex-1 max-w-full">
               <label className="block text-sm font-medium text-gray-700 mb-2">View Mode</label>
-              <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+              <div className="flex flex-wrap items-center gap-1 bg-gray-100 p-1 rounded-lg">
                 <button
                   onClick={() => setViewMode('timeline')}
-                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors flex items-center flex-1 justify-center ${
-                    viewMode === 'timeline' 
-                      ? 'bg-baylor-green text-white shadow' 
-                      : 'text-gray-600 hover:bg-gray-200'
-                  }`}
+                  className={`px-2 py-2 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${viewMode === 'timeline'
+                    ? 'bg-baylor-green text-white shadow'
+                    : 'text-gray-600 hover:bg-gray-200'
+                    }`}
                 >
-                  <Grid className="mr-1" size={16} />
+                  <Grid className="mr-1" size={14} />
                   Timeline
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors flex items-center flex-1 justify-center ${
-                    viewMode === 'list' 
-                      ? 'bg-baylor-green text-white shadow' 
-                      : 'text-gray-600 hover:bg-gray-200'
-                  }`}
+                  className={`px-2 py-2 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${viewMode === 'list'
+                    ? 'bg-baylor-green text-white shadow'
+                    : 'text-gray-600 hover:bg-gray-200'
+                    }`}
                 >
-                  <List className="mr-1" size={16} />
+                  <List className="mr-1" size={14} />
                   List
                 </button>
                 <button
                   onClick={() => setViewMode('week')}
-                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors flex items-center flex-1 justify-center ${
-                    viewMode === 'week' 
-                      ? 'bg-baylor-green text-white shadow' 
-                      : 'text-gray-600 hover:bg-gray-200'
-                  }`}
+                  className={`px-2 py-2 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${viewMode === 'week'
+                    ? 'bg-baylor-green text-white shadow'
+                    : 'text-gray-600 hover:bg-gray-200'
+                    }`}
                 >
-                  <Calendar className="mr-1" size={16} />
+                  <Calendar className="mr-1" size={14} />
                   Week
+                </button>
+                <button
+                  onClick={() => setViewMode('calendar')}
+                  className={`px-2 py-2 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${viewMode === 'calendar'
+                    ? 'bg-baylor-green text-white shadow'
+                    : 'text-gray-600 hover:bg-gray-200'
+                    }`}
+                >
+                  <CalendarDays className="mr-1" size={14} />
+                  Calendar
                 </button>
               </div>
             </div>
@@ -763,28 +770,38 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
           </div>
         )}
 
-        {visibleRooms.length > 0 ? (
-          viewMode === 'timeline' ? <TimelineView /> : 
-          viewMode === 'list' ? <ListView /> :
-          viewMode === 'week' ? (
-            <WeekView
-              scheduleData={scheduleData}
-              filteredRooms={filteredRooms}
-              selectedRoom={selectedRoom}
-              selectedBuilding={selectedBuilding}
-              weekViewMode={weekViewMode}
-              density={density}
-              onShowContactCard={handleShowContactCard}
-              onExport={handleExportWeekView}
-              onPrint={handlePrintWeekView}
-            />
-          ) : <TimelineView />
+        {viewMode === 'calendar' ? (
+          <RoomCalendarView
+            scheduleData={scheduleData}
+            selectedRoom={selectedRoom}
+            selectedBuilding={selectedBuilding}
+            density={density}
+            onShowContactCard={handleShowContactCard}
+            onExport={handleExportWeekView}
+            onPrint={handlePrintWeekView}
+          />
+        ) : visibleRooms.length > 0 ? (
+          viewMode === 'timeline' ? <TimelineView /> :
+            viewMode === 'list' ? <ListView /> :
+              viewMode === 'week' ? (
+                <WeekView
+                  scheduleData={scheduleData}
+                  filteredRooms={filteredRooms}
+                  selectedRoom={selectedRoom}
+                  selectedBuilding={selectedBuilding}
+                  weekViewMode={weekViewMode}
+                  density={density}
+                  onShowContactCard={handleShowContactCard}
+                  onExport={handleExportWeekView}
+                  onPrint={handlePrintWeekView}
+                />
+              ) : <TimelineView />
         ) : (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
             <MapPin className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No Rooms Found</h3>
             <p className="text-gray-600">
-              {searchTerm 
+              {searchTerm
                 ? `No rooms match your search "${searchTerm}". Try adjusting your search criteria.`
                 : 'No room data available for the selected day.'
               }
@@ -813,7 +830,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
         />
       )}
 
-      
+
     </div>
   );
 };

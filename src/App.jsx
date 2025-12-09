@@ -24,6 +24,7 @@ import RecentChangesPage from './components/RecentChangesPage';
 import RoomGridGenerator from './components/admin/RoomGridGenerator';
 import UserActivityDashboard from './components/UserActivityDashboard';
 import BaylorIDManager from './components/BaylorIDManager';
+import CommandCenter from './components/CommandCenter';
 
 import EmailLists from './components/EmailLists';
 import BuildingDirectory from './components/BuildingDirectory';
@@ -34,15 +35,15 @@ import { useAuth } from './contexts/AuthContext.jsx';
 import { usePermissions } from './utils/permissions';
 import Notification from './components/Notification';
 import { registerNavigationPages } from './utils/pageRegistry';
-import { 
-  Home, 
-  Calendar, 
-  Users, 
-  BarChart3, 
-  Settings, 
-  Bell, 
-  Search, 
-  User, 
+import {
+  Home,
+  Calendar,
+  Users,
+  BarChart3,
+  Settings,
+  Bell,
+  Search,
+  User,
   ChevronDown,
   GraduationCap,
   Menu,
@@ -50,7 +51,9 @@ import {
   Star,
   X,
   Wrench,
-  Database
+  Database,
+  Activity,
+  Radio
 } from 'lucide-react';
 import { db } from './firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, setDoc, query, orderBy, onSnapshot, getDoc } from 'firebase/firestore';
@@ -111,7 +114,7 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
-  
+
   // Pinned pages state
   const [pinnedPages, setPinnedPages] = useState(() => {
     try {
@@ -122,14 +125,14 @@ function App() {
       return [];
     }
   });
-  
+
   // Semester Selection State with localStorage persistence
   const [selectedSemester, setSelectedSemester] = useState(() => {
     return localStorage.getItem('selectedSemester') || '';
   });
   const [availableSemesters, setAvailableSemesters] = useState([]);
   const [showSemesterDropdown, setShowSemesterDropdown] = useState(false);
-  
+
   // Raw data from Firebase
   const [rawScheduleData, setRawScheduleData] = useState([]);
   const [rawPeople, setRawPeople] = useState([]);
@@ -137,7 +140,7 @@ function App() {
   const [editHistory, setEditHistory] = useState([]);
   const [recentChanges, setRecentChanges] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Notification state
   const [notification, setNotification] = useState({
     show: false,
@@ -190,38 +193,38 @@ function App() {
         semesters.add(schedule.term.trim());
       }
     });
-    
+
     if (semesters.size === 0) {
       setAvailableSemesters([]);
       return;
     }
-    
+
     const semesterList = Array.from(semesters).sort((a, b) => {
       // Simple sort: extract year and term, sort by year first, then by term
       const [aTerm, aYear] = a.split(' ');
       const [bTerm, bYear] = b.split(' ');
-      
+
       const aYearNum = parseInt(aYear);
       const bYearNum = parseInt(bYear);
-      
+
       if (aYearNum !== bYearNum) {
         return bYearNum - aYearNum; // Newer years first
       }
-      
+
       // For same year, Fall is most recent, then Summer, then Spring
       const termOrder = { 'Fall': 3, 'Summer': 2, 'Spring': 1 };
       return (termOrder[bTerm] || 0) - (termOrder[aTerm] || 0);
     });
-    
+
     console.log('🎓 Available semesters:', semesterList);
     setAvailableSemesters(semesterList);
-    
+
     // Check if admin has set a default term
     let defaultTermToUse = semesterList[0]; // Fallback to most recent
     try {
       const settingsRef = doc(db, 'settings', 'app');
       const settingsSnap = await getDoc(settingsRef);
-      
+
       if (settingsSnap.exists()) {
         const adminDefaultTerm = settingsSnap.data()?.defaultTerm;
         // Only use admin default if it exists in the available semesters
@@ -235,7 +238,7 @@ function App() {
     } catch (error) {
       console.warn('Failed to load default term setting, using most recent:', error);
     }
-    
+
     // Set the selected semester if not already set or if different from current
     if (defaultTermToUse !== selectedSemester) {
       console.log(`🎓 Setting semester to: ${defaultTermToUse}`);
@@ -244,8 +247,8 @@ function App() {
   };
 
   const togglePinPage = (pageId) => {
-    setPinnedPages(prev => 
-      prev.includes(pageId) 
+    setPinnedPages(prev =>
+      prev.includes(pageId)
         ? prev.filter(id => id !== pageId)
         : [...prev, pageId]
     );
@@ -253,7 +256,7 @@ function App() {
 
   // Filter schedule data by selected semester (removed problematic fallback)
   const semesterFilteredScheduleData = useMemo(() => {
-    return rawScheduleData.filter(schedule => 
+    return rawScheduleData.filter(schedule =>
       schedule.term === selectedSemester
     );
   }, [rawScheduleData, selectedSemester]);
@@ -265,6 +268,12 @@ function App() {
       label: 'Dashboard',
       icon: Home,
       path: 'dashboard'
+    },
+    {
+      id: 'command-center',
+      label: 'Live View',
+      icon: Radio,
+      path: 'command-center'
     },
     {
       id: 'scheduling',
@@ -334,22 +343,22 @@ function App() {
   // Adapt relational data to flat structure for component compatibility
   const scheduleData = useMemo(() => {
     if (!semesterFilteredScheduleData || semesterFilteredScheduleData.length === 0) return [];
-    
+
     // Convert normalized relational data to flat structure
     const flattenedData = [];
-    
+
     semesterFilteredScheduleData.forEach(schedule => {
       // Skip invalid schedules
       if (!schedule || !schedule.id) {
         console.warn('⚠️ Skipping invalid schedule:', schedule);
         return;
       }
-      
+
       // Handle meeting patterns - create one row per meeting pattern
       if (schedule.meetingPatterns && Array.isArray(schedule.meetingPatterns) && schedule.meetingPatterns.length > 0) {
         schedule.meetingPatterns.forEach((pattern, index) => {
           if (!pattern) return; // Skip null patterns
-          
+
           // Build room fields with multi-room awareness
           const roomDisplay = (() => {
             if (schedule.isOnline) return 'Online';
@@ -379,23 +388,23 @@ function App() {
             Credits: creditsValue ?? '',
             Program: programCode,
             Term: schedule.term || '',
-            
+
             // Meeting pattern info
             Day: pattern.day || '',
             'Start Time': pattern.startTime || '',
             'End Time': pattern.endTime || '',
-            
+
             // Room info
             Room: roomDisplay,
             'Room Capacity': Array.isArray(schedule.rooms) && schedule.rooms.length > 0 ? (schedule.rooms[0]?.capacity || '') : (schedule.room ? schedule.room.capacity : ''),
-            
+
             // Course details
             CRN: schedule.crn || schedule.CRN || '',
             'Course Level': schedule.courseLevel || '',
             'Course Type': programCode,
             'Schedule Type': schedule.scheduleType || 'Class Instruction',
             Status: schedule.status || 'Active',
-            
+
             // Legacy flat structure compatibility
             ...schedule,
             _originalId: schedule.id
@@ -461,7 +470,7 @@ function App() {
 
     // Session counts
     const totalSessions = scheduleData.length;
-    
+
     // Adjunct-taught sessions
     const adjunctTaughtSessions = scheduleData.filter(schedule => {
       const instructorName = schedule.Instructor || '';
@@ -575,7 +584,7 @@ function App() {
               updates,
               schedule,
               'App.jsx - autoBackfillOnlineFlags'
-            ).catch(() => {});
+            ).catch(() => { });
             updatesPerformed.push(schedule.id);
             // Mutate local copy for immediate UX consistency
             schedule.isOnline = true;
@@ -624,7 +633,7 @@ function App() {
             updates,
             person,
             'App.jsx - autoInactivateExpiredStudents'
-          ).catch(() => {});
+          ).catch(() => { });
           // Reflect locally for immediate UX
           person.isActive = false;
         } catch (e) {
@@ -646,25 +655,25 @@ function App() {
     }
     try {
       console.log('📡 Loading data from Firebase...');
-      
+
       // First run any needed migrations
       await autoMigrateIfNeeded();
-      
+
       // Load schedule data with relational structure
       let { schedules, people: schedulePeople } = await fetchSchedulesWithRelationalData();
       // Backfill online flags for legacy records
       schedules = await autoBackfillOnlineFlags(schedules);
-      
+
       // Load people data
       const peopleSnapshot = await getDocs(collection(db, 'people'));
-      const people = peopleSnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
+      const people = peopleSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
       }));
-      
+
       // Load programs data
       const programs = await fetchPrograms();
-      
+
       // Merge people from schedules with directory people
       const mergedPeople = [...people];
       schedulePeople.forEach(schedulePerson => {
@@ -672,7 +681,7 @@ function App() {
           mergedPeople.push(schedulePerson);
         }
       });
-      
+
       // Load edit history (legacy) - non-fatal if denied
       let history = [];
       try {
@@ -689,7 +698,7 @@ function App() {
       } catch (e) {
         console.warn('recentChanges read skipped:', e?.code || e);
       }
-      
+
       console.log('✅ Data loaded successfully:', {
         schedules: schedules.length,
         people: mergedPeople.length,
@@ -697,7 +706,7 @@ function App() {
         history: history.length,
         recentChanges: recentChangesData.length
       });
-      
+
       setRawScheduleData(schedules);
       // Auto-inactivate any expired students (non-blocking, but we await to keep local state consistent)
       await autoInactivateExpiredStudents(mergedPeople);
@@ -706,7 +715,7 @@ function App() {
       setEditHistory(history);
       setRecentChanges(recentChangesData);
       updateAvailableSemesters(schedules);
-      
+
     } catch (error) {
       console.error('❌ Error loading data:', error);
       const title = silent ? 'Data Refresh Error' : 'Data Loading Error';
@@ -750,7 +759,7 @@ function App() {
         canCreateStaff: canCreateStaff?.() || false,
       };
       window.appPermissions = perms;
-    } catch (_) {}
+    } catch (_) { }
   }, [
     canEditStudent, canCreateStudent, canDeleteStudent,
     canEditFaculty, canCreateFaculty, canDeleteFaculty,
@@ -768,7 +777,7 @@ function App() {
       return;
     }
     console.log('💾 Updating schedule data:', updatedRow);
-    
+
     try {
       const isNewCourse = updatedRow.id && updatedRow.id.startsWith('new_');
       const isGroupedCourse = updatedRow.id && updatedRow.id.startsWith('grouped_');
@@ -786,7 +795,7 @@ function App() {
         // Extract original IDs from grouped ID (format: grouped_index_id1_id2_id3...)
         const idParts = updatedRow.id.split('_');
         const originalIds = idParts.slice(2); // Skip 'grouped' and index parts
-        
+
         originalSchedules = rawScheduleData.filter(s => originalIds.includes(s.id));
         if (originalSchedules.length === 0) {
           console.error('❌ No original schedules found for grouped update');
@@ -870,20 +879,20 @@ function App() {
         credits: computedCredits,
         scheduleType: updatedRow['Schedule Type'] || (referenceSchedule?.scheduleType || 'Class Instruction'),
         status: updatedRow.Status || (referenceSchedule?.status || 'Active'),
-        
+
         // Relational references
         instructorId: instructorId,
         instructorName: updatedRow.Instructor || (referenceSchedule?.instructorName || ''),
         roomId: isOnlineFlag ? null : roomId,
         roomName: isOnlineFlag ? '' : (updatedRow.Room || (referenceSchedule?.roomName || '')),
-        
+
         // Meeting patterns (persist even when online for synchronous meetings)
         meetingPatterns: meetingPatterns.length > 0 ? meetingPatterns : (referenceSchedule?.meetingPatterns || []),
-        
+
         // Online flags
         isOnline: isOnlineFlag,
         onlineMode: isOnlineFlag ? (onlineMode || (meetingPatterns.length > 0 ? 'synchronous' : 'asynchronous')) : null,
-        
+
         // Timestamps
         updatedAt: new Date().toISOString(),
         ...(isNewCourse && { createdAt: new Date().toISOString() })
@@ -911,15 +920,15 @@ function App() {
       } else if (isGroupedCourse) {
         // Handle grouped course updates
         console.log('🔄 Updating grouped course schedules...');
-        
+
         // Split the day pattern into individual days for updating each schedule
         const dayCodes = typeof updatedRow.Day === 'string' ? updatedRow.Day.match(/[MTWRF]/g) : [];
-        
+
         // Update each original schedule with its corresponding day
         for (let i = 0; i < originalSchedules.length && i < dayCodes.length; i++) {
           const originalId = originalSchedules[i].id;
           const dayCode = dayCodes[i];
-          
+
           // Create update data for this specific day
           const daySpecificUpdateData = {
             ...updateData,
@@ -929,12 +938,12 @@ function App() {
               endTime: updatedRow['End Time']
             }]
           };
-          
+
           const scheduleDocRef = doc(db, 'schedules', originalId);
           await updateDoc(scheduleDocRef, daySpecificUpdateData);
           console.log(`✅ Updated schedule ${originalId} for day ${dayCode}`);
         }
-        
+
         // If there are more days than original schedules, create new ones
         if (dayCodes.length > originalSchedules.length) {
           for (let i = originalSchedules.length; i < dayCodes.length; i++) {
@@ -948,13 +957,13 @@ function App() {
               }],
               createdAt: new Date().toISOString()
             };
-            
+
             const newScheduleRef = doc(collection(db, 'schedules'));
             await setDoc(newScheduleRef, newScheduleData);
             console.log(`✅ Created new schedule for day ${dayCode}`);
           }
         }
-        
+
         // If there are fewer days than original schedules, delete the extra ones
         if (dayCodes.length < originalSchedules.length) {
           for (let i = dayCodes.length; i < originalSchedules.length; i++) {
@@ -977,11 +986,11 @@ function App() {
         timestamp: new Date().toISOString(),
         userId: 'system'
       };
-      
+
       if (isGroupedCourse) {
         historyData.affectedScheduleCount = originalSchedules.length;
       }
-      
+
       await addDoc(collection(db, 'editHistory'), historyData);
 
       // Log change in centralized system
@@ -1015,18 +1024,18 @@ function App() {
 
       // Refresh data to reflect changes
       await loadData({ silent: true });
-      
+
       if (isNewCourse) {
-        showNotification('success', 'Schedule Created', 
+        showNotification('success', 'Schedule Created',
           `Course ${updateData.courseCode} ${updateData.section} has been created successfully.`);
       } else if (isGroupedCourse) {
-        showNotification('success', 'Grouped Schedule Updated', 
+        showNotification('success', 'Grouped Schedule Updated',
           `Course ${updateData.courseCode} ${updateData.section} (${originalSchedules.length} schedule entries) has been updated successfully.`);
       } else {
-        showNotification('success', 'Schedule Updated', 
+        showNotification('success', 'Schedule Updated',
           `Course ${updateData.courseCode} ${updateData.section} has been updated successfully.`);
       }
-      
+
     } catch (error) {
       console.error('❌ Error updating schedule:', error);
       showNotification('error', 'Update Failed', `Failed to update schedule: ${error.message}`);
@@ -1047,7 +1056,7 @@ function App() {
     try {
       let facultyRef;
       let actionType;
-      
+
       if (isNewFaculty) {
         // Creating a new faculty member
         console.log('🆕 Creating new faculty member');
@@ -1059,12 +1068,12 @@ function App() {
         facultyRef = doc(db, 'people', facultyToUpdate.id);
         actionType = 'UPDATE';
       }
-      
+
       // Filter out undefined values to prevent Firebase errors
       const cleanData = Object.fromEntries(
         Object.entries(facultyToUpdate).filter(([_, value]) => value !== undefined)
       );
-      
+
       const updateData = {
         ...cleanData,
         updatedAt: new Date().toISOString()
@@ -1109,16 +1118,16 @@ function App() {
 
       // Refresh data
       await loadData({ silent: true });
-      
-      const successMessage = isNewFaculty 
+
+      const successMessage = isNewFaculty
         ? `${facultyToUpdate.name} has been added to the directory successfully.`
         : `${facultyToUpdate.name} has been updated successfully.`;
-      
+
       showNotification('success', isNewFaculty ? 'Faculty Added' : 'Faculty Updated', successMessage);
-      
+
     } catch (error) {
       console.error('❌ Error updating faculty:', error);
-      const errorMessage = !facultyToUpdate.id 
+      const errorMessage = !facultyToUpdate.id
         ? 'Failed to add faculty member. Please try again.'
         : 'Failed to update faculty member. Please try again.';
       showNotification('error', 'Operation Failed', errorMessage);
@@ -1135,17 +1144,17 @@ function App() {
       return;
     }
     console.log('👥 Updating staff member:', staffToUpdate);
-    
+
     try {
       let docRef;
       let action;
       let originalData = null;
-      
+
       // Filter out undefined values to prevent Firebase errors
       const cleanStaffData = Object.fromEntries(
         Object.entries(staffToUpdate).filter(([_, value]) => value !== undefined)
       );
-      
+
       if (staffToUpdate.id) {
         // Update existing staff member
         // Find original data for change logging
@@ -1155,11 +1164,11 @@ function App() {
           ...cleanStaffData,
           updatedAt: new Date().toISOString()
         };
-        
+
         await updateDoc(staffRef, updateData);
         docRef = staffRef;
         action = 'UPDATE';
-        
+
         // Add to edit history (legacy)
         await addDoc(collection(db, 'editHistory'), {
           action: action,
@@ -1168,7 +1177,7 @@ function App() {
           timestamp: new Date().toISOString(),
           userId: 'system'
         });
-        
+
         // Log change in centralized system with field diffs
         await logUpdate(
           `Staff - ${staffToUpdate.name}`,
@@ -1178,7 +1187,7 @@ function App() {
           originalData,
           'App.jsx - handleStaffUpdate'
         );
-        
+
       } else {
         // Create new staff member
         const createData = {
@@ -1186,10 +1195,10 @@ function App() {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
-        
+
         docRef = await addDoc(collection(db, 'people'), createData);
         action = 'CREATE';
-        
+
         // Add to edit history (legacy)
         await addDoc(collection(db, 'editHistory'), {
           action: action,
@@ -1198,7 +1207,7 @@ function App() {
           timestamp: new Date().toISOString(),
           userId: 'system'
         });
-        
+
         // Log change in centralized system
         await logCreate(
           `Staff - ${staffToUpdate.name}`,
@@ -1211,13 +1220,13 @@ function App() {
 
       // Refresh data
       await loadData({ silent: true });
-      
-      const successMessage = action === 'CREATE' 
+
+      const successMessage = action === 'CREATE'
         ? `${staffToUpdate.name} has been created successfully.`
         : `${staffToUpdate.name} has been updated successfully.`;
-      
+
       showNotification('success', `Staff ${action === 'CREATE' ? 'Created' : 'Updated'}`, successMessage);
-      
+
     } catch (error) {
       console.error('❌ Error updating staff:', error);
       showNotification('error', 'Operation Failed', 'Failed to save staff member. Please try again.');
@@ -1230,7 +1239,7 @@ function App() {
       return;
     }
     console.log('🗑️ Deleting faculty member:', facultyToDelete);
-    
+
     try {
       // Delete from Firebase
       await deleteDoc(doc(db, 'people', facultyToDelete.id));
@@ -1254,9 +1263,9 @@ function App() {
 
       // Refresh data
       await loadData({ silent: true });
-      
+
       showNotification('success', 'Faculty Deleted', `${facultyToDelete.name} has been removed from the directory.`);
-      
+
     } catch (error) {
       console.error('❌ Error deleting faculty:', error);
       showNotification('error', 'Delete Failed', 'Failed to delete faculty member. Please try again.');
@@ -1269,7 +1278,7 @@ function App() {
       return;
     }
     console.log('🗑️ Deleting staff member:', staffToDelete);
-    
+
     try {
       // Delete from Firebase
       await deleteDoc(doc(db, 'people', staffToDelete.id));
@@ -1293,9 +1302,9 @@ function App() {
 
       // Refresh data
       await loadData({ silent: true });
-      
+
       showNotification('success', 'Staff Deleted', `${staffToDelete.name} has been removed from the directory.`);
-      
+
     } catch (error) {
       console.error('❌ Error deleting staff:', error);
       showNotification('error', 'Delete Failed', 'Failed to delete staff member. Please try again.');
@@ -1316,7 +1325,7 @@ function App() {
     try {
       let studentRef;
       let actionType;
-      
+
       if (isNewStudent) {
         // Creating a new student worker
         console.log('🆕 Creating new student worker');
@@ -1328,12 +1337,12 @@ function App() {
         studentRef = doc(db, 'people', studentToUpdate.id);
         actionType = 'UPDATE';
       }
-      
+
       // Filter out undefined values to prevent Firebase errors
       const cleanStudentData = Object.fromEntries(
         Object.entries(studentToUpdate).filter(([_, value]) => value !== undefined)
       );
-      
+
       // Derive isActive based on endDate unless explicitly set
       let derivedIsActive = cleanStudentData.isActive;
       try {
@@ -1344,7 +1353,7 @@ function App() {
             derivedIsActive = end >= new Date();
           }
         }
-      } catch (_) {}
+      } catch (_) { }
 
       const updateData = {
         ...cleanStudentData,
@@ -1367,7 +1376,7 @@ function App() {
             timestamp: new Date().toISOString(),
             userId: 'system'
           });
-        } catch (_) {}
+        } catch (_) { }
       } else {
         // Use updateDoc for existing student if doc exists; otherwise, create a new one
         const originalData = rawPeople.find(p => p.id === studentToUpdate.id) || null;
@@ -1385,7 +1394,7 @@ function App() {
               timestamp: new Date().toISOString(),
               userId: 'system'
             });
-          } catch (_) {}
+          } catch (_) { }
           // Log as create
           await logCreate(
             `Student - ${studentToUpdate.name}`,
@@ -1410,7 +1419,7 @@ function App() {
             timestamp: new Date().toISOString(),
             userId: 'system'
           });
-        } catch (_) {}
+        } catch (_) { }
         // Log with original for diffs
         await logUpdate(
           `Student - ${studentToUpdate.name}`,
@@ -1420,7 +1429,7 @@ function App() {
           originalData,
           'App.jsx - handleStudentUpdate'
         );
-        
+
         // Refresh data and notify below as usual
         await loadData({ silent: true });
         const successMessage = `${studentToUpdate.name} has been updated successfully.`;
@@ -1437,7 +1446,7 @@ function App() {
           timestamp: new Date().toISOString(),
           userId: 'system'
         });
-      } catch (_) {}
+      } catch (_) { }
 
       // Log change in centralized system
       if (isNewStudent) {
@@ -1452,13 +1461,13 @@ function App() {
 
       // Refresh data
       await loadData({ silent: true });
-      
-      const successMessage = isNewStudent 
+
+      const successMessage = isNewStudent
         ? `${studentToUpdate.name} has been added to the student worker directory successfully.`
         : `${studentToUpdate.name} has been updated successfully.`;
-      
+
       showNotification('success', isNewStudent ? 'Student Added' : 'Student Updated', successMessage);
-      
+
     } catch (error) {
       console.error('❌ Error updating student:', error);
       // Only show a hard error for true failures; suppress if write actually succeeded
@@ -1479,7 +1488,7 @@ function App() {
       return;
     }
     console.log('🗑️ Deleting student worker:', studentToDelete);
-    
+
     try {
       // Accept either an id or full object
       const studentId = typeof studentToDelete === 'string' ? studentToDelete : studentToDelete.id;
@@ -1508,9 +1517,9 @@ function App() {
 
       // Refresh data
       await loadData({ silent: true });
-      
+
       showNotification('success', 'Student Deleted', `${studentToDelete.name} has been removed from the directory.`);
-      
+
     } catch (error) {
       console.error('❌ Error deleting student:', error);
       showNotification('error', 'Delete Failed', 'Failed to delete student worker. Please try again.');
@@ -1523,7 +1532,7 @@ function App() {
       return;
     }
     console.log('🗑️ Deleting schedule:', scheduleId);
-    
+
     try {
       // Find the schedule to get details for history
       const scheduleToDelete = rawScheduleData.find(s => s.id === scheduleId);
@@ -1555,10 +1564,10 @@ function App() {
 
       // Refresh data
       await loadData({ silent: true });
-      
-      showNotification('success', 'Schedule Deleted', 
+
+      showNotification('success', 'Schedule Deleted',
         `Course ${scheduleToDelete.courseCode} ${scheduleToDelete.section} has been removed successfully.`);
-      
+
     } catch (error) {
       console.error('❌ Error deleting schedule:', error);
       showNotification('error', 'Delete Failed', 'Failed to delete schedule. Please try again.');
@@ -1567,7 +1576,7 @@ function App() {
 
   const handleRevertChange = async (changeToRevert) => {
     console.log('↩️ Reverting change:', changeToRevert);
-    
+
     try {
       if (changeToRevert.action === 'DELETE') {
         showNotification('warning', 'Cannot Revert Delete', 'Deleted items cannot be automatically restored.');
@@ -1577,7 +1586,7 @@ function App() {
       // For updates, we would need to store the previous state to revert properly
       // This is a simplified implementation
       showNotification('info', 'Revert Not Implemented', 'Change reversion is not yet implemented.');
-      
+
     } catch (error) {
       console.error('❌ Error reverting change:', error);
       showNotification('error', 'Revert Failed', 'Failed to revert change. Please try again.');
@@ -1646,17 +1655,17 @@ function App() {
     // Filter student data from rawPeople
     const studentData = rawPeople.filter(person => {
       if (!person.roles) return false;
-      
+
       // Handle array format (newer format)
       if (Array.isArray(person.roles)) {
         return person.roles.includes('student');
       }
-      
+
       // Handle object format (legacy format)
       if (typeof person.roles === 'object') {
         return person.roles.student === true;
       }
-      
+
       return false;
     });
 
@@ -1690,7 +1699,7 @@ function App() {
             effectiveIsActive = end >= new Date();
           }
         }
-      } catch (_) {}
+      } catch (_) { }
 
       return {
         ...s,
@@ -1740,6 +1749,12 @@ function App() {
         return (
           <ProtectedContent pageId="dashboard">
             <Dashboard {...pageProps} />
+          </ProtectedContent>
+        );
+      case 'command-center':
+        return (
+          <ProtectedContent pageId="command-center">
+            <CommandCenter {...pageProps} />
           </ProtectedContent>
         );
       case 'scheduling/faculty-schedules':
@@ -1937,7 +1952,7 @@ function App() {
               currentPage={currentPage}
               onNavigate={(path) => { setMobileSidebarOpen(false); handleNavigate(path); }}
               collapsed={false}
-              onToggleCollapse={() => {}}
+              onToggleCollapse={() => { }}
               selectedSemester={selectedSemester}
               pinnedPages={pinnedPages}
               togglePinPage={togglePinPage}
@@ -2004,9 +2019,8 @@ function App() {
                             setSelectedSemester(semester);
                             setShowSemesterDropdown(false);
                           }}
-                          className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${
-                            semester === selectedSemester ? 'bg-baylor-green/5 text-baylor-green font-medium' : 'text-gray-900'
-                          }`}
+                          className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${semester === selectedSemester ? 'bg-baylor-green/5 text-baylor-green font-medium' : 'text-gray-900'
+                            }`}
                         >
                           {semester}
                         </button>
@@ -2036,11 +2050,10 @@ function App() {
                   <button
                     key={child.id}
                     onClick={() => handleNavigate(child.path)}
-                    className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                      currentPage === child.path
-                        ? 'bg-baylor-green/10 text-baylor-green border-baylor-green/30'
-                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-                    }`}
+                    className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${currentPage === child.path
+                      ? 'bg-baylor-green/10 text-baylor-green border-baylor-green/30'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                      }`}
                   >
                     {child.label}
                   </button>
@@ -2070,13 +2083,13 @@ function App() {
               <p className="text-gray-600">Are you sure you want to logout? Any unsaved changes will be lost.</p>
             </div>
             <div className="modal-footer">
-              <button 
+              <button
                 onClick={() => setShowLogoutConfirm(false)}
                 className="btn-ghost"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={confirmLogout}
                 className="btn-danger"
               >

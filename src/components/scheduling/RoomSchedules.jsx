@@ -5,6 +5,7 @@ import WeekView from './WeekView';
 import RoomCalendarView from './RoomCalendarView';
 import CourseDetailModal from './CourseDetailModal';
 import { logExport } from '../../utils/activityLogger';
+import { getBuildingFromRoom, getCanonicalBuildingList } from '../../utils/buildingUtils';
 
 const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate }) => {
   const getDefaultRoomScheduleDay = () => {
@@ -32,16 +33,7 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
   const dayOrder = ['M', 'T', 'W', 'R', 'F'];
 
-  // Utility functions
-  const getBuildingFromRoom = (room) => {
-    if (!room) return '';
-    const trimmed = room.trim().replace(/\s{2,}/g, ' ');
-    if (!trimmed) return '';
-    // Capture everything before the first token that contains a digit (room number/identifier)
-    const match = trimmed.match(/^(.*?)(?=\s(?:[A-Za-z-]*\d))/);
-    const name = (match && match[1] ? match[1] : trimmed).trim();
-    return name || trimmed.split(' ')[0];
-  };
+  // getBuildingFromRoom is imported from buildingUtils
 
   // Normalize a meeting pattern string to ordered unique chars (e.g., "WFM" -> "MWF")
   const normalizePattern = (patternStr) => {
@@ -101,12 +93,12 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   }, [scheduleData]);
 
-  // Building options parsed from rooms
+  // Building options - use canonical list plus any additional from data
   const buildingOptions = useMemo(() => {
-    const buildings = new Set();
+    const buildings = new Set(getCanonicalBuildingList());
     uniqueRooms.forEach(room => {
       const b = getBuildingFromRoom(room);
-      if (b) buildings.add(b);
+      if (b && b !== 'Online' && b !== 'Off Campus') buildings.add(b);
     });
     return Array.from(buildings).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   }, [uniqueRooms]);

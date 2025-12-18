@@ -3,6 +3,7 @@ import { db, COLLECTIONS } from '../firebase';
 import { logCreate, logUpdate, logDelete, logBulkUpdate, logImport } from './changeLogger';
 import { findMatchingPerson, parseFullName, parseInstructorField } from './dataImportUtils';
 import { parseCourseCode, deriveCreditsFromCatalogNumber } from './courseUtils';
+import { getBuildingFromRoom } from './buildingUtils';
 
 // Import transaction model for tracking changes
 export class ImportTransaction {
@@ -321,14 +322,14 @@ export const projectSchedulePreviewRow = (row, fallbackTerm = '') => {
   const base = extractScheduleRowBaseData(row, fallbackTerm);
   const meetingSummary = Array.isArray(base.meetingPatterns)
     ? base.meetingPatterns
-        .map((pattern) => {
-          if (pattern.day && pattern.startTime && pattern.endTime) {
-            return `${pattern.day} ${pattern.startTime}-${pattern.endTime}`;
-          }
-          return pattern.raw || '';
-        })
-        .filter(Boolean)
-        .join('\n')
+      .map((pattern) => {
+        if (pattern.day && pattern.startTime && pattern.endTime) {
+          return `${pattern.day} ${pattern.startTime}-${pattern.endTime}`;
+        }
+        return pattern.raw || '';
+      })
+      .filter(Boolean)
+      .join('\n')
     : '';
 
   return {
@@ -467,7 +468,7 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
           const newRoom = {
             name: singleRoom,
             displayName: singleRoom,
-            building: singleRoom.includes('(') ? (singleRoom.split('(')[1] || '').replace(')', '') : '',
+            building: getBuildingFromRoom(singleRoom),
             capacity: null,
             type: 'Classroom',
             isActive: true
@@ -944,7 +945,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               change.documentId,
               change.newData,
               source
-            ).catch(() => {});
+            ).catch(() => { });
           } else if (change.action === 'modify') {
             logUpdate(
               `Schedule - ${change.originalData?.courseCode || ''} ${change.originalData?.section || ''} (${change.originalData?.term || ''})`,
@@ -953,7 +954,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               change.newData,
               change.originalData,
               source
-            ).catch(() => {});
+            ).catch(() => { });
           } else if (change.action === 'delete') {
             logDelete(
               `Schedule - ${change.originalData?.courseCode || ''} ${change.originalData?.section || ''} (${change.originalData?.term || ''})`,
@@ -961,7 +962,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               change.documentId,
               change.originalData,
               source
-            ).catch(() => {});
+            ).catch(() => { });
           }
         } else if (change.collection === 'people') {
           if (change.action === 'add') {
@@ -971,7 +972,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               change.documentId,
               change.newData,
               source
-            ).catch(() => {});
+            ).catch(() => { });
           } else if (change.action === 'modify') {
             logUpdate(
               `Person - ${change.originalData?.firstName || ''} ${change.originalData?.lastName || ''}`.trim(),
@@ -980,7 +981,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               change.newData,
               change.originalData,
               source
-            ).catch(() => {});
+            ).catch(() => { });
           } else if (change.action === 'delete') {
             logDelete(
               `Person - ${change.originalData?.firstName || ''} ${change.originalData?.lastName || ''}`.trim(),
@@ -988,7 +989,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               change.documentId,
               change.originalData,
               source
-            ).catch(() => {});
+            ).catch(() => { });
           }
         } else if (change.collection === 'rooms') {
           if (change.action === 'add') {
@@ -998,7 +999,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               change.documentId,
               change.newData,
               source
-            ).catch(() => {});
+            ).catch(() => { });
           } else if (change.action === 'modify') {
             logUpdate(
               `Room - ${change.originalData?.displayName || change.originalData?.name}`,
@@ -1007,7 +1008,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               change.newData,
               change.originalData,
               source
-            ).catch(() => {});
+            ).catch(() => { });
           } else if (change.action === 'delete') {
             logDelete(
               `Room - ${change.originalData?.displayName || change.originalData?.name}`,
@@ -1015,7 +1016,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               change.documentId,
               change.originalData,
               source
-            ).catch(() => {});
+            ).catch(() => { });
           }
         }
       }
@@ -1026,8 +1027,8 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
         changesToApply.length,
         'importTransactionUtils.js - commitTransaction',
         { transactionId: transaction.id, semester: transaction.semester, stats: transaction.stats }
-      ).catch(() => {});
-    } catch (_) {}
+      ).catch(() => { });
+    } catch (_) { }
 
     return transaction;
   } catch (error) {
@@ -1294,9 +1295,9 @@ export const findOrphanedImportedData = async (semesterFilter = null) => {
       const isLikelyImported = termFilterNorm
         ? inSelectedTerm
         : (
-            (data.createdAt && (new Date() - new Date(data.createdAt)) < (30 * 24 * 60 * 60 * 1000)) ||
-            /^\w+_\d{5}$/.test(docId)
-          );
+          (data.createdAt && (new Date() - new Date(data.createdAt)) < (30 * 24 * 60 * 60 * 1000)) ||
+          /^\w+_\d{5}$/.test(docId)
+        );
 
       if (isLikelyImported) {
         results.schedules.push({

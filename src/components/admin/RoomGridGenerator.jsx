@@ -486,7 +486,7 @@ const RoomGridGenerator = () => {
             if (starts.length) earliest = Math.min(earliest, ...starts);
             if (ends.length) latest = Math.max(latest, ...ends);
         } catch { }
-        const step = 15; // minutes per grid row
+        const step = 15; // minutes per grid row (visual height set via --rowHeight CSS)
         const start = roundDownTo(earliest, 60); // snap to hour for cleaner labels
         const end = roundUpTo(latest, 30);
         const slots = Math.max(1, Math.round((end - start) / step));
@@ -527,7 +527,7 @@ const RoomGridGenerator = () => {
         ).join('');
 
         const grid = `
-            <div class="weekly-grid" style="--rows:${slots}; --rowHeight: 15px;" data-start="${start}" data-end="${end}" data-step="${step}" data-headeroffset="${headerOffset}">
+            <div class="weekly-grid" style="--rows:${slots}; --rowHeight: 24px;" data-start="${start}" data-end="${end}" data-step="${step}" data-headeroffset="${headerOffset}">
                 ${hourMarks.join('')}
                 ${vLines}
                 ${blocks}
@@ -1187,10 +1187,11 @@ const RoomGridGenerator = () => {
                     --danger-border: #fecaca;
                     --green-dark: #0f3a2a;
                     background: var(--sheet-bg); 
-                    width: 7in; 
+                    width: 8in; 
+                    max-width: 100%;
                     min-height: 5in; 
                     margin: 0 auto; 
-                    padding: 0.4in; 
+                    padding: 0.35in; 
                     border: 1px solid var(--neutral-border); 
                     border-radius: 10px; 
                     box-shadow: 0 10px 30px rgba(0,0,0,0.08);
@@ -1259,24 +1260,44 @@ const RoomGridGenerator = () => {
                     border-radius: 2px;
                 }
                 @media print {
-                    @page { size:7in 5in; margin: 0.25in; }
+                    @page { size: letter portrait; margin: 0.35in; }
                     .schedule-sheet { 
                         -webkit-print-color-adjust: exact; 
                         print-color-adjust: exact; 
                         box-shadow: none; 
                         border-radius: 0; 
                         border: none;
-                        width: auto; 
+                        width: 100% !important; 
+                        max-width: 8in !important;
                         min-height: auto; 
                         padding: 0; 
                         margin: 0 auto;
                     }
+                    .weekly-sheet {
+                        padding: 0.25in;
+                        padding-top: 0;
+                    }
+                    .weekly-grid {
+                        --rowHeight: 18px !important;
+                    }
+                    .weekly-grid .class-block {
+                        padding: 4px 6px;
+                        margin: 1px 2px;
+                    }
+                    .weekly-grid .class-title { font-size: 11px; }
+                    .weekly-grid .class-instructor { font-size: 10px; }
+                    .weekly-grid .class-time { font-size: 9px; }
                     .schedule-table { font-size: 10pt; }
                     .schedule-table th, .schedule-table td { padding: 8pt; }
                 }
  
                  /* Weekly grid layout */
-                .weekly-sheet { padding: 0.4in; padding-top: 0; }
+                .weekly-sheet { 
+                    padding: 0.35in; 
+                    padding-top: 0; 
+                    width: 8in;
+                    max-width: 100%;
+                }
                 .weekly-header {
                     background-color: var(--baylor-green);
                     color: #ffffff;
@@ -1296,32 +1317,33 @@ const RoomGridGenerator = () => {
                 .weekly-header .text-md { font-size: 12px; opacity: 0.9; }
                 .weekly-grid { 
                     display: grid; 
-                    grid-template-columns: 0.75in repeat(5, 1fr);
+                    grid-template-columns: 0.9in repeat(5, 1fr);
                     grid-template-rows: auto repeat(var(--rows), var(--rowHeight));
                     position: relative; 
                     gap: 0; 
                     border: 1px solid var(--neutral-border);
+                    min-width: 100%;
                 }
                 .weekly-grid .day-header {
                     position: sticky; top: 0; z-index: 2;
                     grid-row: 1;
                     background: var(--baylor-green);
                     color: #fff;
-                    font-size: 12px;
+                    font-size: 14px;
                     font-weight: 700;
                     text-align: center;
-                    padding: 8px 4px;
+                    padding: 10px 6px;
                     border-bottom: 2px solid var(--baylor-gold);
                 }
                 .weekly-grid .hour-label { 
                     font-weight: 700; 
-                    font-size: 11px;
+                    font-size: 12px;
                     color: var(--baylor-green); 
                     display: flex; 
                     align-items: flex-start; 
                     justify-content: center; 
                     text-align: center;
-                    padding: 4px 2px; 
+                    padding: 6px 4px; 
                     border-top: 1px solid var(--neutral-border); 
                     border-right: 1px solid var(--neutral-border);
                     background: var(--row-bg); 
@@ -1332,23 +1354,24 @@ const RoomGridGenerator = () => {
                 .weekly-grid .class-block { 
                     background-color: var(--block-bg);
                     border: 1px solid var(--baylor-green);
-                    border-left: 3px solid var(--baylor-green);
-                    border-radius: 4px;
-                    padding: 3px 5px; 
-                    margin: 1px 2px; 
-                    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                    border-left: 4px solid var(--baylor-green);
+                    border-radius: 6px;
+                    padding: 8px 10px; 
+                    margin: 2px 3px; 
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
                     display: flex; 
                     flex-direction: column; 
                     justify-content: center;
-                    gap: 1px; 
+                    gap: 3px; 
                     overflow: hidden;
                     word-break: break-word;
-                    font-size: 11px;
+                    font-size: 13px;
                     position: relative;
+                    min-height: 50px;
                 }
-                .weekly-grid .class-title { font-weight: 700; color: var(--baylor-green); font-size: 11px; line-height: 1.2; }
-                .weekly-grid .class-instructor { font-size: 10px; color: var(--text-muted); line-height: 1.2; }
-                .weekly-grid .class-time { font-size: 9px; color: var(--text-strong); line-height: 1.2; }
+                .weekly-grid .class-title { font-weight: 700; color: var(--baylor-green); font-size: 14px; line-height: 1.3; letter-spacing: 0.3px; }
+                .weekly-grid .class-instructor { font-size: 12px; color: var(--text-muted); line-height: 1.3; }
+                .weekly-grid .class-time { font-size: 11px; color: var(--text-strong); line-height: 1.3; font-weight: 500; }
 
                 /* Editing helpers */
                 .slot-toolbar { display: flex; justify-content: flex-end; }

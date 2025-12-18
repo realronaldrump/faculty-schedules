@@ -239,10 +239,13 @@ function App() {
       console.warn('Failed to load default term setting, using most recent:', error);
     }
 
-    // Set the selected semester if not already set or if different from current
-    if (defaultTermToUse !== selectedSemester) {
-      console.log(`🎓 Setting semester to: ${defaultTermToUse}`);
+    // Set the selected semester if not already set or no longer valid
+    const currentIsValid = selectedSemester && semesterList.includes(selectedSemester);
+    if (!currentIsValid) {
+      console.log(`🎓 Setting semester to default: ${defaultTermToUse}`);
       setSelectedSemester(defaultTermToUse);
+    } else {
+      console.log(`🎓 Preserving current valid semester: ${selectedSemester}`);
     }
   };
 
@@ -780,7 +783,7 @@ function App() {
 
     try {
       const isNewCourse = updatedRow.id && updatedRow.id.startsWith('new_');
-      const isGroupedCourse = updatedRow.id && updatedRow.id.startsWith('grouped_');
+      const isGroupedCourse = updatedRow.id && updatedRow.id.startsWith('grouped::');
       let scheduleRef;
       let originalSchedule = null;
       let originalSchedules = [];
@@ -793,7 +796,7 @@ function App() {
         // Handle grouped courses (multi-day classes)
         console.log('🔄 Updating grouped course entry');
         // Extract original IDs from grouped ID (format: grouped_index_id1_id2_id3...)
-        const idParts = updatedRow.id.split('_');
+        const idParts = updatedRow.id.split('::');
         const originalIds = idParts.slice(2); // Skip 'grouped' and index parts
 
         originalSchedules = rawScheduleData.filter(s => originalIds.includes(s.id));

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import DOMPurify from 'dompurify';
 import Papa from 'papaparse';
-import { Upload, X, Trash2, FileText, Download, Save as SaveIcon } from 'lucide-react';
+import { Upload, X, Trash2, FileText, Download, Save as SaveIcon, Database, ArrowLeft } from 'lucide-react';
 import ExportModal from './ExportModal';
 import { db } from '../../firebase';
 import { collection, addDoc, getDocs, deleteDoc, doc, query, where, orderBy, limit } from 'firebase/firestore';
@@ -9,6 +9,7 @@ import { logCreate, logDelete } from '../../utils/changeLogger';
 import { ConfirmationDialog } from '../CustomAlert';
 import { usePermissions } from '../../utils/permissions';
 import { registerActionKeys } from '../../utils/actionRegistry';
+import { fetchSchedulesWithRelationalData } from '../../utils/dataImportUtils';
 
 
 const RoomGridGenerator = () => {
@@ -22,7 +23,7 @@ const RoomGridGenerator = () => {
     const [selectedBuilding, setSelectedBuilding] = useState('');
     const [selectedRoom, setSelectedRoom] = useState('');
     const [selectedDayType, setSelectedDayType] = useState('MWF');
-    const [semester, setSemester] = useState('Fall 2025');
+    const [semester, setSemester] = useState('');
     const [message, setMessage] = useState({ text: '', type: '' });
     const [scheduleHtml, setScheduleHtml] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
@@ -30,7 +31,13 @@ const RoomGridGenerator = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [isLoadingSaved, setIsLoadingSaved] = useState(false);
     const [savedGrids, setSavedGrids] = useState([]);
-    
+
+    // Mode selection: null = wizard, 'auto' = dashboard data, 'csv' = CLSS import
+    const [dataMode, setDataMode] = useState(null);
+    const [availableSemesters, setAvailableSemesters] = useState([]);
+    const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
+    const [dashboardSchedules, setDashboardSchedules] = useState(null);
+
     // Dialog states
     const [alertDialog, setAlertDialog] = useState({ isOpen: false, message: '', title: '' });
     const [deleteConfirmDialog, setDeleteConfirmDialog] = useState({ isOpen: false, grid: null });
@@ -69,19 +76,191 @@ const RoomGridGenerator = () => {
         setMessage({ text: '', type: '' });
     };
 
+    // Load all schedules from Firebase for auto-populate mode
+    const loadDashboardData = useCallback(async () => {
+        setIsLoadingDashboard(true);
+        try {
+            const { schedules } = await fetchSchedulesWithRelationalData();
+            setDashboardSchedules(schedules);
+
+            // Extract unique semesters/terms from schedules
+            const semesters = new Set();
+            schedules.forEach(s => {
+                if (s.term) semesters.add(s.term);
+            });
+            const sortedSemesters = Array.from(semesters).sort((a, b) => {
+                // Sort by year (desc) then semester order (Spring, Summer, Fall)
+                const getYear = (s) => parseInt(s.match(/\d{4}/)?.[0] || '0');
+                const getSemOrder = (s) => {
+                    if (s.toLowerCase().includes('spring')) return 1;
+                    if (s.toLowerCase().includes('summer')) return 2;
+                    if (s.toLowerCase().includes('fall')) return 3;
+                    return 0;
+                };
+                const yearDiff = getYear(b) - getYear(a);
+                if (yearDiff !== 0) return yearDiff;
+                return getSemOrder(b) - getSemOrder(a);
+            });
+            setAvailableSemesters(sortedSemesters);
+
+            // Auto-select the first (most recent) semester if none selected
+            if (sortedSemesters.length > 0 && !semester) {
+                setSemester(sortedSemesters[0]);
+            }
+
+            showMessage(`Loaded ${schedules.length} schedules from dashboard.`, 'success');
+        } catch (error) {
+            console.error('Error loading dashboard data:', error);
+            showMessage('Failed to load dashboard data. ' + error.message);
+        } finally {
+            setIsLoadingDashboard(false);
+        }
+    }, [semester]);
+
+    // Transform dashboard schedules to allClassData format (matching CSV processing output)
+    const processDashboardData = useCallback((targetSemester) => {
+        if (!dashboardSchedules || dashboardSchedules.length === 0) return;
+
+        // Filter schedules by the selected semester
+        const semesterSchedules = dashboardSchedules.filter(s =>
+            s.term && s.term.toLowerCase() === targetSemester.toLowerCase()
+        );
+
+        // Transform each schedule to the format expected by the grid generator
+        const items = semesterSchedules.flatMap(schedule => {
+            // Skip schedules without rooms or meeting patterns
+            const roomNames = schedule.roomNames || (schedule.roomName ? [schedule.roomName] : []);
+            const meetingPatterns = schedule.meetingPatterns || [];
+
+            if (roomNames.length === 0 || meetingPatterns.length === 0) {
+                return [];
+            }
+
+            // Skip online/no room schedules
+            const firstRoom = roomNames[0] || '';
+            if (firstRoom.toLowerCase().includes('online') ||
+                firstRoom.toLowerCase().includes('no room') ||
+                firstRoom.toLowerCase().includes('tba')) {
+                return [];
+            }
+
+            const courseCode = schedule.courseCode || `${schedule.subjectCode || ''} ${schedule.catalogNumber || ''}`.trim();
+            const instructorName = schedule.instructorName ||
+                (schedule.instructor ? `${schedule.instructor.lastName || ''}`.trim() : 'Staff');
+
+            // Create entries for each room/pattern combination
+            return roomNames.flatMap(roomString => {
+                // Parse "Building Name RoomNumber" format
+                let buildingName = '';
+                let roomNumber = '';
+                const roomMatch = roomString.match(/(.+?)\s+([\w\d\-\/]+)$/);
+                if (roomMatch) {
+                    buildingName = roomMatch[1].trim();
+                    roomNumber = roomMatch[2].trim();
+                } else {
+                    // If no room number found, use full string as building
+                    buildingName = roomString.trim();
+                    roomNumber = 'N/A';
+                }
+
+                // Skip general assignment rooms
+                if (buildingName.toLowerCase().includes('general assignment')) {
+                    return [];
+                }
+
+                return meetingPatterns.map(pattern => {
+                    const days = pattern.day || '';
+                    const time = pattern.startTime && pattern.endTime
+                        ? `${pattern.startTime} - ${pattern.endTime}`
+                        : '';
+
+                    if (!days || !time) return null;
+
+                    return {
+                        building: buildingName,
+                        room: roomNumber,
+                        days: days,
+                        time: time,
+                        class: courseCode,
+                        section: (schedule.section || '').split(' ')[0],
+                        professor: instructorName
+                    };
+                }).filter(Boolean);
+            });
+        });
+
+        // Deduplicate identical entries
+        const dedupedMap = new Map();
+        for (const item of items) {
+            const key = [
+                item.building,
+                item.room,
+                item.days.replace(/\s/g, ''),
+                item.time.replace(/\s/g, ''),
+                item.class,
+                item.section,
+                item.professor
+            ].join('|');
+            if (!dedupedMap.has(key)) dedupedMap.set(key, item);
+        }
+        const processedClassData = Array.from(dedupedMap.values());
+
+        setAllClassData(processedClassData);
+
+        // Build buildings map from processed data
+        const newBuildings = processedClassData.reduce((acc, item) => {
+            if (!acc[item.building]) {
+                acc[item.building] = new Set();
+            }
+            acc[item.building].add(item.room);
+            return acc;
+        }, {});
+
+        setBuildings(newBuildings);
+
+        if (Object.keys(newBuildings).length === 0) {
+            showMessage(`No classes with room assignments found for ${targetSemester}.`);
+        } else {
+            showMessage(`Found ${processedClassData.length} classes across ${Object.keys(newBuildings).length} buildings for ${targetSemester}.`, 'success');
+        }
+    }, [dashboardSchedules]);
+
+    // When semester changes in auto mode, reprocess data
+    useEffect(() => {
+        if (dataMode === 'auto' && dashboardSchedules && semester) {
+            processDashboardData(semester);
+        }
+    }, [dataMode, semester, dashboardSchedules, processDashboardData]);
+
+    // When switching to auto mode, load dashboard data
+    useEffect(() => {
+        if (dataMode === 'auto' && !dashboardSchedules) {
+            loadDashboardData();
+        }
+    }, [dataMode, dashboardSchedules, loadDashboardData]);
+
+    // Reset when changing modes
+    const handleModeChange = (mode) => {
+        resetUI();
+        setDataMode(mode);
+        if (mode === 'csv') {
+            setSemester(''); // Let user set semester manually for CSV
+        }
+    };
+
     const handleFileUpload = (file) => {
         if (!file) return;
 
         resetUI(true);
         setIsProcessing(true);
-        
+
         Papa.parse(file, {
             header: true,
             skipEmptyLines: "greedy",
             beforeFirstChunk: (chunk) => {
                 const lines = chunk.split(/\r\n|\n|\r/);
                 const headerIndex = lines.findIndex(line => line.includes('"CLSS ID","CRN","Term"'));
-                
+
                 if (headerIndex === -1) {
                     console.error("Could not find the header row in the CSV file.");
                     return "";
@@ -102,7 +281,7 @@ const RoomGridGenerator = () => {
             }
         });
     };
-    
+
     const processData = (data) => {
         const items = data.flatMap(row => {
             try {
@@ -135,7 +314,7 @@ const RoomGridGenerator = () => {
                         buildingName = roomString.trim();
                         roomNumber = "N/A";
                     }
-                    
+
                     const mp = patternString.trim().match(/^([A-Za-z]+)\s+(.+)$/);
                     const days = mp ? mp[1] : (patternString.split(/\s+/)[0] || '');
                     const time = mp ? mp[2].trim() : patternString.replace(days, '').trim();
@@ -178,7 +357,7 @@ const RoomGridGenerator = () => {
         }, {});
 
         setBuildings(newBuildings);
-        
+
         if (Object.keys(newBuildings).length === 0) {
             showMessage("CSV processed, but no valid class data with rooms was found.");
         } else {
@@ -201,8 +380,8 @@ const RoomGridGenerator = () => {
         const relevantClasses = allClassData.filter(c => {
             const meetingDays = parseDaysToChars(c.days);
             return c.building === selectedBuilding &&
-                   c.room === selectedRoom &&
-                   meetingDays.some(d => dayChars.includes(d));
+                c.room === selectedRoom &&
+                meetingDays.some(d => dayChars.includes(d));
         });
 
         if (relevantClasses.length === 0) {
@@ -221,7 +400,7 @@ const RoomGridGenerator = () => {
             const classContent = classesInSlot.length > 0 ? classesInSlot.map(c => {
                 let daysIndicator = '';
                 const mdays = parseDaysToChars(c.days);
-                const expected = selectedDayType === 'MWF' ? ['M','W','F'] : ['T','R'];
+                const expected = selectedDayType === 'MWF' ? ['M', 'W', 'F'] : ['T', 'R'];
                 const isFullPattern = expected.every(d => mdays.includes(d)) && mdays.every(d => expected.includes(d));
                 if (!isFullPattern) {
                     const overlap = mdays.filter(d => expected.includes(d)).join('');
@@ -274,8 +453,8 @@ const RoomGridGenerator = () => {
         if (/(Th|R)/i.test(str)) add('R');
         if (/F/.test(str)) add('F');
         // Common shorthands
-        if (/MWF/i.test(str)) return ['M','W','F'];
-        if (/(TTh|TR)/i.test(str)) return ['T','R'];
+        if (/MWF/i.test(str)) return ['M', 'W', 'F'];
+        if (/(TTh|TR)/i.test(str)) return ['T', 'R'];
         return chars;
     };
 
@@ -284,7 +463,7 @@ const RoomGridGenerator = () => {
         const m = mins % 60;
         const period = h >= 12 ? 'PM' : 'AM';
         let hour = h % 12; if (hour === 0) hour = 12;
-        return `${hour}:${m.toString().padStart(2,'0')} ${period}`.replace(':00','');
+        return `${hour}:${m.toString().padStart(2, '0')} ${period}`.replace(':00', '');
     };
 
     const roundDownTo = (mins, step) => Math.floor(mins / step) * step;
@@ -305,7 +484,7 @@ const RoomGridGenerator = () => {
             const ends = relevant.map(c => parseTimeRange(c.time)[1]);
             if (starts.length) earliest = Math.min(earliest, ...starts);
             if (ends.length) latest = Math.max(latest, ...ends);
-        } catch {}
+        } catch { }
         const step = 15; // minutes per grid row
         const start = roundDownTo(earliest, 60); // snap to hour for cleaner labels
         const end = roundUpTo(latest, 30);
@@ -362,7 +541,7 @@ const RoomGridGenerator = () => {
         const header = `
             <div class="weekly-header">
                 <div class="header-left">
-                    <div class="text-2xl font-bold" contenteditable="true">${selectedBuilding.replace(' Bldg','').toUpperCase()} ${selectedRoom} Schedule</div>
+                    <div class="text-2xl font-bold" contenteditable="true">${selectedBuilding.replace(' Bldg', '').toUpperCase()} ${selectedRoom} Schedule</div>
                     <div class="text-md" contenteditable="true">${semester}</div>
                 </div>
                 <div class="header-actions export-ignore">
@@ -393,7 +572,7 @@ const RoomGridGenerator = () => {
                     return false;
                 }
             });
-        } catch(e) {
+        } catch (e) {
             console.error("Error parsing time slot:", slot, e);
             return [];
         }
@@ -425,7 +604,7 @@ const RoomGridGenerator = () => {
         else if (startModifierMatch && !endModifierMatch) endStr += startModifierMatch[0];
         return [timeToMinutes(startStr), timeToMinutes(endStr)];
     };
-    
+
     const fileUploaderRef = useRef(null);
 
     const handleFileChange = (event) => {
@@ -434,7 +613,7 @@ const RoomGridGenerator = () => {
             handleFileUpload(file);
         }
     };
-    
+
     const triggerFileUpload = () => {
         fileUploaderRef.current.click();
     };
@@ -517,21 +696,21 @@ const RoomGridGenerator = () => {
                 if (!form) return;
                 const grid = container.querySelector('.weekly-grid');
                 if (!grid) return;
-                
+
                 // Get selected days
                 const selectedDays = Array.from(form.querySelectorAll('.day-input:checked')).map(cb => cb.value);
                 if (selectedDays.length === 0) {
                     setAlertDialog({ isOpen: true, title: 'Validation Error', message: 'Please select at least one day.' });
                     return;
                 }
-                
+
                 const startStr = form.querySelector('input.start').value;
                 const endStr = form.querySelector('input.end').value;
                 if (!startStr || !endStr) {
                     setAlertDialog({ isOpen: true, title: 'Validation Error', message: 'Please enter both start and end times.' });
                     return;
                 }
-                
+
                 const timeStr = `${startStr} - ${endStr}`;
                 try {
                     const colMap = { 'M': 2, 'T': 3, 'W': 4, 'R': 5, 'F': 6 };
@@ -541,7 +720,7 @@ const RoomGridGenerator = () => {
                     const [startMin, endMin] = parseTimeRange(timeStr);
                     const startRow = Math.floor((startMin - start) / step) + headerOffset;
                     const endRow = Math.ceil((endMin - start) / step) + headerOffset;
-                    
+
                     // Create a block for each selected day
                     selectedDays.forEach(day => {
                         const col = colMap[day];
@@ -611,7 +790,7 @@ const RoomGridGenerator = () => {
                 createdAt: Date.now()
             };
             const ref = await addDoc(collection(db, 'roomGrids'), payload);
-            logCreate(`Room Grid - ${payload.title}`, 'roomGrids', ref.id, payload, 'RoomGridGenerator.jsx - saveGrid').catch(() => {});
+            logCreate(`Room Grid - ${payload.title}`, 'roomGrids', ref.id, payload, 'RoomGridGenerator.jsx - saveGrid').catch(() => { });
             showMessage('Grid saved.', 'success');
             fetchSavedGrids();
         } catch (err) {
@@ -650,7 +829,7 @@ const RoomGridGenerator = () => {
         }
         try {
             await deleteDoc(doc(collection(db, 'roomGrids'), deleteConfirmDialog.grid.id));
-            logDelete(`Room Grid - ${deleteConfirmDialog.grid.title}`, 'roomGrids', deleteConfirmDialog.grid.id, deleteConfirmDialog.grid, 'RoomGridGenerator.jsx - deleteSavedGrid').catch(() => {});
+            logDelete(`Room Grid - ${deleteConfirmDialog.grid.title}`, 'roomGrids', deleteConfirmDialog.grid.id, deleteConfirmDialog.grid, 'RoomGridGenerator.jsx - deleteSavedGrid').catch(() => { });
             showMessage('Deleted saved grid.', 'success');
             setSavedGrids(prev => prev.filter(g => g.id !== deleteConfirmDialog.grid.id));
         } catch (err) {
@@ -671,7 +850,7 @@ const RoomGridGenerator = () => {
     ));
 
     const roomOptions = selectedBuilding && buildings[selectedBuilding]
-        ? Array.from(buildings[selectedBuilding]).sort((a,b) => a.localeCompare(b, undefined, {numeric: true})).map(room => (
+        ? Array.from(buildings[selectedBuilding]).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map(room => (
             <option key={room} value={room}>{room}</option>
         ))
         : [];
@@ -680,19 +859,68 @@ const RoomGridGenerator = () => {
         <div className="page-content">
             <div className="university-header rounded-xl p-8 mb-8">
                 <h1 className="university-title">Room Schedule Generator</h1>
-                <p className="university-subtitle">Upload a CLSS export CSV to generate printable room schedules.</p>
+                <p className="university-subtitle">Generate printable room schedules from dashboard data or a CLSS export.</p>
             </div>
 
-            <div className="university-card mb-8">
-                <div className="university-card-content">
-                    <h3 className="text-lg font-semibold text-baylor-green mb-2">Instructions</h3>
-                    <ul className="list-disc list-inside text-gray-700 space-y-1 text-sm">
-                        <li>Currently, this tool requires a CSV export from CLSS.</li>
-                        <li>In CLSS: select the semester, choose the HSD department, and export the entire CSV with all fields selected. The app will handle the rest.</li>
-                        <li><strong>Coming Soon:</strong> This tool will be integrated directly with the dashboard's data, removing the need for manual CSV uploads.</li>
-                    </ul>
+            {/* Mode Selection Wizard */}
+            {dataMode === null && (
+                <div className="university-card mb-8">
+                    <div className="university-card-content">
+                        <h3 className="text-lg font-semibold text-baylor-green mb-4">Select Data Source</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Auto-Populate Option */}
+                            <div
+                                onClick={() => handleModeChange('auto')}
+                                className="border-2 border-gray-200 rounded-xl p-6 cursor-pointer hover:border-baylor-green hover:bg-green-50 transition-all duration-200 group"
+                            >
+                                <div className="flex items-center mb-3">
+                                    <Database className="w-8 h-8 text-baylor-green mr-3" />
+                                    <h4 className="text-lg font-semibold text-gray-900 group-hover:text-baylor-green">Auto-Populate from Dashboard</h4>
+                                </div>
+                                <p className="text-gray-600 text-sm mb-3">
+                                    Uses existing schedule data already in the application. Select a semester and instantly generate room grids.
+                                </p>
+                                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-baylor-green text-white">
+                                    Recommended
+                                </span>
+                            </div>
+
+                            {/* CSV Import Option */}
+                            <div
+                                onClick={() => handleModeChange('csv')}
+                                className="border-2 border-gray-200 rounded-xl p-6 cursor-pointer hover:border-baylor-green hover:bg-green-50 transition-all duration-200 group"
+                            >
+                                <div className="flex items-center mb-3">
+                                    <Upload className="w-8 h-8 text-baylor-gold mr-3" />
+                                    <h4 className="text-lg font-semibold text-gray-900 group-hover:text-baylor-green">Import CLSS CSV</h4>
+                                </div>
+                                <p className="text-gray-600 text-sm mb-3">
+                                    Upload a fresh CLSS export CSV file. Use this for the most up-to-date data or when working with a new semester not yet imported.
+                                </p>
+                                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-700">
+                                    Manual Upload
+                                </span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
+            )}
+
+            {/* Change Mode Button - shown when a mode is selected */}
+            {dataMode !== null && (
+                <div className="mb-4">
+                    <button
+                        onClick={() => { resetUI(); setDataMode(null); setDashboardSchedules(null); }}
+                        className="btn-secondary text-sm"
+                    >
+                        <ArrowLeft className="w-4 h-4 mr-2" />
+                        Change Data Source
+                    </button>
+                    <span className="ml-4 text-sm text-gray-600">
+                        Current: <strong>{dataMode === 'auto' ? 'Dashboard Data' : 'CLSS CSV Import'}</strong>
+                    </span>
+                </div>
+            )}
 
             {message.text && (
                 <div className={`alert mb-6 ${message.type === 'success' ? 'alert-success' : 'alert-error'}`} role="alert">
@@ -704,62 +932,135 @@ const RoomGridGenerator = () => {
                 </div>
             )}
 
-            <div className="university-card">
-                <div className="university-card-content">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-                        <div className="md:col-span-2 lg:col-span-1">
-                            <label htmlFor="csvFile" className="block text-sm font-medium text-gray-700 mb-1">1. Upload CLSS Export</label>
-                            <input type="file" ref={fileUploaderRef} onChange={handleFileChange} className="hidden" accept=".csv" />
-                            <button onClick={triggerFileUpload} className="btn-secondary w-full justify-center">
-                                <Upload className="w-4 h-4 mr-2" />
-                                { isProcessing ? 'Processing...' : 'Upload CSV' }
-                            </button>
-                        </div>
-                        <div>
-                            <label htmlFor="semesterInput" className="block text-sm font-medium text-gray-700 mb-1">2. Semester</label>
-                            <input type="text" id="semesterInput" value={semester} onChange={e => setSemester(e.target.value)} className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., Fall 2025" />
-                        </div>
-                        <div>
-                            <label htmlFor="buildingSelect" className="block text-sm font-medium text-gray-700 mb-1">3. Select Building</label>
-                            <select id="buildingSelect" value={selectedBuilding} onChange={e => setSelectedBuilding(e.target.value)} className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" disabled={Object.keys(buildings).length === 0}>
-                                <option value="">-- Select Building --</option>
-                                {buildingOptions}
-                            </select>
-                        </div>
-                        <div>
-                            <label htmlFor="roomSelect" className="block text-sm font-medium text-gray-700 mb-1">4. Select Room</label>
-                            <select id="roomSelect" value={selectedRoom} onChange={e => setSelectedRoom(e.target.value)} className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" disabled={!selectedBuilding}>
-                                <option value="">-- Select Room --</option>
-                                {roomOptions}
-                            </select>
-                        </div>
-                        <div>
-                            <label htmlFor="dayTypeSelect" className="block text-sm font-medium text-gray-700 mb-1">5. Select View</label>
-                            <select id="dayTypeSelect" value={selectedDayType} onChange={e => setSelectedDayType(e.target.value)} className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" disabled={Object.keys(buildings).length === 0}>
-                                <option value="MWF">MWF</option>
-                                <option value="TR">TR</option>
-                                <option value="WEEK">Week (M-F)</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div className="mt-6 flex justify-end space-x-4">
-                         <button onClick={() => resetUI()} className="btn-danger">
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Clear
-                        </button>
-                         <button onClick={generateSchedule} className="btn-primary" disabled={Object.keys(buildings).length === 0}>
-                            <FileText className="w-4 h-4 mr-2" />
-                            Generate Schedule
-                        </button>
-                        { (canAction('roomGrids.save')) && (
-                          <button onClick={saveGrid} className="btn-secondary" disabled={!scheduleHtml || isSaving}>
-                              <SaveIcon className="w-4 h-4 mr-2" />
-                              { isSaving ? 'Saving...' : 'Save Grid' }
-                          </button>
+            {/* Configuration Panel - only shown when mode is selected */}
+            {dataMode !== null && (
+                <div className="university-card">
+                    <div className="university-card-content">
+                        {isLoadingDashboard && (
+                            <div className="flex items-center justify-center py-8">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-baylor-green mr-3"></div>
+                                <span className="text-gray-600">Loading dashboard data...</span>
+                            </div>
+                        )}
+
+                        {!isLoadingDashboard && (
+                            <>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                                    {/* CSV Upload - only for csv mode */}
+                                    {dataMode === 'csv' && (
+                                        <div className="md:col-span-2 lg:col-span-1">
+                                            <label htmlFor="csvFile" className="block text-sm font-medium text-gray-700 mb-1">1. Upload CLSS Export</label>
+                                            <input type="file" ref={fileUploaderRef} onChange={handleFileChange} className="hidden" accept=".csv" />
+                                            <button onClick={triggerFileUpload} className="btn-secondary w-full justify-center">
+                                                <Upload className="w-4 h-4 mr-2" />
+                                                {isProcessing ? 'Processing...' : 'Upload CSV'}
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* Semester Selection */}
+                                    <div>
+                                        <label htmlFor="semesterInput" className="block text-sm font-medium text-gray-700 mb-1">
+                                            {dataMode === 'csv' ? '2. Semester' : '1. Select Semester'}
+                                        </label>
+                                        {dataMode === 'auto' && availableSemesters.length > 0 ? (
+                                            <select
+                                                id="semesterSelect"
+                                                value={semester}
+                                                onChange={e => setSemester(e.target.value)}
+                                                className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                <option value="">-- Select Semester --</option>
+                                                {availableSemesters.map(s => (
+                                                    <option key={s} value={s}>{s}</option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <input
+                                                type="text"
+                                                id="semesterInput"
+                                                value={semester}
+                                                onChange={e => setSemester(e.target.value)}
+                                                className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                                placeholder="e.g., Fall 2025"
+                                            />
+                                        )}
+                                    </div>
+
+                                    {/* Building Selection */}
+                                    <div>
+                                        <label htmlFor="buildingSelect" className="block text-sm font-medium text-gray-700 mb-1">
+                                            {dataMode === 'csv' ? '3. Select Building' : '2. Select Building'}
+                                        </label>
+                                        <select
+                                            id="buildingSelect"
+                                            value={selectedBuilding}
+                                            onChange={e => setSelectedBuilding(e.target.value)}
+                                            className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            disabled={Object.keys(buildings).length === 0}
+                                        >
+                                            <option value="">-- Select Building --</option>
+                                            {buildingOptions}
+                                        </select>
+                                    </div>
+
+                                    {/* Room Selection */}
+                                    <div>
+                                        <label htmlFor="roomSelect" className="block text-sm font-medium text-gray-700 mb-1">
+                                            {dataMode === 'csv' ? '4. Select Room' : '3. Select Room'}
+                                        </label>
+                                        <select
+                                            id="roomSelect"
+                                            value={selectedRoom}
+                                            onChange={e => setSelectedRoom(e.target.value)}
+                                            className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            disabled={!selectedBuilding}
+                                        >
+                                            <option value="">-- Select Room --</option>
+                                            {roomOptions}
+                                        </select>
+                                    </div>
+
+                                    {/* View Type Selection */}
+                                    <div>
+                                        <label htmlFor="dayTypeSelect" className="block text-sm font-medium text-gray-700 mb-1">
+                                            {dataMode === 'csv' ? '5. Select View' : '4. Select View'}
+                                        </label>
+                                        <select
+                                            id="dayTypeSelect"
+                                            value={selectedDayType}
+                                            onChange={e => setSelectedDayType(e.target.value)}
+                                            className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            disabled={Object.keys(buildings).length === 0}
+                                        >
+                                            <option value="MWF">MWF</option>
+                                            <option value="TR">TR</option>
+                                            <option value="WEEK">Week (M-F)</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="mt-6 flex justify-end space-x-4">
+                                    <button onClick={() => resetUI()} className="btn-danger">
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        Clear
+                                    </button>
+                                    <button onClick={generateSchedule} className="btn-primary" disabled={Object.keys(buildings).length === 0}>
+                                        <FileText className="w-4 h-4 mr-2" />
+                                        Generate Schedule
+                                    </button>
+                                    {(canAction('roomGrids.save')) && (
+                                        <button onClick={saveGrid} className="btn-secondary" disabled={!scheduleHtml || isSaving}>
+                                            <SaveIcon className="w-4 h-4 mr-2" />
+                                            {isSaving ? 'Saving...' : 'Save Grid'}
+                                        </button>
+                                    )}
+                                </div>
+                            </>
                         )}
                     </div>
                 </div>
-            </div>
+            )}
 
             <div className="university-card mt-6">
                 <div className="university-card-content">
@@ -849,15 +1150,15 @@ const RoomGridGenerator = () => {
                             </button>
                         </div>
                     )}
-                     {isProcessing ? (
+                    {isProcessing ? (
                         <div className="text-center text-gray-500 flex flex-col items-center justify-center h-full">
                             <p>Processing file...</p>
                         </div>
-                     ) : !scheduleHtml ? (
+                    ) : !scheduleHtml ? (
                         <div className="text-center text-gray-500 flex flex-col items-center justify-center h-full">
-                           <FileText className="w-16 h-16 text-gray-300 mb-4" />
-                           <p>Your generated schedule will appear here. You can click on fields to edit them before printing.</p>
-                       </div>
+                            <FileText className="w-16 h-16 text-gray-300 mb-4" />
+                            <p>Your generated schedule will appear here. You can click on fields to edit them before printing.</p>
+                        </div>
                     ) : (
                         <div ref={printRef} dangerouslySetInnerHTML={{ __html: scheduleHtml }}></div>
                     )}

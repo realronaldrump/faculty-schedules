@@ -5,13 +5,13 @@ import FacultyContactCard from '../FacultyContactCard';
 import { formatChangeForDisplay } from '../../utils/recentChanges';
 import { parseCourseCode } from '../../utils/courseUtils';
 
-const CourseManagement = ({ 
-  scheduleData, 
-  facultyData, 
-  rawScheduleData, 
-  editHistory, 
+const CourseManagement = ({
+  scheduleData,
+  facultyData,
+  rawScheduleData,
+  editHistory,
   recentChanges = [],
-  onDataUpdate, 
+  onDataUpdate,
   onScheduleDelete,
   onRevertChange,
   showNotification
@@ -22,11 +22,11 @@ const CourseManagement = ({
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [showAddCourseForm, setShowAddCourseForm] = useState(false);
   const [newCourseData, setNewCourseData] = useState({});
-  const [filters, setFilters] = useState({ 
+  const [filters, setFilters] = useState({
     // Basic filters
-    instructor: [], 
-    day: [], 
-    room: [], 
+    instructor: [],
+    day: [],
+    room: [],
     searchTerm: '',
     // Advanced filters 
     programs: { include: [], exclude: [] },
@@ -140,7 +140,7 @@ const CourseManagement = ({
         const entityParts = change.entity?.split(' - ') || [];
         const scheduleInfo = entityParts[1] || '';
         const instructorInfo = entityParts[2] || '';
-        
+
         return {
           action: change.action,
           entity: change.entity,
@@ -155,13 +155,13 @@ const CourseManagement = ({
           timeAgo: formatted.timeAgo
         };
       });
-    
+
     // Combine with legacy editHistory for backward compatibility
     return [...scheduleChanges, ...(editHistory || [])];
   }, [recentChanges, editHistory]);
 
   // Get unique values for filters (using display names)
-  const uniqueInstructors = useMemo(() => 
+  const uniqueInstructors = useMemo(() =>
     [...new Set(scheduleData.filter(item => item && item.Instructor).map(item => item.Instructor))].sort(),
     [scheduleData]
   );
@@ -177,22 +177,22 @@ const CourseManagement = ({
     return [...new Set(all)].filter(r => r.toLowerCase() !== 'online').sort();
   }, [scheduleData]);
 
-  const uniqueTerms = useMemo(() => 
+  const uniqueTerms = useMemo(() =>
     [...new Set(scheduleData.filter(item => item && item.Term).map(item => item.Term))].sort(),
     [scheduleData]
   );
 
-  const uniqueSections = useMemo(() => 
+  const uniqueSections = useMemo(() =>
     [...new Set(scheduleData.filter(item => item && item.Section).map(item => item.Section))].sort(),
     [scheduleData]
   );
 
-  const uniqueScheduleTypes = useMemo(() => 
+  const uniqueScheduleTypes = useMemo(() =>
     [...new Set(scheduleData.filter(item => item && item['Schedule Type']).map(item => item['Schedule Type']))].sort(),
     [scheduleData]
   );
 
-  const uniqueStatuses = useMemo(() => 
+  const uniqueStatuses = useMemo(() =>
     [...new Set(scheduleData.filter(item => item && item.Status).map(item => item.Status))].sort(),
     [scheduleData]
   );
@@ -343,9 +343,9 @@ const CourseManagement = ({
 
   // Filter and sort data
   const filteredAndSortedData = useMemo(() => {
-    
+
     let data = [...scheduleData];
-    
+
     // Apply text search filter
     if (filters.searchTerm && filters.searchTerm.trim() !== '') {
       const lowercasedFilter = filters.searchTerm.toLowerCase().trim();
@@ -362,16 +362,16 @@ const CourseManagement = ({
         );
       });
     }
-    
+
     // Apply basic multi-select filters
     if (filters.instructor && Array.isArray(filters.instructor) && filters.instructor.length > 0) {
       data = data.filter(item => item && item.Instructor && filters.instructor.includes(item.Instructor));
     }
-    
+
     if (filters.day && Array.isArray(filters.day) && filters.day.length > 0) {
       data = data.filter(item => item && item.Day && filters.day.includes(item.Day));
     }
-    
+
     if (filters.room && Array.isArray(filters.room) && filters.room.length > 0) {
       data = data.filter(item => {
         if (!item || !item.Room) return false;
@@ -444,7 +444,7 @@ const CourseManagement = ({
     if (filters.adjunct && filters.adjunct !== 'all') {
       data = data.filter(item => {
         if (!item || !item.Instructor || !facultyData) return true;
-        
+
         const faculty = facultyData.find(f => f.name === item.Instructor);
         if (filters.adjunct === 'include') {
           return faculty?.isAdjunct === true;
@@ -459,7 +459,7 @@ const CourseManagement = ({
     if (filters.tenured && filters.tenured !== 'all') {
       data = data.filter(item => {
         if (!item || !item.Instructor || !facultyData) return true;
-        
+
         const faculty = facultyData.find(f => f.name === item.Instructor);
         if (filters.tenured === 'include') {
           return faculty?.isTenured === true;
@@ -497,7 +497,7 @@ const CourseManagement = ({
     const groupedMap = {};
     data.forEach(item => {
       if (!item) return;
-      const key = `${item.Course}|${item.Section}|${item.Term}|${item.CRN}|${item.Instructor}|${item['Start Time']}|${item['End Time']}|${(item.Room||'')}`;
+      const key = `${item.Course}|${item.Section}|${item.Term}|${item.CRN}|${item.Instructor}|${item['Start Time']}|${item['End Time']}|${(item.Room || '')}`;
       if (!groupedMap[key]) {
         groupedMap[key] = { ...item, _daySet: new Set(item.Day ? [item.Day] : []), _originalIds: [item.id] };
       } else if (item.Day) {
@@ -511,7 +511,7 @@ const CourseManagement = ({
         .join('');
       const { _daySet, _originalIds, ...rest } = entry;
       // Generate unique ID for grouped entries to prevent duplicate key warnings
-      const uniqueId = _originalIds.length > 1 ? `grouped_${index}_${_originalIds.join('_')}` : _originalIds[0];
+      const uniqueId = _originalIds.length > 1 ? `grouped::${index}::${_originalIds.join('::')}` : _originalIds[0];
       return { ...rest, Day: dayPattern, id: uniqueId };
     });
 
@@ -519,15 +519,15 @@ const CourseManagement = ({
     if (sortConfig.key) {
       data.sort((a, b) => {
         if (!a || !b) return 0;
-        
+
         let aValue = a[sortConfig.key];
         let bValue = b[sortConfig.key];
-        
+
         // Handle null/undefined values
         if (aValue == null && bValue == null) return 0;
         if (aValue == null) return sortConfig.direction === 'ascending' ? 1 : -1;
         if (bValue == null) return sortConfig.direction === 'ascending' ? -1 : 1;
-        
+
         // Special handling for time fields
         if (sortConfig.key === 'Start Time' || sortConfig.key === 'End Time') {
           aValue = parseTime(aValue) || 0;
@@ -549,23 +549,23 @@ const CourseManagement = ({
           aValue = String(aValue).toLowerCase();
           bValue = String(bValue).toLowerCase();
         }
-        
+
         if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
         if (aValue > bValue) return sortConfig.direction === 'ascending' ? 1 : -1;
         return 0;
       });
-          }
+    }
 
     return data;
   }, [scheduleData, filters, sortConfig, facultyData]);
 
   const validateScheduleData = (data) => {
     const errors = [];
-    
+
     if (!data.Course || data.Course.trim() === '') {
       errors.push('Course code is required');
     }
-    
+
     const isOnline = data.isOnline === true || String(data.isOnline).toLowerCase() === 'true';
     const hasDay = data.Day && typeof data.Day === 'string' && /^([MTWRF]+)$/.test(data.Day);
     const hasTimes = Boolean(data['Start Time']) && Boolean(data['End Time']);
@@ -578,10 +578,10 @@ const CourseManagement = ({
         errors.push('Start time and end time are required');
       }
     }
-    
+
     const startTime = parseTime(data['Start Time']);
     const endTime = parseTime(data['End Time']);
-    
+
     if (startTime && endTime && startTime >= endTime) {
       errors.push('End time must be after start time');
     }
@@ -593,7 +593,7 @@ const CourseManagement = ({
     if (!data.Section || data.Section.trim() === '') {
       errors.push('Section is required');
     }
-    
+
     return errors;
   };
 
@@ -619,13 +619,13 @@ const CourseManagement = ({
 
   const handleEditSave = () => {
     const errors = validateScheduleData(editFormData);
-    
+
     if (errors.length > 0) {
       // Replace blocking alert with inline banner
       setInlineError({ context: 'edit', messages: errors });
       return;
     }
-    
+
     onDataUpdate(editFormData);
     setEditingRowId(null);
     setEditFormData({});
@@ -739,7 +739,7 @@ const CourseManagement = ({
       setActiveFilterPreset('');
       return;
     }
-    
+
     const preset = filterPresets[presetKey];
     if (preset) {
       setFilters(preset.filters);
@@ -841,7 +841,7 @@ const CourseManagement = ({
         return faculty?.isAdjunct;
       }).length
     };
-    
+
     // Calculate busiest day
     const dayCount = {};
     scheduleData.forEach(s => {
@@ -849,10 +849,10 @@ const CourseManagement = ({
         dayCount[s.Day] = (dayCount[s.Day] || 0) + 1;
       }
     });
-    
-    const busiestDay = Object.entries(dayCount).reduce((max, [day, count]) => 
+
+    const busiestDay = Object.entries(dayCount).reduce((max, [day, count]) =>
       count > max.count ? { day, count } : max, { day: '', count: 0 });
-    
+
     stats.busiestDay = busiestDay;
     return stats;
   }, [scheduleData, facultyData]);
@@ -1160,19 +1160,18 @@ const CourseManagement = ({
                   <option key={key} value={key}>{preset.name}</option>
                 ))}
               </select>
-              
+
               {/* Advanced Filters Toggle */}
               <button
                 onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                className={`flex items-center px-3 py-2 border rounded-lg transition-colors ${
-                  showAdvancedFilters ? 'bg-baylor-green text-white border-baylor-green' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
+                className={`flex items-center px-3 py-2 border rounded-lg transition-colors ${showAdvancedFilters ? 'bg-baylor-green text-white border-baylor-green' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                  }`}
               >
                 <Settings className="w-4 h-4 mr-2" />
                 Advanced
                 <ChevronDown className={`w-4 h-4 ml-2 transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} />
               </button>
-              
+
               {/* Clear Filters */}
               {activeFilterCount > 0 && (
                 <button
@@ -1231,8 +1230,8 @@ const CourseManagement = ({
                   <MultiSelectDropdown
                     options={filterOptions.programs}
                     selected={filters.programs.include}
-                    onChange={(selected) => setFilters(prev => ({ 
-                      ...prev, 
+                    onChange={(selected) => setFilters(prev => ({
+                      ...prev,
                       programs: { ...prev.programs, include: selected }
                     }))}
                     placeholder="Select programs to include..."
@@ -1245,8 +1244,8 @@ const CourseManagement = ({
                   <MultiSelectDropdown
                     options={filterOptions.programs}
                     selected={filters.programs.exclude}
-                    onChange={(selected) => setFilters(prev => ({ 
-                      ...prev, 
+                    onChange={(selected) => setFilters(prev => ({
+                      ...prev,
                       programs: { ...prev.programs, exclude: selected }
                     }))}
                     placeholder="Select programs to exclude..."
@@ -1278,8 +1277,8 @@ const CourseManagement = ({
                   <MultiSelectDropdown
                     options={filterOptions.buildings}
                     selected={filters.buildings.include}
-                    onChange={(selected) => setFilters(prev => ({ 
-                      ...prev, 
+                    onChange={(selected) => setFilters(prev => ({
+                      ...prev,
                       buildings: { ...prev.buildings, include: selected }
                     }))}
                     placeholder="Select buildings to include..."
@@ -1292,8 +1291,8 @@ const CourseManagement = ({
                   <MultiSelectDropdown
                     options={filterOptions.buildings}
                     selected={filters.buildings.exclude}
-                    onChange={(selected) => setFilters(prev => ({ 
-                      ...prev, 
+                    onChange={(selected) => setFilters(prev => ({
+                      ...prev,
                       buildings: { ...prev.buildings, exclude: selected }
                     }))}
                     placeholder="Select buildings to exclude..."
@@ -1426,9 +1425,8 @@ const CourseManagement = ({
                 {processedChanges.slice(0, 50).map((change, index) => (
                   <li
                     key={index}
-                    className={`p-3 rounded-lg flex items-center justify-between text-sm ${
-                      change.isRevert ? 'bg-blue-50 border-blue-200' : 'bg-yellow-50 border-yellow-200'
-                    } border`}
+                    className={`p-3 rounded-lg flex items-center justify-between text-sm ${change.isRevert ? 'bg-blue-50 border-blue-200' : 'bg-yellow-50 border-yellow-200'
+                      } border`}
                   >
                     <div className="flex-1">
                       <p className="font-medium text-gray-800">
@@ -1498,7 +1496,7 @@ const CourseManagement = ({
             <tbody className="divide-y divide-gray-200">
               {filteredAndSortedData.length > 0 ? (
                 filteredAndSortedData.map(row => (
-                  <tr key={`${row.id}|${row.CRN||''}|${row.Term||''}|${row.Section||''}`} className="hover:bg-gray-50">
+                  <tr key={`${row.id}|${row.CRN || ''}|${row.Term || ''}|${row.Section || ''}`} className="hover:bg-gray-50">
                     {editingRowId === row.id ? (
                       <>
                         <td className="p-1">
@@ -1700,10 +1698,10 @@ const CourseManagement = ({
                             <span className="px-2 py-1 bg-blue-50 text-blue-600 rounded text-xs font-medium border border-blue-200">
                               Online
                             </span>
-                            ) : !row['Start Time'] || !row['End Time'] ? (
-                              <span className="px-1.5 py-0.5 bg-gray-25 text-gray-400 rounded text-xs border border-gray-100">
-                                No Meeting Time
-                              </span>
+                          ) : !row['Start Time'] || !row['End Time'] ? (
+                            <span className="px-1.5 py-0.5 bg-gray-25 text-gray-400 rounded text-xs border border-gray-100">
+                              No Meeting Time
+                            </span>
                           ) : (
                             <span className="px-2 py-1 bg-baylor-green/10 text-baylor-green rounded text-xs font-medium">
                               {row.Day}

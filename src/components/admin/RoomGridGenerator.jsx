@@ -10,6 +10,7 @@ import { ConfirmationDialog } from '../CustomAlert';
 import { usePermissions } from '../../utils/permissions';
 import { registerActionKeys } from '../../utils/actionRegistry';
 import { fetchSchedulesWithRelationalData } from '../../utils/dataImportUtils';
+import { getBuildingFromRoom } from '../../utils/buildingUtils';
 
 
 const RoomGridGenerator = () => {
@@ -150,21 +151,21 @@ const RoomGridGenerator = () => {
 
             // Create entries for each room/pattern combination
             return roomNames.flatMap(roomString => {
-                // Parse "Building Name RoomNumber" format
-                let buildingName = '';
-                let roomNumber = '';
-                const roomMatch = roomString.match(/(.+?)\s+([\w\d\-\/]+)$/);
-                if (roomMatch) {
-                    buildingName = roomMatch[1].trim();
-                    roomNumber = roomMatch[2].trim();
-                } else {
-                    // If no room number found, use full string as building
-                    buildingName = roomString.trim();
-                    roomNumber = 'N/A';
+                // Use centralized building utility for consistent naming
+                const buildingName = getBuildingFromRoom(roomString);
+
+                // Extract room number (last word that contains digits)
+                let roomNumber = 'N/A';
+                const roomMatch = roomString.match(/([\w\d\-\/]+)\s*$/);
+                if (roomMatch && /\d/.test(roomMatch[1])) {
+                    roomNumber = roomMatch[1].trim();
                 }
 
-                // Skip general assignment rooms
-                if (buildingName.toLowerCase().includes('general assignment')) {
+                // Skip general assignment rooms, empty buildings, online
+                if (!buildingName ||
+                    buildingName.toLowerCase().includes('general') ||
+                    buildingName.toLowerCase() === 'online' ||
+                    buildingName.toLowerCase() === 'off campus') {
                     return [];
                 }
 

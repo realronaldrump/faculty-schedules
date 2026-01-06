@@ -6,6 +6,7 @@ import RoomCalendarView from './RoomCalendarView';
 import CourseDetailModal from './CourseDetailModal';
 import { logExport } from '../../utils/activityLogger';
 import { getBuildingFromRoom, getCanonicalBuildingList } from '../../utils/buildingUtils';
+import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
 
 const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate }) => {
   const getDefaultRoomScheduleDay = () => {
@@ -50,35 +51,6 @@ const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
     }, 60000);
     return () => clearInterval(interval);
   }, []);
-  const parseTime = (timeStr) => {
-    if (!timeStr) return null;
-    const cleaned = timeStr.toLowerCase().replace(/\s+/g, '');
-    let hour, minute, ampm;
-    if (cleaned.includes(':')) {
-      const parts = cleaned.split(':');
-      hour = parseInt(parts[0]);
-      minute = parseInt(parts[1].replace(/[^\d]/g, ''));
-      ampm = cleaned.includes('pm') ? 'pm' : 'am';
-    } else {
-      const match = cleaned.match(/(\d+)(am|pm)/);
-      if (match) {
-        hour = parseInt(match[1]);
-        minute = 0;
-        ampm = match[2];
-      } else return null;
-    }
-    if (ampm === 'pm' && hour !== 12) hour += 12;
-    if (ampm === 'am' && hour === 12) hour = 0;
-    return hour * 60 + (minute || 0);
-  };
-
-  const formatMinutesToTime = (minutes) => {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
-    return `${displayHour}:${m.toString().padStart(2, '0')} ${ampm}`;
-  };
 
   // Get unique rooms
   const uniqueRooms = useMemo(() => {

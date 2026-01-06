@@ -65,6 +65,7 @@ import { parseCourseCode } from './utils/courseUtils';
 import { logCreate, logUpdate, logDelete } from './utils/changeLogger';
 import { fetchRecentChanges } from './utils/recentChanges';
 import { getProgramNameKey, isReservedProgramName, normalizeProgramName } from './utils/programUtils';
+import { parseTime } from './utils/timeUtils';
 
 const deriveCreditsFromSchedule = (courseCode, credits) => {
   if (credits !== undefined && credits !== null && credits !== '') {
@@ -508,29 +509,6 @@ function App() {
     console.log('📊 Analytics calculated:', result);
     return result;
   }, [scheduleData, rawPeople]);
-
-  // Utility functions
-  const parseTime = (timeStr) => {
-    if (!timeStr) return null;
-    const cleaned = timeStr.toLowerCase().replace(/\s+/g, '');
-    let hour, minute, ampm;
-    if (cleaned.includes(':')) {
-      const parts = cleaned.split(':');
-      hour = parseInt(parts[0]);
-      minute = parseInt(parts[1].replace(/[^\d]/g, ''));
-      ampm = cleaned.includes('pm') ? 'pm' : 'am';
-    } else {
-      const match = cleaned.match(/(\d+)(am|pm)/);
-      if (match) {
-        hour = parseInt(match[1]);
-        minute = 0;
-        ampm = match[2];
-      } else return null;
-    }
-    if (ampm === 'pm' && hour !== 12) hour += 12;
-    if (ampm === 'am' && hour === 12) hour = 0;
-    return hour * 60 + (minute || 0);
-  };
 
   // Click outside handler for dropdowns
   useEffect(() => {

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { User, Calendar, Clock, Search, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
+import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
 
 const IndividualAvailability = ({ scheduleData, facultyData, rawScheduleData, selectedSemester }) => {
   const [selectedIndividual, setSelectedIndividual] = useState('');
@@ -10,39 +11,8 @@ const IndividualAvailability = ({ scheduleData, facultyData, rawScheduleData, se
 
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
 
-  // Utility functions
-  const parseTime = (timeStr) => {
-    if (!timeStr) return null;
-    const cleaned = timeStr.toLowerCase().replace(/\s+/g, '');
-    let hour, minute, ampm;
-    if (cleaned.includes(':')) {
-      const parts = cleaned.split(':');
-      hour = parseInt(parts[0]);
-      minute = parseInt(parts[1].replace(/[^\d]/g, ''));
-      ampm = cleaned.includes('pm') ? 'pm' : 'am';
-    } else {
-      const match = cleaned.match(/(\d+)(am|pm)/);
-      if (match) {
-        hour = parseInt(match[1]);
-        minute = 0;
-        ampm = match[2];
-      } else return null;
-    }
-    if (ampm === 'pm' && hour !== 12) hour += 12;
-    if (ampm === 'am' && hour === 12) hour = 0;
-    return hour * 60 + (minute || 0);
-  };
-
-  const formatMinutesToTime = (minutes) => {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
-    return `${displayHour}:${m.toString().padStart(2, '0')} ${ampm}`;
-  };
-
   // Get unique instructors - use relational data when available
-  const uniqueInstructors = useMemo(() => 
+  const uniqueInstructors = useMemo(() =>
     [...new Set(scheduleData.map(item => {
       if (item.instructor) {
         return `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim();
@@ -53,8 +23,8 @@ const IndividualAvailability = ({ scheduleData, facultyData, rawScheduleData, se
   );
 
   // Filter instructors based on search
-  const filteredInstructors = useMemo(() => 
-    uniqueInstructors.filter(instructor => 
+  const filteredInstructors = useMemo(() =>
+    uniqueInstructors.filter(instructor =>
       instructor.toLowerCase().includes(searchTerm.toLowerCase())
     ),
     [uniqueInstructors, searchTerm]
@@ -63,56 +33,56 @@ const IndividualAvailability = ({ scheduleData, facultyData, rawScheduleData, se
   // Calculate individual availability
   const getIndividualAvailability = (professor) => {
     const availability = {};
-    
+
     ['M', 'T', 'W', 'R', 'F'].forEach(day => {
       const professorSchedule = scheduleData.filter(item => {
-        const instructorName = item.instructor ? 
+        const instructorName = item.instructor ?
           `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim() :
           (item.Instructor || item.instructorName || '');
-        
+
         // For normalized data, check meeting patterns for the day
         if (item.meetingPatterns) {
-          return instructorName === professor && 
-                 item.meetingPatterns.some(pattern => pattern.day === day);
+          return instructorName === professor &&
+            item.meetingPatterns.some(pattern => pattern.day === day);
         }
-        
+
         // Fallback to direct day field
         return instructorName === professor && item.Day === day;
       });
-      
-              const busyPeriodsRaw = professorSchedule
-          .flatMap(item => {
-            // Handle normalized data with meeting patterns
-            if (item.meetingPatterns) {
-              return item.meetingPatterns
-                .filter(pattern => pattern.day === day)
-                .map(pattern => ({
-                  start: parseTime(pattern.startTime),
-                  end: parseTime(pattern.endTime),
-                  course: item.courseCode,
-                  room: (() => {
-                    if (item.isOnline) return 'Online';
-                    const names = Array.isArray(item.roomNames) && item.roomNames.length > 0
-                      ? item.roomNames
-                      : [item.room ? item.room.displayName : item.roomName].filter(Boolean);
-                    return names.join('; ');
-                  })(),
-                  title: item.courseTitle
-                }));
-            }
-            
-            // Fallback to direct fields
-            return [{
-              start: parseTime(item['Start Time']),
-              end: parseTime(item['End Time']),
-              course: item.Course,
-              room: item.Room,
-              // Normalize online display
-              ...(item.isOnline ? { room: 'Online' } : {}),
-              title: item['Course Title']
-            }];
-          })
-          .filter(period => period.start !== null && period.end !== null);
+
+      const busyPeriodsRaw = professorSchedule
+        .flatMap(item => {
+          // Handle normalized data with meeting patterns
+          if (item.meetingPatterns) {
+            return item.meetingPatterns
+              .filter(pattern => pattern.day === day)
+              .map(pattern => ({
+                start: parseTime(pattern.startTime),
+                end: parseTime(pattern.endTime),
+                course: item.courseCode,
+                room: (() => {
+                  if (item.isOnline) return 'Online';
+                  const names = Array.isArray(item.roomNames) && item.roomNames.length > 0
+                    ? item.roomNames
+                    : [item.room ? item.room.displayName : item.roomName].filter(Boolean);
+                  return names.join('; ');
+                })(),
+                title: item.courseTitle
+              }));
+          }
+
+          // Fallback to direct fields
+          return [{
+            start: parseTime(item['Start Time']),
+            end: parseTime(item['End Time']),
+            course: item.Course,
+            room: item.Room,
+            // Normalize online display
+            ...(item.isOnline ? { room: 'Online' } : {}),
+            title: item['Course Title']
+          }];
+        })
+        .filter(period => period.start !== null && period.end !== null);
 
       // Group identical time periods (cross-listed courses)
       const busyPeriodsGrouped = busyPeriodsRaw.reduce((acc, period) => {
@@ -179,7 +149,7 @@ const IndividualAvailability = ({ scheduleData, facultyData, rawScheduleData, se
         </span>
         <ChevronsUpDown className={`w-5 h-5 text-baylor-green transition-transform ${isDropdownOpen ? 'transform rotate-180' : ''}`} />
       </button>
-      
+
       {isDropdownOpen && (
         <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-hidden">
           {/* Search input */}
@@ -196,7 +166,7 @@ const IndividualAvailability = ({ scheduleData, facultyData, rawScheduleData, se
               />
             </div>
           </div>
-          
+
           {/* Options */}
           <div className="max-h-48 overflow-auto">
             {filteredInstructors.length > 0 ? (
@@ -208,9 +178,8 @@ const IndividualAvailability = ({ scheduleData, facultyData, rawScheduleData, se
                     setIsDropdownOpen(false);
                     setSearchTerm('');
                   }}
-                  className={`w-full px-4 py-3 text-left hover:bg-baylor-green/10 transition-colors ${
-                    instructor === selectedIndividual ? 'bg-baylor-green text-white' : 'text-gray-900'
-                  }`}
+                  className={`w-full px-4 py-3 text-left hover:bg-baylor-green/10 transition-colors ${instructor === selectedIndividual ? 'bg-baylor-green text-white' : 'text-gray-900'
+                    }`}
                 >
                   {instructor}
                 </button>
@@ -322,7 +291,7 @@ const IndividualAvailability = ({ scheduleData, facultyData, rawScheduleData, se
           <User className="mr-2 text-baylor-gold" size={20} />
           Select Faculty Member
         </h2>
-        
+
         <div className="max-w-md">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Choose a faculty member to view their schedule
@@ -379,7 +348,7 @@ const IndividualAvailability = ({ scheduleData, facultyData, rawScheduleData, se
             <h3 className="text-lg font-serif font-semibold text-baylor-green mb-4 border-b border-baylor-gold/30 pb-2">
               Weekly Summary
             </h3>
-            
+
             <div className="grid md:grid-cols-3 gap-6">
               {(() => {
                 const availability = getIndividualAvailability(selectedIndividual);

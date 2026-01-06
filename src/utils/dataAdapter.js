@@ -5,6 +5,7 @@
 
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
+import { parseTime } from './timeUtils';
 
 // ==================== DATA FETCHING ====================
 
@@ -43,13 +44,13 @@ export const fetchSchedulesWithInstructors = async () => {
       getDocs(collection(db, COLLECTIONS.SCHEDULES)),
       getDocs(collection(db, COLLECTIONS.PEOPLE))
     ]);
-    
+
     const schedules = schedulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     const people = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    
+
     // Create lookup map for people
     const peopleMap = new Map(people.map(person => [person.id, person]));
-    
+
     // Populate schedules with instructor data
     return schedules.map(schedule => ({
       ...schedule,
@@ -69,7 +70,7 @@ export const fetchSchedulesWithInstructors = async () => {
 export const adaptPeopleToFaculty = (people, scheduleData = [], programs = []) => {
   // Create lookup map for programs
   const programsMap = new Map(programs.map(program => [program.id, program]));
-  
+
   return people
     .filter(person => {
       // Handle both array and object formats for roles
@@ -82,7 +83,7 @@ export const adaptPeopleToFaculty = (people, scheduleData = [], programs = []) =
     })
     .map(person => {
       const facultyName = `${person.firstName} ${person.lastName}`.trim();
-      
+
       // Single source of truth for program: use programId to lookup program
       let program = null;
       if (person.programId && programsMap.has(person.programId)) {
@@ -93,7 +94,7 @@ export const adaptPeopleToFaculty = (people, scheduleData = [], programs = []) =
           code: programData.code
         };
       }
-      
+
       // Helper function to check if person has role (handles both formats)
       const hasRole = (role) => {
         if (Array.isArray(person.roles)) {
@@ -103,7 +104,7 @@ export const adaptPeopleToFaculty = (people, scheduleData = [], programs = []) =
         }
         return false;
       };
-      
+
       return {
         ...person, // Spread original data first
         id: person.id,
@@ -153,7 +154,7 @@ export const adaptPeopleToStaff = (people) => {
         }
         return false;
       };
-      
+
       return {
         id: person.id,
         name: `${person.firstName} ${person.lastName}`.trim(),
@@ -181,9 +182,9 @@ export const adaptPeopleToStaff = (people) => {
  */
 export const searchPeople = (people, searchTerm) => {
   if (!searchTerm) return people;
-  
+
   const term = searchTerm.toLowerCase();
-  return people.filter(person => 
+  return people.filter(person =>
     person.firstName.toLowerCase().includes(term) ||
     person.lastName.toLowerCase().includes(term) ||
     person.email.toLowerCase().includes(term) ||
@@ -216,7 +217,7 @@ export const filterPeopleByRole = (people, role) => {
  * Get people with dual roles (both faculty and staff)
  */
 export const getDualRolePeople = (people) => {
-  return people.filter(person => 
+  return people.filter(person =>
     hasRole(person, 'faculty') && hasRole(person, 'staff')
   );
 };
@@ -230,34 +231,34 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
   const facultyWorkload = {};
   const roomUtilization = {};
   const dayStats = {};
-  
+
   // Process schedules
   const processedSessions = new Set();
-  
+
   for (const schedule of schedulesWithInstructors) {
     for (const pattern of schedule.meetingPatterns || []) {
       const sessionKey = `${schedule.instructorId}-${schedule.courseCode}-${pattern.day}-${pattern.startTime}-${pattern.endTime}`;
-      
+
       if (!processedSessions.has(sessionKey)) {
         processedSessions.add(sessionKey);
-        
+
         // Faculty workload (excluding adjunct faculty for workload tracking)
         const instructor = people.find(p => p.id === schedule.instructorId);
         if (schedule.instructorId && !instructor?.isAdjunct) {
           if (!facultyWorkload[schedule.instructorName]) {
-            facultyWorkload[schedule.instructorName] = { 
-              courseSet: new Set(), 
-              totalHours: 0 
+            facultyWorkload[schedule.instructorName] = {
+              courseSet: new Set(),
+              totalHours: 0
             };
           }
-          
+
           facultyWorkload[schedule.instructorName].courseSet.add(schedule.courseCode);
-          
+
           // Calculate duration
           const duration = calculateDuration(pattern.startTime, pattern.endTime);
           facultyWorkload[schedule.instructorName].totalHours += duration;
         }
-        
+
         // Room utilization
         // Multi-room aware utilization
         const roomNamesArr = Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0
@@ -277,7 +278,7 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
               roomUtilization[rn].adjunctTaughtClasses++;
             }
           });
-        
+
         // Day statistics
         if (pattern.day) {
           dayStats[pattern.day] = (dayStats[pattern.day] || 0) + 1;
@@ -285,7 +286,7 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
       }
     }
   }
-  
+
   // Convert faculty workload to final format
   const finalFacultyWorkload = Object.fromEntries(
     Object.entries(facultyWorkload).map(([instructor, data]) => [
@@ -293,7 +294,7 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
       { courses: data.courseSet.size, totalHours: data.totalHours }
     ])
   );
-  
+
   // Calculate additional metrics
   const facultyPeople = people.filter(p => hasRole(p, 'faculty'));
   const uniqueRooms = Object.keys(roomUtilization);
@@ -303,12 +304,12 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
     return instructor?.isAdjunct;
   }).length;
   const uniqueCourses = [...new Set(schedulesWithInstructors.map(s => s.courseCode))].length;
-  
+
   const busiestDay = Object.entries(dayStats).reduce(
     (max, [day, count]) => count > max.count ? { day, count } : max,
     { day: '', count: 0 }
   );
-  
+
   return {
     facultyCount: facultyPeople.length,
     adjunctTaughtSessions,
@@ -329,37 +330,13 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
  * Calculate duration between two time strings
  */
 const calculateDuration = (startTime, endTime) => {
-  const parseTime = (timeStr) => {
-    if (!timeStr) return null;
-    const cleaned = timeStr.toLowerCase().replace(/\s+/g, '');
-    let hour, minute, ampm;
-    
-    if (cleaned.includes(':')) {
-      const parts = cleaned.split(':');
-      hour = parseInt(parts[0]);
-      minute = parseInt(parts[1].replace(/[^\d]/g, ''));
-      ampm = cleaned.includes('pm') ? 'pm' : 'am';
-    } else {
-      const match = cleaned.match(/(\d+)(am|pm)/);
-      if (match) {
-        hour = parseInt(match[1]);
-        minute = 0;
-        ampm = match[2];
-      } else return null;
-    }
-    
-    if (ampm === 'pm' && hour !== 12) hour += 12;
-    if (ampm === 'am' && hour === 12) hour = 0;
-    return hour * 60 + (minute || 0);
-  };
-  
   const start = parseTime(startTime);
   const end = parseTime(endTime);
-  
+
   if (start !== null && end !== null && end > start) {
     return (end - start) / 60; // Return hours
   }
-  
+
   return 0;
 };
 
@@ -368,12 +345,12 @@ const calculateDuration = (startTime, endTime) => {
  */
 export const getFullName = (person) => {
   if (!person) return '';
-  
+
   const parts = [];
   if (person.title) parts.push(person.title);
   if (person.firstName) parts.push(person.firstName);
   if (person.lastName) parts.push(person.lastName);
-  
+
   return parts.join(' ');
 };
 

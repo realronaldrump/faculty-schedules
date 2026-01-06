@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, Clock, Users, Calendar, X, CheckCircle, Eye, GraduationCap } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
+import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
 
 const GroupMeetings = ({ scheduleData, facultyData, rawScheduleData, onNavigate }) => {
   const [selectedProfessors, setSelectedProfessors] = useState([]);
@@ -52,37 +53,6 @@ const GroupMeetings = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
     }
   }, [showAdjuncts, selectedProfessors, facultyData]);
 
-  // Utility functions
-  const parseTime = (timeStr) => {
-    if (!timeStr) return null;
-    const cleaned = timeStr.toLowerCase().replace(/\s+/g, '');
-    let hour, minute, ampm;
-    if (cleaned.includes(':')) {
-      const parts = cleaned.split(':');
-      hour = parseInt(parts[0]);
-      minute = parseInt(parts[1].replace(/[^\d]/g, ''));
-      ampm = cleaned.includes('pm') ? 'pm' : 'am';
-    } else {
-      const match = cleaned.match(/(\d+)(am|pm)/);
-      if (match) {
-        hour = parseInt(match[1]);
-        minute = 0;
-        ampm = match[2];
-      } else return null;
-    }
-    if (ampm === 'pm' && hour !== 12) hour += 12;
-    if (ampm === 'am' && hour === 12) hour = 0;
-    return hour * 60 + (minute || 0);
-  };
-
-  const formatMinutesToTime = (minutes) => {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
-    return `${displayHour}:${m.toString().padStart(2, '0')} ${ampm}`;
-  };
-
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
 
   // Helper to normalize instructor names from schedule items
@@ -110,7 +80,7 @@ const GroupMeetings = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
   const uniqueRooms = useMemo(() => {
     const allRooms = scheduleData.flatMap(item => (item.Room || '').split(';').map(r => r.trim()));
     return [...new Set(allRooms)]
-      .filter(room => 
+      .filter(room =>
         room &&
         room.toLowerCase() !== 'online' &&
         !room.toLowerCase().includes('no room needed') &&
@@ -119,7 +89,7 @@ const GroupMeetings = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   }, [scheduleData]);
 
-  const filteredInstructors = useMemo(() => 
+  const filteredInstructors = useMemo(() =>
     uniqueInstructors.filter(instructor => instructor.toLowerCase().includes(searchTerm.toLowerCase())),
     [uniqueInstructors, searchTerm]
   );
@@ -165,7 +135,7 @@ const GroupMeetings = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
     if (selectedProfessors.length === 0) return {};
     const availability = {};
     const days = ['M', 'T', 'W', 'R', 'F'];
-    
+
     days.forEach(day => {
       const busyPeriods = [];
       selectedProfessors.forEach(professor => {
@@ -178,34 +148,34 @@ const GroupMeetings = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
           }
         });
       });
-      
+
       busyPeriods.sort((a, b) => a.start - b.start);
       const availableSlots = [];
       const dayStart = 8 * 60, dayEnd = 17 * 60;
       let currentTime = dayStart;
-      
+
       busyPeriods.forEach(period => {
         if (currentTime < period.start && (period.start - currentTime) >= (meetingDuration + bufferTime)) {
           availableSlots.push({ start: currentTime, end: period.start, duration: period.start - currentTime });
         }
         currentTime = Math.max(currentTime, period.end);
       });
-      
+
       if (currentTime < dayEnd && (dayEnd - currentTime) >= (meetingDuration + bufferTime)) {
         availableSlots.push({ start: currentTime, end: dayEnd, duration: dayEnd - currentTime });
       }
-      
+
       availability[day] = availableSlots.filter(slot => slot.duration >= meetingDuration);
     });
-    
+
     return availability;
   }, [scheduleData, selectedProfessors, meetingDuration, bufferTime]);
 
   // Event handlers
   const toggleProfessor = (professor) => {
-    setSelectedProfessors(prev => 
-      prev.includes(professor) 
-        ? prev.filter(p => p !== professor) 
+    setSelectedProfessors(prev =>
+      prev.includes(professor)
+        ? prev.filter(p => p !== professor)
         : [...prev, professor]
     );
   };
@@ -224,11 +194,11 @@ const GroupMeetings = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
 
   const renderRoomModal = () => {
     if (!isRoomModalOpen || !selectedSlotForRoomSearch) return null;
-    
+
     const { dayCode, dayName, slot } = selectedSlotForRoomSearch;
     const meetingStart = slot.start;
     const meetingEnd = meetingStart + meetingDuration;
-    
+
     // Determine availability using same multi-room parsing as RoomSchedules
     const availableRooms = uniqueRooms.filter(room => {
       return !scheduleData.some(item => {
@@ -262,7 +232,7 @@ const GroupMeetings = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
               <X size={20} className="text-gray-600" />
             </button>
           </div>
-          
+
           {availableRooms.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto pr-2">
               {availableRooms.map(room => (
@@ -279,10 +249,10 @@ const GroupMeetings = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
               <p className="text-sm">Try a different time or a shorter meeting duration.</p>
             </div>
           )}
-          
+
           <div className="mt-6 text-right">
-            <button 
-              onClick={() => setIsRoomModalOpen(false)} 
+            <button
+              onClick={() => setIsRoomModalOpen(false)}
               className="px-4 py-2 bg-baylor-gold text-baylor-green font-bold rounded-lg hover:bg-baylor-gold/90 transition-colors"
             >
               Close
@@ -309,7 +279,7 @@ const GroupMeetings = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
               <Clock className="mr-2 text-baylor-gold" size={20} />
               Meeting Details
             </h2>
-            
+
             <div className="space-y-6">
               {/* Meeting Duration */}
               <div>
@@ -319,11 +289,10 @@ const GroupMeetings = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
                     <button
                       key={duration}
                       onClick={() => setMeetingDuration(duration)}
-                      className={`p-3 rounded-lg border text-center transition-all ${
-                        meetingDuration === duration
+                      className={`p-3 rounded-lg border text-center transition-all ${meetingDuration === duration
                           ? 'bg-baylor-green text-white border-baylor-green shadow-md'
                           : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-                      }`}
+                        }`}
                     >
                       <div className="font-medium">
                         {duration === 60 ? '1 hr' : duration === 120 ? '2 hrs' : `${duration}m`}
@@ -341,11 +310,10 @@ const GroupMeetings = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
                     <button
                       key={buffer}
                       onClick={() => setBufferTime(buffer)}
-                      className={`p-3 rounded-lg border text-center transition-all ${
-                        bufferTime === buffer
+                      className={`p-3 rounded-lg border text-center transition-all ${bufferTime === buffer
                           ? 'bg-baylor-gold text-baylor-green font-bold border-baylor-gold shadow-md'
                           : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-                      }`}
+                        }`}
                     >
                       <div className="font-medium">{buffer === 0 ? 'None' : `${buffer}m`}</div>
                     </button>
@@ -491,25 +459,23 @@ const GroupMeetings = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
                 filteredInstructors.map(professor => {
                   const faculty = facultyData.find(f => f.name === professor);
                   const isAdjunct = faculty?.isAdjunct;
-                  
+
                   return (
                     <div
                       key={professor}
-                      className={`p-3 rounded-lg border transition-all flex justify-between items-center ${
-                        selectedProfessors.includes(professor)
+                      className={`p-3 rounded-lg border transition-all flex justify-between items-center ${selectedProfessors.includes(professor)
                           ? 'bg-baylor-green/10 border-baylor-green text-baylor-green'
                           : isAdjunct
                             ? 'bg-gray-50 border-gray-200'
                             : 'bg-white border-gray-200'
-                      }`}
+                        }`}
                     >
                       <button onClick={() => toggleProfessor(professor)} className="flex items-center flex-grow text-left">
                         <div
-                          className={`w-3 h-3 rounded-full mr-3 ${
-                            selectedProfessors.includes(professor)
+                          className={`w-3 h-3 rounded-full mr-3 ${selectedProfessors.includes(professor)
                               ? 'bg-baylor-green'
                               : 'bg-gray-300'
-                          }`}
+                            }`}
                         ></div>
                         <span
                           className="text-sm font-medium hover:underline cursor-pointer"
@@ -594,14 +560,13 @@ const GroupMeetings = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
                       {dayName}
                     </h3>
                     <span
-                      className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        slots.length > 0 ? 'bg-baylor-green/10 text-baylor-green' : 'bg-red-100 text-red-800'
-                      }`}
+                      className={`px-3 py-1 rounded-full text-sm font-medium ${slots.length > 0 ? 'bg-baylor-green/10 text-baylor-green' : 'bg-red-100 text-red-800'
+                        }`}
                     >
                       {slots.length > 0 ? `${slots.length} slot${slots.length !== 1 ? 's' : ''}` : 'No availability'}
                     </span>
                   </div>
-                  
+
                   {slots.length > 0 ? (
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
                       {slots.map((slot, index) => (

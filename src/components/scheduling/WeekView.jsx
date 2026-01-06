@@ -1,17 +1,18 @@
 import React, { useMemo, useState } from 'react';
 import { MapPin, Download, Printer } from 'lucide-react';
 import CourseDetailModal from './CourseDetailModal';
+import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
 
-const WeekView = ({ 
-  scheduleData, 
-  filteredRooms, 
-  selectedRoom, 
-  selectedBuilding, 
-  weekViewMode, 
-  density, 
+const WeekView = ({
+  scheduleData,
+  filteredRooms,
+  selectedRoom,
+  selectedBuilding,
+  weekViewMode,
+  density,
   onShowContactCard,
   onExport,
-  onPrint 
+  onPrint
 }) => {
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
   const dayOrder = ['M', 'T', 'W', 'R', 'F'];
@@ -21,38 +22,6 @@ const WeekView = ({
 
   // Time scale configuration (dynamic 8:00 AM to last class end)
   const dayStartMinutes = 8 * 60;
-
-  // Parse time string to minutes
-  const parseTime = (timeStr) => {
-    if (!timeStr) return null;
-    const cleaned = timeStr.toLowerCase().replace(/\s+/g, '');
-    let hour, minute, ampm;
-    if (cleaned.includes(':')) {
-      const parts = cleaned.split(':');
-      hour = parseInt(parts[0]);
-      minute = parseInt(parts[1].replace(/[^\d]/g, ''));
-      ampm = cleaned.includes('pm') ? 'pm' : 'am';
-    } else {
-      const match = cleaned.match(/(\d+)(am|pm)/);
-      if (match) {
-        hour = parseInt(match[1]);
-        minute = 0;
-        ampm = match[2];
-      } else return null;
-    }
-    if (ampm === 'pm' && hour !== 12) hour += 12;
-    if (ampm === 'am' && hour === 12) hour = 0;
-    return hour * 60 + (minute || 0);
-  };
-
-  // Format minutes to time string
-  const formatMinutesToTime = (minutes) => {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
-    return `${displayHour}:${m.toString().padStart(2, '0')} ${ampm}`;
-  };
 
   // Get building from room name
   const getBuildingFromRoom = (room) => {
@@ -68,14 +37,14 @@ const WeekView = ({
   const weeklyRoomSchedules = useMemo(() => {
     const schedules = {};
     const roomsToShow = selectedRoom ? [selectedRoom] : filteredRooms;
-    
+
     // Filter days based on week view mode
     let daysToShow = dayOrder;
     if (weekViewMode === 'mwf') daysToShow = ['M', 'W', 'F'];
     else if (weekViewMode === 'tr') daysToShow = ['T', 'R'];
     else if (weekViewMode === 'mw') daysToShow = ['M', 'W'];
     else if (weekViewMode === 'trf') daysToShow = ['T', 'R', 'F'];
-    
+
     roomsToShow.forEach(room => {
       schedules[room] = {};
       daysToShow.forEach(day => {
@@ -97,7 +66,7 @@ const WeekView = ({
           .sort((a, b) => parseTime(a['Start Time']) - parseTime(b['Start Time']));
       });
     });
-    
+
     return schedules;
   }, [scheduleData, filteredRooms, selectedRoom, weekViewMode]);
 
@@ -145,16 +114,16 @@ const WeekView = ({
 
   // Get meeting pattern for a course
   const getMeetingPattern = (courseCode, startTime, endTime) => {
-    const course = scheduleData.find(item => 
-      item.Course === courseCode && 
-      item['Start Time'] === startTime && 
+    const course = scheduleData.find(item =>
+      item.Course === courseCode &&
+      item['Start Time'] === startTime &&
       item['End Time'] === endTime
     );
-    
+
     if (course && course.meetingPatterns) {
       return course.meetingPatterns.map(p => p.day).join('');
     }
-    
+
     // Fallback to Day field
     return course?.Day || '';
   };
@@ -353,11 +322,11 @@ const WeekView = ({
             Weekly Schedule View
           </h2>
           <p className="text-sm text-gray-600">
-            {weekViewMode === 'all' ? 'All Days' : 
-             weekViewMode === 'mwf' ? 'Monday, Wednesday, Friday' :
-             weekViewMode === 'tr' ? 'Tuesday, Thursday' :
-             weekViewMode === 'mw' ? 'Monday, Wednesday' :
-             'Tuesday, Thursday, Friday'}
+            {weekViewMode === 'all' ? 'All Days' :
+              weekViewMode === 'mwf' ? 'Monday, Wednesday, Friday' :
+                weekViewMode === 'tr' ? 'Tuesday, Thursday' :
+                  weekViewMode === 'mw' ? 'Monday, Wednesday' :
+                    'Tuesday, Thursday, Friday'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -369,7 +338,7 @@ const WeekView = ({
             <Download className="w-4 h-4 mr-2" />
             Export CSV
           </button>
-          
+
           <button
             onClick={onPrint}
             className="inline-flex items-center px-3 py-2 text-sm font-medium text-baylor-green bg-white border border-baylor-green rounded-lg hover:bg-baylor-green hover:text-white transition-colors"
@@ -392,7 +361,7 @@ const WeekView = ({
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="text-sm text-gray-600">Total Sessions</div>
           <div className="text-2xl font-bold text-baylor-green">
-            {Object.values(weeklyRoomSchedules).reduce((total, room) => 
+            {Object.values(weeklyRoomSchedules).reduce((total, room) =>
               total + Object.values(room).reduce((dayTotal, day) => dayTotal + day.length, 0), 0
             )}
           </div>
@@ -484,11 +453,10 @@ const WeekView = ({
                               <div
                                 key={`${building}-${bucket}-${room}-${index}`}
                                 style={style}
-                                className={`px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md shadow-sm transition-all cursor-pointer group ${
-                                  isCurrent
+                                className={`px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md shadow-sm transition-all cursor-pointer group ${isCurrent
                                     ? 'bg-baylor-gold text-baylor-green ring-2 ring-baylor-gold/40'
                                     : 'bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green'
-                                }`}
+                                  }`}
                                 title={`${item.Course} • ${item['Start Time']} - ${item['End Time']} • ${pattern}`}
                                 onClick={() => openCourseCard(item)}
                               >

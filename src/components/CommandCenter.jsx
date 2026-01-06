@@ -14,6 +14,7 @@ import {
   X
 } from 'lucide-react';
 import { getBuildingFromRoom, normalizeBuildingName, getCanonicalBuildingList, buildingMatches } from '../utils/buildingUtils';
+import { formatMinutesToTime } from '../utils/timeUtils';
 
 const CommandCenter = ({
   scheduleData = [],
@@ -47,7 +48,7 @@ const CommandCenter = ({
     return dayMap[currentTime.getDay()];
   };
 
-  // Parse time string to minutes since midnight
+  // Parse time string to minutes since midnight (slightly different format handling)
   const parseTimeToMinutes = (timeStr) => {
     if (!timeStr) return null;
     const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
@@ -61,16 +62,6 @@ const CommandCenter = ({
     if (period === 'AM' && hours === 12) hours = 0;
 
     return hours * 60 + minutes;
-  };
-
-  // Format minutes to time string
-  const formatMinutesToTime = (minutes) => {
-    if (minutes === null || minutes === undefined) return '';
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    const period = h >= 12 ? 'PM' : 'AM';
-    const displayH = h === 0 ? 12 : h > 12 ? h - 12 : h;
-    return `${displayH}:${m.toString().padStart(2, '0')} ${period}`;
   };
 
   // Get current time in minutes since midnight

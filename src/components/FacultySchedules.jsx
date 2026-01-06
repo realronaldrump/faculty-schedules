@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { User, Calendar, Clock, Search, ChevronDown, ChevronsUpDown, Grid, List, Plus, X, Eye, Info, Building, BookOpen, Users, GraduationCap } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
+import { parseTime, formatMinutesToTime } from '../utils/timeUtils';
 
 const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUpdate, onScheduleDelete, showNotification }) => {
   const [selectedFaculty, setSelectedFaculty] = useState([]);
@@ -20,42 +21,11 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
 
   const handleDayToggle = (dayCode) => {
-    setSelectedDays(prev => 
-      prev.includes(dayCode) 
-        ? prev.filter(d => d !== dayCode) 
+    setSelectedDays(prev =>
+      prev.includes(dayCode)
+        ? prev.filter(d => d !== dayCode)
         : [...prev, dayCode]
     );
-  };
-
-  // Utility functions
-  const parseTime = (timeStr) => {
-    if (!timeStr) return null;
-    const cleaned = timeStr.toLowerCase().replace(/\s+/g, '');
-    let hour, minute, ampm;
-    if (cleaned.includes(':')) {
-      const parts = cleaned.split(':');
-      hour = parseInt(parts[0]);
-      minute = parseInt(parts[1].replace(/[^\d]/g, ''));
-      ampm = cleaned.includes('pm') ? 'pm' : 'am';
-    } else {
-      const match = cleaned.match(/(\d+)(am|pm)/);
-      if (match) {
-        hour = parseInt(match[1]);
-        minute = 0;
-        ampm = match[2];
-      } else return null;
-    }
-    if (ampm === 'pm' && hour !== 12) hour += 12;
-    if (ampm === 'am' && hour === 12) hour = 0;
-    return hour * 60 + (minute || 0);
-  };
-
-  const formatMinutesToTime = (minutes) => {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
-    return `${displayHour}:${m.toString().padStart(2, '0')} ${ampm}`;
   };
 
   // Get unique instructors (filtered by adjunct preference)
@@ -66,7 +36,7 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
       }
       return item.Instructor || item.instructorName || '';
     }))].filter(i => i !== '');
-    
+
     // Filter out adjuncts if showAdjuncts is false
     if (!showAdjuncts) {
       return instructorNames.filter(instructorName => {
@@ -74,12 +44,12 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
         return faculty && !faculty.isAdjunct;
       }).sort();
     }
-    
+
     return instructorNames.sort();
   }, [scheduleData, facultyData, showAdjuncts]);
 
-  const filteredInstructors = useMemo(() => 
-    uniqueInstructors.filter(instructor => 
+  const filteredInstructors = useMemo(() =>
+    uniqueInstructors.filter(instructor =>
       instructor.toLowerCase().includes(searchTerm.toLowerCase())
     ),
     [uniqueInstructors, searchTerm]
@@ -100,8 +70,8 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
     return Array.from(programs).sort();
   }, [facultyData, showAdjuncts]);
 
-  const filteredPrograms = useMemo(() => 
-    uniquePrograms.filter(program => 
+  const filteredPrograms = useMemo(() =>
+    uniquePrograms.filter(program =>
       program.toLowerCase().includes(programSearchTerm.toLowerCase())
     ),
     [uniquePrograms, programSearchTerm]
@@ -125,16 +95,16 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
   const handleAddProgramFaculty = (programName) => {
     const programFaculty = getFacultyByProgram(programName);
     const newFaculty = programFaculty.filter(name => !selectedFaculty.includes(name));
-    
+
     if (newFaculty.length === 0) {
       // All faculty from this program are already selected
       return;
     }
-    
+
     setSelectedFaculty(prev => [...prev, ...newFaculty]);
     setIsProgramDropdownOpen(false);
     setProgramSearchTerm('');
-    
+
     // Show a brief notification (you can replace this with your notification system)
     console.log(`Added ${newFaculty.length} faculty from ${programName} program`);
   };
@@ -175,7 +145,7 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
         const faculty = facultyData.find(f => f.name === facultyName);
         return faculty && faculty.isAdjunct;
       });
-      
+
       if (adjunctFaculty.length > 0) {
         setSelectedFaculty(prev => prev.filter(name => !adjunctFaculty.includes(name)));
       }
@@ -185,15 +155,15 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
   // Get schedule data for selected faculty
   const getFacultyScheduleData = (facultyName, day) => {
     const facultySchedule = scheduleData.filter(item => {
-      const instructorName = item.instructor ? 
+      const instructorName = item.instructor ?
         `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim() :
         (item.Instructor || item.instructorName || '');
-      
+
       if (item.meetingPatterns) {
-        return instructorName === facultyName && 
-               item.meetingPatterns.some(pattern => pattern.day === day);
+        return instructorName === facultyName &&
+          item.meetingPatterns.some(pattern => pattern.day === day);
       }
-      
+
       return instructorName === facultyName && item.Day === day;
     });
 
@@ -221,7 +191,7 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
               rawData: item
             }));
         }
-        
+
         return [{
           id: item.id || `${item.Course}-${item['Start Time']}-${item['End Time']}`,
           start: parseTime(item['Start Time']),
@@ -252,7 +222,7 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
     const dayStart = 8 * 60;
     const dayEnd = 18 * 60;
     const totalMinutes = dayEnd - dayStart;
-    const timeLabels = Array.from({length: (dayEnd - dayStart) / 60 + 1}, (_, i) => dayStart + i * 60);
+    const timeLabels = Array.from({ length: (dayEnd - dayStart) / 60 + 1 }, (_, i) => dayStart + i * 60);
 
     return (
       <div className="mt-6">
@@ -267,20 +237,20 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
               </div>
               <div className="flex-grow flex">
                 {timeLabels.slice(0, -1).map(time => (
-                  <div 
-                    key={time} 
-                    style={{width: `${(60 / totalMinutes) * 100}%`}} 
+                  <div
+                    key={time}
+                    style={{ width: `${(60 / totalMinutes) * 100}%` }}
                     className="text-center text-xs font-medium p-2 border-l border-gray-200 text-baylor-green"
                   >
-                    {formatMinutesToTime(time).replace(':00','')}
+                    {formatMinutesToTime(time).replace(':00', '')}
                   </div>
                 ))}
               </div>
             </div>
-            
+
             {selectedFaculty.map(facultyName => {
               const courses = getFacultyScheduleData(facultyName, dayCode);
-              
+
               return (
                 <div key={facultyName} className="flex border-b border-gray-100 hover:bg-gray-50/50">
                   <div className="w-48 flex-shrink-0 p-4 border-r border-gray-200 bg-gray-50/30">
@@ -314,12 +284,12 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
                       return (
                         <div
                           key={course.id}
-                          style={{ 
-                            position: 'absolute', 
-                            left: `${left}%`, 
-                            width: `${width}%`, 
-                            top: '8px', 
-                            bottom: '8px' 
+                          style={{
+                            position: 'absolute',
+                            left: `${left}%`,
+                            width: `${width}%`,
+                            top: '8px',
+                            bottom: '8px'
                           }}
                           className="px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green shadow-sm transition-all cursor-pointer"
                           onClick={() => {
@@ -334,7 +304,7 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
                         </div>
                       );
                     })}
-                    
+
                     {courses.length === 0 && (
                       <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">
                         No classes scheduled
@@ -362,7 +332,7 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
           <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
             <X size={24} />
           </button>
-          
+
           <div className="mb-6">
             <p className="text-sm font-semibold text-baylor-green tracking-wider uppercase">{course.course}</p>
             <h2 className="text-3xl font-bold font-serif text-gray-900 mt-1">{course.title}</h2>
@@ -449,7 +419,7 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
                 <span>Add faculty member...</span>
                 <ChevronsUpDown className="w-5 h-5 text-baylor-green" />
               </button>
-              
+
               {isDropdownOpen && (
                 <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-hidden">
                   <div className="p-2 border-b border-gray-200">
@@ -461,14 +431,14 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-baylor-green focus:border-baylor-green text-sm"
                     />
                   </div>
-                  
+
                   <div className="max-h-48 overflow-auto">
                     {filteredInstructors
                       .filter(instructor => !selectedFaculty.includes(instructor))
                       .length === 0 ? (
                       <div className="px-3 py-2 text-sm text-gray-500">
-                        {searchTerm ? 'No faculty found matching your search.' : 
-                         !showAdjuncts ? 'No full-time faculty available.' : 'No faculty available.'}
+                        {searchTerm ? 'No faculty found matching your search.' :
+                          !showAdjuncts ? 'No full-time faculty available.' : 'No faculty available.'}
                       </div>
                     ) : (
                       filteredInstructors
@@ -503,7 +473,7 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
                 <span>Select program...</span>
                 <GraduationCap className="w-5 h-5 text-baylor-green" />
               </button>
-              
+
               {isProgramDropdownOpen && (
                 <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-hidden">
                   <div className="p-2 border-b border-gray-200">
@@ -515,27 +485,26 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-baylor-green focus:border-baylor-green text-sm"
                     />
                   </div>
-                  
+
                   <div className="max-h-48 overflow-auto">
                     {filteredPrograms.length === 0 ? (
                       <div className="px-3 py-2 text-sm text-gray-500">
-                        {programSearchTerm ? 'No programs found matching your search.' : 
-                         !showAdjuncts ? 'No programs with full-time faculty available.' : 'No programs available.'}
+                        {programSearchTerm ? 'No programs found matching your search.' :
+                          !showAdjuncts ? 'No programs with full-time faculty available.' : 'No programs available.'}
                       </div>
                     ) : (
                       filteredPrograms.map((program) => {
                         const programFaculty = getFacultyByProgram(program);
                         const availableFaculty = programFaculty.filter(name => !selectedFaculty.includes(name));
                         const facultyCount = availableFaculty.length;
-                        
+
                         return (
                           <button
                             key={program}
                             onClick={() => handleAddProgramFaculty(program)}
                             disabled={facultyCount === 0}
-                            className={`w-full text-left px-3 py-2 hover:bg-baylor-green/10 transition-colors text-sm ${
-                              facultyCount === 0 ? 'text-gray-400 cursor-not-allowed' : ''
-                            }`}
+                            className={`w-full text-left px-3 py-2 hover:bg-baylor-green/10 transition-colors text-sm ${facultyCount === 0 ? 'text-gray-400 cursor-not-allowed' : ''
+                              }`}
                           >
                             <div className="flex items-center justify-between">
                               <span>{program}</span>
@@ -560,11 +529,10 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
                 <button
                   key={dayCode}
                   onClick={() => handleDayToggle(dayCode)}
-                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors flex-1 ${
-                    selectedDays.includes(dayCode) 
-                      ? 'bg-baylor-green text-white shadow' 
+                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors flex-1 ${selectedDays.includes(dayCode)
+                      ? 'bg-baylor-green text-white shadow'
                       : 'text-gray-600 hover:bg-gray-200'
-                  }`}
+                    }`}
                 >
                   {dayName.slice(0, 3)}
                 </button>
@@ -582,14 +550,12 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
             </div>
             <button
               onClick={() => setShowAdjuncts(!showAdjuncts)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-baylor-green focus:ring-offset-2 ${
-                showAdjuncts ? 'bg-baylor-green' : 'bg-gray-200'
-              }`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-baylor-green focus:ring-offset-2 ${showAdjuncts ? 'bg-baylor-green' : 'bg-gray-200'
+                }`}
             >
               <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  showAdjuncts ? 'translate-x-6' : 'translate-x-1'
-                }`}
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showAdjuncts ? 'translate-x-6' : 'translate-x-1'
+                  }`}
               />
             </button>
           </div>
@@ -628,13 +594,12 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
                 const faculty = facultyData.find(f => f.name === facultyName);
                 const programName = faculty?.program?.name;
                 const isAdjunct = faculty?.isAdjunct;
-                
+
                 return (
-                  <div key={facultyName} className={`flex items-center px-3 py-1 rounded-full text-sm ${
-                    isAdjunct 
-                      ? 'bg-orange-100 text-orange-700 border border-orange-200' 
+                  <div key={facultyName} className={`flex items-center px-3 py-1 rounded-full text-sm ${isAdjunct
+                      ? 'bg-orange-100 text-orange-700 border border-orange-200'
                       : 'bg-baylor-green/10 text-baylor-green'
-                  }`}>
+                    }`}>
                     <span>{facultyName}</span>
                     {programName && (
                       <span className="ml-1 text-xs opacity-75">({programName})</span>
@@ -685,7 +650,7 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
       </div>
 
       {selectedCourse && (
-        <CourseDetailModal 
+        <CourseDetailModal
           course={selectedCourse}
           facultyData={facultyData}
           onClose={() => setSelectedCourse(null)}
@@ -693,10 +658,10 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
       )}
 
       {selectedFacultyForCard && (
-        <FacultyContactCard 
-          faculty={selectedFacultyForCard} 
-          onClose={() => setSelectedFacultyForCard(null)} 
-          showNotification={() => {}} 
+        <FacultyContactCard
+          faculty={selectedFacultyForCard}
+          onClose={() => setSelectedFacultyForCard(null)}
+          showNotification={() => { }}
         />
       )}
     </div>

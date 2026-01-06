@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  BarChart3, 
-  Users, 
-  Clock, 
-  MapPin, 
+import {
+  BarChart3,
+  Users,
+  Clock,
+  MapPin,
   BookOpen,
   ArrowUpDown,
   X,
@@ -12,6 +12,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
+import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
 
 const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analytics, selectedSemester }) => {
   const [showWarning, setShowWarning] = useState(() => localStorage.getItem('insightsWarningDismissed') !== 'true');
@@ -22,60 +23,29 @@ const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analyt
 
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
 
-  // Utility functions
-  const parseTime = (timeStr) => {
-    if (!timeStr) return null;
-    const cleaned = timeStr.toLowerCase().replace(/\s+/g, '');
-    let hour, minute, ampm;
-    if (cleaned.includes(':')) {
-      const parts = cleaned.split(':');
-      hour = parseInt(parts[0]);
-      minute = parseInt(parts[1].replace(/[^\d]/g, ''));
-      ampm = cleaned.includes('pm') ? 'pm' : 'am';
-    } else {
-      const match = cleaned.match(/(\d+)(am|pm)/);
-      if (match) {
-        hour = parseInt(match[1]);
-        minute = 0;
-        ampm = match[2];
-      } else return null;
-    }
-    if (ampm === 'pm' && hour !== 12) hour += 12;
-    if (ampm === 'am' && hour === 12) hour = 0;
-    return hour * 60 + (minute || 0);
-  };
-
-  const formatMinutesToTime = (minutes) => {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
-    return `${displayHour}:${m.toString().padStart(2, '0')} ${ampm}`;
-  };
-
   // Calculate hourly usage (specific to this component)
   const filteredHourCounts = useMemo(() => {
-    const dataToProcess = hourlyUsageDayFilter === 'All' 
-      ? scheduleData 
+    const dataToProcess = hourlyUsageDayFilter === 'All'
+      ? scheduleData
       : scheduleData.filter(item => item.Day === hourlyUsageDayFilter);
-    
+
     if (dataToProcess.length === 0) {
       const emptyCounts = {};
       for (let hour = 8; hour <= 17; hour++) emptyCounts[hour] = 0;
       return { hourCounts: emptyCounts, latestEndTime: 17 * 60, peakHour: { hour: 8, count: 0 } };
     }
-    
+
     let latestEndTime = 17 * 60;
     dataToProcess.forEach(item => {
       const end = parseTime(item['End Time']);
       if (end && end > latestEndTime) latestEndTime = end;
     });
-    
+
     const hourCounts = {};
     for (let hour = 8; hour <= Math.ceil(latestEndTime / 60); hour++) {
       hourCounts[hour] = 0;
     }
-    
+
     dataToProcess.forEach(item => {
       const start = parseTime(item['Start Time']);
       const end = parseTime(item['End Time']);
@@ -87,12 +57,12 @@ const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analyt
         }
       }
     });
-    
+
     const peakHour = Object.entries(hourCounts).reduce(
       (max, [hour, count]) => count > max.count ? { hour: parseInt(hour), count } : max,
       { hour: 8, count: 0 }
     );
-    
+
     return { hourCounts, latestEndTime, peakHour };
   }, [scheduleData, hourlyUsageDayFilter]);
 
@@ -174,12 +144,12 @@ const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analyt
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Department Insights</h1>
           <p className="text-gray-600">Analytics and metrics for faculty scheduling</p>
         </div>
-        
+
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
           <BarChart3 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-900 mb-2">No Data Available</h2>
           <p className="text-gray-600 mb-6">Import schedule data to view department analytics and insights</p>
-          <button 
+          <button
             onClick={() => onNavigate('administration/data-import')}
             className="px-6 py-3 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors font-medium"
           >
@@ -201,7 +171,7 @@ const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analyt
       {/* Warning Banner */}
       {showWarning && (
         <div className="bg-baylor-gold/10 border border-baylor-gold/30 rounded-lg p-4 text-baylor-green relative">
-          <button 
+          <button
             onClick={handleDismissWarning}
             className="absolute top-2 right-2 p-1 hover:bg-baylor-gold/20 rounded-full transition-colors"
           >
@@ -213,7 +183,7 @@ const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analyt
               <p className="text-sm font-medium">Data Verification Notice</p>
               <p className="text-sm mt-1">
                 This data is still being refined and may not reflect the final schedule. Please verify any critical information with the department and official University{' '}
-                <button 
+                <button
                   onClick={() => onNavigate('administration/baylor-systems')}
                   className="text-baylor-gold hover:text-baylor-green underline transition-colors"
                 >
@@ -296,18 +266,17 @@ const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analyt
               <button
                 key={day}
                 onClick={() => setHourlyUsageDayFilter(day)}
-                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
-                  hourlyUsageDayFilter === day 
-                    ? 'bg-baylor-green text-white shadow' 
+                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${hourlyUsageDayFilter === day
+                    ? 'bg-baylor-green text-white shadow'
                     : 'text-gray-600 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 {day === 'All' ? 'All' : dayNames[day]?.substring(0, 3)}
               </button>
             ))}
           </div>
         </div>
-        
+
         <div className="space-y-2">
           {Object.entries(filteredHourCounts.hourCounts).map(([hour, count]) => {
             const maxCount = Math.max(...Object.values(filteredHourCounts.hourCounts), 1);
@@ -318,7 +287,7 @@ const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analyt
                 </div>
                 <div className="flex-1 mx-4">
                   <div className="bg-gray-200 rounded-full h-6 relative overflow-hidden">
-                    <div 
+                    <div
                       className="bg-baylor-green h-6 rounded-full transition-all duration-500 group-hover:bg-baylor-gold relative"
                       style={{ width: `${(count / maxCount) * 100}%` }}
                     >
@@ -347,7 +316,7 @@ const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analyt
             <p className="text-sm text-gray-600">Weekly hours and course assignments by faculty member</p>
           </div>
         </div>
-        
+
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-baylor-green/5">
@@ -366,7 +335,7 @@ const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analyt
                   moderate: 'bg-yellow-100 text-yellow-800',
                   light: 'bg-green-100 text-green-800'
                 };
-                
+
                 return (
                   <tr key={instructor} className="hover:bg-baylor-green/5 transition-colors">
                     <td className="px-4 py-3 text-sm text-baylor-green font-medium">
@@ -404,7 +373,7 @@ const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analyt
             <p className="text-sm text-gray-600">Weekly usage statistics by classroom</p>
           </div>
         </div>
-        
+
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {sortedRoomUtilization.map(([room, data]) => (
             <div key={room} className="border border-baylor-green/20 rounded-lg p-4 bg-baylor-green/5 hover:bg-baylor-green/10 transition-all">
@@ -420,7 +389,7 @@ const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analyt
               </div>
               <div className="mt-2">
                 <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
+                  <div
                     className="bg-baylor-green h-2 rounded-full"
                     style={{ width: `${Math.min((data.hours / 40) * 100, 100)}%` }}
                   ></div>

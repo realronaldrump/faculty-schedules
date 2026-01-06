@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { MapPin, Download, Printer, Clock, Calendar } from 'lucide-react';
 import CourseDetailModal from './CourseDetailModal';
+import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
 
 const RoomCalendarView = ({
     scheduleData,
@@ -30,38 +31,6 @@ const RoomCalendarView = ({
     }, []);
 
     const dayStartMinutes = 8 * 60; // 8:00 AM
-
-    // Parse time string to minutes
-    const parseTime = (timeStr) => {
-        if (!timeStr) return null;
-        const cleaned = timeStr.toLowerCase().replace(/\s+/g, '');
-        let hour, minute, ampm;
-        if (cleaned.includes(':')) {
-            const parts = cleaned.split(':');
-            hour = parseInt(parts[0]);
-            minute = parseInt(parts[1].replace(/[^\d]/g, ''));
-            ampm = cleaned.includes('pm') ? 'pm' : 'am';
-        } else {
-            const match = cleaned.match(/(\d+)(am|pm)/);
-            if (match) {
-                hour = parseInt(match[1]);
-                minute = 0;
-                ampm = match[2];
-            } else return null;
-        }
-        if (ampm === 'pm' && hour !== 12) hour += 12;
-        if (ampm === 'am' && hour === 12) hour = 0;
-        return hour * 60 + (minute || 0);
-    };
-
-    // Format minutes to time string
-    const formatMinutesToTime = (minutes) => {
-        const h = Math.floor(minutes / 60);
-        const m = minutes % 60;
-        const ampm = h >= 12 ? 'PM' : 'AM';
-        const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
-        return `${displayHour}:${m.toString().padStart(2, '0')} ${ampm}`;
-    };
 
     // Get building from room name
     const getBuildingFromRoom = (room) => {
@@ -353,8 +322,8 @@ const RoomCalendarView = ({
                             <div key={dayCode} className="flex-1 min-w-[120px] border-r border-gray-200 last:border-r-0">
                                 {/* Day Header */}
                                 <div className={`h-12 p-2 text-center font-serif font-semibold border-b-2 ${currentDayCode === dayCode
-                                        ? 'bg-baylor-gold/20 text-baylor-green border-baylor-gold'
-                                        : 'bg-gray-50 text-baylor-green border-baylor-green'
+                                    ? 'bg-baylor-gold/20 text-baylor-green border-baylor-gold'
+                                    : 'bg-gray-50 text-baylor-green border-baylor-green'
                                     }`}>
                                     {dayNames[dayCode]}
                                 </div>
@@ -408,8 +377,8 @@ const RoomCalendarView = ({
                                                 key={`${dayCode}-${index}`}
                                                 style={style}
                                                 className={`px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md shadow-sm transition-all cursor-pointer ${isCurrent
-                                                        ? 'bg-baylor-gold text-baylor-green ring-2 ring-baylor-gold/40'
-                                                        : 'bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green'
+                                                    ? 'bg-baylor-gold text-baylor-green ring-2 ring-baylor-gold/40'
+                                                    : 'bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green'
                                                     }`}
                                                 title={`${item.Course} • ${item['Start Time']} - ${item['End Time']} • ${item.Instructor}`}
                                                 onClick={() => openCourseCard(item)}

@@ -1,4 +1,15 @@
-import React, { useState, useEffect, useMemo } from 'react';
+/**
+ * App.jsx - Main Application Layout Component
+ *
+ * REFACTORED: This component now focuses solely on layout and routing.
+ * All data management is handled by DataContext and UIContext.
+ * All CRUD operations are handled by custom hooks.
+ *
+ * Previous size: ~2200 lines
+ * Current size: ~600 lines (focused on layout, routing, and navigation)
+ */
+
+import React, { useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -12,505 +23,216 @@ import ProgramManagement from './components/ProgramManagement';
 import DepartmentInsights from './components/analytics/DepartmentInsights.jsx';
 import StudentWorkerAnalytics from './components/analytics/StudentWorkerAnalytics.jsx';
 import CourseManagement from './components/analytics/CourseManagement';
-// Legacy import removed - using smart import only
 import ImportWizard from './components/ImportWizard';
 import SystemsPage from './components/SystemsPage';
 import DataHygieneManager from './components/DataHygieneManager';
 import BaylorAcronyms from './pages/BaylorAcronyms';
 import CRNQualityTools from './components/CRNQualityTools';
 import OutlookRoomExport from './components/tools/OutlookRoomExport.jsx';
-
 import RecentChangesPage from './components/RecentChangesPage';
 import RoomGridGenerator from './components/admin/RoomGridGenerator';
 import UserActivityDashboard from './components/UserActivityDashboard';
 import BaylorIDManager from './components/BaylorIDManager';
 import CommandCenter from './components/CommandCenter';
-
 import EmailLists from './components/EmailLists';
 import BuildingDirectory from './components/BuildingDirectory';
 import Login from './components/Login';
 import ProtectedContent from './components/ProtectedContent.jsx';
 import AccessControl from './components/admin/AccessControl.jsx';
-import { useAuth } from './contexts/AuthContext.jsx';
-import { usePermissions } from './utils/permissions';
+import MaintenancePage from './components/MaintenancePage';
 import Notification from './components/Notification';
+
+import { useAuth } from './contexts/AuthContext.jsx';
+import { useData } from './contexts/DataContext.jsx';
+import { useUI } from './contexts/UIContext.jsx';
+import { useScheduleOperations, usePeopleOperations } from './hooks';
 import { registerNavigationPages } from './utils/pageRegistry';
+
 import {
   Home,
   Calendar,
   Users,
   BarChart3,
   Settings,
-  Bell,
-  Search,
-  User,
-  ChevronDown,
   GraduationCap,
   Menu,
   LogOut,
-  Star,
+  ChevronDown,
   X,
-  Wrench,
   Database,
-  Activity,
   Radio
 } from 'lucide-react';
-import { db, COLLECTIONS } from './firebase';
-import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, setDoc, query, orderBy, onSnapshot, getDoc } from 'firebase/firestore';
-import { adaptPeopleToFaculty, adaptPeopleToStaff, fetchPrograms } from './utils/dataAdapter';
-import { fetchSchedulesWithRelationalData, fetchSchedulesByTerm, fetchAvailableSemesters } from './utils/dataImportUtils';
-import { autoMigrateIfNeeded } from './utils/importTransactionMigration';
-import MaintenancePage from './components/MaintenancePage';
-import { parseCourseCode } from './utils/courseUtils';
-import { logCreate, logUpdate, logDelete } from './utils/changeLogger';
-import { fetchRecentChanges } from './utils/recentChanges';
-import { getProgramNameKey, isReservedProgramName, normalizeProgramName } from './utils/programUtils';
-import { parseTime } from './utils/timeUtils';
 
-const deriveCreditsFromSchedule = (courseCode, credits) => {
-  if (credits !== undefined && credits !== null && credits !== '') {
-    const numericCredits = Number(credits);
-    if (!Number.isNaN(numericCredits)) {
-      return numericCredits;
-    }
+// ==================== NAVIGATION CONFIGURATION ====================
+
+const navigationItems = [
+  {
+    id: 'dashboard',
+    label: 'Dashboard',
+    icon: Home,
+    path: 'dashboard'
+  },
+  {
+    id: 'command-center',
+    label: 'Live View',
+    icon: Radio,
+    path: 'command-center'
+  },
+  {
+    id: 'scheduling',
+    label: 'Scheduling',
+    icon: Calendar,
+    children: [
+      { id: 'faculty-schedules', label: 'Faculty Schedules', path: 'scheduling/faculty-schedules' },
+      { id: 'individual-availability', label: 'Individual Availability', path: 'scheduling/individual-availability' },
+      { id: 'room-schedules', label: 'Room Schedules', path: 'scheduling/room-schedules' },
+      { id: 'student-schedules', label: 'Student Worker Schedules', path: 'scheduling/student-schedules' },
+      { id: 'group-meeting-scheduler', label: 'Group Meetings', path: 'scheduling/group-meeting-scheduler' }
+    ]
+  },
+  {
+    id: 'directory',
+    label: 'Directory',
+    icon: Users,
+    children: [
+      { id: 'people-directory', label: 'People Directory', path: 'people/people-directory' },
+      { id: 'email-lists', label: 'Email Lists', path: 'people/email-lists' },
+      { id: 'building-directory', label: 'Building Directory', path: 'resources/building-directory' },
+      { id: 'baylor-acronyms', label: 'Baylor Acronyms', path: 'administration/baylor-acronyms' }
+    ]
+  },
+  {
+    id: 'analytics',
+    label: 'Analytics',
+    icon: BarChart3,
+    children: [
+      { id: 'department-insights', label: 'Department Insights', path: 'analytics/department-insights' },
+      { id: 'student-worker-analytics', label: 'Student Worker Analytics', path: 'analytics/student-worker-analytics' },
+      { id: 'course-management', label: 'Course Management', path: 'analytics/course-management' },
+      { id: 'program-management', label: 'Program Management', path: 'analytics/program-management' }
+    ]
+  },
+  {
+    id: 'tools',
+    label: 'Tools',
+    icon: Database,
+    children: [
+      { id: 'smart-import', label: 'Import Wizard', path: 'administration/import-wizard' },
+      { id: 'data-hygiene', label: 'Data Hygiene', path: 'administration/data-hygiene' },
+      { id: 'crn-tools', label: 'CRN Quality Tools', path: 'administration/crn-tools' },
+      { id: 'outlook-export', label: 'Outlook Room Export', path: 'administration/outlook-export' },
+      { id: 'room-grid-generator', label: 'Room Grid Generator', path: 'resources/room-grid-generator' },
+      { id: 'baylor-id-manager', label: 'Baylor ID Manager', path: 'people/baylor-id-manager' },
+    ]
+  },
+  {
+    id: 'system',
+    label: 'System',
+    icon: Settings,
+    children: [
+      { id: 'access-control', label: 'Access Control', path: 'administration/access-control' },
+      { id: 'user-activity', label: 'User Activity', path: 'administration/user-activity' },
+      { id: 'recent-changes', label: 'Recent Changes', path: 'administration/recent-changes' },
+      { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' }
+    ]
   }
+];
 
-  const parsed = parseCourseCode(courseCode || '');
-  if (parsed && !parsed.error && parsed.credits !== undefined && parsed.credits !== null) {
-    return parsed.credits;
-  }
+// ==================== MAINTENANCE MODE CONFIG ====================
 
-  return null;
-};
+const MAINTENANCE_MODE = false;
+const MAINTENANCE_MESSAGE = "I accidentally broke my dashboard, but it will be fixed soon (hopefully!!)";
+const MAINTENANCE_UNTIL = "2025-07-03T08:00:00";
+
+// ==================== MAIN APP COMPONENT ====================
 
 function App() {
+  // Context hooks
   const { user, signOut, loading: authLoading, canAccess } = useAuth();
   const {
-    canEdit,
-    canEditFaculty,
-    canCreateFaculty,
-    canDeleteFaculty,
-    canEditStaff,
-    canCreateStaff,
-    canEditStudent,
-    canCreateStudent,
-    canDeleteStudent,
-    canEditSchedule,
-    canCreateSchedule,
-    canDeleteSchedule,
-    canCreateProgram
-  } = usePermissions();
+    scheduleData,
+    facultyData,
+    staffData,
+    studentData,
+    directoryData,
+    programs,
+    analytics,
+    editHistory,
+    recentChanges,
+    rawScheduleData,
+    selectedSemester,
+    setSelectedSemester,
+    availableSemesters,
+    loading,
+    loadData,
+    refreshData,
+    canEdit
+  } = useData();
+
+  const {
+    notification,
+    showNotification,
+    hideNotification,
+    sidebarCollapsed,
+    setSidebarCollapsed,
+    mobileSidebarOpen,
+    setMobileSidebarOpen,
+    pinnedPages,
+    togglePinPage,
+    showLogoutConfirm,
+    setShowLogoutConfirm
+  } = useUI();
+
+  // CRUD operation hooks
+  const { handleDataUpdate, handleScheduleDelete } = useScheduleOperations();
+  const {
+    handleFacultyUpdate,
+    handleFacultyDelete,
+    handleStaffUpdate,
+    handleStaffDelete,
+    handleStudentUpdate,
+    handleStudentDelete,
+    handleProgramCreate,
+    handleRevertChange
+  } = usePeopleOperations();
+
+  // Router hooks
   const location = useLocation();
   const navigate = useNavigate();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  // Authentication state
+  const [isAuthenticated, setIsAuthenticated] = React.useState(false);
+  const [showSemesterDropdown, setShowSemesterDropdown] = React.useState(false);
+
+  // Current page from URL
   const currentPage = useMemo(() => {
     const path = (location.pathname || '/').replace(/^\//, '');
     return path === '' ? 'dashboard' : path;
   }, [location.pathname]);
+
+  // Navigation handler
   const handleNavigate = (path) => {
     const normalized = path.startsWith('/') ? path : `/${path}`;
     if (normalized !== location.pathname) {
       navigate(normalized);
     }
   };
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [commandOpen, setCommandOpen] = useState(false);
 
-  // Pinned pages state
-  const [pinnedPages, setPinnedPages] = useState(() => {
-    try {
-      const savedPins = localStorage.getItem('pinnedPages');
-      return savedPins ? JSON.parse(savedPins) : [];
-    } catch (error) {
-      console.error("Failed to parse pinned pages from localStorage", error);
-      return [];
-    }
-  });
-
-  // Semester Selection State with localStorage persistence
-  const [selectedSemester, setSelectedSemester] = useState(() => {
-    return localStorage.getItem('selectedSemester') || '';
-  });
-  const [availableSemesters, setAvailableSemesters] = useState([]);
-  const [showSemesterDropdown, setShowSemesterDropdown] = useState(false);
-
-  // Raw data from Firebase
-  const [rawScheduleData, setRawScheduleData] = useState([]);
-  const [rawPeople, setRawPeople] = useState([]);
-  const [rawPrograms, setRawPrograms] = useState([]);
-  const [editHistory, setEditHistory] = useState([]);
-  const [recentChanges, setRecentChanges] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  // Notification state
-  const [notification, setNotification] = useState({
-    show: false,
-    type: 'success',
-    title: '',
-    message: ''
-  });
-
-  // -------------------- Maintenance mode --------------------
-  // Set this to true to enable maintenance mode
-  const MAINTENANCE_MODE = false;
-  const MAINTENANCE_MESSAGE = "I accidentally broke my dashboard, but it will be fixed soon (hopefully!!)";
-  const MAINTENANCE_UNTIL = "2025-07-03T08:00:00"; // Set your expected completion time here
-
-  // Notification helper functions
-  const showNotification = (type, title, message) => {
-    setNotification({
-      show: true,
-      type,
-      title,
-      message
-    });
-  };
-
-  const hideNotification = () => {
-    setNotification(prev => ({ ...prev, show: false }));
-  };
-
-  // Persist pinned pages to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('pinnedPages', JSON.stringify(pinnedPages));
-    } catch (error) {
-      console.error("Failed to save pinned pages to localStorage", error);
-    }
-  }, [pinnedPages]);
-
-  // Persist selected semester to localStorage
-  useEffect(() => {
-    localStorage.setItem('selectedSemester', selectedSemester);
-  }, [selectedSemester]);
-
-
-
-  // Fetch available semesters using server-side query and auto-select default or most recent
-  const updateAvailableSemesters = async () => {
-    try {
-      const semesterList = await fetchAvailableSemesters();
-
-      if (semesterList.length === 0) {
-        setAvailableSemesters([]);
-        return null;
-      }
-
-      console.log('🎓 Available semesters:', semesterList);
-      setAvailableSemesters(semesterList);
-
-      // Check if admin has set a default term
-      let defaultTermToUse = semesterList[0]; // Fallback to most recent
-      try {
-        const settingsRef = doc(db, 'settings', 'app');
-        const settingsSnap = await getDoc(settingsRef);
-
-        if (settingsSnap.exists()) {
-          const adminDefaultTerm = settingsSnap.data()?.defaultTerm;
-          // Only use admin default if it exists in the available semesters
-          if (adminDefaultTerm && semesterList.includes(adminDefaultTerm)) {
-            defaultTermToUse = adminDefaultTerm;
-            console.log(`🎓 Using admin-configured default term: ${adminDefaultTerm}`);
-          } else if (adminDefaultTerm) {
-            console.warn(`⚠️ Admin default term "${adminDefaultTerm}" not found in available semesters, using most recent instead`);
-          }
-        }
-      } catch (error) {
-        console.warn('Failed to load default term setting, using most recent:', error);
-      }
-
-      // Set the selected semester if not already set or no longer valid
-      const currentIsValid = selectedSemester && semesterList.includes(selectedSemester);
-      if (!currentIsValid) {
-        console.log(`🎓 Setting semester to default: ${defaultTermToUse}`);
-        setSelectedSemester(defaultTermToUse);
-        return defaultTermToUse;
-      } else {
-        console.log(`🎓 Preserving current valid semester: ${selectedSemester}`);
-        return selectedSemester;
-      }
-    } catch (error) {
-      console.error('Error updating available semesters:', error);
-      return null;
-    }
-  };
-
-  const togglePinPage = (pageId) => {
-    setPinnedPages(prev =>
-      prev.includes(pageId)
-        ? prev.filter(id => id !== pageId)
-        : [...prev, pageId]
-    );
-  };
-
-  // Server-side filtering: rawScheduleData is already filtered by term from Firestore
-  // This memo now just returns the data directly (or could be removed and replaced with rawScheduleData)
-  const semesterFilteredScheduleData = useMemo(() => {
-    return rawScheduleData;
-  }, [rawScheduleData]);
-
-  // Professional Navigation structure with enhanced organization
-  const navigationItems = [
-    {
-      id: 'dashboard',
-      label: 'Dashboard',
-      icon: Home,
-      path: 'dashboard'
-    },
-    {
-      id: 'command-center',
-      label: 'Live View',
-      icon: Radio,
-      path: 'command-center'
-    },
-    {
-      id: 'scheduling',
-      label: 'Scheduling',
-      icon: Calendar,
-      children: [
-        { id: 'faculty-schedules', label: 'Faculty Schedules', path: 'scheduling/faculty-schedules' },
-        { id: 'individual-availability', label: 'Individual Availability', path: 'scheduling/individual-availability' },
-        { id: 'room-schedules', label: 'Room Schedules', path: 'scheduling/room-schedules' },
-        { id: 'student-schedules', label: 'Student Worker Schedules', path: 'scheduling/student-schedules' },
-        { id: 'group-meeting-scheduler', label: 'Group Meetings', path: 'scheduling/group-meeting-scheduler' }
-      ]
-    },
-    {
-      id: 'directory',
-      label: 'Directory',
-      icon: Users,
-      children: [
-        { id: 'people-directory', label: 'People Directory', path: 'people/people-directory' },
-        { id: 'email-lists', label: 'Email Lists', path: 'people/email-lists' },
-        { id: 'building-directory', label: 'Building Directory', path: 'resources/building-directory' },
-        { id: 'baylor-acronyms', label: 'Baylor Acronyms', path: 'administration/baylor-acronyms' }
-      ]
-    },
-    {
-      id: 'analytics',
-      label: 'Analytics',
-      icon: BarChart3,
-      children: [
-        { id: 'department-insights', label: 'Department Insights', path: 'analytics/department-insights' },
-        { id: 'student-worker-analytics', label: 'Student Worker Analytics', path: 'analytics/student-worker-analytics' },
-        { id: 'course-management', label: 'Course Management', path: 'analytics/course-management' },
-        { id: 'program-management', label: 'Program Management', path: 'analytics/program-management' }
-      ]
-    },
-    {
-      id: 'tools',
-      label: 'Tools',
-      icon: Database,
-      children: [
-        { id: 'smart-import', label: 'Import Wizard', path: 'administration/import-wizard' },
-        { id: 'data-hygiene', label: 'Data Hygiene', path: 'administration/data-hygiene' },
-        { id: 'crn-tools', label: 'CRN Quality Tools', path: 'administration/crn-tools' },
-        { id: 'outlook-export', label: 'Outlook Room Export', path: 'administration/outlook-export' },
-        { id: 'room-grid-generator', label: 'Room Grid Generator', path: 'resources/room-grid-generator' },
-        { id: 'baylor-id-manager', label: 'Baylor ID Manager', path: 'people/baylor-id-manager' },
-      ]
-    },
-    {
-      id: 'system',
-      label: 'System',
-      icon: Settings,
-      children: [
-        { id: 'access-control', label: 'Access Control', path: 'administration/access-control' },
-        { id: 'user-activity', label: 'User Activity', path: 'administration/user-activity' },
-        { id: 'recent-changes', label: 'Recent Changes', path: 'administration/recent-changes' },
-        { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' }
-      ]
-    }
-  ];
-
-  // Register pages for access control UI (one-time per mount)
+  // Register navigation pages for access control
   useEffect(() => {
     registerNavigationPages(navigationItems);
   }, []);
 
-  // Adapt relational data to flat structure for component compatibility
-  const scheduleData = useMemo(() => {
-    if (!semesterFilteredScheduleData || semesterFilteredScheduleData.length === 0) return [];
+  // Check authentication on mount
+  useEffect(() => {
+    const authStatus = localStorage.getItem('isAuthenticated');
+    if (authStatus === 'true') {
+      setIsAuthenticated(true);
+      loadData();
+    }
+  }, [loadData]);
 
-    // Convert normalized relational data to flat structure
-    const flattenedData = [];
-
-    semesterFilteredScheduleData.forEach(schedule => {
-      // Skip invalid schedules
-      if (!schedule || !schedule.id) {
-        console.warn('⚠️ Skipping invalid schedule:', schedule);
-        return;
-      }
-
-      // Handle meeting patterns - create one row per meeting pattern
-      if (schedule.meetingPatterns && Array.isArray(schedule.meetingPatterns) && schedule.meetingPatterns.length > 0) {
-        schedule.meetingPatterns.forEach((pattern, index) => {
-          if (!pattern) return; // Skip null patterns
-
-          // Build room fields with multi-room awareness
-          const roomDisplay = (() => {
-            if (schedule.isOnline) return 'Online';
-            if (Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0) {
-              return schedule.roomNames.join('; ');
-            }
-            if (Array.isArray(schedule.rooms) && schedule.rooms.length > 0) {
-              return schedule.rooms.map(r => r?.displayName || r?.name).filter(Boolean).join('; ');
-            }
-            return schedule.room ? (schedule.room.displayName || schedule.room.name) : (schedule.roomName || '');
-          })();
-
-          const baseCourseCode = schedule.courseCode || schedule.Course || '';
-          const creditsValue = deriveCreditsFromSchedule(baseCourseCode, schedule.credits ?? schedule.Credits);
-          const programCode = (() => {
-            const rawProgram = schedule.program ?? schedule.subjectCode ?? schedule.subject ?? '';
-            return rawProgram ? String(rawProgram).trim().toUpperCase() : '';
-          })();
-
-          flattenedData.push({
-            id: `${schedule.id}-${index}`,
-            // Basic schedule info
-            Course: schedule.courseCode || '',
-            'Course Title': schedule.courseTitle || '',
-            Instructor: schedule.instructor ? `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim() : (schedule.instructorName || ''),
-            Section: schedule.section || '',
-            Credits: creditsValue ?? '',
-            Program: programCode,
-            Term: schedule.term || '',
-
-            // Meeting pattern info
-            Day: pattern.day || '',
-            'Start Time': pattern.startTime || '',
-            'End Time': pattern.endTime || '',
-
-            // Room info
-            Room: roomDisplay,
-            'Room Capacity': Array.isArray(schedule.rooms) && schedule.rooms.length > 0 ? (schedule.rooms[0]?.capacity || '') : (schedule.room ? schedule.room.capacity : ''),
-
-            // Course details
-            CRN: schedule.crn || schedule.CRN || '',
-            'Course Level': schedule.courseLevel || '',
-            'Course Type': programCode,
-            'Schedule Type': schedule.scheduleType || 'Class Instruction',
-            Status: schedule.status || 'Active',
-
-            // Legacy flat structure compatibility
-            ...schedule,
-            _originalId: schedule.id
-          });
-        });
-      } else {
-        // If no meeting patterns, create a single entry (legacy format support)
-        const roomDisplay = (() => {
-          if (schedule.isOnline) return 'Online';
-          if (Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0) {
-            return schedule.roomNames.join('; ');
-          }
-          if (Array.isArray(schedule.rooms) && schedule.rooms.length > 0) {
-            return schedule.rooms.map(r => r?.displayName || r?.name).filter(Boolean).join('; ');
-          }
-          return schedule.room ? (schedule.room.displayName || schedule.room.name) : (schedule.roomName || '');
-        })();
-
-        const baseCourseCode = schedule.courseCode || schedule.Course || '';
-        const creditsValue = deriveCreditsFromSchedule(baseCourseCode, schedule.credits ?? schedule.Credits);
-        const programCode = (() => {
-          const rawProgram = schedule.program ?? schedule.subjectCode ?? schedule.subject ?? '';
-          return rawProgram ? String(rawProgram).trim().toUpperCase() : '';
-        })();
-
-        flattenedData.push({
-          id: schedule.id,
-          Course: schedule.courseCode || '',
-          'Course Title': schedule.courseTitle || '',
-          Instructor: schedule.instructor ? `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim() : (schedule.instructorName || ''),
-          Section: schedule.section || '',
-          Credits: creditsValue ?? '',
-          Program: programCode,
-          Term: schedule.term || '',
-          Room: roomDisplay,
-          CRN: schedule.crn || schedule.CRN || '',
-          'Schedule Type': schedule.scheduleType || 'Class Instruction',
-          'Course Type': programCode,
-          Status: schedule.status || 'Active',
-          ...schedule,
-          _originalId: schedule.id
-        });
-      }
-    });
-
-    console.log(`📊 Converted ${semesterFilteredScheduleData.length} relational schedules to ${flattenedData.length} flat entries`);
-    return flattenedData;
-  }, [semesterFilteredScheduleData]);
-
-  // Comprehensive analytics calculation
-  const analytics = useMemo(() => {
-    if (!scheduleData || scheduleData.length === 0) return null;
-
-    console.log('📊 Calculating analytics for', scheduleData.length, 'schedule entries');
-
-    // Faculty count
-    const instructors = new Set();
-    scheduleData.forEach(schedule => {
-      if (schedule.Instructor && schedule.Instructor.trim()) {
-        instructors.add(schedule.Instructor.trim());
-      }
-    });
-
-    // Session counts
-    const totalSessions = scheduleData.length;
-
-    // Adjunct-taught sessions
-    const adjunctTaughtSessions = scheduleData.filter(schedule => {
-      const instructorName = schedule.Instructor || '';
-      const facultyMember = rawPeople.find(person => person.name === instructorName);
-      return facultyMember && facultyMember.isAdjunct;
-    }).length;
-
-    // Rooms in use (exclude Online)
-    const rooms = new Set();
-    scheduleData.forEach(schedule => {
-      if (schedule.Room && schedule.Room.trim() && schedule.Room.trim().toLowerCase() !== 'online') {
-        rooms.add(schedule.Room.trim());
-      }
-    });
-
-    // Unique courses
-    const courses = new Set();
-    scheduleData.forEach(schedule => {
-      if (schedule.Course && schedule.Course.trim()) {
-        courses.add(schedule.Course.trim());
-      }
-    });
-
-    // Busiest day calculation
-    const daySchedules = { M: 0, T: 0, W: 0, R: 0, F: 0 };
-    scheduleData.forEach(schedule => {
-      if (schedule.Day && daySchedules.hasOwnProperty(schedule.Day)) {
-        daySchedules[schedule.Day]++;
-      }
-    });
-
-    const busiestDay = Object.entries(daySchedules).reduce(
-      (max, [day, count]) => count > max.count ? { day, count } : max,
-      { day: 'M', count: 0 }
-    );
-
-    const result = {
-      facultyCount: instructors.size,
-      totalSessions,
-      adjunctTaughtSessions,
-      roomsInUse: rooms.size,
-      uniqueCourses: courses.size,
-      busiestDay
-    };
-
-    console.log('📊 Analytics calculated:', result);
-    return result;
-  }, [scheduleData, rawPeople]);
-
-  // Click outside handler for dropdowns
+  // Click outside handler for semester dropdown
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (!event.target.closest('.semester-dropdown')) {
@@ -521,1173 +243,7 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Data loading function
-  const autoBackfillOnlineFlags = async (schedules) => {
-    try {
-      const updatesPerformed = [];
-      for (const schedule of schedules) {
-        if (!schedule || !schedule.id) continue;
-        const hasOnlineRoom = (
-          (Array.isArray(schedule.roomNames) && schedule.roomNames.some(n => (n || '').toLowerCase() === 'online')) ||
-          ((schedule.roomName || '').toLowerCase() === 'online') ||
-          ((schedule.room && ((schedule.room.displayName || schedule.room.name || '').toLowerCase() === 'online')))
-        );
-        const noMeeting = !Array.isArray(schedule.meetingPatterns) || schedule.meetingPatterns.length === 0;
-        const missingFlag = schedule.isOnline !== true;
-        if (hasOnlineRoom && noMeeting && missingFlag) {
-          const scheduleDocRef = doc(db, 'schedules', schedule.id);
-          const updates = {
-            isOnline: true,
-            onlineMode: 'asynchronous',
-            meetingPatterns: []
-          };
-          try {
-            await updateDoc(scheduleDocRef, updates);
-            // Non-blocking change log
-            logUpdate(
-              `Schedule - ${schedule.courseCode || ''} ${schedule.section || ''} (${schedule.instructorName || ''})`,
-              'schedules',
-              schedule.id,
-              updates,
-              schedule,
-              'App.jsx - autoBackfillOnlineFlags'
-            ).catch(() => { });
-            updatesPerformed.push(schedule.id);
-            // Mutate local copy for immediate UX consistency
-            schedule.isOnline = true;
-            schedule.onlineMode = 'asynchronous';
-            schedule.meetingPatterns = [];
-          } catch (e) {
-            console.warn('Auto-backfill online flags failed for schedule', schedule.id, e);
-          }
-        }
-      }
-      if (updatesPerformed.length > 0) {
-        console.log(`🔁 Auto-backfilled online flags for ${updatesPerformed.length} schedules`);
-      }
-    } catch (err) {
-      console.warn('Auto-backfill online flags encountered an error:', err);
-    }
-    return schedules;
-  };
-
-  // Auto-inactivate student workers whose endDate has passed (one-time per record)
-  const autoInactivateExpiredStudents = async (people) => {
-    try {
-      const now = new Date();
-      const candidates = (people || []).filter(p => {
-        // Must be a student
-        const hasStudentRole = Array.isArray(p.roles) ? p.roles.includes('student') : (typeof p.roles === 'object' && p.roles?.student === true);
-        if (!hasStudentRole) return false;
-        const endStr = p.endDate || (Array.isArray(p.jobs) && p.jobs[0]?.endDate) || '';
-        if (!endStr) return false;
-        const end = new Date(`${endStr}T23:59:59`);
-        if (isNaN(end.getTime())) return false;
-        // Only inactivate if end in past and not already inactive
-        return end < now && p.isActive !== false;
-      });
-
-      for (const person of candidates) {
-        try {
-          const personRef = doc(db, 'people', person.id);
-          const updates = { isActive: false, updatedAt: new Date().toISOString() };
-          await updateDoc(personRef, updates);
-          // Non-blocking change log
-          logUpdate(
-            `Student - ${person.name || person.id}`,
-            'people',
-            person.id,
-            updates,
-            person,
-            'App.jsx - autoInactivateExpiredStudents'
-          ).catch(() => { });
-          // Reflect locally for immediate UX
-          person.isActive = false;
-        } catch (e) {
-          console.warn('Auto-inactivate failed for person', person.id, e);
-        }
-      }
-      if (candidates.length > 0) {
-        console.log(`🔁 Auto-inactivated ${candidates.length} expired student workers`);
-      }
-    } catch (err) {
-      console.warn('Auto-inactivate expired students encountered an error:', err);
-    }
-    return people;
-  };
-
-  // Load schedules for a specific term (used on initial load and semester change)
-  const loadSchedulesForTerm = async (term, { people = null } = {}) => {
-    if (!term) {
-      console.warn('⚠️ No term specified for loadSchedulesForTerm');
-      return;
-    }
-
-    try {
-      console.log(`📡 Loading schedules for term: ${term}`);
-
-      // Use server-side filtered query
-      let { schedules, people: schedulePeople } = await fetchSchedulesByTerm(term);
-
-      // Backfill online flags for legacy records
-      schedules = await autoBackfillOnlineFlags(schedules);
-
-      // If people not provided, fetch them
-      let allPeople = people;
-      if (!allPeople) {
-        const peopleSnapshot = await getDocs(collection(db, 'people'));
-        allPeople = peopleSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-      }
-
-      // Merge people from schedules with directory people
-      const mergedPeople = [...allPeople];
-      schedulePeople.forEach(schedulePerson => {
-        if (!allPeople.find(p => p.id === schedulePerson.id)) {
-          mergedPeople.push(schedulePerson);
-        }
-      });
-
-      // Auto-inactivate expired students
-      await autoInactivateExpiredStudents(mergedPeople);
-
-      setRawScheduleData(schedules);
-      setRawPeople(mergedPeople);
-
-      console.log(`✅ Loaded ${schedules.length} schedules for term "${term}"`);
-      return schedules;
-    } catch (error) {
-      console.error(`❌ Error loading schedules for term "${term}":`, error);
-      throw error;
-    }
-  };
-
-  const loadData = async ({ silent = false } = {}) => {
-    if (!silent) {
-      setLoading(true);
-    }
-    try {
-      console.log('📡 Loading data from Firebase...');
-
-      // First run any needed migrations
-      await autoMigrateIfNeeded();
-
-      // Step 1: Get available semesters first (server-side query)
-      const termToLoad = await updateAvailableSemesters();
-
-      if (!termToLoad) {
-        console.warn('⚠️ No semesters available');
-        setRawScheduleData([]);
-        setRawPeople([]);
-        setRawPrograms([]);
-        setLoading(false);
-        return;
-      }
-
-      // Step 2: Load people separately (needed for relational data)
-      const peopleSnapshot = await getDocs(collection(db, 'people'));
-      const people = peopleSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-
-      // Step 3: Load programs data
-      const programs = await fetchPrograms();
-
-      // Step 4: Load schedules for the selected term (server-side filtered)
-      await loadSchedulesForTerm(termToLoad, { people });
-
-      // Load edit history (legacy) - non-fatal if denied
-      let history = [];
-      try {
-        const historySnapshot = await getDocs(query(collection(db, 'editHistory'), orderBy('timestamp', 'desc')));
-        history = historySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      } catch (e) {
-        console.warn('editHistory read skipped:', e?.code || e);
-      }
-
-      // Load recent changes from new centralized log - non-fatal if denied
-      let recentChangesData = [];
-      try {
-        recentChangesData = await fetchRecentChanges(100);
-      } catch (e) {
-        console.warn('recentChanges read skipped:', e?.code || e);
-      }
-
-      console.log('✅ Data loaded successfully:', {
-        term: termToLoad,
-        people: people.length,
-        programs: programs.length,
-        history: history.length,
-        recentChanges: recentChangesData.length
-      });
-
-      setRawPrograms(programs);
-      setEditHistory(history);
-      setRecentChanges(recentChangesData);
-
-    } catch (error) {
-      console.error('❌ Error loading data:', error);
-      const title = silent ? 'Data Refresh Error' : 'Data Loading Error';
-      const message = silent
-        ? 'Failed to refresh application data. Recent changes may not appear until you manually refresh.'
-        : 'Failed to load application data. Please refresh the page.';
-      showNotification('error', title, message);
-    } finally {
-      if (!silent) {
-        setLoading(false);
-      }
-    }
-  };
-
-  // Check authentication on mount
-  const checkAuthStatus = () => {
-    const authStatus = localStorage.getItem('isAuthenticated');
-    if (authStatus === 'true') {
-      setIsAuthenticated(true);
-      loadData();
-    } else {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    checkAuthStatus();
-  }, []);
-
-  // Reload schedules when semester changes (after initial load)
-  const isInitialLoadRef = React.useRef(true);
-  useEffect(() => {
-    // Skip on initial load (loadData handles that)
-    if (isInitialLoadRef.current) {
-      isInitialLoadRef.current = false;
-      return;
-    }
-
-    // Only reload if we're authenticated and have a valid semester
-    if (isAuthenticated && selectedSemester && availableSemesters.length > 0) {
-      console.log(`🔄 Semester changed to "${selectedSemester}", reloading schedules...`);
-      loadSchedulesForTerm(selectedSemester);
-    }
-  }, [selectedSemester]);
-
-  // Expose effective action permissions globally for UI components that can't access hooks
-  useEffect(() => {
-    try {
-      const perms = {
-        canEditStudent: canEditStudent?.() || false,
-        canCreateStudent: canCreateStudent?.() || false,
-        canDeleteStudent: canDeleteStudent?.() || false,
-        canEditFaculty: canEditFaculty?.() || false,
-        canCreateFaculty: canCreateFaculty?.() || false,
-        canDeleteFaculty: canDeleteFaculty?.() || false,
-        canEditStaff: canEditStaff?.() || false,
-        canCreateStaff: canCreateStaff?.() || false,
-      };
-      window.appPermissions = perms;
-    } catch (_) { }
-  }, [
-    canEditStudent, canCreateStudent, canDeleteStudent,
-    canEditFaculty, canCreateFaculty, canDeleteFaculty,
-    canEditStaff, canCreateStaff
-  ]);
-
-  // Data update handlers with enhanced relational integrity
-  const handleDataUpdate = async (updatedRow) => {
-    const isNewSchedule = updatedRow.id && updatedRow.id.startsWith('new_');
-    const hasPermission = isNewSchedule ? (canCreateSchedule?.() || false) : (canEditSchedule?.() || false);
-
-    if (!hasPermission) {
-      const actionName = isNewSchedule ? 'create' : 'modify';
-      showNotification('warning', 'Permission Denied', `You don't have permission to ${actionName} schedules.`);
-      return;
-    }
-    console.log('💾 Updating schedule data:', updatedRow);
-
-    try {
-      const isNewCourse = updatedRow.id && updatedRow.id.startsWith('new_');
-      const isGroupedCourse = updatedRow.id && updatedRow.id.startsWith('grouped::');
-      let scheduleRef;
-      let originalSchedule = null;
-      let originalSchedules = [];
-
-      if (isNewCourse) {
-        // Creating a new course
-        console.log('🆕 Creating new course entry');
-        scheduleRef = doc(collection(db, 'schedules'));
-      } else if (isGroupedCourse) {
-        // Handle grouped courses (multi-day classes)
-        console.log('🔄 Updating grouped course entry');
-        // Extract original IDs from grouped ID (format: grouped_index_id1_id2_id3...)
-        const idParts = updatedRow.id.split('::');
-        const originalIds = idParts.slice(2); // Skip 'grouped' and index parts
-
-        originalSchedules = rawScheduleData.filter(s => originalIds.includes(s.id));
-        if (originalSchedules.length === 0) {
-          console.error('❌ No original schedules found for grouped update');
-          showNotification('error', 'Update Failed', 'Original schedules not found for grouped course.');
-          return;
-        }
-        console.log(`📋 Found ${originalSchedules.length} original schedules for grouped course`);
-      } else {
-        // Updating existing single course
-        const effectiveId = updatedRow._originalId || updatedRow.id;
-        originalSchedule = rawScheduleData.find(s => s.id === effectiveId);
-        if (!originalSchedule) {
-          console.error('❌ Original schedule not found for update');
-          showNotification('error', 'Update Failed', 'Original schedule not found.');
-          return;
-        }
-        scheduleRef = doc(db, 'schedules', effectiveId);
-      }
-
-      // Validate and resolve instructor reference
-      let instructorId = null;
-      if (updatedRow.Instructor && updatedRow.Instructor !== 'Staff') {
-        const instructor = rawPeople.find(person => person.name === updatedRow.Instructor);
-        if (instructor) {
-          instructorId = instructor.id;
-        } else {
-          console.warn('⚠️ Instructor not found in people collection:', updatedRow.Instructor);
-        }
-      }
-
-      // Validate and resolve room reference
-      let roomId = null;
-      if (updatedRow.Room && updatedRow.Room.trim() !== '') {
-        // Check if room exists or needs to be created
-        // For now, we'll store room name and handle room creation separately
-        // This could be enhanced to create room entries automatically
-      }
-
-      // Establish a reference schedule before computing dependent fields
-      const referenceSchedule = isGroupedCourse ? originalSchedules[0] : originalSchedule;
-
-      // Create meeting patterns from Day/Start Time/End Time (supports online synchronous)
-      const meetingPatterns = [];
-      const isOnlineFlag = updatedRow.isOnline === true || String(updatedRow.isOnline).toLowerCase() === 'true';
-      const onlineMode = updatedRow.onlineMode || (referenceSchedule?.onlineMode || null);
-      if (updatedRow.Day && updatedRow['Start Time'] && updatedRow['End Time']) {
-        // Split Day string into individual day codes (e.g., "MWF" -> ["M","W","F"])
-        const dayCodes = typeof updatedRow.Day === 'string' ? updatedRow.Day.match(/[MTWRF]/g) : [];
-        (dayCodes && dayCodes.length > 0 ? dayCodes : [updatedRow.Day]).forEach(code => {
-          if (!code) return;
-          meetingPatterns.push({
-            day: code,
-            startTime: updatedRow['Start Time'],
-            endTime: updatedRow['End Time']
-          });
-        });
-      }
-
-      // Parse the course code to get program, level, and credits
-      const courseCode = updatedRow.Course || (referenceSchedule?.courseCode || '');
-      const parsedCourse = parseCourseCode(courseCode);
-      const parsedProgram = parsedCourse.error ? '' : (parsedCourse.program || '');
-      const subjectCodeRaw = parsedProgram || referenceSchedule?.subjectCode || referenceSchedule?.program || '';
-      const subjectCode = subjectCodeRaw ? subjectCodeRaw.toString().toUpperCase() : '';
-      const catalogNumber = parsedCourse.catalogNumber || referenceSchedule?.catalogNumber || courseCode.replace(/^[A-Z]{2,4}\s?/, '').toUpperCase();
-      const derivedCredits = parsedCourse.error ? null : parsedCourse.credits;
-      const computedCredits = derivedCredits ?? referenceSchedule?.credits ?? 0;
-
-      // Prepare update data with proper relational structure
-      const updateData = {
-        courseCode: courseCode,
-        courseTitle: updatedRow['Course Title'] || (referenceSchedule?.courseTitle || ''),
-        program: subjectCode || parsedProgram,
-        subjectCode,
-        subject: subjectCode,
-        catalogNumber,
-        courseLevel: parsedCourse.level,
-        section: updatedRow.Section || (referenceSchedule?.section || ''),
-        crn: updatedRow.CRN || (referenceSchedule?.crn || ''),
-        term: updatedRow.Term || (referenceSchedule?.term || ''),
-        credits: computedCredits,
-        scheduleType: updatedRow['Schedule Type'] || (referenceSchedule?.scheduleType || 'Class Instruction'),
-        status: updatedRow.Status || (referenceSchedule?.status || 'Active'),
-
-        // Relational references
-        instructorId: instructorId,
-        instructorName: updatedRow.Instructor || (referenceSchedule?.instructorName || ''),
-        roomId: isOnlineFlag ? null : roomId,
-        roomName: isOnlineFlag ? '' : (updatedRow.Room || (referenceSchedule?.roomName || '')),
-
-        // Meeting patterns (persist even when online for synchronous meetings)
-        meetingPatterns: meetingPatterns.length > 0 ? meetingPatterns : (referenceSchedule?.meetingPatterns || []),
-
-        // Online flags
-        isOnline: isOnlineFlag,
-        onlineMode: isOnlineFlag ? (onlineMode || (meetingPatterns.length > 0 ? 'synchronous' : 'asynchronous')) : null,
-
-        // Timestamps
-        updatedAt: new Date().toISOString(),
-        ...(isNewCourse && { createdAt: new Date().toISOString() })
-      };
-
-      // Validate required fields
-      const validationErrors = [];
-      if (!updateData.courseCode) validationErrors.push('Course code is required');
-      if (!updateData.term) validationErrors.push('Term is required');
-      if (!updateData.section) validationErrors.push('Section is required');
-      const requiresMeeting = (!isOnlineFlag) || (isOnlineFlag && ((onlineMode || '').toLowerCase() === 'synchronous'));
-      const hasExistingOrNewMeetings = (meetingPatterns.length > 0) || (Array.isArray(referenceSchedule?.meetingPatterns) && referenceSchedule.meetingPatterns.length > 0);
-      if (requiresMeeting && !hasExistingOrNewMeetings) {
-        validationErrors.push('Meeting time and day are required');
-      }
-
-      if (validationErrors.length > 0) {
-        showNotification('error', 'Validation Failed', validationErrors.join('\n'));
-        return;
-      }
-
-      // Save to Firebase
-      if (isNewCourse) {
-        await setDoc(scheduleRef, updateData);
-      } else if (isGroupedCourse) {
-        // Handle grouped course updates
-        console.log('🔄 Updating grouped course schedules...');
-
-        // Split the day pattern into individual days for updating each schedule
-        const dayCodes = typeof updatedRow.Day === 'string' ? updatedRow.Day.match(/[MTWRF]/g) : [];
-
-        // Update each original schedule with its corresponding day
-        for (let i = 0; i < originalSchedules.length && i < dayCodes.length; i++) {
-          const originalId = originalSchedules[i].id;
-          const dayCode = dayCodes[i];
-
-          // Create update data for this specific day
-          const daySpecificUpdateData = {
-            ...updateData,
-            meetingPatterns: [{
-              day: dayCode,
-              startTime: updatedRow['Start Time'],
-              endTime: updatedRow['End Time']
-            }]
-          };
-
-          const scheduleDocRef = doc(db, 'schedules', originalId);
-          await updateDoc(scheduleDocRef, daySpecificUpdateData);
-          console.log(`✅ Updated schedule ${originalId} for day ${dayCode}`);
-        }
-
-        // If there are more days than original schedules, create new ones
-        if (dayCodes.length > originalSchedules.length) {
-          for (let i = originalSchedules.length; i < dayCodes.length; i++) {
-            const dayCode = dayCodes[i];
-            const newScheduleData = {
-              ...updateData,
-              meetingPatterns: [{
-                day: dayCode,
-                startTime: updatedRow['Start Time'],
-                endTime: updatedRow['End Time']
-              }],
-              createdAt: new Date().toISOString()
-            };
-
-            const newScheduleRef = doc(collection(db, 'schedules'));
-            await setDoc(newScheduleRef, newScheduleData);
-            console.log(`✅ Created new schedule for day ${dayCode}`);
-          }
-        }
-
-        // If there are fewer days than original schedules, delete the extra ones
-        if (dayCodes.length < originalSchedules.length) {
-          for (let i = dayCodes.length; i < originalSchedules.length; i++) {
-            const scheduleToDelete = originalSchedules[i];
-            const scheduleDocRef = doc(db, 'schedules', scheduleToDelete.id);
-            await deleteDoc(scheduleDocRef);
-            console.log(`🗑️ Deleted extra schedule ${scheduleToDelete.id}`);
-          }
-        }
-      } else {
-        await updateDoc(scheduleRef, updateData);
-      }
-
-      // Add to edit history (legacy)
-      const historyData = {
-        action: isNewCourse ? 'CREATE' : (isGroupedCourse ? 'UPDATE_GROUPED' : 'UPDATE'),
-        entity: `${updateData.courseCode} ${updateData.section} - ${updateData.instructorName}`,
-        changes: updateData,
-        originalData: isGroupedCourse ? originalSchedules : originalSchedule,
-        timestamp: new Date().toISOString(),
-        userId: 'system'
-      };
-
-      if (isGroupedCourse) {
-        historyData.affectedScheduleCount = originalSchedules.length;
-      }
-
-      await addDoc(collection(db, 'editHistory'), historyData);
-
-      // Log change in centralized system
-      if (isNewCourse) {
-        await logCreate(
-          `Schedule - ${updateData.courseCode} ${updateData.section} (${updateData.instructorName})`,
-          'schedules',
-          scheduleRef.id,
-          updateData,
-          'App.jsx - handleDataUpdate'
-        );
-      } else if (isGroupedCourse) {
-        await logUpdate(
-          `Schedule Group - ${updateData.courseCode} ${updateData.section} (${originalSchedules.length} schedules)`,
-          'schedules',
-          'multiple',
-          updateData,
-          originalSchedules,
-          'App.jsx - handleDataUpdate'
-        );
-      } else {
-        await logUpdate(
-          `Schedule - ${updateData.courseCode} ${updateData.section} (${updateData.instructorName})`,
-          'schedules',
-          (updatedRow._originalId || updatedRow.id),
-          updateData,
-          originalSchedule,
-          'App.jsx - handleDataUpdate'
-        );
-      }
-
-      // Refresh data to reflect changes
-      await loadData({ silent: true });
-
-      if (isNewCourse) {
-        showNotification('success', 'Schedule Created',
-          `Course ${updateData.courseCode} ${updateData.section} has been created successfully.`);
-      } else if (isGroupedCourse) {
-        showNotification('success', 'Grouped Schedule Updated',
-          `Course ${updateData.courseCode} ${updateData.section} (${originalSchedules.length} schedule entries) has been updated successfully.`);
-      } else {
-        showNotification('success', 'Schedule Updated',
-          `Course ${updateData.courseCode} ${updateData.section} has been updated successfully.`);
-      }
-
-    } catch (error) {
-      console.error('❌ Error updating schedule:', error);
-      showNotification('error', 'Update Failed', `Failed to update schedule: ${error.message}`);
-    }
-  };
-
-  const handleFacultyUpdate = async (facultyToUpdate, originalData = null) => {
-    const isNewFaculty = !facultyToUpdate.id;
-    const requiredPermission = isNewFaculty ? canCreateFaculty() : canEditFaculty();
-
-    if (!requiredPermission) {
-      const actionName = isNewFaculty ? 'create' : 'modify';
-      showNotification('warning', 'Permission Denied', `You don't have permission to ${actionName} faculty members.`);
-      return;
-    }
-    console.log('👤 Updating faculty member:', facultyToUpdate);
-
-    try {
-      let facultyRef;
-      let actionType;
-
-      if (isNewFaculty) {
-        // Creating a new faculty member
-        console.log('🆕 Creating new faculty member');
-        facultyRef = doc(collection(db, 'people'));
-        actionType = 'CREATE';
-      } else {
-        // Updating existing faculty member
-        console.log('📝 Updating existing faculty member');
-        facultyRef = doc(db, 'people', facultyToUpdate.id);
-        actionType = 'UPDATE';
-      }
-
-      // Recursively remove undefined values from nested objects to prevent Firebase errors
-      // Also exclude derived/enriched fields that are added during data fetching but shouldn't be persisted
-      const derivedFields = ['program', 'instructor', 'rooms', 'room']; // These are enriched during fetch, not stored
-      const cleanDataRecursively = (obj) => {
-        if (obj === null || typeof obj !== 'object') return obj;
-        if (Array.isArray(obj)) {
-          return obj.map(item => cleanDataRecursively(item)).filter(item => item !== undefined);
-        }
-        return Object.fromEntries(
-          Object.entries(obj)
-            .filter(([key, value]) => value !== undefined && !derivedFields.includes(key))
-            .map(([key, value]) => [key, cleanDataRecursively(value)])
-        );
-      };
-      const cleanData = cleanDataRecursively(facultyToUpdate);
-
-      const updateData = {
-        ...cleanData,
-        updatedAt: new Date().toISOString()
-      };
-
-      if (isNewFaculty) {
-        // Use setDoc for new faculty to ensure we get the generated ID
-        await setDoc(facultyRef, updateData);
-      } else {
-        // Use updateDoc for existing faculty
-        await updateDoc(facultyRef, updateData);
-      }
-
-      // Add to edit history (legacy)
-      await addDoc(collection(db, 'editHistory'), {
-        action: actionType,
-        entity: `Faculty - ${facultyToUpdate.name}`,
-        changes: updateData,
-        timestamp: new Date().toISOString(),
-        userId: 'system'
-      });
-
-      // Log change in centralized system
-      if (isNewFaculty) {
-        await logCreate(
-          `Faculty - ${facultyToUpdate.name}`,
-          'people',
-          facultyRef.id,
-          updateData,
-          'App.jsx - handleFacultyUpdate'
-        );
-      } else {
-        await logUpdate(
-          `Faculty - ${facultyToUpdate.name}`,
-          'people',
-          facultyToUpdate.id,
-          updateData,
-          originalData, // Pass original data for accurate logging
-          'App.jsx - handleFacultyUpdate'
-        );
-      }
-
-      // Refresh data
-      await loadData({ silent: true });
-
-      const successMessage = isNewFaculty
-        ? `${facultyToUpdate.name} has been added to the directory successfully.`
-        : `${facultyToUpdate.name} has been updated successfully.`;
-
-      showNotification('success', isNewFaculty ? 'Faculty Added' : 'Faculty Updated', successMessage);
-
-    } catch (error) {
-      console.error('❌ Error updating faculty:', error);
-      const errorMessage = !facultyToUpdate.id
-        ? 'Failed to add faculty member. Please try again.'
-        : 'Failed to update faculty member. Please try again.';
-      showNotification('error', 'Operation Failed', errorMessage);
-    }
-  };
-
-  const handleStaffUpdate = async (staffToUpdate) => {
-    const isNewStaff = !staffToUpdate.id;
-    const requiredPermission = isNewStaff ? canCreateStaff() : canEditStaff();
-
-    if (!requiredPermission) {
-      const actionName = isNewStaff ? 'create' : 'modify';
-      showNotification('warning', 'Permission Denied', `You don't have permission to ${actionName} staff members.`);
-      return;
-    }
-    console.log('👥 Updating staff member:', staffToUpdate);
-
-    try {
-      let docRef;
-      let action;
-      let originalData = null;
-
-      // Filter out undefined values to prevent Firebase errors
-      const cleanStaffData = Object.fromEntries(
-        Object.entries(staffToUpdate).filter(([_, value]) => value !== undefined)
-      );
-
-      if (staffToUpdate.id) {
-        // Update existing staff member
-        // Find original data for change logging
-        originalData = rawPeople.find(p => p.id === staffToUpdate.id) || null;
-        const staffRef = doc(db, 'people', staffToUpdate.id);
-        const updateData = {
-          ...cleanStaffData,
-          updatedAt: new Date().toISOString()
-        };
-
-        await updateDoc(staffRef, updateData);
-        docRef = staffRef;
-        action = 'UPDATE';
-
-        // Add to edit history (legacy)
-        await addDoc(collection(db, 'editHistory'), {
-          action: action,
-          entity: `Staff - ${staffToUpdate.name}`,
-          changes: updateData,
-          timestamp: new Date().toISOString(),
-          userId: 'system'
-        });
-
-        // Log change in centralized system with field diffs
-        await logUpdate(
-          `Staff - ${staffToUpdate.name}`,
-          'people',
-          staffToUpdate.id,
-          updateData,
-          originalData,
-          'App.jsx - handleStaffUpdate'
-        );
-
-      } else {
-        // Create new staff member
-        const createData = {
-          ...cleanStaffData,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-
-        docRef = await addDoc(collection(db, 'people'), createData);
-        action = 'CREATE';
-
-        // Add to edit history (legacy)
-        await addDoc(collection(db, 'editHistory'), {
-          action: action,
-          entity: `Staff - ${staffToUpdate.name}`,
-          changes: createData,
-          timestamp: new Date().toISOString(),
-          userId: 'system'
-        });
-
-        // Log change in centralized system
-        await logCreate(
-          `Staff - ${staffToUpdate.name}`,
-          'people',
-          docRef.id,
-          createData,
-          'App.jsx - handleStaffUpdate'
-        );
-      }
-
-      // Refresh data
-      await loadData({ silent: true });
-
-      const successMessage = action === 'CREATE'
-        ? `${staffToUpdate.name} has been created successfully.`
-        : `${staffToUpdate.name} has been updated successfully.`;
-
-      showNotification('success', `Staff ${action === 'CREATE' ? 'Created' : 'Updated'}`, successMessage);
-
-    } catch (error) {
-      console.error('❌ Error updating staff:', error);
-      showNotification('error', 'Operation Failed', 'Failed to save staff member. Please try again.');
-    }
-  };
-
-  const handleProgramCreate = async (programInput = {}) => {
-    if (!canCreateProgram()) {
-      showNotification('warning', 'Permission Denied', 'You do not have permission to create programs.');
-      return null;
-    }
-
-    const normalizedName = normalizeProgramName(programInput.name);
-    if (!normalizedName) {
-      showNotification('error', 'Invalid Name', 'Program name cannot be empty.');
-      return null;
-    }
-
-    if (isReservedProgramName(normalizedName)) {
-      showNotification('error', 'Invalid Name', '"Unassigned" is reserved for faculty without a program.');
-      return null;
-    }
-
-    const nameKey = getProgramNameKey(normalizedName);
-    const existing = (rawPrograms || []).find(p => getProgramNameKey(p.name) === nameKey);
-    if (existing) {
-      showNotification('error', 'Program Exists', `A program named "${existing.name}" already exists.`);
-      return null;
-    }
-
-    try {
-      const now = new Date().toISOString();
-      const programData = {
-        name: normalizedName,
-        updIds: [],
-        createdAt: now,
-        updatedAt: now
-      };
-
-      const programRef = doc(collection(db, COLLECTIONS.PROGRAMS));
-      await setDoc(programRef, programData);
-
-      await logCreate(
-        `Program - ${normalizedName}`,
-        COLLECTIONS.PROGRAMS,
-        programRef.id,
-        programData,
-        'App.jsx - handleProgramCreate'
-      );
-
-      await loadData({ silent: true });
-
-      showNotification('success', 'Program Added', `${normalizedName} has been added successfully.`);
-      return { id: programRef.id, ...programData };
-    } catch (error) {
-      console.error('❌ Error creating program:', error);
-      showNotification('error', 'Program Creation Failed', 'Failed to create program. Please try again.');
-      return null;
-    }
-  };
-
-  const handleFacultyDelete = async (facultyToDelete) => {
-    if (!canDeleteFaculty()) {
-      showNotification('warning', 'Permission Denied', 'You don\'t have permission to delete faculty members.');
-      return;
-    }
-    console.log('🗑️ Deleting faculty member:', facultyToDelete);
-
-    try {
-      // Delete from Firebase
-      await deleteDoc(doc(db, 'people', facultyToDelete.id));
-
-      // Add to edit history (legacy)
-      await addDoc(collection(db, 'editHistory'), {
-        action: 'DELETE',
-        entity: `Faculty - ${facultyToDelete.name}`,
-        timestamp: new Date().toISOString(),
-        userId: 'system'
-      });
-
-      // Log change in centralized system
-      await logDelete(
-        `Faculty - ${facultyToDelete.name}`,
-        'people',
-        facultyToDelete.id,
-        facultyToDelete,
-        'App.jsx - handleFacultyDelete'
-      );
-
-      // Refresh data
-      await loadData({ silent: true });
-
-      showNotification('success', 'Faculty Deleted', `${facultyToDelete.name} has been removed from the directory.`);
-
-    } catch (error) {
-      console.error('❌ Error deleting faculty:', error);
-      showNotification('error', 'Delete Failed', 'Failed to delete faculty member. Please try again.');
-    }
-  };
-
-  const handleStaffDelete = async (staffToDelete) => {
-    if (!canEdit()) {
-      showNotification('warning', 'Permission Denied', 'Only admins can delete staff.');
-      return;
-    }
-    console.log('🗑️ Deleting staff member:', staffToDelete);
-
-    try {
-      // Delete from Firebase
-      await deleteDoc(doc(db, 'people', staffToDelete.id));
-
-      // Add to edit history (legacy)
-      await addDoc(collection(db, 'editHistory'), {
-        action: 'DELETE',
-        entity: `Staff - ${staffToDelete.name}`,
-        timestamp: new Date().toISOString(),
-        userId: 'system'
-      });
-
-      // Log change in centralized system
-      await logDelete(
-        `Staff - ${staffToDelete.name}`,
-        'people',
-        staffToDelete.id,
-        staffToDelete,
-        'App.jsx - handleStaffDelete'
-      );
-
-      // Refresh data
-      await loadData({ silent: true });
-
-      showNotification('success', 'Staff Deleted', `${staffToDelete.name} has been removed from the directory.`);
-
-    } catch (error) {
-      console.error('❌ Error deleting staff:', error);
-      showNotification('error', 'Delete Failed', 'Failed to delete staff member. Please try again.');
-    }
-  };
-
-  const handleStudentUpdate = async (studentToUpdate) => {
-    const isNewStudent = !studentToUpdate.id;
-    const requiredPermission = isNewStudent ? canCreateStudent() : canEditStudent();
-
-    if (!requiredPermission) {
-      const actionName = isNewStudent ? 'create' : 'modify';
-      showNotification('warning', 'Permission Denied', `You don't have permission to ${actionName} student workers.`);
-      return;
-    }
-    console.log('🎓 Updating student worker:', studentToUpdate);
-
-    try {
-      let studentRef;
-      let actionType;
-
-      if (isNewStudent) {
-        // Creating a new student worker
-        console.log('🆕 Creating new student worker');
-        studentRef = doc(collection(db, 'people'));
-        actionType = 'CREATE';
-      } else {
-        // Updating existing student worker
-        console.log('📝 Updating existing student worker');
-        studentRef = doc(db, 'people', studentToUpdate.id);
-        actionType = 'UPDATE';
-      }
-
-      // Filter out undefined values to prevent Firebase errors
-      const cleanStudentData = Object.fromEntries(
-        Object.entries(studentToUpdate).filter(([_, value]) => value !== undefined)
-      );
-
-      // Derive isActive based on endDate unless explicitly set
-      let derivedIsActive = cleanStudentData.isActive;
-      try {
-        const endDateStr = cleanStudentData.endDate || null;
-        if (endDateStr) {
-          const end = new Date(`${endDateStr}T23:59:59`);
-          if (!isNaN(end.getTime())) {
-            derivedIsActive = end >= new Date();
-          }
-        }
-      } catch (_) { }
-
-      const updateData = {
-        ...cleanStudentData,
-        // Ensure student role is set
-        roles: ['student'],
-        // If user provided isActive, respect it; otherwise use derived value or default true
-        isActive: (cleanStudentData.isActive !== undefined ? cleanStudentData.isActive : (derivedIsActive !== undefined ? derivedIsActive : true)),
-        updatedAt: new Date().toISOString()
-      };
-
-      if (isNewStudent) {
-        // Use setDoc for new student to ensure we get the generated ID
-        await setDoc(studentRef, { ...updateData, createdAt: new Date().toISOString() });
-        // Non-blocking legacy history write
-        try {
-          await addDoc(collection(db, 'editHistory'), {
-            action: 'CREATE',
-            entity: `Student - ${studentToUpdate.name}`,
-            changes: { ...updateData, createdAt: new Date().toISOString() },
-            timestamp: new Date().toISOString(),
-            userId: 'system'
-          });
-        } catch (_) { }
-      } else {
-        // Use updateDoc for existing student if doc exists; otherwise, create a new one
-        const originalData = rawPeople.find(p => p.id === studentToUpdate.id) || null;
-        if (!originalData) {
-          console.warn('⚠️ Provided student id not found; creating new student instead of updating');
-          const createRef = doc(collection(db, 'people'));
-          await setDoc(createRef, { ...updateData, createdAt: new Date().toISOString() });
-
-          // Non-blocking legacy history write
-          try {
-            await addDoc(collection(db, 'editHistory'), {
-              action: 'CREATE',
-              entity: `Student - ${studentToUpdate.name}`,
-              changes: { ...updateData, createdAt: new Date().toISOString() },
-              timestamp: new Date().toISOString(),
-              userId: 'system'
-            });
-          } catch (_) { }
-          // Log as create
-          await logCreate(
-            `Student - ${studentToUpdate.name}`,
-            'people',
-            createRef.id,
-            { ...updateData, createdAt: new Date().toISOString() },
-            'App.jsx - handleStudentUpdate'
-          );
-
-          await loadData({ silent: true });
-          showNotification('success', 'Student Added', `${studentToUpdate.name} has been added to the student worker directory successfully.`);
-          return;
-        }
-
-        await updateDoc(studentRef, updateData);
-        // Non-blocking legacy history write
-        try {
-          await addDoc(collection(db, 'editHistory'), {
-            action: actionType,
-            entity: `Student - ${studentToUpdate.name}`,
-            changes: updateData,
-            timestamp: new Date().toISOString(),
-            userId: 'system'
-          });
-        } catch (_) { }
-        // Log with original for diffs
-        await logUpdate(
-          `Student - ${studentToUpdate.name}`,
-          'people',
-          studentToUpdate.id,
-          updateData,
-          originalData,
-          'App.jsx - handleStudentUpdate'
-        );
-
-        // Refresh data and notify below as usual
-        await loadData({ silent: true });
-        const successMessage = `${studentToUpdate.name} has been updated successfully.`;
-        showNotification('success', 'Student Updated', successMessage);
-        return;
-      }
-
-      // Non-blocking legacy history write
-      try {
-        await addDoc(collection(db, 'editHistory'), {
-          action: actionType,
-          entity: `Student - ${studentToUpdate.name}`,
-          changes: updateData,
-          timestamp: new Date().toISOString(),
-          userId: 'system'
-        });
-      } catch (_) { }
-
-      // Log change in centralized system
-      if (isNewStudent) {
-        await logCreate(
-          `Student - ${studentToUpdate.name}`,
-          'people',
-          studentRef.id,
-          { ...updateData, createdAt: new Date().toISOString() },
-          'App.jsx - handleStudentUpdate'
-        );
-      }
-
-      // Refresh data
-      await loadData({ silent: true });
-
-      const successMessage = isNewStudent
-        ? `${studentToUpdate.name} has been added to the student worker directory successfully.`
-        : `${studentToUpdate.name} has been updated successfully.`;
-
-      showNotification('success', isNewStudent ? 'Student Added' : 'Student Updated', successMessage);
-
-    } catch (error) {
-      console.error('❌ Error updating student:', error);
-      // Only show a hard error for true failures; suppress if write actually succeeded
-      const friendly = (error && error.message) ? error.message : 'Unexpected error';
-      const isPermission = (error && (error.code === 'permission-denied' || /insufficient permissions/i.test(error.message || '')));
-      const isNew = !studentToUpdate.id;
-      if (isPermission) {
-        showNotification('warning', 'Permission Denied', 'Your account is not permitted to perform this action.');
-      } else {
-        showNotification('error', 'Operation Failed', isNew ? 'Failed to add student worker. Please try again.' : `Failed to update student worker. ${friendly}`);
-      }
-    }
-  };
-
-  const handleStudentDelete = async (studentToDelete) => {
-    if (!canDeleteStudent()) {
-      showNotification('warning', 'Permission Denied', 'You don\'t have permission to delete student workers.');
-      return;
-    }
-    console.log('🗑️ Deleting student worker:', studentToDelete);
-
-    try {
-      // Accept either an id or full object
-      const studentId = typeof studentToDelete === 'string' ? studentToDelete : studentToDelete.id;
-      const existing = rawPeople.find(p => p.id === studentId) || null;
-      const entityName = existing?.name || (typeof studentToDelete === 'object' ? studentToDelete.name : 'Unknown');
-
-      // Delete from Firebase
-      await deleteDoc(doc(db, 'people', studentId));
-
-      // Add to edit history (legacy)
-      await addDoc(collection(db, 'editHistory'), {
-        action: 'DELETE',
-        entity: `Student - ${entityName}`,
-        timestamp: new Date().toISOString(),
-        userId: 'system'
-      });
-
-      // Log change in centralized system
-      await logDelete(
-        `Student - ${entityName}`,
-        'people',
-        studentId,
-        existing || studentToDelete,
-        'App.jsx - handleStudentDelete'
-      );
-
-      // Refresh data
-      await loadData({ silent: true });
-
-      showNotification('success', 'Student Deleted', `${studentToDelete.name} has been removed from the directory.`);
-
-    } catch (error) {
-      console.error('❌ Error deleting student:', error);
-      showNotification('error', 'Delete Failed', 'Failed to delete student worker. Please try again.');
-    }
-  };
-
-  const handleScheduleDelete = async (scheduleId) => {
-    if (!canDeleteSchedule?.()) {
-      showNotification('warning', 'Permission Denied', 'You don\'t have permission to delete schedules.');
-      return;
-    }
-    console.log('🗑️ Deleting schedule:', scheduleId);
-
-    try {
-      // Find the schedule to get details for history
-      const scheduleToDelete = rawScheduleData.find(s => s.id === scheduleId);
-      if (!scheduleToDelete) {
-        showNotification('error', 'Delete Failed', 'Schedule not found.');
-        return;
-      }
-
-      // Delete from Firebase
-      await deleteDoc(doc(db, 'schedules', scheduleId));
-
-      // Add to edit history (legacy)
-      await addDoc(collection(db, 'editHistory'), {
-        action: 'DELETE',
-        entity: `${scheduleToDelete.courseCode} ${scheduleToDelete.section} - ${scheduleToDelete.instructorName}`,
-        deletedData: scheduleToDelete,
-        timestamp: new Date().toISOString(),
-        userId: 'system'
-      });
-
-      // Log change in centralized system
-      await logDelete(
-        `Schedule - ${scheduleToDelete.courseCode} ${scheduleToDelete.section} (${scheduleToDelete.instructorName})`,
-        'schedules',
-        scheduleId,
-        scheduleToDelete,
-        'App.jsx - handleScheduleDelete'
-      );
-
-      // Refresh data
-      await loadData({ silent: true });
-
-      showNotification('success', 'Schedule Deleted',
-        `Course ${scheduleToDelete.courseCode} ${scheduleToDelete.section} has been removed successfully.`);
-
-    } catch (error) {
-      console.error('❌ Error deleting schedule:', error);
-      showNotification('error', 'Delete Failed', 'Failed to delete schedule. Please try again.');
-    }
-  };
-
-  const handleRevertChange = async (changeToRevert) => {
-    console.log('↩️ Reverting change:', changeToRevert);
-
-    try {
-      if (changeToRevert.action === 'DELETE') {
-        showNotification('warning', 'Cannot Revert Delete', 'Deleted items cannot be automatically restored.');
-        return;
-      }
-
-      // For updates, we would need to store the previous state to revert properly
-      // This is a simplified implementation
-      showNotification('info', 'Revert Not Implemented', 'Change reversion is not yet implemented.');
-
-    } catch (error) {
-      console.error('❌ Error reverting change:', error);
-      showNotification('error', 'Revert Failed', 'Failed to revert change. Please try again.');
-    }
-  };
-
-  // Navigation and authentication handlers
+  // Login handler
   const handleLogin = (status) => {
     setIsAuthenticated(status);
     if (status) {
@@ -1695,6 +251,7 @@ function App() {
     }
   };
 
+  // Logout handlers
   const handleLogout = () => setShowLogoutConfirm(true);
 
   const confirmLogout = async () => {
@@ -1705,6 +262,7 @@ function App() {
     navigate('/dashboard');
   };
 
+  // Breadcrumb generation
   const getCurrentBreadcrumb = () => {
     const pathParts = currentPage.split('/');
     const crumbs = [];
@@ -1728,12 +286,45 @@ function App() {
     return crumbs;
   };
 
+  // Get active section for sub-navigation
   const getActiveSection = () => {
     const pathParts = currentPage.split('/');
     return navigationItems.find(item => item.id === pathParts[0]) || null;
   };
 
-  // Main page content renderer
+  // Props object for page components (backwards compatibility)
+  const pageProps = {
+    scheduleData,
+    directoryData,
+    facultyData,
+    staffData,
+    studentData,
+    programs,
+    analytics,
+    editHistory,
+    recentChanges,
+    onDataUpdate: handleDataUpdate,
+    onFacultyUpdate: handleFacultyUpdate,
+    onStaffUpdate: handleStaffUpdate,
+    onStudentUpdate: handleStudentUpdate,
+    onFacultyDelete: handleFacultyDelete,
+    onStaffDelete: handleStaffDelete,
+    onStudentDelete: handleStudentDelete,
+    onScheduleDelete: handleScheduleDelete,
+    onProgramCreate: handleProgramCreate,
+    onRevertChange: handleRevertChange,
+    onNavigate: handleNavigate,
+    showNotification,
+    canEdit,
+    selectedSemester,
+    availableSemesters,
+    onSemesterDataImported: refreshData,
+    pinnedPages,
+    togglePinPage,
+    rawScheduleData
+  };
+
+  // Page content renderer
   const renderPageContent = () => {
     if (loading) {
       return (
@@ -1746,283 +337,82 @@ function App() {
       );
     }
 
-    // Filter student data from rawPeople
-    const studentData = rawPeople.filter(person => {
-      if (!person.roles) return false;
-
-      // Handle array format (newer format)
-      if (Array.isArray(person.roles)) {
-        return person.roles.includes('student');
-      }
-
-      // Handle object format (legacy format)
-      if (typeof person.roles === 'object') {
-        return person.roles.student === true;
-      }
-
-      return false;
-    });
-
-    // Backward compatible student adapter: introduce jobs[] while preserving legacy fields
-    const adaptedStudents = studentData.map((s) => {
-      const legacyWeekly = Array.isArray(s.weeklySchedule) ? s.weeklySchedule : [];
-      const legacyBuildings = Array.isArray(s.primaryBuildings)
-        ? s.primaryBuildings
-        : (s.primaryBuilding ? [s.primaryBuilding] : []);
-      const legacyJob = {
-        id: 'legacy',
-        jobTitle: s.jobTitle || '',
-        supervisor: s.supervisor || '',
-        hourlyRate: s.hourlyRate || '',
-        location: Array.isArray(s.primaryBuildings) ? s.primaryBuildings : legacyBuildings,
-        weeklySchedule: legacyWeekly,
-        startDate: s.startDate || '',
-        endDate: s.endDate || ''
-      };
-      const jobsArray = Array.isArray(s.jobs) && s.jobs.length > 0 ? s.jobs : [legacyJob];
-      // Compute unified weekly schedule for compatibility consumers
-      const unifiedWeekly = jobsArray.flatMap(j => Array.isArray(j.weeklySchedule) ? j.weeklySchedule : []);
-      const unifiedBuildings = Array.from(new Set(jobsArray.flatMap(j => Array.isArray(j.location) ? j.location : (j.location ? [j.location] : []))));
-      // Compute effective active state if missing: endDate in past => inactive
-      let effectiveIsActive = s.isActive;
-      try {
-        const endStr = s.endDate || (jobsArray[0]?.endDate) || '';
-        if (endStr) {
-          const end = new Date(`${endStr}T23:59:59`);
-          if (!isNaN(end.getTime())) {
-            effectiveIsActive = end >= new Date();
-          }
-        }
-      } catch (_) { }
-
-      return {
-        ...s,
-        isActive: (s.isActive !== undefined ? s.isActive : (effectiveIsActive !== undefined ? effectiveIsActive : true)),
-        jobs: jobsArray,
-        // preserve legacy fields for components not yet migrated
-        weeklySchedule: unifiedWeekly,
-        primaryBuildings: unifiedBuildings.length > 0 ? unifiedBuildings : legacyBuildings,
-        jobTitle: s.jobTitle || (jobsArray[0]?.jobTitle || ''),
-        supervisor: s.supervisor || (jobsArray[0]?.supervisor || ''),
-        hourlyRate: s.hourlyRate || (jobsArray[0]?.hourlyRate || ''),
-      };
-    });
-
-    const pageProps = {
-      scheduleData,
-      directoryData: rawPeople,
-      facultyData: adaptPeopleToFaculty(rawPeople, rawScheduleData, rawPrograms),
-      staffData: adaptPeopleToStaff(rawPeople, rawScheduleData, rawPrograms),
-      studentData: adaptedStudents,
-      programs: rawPrograms,
-      analytics,
-      editHistory,
-      recentChanges,
-      onDataUpdate: handleDataUpdate,
-      onFacultyUpdate: handleFacultyUpdate,
-      onStaffUpdate: handleStaffUpdate,
-      onStudentUpdate: handleStudentUpdate,
-      onFacultyDelete: handleFacultyDelete,
-      onStaffDelete: handleStaffDelete,
-      onStudentDelete: handleStudentDelete,
-      onScheduleDelete: handleScheduleDelete,
-      onProgramCreate: handleProgramCreate,
-      onRevertChange: handleRevertChange,
-      onNavigate: handleNavigate,
-      showNotification,
-      canEdit,
-      selectedSemester,
-      availableSemesters,
-      onSemesterDataImported: () => loadData({ silent: true }),
-      pinnedPages,
-      togglePinPage,
-      rawScheduleData,
-    };
-
     switch (currentPage) {
       case 'dashboard':
-        return (
-          <ProtectedContent pageId="dashboard">
-            <Dashboard {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="dashboard"><Dashboard {...pageProps} /></ProtectedContent>;
       case 'command-center':
-        return (
-          <ProtectedContent pageId="command-center">
-            <CommandCenter {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="command-center"><CommandCenter {...pageProps} /></ProtectedContent>;
       case 'scheduling/faculty-schedules':
-        return (
-          <ProtectedContent pageId="scheduling/faculty-schedules">
-            <FacultySchedules {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="scheduling/faculty-schedules"><FacultySchedules {...pageProps} /></ProtectedContent>;
       case 'scheduling/group-meeting-scheduler':
-        return (
-          <ProtectedContent pageId="scheduling/group-meeting-scheduler">
-            <GroupMeetings {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="scheduling/group-meeting-scheduler"><GroupMeetings {...pageProps} /></ProtectedContent>;
       case 'scheduling/individual-availability':
-        return (
-          <ProtectedContent pageId="scheduling/individual-availability">
-            <IndividualAvailability {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="scheduling/individual-availability"><IndividualAvailability {...pageProps} /></ProtectedContent>;
       case 'scheduling/room-schedules':
-        return (
-          <ProtectedContent pageId="scheduling/room-schedules">
-            <RoomSchedules {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="scheduling/room-schedules"><RoomSchedules {...pageProps} /></ProtectedContent>;
       case 'scheduling/student-schedules':
-        return (
-          <ProtectedContent pageId="scheduling/student-schedules">
-            <StudentSchedules {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="scheduling/student-schedules"><StudentSchedules {...pageProps} /></ProtectedContent>;
       case 'people/people-directory':
-        return (
-          <ProtectedContent pageId="people/people-directory">
-            <PeopleDirectory {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="people/people-directory"><PeopleDirectory {...pageProps} /></ProtectedContent>;
       case 'people/baylor-id-manager':
-        return (
-          <ProtectedContent pageId="people/baylor-id-manager">
-            <BaylorIDManager {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="people/baylor-id-manager"><BaylorIDManager {...pageProps} /></ProtectedContent>;
       case 'analytics/program-management':
-        return (
-          <ProtectedContent pageId="analytics/program-management">
-            <ProgramManagement {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="analytics/program-management"><ProgramManagement {...pageProps} /></ProtectedContent>;
       case 'people/email-lists':
-        return (
-          <ProtectedContent pageId="people/email-lists">
-            <EmailLists {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="people/email-lists"><EmailLists {...pageProps} /></ProtectedContent>;
       case 'resources/building-directory':
-        return (
-          <ProtectedContent pageId="resources/building-directory">
-            <BuildingDirectory {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="resources/building-directory"><BuildingDirectory {...pageProps} /></ProtectedContent>;
       case 'analytics/department-insights':
-        return (
-          <ProtectedContent pageId="analytics/department-insights">
-            <DepartmentInsights {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="analytics/department-insights"><DepartmentInsights {...pageProps} /></ProtectedContent>;
       case 'analytics/student-worker-analytics':
-        return (
-          <ProtectedContent pageId="analytics/student-worker-analytics">
-            <StudentWorkerAnalytics {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="analytics/student-worker-analytics"><StudentWorkerAnalytics {...pageProps} /></ProtectedContent>;
       case 'analytics/course-management':
-        return (
-          <ProtectedContent pageId="analytics/course-management">
-            <CourseManagement {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="analytics/course-management"><CourseManagement {...pageProps} /></ProtectedContent>;
       case 'administration/recent-changes':
-        return (
-          <ProtectedContent pageId="administration/recent-changes">
-            <RecentChangesPage {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="administration/recent-changes"><RecentChangesPage {...pageProps} /></ProtectedContent>;
       case 'administration/import-wizard':
-        return (
-          <ProtectedContent pageId="administration/import-wizard">
-            <ImportWizard {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="administration/import-wizard"><ImportWizard {...pageProps} /></ProtectedContent>;
       case 'administration/data-hygiene':
-        return (
-          <ProtectedContent pageId="administration/data-hygiene">
-            <DataHygieneManager {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="administration/data-hygiene"><DataHygieneManager {...pageProps} /></ProtectedContent>;
       case 'administration/crn-tools':
-        return (
-          <ProtectedContent pageId="administration/crn-tools">
-            <CRNQualityTools {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="administration/crn-tools"><CRNQualityTools {...pageProps} /></ProtectedContent>;
       case 'administration/outlook-export':
-        return (
-          <ProtectedContent pageId="administration/outlook-export">
-            <OutlookRoomExport {...pageProps} />
-          </ProtectedContent>
-        );
-      // removed orphaned-data-cleanup standalone page; use Data Hygiene wizard
+        return <ProtectedContent pageId="administration/outlook-export"><OutlookRoomExport {...pageProps} /></ProtectedContent>;
       case 'administration/baylor-systems':
-        return (
-          <ProtectedContent pageId="administration/baylor-systems">
-            <SystemsPage {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="administration/baylor-systems"><SystemsPage {...pageProps} /></ProtectedContent>;
       case 'administration/baylor-acronyms':
-        return (
-          <ProtectedContent pageId="administration/baylor-acronyms">
-            <BaylorAcronyms {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="administration/baylor-acronyms"><BaylorAcronyms {...pageProps} /></ProtectedContent>;
       case 'resources/room-grid-generator':
-        return (
-          <ProtectedContent pageId="resources/room-grid-generator">
-            <RoomGridGenerator {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="resources/room-grid-generator"><RoomGridGenerator {...pageProps} /></ProtectedContent>;
       case 'administration/access-control':
-        return (
-          <ProtectedContent pageId="administration/access-control">
-            <AccessControl {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="administration/access-control"><AccessControl {...pageProps} /></ProtectedContent>;
       case 'administration/user-activity':
-        return (
-          <ProtectedContent pageId="administration/user-activity">
-            <UserActivityDashboard {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="administration/user-activity"><UserActivityDashboard {...pageProps} /></ProtectedContent>;
       default:
-        return (
-          <ProtectedContent pageId="dashboard">
-            <Dashboard {...pageProps} />
-          </ProtectedContent>
-        );
+        return <ProtectedContent pageId="dashboard"><Dashboard {...pageProps} /></ProtectedContent>;
     }
   };
 
-  // If the app is in maintenance mode, render the maintenance page and block the rest of the UI
+  // ==================== RENDER ====================
+
+  // Maintenance mode
   if (MAINTENANCE_MODE) {
-    return (
-      <MaintenancePage
-        message={MAINTENANCE_MESSAGE}
-        until={MAINTENANCE_UNTIL}
-      />
-    );
+    return <MaintenancePage message={MAINTENANCE_MESSAGE} until={MAINTENANCE_UNTIL} />;
   }
 
-  // Authentication check (only if NOT in maintenance mode)
+  // Authentication check
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;
   }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      {/* Professional Sidebar - Desktop */}
+      {/* Desktop Sidebar */}
       <div className="hidden md:block">
         <Sidebar
           navigationItems={navigationItems}
           currentPage={currentPage}
-          onNavigate={(path) => { handleNavigate(path); }}
+          onNavigate={handleNavigate}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           selectedSemester={selectedSemester}
@@ -2047,7 +437,7 @@ function App() {
               currentPage={currentPage}
               onNavigate={(path) => { setMobileSidebarOpen(false); handleNavigate(path); }}
               collapsed={false}
-              onToggleCollapse={() => { }}
+              onToggleCollapse={() => {}}
               selectedSemester={selectedSemester}
               pinnedPages={pinnedPages}
               togglePinPage={togglePinPage}
@@ -2058,12 +448,16 @@ function App() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Professional Header Bar */}
+        {/* Header */}
         <header className="bg-white border-b border-gray-200 shadow-sm">
           <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4">
             {/* Left: Mobile menu + Breadcrumb */}
             <div className="flex items-center space-x-3">
-              <button className="md:hidden p-2 rounded-md hover:bg-gray-100" aria-label="Open menu" onClick={() => setMobileSidebarOpen(true)}>
+              <button
+                className="md:hidden p-2 rounded-md hover:bg-gray-100"
+                aria-label="Open menu"
+                onClick={() => setMobileSidebarOpen(true)}
+              >
                 <Menu className="w-5 h-5 text-gray-700" />
               </button>
               <div className="flex items-center space-x-2">
@@ -2092,8 +486,6 @@ function App() {
 
             {/* Right: Actions */}
             <div className="flex items-center space-x-2 md:space-x-4">
-
-
               {/* Semester Selector */}
               <div className="relative semester-dropdown">
                 <button
@@ -2114,8 +506,9 @@ function App() {
                             setSelectedSemester(semester);
                             setShowSemesterDropdown(false);
                           }}
-                          className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${semester === selectedSemester ? 'bg-baylor-green/5 text-baylor-green font-medium' : 'text-gray-900'
-                            }`}
+                          className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${
+                            semester === selectedSemester ? 'bg-baylor-green/5 text-baylor-green font-medium' : 'text-gray-900'
+                          }`}
                         >
                           {semester}
                         </button>
@@ -2126,11 +519,7 @@ function App() {
               </div>
 
               {/* Logout Button */}
-              <button
-                onClick={handleLogout}
-                className="btn-ghost"
-                title="Logout"
-              >
+              <button onClick={handleLogout} className="btn-ghost" title="Logout">
                 <LogOut className="w-4 h-4" />
                 <span className="ml-2 hidden sm:inline">Logout</span>
               </button>
@@ -2145,10 +534,11 @@ function App() {
                   <button
                     key={child.id}
                     onClick={() => handleNavigate(child.path)}
-                    className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${currentPage === child.path
-                      ? 'bg-baylor-green/10 text-baylor-green border-baylor-green/30'
-                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-                      }`}
+                    className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                      currentPage === child.path
+                        ? 'bg-baylor-green/10 text-baylor-green border-baylor-green/30'
+                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                    }`}
                   >
                     {child.label}
                   </button>
@@ -2166,7 +556,6 @@ function App() {
         </main>
       </div>
 
-
       {/* Logout Confirmation Modal */}
       {showLogoutConfirm && (
         <div className="modal-overlay">
@@ -2178,16 +567,8 @@ function App() {
               <p className="text-gray-600">Are you sure you want to logout? Any unsaved changes will be lost.</p>
             </div>
             <div className="modal-footer">
-              <button
-                onClick={() => setShowLogoutConfirm(false)}
-                className="btn-ghost"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmLogout}
-                className="btn-danger"
-              >
+              <button onClick={() => setShowLogoutConfirm(false)} className="btn-ghost">Cancel</button>
+              <button onClick={confirmLogout} className="btn-danger">
                 <LogOut className="w-4 h-4 mr-2" />
                 Logout
               </button>
@@ -2196,7 +577,7 @@ function App() {
         </div>
       )}
 
-      {/* Professional Notification System */}
+      {/* Notification */}
       <Notification
         show={notification.show}
         type={notification.type}

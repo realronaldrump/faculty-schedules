@@ -55,7 +55,7 @@ import {
   Activity,
   Radio
 } from 'lucide-react';
-import { db } from './firebase';
+import { db, COLLECTIONS } from './firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, setDoc, query, orderBy, onSnapshot, getDoc } from 'firebase/firestore';
 import { adaptPeopleToFaculty, adaptPeopleToStaff, fetchPrograms } from './utils/dataAdapter';
 import { fetchSchedulesWithRelationalData } from './utils/dataImportUtils';
@@ -64,6 +64,7 @@ import MaintenancePage from './components/MaintenancePage';
 import { parseCourseCode } from './utils/courseUtils';
 import { logCreate, logUpdate, logDelete } from './utils/changeLogger';
 import { fetchRecentChanges } from './utils/recentChanges';
+import { getProgramNameKey, isReservedProgramName, normalizeProgramName } from './utils/programUtils';
 
 const deriveCreditsFromSchedule = (courseCode, credits) => {
   if (credits !== undefined && credits !== null && credits !== '') {
@@ -95,7 +96,8 @@ function App() {
     canDeleteStudent,
     canEditSchedule,
     canCreateSchedule,
-    canDeleteSchedule
+    canDeleteSchedule,
+    canCreateProgram
   } = usePermissions();
   const location = useLocation();
   const navigate = useNavigate();
@@ -1236,6 +1238,61 @@ function App() {
     }
   };
 
+  const handleProgramCreate = async (programInput = {}) => {
+    if (!canCreateProgram()) {
+      showNotification('warning', 'Permission Denied', 'You do not have permission to create programs.');
+      return null;
+    }
+
+    const normalizedName = normalizeProgramName(programInput.name);
+    if (!normalizedName) {
+      showNotification('error', 'Invalid Name', 'Program name cannot be empty.');
+      return null;
+    }
+
+    if (isReservedProgramName(normalizedName)) {
+      showNotification('error', 'Invalid Name', '"Unassigned" is reserved for faculty without a program.');
+      return null;
+    }
+
+    const nameKey = getProgramNameKey(normalizedName);
+    const existing = (rawPrograms || []).find(p => getProgramNameKey(p.name) === nameKey);
+    if (existing) {
+      showNotification('error', 'Program Exists', `A program named "${existing.name}" already exists.`);
+      return null;
+    }
+
+    try {
+      const now = new Date().toISOString();
+      const programData = {
+        name: normalizedName,
+        updIds: [],
+        createdAt: now,
+        updatedAt: now
+      };
+
+      const programRef = doc(collection(db, COLLECTIONS.PROGRAMS));
+      await setDoc(programRef, programData);
+
+      await logCreate(
+        `Program - ${normalizedName}`,
+        COLLECTIONS.PROGRAMS,
+        programRef.id,
+        programData,
+        'App.jsx - handleProgramCreate'
+      );
+
+      await loadData({ silent: true });
+
+      showNotification('success', 'Program Added', `${normalizedName} has been added successfully.`);
+      return { id: programRef.id, ...programData };
+    } catch (error) {
+      console.error('❌ Error creating program:', error);
+      showNotification('error', 'Program Creation Failed', 'Failed to create program. Please try again.');
+      return null;
+    }
+  };
+
   const handleFacultyDelete = async (facultyToDelete) => {
     if (!canDeleteFaculty()) {
       showNotification('warning', 'Permission Denied', 'You don\'t have permission to delete faculty members.');
@@ -1735,6 +1792,7 @@ function App() {
       onStaffDelete: handleStaffDelete,
       onStudentDelete: handleStudentDelete,
       onScheduleDelete: handleScheduleDelete,
+      onProgramCreate: handleProgramCreate,
       onRevertChange: handleRevertChange,
       onNavigate: handleNavigate,
       showNotification,

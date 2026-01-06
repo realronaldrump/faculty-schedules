@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Users, 
   Edit, 
@@ -18,44 +18,35 @@ import {
   Check
 } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
-import { doc, updateDoc, getDocs, collection } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { logUpdate } from '../utils/changeLogger';
 import { usePermissions } from '../utils/permissions';
+import { getProgramNameKey, isReservedProgramName, normalizeProgramName } from '../utils/programUtils';
 
 const ProgramManagement = ({
   facultyData,
+  programs = [],
+  onProgramCreate,
   onFacultyUpdate,
   onStaffUpdate,
   showNotification,
   rawScheduleData
 }) => {
-  const { canAssignProgramUPD, canEditProgram } = usePermissions();
+  const { canAssignProgramUPD, canEditProgram, canCreateProgram } = usePermissions();
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [editingUPD, setEditingUPD] = useState(null);
   const [selectedProgram, setSelectedProgram] = useState('all');
   const [searchText, setSearchText] = useState('');
   const [showCreateProgram, setShowCreateProgram] = useState(false);
   const [newProgramName, setNewProgramName] = useState('');
+  const [isCreatingProgram, setIsCreatingProgram] = useState(false);
   const [draggedFaculty, setDraggedFaculty] = useState(null);
   const [dragOverProgram, setDragOverProgram] = useState(null);
   const [showAdjuncts, setShowAdjuncts] = useState(false);
   const [expandedPrograms, setExpandedPrograms] = useState(new Set());
-  const [programs, setPrograms] = useState([]);
-
-  // Load programs data
-  useEffect(() => {
-    const loadPrograms = async () => {
-      try {
-        const programsSnapshot = await getDocs(collection(db, COLLECTIONS.PROGRAMS));
-        const programsData = programsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setPrograms(programsData);
-      } catch (error) {
-        console.error('Error loading programs:', error);
-      }
-    };
-    loadPrograms();
-  }, []);
+  const allowCreateProgram = canCreateProgram();
+  const activePrograms = Array.isArray(programs) ? programs : [];
 
   // Organize faculty by program using the reliable program data
   const programData = useMemo(() => {
@@ -63,7 +54,7 @@ const ProgramManagement = ({
 
     // Start with all programs from the database
     const programGroups = {};
-    programs.forEach(p => {
+    activePrograms.forEach(p => {
       programGroups[p.name] = {
         name: p.name,
         faculty: [],
@@ -91,7 +82,7 @@ const ProgramManagement = ({
       
       // Find the program name from the programs list using programId
       if (faculty.programId) {
-        const program = programs.find(p => p.id === faculty.programId);
+        const program = activePrograms.find(p => p.id === faculty.programId);
         if (program) {
           programName = program.name;
         }
@@ -112,7 +103,7 @@ const ProgramManagement = ({
       // Check if this faculty member is marked as UPD
       if (faculty.isUPD) {
         // Check if this program has this faculty as UPD (supports single updId and multiple updIds)
-        const programInfo = programs.find(p => p.id === faculty.programId);
+        const programInfo = activePrograms.find(p => p.id === faculty.programId);
         const updIds = Array.isArray(programInfo?.updIds)
           ? programInfo.updIds
           : (programInfo?.updId ? [programInfo.updId] : []);
@@ -383,27 +374,56 @@ const ProgramManagement = ({
   };
 
   const createNewProgram = async () => {
-    const programName = newProgramName.trim();
+    if (!allowCreateProgram) {
+      showNotification(
+        'warning',
+        'Permission Denied',
+        'You do not have permission to create programs.'
+      );
+      return;
+    }
+
+    if (!onProgramCreate) {
+      showNotification(
+        'error',
+        'Program Creation Unavailable',
+        'Program creation is not available right now. Please refresh and try again.'
+      );
+      return;
+    }
+
+    const programName = normalizeProgramName(newProgramName);
     
     if (!programName) {
       showNotification('error', 'Invalid Name', 'Program name cannot be empty');
       return;
     }
 
-    if (programList.includes(programName)) {
+    if (isReservedProgramName(programName)) {
+      showNotification('error', 'Invalid Name', '"Unassigned" is reserved for faculty without a program');
+      return;
+    }
+
+    const programKey = getProgramNameKey(programName);
+    const duplicate = activePrograms.find(p => getProgramNameKey(p.name) === programKey);
+    if (duplicate) {
       showNotification('error', 'Program Exists', 'A program with this name already exists');
       return;
     }
 
-    // For now, just show a notification that this would need to be implemented
-    showNotification(
-      'info',
-      'Feature Not Implemented',
-      'Creating new programs will be implemented in a future update'
-    );
-    
-    setNewProgramName('');
-    setShowCreateProgram(false);
+    setIsCreatingProgram(true);
+    try {
+      const created = await onProgramCreate({ name: programName });
+      if (created) {
+        setNewProgramName('');
+        setShowCreateProgram(false);
+      }
+    } catch (error) {
+      console.error('Error creating program:', error);
+      showNotification('error', 'Error', 'Failed to create program. Please try again.');
+    } finally {
+      setIsCreatingProgram(false);
+    }
   };
 
   return (
@@ -415,8 +435,24 @@ const ProgramManagement = ({
           <p className="text-gray-600">Organize faculty by program and manage UPD designations</p>
         </div>
         <button
-          onClick={() => setShowCreateProgram(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+          onClick={() => {
+            if (!allowCreateProgram) {
+              showNotification(
+                'warning',
+                'Permission Denied',
+                'You do not have permission to create programs.'
+              );
+              return;
+            }
+            setShowCreateProgram(true);
+          }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+            allowCreateProgram
+              ? 'bg-baylor-green text-white hover:bg-baylor-green/90'
+              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+          }`}
+          disabled={!allowCreateProgram}
+          title={allowCreateProgram ? 'Add a new program' : 'You do not have permission to add programs'}
         >
           <Plus size={16} />
           Add Program
@@ -809,11 +845,11 @@ const ProgramManagement = ({
               </button>
               <button 
                 onClick={createNewProgram}
-                className="btn-primary"
-                disabled={!newProgramName.trim()}
+                className={`btn-primary ${isCreatingProgram ? 'opacity-70 cursor-not-allowed' : ''}`}
+                disabled={!newProgramName.trim() || isCreatingProgram}
               >
                 <Plus size={16} className="mr-2" />
-                Create Program
+                {isCreatingProgram ? 'Creating...' : 'Create Program'}
               </button>
             </div>
           </div>

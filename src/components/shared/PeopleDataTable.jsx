@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
-import * as ReactWindow from 'react-window';
-const List = ReactWindow.FixedSizeList || ReactWindow.default.FixedSizeList;
+import { FixedSizeList as List } from 'react-window';
 import * as AutoSizerModule from 'react-virtualized-auto-sizer';
 const AutoSizer = AutoSizerModule.default || AutoSizerModule;
 import SortableHeader from './SortableHeader';

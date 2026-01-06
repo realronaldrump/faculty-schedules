@@ -475,8 +475,8 @@ const FacultyDirectory = ({
 
   // Create row
   const createRow = isCreating ? (
-    <tr className="bg-baylor-gold/5">
-      <td className="p-2 align-top text-gray-700 font-medium">
+    <div className="flex items-center border-b border-gray-200 bg-baylor-gold/5">
+      <div className="px-4 py-2 flex-1 min-w-0 text-sm align-top text-gray-700 font-medium">
         <input name="name" value={newRecord.name} onChange={handleCreateChange} className={getInputClass('name')} placeholder="Full Name" />
         <div className="flex items-center gap-2 text-xs mt-2">
           <input type="checkbox" id="new-adjunct" name="isAdjunct" checked={newRecord.isAdjunct} onChange={handleCreateChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
@@ -494,21 +494,21 @@ const FacultyDirectory = ({
           <input type="checkbox" id="new-hasPhD" name="hasPhD" checked={newRecord.hasPhD} onChange={handleCreateChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
           <label htmlFor="new-hasPhD" className="font-normal">Has PhD</label>
         </div>
-      </td>
-      <td className="p-2 align-top">
+      </div>
+      <div className="px-4 py-2 flex-1 min-w-0 text-sm align-top">
         <select name="programId" value={newRecord.programId || ''} onChange={handleCreateChange} className={getInputClass('programId')}>
           <option value="">No Program</option>
           {programs.map(program => <option key={program.id} value={program.id}>{program.name}</option>)}
         </select>
-      </td>
-      <td className="p-2 align-top">
+      </div>
+      <div className="px-4 py-2 flex-1 min-w-0 text-sm align-top">
         <input name="jobTitle" value={newRecord.jobTitle} onChange={handleCreateChange} className={getInputClass('jobTitle')} placeholder="Job Title" />
-      </td>
-      <td className="p-2 align-top">
+      </div>
+      <div className="px-4 py-2 flex-1 min-w-0 text-sm align-top">
         <input name="email" value={newRecord.email} onChange={handleCreateChange} className={getInputClass('email')} placeholder="email@baylor.edu" />
         {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
-      </td>
-      <td className="p-2 align-top">
+      </div>
+      <div className="px-4 py-2 flex-1 min-w-0 text-sm align-top">
         <div className="flex items-center gap-2">
           <input name="phone" value={newRecord.phone} onChange={handleCreateChange} className={getInputClass('phone')} placeholder="10 digits" maxLength="10" disabled={newRecord.hasNoPhone} />
           <button type="button" onClick={toggleCreatePhoneState} className={`p-1 rounded transition-colors ${newRecord.hasNoPhone ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`}>
@@ -516,25 +516,25 @@ const FacultyDirectory = ({
           </button>
         </div>
         {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
-      </td>
-      <td className="p-2 align-top">
+      </div>
+      <div className="px-4 py-2 flex-1 min-w-0 text-sm align-top">
         <div className="flex items-center gap-2">
           <input name="office" value={newRecord.office} onChange={handleCreateChange} className={getInputClass('office')} placeholder="Building & Room" disabled={newRecord.hasNoOffice} />
           <button type="button" onClick={toggleCreateOfficeState} className={`p-1 rounded transition-colors ${newRecord.hasNoOffice ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`}>
             {newRecord.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
           </button>
         </div>
-      </td>
-      <td className="p-2 align-top">
+      </div>
+      <div className="px-4 py-2 flex-1 min-w-0 text-sm align-top">
         <div className="text-sm text-gray-500 italic">Calculated from courses</div>
-      </td>
-      <td className="p-2 align-top text-right">
-        <div className="flex gap-2">
+      </div>
+      <div className="px-4 py-2 w-28 flex-none text-right align-top">
+        <div className="flex gap-2 justify-end">
           <button onClick={handleCreateSave} className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"><Save size={16} /></button>
           <button onClick={handleCancelCreate} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
         </div>
-      </td>
-    </tr>
+      </div>
+    </div>
   ) : null;
 
   return (

@@ -8,15 +8,22 @@ import { AuthProvider } from './contexts/AuthContext.jsx'
 import { DataProvider } from './contexts/DataContext.jsx'
 import { UIProvider } from './contexts/UIContext.jsx'
 
+import { PeopleProvider } from './contexts/PeopleContext.jsx'
+import { ScheduleProvider } from './contexts/ScheduleContext.jsx'
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
         <UIProvider>
-          <DataProvider>
-            <App />
-            <Analytics />
-          </DataProvider>
+          <PeopleProvider>
+            <ScheduleProvider>
+              <DataProvider>
+                <App />
+                <Analytics />
+              </DataProvider>
+            </ScheduleProvider>
+          </PeopleProvider>
         </UIProvider>
       </AuthProvider>
     </BrowserRouter>

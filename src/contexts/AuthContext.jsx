@@ -15,10 +15,8 @@ export const AuthProvider = ({ children }) => {
   const [loadedProfile, setLoadedProfile] = useState(false);
   const [loadedAccess, setLoadedAccess] = useState(false);
 
-  const ADMIN_EMAILS = useMemo(() => {
-    const envEmails = (import.meta.env.VITE_ADMIN_EMAILS || import.meta.env.VITE_ADMIN_EMAIL || '').trim();
-    return envEmails ? envEmails.split(',').map(e => e.trim().toLowerCase()) : [];
-  }, []);
+  // Removed insecure .env based admin check. Admin access is now strictly role-based.
+  const ADMIN_EMAILS = [];
 
   const getAccessControlRef = () => doc(db, 'settings', 'accessControl');
 
@@ -131,16 +129,11 @@ export const AuthProvider = ({ children }) => {
       // Update last login timestamp
       try {
         await updateDoc(userRef, { lastLoginAt: serverTimestamp() });
-      } catch (_) {}
+      } catch (_) { }
       // Ensure bootstrap admin has admin role
-      if (isBootstrapAdmin && !(Array.isArray(existing.roles) && existing.roles.includes('admin'))) {
-        const updated = { ...existing, roles: [...new Set([...(existing.roles || []), 'admin'])], updatedAt: serverTimestamp() };
-        await updateDoc(userRef, { roles: updated.roles, updatedAt: updated.updatedAt });
-        await logUpdate(`User Roles - ${existing.email}`, 'users', firebaseUser.uid, { roles: updated.roles }, existing, 'AuthContext.jsx - loadUserProfile:bootstrapAdmin');
-        setUserProfile({ ...existing, roles: updated.roles });
-      } else {
-        setUserProfile(existing);
-      }
+      // Legacy code removed: We no longer auto-grant admin based on .env emails. 
+      // Admins must be manually promoted in Firestore or via the initial seed script.
+      setUserProfile(existing);
     }
   };
 
@@ -150,7 +143,7 @@ export const AuthProvider = ({ children }) => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       // Clean up any existing profile subscription before handling new user
       if (typeof stopUserProfile === 'function') {
-        try { stopUserProfile(); } catch (_) {}
+        try { stopUserProfile(); } catch (_) { }
         stopUserProfile = null;
       }
 
@@ -169,7 +162,7 @@ export const AuthProvider = ({ children }) => {
         } else {
           localStorage.removeItem('userInfo');
         }
-      } catch (_) {}
+      } catch (_) { }
       try {
         await bootstrapAccessControl();
       } finally {
@@ -180,7 +173,7 @@ export const AuthProvider = ({ children }) => {
         if (u) {
           await loadUserProfile(u);
         }
-      } catch (_) {}
+      } catch (_) { }
       // Subscribe to current user's profile
       if (u) {
         const userRef = doc(db, 'users', u.uid);
@@ -196,7 +189,7 @@ export const AuthProvider = ({ children }) => {
               role: (snap.exists() && Array.isArray(snap.data().roles) ? snap.data().roles[0] : existing.role || 'unknown')
             };
             localStorage.setItem('userInfo', JSON.stringify(updated));
-          } catch (_) {}
+          } catch (_) { }
           setLoadedProfile(true);
         }, () => {
           setUserProfile(null);
@@ -208,9 +201,9 @@ export const AuthProvider = ({ children }) => {
       }
     });
     return () => {
-      try { unsub(); } catch (_) {}
+      try { unsub(); } catch (_) { }
       if (typeof stopUserProfile === 'function') {
-        try { stopUserProfile(); } catch (_) {}
+        try { stopUserProfile(); } catch (_) { }
       }
     };
   }, []);
@@ -245,7 +238,7 @@ export const AuthProvider = ({ children }) => {
   const signUp = async (email, password, displayName) => {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     if (displayName) {
-      try { await updateProfile(cred.user, { displayName }); } catch (_) {}
+      try { await updateProfile(cred.user, { displayName }); } catch (_) { }
     }
     await loadUserProfile(cred.user);
     return cred.user;

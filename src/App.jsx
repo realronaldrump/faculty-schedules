@@ -1097,10 +1097,21 @@ function App() {
         actionType = 'UPDATE';
       }
 
-      // Filter out undefined values to prevent Firebase errors
-      const cleanData = Object.fromEntries(
-        Object.entries(facultyToUpdate).filter(([_, value]) => value !== undefined)
-      );
+      // Recursively remove undefined values from nested objects to prevent Firebase errors
+      // Also exclude derived/enriched fields that are added during data fetching but shouldn't be persisted
+      const derivedFields = ['program', 'instructor', 'rooms', 'room']; // These are enriched during fetch, not stored
+      const cleanDataRecursively = (obj) => {
+        if (obj === null || typeof obj !== 'object') return obj;
+        if (Array.isArray(obj)) {
+          return obj.map(item => cleanDataRecursively(item)).filter(item => item !== undefined);
+        }
+        return Object.fromEntries(
+          Object.entries(obj)
+            .filter(([key, value]) => value !== undefined && !derivedFields.includes(key))
+            .map(([key, value]) => [key, cleanDataRecursively(value)])
+        );
+      };
+      const cleanData = cleanDataRecursively(facultyToUpdate);
 
       const updateData = {
         ...cleanData,

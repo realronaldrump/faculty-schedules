@@ -7,6 +7,7 @@ import {
   formatHoursValue,
   getStudentAssignments
 } from '../utils/studentWorkers';
+import { formatPhoneNumber } from '../utils/directoryUtils';
 
 const WEEKDAY_OPTIONS = [
   { value: 'M', label: 'Mon' },
@@ -120,18 +121,6 @@ const toComparableValue = (value) => {
   if (Array.isArray(value)) return value.join(' ').toLowerCase();
   if (typeof value === 'boolean') return value ? '1' : '0';
   return String(value).toLowerCase();
-};
-
-const formatPhoneNumber = (phoneStr) => {
-    if (!phoneStr) return '-';
-    const cleaned = ('' + phoneStr).replace(/\D/g, '');
-    if (cleaned.length === 10) {
-        const match = cleaned.match(/^(\d{3})(\d{3})(\d{4})$/);
-        if (match) {
-            return `(${match[1]}) ${match[2]} - ${match[3]}`;
-        }
-    }
-    return phoneStr;
 };
 
 const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStudentDelete, showNotification, onNavigate }) => {
@@ -264,12 +253,12 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
       jobs: prev.jobs.map((job, jobIndex) =>
         jobIndex === index
           ? {
-              ...job,
-              weeklySchedule: [
-                ...(Array.isArray(job.weeklySchedule) ? job.weeklySchedule : []),
-                { day: draft.day, start: draft.start, end: draft.end }
-              ]
-            }
+            ...job,
+            weeklySchedule: [
+              ...(Array.isArray(job.weeklySchedule) ? job.weeklySchedule : []),
+              { day: draft.day, start: draft.start, end: draft.end }
+            ]
+          }
           : job
       )
     }));
@@ -287,9 +276,9 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
       jobs: prev.jobs.map((job, jobIndex) =>
         jobIndex === assignmentIndex
           ? {
-              ...job,
-              weeklySchedule: (job.weeklySchedule || []).filter((_, i) => i !== entryIndex)
-            }
+            ...job,
+            weeklySchedule: (job.weeklySchedule || []).filter((_, i) => i !== entryIndex)
+          }
           : job
       )
     }));
@@ -581,7 +570,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
         type: 'update',
         timestamp: new Date().toISOString(),
         originalData: originalStudent,
-        newData: {...editFormData}
+        newData: { ...editFormData }
       }]);
 
       await onStudentUpdate(payload);
@@ -699,7 +688,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
 
   const formatWeeklySchedule = (entries) => {
     if (!Array.isArray(entries) || entries.length === 0) return '-';
-    const dayOrder = ['M','T','W','R','F'];
+    const dayOrder = ['M', 'T', 'W', 'R', 'F'];
     const dayLabels = { M: 'Mon', T: 'Tue', W: 'Wed', R: 'Thu', F: 'Fri' };
     const to12Hour = (timeStr) => {
       if (!timeStr || typeof timeStr !== 'string') return timeStr || '';
@@ -719,7 +708,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
       grouped[key].push(e.day);
     });
     return Object.entries(grouped).map(([time, days]) => {
-      const orderedDays = days.sort((a,b) => dayOrder.indexOf(a) - dayOrder.indexOf(b));
+      const orderedDays = days.sort((a, b) => dayOrder.indexOf(a) - dayOrder.indexOf(b));
       const dayStr = orderedDays.map(d => dayLabels[d]).join(',');
       const [s, e] = time.split('-');
       return `${dayStr} ${to12Hour(s)}–${to12Hour(e)}`;
@@ -844,17 +833,15 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                 <div className="flex rounded-lg border border-gray-300 overflow-hidden">
                   <button
                     onClick={() => setNameSort('firstName')}
-                    className={`px-3 py-1 text-xs ${
-                      nameSort === 'firstName' ? 'bg-baylor-green text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
-                    }`}
+                    className={`px-3 py-1 text-xs ${nameSort === 'firstName' ? 'bg-baylor-green text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
                   >
                     First Name
                   </button>
                   <button
                     onClick={() => setNameSort('lastName')}
-                    className={`px-3 py-1 text-xs ${
-                      nameSort === 'lastName' ? 'bg-baylor-green text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
-                    }`}
+                    className={`px-3 py-1 text-xs ${nameSort === 'lastName' ? 'bg-baylor-green text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
                   >
                     Last Name
                   </button>
@@ -895,9 +882,8 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
             </div>
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                showFilters ? 'bg-baylor-green text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${showFilters ? 'bg-baylor-green text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
             >
               <Filter size={16} />
               Filters
@@ -994,74 +980,74 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
 
         {/* Advanced Filters */}
         {showFilters && (
-        <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-medium text-gray-900">Advanced Filters</h3>
-            <button
-              onClick={() => {
-                setFilters({
-                  departments: { include: [], exclude: [] },
-                  supervisors: { include: [], exclude: [] },
-                  jobTitles: [],
-                  buildings: [],
-                  hasEmail: true,
-                  hasPhone: true,
-                  activeOnly: true
-                });
-                setFilterText('');
-              }}
-              className="text-sm text-baylor-green hover:text-baylor-green/80 font-medium"
-            >
-              Clear All Filters
-            </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Supervisor</label>
-              <select
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                value=""
-                onChange={(e) => {
-                  if (e.target.value) {
-                    setFilters(prev => ({
-                      ...prev,
-                      supervisors: { ...prev.supervisors, include: [e.target.value] }
-                    }));
-                  }
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-medium text-gray-900">Advanced Filters</h3>
+              <button
+                onClick={() => {
+                  setFilters({
+                    departments: { include: [], exclude: [] },
+                    supervisors: { include: [], exclude: [] },
+                    jobTitles: [],
+                    buildings: [],
+                    hasEmail: true,
+                    hasPhone: true,
+                    activeOnly: true
+                  });
+                  setFilterText('');
                 }}
+                className="text-sm text-baylor-green hover:text-baylor-green/80 font-medium"
               >
-                <option value="">All Supervisors</option>
-                {availableSupervisors.map(supervisor => (
-                  <option key={supervisor} value={supervisor}>{supervisor}</option>
-                ))}
-              </select>
+                Clear All Filters
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Job Titles</label>
-              <MultiSelectDropdown
-                options={availableJobTitles}
-                selected={filters.jobTitles}
-                onChange={(selected) => setFilters(prev => ({
-                  ...prev,
-                  jobTitles: selected
-                }))}
-                placeholder="Select job titles..."
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Buildings</label>
-              <MultiSelectDropdown
-                options={availableBuildings}
-                selected={filters.buildings}
-                onChange={(selected) => setFilters(prev => ({
-                  ...prev,
-                  buildings: selected
-                }))}
-                placeholder="Select buildings..."
-              />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Supervisor</label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setFilters(prev => ({
+                        ...prev,
+                        supervisors: { ...prev.supervisors, include: [e.target.value] }
+                      }));
+                    }
+                  }}
+                >
+                  <option value="">All Supervisors</option>
+                  {availableSupervisors.map(supervisor => (
+                    <option key={supervisor} value={supervisor}>{supervisor}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Job Titles</label>
+                <MultiSelectDropdown
+                  options={availableJobTitles}
+                  selected={filters.jobTitles}
+                  onChange={(selected) => setFilters(prev => ({
+                    ...prev,
+                    jobTitles: selected
+                  }))}
+                  placeholder="Select job titles..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Buildings</label>
+                <MultiSelectDropdown
+                  options={availableBuildings}
+                  selected={filters.buildings}
+                  onChange={(selected) => setFilters(prev => ({
+                    ...prev,
+                    buildings: selected
+                  }))}
+                  placeholder="Select buildings..."
+                />
+              </div>
             </div>
           </div>
-        </div>
         )}
 
         {/* Create New Student Form */}
@@ -1411,395 +1397,395 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
               {filteredAndSortedData.map((student) => {
                 return (
                   <tr key={student.id} className="hover:bg-gray-50">
-                  {editingId === student.id ? (
-                    // Edit row
-                    <>
-                      <td className="p-2 align-top">
-                        <input
-                          type="text"
-                          value={editFormData.name || ''}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, name: e.target.value }))}
-                          className={`w-full border rounded px-2 py-1 text-sm ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
-                        />
-                        {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
-                      </td>
-                      <td className="p-2 align-top">
-                        <input
-                          type="email"
-                          value={editFormData.email || ''}
-                          onChange={(e) => setEditFormData(prev => ({ ...prev, email: e.target.value }))}
-                          className={`w-full border rounded px-2 py-1 text-sm ${errors.email ? 'border-red-500' : 'border-gray-300'}`}
-                        />
-                        {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-                      </td>
-                      <td className="p-2 align-top">
-                        <div className="space-y-3">
-                          {/* Contact Info */}
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Phone</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="tel"
-                                value={editFormData.phone || ''}
-                                onChange={(e) => setEditFormData(prev => ({ ...prev, phone: e.target.value }))}
-                                disabled={editFormData.hasNoPhone}
-                                className={`flex-1 border rounded px-2 py-1 text-sm ${errors.phone ? 'border-red-500' : 'border-gray-300'} ${editFormData.hasNoPhone ? 'bg-gray-100' : ''}`}
-                              />
-                              <label className="flex items-center text-xs whitespace-nowrap">
-                                <input
-                                  type="checkbox"
-                                  checked={editFormData.hasNoPhone || false}
-                                  onChange={(e) => setEditFormData(prev => ({ ...prev, hasNoPhone: e.target.checked, phone: e.target.checked ? '' : prev.phone }))}
-                                  className="mr-1"
-                                />
-                                No Phone
-                              </label>
-                            </div>
-                            {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
-                          </div>
-
-                          {/* Employment Dates */}
-                          <div className="border-t pt-3">
-                            <label className="block text-xs font-medium text-gray-700 mb-2">Employment Period</label>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <label className="block text-xs text-gray-600 mb-1">Start Date</label>
-                                <input 
-                                  type="date" 
-                                  className="border rounded px-2 py-1 w-full text-xs" 
-                                  value={editFormData.startDate || ''} 
-                                  onChange={e => setEditFormData(prev => ({ ...prev, startDate: e.target.value }))} 
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs text-gray-600 mb-1">End Date</label>
-                                <input 
-                                  type="date" 
-                                  className="border rounded px-2 py-1 w-full text-xs" 
-                                  value={editFormData.endDate || ''} 
-                                  onChange={e => setEditFormData(prev => ({ ...prev, endDate: e.target.value }))} 
-                                />
-                              </div>
-                            </div>
-                            <div className="mt-2">
-                              <label className="flex items-center gap-2 text-xs">
-                                <input 
-                                  type="checkbox" 
-                                  checked={editFormData.isActive !== false} 
-                                  onChange={e => setEditFormData(prev => ({ ...prev, isActive: e.target.checked }))} 
-                                  className="rounded"
-                                />
-                                <span className="font-medium">Active Employee</span>
-                              </label>
-                              {editFormData.endDate && (
-                                <p className="text-xs text-gray-500 mt-1">Will auto-inactivate after end date</p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-2 align-top" colSpan={3}>
-                        <div className="space-y-4">
-                          {/* Job Management Header */}
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-sm font-medium text-gray-900">Job Management</h4>
-                            <button
-                              onClick={() => {
-                                setEditFormData(prev => ({ ...prev, jobs: [...(prev.jobs || []), { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] }] }));
-                                setEditJobsDrafts(prev => ([...prev, { day: 'M', start: '', end: '' }]));
-                              }}
-                              className="px-3 py-1 bg-baylor-green text-white text-xs rounded hover:bg-baylor-green/90 transition-colors"
-                            >
-                              + Add Job
-                            </button>
-                          </div>
-
-                          {/* Jobs List */}
+                    {editingId === student.id ? (
+                      // Edit row
+                      <>
+                        <td className="p-2 align-top">
+                          <input
+                            type="text"
+                            value={editFormData.name || ''}
+                            onChange={(e) => setEditFormData(prev => ({ ...prev, name: e.target.value }))}
+                            className={`w-full border rounded px-2 py-1 text-sm ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
+                          />
+                          {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
+                        </td>
+                        <td className="p-2 align-top">
+                          <input
+                            type="email"
+                            value={editFormData.email || ''}
+                            onChange={(e) => setEditFormData(prev => ({ ...prev, email: e.target.value }))}
+                            className={`w-full border rounded px-2 py-1 text-sm ${errors.email ? 'border-red-500' : 'border-gray-300'}`}
+                          />
+                          {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+                        </td>
+                        <td className="p-2 align-top">
                           <div className="space-y-3">
-                            {(editFormData.jobs || []).map((job, idx) => (
-                              <div key={idx} className="border border-gray-200 rounded-lg p-4 bg-gray-50/50">
-                                {/* Job Header */}
-                                <div className="flex items-center justify-between mb-3">
-                                  <h5 className="font-medium text-gray-900 text-sm">Job {idx + 1}</h5>
-                                  {(editFormData.jobs || []).length > 1 && (
-                                    <button
-                                      onClick={() => {
-                                        setEditFormData(prev => ({ ...prev, jobs: prev.jobs.filter((_, i) => i !== idx) }));
-                                        setEditJobsDrafts(prev => prev.filter((_, i) => i !== idx));
-                                      }}
-                                      className="text-red-600 hover:text-red-800 text-xs font-medium"
-                                    >
-                                      Remove Job
-                                    </button>
-                                  )}
+                            {/* Contact Info */}
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Phone</label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="tel"
+                                  value={editFormData.phone || ''}
+                                  onChange={(e) => setEditFormData(prev => ({ ...prev, phone: e.target.value }))}
+                                  disabled={editFormData.hasNoPhone}
+                                  className={`flex-1 border rounded px-2 py-1 text-sm ${errors.phone ? 'border-red-500' : 'border-gray-300'} ${editFormData.hasNoPhone ? 'bg-gray-100' : ''}`}
+                                />
+                                <label className="flex items-center text-xs whitespace-nowrap">
+                                  <input
+                                    type="checkbox"
+                                    checked={editFormData.hasNoPhone || false}
+                                    onChange={(e) => setEditFormData(prev => ({ ...prev, hasNoPhone: e.target.checked, phone: e.target.checked ? '' : prev.phone }))}
+                                    className="mr-1"
+                                  />
+                                  No Phone
+                                </label>
+                              </div>
+                              {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
+                            </div>
+
+                            {/* Employment Dates */}
+                            <div className="border-t pt-3">
+                              <label className="block text-xs font-medium text-gray-700 mb-2">Employment Period</label>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="block text-xs text-gray-600 mb-1">Start Date</label>
+                                  <input
+                                    type="date"
+                                    className="border rounded px-2 py-1 w-full text-xs"
+                                    value={editFormData.startDate || ''}
+                                    onChange={e => setEditFormData(prev => ({ ...prev, startDate: e.target.value }))}
+                                  />
                                 </div>
-
-                                {/* Job Details */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                                  <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Job Title</label>
-                                    <input
-                                      type="text"
-                                      placeholder="e.g., Administrative Assistant"
-                                      value={job.jobTitle || ''}
-                                      onChange={e => setEditFormData(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, jobTitle: e.target.value } : j)}))}
-                                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Supervisor</label>
-                                    <input
-                                      type="text"
-                                      placeholder="Supervisor name"
-                                      value={job.supervisor || ''}
-                                      onChange={e => setEditFormData(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, supervisor: e.target.value } : j)}))}
-                                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Hourly Rate ($)</label>
-                                    <input
-                                      type="number"
-                                      step="0.01"
-                                      placeholder="0.00"
-                                      value={job.hourlyRate || ''}
-                                      onChange={e => setEditFormData(prev => ({...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, hourlyRate: e.target.value } : j)}))}
-                                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Location</label>
-                                    <div className="flex gap-4 items-center text-sm">
-                                      <label className="flex items-center gap-2">
-                                        <input
-                                          type="checkbox"
-                                          checked={(job.location || []).includes('Mary Gibbs Jones')}
-                                          onChange={(e) => setEditFormData(prev => ({
-                                            ...prev,
-                                            jobs: prev.jobs.map((j,i)=> i===idx? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Mary Gibbs Jones'])) : (j.location || []).filter(b => b !== 'Mary Gibbs Jones') } : j)
-                                          }))}
-                                          className="rounded"
-                                        />
-                                        Mary Gibbs Jones
-                                      </label>
-                                      <label className="flex items-center gap-2">
-                                        <input
-                                          type="checkbox"
-                                          checked={(job.location || []).includes('Goebel')}
-                                          onChange={(e) => setEditFormData(prev => ({
-                                            ...prev,
-                                            jobs: prev.jobs.map((j,i)=> i===idx? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Goebel'])) : (j.location || []).filter(b => b !== 'Goebel') } : j)
-                                          }))}
-                                          className="rounded"
-                                        />
-                                        Goebel
-                                      </label>
-                                    </div>
-                                  </div>
+                                <div>
+                                  <label className="block text-xs text-gray-600 mb-1">End Date</label>
+                                  <input
+                                    type="date"
+                                    className="border rounded px-2 py-1 w-full text-xs"
+                                    value={editFormData.endDate || ''}
+                                    onChange={e => setEditFormData(prev => ({ ...prev, endDate: e.target.value }))}
+                                  />
                                 </div>
+                              </div>
+                              <div className="mt-2">
+                                <label className="flex items-center gap-2 text-xs">
+                                  <input
+                                    type="checkbox"
+                                    checked={editFormData.isActive !== false}
+                                    onChange={e => setEditFormData(prev => ({ ...prev, isActive: e.target.checked }))}
+                                    className="rounded"
+                                  />
+                                  <span className="font-medium">Active Employee</span>
+                                </label>
+                                {editFormData.endDate && (
+                                  <p className="text-xs text-gray-500 mt-1">Will auto-inactivate after end date</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-2 align-top" colSpan={3}>
+                          <div className="space-y-4">
+                            {/* Job Management Header */}
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-sm font-medium text-gray-900">Job Management</h4>
+                              <button
+                                onClick={() => {
+                                  setEditFormData(prev => ({ ...prev, jobs: [...(prev.jobs || []), { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] }] }));
+                                  setEditJobsDrafts(prev => ([...prev, { day: 'M', start: '', end: '' }]));
+                                }}
+                                className="px-3 py-1 bg-baylor-green text-white text-xs rounded hover:bg-baylor-green/90 transition-colors"
+                              >
+                                + Add Job
+                              </button>
+                            </div>
 
-                                {/* Schedule Section */}
-                                <div className="border-t pt-3">
-                                  <label className="block text-xs font-medium text-gray-700 mb-2">Weekly Schedule</label>
-
-                                  {/* Add Schedule Entry */}
-                                  <div className="flex items-end gap-2 mb-3">
-                                    <div>
-                                      <label className="block text-xs text-gray-600 mb-1">Day</label>
-                                      <select
-                                        className="border border-gray-300 rounded px-2 py-1 text-sm"
-                                        value={(editJobsDrafts[idx]||{}).day || 'M'}
-                                        onChange={e => setEditJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), day: e.target.value } : d))}
+                            {/* Jobs List */}
+                            <div className="space-y-3">
+                              {(editFormData.jobs || []).map((job, idx) => (
+                                <div key={idx} className="border border-gray-200 rounded-lg p-4 bg-gray-50/50">
+                                  {/* Job Header */}
+                                  <div className="flex items-center justify-between mb-3">
+                                    <h5 className="font-medium text-gray-900 text-sm">Job {idx + 1}</h5>
+                                    {(editFormData.jobs || []).length > 1 && (
+                                      <button
+                                        onClick={() => {
+                                          setEditFormData(prev => ({ ...prev, jobs: prev.jobs.filter((_, i) => i !== idx) }));
+                                          setEditJobsDrafts(prev => prev.filter((_, i) => i !== idx));
+                                        }}
+                                        className="text-red-600 hover:text-red-800 text-xs font-medium"
                                       >
-                                        <option value="M">Monday</option>
-                                        <option value="T">Tuesday</option>
-                                        <option value="W">Wednesday</option>
-                                        <option value="R">Thursday</option>
-                                        <option value="F">Friday</option>
-                                      </select>
-                                    </div>
-                                    <div>
-                                      <label className="block text-xs text-gray-600 mb-1">Start Time</label>
-                                      <input
-                                        type="time"
-                                        className="border border-gray-300 rounded px-2 py-1 text-sm"
-                                        value={(editJobsDrafts[idx]||{}).start || ''}
-                                        onChange={e => setEditJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), start: e.target.value } : d))}
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="block text-xs text-gray-600 mb-1">End Time</label>
-                                      <input
-                                        type="time"
-                                        className="border border-gray-300 rounded px-2 py-1 text-sm"
-                                        value={(editJobsDrafts[idx]||{}).end || ''}
-                                        onChange={e => setEditJobsDrafts(prev => prev.map((d,i)=> i===idx? { ...(d||{}), end: e.target.value } : d))}
-                                      />
-                                    </div>
-                                    <button
-                                      onClick={() => {
-                                        const draft = editJobsDrafts[idx] || { day: 'M', start: '', end: '' };
-                                        if (!draft.day || !draft.start || !draft.end) return;
-                                        if (draft.start >= draft.end) { setErrors(prev => ({ ...prev, weeklySchedule: 'End time must be after start time' })); return; }
-                                        setEditFormData(prev => ({
-                                          ...prev,
-                                          jobs: prev.jobs.map((j,i)=> i===idx? { ...j, weeklySchedule: [...(j.weeklySchedule || []), { ...draft }] } : j)
-                                        }));
-                                        setEditJobsDrafts(prev => prev.map((d,i)=> i===idx? { day: 'M', start: '', end: '' } : d));
-                                        setErrors(prev => ({ ...prev, weeklySchedule: undefined }));
-                                      }}
-                                      className="px-3 py-1 bg-baylor-green text-white text-xs rounded hover:bg-baylor-green/90 transition-colors"
-                                    >
-                                      Add Time
-                                    </button>
-                                  </div>
-
-                                  {/* Schedule Entries */}
-                                  <div className="space-y-2">
-                                    {(job.weeklySchedule || []).map((entry, k) => (
-                                      <div key={k} className="flex items-center justify-between bg-white border border-gray-200 rounded px-3 py-2">
-                                        <span className="text-sm">
-                                          {entry.day === 'M' ? 'Monday' : entry.day === 'T' ? 'Tuesday' : entry.day === 'W' ? 'Wednesday' : entry.day === 'R' ? 'Thursday' : 'Friday'}
-                                          {' '}{formatTime12h(entry.start)} - {formatTime12h(entry.end)}
-                                        </span>
-                                        <button
-                                          onClick={() => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j,i)=> i===idx? { ...j, weeklySchedule: (j.weeklySchedule || []).filter((_, x) => x !== k) } : j) }))}
-                                          className="text-red-500 hover:text-red-700 p-1"
-                                        >
-                                          <X className="h-4 w-4" />
-                                        </button>
-                                      </div>
-                                    ))}
-                                    {(job.weeklySchedule || []).length === 0 && (
-                                      <div className="text-center text-gray-500 text-sm py-4 border border-gray-200 rounded bg-gray-50">
-                                        No schedule entries yet
-                                      </div>
+                                        Remove Job
+                                      </button>
                                     )}
                                   </div>
-                                  {errors.weeklySchedule && <p className="text-red-500 text-xs mt-2">{errors.weeklySchedule}</p>}
+
+                                  {/* Job Details */}
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                                    <div>
+                                      <label className="block text-xs font-medium text-gray-700 mb-1">Job Title</label>
+                                      <input
+                                        type="text"
+                                        placeholder="e.g., Administrative Assistant"
+                                        value={job.jobTitle || ''}
+                                        onChange={e => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j, i) => i === idx ? { ...j, jobTitle: e.target.value } : j) }))}
+                                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium text-gray-700 mb-1">Supervisor</label>
+                                      <input
+                                        type="text"
+                                        placeholder="Supervisor name"
+                                        value={job.supervisor || ''}
+                                        onChange={e => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j, i) => i === idx ? { ...j, supervisor: e.target.value } : j) }))}
+                                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium text-gray-700 mb-1">Hourly Rate ($)</label>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="0.00"
+                                        value={job.hourlyRate || ''}
+                                        onChange={e => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j, i) => i === idx ? { ...j, hourlyRate: e.target.value } : j) }))}
+                                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium text-gray-700 mb-1">Location</label>
+                                      <div className="flex gap-4 items-center text-sm">
+                                        <label className="flex items-center gap-2">
+                                          <input
+                                            type="checkbox"
+                                            checked={(job.location || []).includes('Mary Gibbs Jones')}
+                                            onChange={(e) => setEditFormData(prev => ({
+                                              ...prev,
+                                              jobs: prev.jobs.map((j, i) => i === idx ? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Mary Gibbs Jones'])) : (j.location || []).filter(b => b !== 'Mary Gibbs Jones') } : j)
+                                            }))}
+                                            className="rounded"
+                                          />
+                                          Mary Gibbs Jones
+                                        </label>
+                                        <label className="flex items-center gap-2">
+                                          <input
+                                            type="checkbox"
+                                            checked={(job.location || []).includes('Goebel')}
+                                            onChange={(e) => setEditFormData(prev => ({
+                                              ...prev,
+                                              jobs: prev.jobs.map((j, i) => i === idx ? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Goebel'])) : (j.location || []).filter(b => b !== 'Goebel') } : j)
+                                            }))}
+                                            className="rounded"
+                                          />
+                                          Goebel
+                                        </label>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Schedule Section */}
+                                  <div className="border-t pt-3">
+                                    <label className="block text-xs font-medium text-gray-700 mb-2">Weekly Schedule</label>
+
+                                    {/* Add Schedule Entry */}
+                                    <div className="flex items-end gap-2 mb-3">
+                                      <div>
+                                        <label className="block text-xs text-gray-600 mb-1">Day</label>
+                                        <select
+                                          className="border border-gray-300 rounded px-2 py-1 text-sm"
+                                          value={(editJobsDrafts[idx] || {}).day || 'M'}
+                                          onChange={e => setEditJobsDrafts(prev => prev.map((d, i) => i === idx ? { ...(d || {}), day: e.target.value } : d))}
+                                        >
+                                          <option value="M">Monday</option>
+                                          <option value="T">Tuesday</option>
+                                          <option value="W">Wednesday</option>
+                                          <option value="R">Thursday</option>
+                                          <option value="F">Friday</option>
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs text-gray-600 mb-1">Start Time</label>
+                                        <input
+                                          type="time"
+                                          className="border border-gray-300 rounded px-2 py-1 text-sm"
+                                          value={(editJobsDrafts[idx] || {}).start || ''}
+                                          onChange={e => setEditJobsDrafts(prev => prev.map((d, i) => i === idx ? { ...(d || {}), start: e.target.value } : d))}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs text-gray-600 mb-1">End Time</label>
+                                        <input
+                                          type="time"
+                                          className="border border-gray-300 rounded px-2 py-1 text-sm"
+                                          value={(editJobsDrafts[idx] || {}).end || ''}
+                                          onChange={e => setEditJobsDrafts(prev => prev.map((d, i) => i === idx ? { ...(d || {}), end: e.target.value } : d))}
+                                        />
+                                      </div>
+                                      <button
+                                        onClick={() => {
+                                          const draft = editJobsDrafts[idx] || { day: 'M', start: '', end: '' };
+                                          if (!draft.day || !draft.start || !draft.end) return;
+                                          if (draft.start >= draft.end) { setErrors(prev => ({ ...prev, weeklySchedule: 'End time must be after start time' })); return; }
+                                          setEditFormData(prev => ({
+                                            ...prev,
+                                            jobs: prev.jobs.map((j, i) => i === idx ? { ...j, weeklySchedule: [...(j.weeklySchedule || []), { ...draft }] } : j)
+                                          }));
+                                          setEditJobsDrafts(prev => prev.map((d, i) => i === idx ? { day: 'M', start: '', end: '' } : d));
+                                          setErrors(prev => ({ ...prev, weeklySchedule: undefined }));
+                                        }}
+                                        className="px-3 py-1 bg-baylor-green text-white text-xs rounded hover:bg-baylor-green/90 transition-colors"
+                                      >
+                                        Add Time
+                                      </button>
+                                    </div>
+
+                                    {/* Schedule Entries */}
+                                    <div className="space-y-2">
+                                      {(job.weeklySchedule || []).map((entry, k) => (
+                                        <div key={k} className="flex items-center justify-between bg-white border border-gray-200 rounded px-3 py-2">
+                                          <span className="text-sm">
+                                            {entry.day === 'M' ? 'Monday' : entry.day === 'T' ? 'Tuesday' : entry.day === 'W' ? 'Wednesday' : entry.day === 'R' ? 'Thursday' : 'Friday'}
+                                            {' '}{formatTime12h(entry.start)} - {formatTime12h(entry.end)}
+                                          </span>
+                                          <button
+                                            onClick={() => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j, i) => i === idx ? { ...j, weeklySchedule: (j.weeklySchedule || []).filter((_, x) => x !== k) } : j) }))}
+                                            className="text-red-500 hover:text-red-700 p-1"
+                                          >
+                                            <X className="h-4 w-4" />
+                                          </button>
+                                        </div>
+                                      ))}
+                                      {(job.weeklySchedule || []).length === 0 && (
+                                        <div className="text-center text-gray-500 text-sm py-4 border border-gray-200 rounded bg-gray-50">
+                                          No schedule entries yet
+                                        </div>
+                                      )}
+                                    </div>
+                                    {errors.weeklySchedule && <p className="text-red-500 text-xs mt-2">{errors.weeklySchedule}</p>}
+                                  </div>
                                 </div>
+                              ))}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-2 align-top">
+                          <div className="flex gap-3 text-xs">
+                            <label className="flex items-center gap-1">
+                              <input type="checkbox" checked={(editFormData.primaryBuildings || []).includes('Mary Gibbs Jones')} onChange={(e) => setEditFormData(prev => ({
+                                ...prev,
+                                primaryBuildings: e.target.checked
+                                  ? Array.from(new Set([...(prev.primaryBuildings || []), 'Mary Gibbs Jones']))
+                                  : (prev.primaryBuildings || []).filter(b => b !== 'Mary Gibbs Jones')
+                              }))} /> MGJ
+                            </label>
+                            <label className="flex items-center gap-1">
+                              <input type="checkbox" checked={(editFormData.primaryBuildings || []).includes('Goebel')} onChange={(e) => setEditFormData(prev => ({
+                                ...prev,
+                                primaryBuildings: e.target.checked
+                                  ? Array.from(new Set([...(prev.primaryBuildings || []), 'Goebel']))
+                                  : (prev.primaryBuildings || []).filter(b => b !== 'Goebel')
+                              }))} /> Goebel
+                            </label>
+                          </div>
+                        </td>
+                        <td className="p-2 align-top text-right">
+                          <div className="flex gap-2 justify-end">
+                            <button
+                              onClick={saveEdit}
+                              className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
+                              title="Save"
+                            >
+                              <Save size={16} />
+                            </button>
+                            <button
+                              onClick={cancelEdit}
+                              className="p-2 text-red-600 hover:bg-red-100 rounded-full"
+                              title="Cancel"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      // Display row
+                      <>
+                        <td className="px-4 py-3 whitespace-nowrap cursor-pointer" onClick={() => setSelectedStudentForCard(student)}>
+                          <div className="flex items-center">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">
+                                {student.name}
                               </div>
-                            ))}
-                          </div>
-                        </div>
-                      </td>
-              <td className="p-2 align-top">
-                <div className="flex gap-3 text-xs">
-                  <label className="flex items-center gap-1">
-                    <input type="checkbox" checked={(editFormData.primaryBuildings || []).includes('Mary Gibbs Jones')} onChange={(e) => setEditFormData(prev => ({
-                      ...prev,
-                      primaryBuildings: e.target.checked
-                        ? Array.from(new Set([...(prev.primaryBuildings || []), 'Mary Gibbs Jones']))
-                        : (prev.primaryBuildings || []).filter(b => b !== 'Mary Gibbs Jones')
-                    }))} /> MGJ
-                  </label>
-                  <label className="flex items-center gap-1">
-                    <input type="checkbox" checked={(editFormData.primaryBuildings || []).includes('Goebel')} onChange={(e) => setEditFormData(prev => ({
-                      ...prev,
-                      primaryBuildings: e.target.checked
-                        ? Array.from(new Set([...(prev.primaryBuildings || []), 'Goebel']))
-                        : (prev.primaryBuildings || []).filter(b => b !== 'Goebel')
-                    }))} /> Goebel
-                  </label>
-                </div>
-              </td>
-                      <td className="p-2 align-top text-right">
-                        <div className="flex gap-2 justify-end">
-                          <button
-                            onClick={saveEdit}
-                            className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
-                            title="Save"
-                          >
-                            <Save size={16} />
-                          </button>
-                          <button
-                            onClick={cancelEdit}
-                            className="p-2 text-red-600 hover:bg-red-100 rounded-full"
-                            title="Cancel"
-                          >
-                            <X size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </>
-                  ) : (
-                    // Display row
-                    <>
-                      <td className="px-4 py-3 whitespace-nowrap cursor-pointer" onClick={() => setSelectedStudentForCard(student)}>
-                        <div className="flex items-center">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">
-                              {student.name}
-                            </div>
-                            <div className="text-xs text-gray-500 space-x-2">
-                              {student.startDate && (
-                                <span>Start: {new Date(student.startDate).toLocaleDateString()}</span>
-                              )}
-                              {student.endDate && (
-                                <span>End: {new Date(student.endDate).toLocaleDateString()}</span>
-                              )}
-                              {student.isActive === false && (
-                                <span className="text-red-600 font-medium">Inactive</span>
-                              )}
+                              <div className="text-xs text-gray-500 space-x-2">
+                                {student.startDate && (
+                                  <span>Start: {new Date(student.startDate).toLocaleDateString()}</span>
+                                )}
+                                {student.endDate && (
+                                  <span>End: {new Date(student.endDate).toLocaleDateString()}</span>
+                                )}
+                                {student.isActive === false && (
+                                  <span className="text-red-600 font-medium">Inactive</span>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <Mail className="h-4 w-4 text-gray-400 mr-2" />
-                          <span className="text-sm text-gray-900">{student.email || '-'}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center">
-                          {student.hasNoPhone ? (
-                            <PhoneOff className="h-4 w-4 text-gray-400 mr-2" />
-                          ) : (
-                            <Phone className="h-4 w-4 text-gray-400 mr-2" />
-                          )}
-                          <span className="text-sm text-gray-900">
-                            {student.hasNoPhone ? 'No Phone' : formatPhoneNumber(student.phone)}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center">
-                          <Clock className="h-4 w-4 text-gray-400 mr-2" />
-                          <span className="text-sm text-gray-900">{formatWeeklySchedule(student.weeklySchedule) || '-'}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="text-sm text-gray-900">{student.jobTitle || '-'}</span>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="text-sm text-gray-900">{student.supervisor || '-'}</span>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="text-sm text-gray-900">{Array.isArray(student.primaryBuildings) ? student.primaryBuildings.join(', ') : (student.primaryBuilding || '-')}</span>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex justify-end gap-1">
-                          <button
-                            onClick={() => startEdit(student)}
-                            className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
-                            title="Edit"
-                            disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canEditStudent === false}
-                          >
-                            <Edit size={16} />
-                          </button>
-                          <button
-                            onClick={() => confirmDelete(student)}
-                            className="p-2 text-red-600 hover:bg-red-100 rounded-full"
-                            title="Delete"
-                            disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canDeleteStudent === false}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </>
-                  )}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <Mail className="h-4 w-4 text-gray-400 mr-2" />
+                            <span className="text-sm text-gray-900">{student.email || '-'}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center">
+                            {student.hasNoPhone ? (
+                              <PhoneOff className="h-4 w-4 text-gray-400 mr-2" />
+                            ) : (
+                              <Phone className="h-4 w-4 text-gray-400 mr-2" />
+                            )}
+                            <span className="text-sm text-gray-900">
+                              {student.hasNoPhone ? 'No Phone' : formatPhoneNumber(student.phone)}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center">
+                            <Clock className="h-4 w-4 text-gray-400 mr-2" />
+                            <span className="text-sm text-gray-900">{formatWeeklySchedule(student.weeklySchedule) || '-'}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="text-sm text-gray-900">{student.jobTitle || '-'}</span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="text-sm text-gray-900">{student.supervisor || '-'}</span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="text-sm text-gray-900">{Array.isArray(student.primaryBuildings) ? student.primaryBuildings.join(', ') : (student.primaryBuilding || '-')}</span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex justify-end gap-1">
+                            <button
+                              onClick={() => startEdit(student)}
+                              className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
+                              title="Edit"
+                              disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canEditStudent === false}
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              onClick={() => confirmDelete(student)}
+                              className="p-2 text-red-600 hover:bg-red-100 rounded-full"
+                              title="Delete"
+                              disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canDeleteStudent === false}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 );
               })}

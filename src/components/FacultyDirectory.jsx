@@ -2,18 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Edit, Save, X, BookUser, Mail, Phone, PhoneOff, Building, BuildingIcon, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, BookOpen, Filter, UserCog, Download } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
 import MultiSelectDropdown from './MultiSelectDropdown';
-
-const formatPhoneNumber = (phoneStr) => {
-    if (!phoneStr) return '-';
-    const cleaned = ('' + phoneStr).replace(/\D/g, '');
-    if (cleaned.length === 10) {
-        const match = cleaned.match(/^(\d{3})(\d{3})(\d{4})$/);
-        if (match) {
-            return `(${match[1]}) ${match[2]} - ${match[3]}`;
-        }
-    }
-    return phoneStr;
-};
+import { formatPhoneNumber, extractBuildingName } from '../utils/directoryUtils';
 
 const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onFacultyUpdate, onStaffUpdate, onFacultyDelete, programs = [] }) => {
   const [editingId, setEditingId] = useState(null);
@@ -64,68 +53,25 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
   });
   const [pinUPDsFirst, setPinUPDsFirst] = useState(false);
 
-  // Helper function to extract building name from office location
-  const extractBuildingName = (officeLocation) => {
-    if (!officeLocation || officeLocation.trim() === '') {
-      return 'No Building';
-    }
-
-    const office = officeLocation.trim();
-    
-    // Handle common building name patterns
-    const buildingKeywords = ['BUILDING', 'HALL', 'GYMNASIUM', 'TOWER', 'CENTER', 'COMPLEX'];
-    
-    // Check if office contains building keywords
-    for (const keyword of buildingKeywords) {
-      const keywordIndex = office.toUpperCase().indexOf(keyword);
-      if (keywordIndex !== -1) {
-        // Include everything up to and including the keyword
-        const endIndex = keywordIndex + keyword.length;
-        return office.substring(0, endIndex).trim();
-      }
-    }
-    
-    // If no building keywords found, try to extract building name before room numbers
-    // Look for patterns where building name ends before standalone numbers
-    const match = office.match(/^([A-Za-z\s]+?)(\s+\d+.*)?$/);
-    if (match && match[1]) {
-      return match[1].trim();
-    }
-    
-    // Handle special cases like "801 WASHINGTON TOWER" where number is part of building name
-    // If it starts with a number followed by words, keep it all as building name
-    const startsWithNumber = office.match(/^\d+\s+[A-Za-z]/);
-    if (startsWithNumber) {
-      // Look for room-like patterns at the end
-      const roomPattern = office.match(/^(.+?)(\s+\d{2,4}(\s+\d+)*)$/);
-      if (roomPattern) {
-        return roomPattern[1].trim();
-      }
-      return office; // Keep whole thing if no clear room pattern
-    }
-    
-    return office; // Fallback: return the whole office location
-  };
-
   // Calculate course counts for each faculty member
   const facultyWithCourseCounts = useMemo(() => {
     if (!facultyData || !Array.isArray(facultyData)) return [];
-    
+
     return facultyData.map(faculty => {
       const facultyName = faculty.name;
       const facultyCourses = scheduleData.filter(schedule => {
-        const instructorName = schedule.instructor ? 
+        const instructorName = schedule.instructor ?
           `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim() :
           (schedule.instructorName || schedule.Instructor || '');
-        
+
         return instructorName === facultyName;
       });
-      
+
       // Get unique courses (by course code)
-      const uniqueCourses = [...new Set(facultyCourses.map(schedule => 
+      const uniqueCourses = [...new Set(facultyCourses.map(schedule =>
         schedule.courseCode || schedule.Course || ''
       ))].filter(courseCode => courseCode.trim() !== '');
-      
+
       return {
         ...faculty,
         courseCount: uniqueCourses.length,
@@ -143,13 +89,13 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
   // Remove duplicates from directoryData and ensure unique entries
   const uniqueDirectoryData = useMemo(() => {
     if (!facultyWithCourseCounts || !Array.isArray(facultyWithCourseCounts)) return [];
-    
+
     const uniqueMap = new Map();
-    
+
     facultyWithCourseCounts.forEach(faculty => {
       // Create a unique key based on name and email
       const key = `${faculty.name?.toLowerCase()}-${(faculty.email || 'no-email').toLowerCase()}`;
-      
+
       // Only add if not already in map, or if this one has more complete data
       if (!uniqueMap.has(key)) {
         uniqueMap.set(key, faculty);
@@ -158,13 +104,13 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
         // Keep the one with more complete data (more fields filled)
         const existingFields = Object.values(existing).filter(v => v && v !== '').length;
         const newFields = Object.values(faculty).filter(v => v && v !== '').length;
-        
+
         if (newFields > existingFields) {
           uniqueMap.set(key, faculty);
         }
       }
     });
-    
+
     return Array.from(uniqueMap.values());
   }, [facultyWithCourseCounts]);
 
@@ -179,7 +125,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
       if (person.program && person.program.name) {
         programs.add(person.program.name);
       }
-      
+
       if (person.jobTitle) {
         jobTitles.add(person.jobTitle);
       }
@@ -206,7 +152,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
     // Search term filter
     if (filterText) {
       const term = filterText.toLowerCase();
-      data = data.filter(person => 
+      data = data.filter(person =>
         person.name?.toLowerCase().includes(term) ||
         person.email?.toLowerCase().includes(term) ||
         person.jobTitle?.toLowerCase().includes(term) ||
@@ -326,7 +272,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
         if (!a.isUPD && !!b.isUPD) return 1;
       }
       let valA, valB;
-      
+
       if (sortConfig.key === 'name') {
         // Handle special name sorting based on user preference
         if (nameSort === 'firstName') {
@@ -354,7 +300,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
       }
 
       if (typeof valA === 'boolean') {
-          return (valA === valB) ? 0 : valA ? -1 : 1;
+        return (valA === valB) ? 0 : valA ? -1 : 1;
       }
 
       if (valA < valB) {
@@ -371,21 +317,21 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
 
   const validate = (data) => {
     const newErrors = {};
-    
+
     // Email validation
     if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
-        newErrors.email = 'Please enter a valid email address.';
+      newErrors.email = 'Please enter a valid email address.';
     }
 
     // Phone validation
     const phoneDigits = (data.phone || '').replace(/\D/g, '');
     if (data.phone && phoneDigits.length !== 10) {
-        newErrors.phone = 'Phone number must contain exactly 10 digits.';
+      newErrors.phone = 'Phone number must contain exactly 10 digits.';
     }
 
     // Baylor ID validation
     if (data.baylorId && !/^\d{9}$/.test(data.baylorId)) {
-        newErrors.baylorId = 'Baylor ID must be exactly 9 digits.';
+      newErrors.baylorId = 'Baylor ID must be exactly 9 digits.';
     }
 
     setErrors(newErrors);
@@ -408,67 +354,67 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
 
   const handleSave = async () => {
     if (validate(editFormData)) {
-        const originalData = uniqueDirectoryData.find(f => f.id === editingId);
-        const dataToSave = { ...editFormData };
-        // Ensure the `roles` field stays in sync with the "Also Staff" checkbox
-        const originalRoles = originalData?.roles;
-        let updatedRoles;
-        if (Array.isArray(originalRoles)) {
-          // Remove any existing faculty/staff duplicates first
-          updatedRoles = originalRoles.filter(r => r !== 'faculty' && r !== 'staff');
-          // Faculty directory always implies faculty role
-          updatedRoles.push('faculty');
-          if (dataToSave.isAlsoStaff) updatedRoles.push('staff');
-        } else {
-          // Object (or missing) representation – normalise to object format
-          updatedRoles = {
-            ...(typeof originalRoles === 'object' && originalRoles !== null ? originalRoles : {}),
-            faculty: true,
-            staff: dataToSave.isAlsoStaff || false
-          };
-        }
-        dataToSave.roles = updatedRoles;
-        const cleanedData = { ...dataToSave, phone: (dataToSave.phone || '').replace(/\D/g, '') };
+      const originalData = uniqueDirectoryData.find(f => f.id === editingId);
+      const dataToSave = { ...editFormData };
+      // Ensure the `roles` field stays in sync with the "Also Staff" checkbox
+      const originalRoles = originalData?.roles;
+      let updatedRoles;
+      if (Array.isArray(originalRoles)) {
+        // Remove any existing faculty/staff duplicates first
+        updatedRoles = originalRoles.filter(r => r !== 'faculty' && r !== 'staff');
+        // Faculty directory always implies faculty role
+        updatedRoles.push('faculty');
+        if (dataToSave.isAlsoStaff) updatedRoles.push('staff');
+      } else {
+        // Object (or missing) representation – normalise to object format
+        updatedRoles = {
+          ...(typeof originalRoles === 'object' && originalRoles !== null ? originalRoles : {}),
+          faculty: true,
+          staff: dataToSave.isAlsoStaff || false
+        };
+      }
+      dataToSave.roles = updatedRoles;
+      const cleanedData = { ...dataToSave, phone: (dataToSave.phone || '').replace(/\D/g, '') };
 
 
 
-        try {
-          // Always use onFacultyUpdate when editing from faculty directory
-          // The handler will manage dual roles properly
-          await onFacultyUpdate(cleanedData, originalData);
-          
-          setEditingId(null);
-          setErrors({});
-        } catch (error) {
+      try {
+        // Always use onFacultyUpdate when editing from faculty directory
+        // The handler will manage dual roles properly
+        await onFacultyUpdate(cleanedData, originalData);
 
-        }
+        setEditingId(null);
+        setErrors({});
+      } catch (error) {
+
+      }
     }
   };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     let finalValue = type === 'checkbox' ? checked : value;
-    
+
     // Allow only numbers for phone input
     if (name === 'phone') {
-        finalValue = finalValue.replace(/\D/g, '');
+      finalValue = finalValue.replace(/\D/g, '');
     }
-    
+
     // Allow only numbers for Baylor ID and limit to 9 digits
     if (name === 'baylorId') {
-        finalValue = finalValue.replace(/\D/g, '').slice(0, 9);
+      finalValue = finalValue.replace(/\D/g, '').slice(0, 9);
     }
 
     const newFormData = {
-        ...editFormData,
-        [name]: finalValue,
+      ...editFormData,
+      [name]: finalValue,
     };
-    
+
     setEditFormData(newFormData);
 
     // Live validation
     if (Object.keys(errors).length > 0) {
-        validate(newFormData);
+      validate(newFormData);
     }
   };
 
@@ -507,7 +453,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
       office: newHasNoOffice ? '' : newFaculty.office
     });
   };
-  
+
   const handleSort = (key) => {
     let direction = 'ascending';
     if (sortConfig.key === key && sortConfig.direction === 'ascending') {
@@ -515,7 +461,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
     }
     setSortConfig({ key, direction });
   };
-  
+
   const handleDelete = (faculty) => {
     setFacultyToDelete(faculty);
     setShowDeleteConfirm(true);
@@ -582,11 +528,11 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
   const handleCreateChange = (e) => {
     const { name, value, type, checked } = e.target;
     let finalValue = type === 'checkbox' ? checked : value;
-    
+
     if (name === 'phone') {
       finalValue = finalValue.replace(/\D/g, '');
     }
-    
+
     if (name === 'baylorId') {
       finalValue = finalValue.replace(/\D/g, '').slice(0, 9);
     }
@@ -613,21 +559,21 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
         lastName: lastName,
         phone: (newFaculty.phone || '').replace(/\D/g, '')
       };
-      
+
       // Set roles for new faculty record
       dataToSave.roles = {
         faculty: true,
         staff: newFaculty.isAlsoStaff || false
       };
-      
 
-      
+
+
       await onFacultyUpdate(dataToSave);
       setIsCreating(false);
       setErrors({});
     }
   };
-  
+
   const clearFilters = () => {
     setFilters({
       programs: [],
@@ -677,121 +623,117 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
   const SortableHeader = ({ label, columnKey }) => {
     const isSorted = sortConfig.key === columnKey;
     const directionIcon = isSorted ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : <ArrowUpDown size={14} className="opacity-30" />;
-    
+
     return (
       <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">
         <button className="flex items-center gap-2" onClick={() => handleSort(columnKey)}>
-            {label}
-            {directionIcon}
+          {label}
+          {directionIcon}
         </button>
       </th>
     );
   };
 
   const getInputClass = (fieldName) => {
-      const baseClass = "w-full p-1 border rounded bg-baylor-gold/10";
-      return errors[fieldName] ? `${baseClass} border-red-500` : `${baseClass} border-baylor-gold`;
+    const baseClass = "w-full p-1 border rounded bg-baylor-gold/10";
+    return errors[fieldName] ? `${baseClass} border-red-500` : `${baseClass} border-baylor-gold`;
   };
 
   return (
     <div className="space-y-6">
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
         <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200">
-            <h2 className="text-xl font-serif font-semibold text-baylor-green flex items-center">
-              <BookUser className="mr-2 text-baylor-gold" size={20} />
-              Faculty Directory ({sortedAndFilteredData.length} members)
-            </h2>
-            <div className="flex items-center gap-4">
-                {/* UPD-first toggle (subtle) */}
-                <button
-                  onClick={() => setPinUPDsFirst(prev => !prev)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
-                    pinUPDsFirst
-                      ? 'bg-amber-100 text-amber-800 border-amber-200'
-                      : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'
-                  }`}
-                  title="Bring Undergraduate Program Directors to the top"
-                >
-                  <UserCog size={16} />
-                  <span className="text-xs font-medium">UPD first</span>
-                </button>
-                {/* Course count filter UI */}
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={showOnlyWithCourses}
-                    onChange={e => setShowOnlyWithCourses(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                  />
-                  Only show faculty with at least 1 course
-                </label>
-                {/* Name Sort Options */}
-                {sortConfig.key === 'name' && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-gray-600">Sort by:</span>
-                    <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-                      <button
-                        onClick={() => setNameSort('firstName')}
-                        className={`px-3 py-1 text-xs ${
-                          nameSort === 'firstName' 
-                            ? 'bg-baylor-green text-white' 
-                            : 'bg-white text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        First Name
-                      </button>
-                      <button
-                        onClick={() => setNameSort('lastName')}
-                        className={`px-3 py-1 text-xs ${
-                          nameSort === 'lastName' 
-                            ? 'bg-baylor-green text-white' 
-                            : 'bg-white text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        Last Name
-                      </button>
-                    </div>
-                  </div>
-                )}
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                    <input 
-                        type="text"
-                        placeholder="Filter directory..."
-                        value={filterText}
-                        onChange={(e) => setFilterText(e.target.value)}
-                        className="w-full pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
-                    />
+          <h2 className="text-xl font-serif font-semibold text-baylor-green flex items-center">
+            <BookUser className="mr-2 text-baylor-gold" size={20} />
+            Faculty Directory ({sortedAndFilteredData.length} members)
+          </h2>
+          <div className="flex items-center gap-4">
+            {/* UPD-first toggle (subtle) */}
+            <button
+              onClick={() => setPinUPDsFirst(prev => !prev)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${pinUPDsFirst
+                ? 'bg-amber-100 text-amber-800 border-amber-200'
+                : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'
+                }`}
+              title="Bring Undergraduate Program Directors to the top"
+            >
+              <UserCog size={16} />
+              <span className="text-xs font-medium">UPD first</span>
+            </button>
+            {/* Course count filter UI */}
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={showOnlyWithCourses}
+                onChange={e => setShowOnlyWithCourses(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+              />
+              Only show faculty with at least 1 course
+            </label>
+            {/* Name Sort Options */}
+            {sortConfig.key === 'name' && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-gray-600">Sort by:</span>
+                <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                  <button
+                    onClick={() => setNameSort('firstName')}
+                    className={`px-3 py-1 text-xs ${nameSort === 'firstName'
+                      ? 'bg-baylor-green text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
+                  >
+                    First Name
+                  </button>
+                  <button
+                    onClick={() => setNameSort('lastName')}
+                    className={`px-3 py-1 text-xs ${nameSort === 'lastName'
+                      ? 'bg-baylor-green text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
+                  >
+                    Last Name
+                  </button>
                 </div>
-                <button
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                    showFilters 
-                      ? 'bg-baylor-green text-white' 
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <Filter size={16} />
-                  Filters
-                </button>
-
-                <button
-                  onClick={exportToCSV}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  <Download size={18} />
-                  Export CSV
-                </button>
-
-                <button
-                  onClick={handleCreate}
-                  className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
-                  disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canAddFaculty === false}
-                >
-                  <Plus size={18} />
-                  Add Faculty
-                </button>
+              </div>
+            )}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="text"
+                placeholder="Filter directory..."
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                className="w-full pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+              />
             </div>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${showFilters
+                ? 'bg-baylor-green text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+            >
+              <Filter size={16} />
+              Filters
+            </button>
+
+            <button
+              onClick={exportToCSV}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Download size={18} />
+              Export CSV
+            </button>
+
+            <button
+              onClick={handleCreate}
+              className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+              disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canAddFaculty === false}
+            >
+              <Plus size={18} />
+              Add Faculty
+            </button>
+          </div>
         </div>
 
         {/* Advanced Filters */}
@@ -806,7 +748,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                 Clear All Filters
               </button>
             </div>
-            
+
             <div className="space-y-4">
               {/* Programs Filter */}
               <div>
@@ -816,8 +758,8 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                 <MultiSelectDropdown
                   options={filterOptions.programs}
                   selected={filters.programs}
-                  onChange={(selected) => setFilters(prev => ({ 
-                    ...prev, 
+                  onChange={(selected) => setFilters(prev => ({
+                    ...prev,
                     programs: selected
                   }))}
                   placeholder="Select programs..."
@@ -832,8 +774,8 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                 <MultiSelectDropdown
                   options={filterOptions.jobTitles}
                   selected={filters.jobTitles}
-                  onChange={(selected) => setFilters(prev => ({ 
-                    ...prev, 
+                  onChange={(selected) => setFilters(prev => ({
+                    ...prev,
                     jobTitles: selected
                   }))}
                   placeholder="Select job titles..."
@@ -848,8 +790,8 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                 <MultiSelectDropdown
                   options={filterOptions.buildings}
                   selected={filters.buildings}
-                  onChange={(selected) => setFilters(prev => ({ 
-                    ...prev, 
+                  onChange={(selected) => setFilters(prev => ({
+                    ...prev,
                     buildings: selected
                   }))}
                   placeholder="Select buildings..."
@@ -966,95 +908,95 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
               </div>
             </div>
           </div>
-                )}
+        )}
 
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-baylor-green/5">
-                  <SortableHeader label="Name" columnKey="name" />
-                  <SortableHeader label="Program" columnKey="program" />
-                  <SortableHeader label="Job Title" columnKey="jobTitle" />
-                  <SortableHeader label="Email" columnKey="email" />
-                  <SortableHeader label="Phone" columnKey="phone" />
-                  <SortableHeader label="Office" columnKey="office" />
-                  <SortableHeader label="Courses" columnKey="courseCount" />
-                  <th className="px-4 py-3"></th>
+                <SortableHeader label="Name" columnKey="name" />
+                <SortableHeader label="Program" columnKey="program" />
+                <SortableHeader label="Job Title" columnKey="jobTitle" />
+                <SortableHeader label="Email" columnKey="email" />
+                <SortableHeader label="Phone" columnKey="phone" />
+                <SortableHeader label="Office" columnKey="office" />
+                <SortableHeader label="Courses" columnKey="courseCount" />
+                <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {isCreating && (
                 <tr className="bg-baylor-gold/5">
                   <td className="p-2 align-top text-gray-700 font-medium">
+                    <input
+                      name="name"
+                      value={newFaculty.name}
+                      onChange={handleCreateChange}
+                      className={getInputClass('name')}
+                      placeholder="Full Name"
+                    />
+                    <div className="flex items-center gap-2 text-xs mt-2">
                       <input
-                        name="name"
-                        value={newFaculty.name}
+                        type="checkbox"
+                        id="new-adjunct"
+                        name="isAdjunct"
+                        checked={newFaculty.isAdjunct}
                         onChange={handleCreateChange}
-                        className={getInputClass('name')}
-                        placeholder="Full Name"
+                        className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                       />
-                      <div className="flex items-center gap-2 text-xs mt-2">
-                         <input
-                           type="checkbox"
-                           id="new-adjunct"
-                           name="isAdjunct"
-                           checked={newFaculty.isAdjunct}
-                           onChange={handleCreateChange}
-                           className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                         />
-                         <label htmlFor="new-adjunct" className="font-normal">Adjunct</label>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs mt-1">
-                         <input
-                           type="checkbox"
-                           id="new-isTenured"
-                           name="isTenured"
-                           checked={newFaculty.isTenured}
-                           onChange={handleCreateChange}
-                                                       className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                         />
-                         <label htmlFor="new-isTenured" className="font-normal">Tenured</label>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs mt-1">
-                         <input type="checkbox" id="new-isAlsoStaff" name="isAlsoStaff" checked={newFaculty.isAlsoStaff} onChange={handleCreateChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
-                         <label htmlFor="new-isAlsoStaff" className="font-normal">Also a staff member</label>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs mt-1">
-                         <input
-                           type="checkbox"
-                           id="new-hasPhD"
-                           name="hasPhD"
-                           checked={newFaculty.hasPhD}
-                           onChange={handleCreateChange}
-                           className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                         />
-                         <label htmlFor="new-hasPhD" className="font-normal">Has PhD</label>
-                      </div>
+                      <label htmlFor="new-adjunct" className="font-normal">Adjunct</label>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs mt-1">
+                      <input
+                        type="checkbox"
+                        id="new-isTenured"
+                        name="isTenured"
+                        checked={newFaculty.isTenured}
+                        onChange={handleCreateChange}
+                        className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                      />
+                      <label htmlFor="new-isTenured" className="font-normal">Tenured</label>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs mt-1">
+                      <input type="checkbox" id="new-isAlsoStaff" name="isAlsoStaff" checked={newFaculty.isAlsoStaff} onChange={handleCreateChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+                      <label htmlFor="new-isAlsoStaff" className="font-normal">Also a staff member</label>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs mt-1">
+                      <input
+                        type="checkbox"
+                        id="new-hasPhD"
+                        name="hasPhD"
+                        checked={newFaculty.hasPhD}
+                        onChange={handleCreateChange}
+                        className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                      />
+                      <label htmlFor="new-hasPhD" className="font-normal">Has PhD</label>
+                    </div>
                   </td>
                   <td className="p-2 align-top">
-                      <select
-                        name="programId"
-                        value={newFaculty.programId || ''}
-                        onChange={handleCreateChange}
-                        className={getInputClass('programId')}
-                      >
-                        <option value="">No Program</option>
-                        {programs.map(program => (
-                          <option key={program.id} value={program.id}>
-                            {program.name}
-                          </option>
-                        ))}
-                      </select>
+                    <select
+                      name="programId"
+                      value={newFaculty.programId || ''}
+                      onChange={handleCreateChange}
+                      className={getInputClass('programId')}
+                    >
+                      <option value="">No Program</option>
+                      {programs.map(program => (
+                        <option key={program.id} value={program.id}>
+                          {program.name}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td className="p-2 align-top">
-                      <input
-                        name="jobTitle"
-                        value={newFaculty.jobTitle}
-                        onChange={handleCreateChange}
-                        className={getInputClass('jobTitle')}
-                        placeholder="Job Title"
-                      />
+                    <input
+                      name="jobTitle"
+                      value={newFaculty.jobTitle}
+                      onChange={handleCreateChange}
+                      className={getInputClass('jobTitle')}
+                      placeholder="Job Title"
+                    />
                   </td>
                   <td className="p-2 align-top">
                     <input
@@ -1080,11 +1022,10 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                       <button
                         type="button"
                         onClick={toggleCreatePhoneState}
-                        className={`p-1 rounded transition-colors ${
-                          newFaculty.hasNoPhone 
-                            ? 'text-red-600 bg-red-100 hover:bg-red-200' 
-                            : 'text-gray-400 hover:bg-gray-100'
-                        }`}
+                        className={`p-1 rounded transition-colors ${newFaculty.hasNoPhone
+                          ? 'text-red-600 bg-red-100 hover:bg-red-200'
+                          : 'text-gray-400 hover:bg-gray-100'
+                          }`}
                         title={newFaculty.hasNoPhone ? 'Has no phone number' : 'Has phone number'}
                       >
                         {newFaculty.hasNoPhone ? <PhoneOff size={16} /> : <Phone size={16} />}
@@ -1105,11 +1046,10 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                       <button
                         type="button"
                         onClick={toggleCreateOfficeState}
-                        className={`p-1 rounded transition-colors ${
-                          newFaculty.hasNoOffice 
-                            ? 'text-red-600 bg-red-100 hover:bg-red-200' 
-                            : 'text-gray-400 hover:bg-gray-100'
-                        }`}
+                        className={`p-1 rounded transition-colors ${newFaculty.hasNoOffice
+                          ? 'text-red-600 bg-red-100 hover:bg-red-200'
+                          : 'text-gray-400 hover:bg-gray-100'
+                          }`}
                         title={newFaculty.hasNoOffice ? 'Has no office' : 'Has office'}
                       >
                         {newFaculty.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
@@ -1123,8 +1063,8 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                   </td>
                   <td className="p-2 align-top text-right">
                     <div className="flex gap-2">
-                                                <button onClick={handleCreateSave} className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"><Save size={16} /></button>
-                          <button onClick={handleCancelCreate} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
+                      <button onClick={handleCreateSave} className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"><Save size={16} /></button>
+                      <button onClick={handleCancelCreate} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
                     </div>
                   </td>
                 </tr>
@@ -1134,55 +1074,55 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                   {editingId === faculty.id ? (
                     <>
                       <td className="p-2 align-top text-gray-700 font-medium">
-                          <div className='mb-2'>{faculty.name}</div>
-                          <div className="flex items-center gap-2 text-xs">
-                             <input type="checkbox" id={`adjunct-${faculty.id || index}`} name="isAdjunct" checked={!!editFormData.isAdjunct} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
-                             <label htmlFor={`adjunct-${faculty.id || index}`} className="font-normal">Adjunct</label>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs mt-1">
-                             <input
-                               type="checkbox"
-                               id={`isTenured-${faculty.id || index}`}
-                               name="isTenured"
-                               checked={!!editFormData.isTenured}
-                               onChange={handleChange}
-                               className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                             />
-                             <label htmlFor={`isTenured-${faculty.id || index}`} className="font-normal">Tenured</label>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs mt-1">
-                             <input type="checkbox" id={`isAlsoStaff-${faculty.id || index}`} name="isAlsoStaff" checked={!!editFormData.isAlsoStaff} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
-                             <label htmlFor={`isAlsoStaff-${faculty.id || index}`} className="font-normal">Also a staff member</label>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs mt-1">
-                             <input
-                               type="checkbox"
-                               id={`hasPhD-${faculty.id || index}`}
-                               name="hasPhD"
-                               checked={!!editFormData.hasPhD}
-                               onChange={handleChange}
-                               className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                             />
-                             <label htmlFor={`hasPhD-${faculty.id || index}`} className="font-normal">Has PhD</label>
-                          </div>
-                      </td>
-                      <td className="p-2 align-top">
-                          <select
-                            name="programId"
-                            value={editFormData.programId || ''}
+                        <div className='mb-2'>{faculty.name}</div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <input type="checkbox" id={`adjunct-${faculty.id || index}`} name="isAdjunct" checked={!!editFormData.isAdjunct} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+                          <label htmlFor={`adjunct-${faculty.id || index}`} className="font-normal">Adjunct</label>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs mt-1">
+                          <input
+                            type="checkbox"
+                            id={`isTenured-${faculty.id || index}`}
+                            name="isTenured"
+                            checked={!!editFormData.isTenured}
                             onChange={handleChange}
-                            className={getInputClass('programId')}
-                          >
-                            <option value="">No Program</option>
-                            {programs.map(program => (
-                              <option key={program.id} value={program.id}>
-                                {program.name}
-                              </option>
-                            ))}
-                          </select>
+                            className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                          />
+                          <label htmlFor={`isTenured-${faculty.id || index}`} className="font-normal">Tenured</label>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs mt-1">
+                          <input type="checkbox" id={`isAlsoStaff-${faculty.id || index}`} name="isAlsoStaff" checked={!!editFormData.isAlsoStaff} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+                          <label htmlFor={`isAlsoStaff-${faculty.id || index}`} className="font-normal">Also a staff member</label>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs mt-1">
+                          <input
+                            type="checkbox"
+                            id={`hasPhD-${faculty.id || index}`}
+                            name="hasPhD"
+                            checked={!!editFormData.hasPhD}
+                            onChange={handleChange}
+                            className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                          />
+                          <label htmlFor={`hasPhD-${faculty.id || index}`} className="font-normal">Has PhD</label>
+                        </div>
                       </td>
                       <td className="p-2 align-top">
-                          <input name="jobTitle" value={editFormData.jobTitle || ''} onChange={handleChange} className={getInputClass('jobTitle')} placeholder="Job Title" />
+                        <select
+                          name="programId"
+                          value={editFormData.programId || ''}
+                          onChange={handleChange}
+                          className={getInputClass('programId')}
+                        >
+                          <option value="">No Program</option>
+                          {programs.map(program => (
+                            <option key={program.id} value={program.id}>
+                              {program.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="p-2 align-top">
+                        <input name="jobTitle" value={editFormData.jobTitle || ''} onChange={handleChange} className={getInputClass('jobTitle')} placeholder="Job Title" />
                       </td>
                       <td className="p-2 align-top">
                         <input name="email" value={editFormData.email || ''} onChange={handleChange} className={getInputClass('email')} placeholder="email@baylor.edu" />
@@ -1190,23 +1130,22 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                       </td>
                       <td className="p-2 align-top">
                         <div className="flex items-center gap-2">
-                          <input 
-                            name="phone" 
-                            value={editFormData.phone || ''} 
-                            onChange={handleChange} 
-                            className={getInputClass('phone')} 
-                            placeholder="10 digits" 
+                          <input
+                            name="phone"
+                            value={editFormData.phone || ''}
+                            onChange={handleChange}
+                            className={getInputClass('phone')}
+                            placeholder="10 digits"
                             maxLength="10"
                             disabled={editFormData.hasNoPhone}
                           />
                           <button
                             type="button"
                             onClick={toggleEditPhoneState}
-                            className={`p-1 rounded transition-colors ${
-                              editFormData.hasNoPhone 
-                                ? 'text-red-600 bg-red-100 hover:bg-red-200' 
-                                : 'text-gray-400 hover:bg-gray-100'
-                            }`}
+                            className={`p-1 rounded transition-colors ${editFormData.hasNoPhone
+                              ? 'text-red-600 bg-red-100 hover:bg-red-200'
+                              : 'text-gray-400 hover:bg-gray-100'
+                              }`}
                             title={editFormData.hasNoPhone ? 'Has no phone number' : 'Has phone number'}
                           >
                             {editFormData.hasNoPhone ? <PhoneOff size={16} /> : <Phone size={16} />}
@@ -1216,33 +1155,32 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
                       </td>
                       <td className="p-2 align-top">
                         <div className="flex items-center gap-2">
-                          <input 
-                            name="office" 
-                            value={editFormData.office || ''} 
-                            onChange={handleChange} 
-                            className={getInputClass('office')} 
+                          <input
+                            name="office"
+                            value={editFormData.office || ''}
+                            onChange={handleChange}
+                            className={getInputClass('office')}
                             placeholder="Building & Room"
                             disabled={editFormData.hasNoOffice}
                           />
                           <button
                             type="button"
                             onClick={toggleEditOfficeState}
-                            className={`p-1 rounded transition-colors ${
-                              editFormData.hasNoOffice 
-                                ? 'text-red-600 bg-red-100 hover:bg-red-200' 
-                                : 'text-gray-400 hover:bg-gray-100'
-                            }`}
+                            className={`p-1 rounded transition-colors ${editFormData.hasNoOffice
+                              ? 'text-red-600 bg-red-100 hover:bg-red-200'
+                              : 'text-gray-400 hover:bg-gray-100'
+                              }`}
                             title={editFormData.hasNoOffice ? 'Has no office' : 'Has office'}
                           >
                             {editFormData.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
                           </button>
                         </div>
                       </td>
-                                              <td className="p-2 align-top">
-                          <div className="text-sm text-gray-600">
-                            {faculty.courseCount || 0}
-                          </div>
-                        </td>
+                      <td className="p-2 align-top">
+                        <div className="text-sm text-gray-600">
+                          {faculty.courseCount || 0}
+                        </div>
+                      </td>
                       <td className="p-2 align-top text-right">
                         <div className="flex gap-2">
                           <button onClick={handleSave} className="p-2 text-green-600 hover:bg-green-100 rounded-full" disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canEditFaculty === false}><Save size={16} /></button>
@@ -1322,7 +1260,7 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
           </table>
         </div>
         {selectedFacultyForCard && <FacultyContactCard faculty={selectedFacultyForCard} onClose={() => setSelectedFacultyForCard(null)} />}
-        
+
         {/* Delete Confirmation Modal */}
         {showDeleteConfirm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

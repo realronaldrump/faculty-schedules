@@ -1,19 +1,39 @@
-import React, { useState, useMemo } from 'react';
-import { Edit, Save, X, BookUser, Mail, Phone, PhoneOff, Building, BuildingIcon, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, BookOpen, Filter, UserCog, Download } from 'lucide-react';
+import React, { useState, useMemo, useCallback } from 'react';
+import { Edit, Save, X, BookUser, Phone, PhoneOff, Building, BuildingIcon, Plus, Trash2, BookOpen, UserCog, Download } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import { formatPhoneNumber, extractBuildingName } from '../utils/directoryUtils';
+import { useDirectoryState, useDirectoryHandlers } from '../hooks';
+import { PeopleDataTable, DeleteConfirmDialog, DirectorySearchBar, DirectoryFiltersPanel, NameSortToggle } from './shared';
 
-const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onFacultyUpdate, onStaffUpdate, onFacultyDelete, programs = [] }) => {
-  const [editingId, setEditingId] = useState(null);
-  const [editFormData, setEditFormData] = useState({});
-  const [filterText, setFilterText] = useState('');
-  const [sortConfig, setSortConfig] = useState({ key: 'courseCount', direction: 'descending' }); // Default sort by course count
-  const [nameSort, setNameSort] = useState('firstName'); // 'firstName' or 'lastName'
-  const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
-  const [errors, setErrors] = useState({});
-  const [isCreating, setIsCreating] = useState(false);
-  const [newFaculty, setNewFaculty] = useState({
+/**
+ * Faculty Directory - displays and manages faculty members.
+ * Refactored to use shared hooks and components for reduced code duplication.
+ */
+const FacultyDirectory = ({
+  facultyData,
+  scheduleData = [],
+  rawScheduleData,
+  onFacultyUpdate,
+  onStaffUpdate,
+  onFacultyDelete,
+  programs = []
+}) => {
+  // Default filter configuration for faculty
+  const defaultFilters = {
+    programs: [],
+    jobTitles: [],
+    buildings: [],
+    adjunct: 'exclude',
+    tenured: 'all',
+    upd: 'all',
+    courseCount: 'all',
+    isAlsoStaff: 'all',
+    hasPhD: 'all',
+    hasBaylorId: 'all'
+  };
+
+  const createEmptyFaculty = useCallback(() => ({
     name: '',
     jobTitle: '',
     email: '',
@@ -26,32 +46,93 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
     hasNoPhone: false,
     hasNoOffice: false,
     hasPhD: false,
+  }), []);
+
+  // Shared state
+  const state = useDirectoryState({
+    defaultSort: { key: 'courseCount', direction: 'descending' },
+    defaultFilters,
+    createEmptyRecord: createEmptyFaculty
   });
 
+  const {
+    editingId, editFormData, setEditFormData, errors, setErrors,
+    filterText, setFilterText, showFilters, setShowFilters, filters, setFilters,
+    sortConfig, nameSort, setNameSort,
+    showDeleteConfirm, recordToDelete,
+    isCreating, setIsCreating, newRecord, setNewRecord,
+    selectedRecord, setSelectedRecord, resetCreateState
+  } = state;
 
-
-  // Delete confirmation
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [facultyToDelete, setFacultyToDelete] = useState(null);
-
-  // Course count filter
+  // Faculty-specific state
   const [showOnlyWithCourses, setShowOnlyWithCourses] = useState(false);
-
-  // Advanced filters
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({
-    programs: [],
-    jobTitles: [],
-    buildings: [],
-    adjunct: 'exclude', // 'all', 'include', 'exclude' - default to exclude adjunct
-    tenured: 'all',
-    upd: 'all',
-    courseCount: 'all', // 'all', 'with-courses', 'without-courses'
-    isAlsoStaff: 'all', // 'all', 'include', 'exclude'
-    hasPhD: 'all', // 'all', 'include', 'exclude'
-    hasBaylorId: 'all' // 'all', 'with-id', 'without-id'
-  });
   const [pinUPDsFirst, setPinUPDsFirst] = useState(false);
+
+  // Validation function
+  const validate = useCallback((data) => {
+    const newErrors = {};
+
+    if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+      newErrors.email = 'Please enter a valid email address.';
+    }
+
+    const phoneDigits = (data.phone || '').replace(/\D/g, '');
+    if (data.phone && phoneDigits.length !== 10) {
+      newErrors.phone = 'Phone number must contain exactly 10 digits.';
+    }
+
+    if (data.baylorId && !/^\d{9}$/.test(data.baylorId)) {
+      newErrors.baylorId = 'Baylor ID must be exactly 9 digits.';
+    }
+
+    return newErrors;
+  }, []);
+
+  // Prepare payload for save
+  const preparePayload = useCallback((data) => {
+    const originalRoles = data.roles;
+    let updatedRoles;
+    if (Array.isArray(originalRoles)) {
+      updatedRoles = originalRoles.filter(r => r !== 'faculty' && r !== 'staff');
+      updatedRoles.push('faculty');
+      if (data.isAlsoStaff) updatedRoles.push('staff');
+    } else {
+      updatedRoles = {
+        ...(typeof originalRoles === 'object' && originalRoles !== null ? originalRoles : {}),
+        faculty: true,
+        staff: data.isAlsoStaff || false
+      };
+    }
+    return {
+      ...data,
+      phone: (data.phone || '').replace(/\D/g, ''),
+      roles: updatedRoles
+    };
+  }, []);
+
+  // Shared handlers
+  const handlers = useDirectoryHandlers({
+    state,
+    data: facultyData,
+    onUpdate: onFacultyUpdate,
+    onDelete: onFacultyDelete,
+    validate,
+    preparePayload
+  });
+
+  const {
+    handleEdit, handleCancel, handleSave, handleChange,
+    handleCreate, handleCancelCreate, handleCreateChange, handleCreateSave,
+    handleSort, handleDelete, confirmDelete, cancelDelete,
+    clearFilters: baseClearFilters, toggleEditPhoneState, toggleEditOfficeState,
+    toggleCreatePhoneState, toggleCreateOfficeState, getInputClass
+  } = handlers;
+
+  // Extended clear filters for faculty-specific state
+  const clearFilters = useCallback(() => {
+    baseClearFilters();
+    setShowOnlyWithCourses(false);
+  }, [baseClearFilters]);
 
   // Calculate course counts for each faculty member
   const facultyWithCourseCounts = useMemo(() => {
@@ -59,15 +140,13 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
 
     return facultyData.map(faculty => {
       const facultyName = faculty.name;
-      const facultyCourses = scheduleData.filter(schedule => {
-        const instructorName = schedule.instructor ?
-          `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim() :
-          (schedule.instructorName || schedule.Instructor || '');
-
+      const facultyCourses = (scheduleData || []).filter(schedule => {
+        const instructorName = schedule.instructor
+          ? `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim()
+          : (schedule.instructorName || schedule.Instructor || '');
         return instructorName === facultyName;
       });
 
-      // Get unique courses (by course code)
       const uniqueCourses = [...new Set(facultyCourses.map(schedule =>
         schedule.courseCode || schedule.Course || ''
       ))].filter(courseCode => courseCode.trim() !== '');
@@ -86,70 +165,55 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
     });
   }, [facultyData, scheduleData]);
 
-  // Remove duplicates from directoryData and ensure unique entries
+  // Remove duplicates
   const uniqueDirectoryData = useMemo(() => {
     if (!facultyWithCourseCounts || !Array.isArray(facultyWithCourseCounts)) return [];
 
     const uniqueMap = new Map();
-
     facultyWithCourseCounts.forEach(faculty => {
-      // Create a unique key based on name and email
       const key = `${faculty.name?.toLowerCase()}-${(faculty.email || 'no-email').toLowerCase()}`;
-
-      // Only add if not already in map, or if this one has more complete data
       if (!uniqueMap.has(key)) {
         uniqueMap.set(key, faculty);
       } else {
         const existing = uniqueMap.get(key);
-        // Keep the one with more complete data (more fields filled)
         const existingFields = Object.values(existing).filter(v => v && v !== '').length;
         const newFields = Object.values(faculty).filter(v => v && v !== '').length;
-
         if (newFields > existingFields) {
           uniqueMap.set(key, faculty);
         }
       }
     });
-
     return Array.from(uniqueMap.values());
   }, [facultyWithCourseCounts]);
 
-  // Extract unique values for filter options
+  // Extract filter options
   const filterOptions = useMemo(() => {
-    const programs = new Set();
+    const programsSet = new Set();
     const jobTitles = new Set();
     const buildings = new Set();
 
     uniqueDirectoryData.forEach(person => {
-      // Use normalized program data (single source of truth)
-      if (person.program && person.program.name) {
-        programs.add(person.program.name);
-      }
-
-      if (person.jobTitle) {
-        jobTitles.add(person.jobTitle);
-      }
-
-      // Extract building name from office location
+      if (person.program?.name) programsSet.add(person.program.name);
+      if (person.jobTitle) jobTitles.add(person.jobTitle);
       if (person.office) {
-        const buildingName = extractBuildingName(person.office);
-        buildings.add(buildingName);
+        buildings.add(extractBuildingName(person.office));
       } else {
         buildings.add('No Building');
       }
     });
 
     return {
-      programs: Array.from(programs).sort(),
+      programs: Array.from(programsSet).sort(),
       jobTitles: Array.from(jobTitles).sort(),
       buildings: Array.from(buildings).sort()
     };
   }, [uniqueDirectoryData]);
 
+  // Filter and sort data
   const sortedAndFilteredData = useMemo(() => {
     let data = [...uniqueDirectoryData];
 
-    // Search term filter
+    // Search filter
     if (filterText) {
       const term = filterText.toLowerCase();
       data = data.filter(person =>
@@ -160,23 +224,17 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
       );
     }
 
-    // Program filter (include-only)
+    // Program filter
     if ((filters.programs || []).length > 0) {
-      data = data.filter(person => {
-        const programName = person.program && person.program.name ? person.program.name : '';
-        return filters.programs.includes(programName);
-      });
+      data = data.filter(person => filters.programs.includes(person.program?.name || ''));
     }
 
-    // Job title filter (include-only)
+    // Job title filter
     if ((filters.jobTitles || []).length > 0) {
-      data = data.filter(person => {
-        const jobTitle = person.jobTitle || '';
-        return filters.jobTitles.includes(jobTitle);
-      });
+      data = data.filter(person => filters.jobTitles.includes(person.jobTitle || ''));
     }
 
-    // Building filter (include-only)
+    // Building filter
     if ((filters.buildings || []).length > 0) {
       data = data.filter(person => {
         const buildingName = person.office ? extractBuildingName(person.office) : 'No Building';
@@ -184,80 +242,31 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
       });
     }
 
-    // Adjunct filter
+    // Status filters
     if (filters.adjunct !== 'all') {
-      data = data.filter(person => {
-        if (filters.adjunct === 'include') {
-          return person.isAdjunct;
-        } else if (filters.adjunct === 'exclude') {
-          return !person.isAdjunct;
-        }
-        return true;
-      });
+      data = data.filter(person => filters.adjunct === 'include' ? person.isAdjunct : !person.isAdjunct);
     }
-
-    // Tenured filter
     if (filters.tenured !== 'all') {
-      data = data.filter(person => {
-        if (filters.tenured === 'include') {
-          return person.isTenured;
-        } else if (filters.tenured === 'exclude') {
-          return !person.isTenured;
-        }
-        return true;
-      });
+      data = data.filter(person => filters.tenured === 'include' ? person.isTenured : !person.isTenured);
     }
-
-    // UPD filter
     if (filters.upd !== 'all') {
-      data = data.filter(person => {
-        if (filters.upd === 'include') {
-          return person.isUPD;
-        } else if (filters.upd === 'exclude') {
-          return !person.isUPD;
-        }
-        return true;
-      });
+      data = data.filter(person => filters.upd === 'include' ? person.isUPD : !person.isUPD);
     }
-
-    // Also Staff filter
     if (filters.isAlsoStaff !== 'all') {
-      data = data.filter(person => {
-        if (filters.isAlsoStaff === 'include') {
-          return person.isAlsoStaff;
-        } else if (filters.isAlsoStaff === 'exclude') {
-          return !person.isAlsoStaff;
-        }
-        return true;
-      });
+      data = data.filter(person => filters.isAlsoStaff === 'include' ? person.isAlsoStaff : !person.isAlsoStaff);
     }
-
-    // PhD filter
     if (filters.hasPhD !== 'all') {
-      data = data.filter(person => {
-        if (filters.hasPhD === 'include') {
-          return person.hasPhD;
-        } else if (filters.hasPhD === 'exclude') {
-          return !person.hasPhD;
-        }
-        return true;
-      });
+      data = data.filter(person => filters.hasPhD === 'include' ? person.hasPhD : !person.hasPhD);
     }
 
-
-    // Course count filter (legacy support for the checkbox)
-    if (showOnlyWithCourses) {
-      data = data.filter(faculty => faculty.courseCount > 0);
-    }
-
-    // Course count filter (advanced filter)
-    if (filters.courseCount === 'with-courses') {
+    // Course count filter
+    if (showOnlyWithCourses || filters.courseCount === 'with-courses') {
       data = data.filter(person => person.courseCount > 0);
     } else if (filters.courseCount === 'without-courses') {
       data = data.filter(person => person.courseCount === 0);
     }
 
-    // Baylor ID status filter
+    // Baylor ID filter
     if (filters.hasBaylorId === 'with-id') {
       data = data.filter(person => person.baylorId && person.baylorId.trim() !== '');
     } else if (filters.hasBaylorId === 'without-id') {
@@ -266,32 +275,27 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
 
     // Sorting
     data.sort((a, b) => {
-      // Optional: bring UPDs to the top subtly without adding a new column
+      // Optional: bring UPDs to the top
       if (pinUPDsFirst) {
         if (!!a.isUPD && !b.isUPD) return -1;
         if (!a.isUPD && !!b.isUPD) return 1;
       }
-      let valA, valB;
 
+      let valA, valB;
       if (sortConfig.key === 'name') {
-        // Handle special name sorting based on user preference
         if (nameSort === 'firstName') {
-          // Extract first name for sorting (part before first space)
           valA = (a.firstName || a.name?.split(' ')[0] || '').toLowerCase();
           valB = (b.firstName || b.name?.split(' ')[0] || '').toLowerCase();
         } else {
-          // Extract last name for sorting (part after last space)
           const aNameParts = (a.lastName || a.name || '').split(' ');
           const bNameParts = (b.lastName || b.name || '').split(' ');
           valA = (a.lastName || aNameParts[aNameParts.length - 1] || '').toLowerCase();
           valB = (b.lastName || bNameParts[bNameParts.length - 1] || '').toLowerCase();
         }
       } else if (sortConfig.key === 'program') {
-        // Handle program sorting
-        valA = (a.program && a.program.name ? a.program.name : '').toLowerCase();
-        valB = (b.program && b.program.name ? b.program.name : '').toLowerCase();
+        valA = (a.program?.name || '').toLowerCase();
+        valB = (b.program?.name || '').toLowerCase();
       } else if (sortConfig.key === 'courseCount') {
-        // Handle course count sorting
         valA = a.courseCount || 0;
         valB = b.courseCount || 0;
       } else {
@@ -303,296 +307,16 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
         return (valA === valB) ? 0 : valA ? -1 : 1;
       }
 
-      if (valA < valB) {
-        return sortConfig.direction === 'ascending' ? -1 : 1;
-      }
-      if (valA > valB) {
-        return sortConfig.direction === 'ascending' ? 1 : -1;
-      }
+      if (valA < valB) return sortConfig.direction === 'ascending' ? -1 : 1;
+      if (valA > valB) return sortConfig.direction === 'ascending' ? 1 : -1;
       return 0;
     });
 
     return data;
   }, [uniqueDirectoryData, filterText, filters, sortConfig, nameSort, showOnlyWithCourses, pinUPDsFirst]);
 
-  const validate = (data) => {
-    const newErrors = {};
-
-    // Email validation
-    if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
-      newErrors.email = 'Please enter a valid email address.';
-    }
-
-    // Phone validation
-    const phoneDigits = (data.phone || '').replace(/\D/g, '');
-    if (data.phone && phoneDigits.length !== 10) {
-      newErrors.phone = 'Phone number must contain exactly 10 digits.';
-    }
-
-    // Baylor ID validation
-    if (data.baylorId && !/^\d{9}$/.test(data.baylorId)) {
-      newErrors.baylorId = 'Baylor ID must be exactly 9 digits.';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-
-
-  const handleEdit = (faculty) => {
-    setErrors({}); // Clear previous errors
-    setEditingId(faculty.id);
-    setEditFormData(faculty);
-  };
-
-  const handleCancel = () => {
-    setEditingId(null);
-    setEditFormData({});
-    setErrors({});
-  };
-
-  const handleSave = async () => {
-    if (validate(editFormData)) {
-      const originalData = uniqueDirectoryData.find(f => f.id === editingId);
-      const dataToSave = { ...editFormData };
-      // Ensure the `roles` field stays in sync with the "Also Staff" checkbox
-      const originalRoles = originalData?.roles;
-      let updatedRoles;
-      if (Array.isArray(originalRoles)) {
-        // Remove any existing faculty/staff duplicates first
-        updatedRoles = originalRoles.filter(r => r !== 'faculty' && r !== 'staff');
-        // Faculty directory always implies faculty role
-        updatedRoles.push('faculty');
-        if (dataToSave.isAlsoStaff) updatedRoles.push('staff');
-      } else {
-        // Object (or missing) representation – normalise to object format
-        updatedRoles = {
-          ...(typeof originalRoles === 'object' && originalRoles !== null ? originalRoles : {}),
-          faculty: true,
-          staff: dataToSave.isAlsoStaff || false
-        };
-      }
-      dataToSave.roles = updatedRoles;
-      const cleanedData = { ...dataToSave, phone: (dataToSave.phone || '').replace(/\D/g, '') };
-
-
-
-      try {
-        // Always use onFacultyUpdate when editing from faculty directory
-        // The handler will manage dual roles properly
-        await onFacultyUpdate(cleanedData, originalData);
-
-        setEditingId(null);
-        setErrors({});
-      } catch (error) {
-
-      }
-    }
-  };
-
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    let finalValue = type === 'checkbox' ? checked : value;
-
-    // Allow only numbers for phone input
-    if (name === 'phone') {
-      finalValue = finalValue.replace(/\D/g, '');
-    }
-
-    // Allow only numbers for Baylor ID and limit to 9 digits
-    if (name === 'baylorId') {
-      finalValue = finalValue.replace(/\D/g, '').slice(0, 9);
-    }
-
-    const newFormData = {
-      ...editFormData,
-      [name]: finalValue,
-    };
-
-    setEditFormData(newFormData);
-
-    // Live validation
-    if (Object.keys(errors).length > 0) {
-      validate(newFormData);
-    }
-  };
-
-  const toggleEditPhoneState = () => {
-    const newHasNoPhone = !editFormData.hasNoPhone;
-    setEditFormData({
-      ...editFormData,
-      hasNoPhone: newHasNoPhone,
-      phone: newHasNoPhone ? '' : editFormData.phone // Clear phone if marking as no phone
-    });
-  };
-
-  const toggleEditOfficeState = () => {
-    const newHasNoOffice = !editFormData.hasNoOffice;
-    setEditFormData({
-      ...editFormData,
-      hasNoOffice: newHasNoOffice,
-      office: newHasNoOffice ? '' : editFormData.office // Clear office if marking as no office
-    });
-  };
-
-  const toggleCreatePhoneState = () => {
-    const newHasNoPhone = !newFaculty.hasNoPhone;
-    setNewFaculty({
-      ...newFaculty,
-      hasNoPhone: newHasNoPhone,
-      phone: newHasNoPhone ? '' : newFaculty.phone
-    });
-  };
-
-  const toggleCreateOfficeState = () => {
-    const newHasNoOffice = !newFaculty.hasNoOffice;
-    setNewFaculty({
-      ...newFaculty,
-      hasNoOffice: newHasNoOffice,
-      office: newHasNoOffice ? '' : newFaculty.office
-    });
-  };
-
-  const handleSort = (key) => {
-    let direction = 'ascending';
-    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
-    }
-    setSortConfig({ key, direction });
-  };
-
-  const handleDelete = (faculty) => {
-    setFacultyToDelete(faculty);
-    setShowDeleteConfirm(true);
-  };
-
-  const confirmDelete = async () => {
-    if (facultyToDelete && onFacultyDelete) {
-      try {
-        await onFacultyDelete(facultyToDelete);
-        setShowDeleteConfirm(false);
-        setFacultyToDelete(null);
-      } catch (error) {
-        console.error('Error deleting faculty:', error);
-        if (showNotification) {
-          showNotification('error', 'Error deleting faculty: ' + error.message);
-        }
-      }
-    }
-  };
-
-  const cancelDelete = () => {
-    setShowDeleteConfirm(false);
-    setFacultyToDelete(null);
-  };
-
-  const handleCreate = () => {
-    setIsCreating(true);
-    setNewFaculty({
-      name: '',
-      jobTitle: '',
-      email: '',
-      phone: '',
-      office: '',
-      baylorId: '',
-      isAdjunct: false,
-      isTenured: false,
-      isAlsoStaff: false,
-      hasNoPhone: false,
-      hasNoOffice: false,
-      hasPhD: false,
-    });
-    setErrors({});
-  };
-
-  const handleCancelCreate = () => {
-    setIsCreating(false);
-    setNewFaculty({
-      name: '',
-      jobTitle: '',
-      email: '',
-      phone: '',
-      office: '',
-      baylorId: '',
-      isAdjunct: false,
-      isTenured: false,
-      isAlsoStaff: false,
-      hasNoPhone: false,
-      hasNoOffice: false,
-      hasPhD: false,
-    });
-    setErrors({});
-  };
-
-  const handleCreateChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    let finalValue = type === 'checkbox' ? checked : value;
-
-    if (name === 'phone') {
-      finalValue = finalValue.replace(/\D/g, '');
-    }
-
-    if (name === 'baylorId') {
-      finalValue = finalValue.replace(/\D/g, '').slice(0, 9);
-    }
-
-    setNewFaculty(prev => ({
-      ...prev,
-      [name]: finalValue
-    }));
-
-    if (Object.keys(errors).length > 0) {
-      validate({ ...newFaculty, [name]: finalValue });
-    }
-  };
-
-  const handleCreateSave = async () => {
-    if (validate(newFaculty)) {
-      const nameParts = newFaculty.name.split(' ');
-      const firstName = nameParts.slice(0, -1).join(' ');
-      const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
-
-      const dataToSave = {
-        ...newFaculty,
-        firstName: firstName,
-        lastName: lastName,
-        phone: (newFaculty.phone || '').replace(/\D/g, '')
-      };
-
-      // Set roles for new faculty record
-      dataToSave.roles = {
-        faculty: true,
-        staff: newFaculty.isAlsoStaff || false
-      };
-
-
-
-      await onFacultyUpdate(dataToSave);
-      setIsCreating(false);
-      setErrors({});
-    }
-  };
-
-  const clearFilters = () => {
-    setFilters({
-      programs: [],
-      jobTitles: [],
-      buildings: [],
-      adjunct: 'exclude', // Maintain default to exclude adjunct
-      tenured: 'all',
-      upd: 'all',
-      courseCount: 'all',
-      isAlsoStaff: 'all',
-      hasPhD: 'all',
-      hasBaylorId: 'all'
-    });
-    setFilterText('');
-    setShowOnlyWithCourses(false);
-  };
-
-  // Export functionality
-  const exportToCSV = () => {
+  // Export to CSV
+  const exportToCSV = useCallback(() => {
     const headers = ['Name', 'Program', 'Job Title', 'Email', 'Phone', 'Office', 'Baylor ID', 'Courses'];
     const rows = sortedAndFilteredData.map(faculty => [
       faculty.name || '',
@@ -618,675 +342,337 @@ const FacultyDirectory = ({ facultyData, scheduleData = [], rawScheduleData, onF
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
+  }, [sortedAndFilteredData]);
 
-  const SortableHeader = ({ label, columnKey }) => {
-    const isSorted = sortConfig.key === columnKey;
-    const directionIcon = isSorted ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : <ArrowUpDown size={14} className="opacity-30" />;
+  // Column definitions
+  const columns = useMemo(() => [
+    {
+      key: 'name',
+      label: 'Name',
+      render: (faculty) => (
+        <div className="text-gray-700 font-medium">
+          <div>{faculty.name}</div>
+          {faculty.program && <div className="text-xs text-baylor-green font-medium">{faculty.program.name}</div>}
+          {faculty.isUPD && <div className="text-xs text-amber-600 font-medium flex items-center gap-1"><UserCog size={12} /> UPD</div>}
+          {faculty.isAlsoStaff && <div className="text-xs text-baylor-gold font-medium">Also Staff</div>}
+          {faculty.isAdjunct && <div className="text-xs text-blue-600 font-medium">Adjunct</div>}
+          {faculty.isTenured && <div className="text-xs text-purple-600 font-medium">Tenured</div>}
+          {faculty.hasPhD && <div className="text-xs text-green-600 font-medium">PhD</div>}
+        </div>
+      ),
+      renderEdit: (faculty) => (
+        <div className="p-2 align-top text-gray-700 font-medium">
+          <div className="mb-2">{faculty.name}</div>
+          <div className="flex items-center gap-2 text-xs">
+            <input type="checkbox" id={`adjunct-${faculty.id}`} name="isAdjunct" checked={!!editFormData.isAdjunct} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+            <label htmlFor={`adjunct-${faculty.id}`} className="font-normal">Adjunct</label>
+          </div>
+          <div className="flex items-center gap-2 text-xs mt-1">
+            <input type="checkbox" id={`isTenured-${faculty.id}`} name="isTenured" checked={!!editFormData.isTenured} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+            <label htmlFor={`isTenured-${faculty.id}`} className="font-normal">Tenured</label>
+          </div>
+          <div className="flex items-center gap-2 text-xs mt-1">
+            <input type="checkbox" id={`isAlsoStaff-${faculty.id}`} name="isAlsoStaff" checked={!!editFormData.isAlsoStaff} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+            <label htmlFor={`isAlsoStaff-${faculty.id}`} className="font-normal">Also a staff member</label>
+          </div>
+          <div className="flex items-center gap-2 text-xs mt-1">
+            <input type="checkbox" id={`hasPhD-${faculty.id}`} name="hasPhD" checked={!!editFormData.hasPhD} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+            <label htmlFor={`hasPhD-${faculty.id}`} className="font-normal">Has PhD</label>
+          </div>
+        </div>
+      )
+    },
+    {
+      key: 'program',
+      label: 'Program',
+      render: (faculty) => faculty.program?.name || '-',
+      renderEdit: () => (
+        <select name="programId" value={editFormData.programId || ''} onChange={handleChange} className={getInputClass('programId')}>
+          <option value="">No Program</option>
+          {programs.map(program => <option key={program.id} value={program.id}>{program.name}</option>)}
+        </select>
+      )
+    },
+    {
+      key: 'jobTitle',
+      label: 'Job Title',
+      render: (faculty) => faculty.jobTitle || '-',
+      renderEdit: () => <input name="jobTitle" value={editFormData.jobTitle || ''} onChange={handleChange} className={getInputClass('jobTitle')} placeholder="Job Title" />
+    },
+    {
+      key: 'email',
+      label: 'Email',
+      render: (faculty) => faculty.email || '-',
+      renderEdit: () => (
+        <div>
+          <input name="email" value={editFormData.email || ''} onChange={handleChange} className={getInputClass('email')} placeholder="email@baylor.edu" />
+          {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
+        </div>
+      )
+    },
+    {
+      key: 'phone',
+      label: 'Phone',
+      render: (faculty) => (
+        <div className="flex items-center gap-2">
+          {faculty.hasNoPhone ? <span className="flex items-center gap-1 text-gray-500"><PhoneOff size={14} /> No phone</span> : formatPhoneNumber(faculty.phone)}
+        </div>
+      ),
+      renderEdit: () => (
+        <div>
+          <div className="flex items-center gap-2">
+            <input name="phone" value={editFormData.phone || ''} onChange={handleChange} className={getInputClass('phone')} placeholder="10 digits" maxLength="10" disabled={editFormData.hasNoPhone} />
+            <button type="button" onClick={toggleEditPhoneState} className={`p-1 rounded transition-colors ${editFormData.hasNoPhone ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`}>
+              {editFormData.hasNoPhone ? <PhoneOff size={16} /> : <Phone size={16} />}
+            </button>
+          </div>
+          {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
+        </div>
+      )
+    },
+    {
+      key: 'office',
+      label: 'Office',
+      render: (faculty) => (
+        <div className="flex items-center gap-2">
+          {faculty.hasNoOffice ? <span className="flex items-center gap-1 text-gray-500"><BuildingIcon size={14} className="opacity-50" /> No office</span> : (faculty.office || '-')}
+        </div>
+      ),
+      renderEdit: () => (
+        <div className="flex items-center gap-2">
+          <input name="office" value={editFormData.office || ''} onChange={handleChange} className={getInputClass('office')} placeholder="Building & Room" disabled={editFormData.hasNoOffice} />
+          <button type="button" onClick={toggleEditOfficeState} className={`p-1 rounded transition-colors ${editFormData.hasNoOffice ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`}>
+            {editFormData.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
+          </button>
+        </div>
+      )
+    },
+    {
+      key: 'courseCount',
+      label: 'Courses',
+      render: (faculty) => faculty.courseCount,
+      renderEdit: (faculty) => <div className="text-sm text-gray-600">{faculty.courseCount || 0}</div>
+    }
+  ], [editFormData, errors, handleChange, toggleEditPhoneState, toggleEditOfficeState, getInputClass, programs]);
 
+  // Render actions column
+  const renderActions = (faculty, isEditing) => {
+    if (isEditing) {
+      return (
+        <div className="flex gap-2">
+          <button onClick={handleSave} className="p-2 text-green-600 hover:bg-green-100 rounded-full" disabled={typeof window !== 'undefined' && window?.appPermissions?.canEditFaculty === false}><Save size={16} /></button>
+          <button onClick={handleCancel} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
+        </div>
+      );
+    }
     return (
-      <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">
-        <button className="flex items-center gap-2" onClick={() => handleSort(columnKey)}>
-          {label}
-          {directionIcon}
-        </button>
-      </th>
+      <div className="flex gap-1 justify-end">
+        <button onClick={(e) => { e.stopPropagation(); handleEdit(faculty); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full" disabled={typeof window !== 'undefined' && window?.appPermissions?.canEditFaculty === false}><Edit size={16} /></button>
+        <button onClick={(e) => { e.stopPropagation(); handleDelete(faculty); }} className="p-2 text-red-600 hover:bg-red-100 rounded-full" disabled={typeof window !== 'undefined' && window?.appPermissions?.canDeleteFaculty === false}><Trash2 size={16} /></button>
+      </div>
     );
   };
 
-  const getInputClass = (fieldName) => {
-    const baseClass = "w-full p-1 border rounded bg-baylor-gold/10";
-    return errors[fieldName] ? `${baseClass} border-red-500` : `${baseClass} border-baylor-gold`;
-  };
+  // Create row
+  const createRow = isCreating ? (
+    <tr className="bg-baylor-gold/5">
+      <td className="p-2 align-top text-gray-700 font-medium">
+        <input name="name" value={newRecord.name} onChange={handleCreateChange} className={getInputClass('name')} placeholder="Full Name" />
+        <div className="flex items-center gap-2 text-xs mt-2">
+          <input type="checkbox" id="new-adjunct" name="isAdjunct" checked={newRecord.isAdjunct} onChange={handleCreateChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+          <label htmlFor="new-adjunct" className="font-normal">Adjunct</label>
+        </div>
+        <div className="flex items-center gap-2 text-xs mt-1">
+          <input type="checkbox" id="new-isTenured" name="isTenured" checked={newRecord.isTenured} onChange={handleCreateChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+          <label htmlFor="new-isTenured" className="font-normal">Tenured</label>
+        </div>
+        <div className="flex items-center gap-2 text-xs mt-1">
+          <input type="checkbox" id="new-isAlsoStaff" name="isAlsoStaff" checked={newRecord.isAlsoStaff} onChange={handleCreateChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+          <label htmlFor="new-isAlsoStaff" className="font-normal">Also a staff member</label>
+        </div>
+        <div className="flex items-center gap-2 text-xs mt-1">
+          <input type="checkbox" id="new-hasPhD" name="hasPhD" checked={newRecord.hasPhD} onChange={handleCreateChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+          <label htmlFor="new-hasPhD" className="font-normal">Has PhD</label>
+        </div>
+      </td>
+      <td className="p-2 align-top">
+        <select name="programId" value={newRecord.programId || ''} onChange={handleCreateChange} className={getInputClass('programId')}>
+          <option value="">No Program</option>
+          {programs.map(program => <option key={program.id} value={program.id}>{program.name}</option>)}
+        </select>
+      </td>
+      <td className="p-2 align-top">
+        <input name="jobTitle" value={newRecord.jobTitle} onChange={handleCreateChange} className={getInputClass('jobTitle')} placeholder="Job Title" />
+      </td>
+      <td className="p-2 align-top">
+        <input name="email" value={newRecord.email} onChange={handleCreateChange} className={getInputClass('email')} placeholder="email@baylor.edu" />
+        {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
+      </td>
+      <td className="p-2 align-top">
+        <div className="flex items-center gap-2">
+          <input name="phone" value={newRecord.phone} onChange={handleCreateChange} className={getInputClass('phone')} placeholder="10 digits" maxLength="10" disabled={newRecord.hasNoPhone} />
+          <button type="button" onClick={toggleCreatePhoneState} className={`p-1 rounded transition-colors ${newRecord.hasNoPhone ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`}>
+            {newRecord.hasNoPhone ? <PhoneOff size={16} /> : <Phone size={16} />}
+          </button>
+        </div>
+        {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
+      </td>
+      <td className="p-2 align-top">
+        <div className="flex items-center gap-2">
+          <input name="office" value={newRecord.office} onChange={handleCreateChange} className={getInputClass('office')} placeholder="Building & Room" disabled={newRecord.hasNoOffice} />
+          <button type="button" onClick={toggleCreateOfficeState} className={`p-1 rounded transition-colors ${newRecord.hasNoOffice ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`}>
+            {newRecord.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
+          </button>
+        </div>
+      </td>
+      <td className="p-2 align-top">
+        <div className="text-sm text-gray-500 italic">Calculated from courses</div>
+      </td>
+      <td className="p-2 align-top text-right">
+        <div className="flex gap-2">
+          <button onClick={handleCreateSave} className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"><Save size={16} /></button>
+          <button onClick={handleCancelCreate} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
+        </div>
+      </td>
+    </tr>
+  ) : null;
 
   return (
     <div className="space-y-6">
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
+        {/* Header */}
         <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200">
           <h2 className="text-xl font-serif font-semibold text-baylor-green flex items-center">
             <BookUser className="mr-2 text-baylor-gold" size={20} />
             Faculty Directory ({sortedAndFilteredData.length} members)
           </h2>
           <div className="flex items-center gap-4">
-            {/* UPD-first toggle (subtle) */}
             <button
               onClick={() => setPinUPDsFirst(prev => !prev)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${pinUPDsFirst
-                ? 'bg-amber-100 text-amber-800 border-amber-200'
-                : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'
-                }`}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${pinUPDsFirst ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'}`}
               title="Bring Undergraduate Program Directors to the top"
             >
               <UserCog size={16} />
               <span className="text-xs font-medium">UPD first</span>
             </button>
-            {/* Course count filter UI */}
             <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={showOnlyWithCourses}
-                onChange={e => setShowOnlyWithCourses(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-              />
+              <input type="checkbox" checked={showOnlyWithCourses} onChange={e => setShowOnlyWithCourses(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
               Only show faculty with at least 1 course
             </label>
-            {/* Name Sort Options */}
-            {sortConfig.key === 'name' && (
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-gray-600">Sort by:</span>
-                <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-                  <button
-                    onClick={() => setNameSort('firstName')}
-                    className={`px-3 py-1 text-xs ${nameSort === 'firstName'
-                      ? 'bg-baylor-green text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                      }`}
-                  >
-                    First Name
-                  </button>
-                  <button
-                    onClick={() => setNameSort('lastName')}
-                    className={`px-3 py-1 text-xs ${nameSort === 'lastName'
-                      ? 'bg-baylor-green text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                      }`}
-                  >
-                    Last Name
-                  </button>
-                </div>
-              </div>
-            )}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input
-                type="text"
-                placeholder="Filter directory..."
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-                className="w-full pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
-              />
-            </div>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${showFilters
-                ? 'bg-baylor-green text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-            >
-              <Filter size={16} />
-              Filters
+            <NameSortToggle show={sortConfig.key === 'name'} nameSort={nameSort} onNameSortChange={setNameSort} />
+            <DirectorySearchBar filterText={filterText} onFilterTextChange={setFilterText} showFilters={showFilters} onToggleFilters={() => setShowFilters(!showFilters)} />
+            <button onClick={exportToCSV} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+              <Download size={18} /> Export CSV
             </button>
-
-            <button
-              onClick={exportToCSV}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Download size={18} />
-              Export CSV
-            </button>
-
             <button
               onClick={handleCreate}
               className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
-              disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canAddFaculty === false}
+              disabled={typeof window !== 'undefined' && window?.appPermissions?.canAddFaculty === false}
             >
-              <Plus size={18} />
-              Add Faculty
+              <Plus size={18} /> Add Faculty
             </button>
           </div>
         </div>
 
         {/* Advanced Filters */}
-        {showFilters && (
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-medium text-gray-900">Advanced Filters</h3>
-              <button
-                onClick={clearFilters}
-                className="text-sm text-baylor-green hover:text-baylor-green/80 font-medium"
-              >
-                Clear All Filters
-              </button>
+        <DirectoryFiltersPanel isOpen={showFilters} onClearAll={clearFilters}>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Programs</label>
+            <MultiSelectDropdown options={filterOptions.programs} selected={filters.programs} onChange={(selected) => setFilters(prev => ({ ...prev, programs: selected }))} placeholder="Select programs..." />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Job Titles</label>
+            <MultiSelectDropdown options={filterOptions.jobTitles} selected={filters.jobTitles} onChange={(selected) => setFilters(prev => ({ ...prev, jobTitles: selected }))} placeholder="Select job titles..." />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Buildings</label>
+            <MultiSelectDropdown options={filterOptions.buildings} selected={filters.buildings} onChange={(selected) => setFilters(prev => ({ ...prev, buildings: selected }))} placeholder="Select buildings..." />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Adjunct Status</label>
+              <select value={filters.adjunct} onChange={(e) => setFilters(prev => ({ ...prev, adjunct: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green">
+                <option value="all">All</option>
+                <option value="include">Adjunct Only</option>
+                <option value="exclude">Exclude Adjunct</option>
+              </select>
             </div>
-
-            <div className="space-y-4">
-              {/* Programs Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Programs
-                </label>
-                <MultiSelectDropdown
-                  options={filterOptions.programs}
-                  selected={filters.programs}
-                  onChange={(selected) => setFilters(prev => ({
-                    ...prev,
-                    programs: selected
-                  }))}
-                  placeholder="Select programs..."
-                />
-              </div>
-
-              {/* Job Titles Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Job Titles
-                </label>
-                <MultiSelectDropdown
-                  options={filterOptions.jobTitles}
-                  selected={filters.jobTitles}
-                  onChange={(selected) => setFilters(prev => ({
-                    ...prev,
-                    jobTitles: selected
-                  }))}
-                  placeholder="Select job titles..."
-                />
-              </div>
-
-              {/* Buildings Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Buildings
-                </label>
-                <MultiSelectDropdown
-                  options={filterOptions.buildings}
-                  selected={filters.buildings}
-                  onChange={(selected) => setFilters(prev => ({
-                    ...prev,
-                    buildings: selected
-                  }))}
-                  placeholder="Select buildings..."
-                />
-              </div>
-
-              {/* Status Filters */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Adjunct Status
-                  </label>
-                  <select
-                    value={filters.adjunct}
-                    onChange={(e) => setFilters(prev => ({ ...prev, adjunct: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                  >
-                    <option value="all">All</option>
-                    <option value="include">Adjunct Only</option>
-                    <option value="exclude">Exclude Adjunct</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Tenure Status
-                  </label>
-                  <select
-                    value={filters.tenured}
-                    onChange={(e) => setFilters(prev => ({ ...prev, tenured: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                  >
-                    <option value="all">All</option>
-                    <option value="include">Tenured Only</option>
-                    <option value="exclude">Exclude Tenured</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    UPD Status
-                  </label>
-                  <select
-                    value={filters.upd}
-                    onChange={(e) => setFilters(prev => ({ ...prev, upd: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                  >
-                    <option value="all">All</option>
-                    <option value="include">UPD Only</option>
-                    <option value="exclude">Exclude UPD</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Staff Status
-                  </label>
-                  <select
-                    value={filters.isAlsoStaff}
-                    onChange={(e) => setFilters(prev => ({ ...prev, isAlsoStaff: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                  >
-                    <option value="all">All</option>
-                    <option value="include">Also Staff</option>
-                    <option value="exclude">Faculty Only</option>
-                  </select>
-                </div>
-
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Course Status
-                  </label>
-                  <select
-                    value={filters.courseCount}
-                    onChange={(e) => setFilters(prev => ({ ...prev, courseCount: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                  >
-                    <option value="all">All</option>
-                    <option value="with-courses">Teaching Courses</option>
-                    <option value="without-courses">Not Teaching</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    PhD Status
-                  </label>
-                  <select
-                    value={filters.hasPhD}
-                    onChange={(e) => setFilters(prev => ({ ...prev, hasPhD: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                  >
-                    <option value="all">All</option>
-                    <option value="include">PhD Only</option>
-                    <option value="exclude">Exclude PhD</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Baylor ID Status
-                  </label>
-                  <select
-                    value={filters.hasBaylorId}
-                    onChange={(e) => setFilters(prev => ({ ...prev, hasBaylorId: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                  >
-                    <option value="all">All</option>
-                    <option value="with-id">Has Baylor ID</option>
-                    <option value="without-id">Missing Baylor ID</option>
-                  </select>
-                </div>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Tenure Status</label>
+              <select value={filters.tenured} onChange={(e) => setFilters(prev => ({ ...prev, tenured: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green">
+                <option value="all">All</option>
+                <option value="include">Tenured Only</option>
+                <option value="exclude">Exclude Tenured</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">UPD Status</label>
+              <select value={filters.upd} onChange={(e) => setFilters(prev => ({ ...prev, upd: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green">
+                <option value="all">All</option>
+                <option value="include">UPD Only</option>
+                <option value="exclude">Exclude UPD</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Staff Status</label>
+              <select value={filters.isAlsoStaff} onChange={(e) => setFilters(prev => ({ ...prev, isAlsoStaff: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green">
+                <option value="all">All</option>
+                <option value="include">Also Staff</option>
+                <option value="exclude">Faculty Only</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Course Status</label>
+              <select value={filters.courseCount} onChange={(e) => setFilters(prev => ({ ...prev, courseCount: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green">
+                <option value="all">All</option>
+                <option value="with-courses">Teaching Courses</option>
+                <option value="without-courses">Not Teaching</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">PhD Status</label>
+              <select value={filters.hasPhD} onChange={(e) => setFilters(prev => ({ ...prev, hasPhD: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green">
+                <option value="all">All</option>
+                <option value="include">PhD Only</option>
+                <option value="exclude">Exclude PhD</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Baylor ID Status</label>
+              <select value={filters.hasBaylorId} onChange={(e) => setFilters(prev => ({ ...prev, hasBaylorId: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green">
+                <option value="all">All</option>
+                <option value="with-id">Has Baylor ID</option>
+                <option value="without-id">Missing Baylor ID</option>
+              </select>
             </div>
           </div>
-        )}
+        </DirectoryFiltersPanel>
 
+        {/* Data Table */}
+        <PeopleDataTable
+          data={sortedAndFilteredData}
+          columns={columns}
+          sortConfig={sortConfig}
+          onSort={handleSort}
+          editingId={editingId}
+          editFormData={editFormData}
+          onRowClick={setSelectedRecord}
+          renderActions={renderActions}
+          createRow={createRow}
+          emptyMessage="No faculty members found."
+        />
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-baylor-green/5">
-                <SortableHeader label="Name" columnKey="name" />
-                <SortableHeader label="Program" columnKey="program" />
-                <SortableHeader label="Job Title" columnKey="jobTitle" />
-                <SortableHeader label="Email" columnKey="email" />
-                <SortableHeader label="Phone" columnKey="phone" />
-                <SortableHeader label="Office" columnKey="office" />
-                <SortableHeader label="Courses" columnKey="courseCount" />
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {isCreating && (
-                <tr className="bg-baylor-gold/5">
-                  <td className="p-2 align-top text-gray-700 font-medium">
-                    <input
-                      name="name"
-                      value={newFaculty.name}
-                      onChange={handleCreateChange}
-                      className={getInputClass('name')}
-                      placeholder="Full Name"
-                    />
-                    <div className="flex items-center gap-2 text-xs mt-2">
-                      <input
-                        type="checkbox"
-                        id="new-adjunct"
-                        name="isAdjunct"
-                        checked={newFaculty.isAdjunct}
-                        onChange={handleCreateChange}
-                        className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                      />
-                      <label htmlFor="new-adjunct" className="font-normal">Adjunct</label>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs mt-1">
-                      <input
-                        type="checkbox"
-                        id="new-isTenured"
-                        name="isTenured"
-                        checked={newFaculty.isTenured}
-                        onChange={handleCreateChange}
-                        className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                      />
-                      <label htmlFor="new-isTenured" className="font-normal">Tenured</label>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs mt-1">
-                      <input type="checkbox" id="new-isAlsoStaff" name="isAlsoStaff" checked={newFaculty.isAlsoStaff} onChange={handleCreateChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
-                      <label htmlFor="new-isAlsoStaff" className="font-normal">Also a staff member</label>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs mt-1">
-                      <input
-                        type="checkbox"
-                        id="new-hasPhD"
-                        name="hasPhD"
-                        checked={newFaculty.hasPhD}
-                        onChange={handleCreateChange}
-                        className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                      />
-                      <label htmlFor="new-hasPhD" className="font-normal">Has PhD</label>
-                    </div>
-                  </td>
-                  <td className="p-2 align-top">
-                    <select
-                      name="programId"
-                      value={newFaculty.programId || ''}
-                      onChange={handleCreateChange}
-                      className={getInputClass('programId')}
-                    >
-                      <option value="">No Program</option>
-                      {programs.map(program => (
-                        <option key={program.id} value={program.id}>
-                          {program.name}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="p-2 align-top">
-                    <input
-                      name="jobTitle"
-                      value={newFaculty.jobTitle}
-                      onChange={handleCreateChange}
-                      className={getInputClass('jobTitle')}
-                      placeholder="Job Title"
-                    />
-                  </td>
-                  <td className="p-2 align-top">
-                    <input
-                      name="email"
-                      value={newFaculty.email}
-                      onChange={handleCreateChange}
-                      className={getInputClass('email')}
-                      placeholder="email@baylor.edu"
-                    />
-                    {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
-                  </td>
-                  <td className="p-2 align-top">
-                    <div className="flex items-center gap-2">
-                      <input
-                        name="phone"
-                        value={newFaculty.phone}
-                        onChange={handleCreateChange}
-                        className={getInputClass('phone')}
-                        placeholder="10 digits"
-                        maxLength="10"
-                        disabled={newFaculty.hasNoPhone}
-                      />
-                      <button
-                        type="button"
-                        onClick={toggleCreatePhoneState}
-                        className={`p-1 rounded transition-colors ${newFaculty.hasNoPhone
-                          ? 'text-red-600 bg-red-100 hover:bg-red-200'
-                          : 'text-gray-400 hover:bg-gray-100'
-                          }`}
-                        title={newFaculty.hasNoPhone ? 'Has no phone number' : 'Has phone number'}
-                      >
-                        {newFaculty.hasNoPhone ? <PhoneOff size={16} /> : <Phone size={16} />}
-                      </button>
-                    </div>
-                    {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
-                  </td>
-                  <td className="p-2 align-top">
-                    <div className="flex items-center gap-2">
-                      <input
-                        name="office"
-                        value={newFaculty.office}
-                        onChange={handleCreateChange}
-                        className={getInputClass('office')}
-                        placeholder="Building & Room"
-                        disabled={newFaculty.hasNoOffice}
-                      />
-                      <button
-                        type="button"
-                        onClick={toggleCreateOfficeState}
-                        className={`p-1 rounded transition-colors ${newFaculty.hasNoOffice
-                          ? 'text-red-600 bg-red-100 hover:bg-red-200'
-                          : 'text-gray-400 hover:bg-gray-100'
-                          }`}
-                        title={newFaculty.hasNoOffice ? 'Has no office' : 'Has office'}
-                      >
-                        {newFaculty.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
-                      </button>
-                    </div>
-                  </td>
-                  <td className="p-2 align-top">
-                    <div className="text-sm text-gray-500 italic">
-                      Will be calculated from courses
-                    </div>
-                  </td>
-                  <td className="p-2 align-top text-right">
-                    <div className="flex gap-2">
-                      <button onClick={handleCreateSave} className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"><Save size={16} /></button>
-                      <button onClick={handleCancelCreate} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {sortedAndFilteredData.map((faculty, index) => (
-                <tr key={`faculty-${faculty.id || index}-${faculty.name}`} className="hover:bg-gray-50" >
-                  {editingId === faculty.id ? (
-                    <>
-                      <td className="p-2 align-top text-gray-700 font-medium">
-                        <div className='mb-2'>{faculty.name}</div>
-                        <div className="flex items-center gap-2 text-xs">
-                          <input type="checkbox" id={`adjunct-${faculty.id || index}`} name="isAdjunct" checked={!!editFormData.isAdjunct} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
-                          <label htmlFor={`adjunct-${faculty.id || index}`} className="font-normal">Adjunct</label>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs mt-1">
-                          <input
-                            type="checkbox"
-                            id={`isTenured-${faculty.id || index}`}
-                            name="isTenured"
-                            checked={!!editFormData.isTenured}
-                            onChange={handleChange}
-                            className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                          />
-                          <label htmlFor={`isTenured-${faculty.id || index}`} className="font-normal">Tenured</label>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs mt-1">
-                          <input type="checkbox" id={`isAlsoStaff-${faculty.id || index}`} name="isAlsoStaff" checked={!!editFormData.isAlsoStaff} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
-                          <label htmlFor={`isAlsoStaff-${faculty.id || index}`} className="font-normal">Also a staff member</label>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs mt-1">
-                          <input
-                            type="checkbox"
-                            id={`hasPhD-${faculty.id || index}`}
-                            name="hasPhD"
-                            checked={!!editFormData.hasPhD}
-                            onChange={handleChange}
-                            className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                          />
-                          <label htmlFor={`hasPhD-${faculty.id || index}`} className="font-normal">Has PhD</label>
-                        </div>
-                      </td>
-                      <td className="p-2 align-top">
-                        <select
-                          name="programId"
-                          value={editFormData.programId || ''}
-                          onChange={handleChange}
-                          className={getInputClass('programId')}
-                        >
-                          <option value="">No Program</option>
-                          {programs.map(program => (
-                            <option key={program.id} value={program.id}>
-                              {program.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="p-2 align-top">
-                        <input name="jobTitle" value={editFormData.jobTitle || ''} onChange={handleChange} className={getInputClass('jobTitle')} placeholder="Job Title" />
-                      </td>
-                      <td className="p-2 align-top">
-                        <input name="email" value={editFormData.email || ''} onChange={handleChange} className={getInputClass('email')} placeholder="email@baylor.edu" />
-                        {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
-                      </td>
-                      <td className="p-2 align-top">
-                        <div className="flex items-center gap-2">
-                          <input
-                            name="phone"
-                            value={editFormData.phone || ''}
-                            onChange={handleChange}
-                            className={getInputClass('phone')}
-                            placeholder="10 digits"
-                            maxLength="10"
-                            disabled={editFormData.hasNoPhone}
-                          />
-                          <button
-                            type="button"
-                            onClick={toggleEditPhoneState}
-                            className={`p-1 rounded transition-colors ${editFormData.hasNoPhone
-                              ? 'text-red-600 bg-red-100 hover:bg-red-200'
-                              : 'text-gray-400 hover:bg-gray-100'
-                              }`}
-                            title={editFormData.hasNoPhone ? 'Has no phone number' : 'Has phone number'}
-                          >
-                            {editFormData.hasNoPhone ? <PhoneOff size={16} /> : <Phone size={16} />}
-                          </button>
-                        </div>
-                        {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
-                      </td>
-                      <td className="p-2 align-top">
-                        <div className="flex items-center gap-2">
-                          <input
-                            name="office"
-                            value={editFormData.office || ''}
-                            onChange={handleChange}
-                            className={getInputClass('office')}
-                            placeholder="Building & Room"
-                            disabled={editFormData.hasNoOffice}
-                          />
-                          <button
-                            type="button"
-                            onClick={toggleEditOfficeState}
-                            className={`p-1 rounded transition-colors ${editFormData.hasNoOffice
-                              ? 'text-red-600 bg-red-100 hover:bg-red-200'
-                              : 'text-gray-400 hover:bg-gray-100'
-                              }`}
-                            title={editFormData.hasNoOffice ? 'Has no office' : 'Has office'}
-                          >
-                            {editFormData.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
-                          </button>
-                        </div>
-                      </td>
-                      <td className="p-2 align-top">
-                        <div className="text-sm text-gray-600">
-                          {faculty.courseCount || 0}
-                        </div>
-                      </td>
-                      <td className="p-2 align-top text-right">
-                        <div className="flex gap-2">
-                          <button onClick={handleSave} className="p-2 text-green-600 hover:bg-green-100 rounded-full" disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canEditFaculty === false}><Save size={16} /></button>
-                          <button onClick={handleCancel} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
-                        </div>
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td className="px-4 py-3 text-gray-700 font-medium cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
-                        <div>{faculty.name}</div>
-                        {faculty.program && (
-                          <div className="text-xs text-baylor-green font-medium">{faculty.program.name}</div>
-                        )}
-                        {faculty.isUPD && (
-                          <div className="text-xs text-amber-600 font-medium flex items-center gap-1">
-                            <UserCog size={12} />
-                            UPD
-                          </div>
-                        )}
-                        {faculty.isAlsoStaff && (
-                          <div className="text-xs text-baylor-gold font-medium">Also Staff</div>
-                        )}
-                        {faculty.isAdjunct && (
-                          <div className="text-xs text-blue-600 font-medium">Adjunct</div>
-                        )}
-                        {faculty.isTenured && (
-                          <div className="text-xs text-purple-600 font-medium">Tenured</div>
-                        )}
-                        {faculty.hasPhD && (
-                          <div className="text-xs text-green-600 font-medium">PhD</div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
-                        {faculty.program ? faculty.program.name : '-'}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.jobTitle || '-'}</td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.email || '-'}</td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
-                        <div className="flex items-center gap-2">
-                          {faculty.hasNoPhone ? (
-                            <span className="flex items-center gap-1 text-gray-500">
-                              <PhoneOff size={14} />
-                              No phone
-                            </span>
-                          ) : (
-                            formatPhoneNumber(faculty.phone)
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
-                        <div className="flex items-center gap-2">
-                          {faculty.hasNoOffice ? (
-                            <span className="flex items-center gap-1 text-gray-500">
-                              <BuildingIcon size={14} className="opacity-50" />
-                              No office
-                            </span>
-                          ) : (
-                            faculty.office || '-'
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
-                        {faculty.courseCount}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex gap-1 justify-end">
-                          <button onClick={(e) => { e.stopPropagation(); handleEdit(faculty); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full" disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canEditFaculty === false}><Edit size={16} /></button>
-                          <button onClick={(e) => { e.stopPropagation(); handleDelete(faculty); }} className="p-2 text-red-600 hover:bg-red-100 rounded-full" disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canDeleteFaculty === false}><Trash2 size={16} /></button>
-                        </div>
-                      </td>
-                    </>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {selectedFacultyForCard && <FacultyContactCard faculty={selectedFacultyForCard} onClose={() => setSelectedFacultyForCard(null)} />}
+        {/* Contact Card Modal */}
+        {selectedRecord && <FacultyContactCard faculty={selectedRecord} onClose={() => setSelectedRecord(null)} />}
 
-        {/* Delete Confirmation Modal */}
-        {showDeleteConfirm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Confirm Delete</h3>
-              <p className="text-gray-600 mb-6">
-                Are you sure you want to delete <strong>{facultyToDelete?.name}</strong>? This action cannot be undone.
-              </p>
-              <div className="flex gap-3 justify-end">
-                <button
-                  onClick={cancelDelete}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmDelete}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
-                >
-                  <Trash2 size={16} />
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Delete Confirmation Dialog */}
+        <DeleteConfirmDialog
+          isOpen={showDeleteConfirm}
+          record={recordToDelete}
+          recordType="faculty member"
+          onConfirm={confirmDelete}
+          onCancel={cancelDelete}
+        />
       </div>
     </div>
   );

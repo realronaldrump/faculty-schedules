@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { Edit, Save, X, GraduationCap, Mail, Phone, PhoneOff, Clock, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, Filter, Download, BarChart3, ArrowRight } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import FacultyContactCard from './FacultyContactCard';
+import { DeleteConfirmDialog } from './shared';
+import SortableHeader from './shared/SortableHeader';
 import {
   calculateWeeklyHoursFromSchedule,
   formatHoursValue,
@@ -805,18 +807,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     document.body.removeChild(link);
   };
 
-  const SortableHeader = ({ label, columnKey }) => {
-    const isSorted = sortConfig.key === columnKey;
-    const directionIcon = isSorted ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : <ArrowUpDown size={14} className="opacity-30" />;
-    return (
-      <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">
-        <button className="flex items-center gap-2" onClick={() => handleSort(columnKey)}>
-          {label}
-          {directionIcon}
-        </button>
-      </th>
-    );
-  };
+  // SortableHeader now imported from ./shared/SortableHeader
 
   return (
     <div className="space-y-6">
@@ -1383,12 +1374,12 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-baylor-green/5">
-                <SortableHeader label="Name" columnKey="name" />
-                <SortableHeader label="Email" columnKey="email" />
-                <SortableHeader label="Phone" columnKey="phone" />
-                <SortableHeader label="Weekly Schedule" columnKey="weeklySchedule" />
-                <SortableHeader label="Job Title" columnKey="jobTitle" />
-                <SortableHeader label="Supervisor" columnKey="supervisor" />
+                <SortableHeader label="Name" columnKey="name" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader label="Email" columnKey="email" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader label="Phone" columnKey="phone" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader label="Weekly Schedule" columnKey="weeklySchedule" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader label="Job Title" columnKey="jobTitle" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader label="Supervisor" columnKey="supervisor" sortConfig={sortConfig} onSort={handleSort} />
                 <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">Building(s)</th>
                 <th className="px-4 py-3"></th>
               </tr>
@@ -1818,30 +1809,13 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
       )}
 
       {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Confirm Delete</h3>
-            <p className="text-sm text-gray-600 mb-6">
-              Are you sure you want to delete {studentToDelete?.name}? This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={executeDelete}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteConfirmDialog
+        isOpen={showDeleteConfirm}
+        record={studentToDelete}
+        recordType="student worker"
+        onConfirm={executeDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
 
       {/* Change History */}
       {showHistory && (

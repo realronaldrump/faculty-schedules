@@ -1,55 +1,138 @@
-import React, { useState, useMemo } from 'react';
-import { Edit, Save, X, BookUser, Mail, Phone, PhoneOff, Building, BuildingIcon, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, BookOpen, Filter } from 'lucide-react';
+import React, { useState, useMemo, useCallback } from 'react';
+import { Edit, Save, X, BookUser, Phone, PhoneOff, Building, BuildingIcon, Plus, RotateCcw, History, Trash2, BookOpen, Download } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import { formatPhoneNumber, extractBuildingName } from '../utils/directoryUtils';
+import { useDirectoryState, useDirectoryHandlers } from '../hooks';
+import { PeopleDataTable, DeleteConfirmDialog, DirectorySearchBar, DirectoryFiltersPanel, NameSortToggle } from './shared';
 
-const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacultyUpdate, onStaffUpdate, onFacultyDelete, programs = [] }) => {
-  const [editingId, setEditingId] = useState(null);
-  const [editFormData, setEditFormData] = useState({});
-  const [filterText, setFilterText] = useState('');
-  const [sortConfig, setSortConfig] = useState({ key: 'courseCount', direction: 'descending' });
-  const [nameSort, setNameSort] = useState('firstName');
-  const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
-  const [errors, setErrors] = useState({});
-  const [showFilters, setShowFilters] = useState(false);
-
-  // Course count filter
-  const [showOnlyWithCourses, setShowOnlyWithCourses] = useState(false);
-
-  // Filter state
-  const [filters, setFilters] = useState({
+/**
+ * Adjunct Faculty Directory - displays and manages adjunct faculty members.
+ * Refactored to use shared hooks and components for reduced code duplication.
+ */
+const AdjunctDirectory = ({
+  facultyData,
+  scheduleData = [],
+  rawScheduleData,
+  onFacultyUpdate,
+  onStaffUpdate,
+  onFacultyDelete,
+  programs = []
+}) => {
+  // Default filter configuration for adjunct
+  const defaultFilters = {
     programs: [],
     jobTitles: [],
     buildings: [],
-    courseCount: 'all' // 'all', 'with-courses', 'without-courses'
+    courseCount: 'all'
+  };
+
+  const createEmptyAdjunct = useCallback(() => ({
+    name: '',
+    jobTitle: '',
+    email: '',
+    phone: '',
+    office: '',
+    baylorId: '',
+    isAdjunct: true,
+    isTenured: false,
+    isAlsoStaff: false,
+    hasNoPhone: false,
+    hasNoOffice: false,
+  }), []);
+
+  // Shared state
+  const state = useDirectoryState({
+    defaultSort: { key: 'courseCount', direction: 'descending' },
+    defaultFilters,
+    createEmptyRecord: createEmptyAdjunct
   });
 
-  // Undo functionality
-  const [changeHistory, setChangeHistory] = useState([]);
-  const [showHistory, setShowHistory] = useState(false);
+  const {
+    editingId, editFormData, setEditFormData, errors, setErrors,
+    filterText, setFilterText, showFilters, setShowFilters, filters, setFilters,
+    sortConfig, nameSort, setNameSort,
+    showDeleteConfirm, recordToDelete,
+    changeHistory, showHistory, setShowHistory, setChangeHistory,
+    selectedRecord, setSelectedRecord
+  } = state;
 
-  // Delete confirmation
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [facultyToDelete, setFacultyToDelete] = useState(null);
+  // Course count filter (legacy checkbox)
+  const [showOnlyWithCourses, setShowOnlyWithCourses] = useState(false);
 
-  // Calculate course counts for adjunct faculty and filter to only adjunct
+  // Validation function
+  const validate = useCallback((data) => {
+    const newErrors = {};
+
+    if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+      newErrors.email = 'Please enter a valid email address.';
+    }
+
+    const phoneDigits = (data.phone || '').replace(/\D/g, '');
+    if (data.phone && phoneDigits.length !== 10) {
+      newErrors.phone = 'Phone number must contain exactly 10 digits.';
+    }
+
+    if (data.baylorId && !/^\d{9}$/.test(data.baylorId)) {
+      newErrors.baylorId = 'Baylor ID must be exactly 9 digits.';
+    }
+
+    return newErrors;
+  }, []);
+
+  // Prepare payload for save
+  const preparePayload = useCallback((data) => ({
+    ...data,
+    phone: (data.phone || '').replace(/\D/g, ''),
+    isAdjunct: true
+  }), []);
+
+  // Track changes for undo
+  const trackChange = useCallback((originalData, updatedData, action) => {
+    const change = {
+      id: Date.now(),
+      timestamp: new Date().toISOString(),
+      action,
+      originalData: { ...originalData },
+      updatedData: { ...updatedData },
+      facultyId: originalData.id || updatedData.id,
+      facultyName: originalData.name || updatedData.name
+    };
+    setChangeHistory(prev => [change, ...prev.slice(0, 19)]);
+  }, [setChangeHistory]);
+
+  // Shared handlers
+  const handlers = useDirectoryHandlers({
+    state,
+    data: facultyData,
+    onUpdate: onFacultyUpdate,
+    onDelete: onFacultyDelete,
+    validate,
+    preparePayload,
+    trackChange
+  });
+
+  const {
+    handleEdit, handleCancel, handleSave, handleChange,
+    handleSort, handleDelete, confirmDelete, cancelDelete,
+    clearFilters, toggleEditPhoneState, toggleEditOfficeState, getInputClass
+  } = handlers;
+
+  // Calculate course counts and filter to only adjunct
   const adjunctWithCourseCounts = useMemo(() => {
     if (!facultyData || !Array.isArray(facultyData)) return [];
 
     return facultyData
-      .filter(faculty => faculty.isAdjunct) // Only adjunct faculty
+      .filter(faculty => faculty.isAdjunct)
       .map(faculty => {
         const facultyName = faculty.name;
-        const facultyCourses = scheduleData.filter(schedule => {
-          const instructorName = schedule.instructor ?
-            `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim() :
-            (schedule.instructorName || schedule.Instructor || '');
-
+        const facultyCourses = (scheduleData || []).filter(schedule => {
+          const instructorName = schedule.instructor
+            ? `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim()
+            : (schedule.instructorName || schedule.Instructor || '');
           return instructorName === facultyName;
         });
 
-        // Get unique courses (by course code)
         const uniqueCourses = [...new Set(facultyCourses.map(schedule =>
           schedule.courseCode || schedule.Course || ''
         ))].filter(courseCode => courseCode.trim() !== '');
@@ -73,63 +156,50 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
     if (!adjunctWithCourseCounts || !Array.isArray(adjunctWithCourseCounts)) return [];
 
     const uniqueMap = new Map();
-
     adjunctWithCourseCounts.forEach(faculty => {
       const key = `${faculty.name?.toLowerCase()}-${(faculty.email || 'no-email').toLowerCase()}`;
-
       if (!uniqueMap.has(key)) {
         uniqueMap.set(key, faculty);
       } else {
         const existing = uniqueMap.get(key);
         const existingFields = Object.values(existing).filter(v => v && v !== '').length;
         const newFields = Object.values(faculty).filter(v => v && v !== '').length;
-
         if (newFields > existingFields) {
           uniqueMap.set(key, faculty);
         }
       }
     });
-
     return Array.from(uniqueMap.values());
   }, [adjunctWithCourseCounts]);
 
-  // Extract unique values for filter options
+  // Extract filter options
   const filterOptions = useMemo(() => {
-    const programs = new Set();
+    const programsSet = new Set();
     const jobTitles = new Set();
     const buildings = new Set();
 
     uniqueDirectoryData.forEach(person => {
-      // Use normalized program data (single source of truth)
-      if (person.program && person.program.name) {
-        programs.add(person.program.name);
-      }
-
-      if (person.jobTitle) {
-        jobTitles.add(person.jobTitle);
-      }
-
-      // Extract building name from office location
+      if (person.program?.name) programsSet.add(person.program.name);
+      if (person.jobTitle) jobTitles.add(person.jobTitle);
       if (person.office) {
-        const buildingName = extractBuildingName(person.office);
-        buildings.add(buildingName);
+        buildings.add(extractBuildingName(person.office));
       } else {
         buildings.add('No Building');
       }
     });
 
     return {
-      programs: Array.from(programs).sort(),
+      programs: Array.from(programsSet).sort(),
       jobTitles: Array.from(jobTitles).sort(),
       buildings: Array.from(buildings).sort()
     };
   }, [uniqueDirectoryData]);
 
-  // Apply filters to data
+  // Filter and sort data
   const sortedAndFilteredData = useMemo(() => {
     let data = [...uniqueDirectoryData];
 
-    // Search term filter
+    // Search filter
     if (filterText) {
       const term = filterText.toLowerCase();
       data = data.filter(person =>
@@ -140,23 +210,20 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
       );
     }
 
-    // Program filter (include-only)
+    // Program filter
     if ((filters.programs || []).length > 0) {
       data = data.filter(person => {
-        const programName = person.program && person.program.name ? person.program.name : '';
+        const programName = person.program?.name || '';
         return filters.programs.includes(programName);
       });
     }
 
-    // Job title filter (include-only)
+    // Job title filter
     if ((filters.jobTitles || []).length > 0) {
-      data = data.filter(person => {
-        const jobTitle = person.jobTitle || '';
-        return filters.jobTitles.includes(jobTitle);
-      });
+      data = data.filter(person => filters.jobTitles.includes(person.jobTitle || ''));
     }
 
-    // Building filter (include-only)
+    // Building filter
     if ((filters.buildings || []).length > 0) {
       data = data.filter(person => {
         const buildingName = person.office ? extractBuildingName(person.office) : 'No Building';
@@ -164,15 +231,8 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
       });
     }
 
-    // Note: Adjuncts cannot be UPD; no UPD filter applied
-
-    // Course count filter (legacy support for the checkbox)
-    if (showOnlyWithCourses) {
-      data = data.filter(adjunct => adjunct.courseCount > 0);
-    }
-
-    // Course count filter (advanced filter)
-    if (filters.courseCount === 'with-courses') {
+    // Course count filter
+    if (showOnlyWithCourses || filters.courseCount === 'with-courses') {
       data = data.filter(person => person.courseCount > 0);
     } else if (filters.courseCount === 'without-courses') {
       data = data.filter(person => person.courseCount === 0);
@@ -193,8 +253,8 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
           valB = (b.lastName || bNameParts[bNameParts.length - 1] || '').toLowerCase();
         }
       } else if (sortConfig.key === 'program') {
-        valA = (a.program && a.program.name ? a.program.name : '').toLowerCase();
-        valB = (b.program && b.program.name ? b.program.name : '').toLowerCase();
+        valA = (a.program?.name || '').toLowerCase();
+        valB = (b.program?.name || '').toLowerCase();
       } else if (sortConfig.key === 'courseCount') {
         valA = a.courseCount || 0;
         valB = b.courseCount || 0;
@@ -207,273 +267,203 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
         return (valA === valB) ? 0 : valA ? -1 : 1;
       }
 
-      if (valA < valB) {
-        return sortConfig.direction === 'ascending' ? -1 : 1;
-      }
-      if (valA > valB) {
-        return sortConfig.direction === 'ascending' ? 1 : -1;
-      }
+      if (valA < valB) return sortConfig.direction === 'ascending' ? -1 : 1;
+      if (valA > valB) return sortConfig.direction === 'ascending' ? 1 : -1;
       return 0;
     });
 
     return data;
   }, [uniqueDirectoryData, filterText, filters, sortConfig, nameSort, showOnlyWithCourses]);
 
-  const validate = (data) => {
-    const newErrors = {};
-
-    if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
-      newErrors.email = 'Please enter a valid email address.';
-    }
-
-    const phoneDigits = (data.phone || '').replace(/\D/g, '');
-    if (data.phone && phoneDigits.length !== 10) {
-      newErrors.phone = 'Phone number must contain exactly 10 digits.';
-    }
-
-    // Baylor ID validation
-    if (data.baylorId && !/^\d{9}$/.test(data.baylorId)) {
-      newErrors.baylorId = 'Baylor ID must be exactly 9 digits.';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const trackChange = (originalData, updatedData, action) => {
-    const change = {
-      id: Date.now(),
-      timestamp: new Date().toISOString(),
-      action,
-      originalData: { ...originalData },
-      updatedData: { ...updatedData },
-      facultyId: originalData.id || updatedData.id,
-      facultyName: originalData.name || updatedData.name
-    };
-
-    setChangeHistory(prev => [change, ...prev.slice(0, 19)]);
-  };
-
+  // Undo change handler
   const undoChange = async (change) => {
     try {
       if (change.action === 'update') {
         const dataToRestore = { ...change.originalData };
-
         if (dataToRestore.isAlsoStaff) {
           await onStaffUpdate(dataToRestore);
         } else {
           await onFacultyUpdate(dataToRestore);
         }
-
         setChangeHistory(prev => prev.filter(c => c.id !== change.id));
-        console.log('Change undone successfully');
       }
     } catch (error) {
       console.error('Error undoing change:', error);
-      setInlineError({ context: 'undo', message: 'Error undoing change: ' + error.message });
     }
   };
 
-  const handleEdit = (faculty) => {
-    setErrors({});
-    setEditingId(faculty.id);
-    setEditFormData(faculty);
-  };
-
-  const handleCancel = () => {
-    setEditingId(null);
-    setEditFormData({});
-    setErrors({});
-  };
-
-  const handleSave = async () => {
-    if (validate(editFormData)) {
-      const originalData = uniqueDirectoryData.find(f => f.id === editingId);
-      const dataToSave = { ...editFormData };
-      const cleanedData = { ...dataToSave, phone: (dataToSave.phone || '').replace(/\D/g, '') };
-
-      trackChange(originalData, cleanedData, 'update');
-
-      try {
-        await onFacultyUpdate(cleanedData, originalData);
-        setEditingId(null);
-        setErrors({});
-      } catch (error) {
-        setChangeHistory(prev => prev.slice(1));
-        throw error;
-      }
+  // Column definitions for PeopleDataTable
+  const columns = useMemo(() => [
+    {
+      key: 'name',
+      label: 'Name',
+      render: (faculty) => (
+        <div className="text-gray-700 font-medium">
+          <div>{faculty.name}</div>
+          {faculty.program && (
+            <div className="text-xs text-baylor-green font-medium">{faculty.program.name}</div>
+          )}
+          <div className="text-xs text-blue-600 font-medium">Adjunct</div>
+          {faculty.isAlsoStaff && (
+            <div className="text-xs text-baylor-gold font-medium">Also Staff</div>
+          )}
+          {faculty.isTenured && (
+            <div className="text-xs text-purple-600 font-medium">Tenured</div>
+          )}
+        </div>
+      ),
+      renderEdit: (faculty) => (
+        <div className="p-2 align-top text-gray-700 font-medium">
+          <div className="mb-2">{faculty.name}</div>
+          <div className="flex items-center gap-2 text-xs">
+            <input type="checkbox" id={`adjunct-${faculty.id}`} name="isAdjunct" checked={!!editFormData.isAdjunct} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+            <label htmlFor={`adjunct-${faculty.id}`} className="font-normal">Adjunct</label>
+          </div>
+          <div className="flex items-center gap-2 text-xs mt-1">
+            <input type="checkbox" id={`isTenured-${faculty.id}`} name="isTenured" checked={!!editFormData.isTenured} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-600" />
+            <label htmlFor={`isTenured-${faculty.id}`} className="font-normal">Tenured</label>
+          </div>
+          <div className="flex items-center gap-2 text-xs mt-1">
+            <input type="checkbox" id={`isAlsoStaff-${faculty.id}`} name="isAlsoStaff" checked={!!editFormData.isAlsoStaff} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+            <label htmlFor={`isAlsoStaff-${faculty.id}`} className="font-normal">Also a staff member</label>
+          </div>
+        </div>
+      )
+    },
+    {
+      key: 'program',
+      label: 'Program',
+      render: (faculty) => faculty.program?.name || '-',
+      renderEdit: () => (
+        <select name="programId" value={editFormData.programId || ''} onChange={handleChange} className={getInputClass('programId')}>
+          <option value="">No Program</option>
+          {programs.map(program => (
+            <option key={program.id} value={program.id}>{program.name}</option>
+          ))}
+        </select>
+      )
+    },
+    {
+      key: 'jobTitle',
+      label: 'Job Title',
+      render: (faculty) => faculty.jobTitle || '-',
+      renderEdit: () => (
+        <input name="jobTitle" value={editFormData.jobTitle || ''} onChange={handleChange} className={getInputClass('jobTitle')} placeholder="Job Title" />
+      )
+    },
+    {
+      key: 'email',
+      label: 'Email',
+      render: (faculty) => faculty.email || '-',
+      renderEdit: () => (
+        <div>
+          <input name="email" value={editFormData.email || ''} onChange={handleChange} className={getInputClass('email')} placeholder="email@baylor.edu" />
+          {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
+        </div>
+      )
+    },
+    {
+      key: 'phone',
+      label: 'Phone',
+      render: (faculty) => (
+        <div className="flex items-center gap-2">
+          {faculty.hasNoPhone ? (
+            <span className="flex items-center gap-1 text-gray-500">
+              <PhoneOff size={14} />
+              No phone
+            </span>
+          ) : (
+            formatPhoneNumber(faculty.phone)
+          )}
+        </div>
+      ),
+      renderEdit: () => (
+        <div>
+          <div className="flex items-center gap-2">
+            <input name="phone" value={editFormData.phone || ''} onChange={handleChange} className={getInputClass('phone')} placeholder="10 digits" maxLength="10" disabled={editFormData.hasNoPhone} />
+            <button type="button" onClick={toggleEditPhoneState} className={`p-1 rounded transition-colors ${editFormData.hasNoPhone ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`} title={editFormData.hasNoPhone ? 'Has no phone number' : 'Has phone number'}>
+              {editFormData.hasNoPhone ? <PhoneOff size={16} /> : <Phone size={16} />}
+            </button>
+          </div>
+          {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
+        </div>
+      )
+    },
+    {
+      key: 'office',
+      label: 'Office',
+      render: (faculty) => (
+        <div className="flex items-center gap-2">
+          {faculty.hasNoOffice ? (
+            <span className="flex items-center gap-1 text-gray-500">
+              <BuildingIcon size={14} className="opacity-50" />
+              No office
+            </span>
+          ) : (
+            faculty.office || '-'
+          )}
+        </div>
+      ),
+      renderEdit: () => (
+        <div className="flex items-center gap-2">
+          <input name="office" value={editFormData.office || ''} onChange={handleChange} className={getInputClass('office')} placeholder="Building & Room" disabled={editFormData.hasNoOffice} />
+          <button type="button" onClick={toggleEditOfficeState} className={`p-1 rounded transition-colors ${editFormData.hasNoOffice ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`} title={editFormData.hasNoOffice ? 'Has no office' : 'Has office'}>
+            {editFormData.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
+          </button>
+        </div>
+      )
+    },
+    {
+      key: 'courseCount',
+      label: 'Courses',
+      render: (faculty) => (
+        <div className="flex items-center gap-2">
+          <span>{faculty.courseCount}</span>
+          {faculty.courseCount > 0 && <BookOpen size={14} className="text-baylor-green" />}
+        </div>
+      ),
+      renderEdit: (faculty) => (
+        <div className="text-sm text-gray-600">{faculty.courseCount || 0}</div>
+      )
     }
-  };
+  ], [editFormData, errors, handleChange, toggleEditPhoneState, toggleEditOfficeState, getInputClass, programs]);
 
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    let finalValue = type === 'checkbox' ? checked : value;
-
-    if (name === 'phone') {
-      finalValue = finalValue.replace(/\D/g, '');
+  // Render actions column
+  const renderActions = (faculty, isEditing) => {
+    if (isEditing) {
+      return (
+        <div className="flex gap-2">
+          <button onClick={handleSave} className="p-2 text-green-600 hover:bg-green-100 rounded-full"><Save size={16} /></button>
+          <button onClick={handleCancel} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
+        </div>
+      );
     }
-
-    if (name === 'baylorId') {
-      finalValue = finalValue.replace(/\D/g, '').slice(0, 9);
-    }
-
-    const newFormData = {
-      ...editFormData,
-      [name]: finalValue,
-    };
-
-    setEditFormData(newFormData);
-
-    if (Object.keys(errors).length > 0) {
-      validate(newFormData);
-    }
-  };
-
-  const toggleEditPhoneState = () => {
-    const newHasNoPhone = !editFormData.hasNoPhone;
-    setEditFormData({
-      ...editFormData,
-      hasNoPhone: newHasNoPhone,
-      phone: newHasNoPhone ? '' : editFormData.phone
-    });
-  };
-
-  const toggleEditOfficeState = () => {
-    const newHasNoOffice = !editFormData.hasNoOffice;
-    setEditFormData({
-      ...editFormData,
-      hasNoOffice: newHasNoOffice,
-      office: newHasNoOffice ? '' : editFormData.office
-    });
-  };
-
-  const handleSort = (key) => {
-    setSortConfig(prevConfig => ({
-      key,
-      direction: prevConfig.key === key && prevConfig.direction === 'ascending' ? 'descending' : 'ascending'
-    }));
-  };
-
-  const handleDelete = (faculty) => {
-    setFacultyToDelete(faculty);
-    setShowDeleteConfirm(true);
-  };
-
-  const confirmDelete = async () => {
-    try {
-      await onFacultyDelete(facultyToDelete);
-      setShowDeleteConfirm(false);
-      setFacultyToDelete(null);
-    } catch (error) {
-      console.error('Error deleting faculty:', error);
-      setInlineError({ context: 'delete', message: 'Error deleting faculty: ' + error.message });
-    }
-  };
-
-  const cancelDelete = () => {
-    setShowDeleteConfirm(false);
-    setFacultyToDelete(null);
-  };
-
-  const clearFilters = () => {
-    setFilters({
-      programs: [],
-      jobTitles: [],
-      buildings: [],
-      courseCount: 'all'
-    });
-    setFilterText('');
-  };
-
-  const SortableHeader = ({ label, columnKey }) => {
-    const isSorted = sortConfig.key === columnKey;
-    const directionIcon = isSorted ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : <ArrowUpDown size={14} className="opacity-30" />;
-
     return (
-      <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">
-        <button className="flex items-center gap-2" onClick={() => handleSort(columnKey)}>
-          {label}
-          {directionIcon}
-        </button>
-      </th>
+      <div className="flex gap-1 justify-end">
+        <button onClick={(e) => { e.stopPropagation(); handleEdit(faculty); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><Edit size={16} /></button>
+        <button onClick={(e) => { e.stopPropagation(); handleDelete(faculty); }} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><Trash2 size={16} /></button>
+      </div>
     );
-  };
-
-  const getInputClass = (fieldName) => {
-    const baseClass = "w-full p-1 border rounded bg-baylor-gold/10";
-    return errors[fieldName] ? `${baseClass} border-red-500` : `${baseClass} border-baylor-gold`;
   };
 
   return (
     <div className="space-y-6">
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
+        {/* Header */}
         <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200">
           <h2 className="text-xl font-serif font-semibold text-baylor-green flex items-center">
             <BookUser className="mr-2 text-baylor-gold" size={20} />
             Adjunct Faculty Directory ({sortedAndFilteredData.length} members)
           </h2>
           <div className="flex items-center gap-4">
-            {/* Name Sort Options */}
-            {sortConfig.key === 'name' && (
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-gray-600">Sort by:</span>
-                <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-                  <button
-                    onClick={() => setNameSort('firstName')}
-                    className={`px-3 py-1 text-xs ${nameSort === 'firstName'
-                      ? 'bg-baylor-green text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                      }`}
-                  >
-                    First Name
-                  </button>
-                  <button
-                    onClick={() => setNameSort('lastName')}
-                    className={`px-3 py-1 text-xs ${nameSort === 'lastName'
-                      ? 'bg-baylor-green text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                      }`}
-                  >
-                    Last Name
-                  </button>
-                </div>
-              </div>
-            )}
-            {/* Course count filter UI */}
+            <NameSortToggle show={sortConfig.key === 'name'} nameSort={nameSort} onNameSortChange={setNameSort} />
             <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={showOnlyWithCourses}
-                onChange={e => setShowOnlyWithCourses(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-              />
+              <input type="checkbox" checked={showOnlyWithCourses} onChange={e => setShowOnlyWithCourses(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
               Only show adjunct with at least 1 course
             </label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input
-                type="text"
-                placeholder="Filter directory..."
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-                className="w-full pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
-              />
-            </div>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${showFilters
-                ? 'bg-baylor-green text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-            >
-              <Filter size={16} />
-              Filters
-            </button>
+            <DirectorySearchBar filterText={filterText} onFilterTextChange={setFilterText} showFilters={showFilters} onToggleFilters={() => setShowFilters(!showFilters)} />
             {changeHistory.length > 0 && (
-              <button
-                onClick={() => setShowHistory(!showHistory)}
-                className="flex items-center gap-2 px-3 py-2 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 transition-colors"
-              >
+              <button onClick={() => setShowHistory(!showHistory)} className="flex items-center gap-2 px-3 py-2 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 transition-colors">
                 <History size={16} />
                 Changes ({changeHistory.length})
               </button>
@@ -482,91 +472,30 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
         </div>
 
         {/* Advanced Filters */}
-        {showFilters && (
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-medium text-gray-900">Advanced Filters</h3>
-              <button
-                onClick={clearFilters}
-                className="text-sm text-baylor-green hover:text-baylor-green/80 font-medium"
-              >
-                Clear All Filters
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* Programs Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Programs
-                </label>
-                <MultiSelectDropdown
-                  options={filterOptions.programs}
-                  selected={filters.programs}
-                  onChange={(selected) => setFilters(prev => ({
-                    ...prev,
-                    programs: selected
-                  }))}
-                  placeholder="Select programs..."
-                />
-              </div>
-
-              {/* Job Titles Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Job Titles
-                </label>
-                <MultiSelectDropdown
-                  options={filterOptions.jobTitles}
-                  selected={filters.jobTitles}
-                  onChange={(selected) => setFilters(prev => ({
-                    ...prev,
-                    jobTitles: selected
-                  }))}
-                  placeholder="Select job titles..."
-                />
-              </div>
-
-              {/* Buildings Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Buildings
-                </label>
-                <MultiSelectDropdown
-                  options={filterOptions.buildings}
-                  selected={filters.buildings}
-                  onChange={(selected) => setFilters(prev => ({
-                    ...prev,
-                    buildings: selected
-                  }))}
-                  placeholder="Select buildings..."
-                />
-              </div>
-
-              {/* Status Filters */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Course Status
-                  </label>
-                  <select
-                    value={filters.courseCount}
-                    onChange={(e) => setFilters(prev => ({ ...prev, courseCount: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                  >
-                    <option value="all">All</option>
-                    <option value="with-courses">Teaching Courses</option>
-                    <option value="without-courses">Not Teaching</option>
-                  </select>
-                </div>
-              </div>
+        <DirectoryFiltersPanel isOpen={showFilters} onClearAll={() => { clearFilters(); setShowOnlyWithCourses(false); }}>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Programs</label>
+            <MultiSelectDropdown options={filterOptions.programs} selected={filters.programs} onChange={(selected) => setFilters(prev => ({ ...prev, programs: selected }))} placeholder="Select programs..." />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Job Titles</label>
+            <MultiSelectDropdown options={filterOptions.jobTitles} selected={filters.jobTitles} onChange={(selected) => setFilters(prev => ({ ...prev, jobTitles: selected }))} placeholder="Select job titles..." />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Buildings</label>
+            <MultiSelectDropdown options={filterOptions.buildings} selected={filters.buildings} onChange={(selected) => setFilters(prev => ({ ...prev, buildings: selected }))} placeholder="Select buildings..." />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Course Status</label>
+              <select value={filters.courseCount} onChange={(e) => setFilters(prev => ({ ...prev, courseCount: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green">
+                <option value="all">All</option>
+                <option value="with-courses">Teaching Courses</option>
+                <option value="without-courses">Not Teaching</option>
+              </select>
             </div>
           </div>
-        )}
-
-
+        </DirectoryFiltersPanel>
 
         {/* Change History */}
         {showHistory && changeHistory.length > 0 && (
@@ -576,18 +505,11 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
               {changeHistory.map((change) => (
                 <div key={change.id} className="flex items-center justify-between p-3 bg-white rounded border">
                   <div className="flex-1">
-                    <div className="font-medium text-sm">
-                      {change.action === 'create' ? 'Created' : 'Updated'} {change.facultyName}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {new Date(change.timestamp).toLocaleString()}
-                    </div>
+                    <div className="font-medium text-sm">{change.action === 'create' ? 'Created' : 'Updated'} {change.facultyName}</div>
+                    <div className="text-xs text-gray-500">{new Date(change.timestamp).toLocaleString()}</div>
                   </div>
                   {change.action === 'update' && (
-                    <button
-                      onClick={() => undoChange(change)}
-                      className="flex items-center gap-1 px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
-                    >
+                    <button onClick={() => undoChange(change)} className="flex items-center gap-1 px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors">
                       <RotateCcw size={12} />
                       Undo
                     </button>
@@ -598,228 +520,30 @@ const AdjunctDirectory = ({ facultyData, scheduleData, rawScheduleData, onFacult
           </div>
         )}
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-baylor-green/5">
-                <SortableHeader label="Name" columnKey="name" />
-                <SortableHeader label="Program" columnKey="program" />
-                <SortableHeader label="Job Title" columnKey="jobTitle" />
-                <SortableHeader label="Email" columnKey="email" />
-                <SortableHeader label="Phone" columnKey="phone" />
-                <SortableHeader label="Office" columnKey="office" />
-                <SortableHeader label="Courses" columnKey="courseCount" />
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {sortedAndFilteredData.map((faculty, index) => (
-                <tr key={`faculty-${faculty.id || index}-${faculty.name}`} className="hover:bg-gray-50" >
-                  {editingId === faculty.id ? (
-                    <>
-                      <td className="p-2 align-top text-gray-700 font-medium">
-                        <div className='mb-2'>{faculty.name}</div>
-                        <div className="flex items-center gap-2 text-xs">
-                          <input type="checkbox" id={`adjunct-${faculty.id || index}`} name="isAdjunct" checked={!!editFormData.isAdjunct} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
-                          <label htmlFor={`adjunct-${faculty.id || index}`} className="font-normal">Adjunct</label>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs mt-1">
-                          <input
-                            type="checkbox"
-                            id={`isTenured-${faculty.id || index}`}
-                            name="isTenured"
-                            checked={!!editFormData.isTenured}
-                            onChange={handleChange}
-                            className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-600"
-                          />
-                          <label htmlFor={`isTenured-${faculty.id || index}`} className="font-normal">Tenured</label>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs mt-1">
-                          <input type="checkbox" id={`isAlsoStaff-${faculty.id || index}`} name="isAlsoStaff" checked={!!editFormData.isAlsoStaff} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
-                          <label htmlFor={`isAlsoStaff-${faculty.id || index}`} className="font-normal">Also a staff member</label>
-                        </div>
-                      </td>
-                      <td className="p-2 align-top">
-                        <select
-                          name="programId"
-                          value={editFormData.programId || ''}
-                          onChange={handleChange}
-                          className={getInputClass('programId')}
-                        >
-                          <option value="">No Program</option>
-                          {programs.map(program => (
-                            <option key={program.id} value={program.id}>
-                              {program.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="p-2 align-top">
-                        <input name="jobTitle" value={editFormData.jobTitle || ''} onChange={handleChange} className={getInputClass('jobTitle')} placeholder="Job Title" />
-                      </td>
-                      <td className="p-2 align-top">
-                        <input name="email" value={editFormData.email || ''} onChange={handleChange} className={getInputClass('email')} placeholder="email@baylor.edu" />
-                        {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
-                      </td>
-                      <td className="p-2 align-top">
-                        <div className="flex items-center gap-2">
-                          <input
-                            name="phone"
-                            value={editFormData.phone || ''}
-                            onChange={handleChange}
-                            className={getInputClass('phone')}
-                            placeholder="10 digits"
-                            maxLength="10"
-                            disabled={editFormData.hasNoPhone}
-                          />
-                          <button
-                            type="button"
-                            onClick={toggleEditPhoneState}
-                            className={`p-1 rounded transition-colors ${editFormData.hasNoPhone
-                              ? 'text-red-600 bg-red-100 hover:bg-red-200'
-                              : 'text-gray-400 hover:bg-gray-100'
-                              }`}
-                            title={editFormData.hasNoPhone ? 'Has no phone number' : 'Has phone number'}
-                          >
-                            {editFormData.hasNoPhone ? <PhoneOff size={16} /> : <Phone size={16} />}
-                          </button>
-                        </div>
-                        {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
-                      </td>
-                      <td className="p-2 align-top">
-                        <div className="flex items-center gap-2">
-                          <input
-                            name="office"
-                            value={editFormData.office || ''}
-                            onChange={handleChange}
-                            className={getInputClass('office')}
-                            placeholder="Building & Room"
-                            disabled={editFormData.hasNoOffice}
-                          />
-                          <button
-                            type="button"
-                            onClick={toggleEditOfficeState}
-                            className={`p-1 rounded transition-colors ${editFormData.hasNoOffice
-                              ? 'text-red-600 bg-red-100 hover:bg-red-200'
-                              : 'text-gray-400 hover:bg-gray-100'
-                              }`}
-                            title={editFormData.hasNoOffice ? 'Has no office' : 'Has office'}
-                          >
-                            {editFormData.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
-                          </button>
-                        </div>
-                      </td>
-                      <td className="p-2 align-top">
-                        <div className="text-sm text-gray-600">
-                          {faculty.courseCount || 0}
-                        </div>
-                      </td>
-                      <td className="p-2 align-top">
-                        <div className="text-sm text-gray-600">
-                          {faculty.courseCount || 0}
-                        </div>
-                      </td>
-                      <td className="p-2 align-top text-right">
-                        <div className="flex gap-2">
-                          <button onClick={handleSave} className="p-2 text-green-600 hover:bg-green-100 rounded-full"><Save size={16} /></button>
-                          <button onClick={handleCancel} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
-                        </div>
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td className="px-4 py-3 text-gray-700 font-medium cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
-                        <div>{faculty.name}</div>
-                        {faculty.program && (
-                          <div className="text-xs text-baylor-green font-medium">{faculty.program.name}</div>
-                        )}
-                        <div className="text-xs text-blue-600 font-medium">Adjunct</div>
-                        {faculty.isAlsoStaff && (
-                          <div className="text-xs text-baylor-gold font-medium">Also Staff</div>
-                        )}
-                        {faculty.isTenured && (
-                          <div className="text-xs text-purple-600 font-medium">Tenured</div>
-                        )}
-                        {/* Adjuncts cannot be UPD; no badge shown */}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
-                        {faculty.program ? faculty.program.name : '-'}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.jobTitle || '-'}</td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>{faculty.email || '-'}</td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
-                        <div className="flex items-center gap-2">
-                          {faculty.hasNoPhone ? (
-                            <span className="flex items-center gap-1 text-gray-500">
-                              <PhoneOff size={14} />
-                              No phone
-                            </span>
-                          ) : (
-                            formatPhoneNumber(faculty.phone)
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
-                        <div className="flex items-center gap-2">
-                          {faculty.hasNoOffice ? (
-                            <span className="flex items-center gap-1 text-gray-500">
-                              <BuildingIcon size={14} className="opacity-50" />
-                              No office
-                            </span>
-                          ) : (
-                            faculty.office || '-'
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => setSelectedFacultyForCard(faculty)}>
-                        <div className="flex items-center gap-2">
-                          <span>{faculty.courseCount}</span>
-                          {faculty.courseCount > 0 && (
-                            <BookOpen size={14} className="text-baylor-green" />
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex gap-1 justify-end">
-                          <button onClick={(e) => { e.stopPropagation(); handleEdit(faculty); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><Edit size={16} /></button>
-                          <button onClick={(e) => { e.stopPropagation(); handleDelete(faculty); }} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><Trash2 size={16} /></button>
-                        </div>
-                      </td>
-                    </>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {selectedFacultyForCard && <FacultyContactCard faculty={selectedFacultyForCard} onClose={() => setSelectedFacultyForCard(null)} />}
+        {/* Data Table */}
+        <PeopleDataTable
+          data={sortedAndFilteredData}
+          columns={columns}
+          sortConfig={sortConfig}
+          onSort={handleSort}
+          editingId={editingId}
+          editFormData={editFormData}
+          onRowClick={setSelectedRecord}
+          renderActions={renderActions}
+          emptyMessage="No adjunct faculty found."
+        />
 
-        {/* Delete Confirmation Modal */}
-        {showDeleteConfirm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Confirm Delete</h3>
-              <p className="text-gray-600 mb-6">
-                Are you sure you want to delete <strong>{facultyToDelete?.name}</strong>? This action cannot be undone.
-              </p>
-              <div className="flex gap-3 justify-end">
-                <button
-                  onClick={cancelDelete}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmDelete}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
-                >
-                  <Trash2 size={16} />
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Contact Card Modal */}
+        {selectedRecord && <FacultyContactCard faculty={selectedRecord} onClose={() => setSelectedRecord(null)} />}
+
+        {/* Delete Confirmation Dialog */}
+        <DeleteConfirmDialog
+          isOpen={showDeleteConfirm}
+          record={recordToDelete}
+          recordType="adjunct faculty member"
+          onConfirm={confirmDelete}
+          onCancel={cancelDelete}
+        />
       </div>
     </div>
   );

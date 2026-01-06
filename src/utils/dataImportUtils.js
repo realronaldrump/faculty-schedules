@@ -501,7 +501,19 @@ export const determineRoles = (jobTitle) => {
 // ==================== MATCHING ALGORITHMS ====================
 
 /**
- * Smart person matching algorithm with fuzzy matching
+ * STRICT person matching algorithm - NO fuzzy matching
+ *
+ * IMPORTANT: This function now uses strict matching only to prevent data corruption.
+ * It matches ONLY on:
+ * 1. Baylor ID (exact match - highest priority)
+ * 2. Email address (exact match - high priority)
+ * 3. External CLSS ID (exact match)
+ * 4. Exact first name + last name (exact match)
+ *
+ * Fuzzy matching has been REMOVED to prevent false positives that could merge
+ * different people (e.g., "John Smith" and "John Smyth").
+ *
+ * If no match is found, returns null - the record should be flagged for manual review.
  */
 export const findMatchingPerson = async (personData, existingPeople = null) => {
   // If existing people not provided, fetch from database
@@ -510,87 +522,84 @@ export const findMatchingPerson = async (personData, existingPeople = null) => {
     existingPeople = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
 
-  const { firstName, lastName, email } = personData;
+  const { firstName, lastName, email, baylorId, clssInstructorId } = personData;
 
-  // Exact email match (highest priority)
+  // 1. Baylor ID match (highest priority - unique identifier)
+  if (baylorId) {
+    const baylorIdMatch = existingPeople.find(p =>
+      p.baylorId && p.baylorId === baylorId
+    );
+    if (baylorIdMatch) {
+      console.log(`🎯 Baylor ID match: ${baylorId} → ${baylorIdMatch.firstName} ${baylorIdMatch.lastName}`);
+      return { person: baylorIdMatch, confidence: 'exact', matchType: 'baylorId' };
+    }
+  }
+
+  // 2. Exact email match (high priority - unique identifier)
   if (email) {
     const emailMatch = existingPeople.find(p =>
       p.email && p.email.toLowerCase() === email.toLowerCase()
     );
-    if (emailMatch) return { person: emailMatch, confidence: 'high' };
+    if (emailMatch) {
+      console.log(`🎯 Email match: ${email} → ${emailMatch.firstName} ${emailMatch.lastName}`);
+      return { person: emailMatch, confidence: 'exact', matchType: 'email' };
+    }
+
+    // Also check externalIds.emails array
+    const extEmailMatch = existingPeople.find(p =>
+      p.externalIds?.emails && Array.isArray(p.externalIds.emails) &&
+      p.externalIds.emails.some(e => e.toLowerCase() === email.toLowerCase())
+    );
+    if (extEmailMatch) {
+      console.log(`🎯 External email match: ${email} → ${extEmailMatch.firstName} ${extEmailMatch.lastName}`);
+      return { person: extEmailMatch, confidence: 'exact', matchType: 'externalEmail' };
+    }
   }
 
-  // Exact name match
+  // 3. CLSS Instructor ID match (for schedule imports)
+  if (clssInstructorId) {
+    const clssMatch = existingPeople.find(p =>
+      p.externalIds?.clssInstructorId &&
+      String(p.externalIds.clssInstructorId) === String(clssInstructorId)
+    );
+    if (clssMatch) {
+      console.log(`🎯 CLSS ID match: ${clssInstructorId} → ${clssMatch.firstName} ${clssMatch.lastName}`);
+      return { person: clssMatch, confidence: 'exact', matchType: 'clssId' };
+    }
+  }
+
+  // 4. Exact name match (requires BOTH first and last name to match exactly)
   if (firstName && lastName) {
-    const nameMatch = existingPeople.find(p =>
+    const exactNameMatch = existingPeople.find(p =>
       p.firstName && p.lastName &&
-      p.firstName.toLowerCase() === firstName.toLowerCase() &&
-      p.lastName.toLowerCase() === lastName.toLowerCase()
+      p.firstName.toLowerCase().trim() === firstName.toLowerCase().trim() &&
+      p.lastName.toLowerCase().trim() === lastName.toLowerCase().trim()
     );
-    if (nameMatch) return { person: nameMatch, confidence: 'medium' };
-  }
-
-  // Fuzzy name match
-  if (firstName && lastName) {
-    let bestMatch = null;
-    let bestSimilarity = 0;
-
-    existingPeople.forEach(p => {
-      if (p.firstName && p.lastName) {
-        const similarity = calculateFuzzyNameSimilarity(
-          `${firstName} ${lastName}`,
-          `${p.firstName} ${p.lastName}`
-        );
-        if (similarity > bestSimilarity && similarity >= 0.85) {
-          bestSimilarity = similarity;
-          bestMatch = p;
-        }
-      }
-    });
-
-    if (bestMatch) {
-      return { person: bestMatch, confidence: 'fuzzy', similarity: bestSimilarity };
+    if (exactNameMatch) {
+      console.log(`🎯 Exact name match: ${firstName} ${lastName} → ${exactNameMatch.id}`);
+      return { person: exactNameMatch, confidence: 'exact', matchType: 'exactName' };
     }
   }
 
-  // Last name only match (lower confidence)
-  if (lastName) {
-    const lastNameMatches = existingPeople.filter(p =>
-      p.lastName && p.lastName.toLowerCase() === lastName.toLowerCase()
-    );
-    if (lastNameMatches.length === 1) {
-      return { person: lastNameMatches[0], confidence: 'low' };
-    }
-  }
-
+  // NO FUZZY MATCHING - If we can't find an exact match, return null
+  // The record should be flagged for manual review
+  console.log(`❓ No exact match found for: ${firstName || ''} ${lastName || ''} (email: ${email || 'none'})`);
   return null;
 };
 
-// Add this helper function for fuzzy similarity (simple Levenshtein)
-const calculateFuzzyNameSimilarity = (name1, name2) => {
-  const n1 = name1.toLowerCase();
-  const n2 = name2.toLowerCase();
-
-  if (n1 === n2) return 1.0;
-
-  const matrix = Array(n1.length + 1).fill().map(() => Array(n2.length + 1).fill(0));
-
-  for (let i = 0; i <= n1.length; i++) matrix[i][0] = i;
-  for (let j = 0; j <= n2.length; j++) matrix[0][j] = j;
-
-  for (let i = 1; i <= n1.length; i++) {
-    for (let j = 1; j <= n2.length; j++) {
-      const cost = n1[i - 1] === n2[j - 1] ? 0 : 1;
-      matrix[i][j] = Math.min(
-        matrix[i - 1][j] + 1,
-        matrix[i][j - 1] + 1,
-        matrix[i - 1][j - 1] + cost
-      );
-    }
-  }
-
-  const maxLength = Math.max(n1.length, n2.length);
-  return maxLength === 0 ? 1.0 : 1.0 - (matrix[n1.length][n2.length] / maxLength);
+/**
+ * Flag a record for manual review during import
+ * This is used when strict matching fails and fuzzy matching is disabled
+ */
+export const flagForManualReview = (record, reason, context = {}) => {
+  return {
+    ...record,
+    _needsReview: true,
+    _reviewReason: reason,
+    _reviewContext: context,
+    _reviewedAt: null,
+    _reviewedBy: null
+  };
 };
 
 // ==================== DATA CLEANING UTILITIES ====================
@@ -1245,121 +1254,93 @@ export const processScheduleImport = async (csvData) => {
 };
 
 /**
- * Enhanced instructor matching with multiple strategies
+ * STRICT instructor matching - NO fuzzy matching
+ *
+ * IMPORTANT: This function now uses strict matching only to prevent data corruption.
+ * Fuzzy matching has been REMOVED because it can incorrectly merge different people
+ * (e.g., "Robert Smith" matching "Bob Smith" or "John Smith" matching "John Smyth").
+ *
+ * Matching strategies (in order of priority):
+ * 1. CLSS External ID (exact match - highest priority)
+ * 2. Baylor ID (exact match)
+ * 3. Email (exact match)
+ * 4. Exact first name + last name (case-insensitive, trimmed)
+ *
+ * If no match is found, returns null - a new person record will be created
+ * with _needsReview flag for manual verification.
  */
 const findBestInstructorMatch = async (instructorInfo, existingPeople) => {
-  const { firstName, lastName, title, id: clssId } = instructorInfo;
-  // Strategy 0: External ID direct match (highest confidence)
+  const { firstName, lastName, title, id: clssId, email, baylorId } = instructorInfo;
+
+  // Strategy 1: CLSS External ID match (highest priority - unique identifier)
   if (clssId) {
-    const externalMatch = existingPeople.find(p => p.externalIds && p.externalIds.clssInstructorId && String(p.externalIds.clssInstructorId) === String(clssId));
+    const externalMatch = existingPeople.find(p =>
+      p.externalIds?.clssInstructorId &&
+      String(p.externalIds.clssInstructorId) === String(clssId)
+    );
     if (externalMatch) {
-      console.log(`🎯 External ID match (CLSS): ${clssId} → ${externalMatch.firstName} ${externalMatch.lastName} (${externalMatch.id})`);
-      return { person: externalMatch, confidence: 'high' };
+      console.log(`🎯 CLSS ID match: ${clssId} → ${externalMatch.firstName} ${externalMatch.lastName} (${externalMatch.id})`);
+      return { person: externalMatch, confidence: 'exact', matchType: 'clssId' };
     }
   }
 
-  // Normalize names for comparison (remove middle initials, common variations)
-  const normalizeNameForMatching = (name) => {
-    if (!name) return '';
-    return name.toLowerCase()
-      .replace(/\b[a-z]\.\s*/g, '') // Remove middle initials like "A.", "B."
-      .replace(/\s+/g, ' ') // Normalize spaces
-      .trim();
-  };
+  // Strategy 2: Baylor ID match (unique identifier)
+  if (baylorId) {
+    const baylorMatch = existingPeople.find(p =>
+      p.baylorId && p.baylorId === baylorId
+    );
+    if (baylorMatch) {
+      console.log(`🎯 Baylor ID match: ${baylorId} → ${baylorMatch.firstName} ${baylorMatch.lastName} (${baylorMatch.id})`);
+      return { person: baylorMatch, confidence: 'exact', matchType: 'baylorId' };
+    }
+  }
 
-  const normalizedFirstName = normalizeNameForMatching(firstName);
-  const normalizedLastName = normalizeNameForMatching(lastName);
+  // Strategy 3: Email match (unique identifier)
+  if (email) {
+    const emailMatch = existingPeople.find(p =>
+      p.email && p.email.toLowerCase() === email.toLowerCase()
+    );
+    if (emailMatch) {
+      console.log(`🎯 Email match: ${email} → ${emailMatch.firstName} ${emailMatch.lastName} (${emailMatch.id})`);
+      return { person: emailMatch, confidence: 'exact', matchType: 'email' };
+    }
+  }
 
-  // Strategy 1: Exact normalized name match (highest confidence)
-  if (normalizedFirstName && normalizedLastName) {
-    const exactMatch = existingPeople.find(p => {
-      const existingFirst = normalizeNameForMatching(p.firstName);
-      const existingLast = normalizeNameForMatching(p.lastName);
-      return existingFirst === normalizedFirstName && existingLast === normalizedLastName;
-    });
+  // Strategy 4: Exact name match (case-insensitive, trimmed)
+  // IMPORTANT: This requires BOTH first and last name to match exactly
+  if (firstName && lastName) {
+    const normalizedFirst = firstName.toLowerCase().trim();
+    const normalizedLast = lastName.toLowerCase().trim();
+
+    const exactMatch = existingPeople.find(p =>
+      p.firstName && p.lastName &&
+      p.firstName.toLowerCase().trim() === normalizedFirst &&
+      p.lastName.toLowerCase().trim() === normalizedLast
+    );
 
     if (exactMatch) {
-      console.log(`🎯 Normalized exact match: "${firstName} ${lastName}" → "${exactMatch.firstName} ${exactMatch.lastName}" (${exactMatch.id})`);
-      return { person: exactMatch, confidence: 'high' };
-    }
-  }
-
-  // Strategy 2: Original exact match (for perfect matches)
-  if (firstName && lastName) {
-    const perfectMatch = existingPeople.find(p =>
-      p.firstName && p.lastName &&
-      p.firstName.toLowerCase() === firstName.toLowerCase() &&
-      p.lastName.toLowerCase() === lastName.toLowerCase()
-    );
-    if (perfectMatch) {
-      console.log(`✨ Perfect exact match: ${firstName} ${lastName} → ${perfectMatch.id}`);
-      return { person: perfectMatch, confidence: 'high' };
-    }
-  }
-
-  // Strategy 3: Fuzzy name match
-  if (firstName && lastName) {
-    let bestMatch = null;
-    let bestSimilarity = 0;
-
-    existingPeople.forEach(p => {
-      if (p.firstName && p.lastName) {
-        const similarity = calculateFuzzyNameSimilarity(
-          `${firstName} ${lastName}`,
-          `${p.firstName} ${p.lastName}`
-        );
-        if (similarity > bestSimilarity && similarity >= 0.85) {
-          bestSimilarity = similarity;
-          bestMatch = p;
-        }
-      }
-    });
-
-    if (bestMatch) {
-      console.log(`🔍 Fuzzy match (${Math.round(bestSimilarity * 100)}%): "${firstName} ${lastName}" → "${bestMatch.firstName} ${bestMatch.lastName}" (${bestMatch.id})`);
-      return { person: bestMatch, confidence: 'fuzzy', similarity: bestSimilarity };
-    }
-  }
-
-  // Strategy 4: Last name + first initial match (medium confidence)
-  if (firstName && lastName) {
-    const firstInitial = firstName.charAt(0).toLowerCase();
-    const initialMatch = existingPeople.find(p =>
-      p.lastName && p.firstName &&
-      p.lastName.toLowerCase() === lastName.toLowerCase() &&
-      p.firstName.charAt(0).toLowerCase() === firstInitial
-    );
-    if (initialMatch) {
-      console.log(`📝 Initial match: ${firstName} ${lastName} → ${initialMatch.firstName} ${initialMatch.lastName}`);
-      return { person: initialMatch, confidence: 'medium' };
-    }
-  }
-
-  // Strategy 5: Unique last name match (for cases where last name is uncommon)
-  if (lastName) {
-    const lastNameMatches = existingPeople.filter(p =>
-      p.lastName && p.lastName.toLowerCase() === lastName.toLowerCase()
-    );
-
-    if (lastNameMatches.length === 1) {
-      const match = lastNameMatches[0];
-      console.log(`👤 Unique last name match: ${lastName} → ${match.firstName} ${match.lastName} (${match.id})`);
-      return { person: match, confidence: 'medium' };
+      console.log(`🎯 Exact name match: "${firstName} ${lastName}" → "${exactMatch.firstName} ${exactMatch.lastName}" (${exactMatch.id})`);
+      return { person: exactMatch, confidence: 'exact', matchType: 'exactName' };
     }
 
-    // If multiple matches, try to disambiguate with title
-    if (title && lastNameMatches.length > 1) {
-      const titleMatch = lastNameMatches.find(p =>
-        p.title && p.title.toLowerCase().includes(title.toLowerCase())
+    // Also try matching with middle initial removed (e.g., "John A." → "John")
+    const firstNameNoInitial = normalizedFirst.replace(/\s+[a-z]\.$/, '').trim();
+    if (firstNameNoInitial !== normalizedFirst) {
+      const matchNoInitial = existingPeople.find(p =>
+        p.firstName && p.lastName &&
+        p.firstName.toLowerCase().trim() === firstNameNoInitial &&
+        p.lastName.toLowerCase().trim() === normalizedLast
       );
-      if (titleMatch) {
-        console.log(`🎓 Title-disambiguated match: ${title} ${lastName} → ${titleMatch.firstName} ${titleMatch.lastName} (${titleMatch.id})`);
-        return { person: titleMatch, confidence: 'medium' };
+      if (matchNoInitial) {
+        console.log(`🎯 Name match (middle initial removed): "${firstName} ${lastName}" → "${matchNoInitial.firstName} ${matchNoInitial.lastName}" (${matchNoInitial.id})`);
+        return { person: matchNoInitial, confidence: 'exact', matchType: 'exactNameNoInitial' };
       }
     }
   }
 
-  console.log(`❓ No match found for: ${firstName} ${lastName}`);
+  // NO FUZZY MATCHING - Return null if no exact match found
+  // The schedule import will create a new person record flagged for manual review
+  console.log(`❓ No exact match found for instructor: ${firstName} ${lastName} (CLSS ID: ${clssId || 'none'})`);
   return null;
 };
 

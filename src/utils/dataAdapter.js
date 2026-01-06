@@ -1,11 +1,30 @@
 /**
  * Data Adapter Utilities
- * Bridge between normalized data model and existing component interfaces
+ *
+ * FULLY RELATIONAL MODEL - This adapter commits to ID-based references only.
+ *
+ * Key principles:
+ * 1. Names are ALWAYS resolved via ID lookups (no string fallbacks)
+ * 2. If instructorId is missing, display "Unassigned" not legacy string names
+ * 3. Programs are resolved via programId, not string matching
+ * 4. Rooms are resolved via roomId, not string parsing
+ *
+ * This prevents data inconsistencies where cached string names diverge from
+ * the actual person/room records.
  */
 
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { parseTime } from './timeUtils';
+
+// ==================== CONSTANTS ====================
+
+/**
+ * Display constants for unresolved references
+ */
+export const UNASSIGNED = 'Unassigned';
+export const UNKNOWN_ROOM = 'TBA';
+export const UNKNOWN_PROGRAM = 'Unassigned';
 
 // ==================== DATA FETCHING ====================
 
@@ -356,10 +375,115 @@ export const getFullName = (person) => {
 
 /**
  * Get display name for instructor (used in schedules)
+ *
+ * RELATIONAL MODEL: Always resolve from person object, never from cached strings.
+ * If person is null/undefined, return "Unassigned" to indicate missing reference.
  */
 export const getInstructorDisplayName = (person) => {
-  if (!person) return 'Staff';
-  return `${person.firstName} ${person.lastName}`.trim() || 'Unknown';
+  if (!person) return UNASSIGNED;
+  const name = `${person.firstName || ''} ${person.lastName || ''}`.trim();
+  return name || UNASSIGNED;
+};
+
+/**
+ * Resolve instructor name from schedule using ID lookup
+ *
+ * @param {Object} schedule - The schedule object
+ * @param {Map|Object} peopleMap - Map of person ID to person object
+ * @returns {string} The instructor's display name or "Unassigned"
+ */
+export const resolveInstructorName = (schedule, peopleMap) => {
+  if (!schedule?.instructorId) {
+    return UNASSIGNED;
+  }
+
+  const person = peopleMap instanceof Map
+    ? peopleMap.get(schedule.instructorId)
+    : peopleMap[schedule.instructorId];
+
+  return getInstructorDisplayName(person);
+};
+
+/**
+ * Resolve room display name from schedule using ID lookup
+ *
+ * @param {Object} schedule - The schedule object
+ * @param {Map|Object} roomsMap - Map of room ID to room object
+ * @returns {string} The room display name or "TBA"
+ */
+export const resolveRoomName = (schedule, roomsMap) => {
+  if (schedule?.isOnline) {
+    return 'Online';
+  }
+
+  // Try roomIds array first (multi-room support)
+  if (Array.isArray(schedule?.roomIds) && schedule.roomIds.length > 0) {
+    const roomNames = schedule.roomIds
+      .map(id => {
+        const room = roomsMap instanceof Map ? roomsMap.get(id) : roomsMap[id];
+        return room ? (room.displayName || room.name) : null;
+      })
+      .filter(Boolean);
+
+    if (roomNames.length > 0) {
+      return roomNames.join('; ');
+    }
+  }
+
+  // Try single roomId
+  if (schedule?.roomId) {
+    const room = roomsMap instanceof Map
+      ? roomsMap.get(schedule.roomId)
+      : roomsMap[schedule.roomId];
+
+    if (room) {
+      return room.displayName || room.name || UNKNOWN_ROOM;
+    }
+  }
+
+  return UNKNOWN_ROOM;
+};
+
+/**
+ * Enrich schedule with resolved display names
+ *
+ * This function resolves all ID references to display names using lookup maps.
+ * It should be used when preparing schedules for UI display.
+ *
+ * @param {Object} schedule - The schedule object with ID references
+ * @param {Map} peopleMap - Map of person ID to person object
+ * @param {Map} roomsMap - Map of room ID to room object
+ * @param {Map} programsMap - Map of program ID to program object
+ * @returns {Object} Schedule with resolved display names
+ */
+export const enrichScheduleForDisplay = (schedule, peopleMap, roomsMap, programsMap) => {
+  if (!schedule) return null;
+
+  const instructor = schedule.instructorId ? peopleMap.get(schedule.instructorId) : null;
+  const instructorName = getInstructorDisplayName(instructor);
+  const roomName = resolveRoomName(schedule, roomsMap);
+
+  // Resolve program from instructor if available
+  let programName = UNKNOWN_PROGRAM;
+  if (instructor?.programId && programsMap) {
+    const program = programsMap.get(instructor.programId);
+    if (program) {
+      programName = program.name;
+    }
+  }
+
+  return {
+    ...schedule,
+    // Resolved display fields
+    instructorName,
+    roomName,
+    programName,
+    // Include full instructor object for detailed views
+    instructor,
+    // Flag indicating if instructor is properly linked
+    _hasValidInstructor: !!instructor,
+    _hasValidRoom: schedule.isOnline || (schedule.roomId && roomsMap.has(schedule.roomId))
+  };
 };
 
 // ==================== MIGRATION HELPERS ====================
@@ -377,16 +501,29 @@ export const isNormalizedDataAvailable = async () => {
 };
 
 export default {
+  // Constants
+  UNASSIGNED,
+  UNKNOWN_ROOM,
+  UNKNOWN_PROGRAM,
+  // Data fetching
   fetchPeople,
   fetchPrograms,
   fetchSchedulesWithInstructors,
+  // Component adapters
   adaptPeopleToFaculty,
   adaptPeopleToStaff,
+  // Search and filtering
   searchPeople,
   filterPeopleByRole,
   getDualRolePeople,
+  // Analytics
   generateAnalyticsFromNormalizedData,
+  // Display helpers (relational model)
   getFullName,
   getInstructorDisplayName,
+  resolveInstructorName,
+  resolveRoomName,
+  enrichScheduleForDisplay,
+  // Migration helpers
   isNormalizedDataAvailable
 }; 

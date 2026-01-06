@@ -4,7 +4,7 @@ import FacultyContactCard from './FacultyContactCard';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import { formatPhoneNumber, extractBuildingName } from '../utils/directoryUtils';
 import { useDirectoryState, useDirectoryHandlers } from '../hooks';
-import { PeopleDataTable, DeleteConfirmDialog, DirectorySearchBar, DirectoryFiltersPanel, NameSortToggle } from './shared';
+import { DeleteConfirmDialog, UniversalDirectory } from './shared';
 
 /**
  * Adjunct Faculty Directory - displays and manages adjunct faculty members.
@@ -447,32 +447,40 @@ const AdjunctDirectory = ({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200">
-          <h2 className="text-xl font-serif font-semibold text-baylor-green flex items-center">
-            <BookUser className="mr-2 text-baylor-gold" size={20} />
-            Adjunct Faculty Directory ({sortedAndFilteredData.length} members)
-          </h2>
-          <div className="flex items-center gap-4">
-            <NameSortToggle show={sortConfig.key === 'name'} nameSort={nameSort} onNameSortChange={setNameSort} />
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={showOnlyWithCourses} onChange={e => setShowOnlyWithCourses(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
-              Only show adjunct with at least 1 course
-            </label>
-            <DirectorySearchBar filterText={filterText} onFilterTextChange={setFilterText} showFilters={showFilters} onToggleFilters={() => setShowFilters(!showFilters)} />
-            {changeHistory.length > 0 && (
-              <button onClick={() => setShowHistory(!showHistory)} className="flex items-center gap-2 px-3 py-2 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 transition-colors">
-                <History size={16} />
-                Changes ({changeHistory.length})
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Advanced Filters */}
-        <DirectoryFiltersPanel isOpen={showFilters} onClearAll={() => { clearFilters(); setShowOnlyWithCourses(false); }}>
+    <UniversalDirectory
+      type="people"
+      title="Adjunct Faculty Directory"
+      icon={BookUser}
+      data={sortedAndFilteredData}
+      columns={columns}
+      sortConfig={sortConfig}
+      onSort={handleSort}
+      nameSort={nameSort}
+      onNameSortChange={setNameSort}
+      filterText={filterText}
+      onFilterTextChange={setFilterText}
+      showFilters={showFilters}
+      onToggleFilters={() => setShowFilters(!showFilters)}
+      onClearFilters={() => { clearFilters(); setShowOnlyWithCourses(false); }}
+      filterOptions={filterOptions}
+      leadingActions={(
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={showOnlyWithCourses} onChange={e => setShowOnlyWithCourses(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+          Only show adjunct with at least 1 course
+        </label>
+      )}
+      trailingActions={(
+        <>
+          {changeHistory.length > 0 && (
+            <button onClick={() => setShowHistory(!showHistory)} className="flex items-center gap-2 px-3 py-2 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 transition-colors">
+              <History size={16} />
+              Changes ({changeHistory.length})
+            </button>
+          )}
+        </>
+      )}
+      filterContent={(
+        <>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Programs</label>
             <MultiSelectDropdown options={filterOptions.programs} selected={filters.programs} onChange={(selected) => setFilters(prev => ({ ...prev, programs: selected }))} placeholder="Select programs..." />
@@ -495,57 +503,46 @@ const AdjunctDirectory = ({
               </select>
             </div>
           </div>
-        </DirectoryFiltersPanel>
-
-        {/* Change History */}
-        {showHistory && changeHistory.length > 0 && (
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <h3 className="font-medium text-gray-900 mb-3">Recent Changes</h3>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {changeHistory.map((change) => (
-                <div key={change.id} className="flex items-center justify-between p-3 bg-white rounded border">
-                  <div className="flex-1">
-                    <div className="font-medium text-sm">{change.action === 'create' ? 'Created' : 'Updated'} {change.facultyName}</div>
-                    <div className="text-xs text-gray-500">{new Date(change.timestamp).toLocaleString()}</div>
-                  </div>
-                  {change.action === 'update' && (
-                    <button onClick={() => undoChange(change)} className="flex items-center gap-1 px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors">
-                      <RotateCcw size={12} />
-                      Undo
-                    </button>
-                  )}
+        </>
+      )}
+      bodyTop={showHistory && changeHistory.length > 0 ? (
+        <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <h3 className="font-medium text-gray-900 mb-3">Recent Changes</h3>
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {changeHistory.map((change) => (
+              <div key={change.id} className="flex items-center justify-between p-3 bg-white rounded border">
+                <div className="flex-1">
+                  <div className="font-medium text-sm">{change.action === 'create' ? 'Created' : 'Updated'} {change.facultyName}</div>
+                  <div className="text-xs text-gray-500">{new Date(change.timestamp).toLocaleString()}</div>
                 </div>
-              ))}
-            </div>
+                {change.action === 'update' && (
+                  <button onClick={() => undoChange(change)} className="flex items-center gap-1 px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors">
+                    <RotateCcw size={12} />
+                    Undo
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
-        )}
-
-        {/* Data Table */}
-        <PeopleDataTable
-          data={sortedAndFilteredData}
-          columns={columns}
-          sortConfig={sortConfig}
-          onSort={handleSort}
-          editingId={editingId}
-          editFormData={editFormData}
-          onRowClick={setSelectedRecord}
-          renderActions={renderActions}
-          emptyMessage="No adjunct faculty found."
-        />
-
-        {/* Contact Card Modal */}
-        {selectedRecord && <FacultyContactCard faculty={selectedRecord} onClose={() => setSelectedRecord(null)} />}
-
-        {/* Delete Confirmation Dialog */}
-        <DeleteConfirmDialog
-          isOpen={showDeleteConfirm}
-          record={recordToDelete}
-          recordType="adjunct faculty member"
-          onConfirm={confirmDelete}
-          onCancel={cancelDelete}
-        />
-      </div>
-    </div>
+        </div>
+      ) : null}
+      tableProps={{
+        editingId,
+        editFormData,
+        onRowClick: setSelectedRecord,
+        renderActions,
+        emptyMessage: 'No adjunct faculty found.'
+      }}
+    >
+      {selectedRecord && <FacultyContactCard faculty={selectedRecord} onClose={() => setSelectedRecord(null)} />}
+      <DeleteConfirmDialog
+        isOpen={showDeleteConfirm}
+        record={recordToDelete}
+        recordType="adjunct faculty member"
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
+    </UniversalDirectory>
   );
 };
 

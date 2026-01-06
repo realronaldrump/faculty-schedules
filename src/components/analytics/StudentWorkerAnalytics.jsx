@@ -11,8 +11,7 @@ import {
   Search,
   TrendingUp,
   Users,
-  Award,
-  PieChart,
+
   List,
   LayoutGrid
 } from 'lucide-react';
@@ -51,53 +50,7 @@ const ProgressBar = ({ value, maxValue, label, subLabel, color = 'baylor-green' 
   );
 };
 
-// Status distribution donut chart (simplified CSS version)
-const StatusDonut = ({ data }) => {
-  const total = data.reduce((sum, item) => sum + item.count, 0);
-  if (total === 0) return null;
 
-  let offset = 0;
-  const segments = data.map((item, index) => {
-    const percentage = (item.count / total) * 100;
-    const segment = { ...item, percentage, offset };
-    offset += percentage;
-    return segment;
-  });
-
-  return (
-    <div className="flex items-center gap-4">
-      <div className="relative w-20 h-20">
-        <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
-          {segments.map((segment, index) => (
-            <circle
-              key={segment.status}
-              cx="18"
-              cy="18"
-              r="15.915"
-              fill="none"
-              stroke={segment.color}
-              strokeWidth="3"
-              strokeDasharray={`${segment.percentage} ${100 - segment.percentage}`}
-              strokeDashoffset={-segment.offset}
-              className="transition-all duration-500"
-            />
-          ))}
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-sm font-bold text-gray-700">{total}</span>
-        </div>
-      </div>
-      <div className="flex flex-col gap-1">
-        {segments.map((segment) => (
-          <div key={segment.status} className="flex items-center gap-2 text-xs">
-            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: segment.color }} />
-            <span className="text-gray-600">{segment.status}: {segment.count}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
 
 const StudentWorkerAnalytics = ({ studentData = [], onNavigate }) => {
   const [searchText, setSearchText] = useState('');
@@ -257,37 +210,7 @@ const StudentWorkerAnalytics = ({ studentData = [], onNavigate }) => {
     };
   }, [filteredAssignments]);
 
-  // Status distribution for donut chart
-  const statusDistribution = useMemo(() => {
-    const counts = { Active: 0, Ended: 0, Upcoming: 0, Inactive: 0 };
-    filteredAssignments.forEach((a) => {
-      if (counts.hasOwnProperty(a.status)) {
-        counts[a.status]++;
-      }
-    });
-    return [
-      { status: 'Active', count: counts.Active, color: '#16a34a' },
-      { status: 'Upcoming', count: counts.Upcoming, color: '#2563eb' },
-      { status: 'Ended', count: counts.Ended, color: '#6b7280' },
-      { status: 'Inactive', count: counts.Inactive, color: '#eab308' },
-    ].filter((item) => item.count > 0);
-  }, [filteredAssignments]);
 
-  // Top performers (students with most hours)
-  const topPerformers = useMemo(() => {
-    const studentHours = new Map();
-    filteredAssignments.forEach((assignment) => {
-      const studentKey = assignment.student?.id || assignment.student?.email || assignment.student?.name;
-      if (!studentKey) return;
-      const existing = studentHours.get(studentKey) || { student: assignment.student, hours: 0, pay: 0 };
-      existing.hours += assignment.weeklyHours || 0;
-      existing.pay += assignment.weeklyPay || 0;
-      studentHours.set(studentKey, existing);
-    });
-    return Array.from(studentHours.values())
-      .sort((a, b) => b.hours - a.hours)
-      .slice(0, 5);
-  }, [filteredAssignments]);
 
   const jobTitleBreakdown = useMemo(() => {
     const map = new Map();
@@ -635,8 +558,8 @@ const StudentWorkerAnalytics = ({ studentData = [], onNavigate }) => {
               <button
                 onClick={() => setActiveTab('overview')}
                 className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${activeTab === 'overview'
-                    ? 'text-baylor-green bg-baylor-green/5'
-                    : 'text-gray-600 hover:text-baylor-green hover:bg-gray-50'
+                  ? 'text-baylor-green bg-baylor-green/5'
+                  : 'text-gray-600 hover:text-baylor-green hover:bg-gray-50'
                   }`}
               >
                 <LayoutGrid size={18} />
@@ -648,8 +571,8 @@ const StudentWorkerAnalytics = ({ studentData = [], onNavigate }) => {
               <button
                 onClick={() => setActiveTab('assignments')}
                 className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${activeTab === 'assignments'
-                    ? 'text-baylor-green bg-baylor-green/5'
-                    : 'text-gray-600 hover:text-baylor-green hover:bg-gray-50'
+                  ? 'text-baylor-green bg-baylor-green/5'
+                  : 'text-gray-600 hover:text-baylor-green hover:bg-gray-50'
                   }`}
               >
                 <List size={18} />
@@ -667,58 +590,7 @@ const StudentWorkerAnalytics = ({ studentData = [], onNavigate }) => {
             <div className="p-6">
               {activeTab === 'overview' ? (
                 <div className="space-y-6">
-                  {/* Top Row: Status + Top Performers */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Status Distribution */}
-                    <div className="border border-gray-100 rounded-xl p-5 bg-gray-50/50">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-gray-800 mb-4">
-                        <PieChart size={18} className="text-baylor-green" />
-                        Assignment Status
-                      </div>
-                      {statusDistribution.length > 0 ? (
-                        <StatusDonut data={statusDistribution} />
-                      ) : (
-                        <p className="text-sm text-gray-500">No status data available.</p>
-                      )}
-                    </div>
 
-                    {/* Top Performers */}
-                    <div className="border border-gray-100 rounded-xl p-5 bg-gray-50/50">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-gray-800 mb-4">
-                        <Award size={18} className="text-baylor-gold" />
-                        Top Workers by Hours
-                      </div>
-                      {topPerformers.length > 0 ? (
-                        <div className="space-y-3">
-                          {topPerformers.map((performer, index) => (
-                            <button
-                              key={performer.student?.email || index}
-                              onClick={() => handleStudentClick(performer.student)}
-                              className="w-full flex items-center gap-3 text-left hover:bg-white p-2 -m-2 rounded-lg transition-colors"
-                            >
-                              <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${index === 0 ? 'bg-baylor-gold text-baylor-green' :
-                                  index === 1 ? 'bg-gray-300 text-gray-700' :
-                                    index === 2 ? 'bg-amber-600 text-white' :
-                                      'bg-gray-100 text-gray-600'
-                                }`}>
-                                {index + 1}
-                              </span>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-800 truncate">
-                                  {performer.student?.name || 'Unknown'}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  {formatHoursValue(performer.hours)} hrs · {formatCurrency(performer.pay)}
-                                </p>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-gray-500">No performers to display.</p>
-                      )}
-                    </div>
-                  </div>
 
                   {/* Breakdown Charts */}
                   <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -864,12 +736,12 @@ const StudentWorkerAnalytics = ({ studentData = [], onNavigate }) => {
                               <td className="px-4 py-3 text-sm">
                                 <span
                                   className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${assignment.status === 'Active'
-                                      ? 'bg-green-100 text-green-800'
-                                      : assignment.status === 'Upcoming'
-                                        ? 'bg-blue-100 text-blue-800'
-                                        : assignment.status === 'Ended'
-                                          ? 'bg-gray-100 text-gray-700'
-                                          : 'bg-yellow-100 text-yellow-800'
+                                    ? 'bg-green-100 text-green-800'
+                                    : assignment.status === 'Upcoming'
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : assignment.status === 'Ended'
+                                        ? 'bg-gray-100 text-gray-700'
+                                        : 'bg-yellow-100 text-yellow-800'
                                     }`}
                                 >
                                   {assignment.status}

@@ -5,7 +5,7 @@ import ExportModal from '../admin/ExportModal';
 import FacultyContactCard from '../FacultyContactCard';
 import { logExport } from '../../utils/activityLogger';
 
-const DAY_ORDER = ['M','T','W','R','F'];
+const DAY_ORDER = ['M', 'T', 'W', 'R', 'F'];
 const DAY_LABELS = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
 
 // Layout tuning for readability and export quality
@@ -25,7 +25,7 @@ function formatTimeLabel(minutes) {
   const m = minutes % 60;
   const ampm = h >= 12 ? 'PM' : 'AM';
   const hr12 = ((h + 11) % 12) + 1;
-  return `${hr12}:${m.toString().padStart(2,'0')} ${ampm}`;
+  return `${hr12}:${m.toString().padStart(2, '0')} ${ampm}`;
 }
 
 // Brand-aligned accent mapping
@@ -122,10 +122,10 @@ const StudentSchedules = ({ studentData = [] }) => {
       const jobs = Array.isArray(s.jobs) && s.jobs.length > 0
         ? s.jobs
         : [{
-            jobTitle: s.jobTitle,
-            location: Array.isArray(s.primaryBuildings) ? s.primaryBuildings : (s.primaryBuilding ? [s.primaryBuilding] : []),
-            weeklySchedule: Array.isArray(s.weeklySchedule) ? s.weeklySchedule : []
-          }];
+          jobTitle: s.jobTitle,
+          location: Array.isArray(s.primaryBuildings) ? s.primaryBuildings : (s.primaryBuilding ? [s.primaryBuilding] : []),
+          weeklySchedule: Array.isArray(s.weeklySchedule) ? s.weeklySchedule : []
+        }];
 
       // Ensure at least one job has schedule entries
       const hasAnySchedule = jobs.some(j => Array.isArray(j.weeklySchedule) && j.weeklySchedule.length > 0);
@@ -280,6 +280,33 @@ const StudentSchedules = ({ studentData = [] }) => {
 
   const visibleDays = dayView === 'All' ? DAY_ORDER : [dayView];
 
+  // Calculate dynamic column widths based on density (max concurrent events)
+  const gridTemplateColumns = useMemo(() => {
+    // 1. Calculate max overlaps for each day
+    const maxOverlapsByDay = {};
+    visibleDays.forEach(day => {
+      const items = entriesByDayWithLayout[day] || [];
+      // items each have a 'columns' property indicating the max columns in their group
+      // We want the maximum of those across the whole day
+      let max = 0;
+      items.forEach(item => {
+        if (item.columns > max) max = item.columns;
+      });
+      maxOverlapsByDay[day] = max;
+    });
+
+    // 2. Compute width string
+    const minWidthPerCol = 60; // px
+    const minDayWidth = 180; // px
+    const widths = visibleDays.map(day => {
+      const overlaps = maxOverlapsByDay[day] || 1;
+      const required = Math.max(minDayWidth, overlaps * minWidthPerCol);
+      return `minmax(${required}px, 1fr)`;
+    });
+
+    return `${TIME_COLUMN_WIDTH}px ${widths.join(' ')}`;
+  }, [entriesByDayWithLayout, visibleDays]);
+
   const handleExport = async (format) => {
     const title = `Student Worker Schedules - ${dayView === 'All' ? 'All Days' : DAY_LABELS[dayView]}`;
     try {
@@ -327,9 +354,8 @@ const StudentSchedules = ({ studentData = [] }) => {
             <div className="flex rounded-md border">
               <button
                 onClick={() => setViewMode('calendar')}
-                className={`px-3 py-1 text-xs rounded-l-md flex items-center gap-1 ${
-                  viewMode === 'calendar' ? 'bg-baylor-green text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
-                }`}
+                className={`px-3 py-1 text-xs rounded-l-md flex items-center gap-1 ${viewMode === 'calendar' ? 'bg-baylor-green text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
                 title="Calendar view - compact grid"
               >
                 <Calendar size={14} />
@@ -337,9 +363,8 @@ const StudentSchedules = ({ studentData = [] }) => {
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`px-3 py-1 text-xs rounded-r-md flex items-center gap-1 ${
-                  viewMode === 'list' ? 'bg-baylor-green text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
-                }`}
+                className={`px-3 py-1 text-xs rounded-r-md flex items-center gap-1 ${viewMode === 'list' ? 'bg-baylor-green text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
                 title="List view - detailed and readable"
               >
                 <List size={14} />
@@ -413,144 +438,144 @@ const StudentSchedules = ({ studentData = [] }) => {
       </div>
 
       {viewMode === 'calendar' && (
-      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm" ref={calendarRef}>
-        {/* Time scale header */}
-        <div className="grid gap-x-2" style={{ gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(${visibleDays.length}, 1fr)` }}>
-          <div></div>
-          {visibleDays.map(d => (
-            <div key={d} className="text-center text-sm font-serif font-semibold text-baylor-green py-1">{DAY_LABELS[d]}</div>
-          ))}
-        </div>
-        <div className="grid gap-x-2" style={{ gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(${visibleDays.length}, 1fr)` }}>
-          {/* Time scale */}
-          <div className="relative" style={{ height: `${(totalMinutes/60)*calendarPxPerHour}px` }}>
-            {Array.from({ length: Math.floor(totalMinutes / 60) + 1 }).map((_, i) => {
-              const m = minStart + i * 60;
-              const top = (i * 60) / totalMinutes * 100;
-              return (
-                <div key={i} className="absolute left-0 right-0 flex items-center" style={{ top: `${top}%` }}>
-                  <div className="text-xs text-gray-600 w-full pr-2 text-right font-medium">{formatTimeLabel(m)}</div>
-                </div>
-              );
-            })}
+        <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm overflow-x-auto" ref={calendarRef}>
+          {/* Time scale header */}
+          <div className="grid gap-x-2 min-w-max" style={{ gridTemplateColumns }}>
+            <div></div>
+            {visibleDays.map(d => (
+              <div key={d} className="text-center text-sm font-serif font-semibold text-baylor-green py-1">{DAY_LABELS[d]}</div>
+            ))}
           </div>
-
-          {/* Day columns */}
-          {visibleDays.map(d => (
-            <div key={d} className="relative border-l border-gray-100" style={{ height: `${(totalMinutes/60)*calendarPxPerHour}px` }}>
-              {/* Hour lines */}
+          <div className="grid gap-x-2 min-w-max" style={{ gridTemplateColumns }}>
+            {/* Time scale */}
+            <div className="relative" style={{ height: `${(totalMinutes / 60) * calendarPxPerHour}px` }}>
               {Array.from({ length: Math.floor(totalMinutes / 60) + 1 }).map((_, i) => {
+                const m = minStart + i * 60;
                 const top = (i * 60) / totalMinutes * 100;
                 return (
-                  <div key={i} className="absolute left-0 right-0 border-t border-gray-100" style={{ top: `${top}%` }} />
+                  <div key={i} className="absolute left-0 right-0 flex items-center" style={{ top: `${top}%` }}>
+                    <div className="text-xs text-gray-600 w-full pr-2 text-right font-medium">{formatTimeLabel(m)}</div>
+                  </div>
                 );
               })}
-              {/* Half-hour lines (dashed) */}
-              {Array.from({ length: Math.floor(totalMinutes / 30) }).map((_, i) => {
-                const minutes = (i + 1) * 30;
-                if (minutes % 60 === 0) return null; // skip where hour line already exists
-                const top = (minutes / totalMinutes) * 100;
-                return (
-                  <div key={`half-${i}`} className="absolute left-0 right-0 border-t border-gray-100" style={{ top: `${top}%`, opacity: 0.5, borderStyle: 'dashed' }} />
-                );
-              })}
-              {/* Entries */}
-              {(entriesByDayWithLayout[d] || []).map((item, idx) => {
-                const { entry, start, end, col, columns } = item;
-                const top = ((start - minStart) / totalMinutes) * 100;
-                const height = Math.max(3, ((end - start) / totalMinutes) * 100);
-                const durationMinutes = end - start;
-                const accent = accentForStudentAndJob(entry.student.id, entry.jobTitle);
-                const gap = 6; // px between columns
-                const widthCalc = `calc((100% - ${(columns - 1) * gap}px) / ${columns})`;
-                const leftCalc = `calc(${(col * 100) / columns}% + ${col * gap}px)`;
-                // Readability-first text sizing with zoom support
-                const eventHeightPx = (durationMinutes / 60) * calendarPxPerHour;
-                let fontSizePx = 12;
-                if (eventHeightPx < 44) fontSizePx = 11;
-                if (eventHeightPx < 34) fontSizePx = 10;
-                if (eventHeightPx < 26) fontSizePx = 9;
-                if (eventHeightPx < 20) fontSizePx = 8;
-                fontSizePx = Math.max(10, fontSizePx); // enforce minimum legible size
-                const dynamicPadding = Math.max(2, Math.min(4, eventHeightPx / 12));
-                const lineHeight = 1.2;
-                const studentName = entry.student.name || '';
-                const timeRange = `${formatTimeLabel(start)} - ${formatTimeLabel(end)}`;
-                const showJob = !!entry.jobTitle && eventHeightPx >= 52;
+            </div>
 
-                return (
-                  <div
-                    key={idx}
-                    lang="en"
-                    className="absolute rounded-md shadow-sm ring-1 ring-black/5 text-gray-900 bg-white hover:shadow-md cursor-pointer flex flex-col justify-center items-stretch"
-                    style={{
-                      top: `${top}%`,
-                      height: `${height}%`,
-                      width: widthCalc,
-                      left: leftCalc,
-                      background: accent.bg,
-                      borderLeft: `4px solid ${accent.border}`,
-                      fontSize: `${fontSizePx}px`,
-                      padding: `${dynamicPadding}px`,
-                      lineHeight: lineHeight,
-                      overflow: 'hidden'
-                    }}
-                    title={`Click to view ${entry.student.name}'s contact information • ${formatTimeLabel(start)} - ${formatTimeLabel(end)}${entry.jobTitle ? ` • ${entry.jobTitle}` : ''} (Color-coded by student + job title)`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleScheduleClick(entry.student);
-                    }}
-                  >
+            {/* Day columns */}
+            {visibleDays.map(d => (
+              <div key={d} className="relative border-l border-gray-100" style={{ height: `${(totalMinutes / 60) * calendarPxPerHour}px` }}>
+                {/* Hour lines */}
+                {Array.from({ length: Math.floor(totalMinutes / 60) + 1 }).map((_, i) => {
+                  const top = (i * 60) / totalMinutes * 100;
+                  return (
+                    <div key={i} className="absolute left-0 right-0 border-t border-gray-100" style={{ top: `${top}%` }} />
+                  );
+                })}
+                {/* Half-hour lines (dashed) */}
+                {Array.from({ length: Math.floor(totalMinutes / 30) }).map((_, i) => {
+                  const minutes = (i + 1) * 30;
+                  if (minutes % 60 === 0) return null; // skip where hour line already exists
+                  const top = (minutes / totalMinutes) * 100;
+                  return (
+                    <div key={`half-${i}`} className="absolute left-0 right-0 border-t border-gray-100" style={{ top: `${top}%`, opacity: 0.5, borderStyle: 'dashed' }} />
+                  );
+                })}
+                {/* Entries */}
+                {(entriesByDayWithLayout[d] || []).map((item, idx) => {
+                  const { entry, start, end, col, columns } = item;
+                  const top = ((start - minStart) / totalMinutes) * 100;
+                  const height = Math.max(3, ((end - start) / totalMinutes) * 100);
+                  const durationMinutes = end - start;
+                  const accent = accentForStudentAndJob(entry.student.id, entry.jobTitle);
+                  const gap = 6; // px between columns
+                  const widthCalc = `calc((100% - ${(columns - 1) * gap}px) / ${columns})`;
+                  const leftCalc = `calc(${(col * 100) / columns}% + ${col * gap}px)`;
+                  // Readability-first text sizing with zoom support
+                  const eventHeightPx = (durationMinutes / 60) * calendarPxPerHour;
+                  let fontSizePx = 12;
+                  if (eventHeightPx < 44) fontSizePx = 11;
+                  if (eventHeightPx < 34) fontSizePx = 10;
+                  if (eventHeightPx < 26) fontSizePx = 9;
+                  if (eventHeightPx < 20) fontSizePx = 8;
+                  fontSizePx = Math.max(10, fontSizePx); // enforce minimum legible size
+                  const dynamicPadding = Math.max(2, Math.min(4, eventHeightPx / 12));
+                  const lineHeight = 1.2;
+                  const studentName = entry.student.name || '';
+                  const timeRange = `${formatTimeLabel(start)} - ${formatTimeLabel(end)}`;
+                  const showJob = !!entry.jobTitle && eventHeightPx >= 52;
+
+                  return (
                     <div
-                      className="font-semibold leading-none text-center"
+                      key={idx}
+                      lang="en"
+                      className="absolute rounded-md shadow-sm ring-1 ring-black/5 text-gray-900 bg-white hover:shadow-md cursor-pointer flex flex-col justify-center items-stretch"
                       style={{
-                        wordBreak: 'break-word',
-                        overflowWrap: 'break-word',
-                        hyphens: 'auto',
+                        top: `${top}%`,
+                        height: `${height}%`,
+                        width: widthCalc,
+                        left: leftCalc,
+                        background: accent.bg,
+                        borderLeft: `4px solid ${accent.border}`,
                         fontSize: `${fontSizePx}px`,
-                        lineHeight: lineHeight
-                      }}
-                      title={entry.student.name}
-                    >
-                      {studentName}
-                    </div>
-                    <div
-                      className="leading-none text-center"
-                      style={{
-                        wordBreak: 'break-word',
-                        overflowWrap: 'break-word',
-                        hyphens: 'auto',
-                        fontSize: `${fontSizePx}px`,
+                        padding: `${dynamicPadding}px`,
                         lineHeight: lineHeight,
-                        fontWeight: fontSizePx <= 9 ? 'normal' : 'medium'
+                        overflow: 'hidden'
                       }}
-                      title={timeRange}
+                      title={`Click to view ${entry.student.name}'s contact information • ${formatTimeLabel(start)} - ${formatTimeLabel(end)}${entry.jobTitle ? ` • ${entry.jobTitle}` : ''} (Color-coded by student + job title)`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleScheduleClick(entry.student);
+                      }}
                     >
-                      {timeRange}
-                    </div>
-                    {showJob && (
+                      <div
+                        className="font-semibold leading-none text-center"
+                        style={{
+                          wordBreak: 'break-word',
+                          overflowWrap: 'break-word',
+                          hyphens: 'auto',
+                          fontSize: `${fontSizePx}px`,
+                          lineHeight: lineHeight
+                        }}
+                        title={entry.student.name}
+                      >
+                        {studentName}
+                      </div>
                       <div
                         className="leading-none text-center"
                         style={{
                           wordBreak: 'break-word',
                           overflowWrap: 'break-word',
                           hyphens: 'auto',
-                          fontSize: `${Math.max(10, fontSizePx - 1)}px`,
+                          fontSize: `${fontSizePx}px`,
                           lineHeight: lineHeight,
-                          opacity: 0.85
+                          fontWeight: fontSizePx <= 9 ? 'normal' : 'medium'
                         }}
-                        title={entry.jobTitle}
+                        title={timeRange}
                       >
-                        {entry.jobTitle}
+                        {timeRange}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+                      {showJob && (
+                        <div
+                          className="leading-none text-center"
+                          style={{
+                            wordBreak: 'break-word',
+                            overflowWrap: 'break-word',
+                            hyphens: 'auto',
+                            fontSize: `${Math.max(10, fontSizePx - 1)}px`,
+                            lineHeight: lineHeight,
+                            opacity: 0.85
+                          }}
+                          title={entry.jobTitle}
+                        >
+                          {entry.jobTitle}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
       )}
 
       {viewMode === 'list' && (

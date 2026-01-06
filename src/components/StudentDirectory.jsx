@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Edit, Save, X, GraduationCap, Mail, Phone, PhoneOff, Clock, Search, ArrowUpDown, Plus, RotateCcw, History, Trash2, Filter, Download, BarChart3, ArrowRight } from 'lucide-react';
+import { Edit, Save, X, GraduationCap, Mail, Phone, PhoneOff, Clock, Search, Plus, RotateCcw, History, Trash2, Filter, Download, BarChart3, ArrowRight } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import FacultyContactCard from './FacultyContactCard';
-import { DeleteConfirmDialog } from './shared';
+import { DeleteConfirmDialog, UniversalDirectory } from './shared';
 import SortableHeader from './shared/SortableHeader';
 import {
   calculateWeeklyHoursFromSchedule,
@@ -324,7 +324,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
 
   // Advanced filters
   const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({
+  const defaultFilters = {
     departments: { include: [], exclude: [] },
     supervisors: { include: [], exclude: [] },
     jobTitles: [],
@@ -333,7 +333,13 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     hasPhone: true,
     activeOnly: true,
     includeEnded: false
-  });
+  };
+  const [filters, setFilters] = useState(defaultFilters);
+
+  const clearAllFilters = () => {
+    setFilters(defaultFilters);
+    setFilterText('');
+  };
 
   // Extract departments and supervisors for filtering
   const availableJobTitles = useMemo(() => {
@@ -810,239 +816,204 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
   // SortableHeader now imported from ./shared/SortableHeader
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
-        <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200">
-          <h2 className="text-xl font-serif font-semibold text-baylor-green flex items-center">
-            <GraduationCap className="mr-2 text-baylor-gold" size={20} />
-            Student Directory ({filteredAndSortedData.length})
-          </h2>
-          <div className="flex flex-wrap items-center justify-end gap-4">
-            {sortConfig.key === 'name' && (
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-gray-600">Sort by:</span>
-                <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-                  <button
-                    onClick={() => setNameSort('firstName')}
-                    className={`px-3 py-1 text-xs ${nameSort === 'firstName' ? 'bg-baylor-green text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
-                      }`}
-                  >
-                    First Name
-                  </button>
-                  <button
-                    onClick={() => setNameSort('lastName')}
-                    className={`px-3 py-1 text-xs ${nameSort === 'lastName' ? 'bg-baylor-green text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
-                      }`}
-                  >
-                    Last Name
-                  </button>
+    <UniversalDirectory
+      type="people"
+      countLabel=""
+      title="Student Directory"
+      icon={GraduationCap}
+      data={filteredAndSortedData}
+      sortConfig={sortConfig}
+      onSort={handleSort}
+      nameSort={nameSort}
+      onNameSortChange={setNameSort}
+      filterText={filterText}
+      onFilterTextChange={setFilterText}
+      showFilters={showFilters}
+      onToggleFilters={() => setShowFilters(!showFilters)}
+      onClearFilters={clearAllFilters}
+      searchNode={(
+        <div className="relative min-w-[220px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+          <input
+            type="text"
+            placeholder="Filter directory..."
+            value={filterText}
+            onChange={(e) => setFilterText(e.target.value)}
+            className="w-full pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+          />
+        </div>
+      )}
+      trailingActions={(
+        <>
+          <div className="min-w-[200px]">
+            <MultiSelectDropdown
+              options={availableJobTitles}
+              selected={filters.jobTitles}
+              onChange={(selected) => setFilters(prev => ({
+                ...prev,
+                jobTitles: selected
+              }))}
+              placeholder="Filter by title"
+            />
+          </div>
+          <div className="min-w-[200px]">
+            <MultiSelectDropdown
+              options={availableBuildings}
+              selected={filters.buildings}
+              onChange={(selected) => setFilters(prev => ({
+                ...prev,
+                buildings: selected
+              }))}
+              placeholder="Filter by building"
+            />
+          </div>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${showFilters ? 'bg-baylor-green text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+          >
+            <Filter size={16} />
+            Filters
+          </button>
+          {changeHistory.length > 0 && (
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="flex items-center gap-2 px-3 py-2 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 transition-colors"
+            >
+              <History size={16} />
+              Changes ({changeHistory.length})
+            </button>
+          )}
+          {changeHistory.length > 0 && (
+            <button
+              onClick={undoLastChange}
+              className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              <RotateCcw size={16} />
+              Undo
+            </button>
+          )}
+          <div className="flex items-center gap-3 text-sm">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={filters.activeOnly}
+                onChange={(e) => setFilters(prev => ({ ...prev, activeOnly: e.target.checked }))}
+              />
+              Active only
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={filters.includeEnded}
+                onChange={(e) => setFilters(prev => ({ ...prev, includeEnded: e.target.checked }))}
+              />
+              Include ended
+            </label>
+          </div>
+          <button
+            onClick={exportToCSV}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Download size={18} />
+            Export CSV
+          </button>
+          <button
+            onClick={startCreate}
+            className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+            disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canCreateStudent === false}
+          >
+            <Plus size={18} />
+            Add Student
+          </button>
+        </>
+      )}
+      filterContent={(
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Supervisor</label>
+            <select
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+              value=""
+              onChange={(e) => {
+                if (e.target.value) {
+                  setFilters(prev => ({
+                    ...prev,
+                    supervisors: { ...prev.supervisors, include: [e.target.value] }
+                  }));
+                }
+              }}
+            >
+              <option value="">All Supervisors</option>
+              {availableSupervisors.map(supervisor => (
+                <option key={supervisor} value={supervisor}>{supervisor}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Job Titles</label>
+            <MultiSelectDropdown
+              options={availableJobTitles}
+              selected={filters.jobTitles}
+              onChange={(selected) => setFilters(prev => ({
+                ...prev,
+                jobTitles: selected
+              }))}
+              placeholder="Select job titles..."
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Buildings</label>
+            <MultiSelectDropdown
+              options={availableBuildings}
+              selected={filters.buildings}
+              onChange={(selected) => setFilters(prev => ({
+                ...prev,
+                buildings: selected
+              }))}
+              placeholder="Select buildings..."
+            />
+          </div>
+        </div>
+      )}
+      renderBody={() => (
+        <>
+          <div className="mb-6">
+            <div className="flex flex-col gap-3 rounded-lg border border-baylor-gold/60 bg-baylor-gold/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="rounded-full bg-baylor-gold/20 p-2 text-baylor-gold">
+                  <BarChart3 className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-baylor-green">Payroll insights moved!</p>
+                  <p className="text-sm text-gray-700">
+                    View wages, hours, and analytics for student workers on the Student Worker Analytics page.
+                  </p>
                 </div>
               </div>
-            )}
-            <div className="relative min-w-[220px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input
-                type="text"
-                placeholder="Filter directory..."
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-                className="w-full pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
-              />
-            </div>
-            <div className="min-w-[200px]">
-              <MultiSelectDropdown
-                options={availableJobTitles}
-                selected={filters.jobTitles}
-                onChange={(selected) => setFilters(prev => ({
-                  ...prev,
-                  jobTitles: selected
-                }))}
-                placeholder="Filter by title"
-              />
-            </div>
-            <div className="min-w-[200px]">
-              <MultiSelectDropdown
-                options={availableBuildings}
-                selected={filters.buildings}
-                onChange={(selected) => setFilters(prev => ({
-                  ...prev,
-                  buildings: selected
-                }))}
-                placeholder="Filter by building"
-              />
-            </div>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${showFilters ? 'bg-baylor-green text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-            >
-              <Filter size={16} />
-              Filters
-            </button>
-            {changeHistory.length > 0 && (
               <button
-                onClick={() => setShowHistory(!showHistory)}
-                className="flex items-center gap-2 px-3 py-2 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 transition-colors"
+                type="button"
+                onClick={goToAnalyticsPage}
+                className="inline-flex items-center gap-2 self-start rounded-lg bg-baylor-green px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-baylor-green/90 focus:outline-none focus:ring-2 focus:ring-baylor-gold focus:ring-offset-2"
               >
-                <History size={16} />
-                Changes ({changeHistory.length})
-              </button>
-            )}
-            {changeHistory.length > 0 && (
-              <button
-                onClick={undoLastChange}
-                className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                <RotateCcw size={16} />
-                Undo
-              </button>
-            )}
-            <div className="flex items-center gap-3 text-sm">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={filters.activeOnly}
-                  onChange={(e) => setFilters(prev => ({ ...prev, activeOnly: e.target.checked }))}
-                />
-                Active only
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={filters.includeEnded}
-                  onChange={(e) => setFilters(prev => ({ ...prev, includeEnded: e.target.checked }))}
-                />
-                Include ended
-              </label>
-            </div>
-            <button
-              onClick={exportToCSV}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Download size={18} />
-              Export CSV
-            </button>
-            <button
-              onClick={startCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
-              disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canCreateStudent === false}
-            >
-              <Plus size={18} />
-              Add Student
-            </button>
-          </div>
-        </div>
-
-        <div className="mb-6">
-          <div className="flex flex-col gap-3 rounded-lg border border-baylor-gold/60 bg-baylor-gold/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              <div className="rounded-full bg-baylor-gold/20 p-2 text-baylor-gold">
-                <BarChart3 className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-baylor-green">Payroll insights moved!</p>
-                <p className="text-sm text-gray-700">
-                  View wages, hours, and analytics for student workers on the Student Worker Analytics page.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={goToAnalyticsPage}
-              className="inline-flex items-center gap-2 self-start rounded-lg bg-baylor-green px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-baylor-green/90 focus:outline-none focus:ring-2 focus:ring-baylor-gold focus:ring-offset-2"
-            >
-              Open analytics
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Shared datalists for suggestions */}
-        <datalist id="supervisor-options">
-          {availableSupervisors.map(s => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-        <datalist id="jobtitle-options">
-          {availableJobTitles.map(t => (
-            <option key={t} value={t} />
-          ))}
-        </datalist>
-
-        {/* Advanced Filters */}
-        {showFilters && (
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-medium text-gray-900">Advanced Filters</h3>
-              <button
-                onClick={() => {
-                  setFilters({
-                    departments: { include: [], exclude: [] },
-                    supervisors: { include: [], exclude: [] },
-                    jobTitles: [],
-                    buildings: [],
-                    hasEmail: true,
-                    hasPhone: true,
-                    activeOnly: true
-                  });
-                  setFilterText('');
-                }}
-                className="text-sm text-baylor-green hover:text-baylor-green/80 font-medium"
-              >
-                Clear All Filters
+                Open analytics
+                <ArrowRight className="h-4 w-4" />
               </button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Supervisor</label>
-                <select
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                  value=""
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      setFilters(prev => ({
-                        ...prev,
-                        supervisors: { ...prev.supervisors, include: [e.target.value] }
-                      }));
-                    }
-                  }}
-                >
-                  <option value="">All Supervisors</option>
-                  {availableSupervisors.map(supervisor => (
-                    <option key={supervisor} value={supervisor}>{supervisor}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Job Titles</label>
-                <MultiSelectDropdown
-                  options={availableJobTitles}
-                  selected={filters.jobTitles}
-                  onChange={(selected) => setFilters(prev => ({
-                    ...prev,
-                    jobTitles: selected
-                  }))}
-                  placeholder="Select job titles..."
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Buildings</label>
-                <MultiSelectDropdown
-                  options={availableBuildings}
-                  selected={filters.buildings}
-                  onChange={(selected) => setFilters(prev => ({
-                    ...prev,
-                    buildings: selected
-                  }))}
-                  placeholder="Select buildings..."
-                />
-              </div>
-            </div>
           </div>
-        )}
 
-        {/* Create New Student Form */}
-        {isCreating && (
+          <datalist id="supervisor-options">
+            {availableSupervisors.map(s => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+          <datalist id="jobtitle-options">
+            {availableJobTitles.map(t => (
+              <option key={t} value={t} />
+            ))}
+          </datalist>
+
+          {isCreating && (
           <div className="bg-white border border-baylor-gold/40 rounded-lg p-6 shadow-sm">
             <div className="mb-6">
               <h4 className="text-lg font-semibold text-gray-900">Add Student Worker</h4>
@@ -1837,7 +1808,9 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
           )}
         </div>
       )}
-    </div>
+    </>
+  )}
+    />
   );
 };
 

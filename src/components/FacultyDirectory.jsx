@@ -4,7 +4,7 @@ import FacultyContactCard from './FacultyContactCard';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import { formatPhoneNumber, extractBuildingName } from '../utils/directoryUtils';
 import { useDirectoryState, useDirectoryHandlers } from '../hooks';
-import { PeopleDataTable, DeleteConfirmDialog, DirectorySearchBar, DirectoryFiltersPanel, NameSortToggle } from './shared';
+import { DeleteConfirmDialog, UniversalDirectory } from './shared';
 
 /**
  * Faculty Directory - displays and manages faculty members.
@@ -538,44 +538,54 @@ const FacultyDirectory = ({
   ) : null;
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200">
-          <h2 className="text-xl font-serif font-semibold text-baylor-green flex items-center">
-            <BookUser className="mr-2 text-baylor-gold" size={20} />
-            Faculty Directory ({sortedAndFilteredData.length} members)
-          </h2>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setPinUPDsFirst(prev => !prev)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${pinUPDsFirst ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'}`}
-              title="Bring Undergraduate Program Directors to the top"
-            >
-              <UserCog size={16} />
-              <span className="text-xs font-medium">UPD first</span>
-            </button>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={showOnlyWithCourses} onChange={e => setShowOnlyWithCourses(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
-              Only show faculty with at least 1 course
-            </label>
-            <NameSortToggle show={sortConfig.key === 'name'} nameSort={nameSort} onNameSortChange={setNameSort} />
-            <DirectorySearchBar filterText={filterText} onFilterTextChange={setFilterText} showFilters={showFilters} onToggleFilters={() => setShowFilters(!showFilters)} />
-            <button onClick={exportToCSV} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-              <Download size={18} /> Export CSV
-            </button>
-            <button
-              onClick={handleCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
-              disabled={typeof window !== 'undefined' && window?.appPermissions?.canAddFaculty === false}
-            >
-              <Plus size={18} /> Add Faculty
-            </button>
-          </div>
-        </div>
-
-        {/* Advanced Filters */}
-        <DirectoryFiltersPanel isOpen={showFilters} onClearAll={clearFilters}>
+    <UniversalDirectory
+      type="people"
+      title="Faculty Directory"
+      icon={BookUser}
+      data={sortedAndFilteredData}
+      columns={columns}
+      sortConfig={sortConfig}
+      onSort={handleSort}
+      nameSort={nameSort}
+      onNameSortChange={setNameSort}
+      filterText={filterText}
+      onFilterTextChange={setFilterText}
+      showFilters={showFilters}
+      onToggleFilters={() => setShowFilters(!showFilters)}
+      onClearFilters={clearFilters}
+      filterOptions={filterOptions}
+      leadingActions={(
+        <>
+          <button
+            onClick={() => setPinUPDsFirst(prev => !prev)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${pinUPDsFirst ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'}`}
+            title="Bring Undergraduate Program Directors to the top"
+          >
+            <UserCog size={16} />
+            <span className="text-xs font-medium">UPD first</span>
+          </button>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={showOnlyWithCourses} onChange={e => setShowOnlyWithCourses(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+            Only show faculty with at least 1 course
+          </label>
+        </>
+      )}
+      trailingActions={(
+        <>
+          <button onClick={exportToCSV} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            <Download size={18} /> Export CSV
+          </button>
+          <button
+            onClick={handleCreate}
+            className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+            disabled={typeof window !== 'undefined' && window?.appPermissions?.canAddFaculty === false}
+          >
+            <Plus size={18} /> Add Faculty
+          </button>
+        </>
+      )}
+      filterContent={(
+        <>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Programs</label>
             <MultiSelectDropdown options={filterOptions.programs} selected={filters.programs} onChange={(selected) => setFilters(prev => ({ ...prev, programs: selected }))} placeholder="Select programs..." />
@@ -646,35 +656,26 @@ const FacultyDirectory = ({
               </select>
             </div>
           </div>
-        </DirectoryFiltersPanel>
-
-        {/* Data Table */}
-        <PeopleDataTable
-          data={sortedAndFilteredData}
-          columns={columns}
-          sortConfig={sortConfig}
-          onSort={handleSort}
-          editingId={editingId}
-          editFormData={editFormData}
-          onRowClick={setSelectedRecord}
-          renderActions={renderActions}
-          createRow={createRow}
-          emptyMessage="No faculty members found."
-        />
-
-        {/* Contact Card Modal */}
-        {selectedRecord && <FacultyContactCard faculty={selectedRecord} onClose={() => setSelectedRecord(null)} />}
-
-        {/* Delete Confirmation Dialog */}
-        <DeleteConfirmDialog
-          isOpen={showDeleteConfirm}
-          record={recordToDelete}
-          recordType="faculty member"
-          onConfirm={confirmDelete}
-          onCancel={cancelDelete}
-        />
-      </div>
-    </div>
+        </>
+      )}
+      tableProps={{
+        editingId,
+        editFormData,
+        onRowClick: setSelectedRecord,
+        renderActions,
+        createRow,
+        emptyMessage: 'No faculty members found.'
+      }}
+    >
+      {selectedRecord && <FacultyContactCard faculty={selectedRecord} onClose={() => setSelectedRecord(null)} />}
+      <DeleteConfirmDialog
+        isOpen={showDeleteConfirm}
+        record={recordToDelete}
+        recordType="faculty member"
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
+    </UniversalDirectory>
   );
 };
 

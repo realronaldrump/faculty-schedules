@@ -58,7 +58,7 @@ import {
 import { db, COLLECTIONS } from './firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, setDoc, query, orderBy, onSnapshot, getDoc } from 'firebase/firestore';
 import { adaptPeopleToFaculty, adaptPeopleToStaff, fetchPrograms } from './utils/dataAdapter';
-import { fetchSchedulesWithRelationalData } from './utils/dataImportUtils';
+import { fetchSchedulesWithRelationalData, fetchSchedulesByTerm, fetchAvailableSemesters } from './utils/dataImportUtils';
 import { autoMigrateIfNeeded } from './utils/importTransactionMigration';
 import MaintenancePage from './components/MaintenancePage';
 import { parseCourseCode } from './utils/courseUtils';
@@ -187,67 +187,52 @@ function App() {
 
 
 
-  // Extract available semesters from schedule data and auto-select default or most recent
-  const updateAvailableSemesters = async (scheduleData) => {
-    const semesters = new Set();
-    scheduleData.forEach(schedule => {
-      if (schedule.term && schedule.term.trim()) {
-        semesters.add(schedule.term.trim());
-      }
-    });
-
-    if (semesters.size === 0) {
-      setAvailableSemesters([]);
-      return;
-    }
-
-    const semesterList = Array.from(semesters).sort((a, b) => {
-      // Simple sort: extract year and term, sort by year first, then by term
-      const [aTerm, aYear] = a.split(' ');
-      const [bTerm, bYear] = b.split(' ');
-
-      const aYearNum = parseInt(aYear);
-      const bYearNum = parseInt(bYear);
-
-      if (aYearNum !== bYearNum) {
-        return bYearNum - aYearNum; // Newer years first
-      }
-
-      // For same year, Fall is most recent, then Summer, then Spring
-      const termOrder = { 'Fall': 3, 'Summer': 2, 'Spring': 1 };
-      return (termOrder[bTerm] || 0) - (termOrder[aTerm] || 0);
-    });
-
-    console.log('🎓 Available semesters:', semesterList);
-    setAvailableSemesters(semesterList);
-
-    // Check if admin has set a default term
-    let defaultTermToUse = semesterList[0]; // Fallback to most recent
+  // Fetch available semesters using server-side query and auto-select default or most recent
+  const updateAvailableSemesters = async () => {
     try {
-      const settingsRef = doc(db, 'settings', 'app');
-      const settingsSnap = await getDoc(settingsRef);
+      const semesterList = await fetchAvailableSemesters();
 
-      if (settingsSnap.exists()) {
-        const adminDefaultTerm = settingsSnap.data()?.defaultTerm;
-        // Only use admin default if it exists in the available semesters
-        if (adminDefaultTerm && semesterList.includes(adminDefaultTerm)) {
-          defaultTermToUse = adminDefaultTerm;
-          console.log(`🎓 Using admin-configured default term: ${adminDefaultTerm}`);
-        } else if (adminDefaultTerm) {
-          console.warn(`⚠️ Admin default term "${adminDefaultTerm}" not found in available semesters, using most recent instead`);
+      if (semesterList.length === 0) {
+        setAvailableSemesters([]);
+        return null;
+      }
+
+      console.log('🎓 Available semesters:', semesterList);
+      setAvailableSemesters(semesterList);
+
+      // Check if admin has set a default term
+      let defaultTermToUse = semesterList[0]; // Fallback to most recent
+      try {
+        const settingsRef = doc(db, 'settings', 'app');
+        const settingsSnap = await getDoc(settingsRef);
+
+        if (settingsSnap.exists()) {
+          const adminDefaultTerm = settingsSnap.data()?.defaultTerm;
+          // Only use admin default if it exists in the available semesters
+          if (adminDefaultTerm && semesterList.includes(adminDefaultTerm)) {
+            defaultTermToUse = adminDefaultTerm;
+            console.log(`🎓 Using admin-configured default term: ${adminDefaultTerm}`);
+          } else if (adminDefaultTerm) {
+            console.warn(`⚠️ Admin default term "${adminDefaultTerm}" not found in available semesters, using most recent instead`);
+          }
         }
+      } catch (error) {
+        console.warn('Failed to load default term setting, using most recent:', error);
+      }
+
+      // Set the selected semester if not already set or no longer valid
+      const currentIsValid = selectedSemester && semesterList.includes(selectedSemester);
+      if (!currentIsValid) {
+        console.log(`🎓 Setting semester to default: ${defaultTermToUse}`);
+        setSelectedSemester(defaultTermToUse);
+        return defaultTermToUse;
+      } else {
+        console.log(`🎓 Preserving current valid semester: ${selectedSemester}`);
+        return selectedSemester;
       }
     } catch (error) {
-      console.warn('Failed to load default term setting, using most recent:', error);
-    }
-
-    // Set the selected semester if not already set or no longer valid
-    const currentIsValid = selectedSemester && semesterList.includes(selectedSemester);
-    if (!currentIsValid) {
-      console.log(`🎓 Setting semester to default: ${defaultTermToUse}`);
-      setSelectedSemester(defaultTermToUse);
-    } else {
-      console.log(`🎓 Preserving current valid semester: ${selectedSemester}`);
+      console.error('Error updating available semesters:', error);
+      return null;
     }
   };
 
@@ -259,12 +244,11 @@ function App() {
     );
   };
 
-  // Filter schedule data by selected semester (removed problematic fallback)
+  // Server-side filtering: rawScheduleData is already filtered by term from Firestore
+  // This memo now just returns the data directly (or could be removed and replaced with rawScheduleData)
   const semesterFilteredScheduleData = useMemo(() => {
-    return rawScheduleData.filter(schedule =>
-      schedule.term === selectedSemester
-    );
-  }, [rawScheduleData, selectedSemester]);
+    return rawScheduleData;
+  }, [rawScheduleData]);
 
   // Professional Navigation structure with enhanced organization
   const navigationItems = [
@@ -654,6 +638,54 @@ function App() {
     return people;
   };
 
+  // Load schedules for a specific term (used on initial load and semester change)
+  const loadSchedulesForTerm = async (term, { people = null } = {}) => {
+    if (!term) {
+      console.warn('⚠️ No term specified for loadSchedulesForTerm');
+      return;
+    }
+
+    try {
+      console.log(`📡 Loading schedules for term: ${term}`);
+
+      // Use server-side filtered query
+      let { schedules, people: schedulePeople } = await fetchSchedulesByTerm(term);
+
+      // Backfill online flags for legacy records
+      schedules = await autoBackfillOnlineFlags(schedules);
+
+      // If people not provided, fetch them
+      let allPeople = people;
+      if (!allPeople) {
+        const peopleSnapshot = await getDocs(collection(db, 'people'));
+        allPeople = peopleSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+      }
+
+      // Merge people from schedules with directory people
+      const mergedPeople = [...allPeople];
+      schedulePeople.forEach(schedulePerson => {
+        if (!allPeople.find(p => p.id === schedulePerson.id)) {
+          mergedPeople.push(schedulePerson);
+        }
+      });
+
+      // Auto-inactivate expired students
+      await autoInactivateExpiredStudents(mergedPeople);
+
+      setRawScheduleData(schedules);
+      setRawPeople(mergedPeople);
+
+      console.log(`✅ Loaded ${schedules.length} schedules for term "${term}"`);
+      return schedules;
+    } catch (error) {
+      console.error(`❌ Error loading schedules for term "${term}":`, error);
+      throw error;
+    }
+  };
+
   const loadData = async ({ silent = false } = {}) => {
     if (!silent) {
       setLoading(true);
@@ -664,28 +696,30 @@ function App() {
       // First run any needed migrations
       await autoMigrateIfNeeded();
 
-      // Load schedule data with relational structure
-      let { schedules, people: schedulePeople } = await fetchSchedulesWithRelationalData();
-      // Backfill online flags for legacy records
-      schedules = await autoBackfillOnlineFlags(schedules);
+      // Step 1: Get available semesters first (server-side query)
+      const termToLoad = await updateAvailableSemesters();
 
-      // Load people data
+      if (!termToLoad) {
+        console.warn('⚠️ No semesters available');
+        setRawScheduleData([]);
+        setRawPeople([]);
+        setRawPrograms([]);
+        setLoading(false);
+        return;
+      }
+
+      // Step 2: Load people separately (needed for relational data)
       const peopleSnapshot = await getDocs(collection(db, 'people'));
       const people = peopleSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
 
-      // Load programs data
+      // Step 3: Load programs data
       const programs = await fetchPrograms();
 
-      // Merge people from schedules with directory people
-      const mergedPeople = [...people];
-      schedulePeople.forEach(schedulePerson => {
-        if (!people.find(p => p.id === schedulePerson.id)) {
-          mergedPeople.push(schedulePerson);
-        }
-      });
+      // Step 4: Load schedules for the selected term (server-side filtered)
+      await loadSchedulesForTerm(termToLoad, { people });
 
       // Load edit history (legacy) - non-fatal if denied
       let history = [];
@@ -705,21 +739,16 @@ function App() {
       }
 
       console.log('✅ Data loaded successfully:', {
-        schedules: schedules.length,
-        people: mergedPeople.length,
+        term: termToLoad,
+        people: people.length,
         programs: programs.length,
         history: history.length,
         recentChanges: recentChangesData.length
       });
 
-      setRawScheduleData(schedules);
-      // Auto-inactivate any expired students (non-blocking, but we await to keep local state consistent)
-      await autoInactivateExpiredStudents(mergedPeople);
-      setRawPeople(mergedPeople);
       setRawPrograms(programs);
       setEditHistory(history);
       setRecentChanges(recentChangesData);
-      updateAvailableSemesters(schedules);
 
     } catch (error) {
       console.error('❌ Error loading data:', error);
@@ -749,6 +778,22 @@ function App() {
   useEffect(() => {
     checkAuthStatus();
   }, []);
+
+  // Reload schedules when semester changes (after initial load)
+  const isInitialLoadRef = React.useRef(true);
+  useEffect(() => {
+    // Skip on initial load (loadData handles that)
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      return;
+    }
+
+    // Only reload if we're authenticated and have a valid semester
+    if (isAuthenticated && selectedSemester && availableSemesters.length > 0) {
+      console.log(`🔄 Semester changed to "${selectedSemester}", reloading schedules...`);
+      loadSchedulesForTerm(selectedSemester);
+    }
+  }, [selectedSemester]);
 
   // Expose effective action permissions globally for UI components that can't access hooks
   useEffect(() => {

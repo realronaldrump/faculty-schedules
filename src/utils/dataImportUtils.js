@@ -1704,6 +1704,143 @@ export const fetchSchedulesWithRelationalData = async () => {
   }
 };
 
+/**
+ * Fetch schedules for a specific term with server-side filtering (Firestore where query).
+ * This is the performance-optimized alternative to fetchSchedulesWithRelationalData().
+ * @param {string} term - The term to filter by (e.g., "Fall 2025", "Spring 2026")
+ * @returns {Promise<{schedules: Array, people: Array, rooms: Array, programs: Array}>}
+ */
+export const fetchSchedulesByTerm = async (term) => {
+  try {
+    console.log(`📡 Loading schedules for term: ${term}`);
+
+    // Server-side filter: only fetch schedules for the specified term
+    const schedulesQuery = query(
+      collection(db, 'schedules'),
+      where('term', '==', term)
+    );
+
+    const [schedulesSnapshot, peopleSnapshot, roomsSnapshot, programsSnapshot] = await Promise.all([
+      getDocs(schedulesQuery), // Filtered query
+      getDocs(collection(db, 'people')),
+      getDocs(collection(db, 'rooms')),
+      getDocs(collection(db, COLLECTIONS.PROGRAMS))
+    ]);
+
+    const schedules = schedulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const people = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const rooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const programs = programsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    console.log(`✅ Fetched ${schedules.length} schedules for "${term}"`);
+
+    // Create lookup maps for performance
+    const peopleMap = new Map(people.map(p => [p.id, p]));
+    const roomsMap = new Map(rooms.map(r => [r.id, r]));
+    const programsMap = new Map(programs.map(p => [p.id, p]));
+
+    // Populate relational data (same enrichment logic as fetchSchedulesWithRelationalData)
+    const enrichedSchedules = schedules.map(schedule => {
+      const instructor = schedule.instructorId ? peopleMap.get(schedule.instructorId) : null;
+
+      // Populate instructor program information
+      let instructorWithProgram = instructor;
+      if (instructor && instructor.programId) {
+        const program = programsMap.get(instructor.programId);
+        if (program) {
+          instructorWithProgram = {
+            ...instructor,
+            program: {
+              id: program.id,
+              name: program.name
+            }
+          };
+        }
+      }
+
+      // Multi-room relational enrichment
+      const resolvedRooms = Array.isArray(schedule.roomIds)
+        ? schedule.roomIds.map((rid) => roomsMap.get(rid)).filter(Boolean)
+        : (schedule.roomId ? [roomsMap.get(schedule.roomId)].filter(Boolean) : []);
+
+      // Derive legacy single room fields for compatibility
+      const primaryRoom = resolvedRooms[0] || (schedule.roomId ? roomsMap.get(schedule.roomId) : null);
+      const derivedRoomName = Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0
+        ? schedule.roomNames[0]
+        : (primaryRoom ? (primaryRoom.displayName || primaryRoom.name) : (schedule.roomName || ''));
+
+      return {
+        ...schedule,
+        instructor: instructorWithProgram,
+        rooms: resolvedRooms,
+        room: primaryRoom || null,
+        instructorName: instructorWithProgram ? `${instructorWithProgram.firstName} ${instructorWithProgram.lastName}`.trim() : schedule.instructorName || 'Staff',
+        roomName: derivedRoomName,
+        roomNames: Array.isArray(schedule.roomNames) ? schedule.roomNames : (derivedRoomName ? [derivedRoomName] : [])
+      };
+    });
+
+    return {
+      schedules: enrichedSchedules,
+      people,
+      rooms,
+      programs
+    };
+  } catch (error) {
+    console.error(`Error fetching schedules for term "${term}":`, error);
+    throw error;
+  }
+};
+
+/**
+ * Fetch available semesters efficiently from the terms collection.
+ * Falls back to extracting unique terms from schedules if terms collection is empty.
+ * @returns {Promise<string[]>} Array of term strings sorted by recency
+ */
+export const fetchAvailableSemesters = async () => {
+  try {
+    // First try the dedicated terms collection (faster)
+    const termsSnapshot = await getDocs(collection(db, COLLECTIONS.TERMS));
+    let terms = termsSnapshot.docs.map(doc => doc.data().term).filter(Boolean);
+
+    // Fallback: if terms collection is empty, extract unique terms from schedules
+    if (terms.length === 0) {
+      console.log('⚠️ Terms collection empty, extracting from schedules...');
+      const schedulesSnapshot = await getDocs(collection(db, 'schedules'));
+      const termsSet = new Set();
+      schedulesSnapshot.docs.forEach(doc => {
+        const term = doc.data().term;
+        if (term && term.trim()) {
+          termsSet.add(term.trim());
+        }
+      });
+      terms = Array.from(termsSet);
+    }
+
+    // Sort by recency: newer years first, then Fall > Summer > Spring within year
+    const sortedTerms = terms.sort((a, b) => {
+      const [aTerm, aYear] = a.split(' ');
+      const [bTerm, bYear] = b.split(' ');
+
+      const aYearNum = parseInt(aYear);
+      const bYearNum = parseInt(bYear);
+
+      if (aYearNum !== bYearNum) {
+        return bYearNum - aYearNum; // Newer years first
+      }
+
+      const termOrder = { 'Fall': 3, 'Summer': 2, 'Spring': 1 };
+      return (termOrder[bTerm] || 0) - (termOrder[aTerm] || 0);
+    });
+
+    console.log(`📅 Available semesters: ${sortedTerms.join(', ')}`);
+    return sortedTerms;
+  } catch (error) {
+    console.error('Error fetching available semesters:', error);
+    throw error;
+  }
+};
+
 export default {
   createPersonModel,
   createScheduleModel,
@@ -1719,5 +1856,7 @@ export default {
   processDirectoryImport,
   processScheduleImport,
   parseCLSSCSV,
-  fetchSchedulesWithRelationalData
+  fetchSchedulesWithRelationalData,
+  fetchSchedulesByTerm,
+  fetchAvailableSemesters
 }; 

@@ -174,9 +174,12 @@ export const adaptPeopleToStaff = (people) => {
         return false;
       };
 
+      const staffName = `${person.firstName || ''} ${person.lastName || ''}`.trim();
+
       return {
+        ...person, // Spread original data first (same pattern as adaptPeopleToFaculty)
         id: person.id,
-        name: `${person.firstName} ${person.lastName}`.trim(),
+        name: staffName,
         firstName: person.firstName,
         lastName: person.lastName,
         title: person.title,
@@ -185,11 +188,10 @@ export const adaptPeopleToStaff = (people) => {
         jobTitle: person.jobTitle,
         office: person.office,
         isFullTime: person.isFullTime,
-        isTenured: hasRole('faculty') ? (person.isTenured || false) : false, // Only display tenure for dual-role staff
+        isTenured: hasRole('faculty') ? (person.isTenured || false) : false,
         isAlsoFaculty: hasRole('faculty'),
         hasNoPhone: person.hasNoPhone || false,
-        hasNoOffice: person.hasNoOffice || false,
-        ...person // Include any additional fields
+        hasNoOffice: person.hasNoOffice || false
       };
     });
 };

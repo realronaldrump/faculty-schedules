@@ -14,7 +14,7 @@ import {
 import FacultyContactCard from '../FacultyContactCard';
 import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
 
-const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analytics, selectedSemester }) => {
+const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analytics, selectedSemester, onNavigate }) => {
   const [showWarning, setShowWarning] = useState(() => localStorage.getItem('insightsWarningDismissed') !== 'true');
   const [facultySort, setFacultySort] = useState({ key: 'totalHours', direction: 'desc' });
   const [roomSort, setRoomSort] = useState({ key: 'hours', direction: 'desc' });
@@ -267,8 +267,8 @@ const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analyt
                 key={day}
                 onClick={() => setHourlyUsageDayFilter(day)}
                 className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${hourlyUsageDayFilter === day
-                    ? 'bg-baylor-green text-white shadow'
-                    : 'text-gray-600 hover:bg-gray-200'
+                  ? 'bg-baylor-green text-white shadow'
+                  : 'text-gray-600 hover:bg-gray-200'
                   }`}
               >
                 {day === 'All' ? 'All' : dayNames[day]?.substring(0, 3)}

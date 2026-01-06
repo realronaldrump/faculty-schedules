@@ -1014,802 +1014,802 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
           </datalist>
 
           {isCreating && (
-          <div className="bg-white border border-baylor-gold/40 rounded-lg p-6 shadow-sm">
-            <div className="mb-6">
-              <h4 className="text-lg font-semibold text-gray-900">Add Student Worker</h4>
-              <p className="text-sm text-gray-600 mt-1">
-                Provide contact information and define at least one job assignment with scheduled hours.
-              </p>
-            </div>
+            <div className="bg-white border border-baylor-gold/40 rounded-lg p-6 shadow-sm">
+              <div className="mb-6">
+                <h4 className="text-lg font-semibold text-gray-900">Add Student Worker</h4>
+                <p className="text-sm text-gray-600 mt-1">
+                  Provide contact information and define at least one job assignment with scheduled hours.
+                </p>
+              </div>
 
-            <div className="space-y-6">
-              <section className="space-y-3">
-                <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Student Details</h5>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                    <input
-                      type="text"
-                      value={newStudent.name}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setNewStudent(prev => ({ ...prev, name: value }));
-                        if (errors.name) setErrors(prev => ({ ...prev, name: undefined }));
-                      }}
-                      className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
-                      placeholder="Full name"
-                    />
-                    {errors.name && <p className="text-xs text-red-600 mt-1">{errors.name}</p>}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                    <input
-                      type="email"
-                      value={newStudent.email}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setNewStudent(prev => ({ ...prev, email: value }));
-                        if (errors.email) setErrors(prev => ({ ...prev, email: undefined }));
-                      }}
-                      className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.email ? 'border-red-500' : 'border-gray-300'}`}
-                      placeholder="student@baylor.edu"
-                    />
-                    {errors.email && <p className="text-xs text-red-600 mt-1">{errors.email}</p>}
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="space-y-6">
+                <section className="space-y-3">
+                  <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Student Details</h5>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
                       <input
-                        type="tel"
-                        value={newStudent.phone}
+                        type="text"
+                        value={newStudent.name}
                         onChange={(e) => {
                           const value = e.target.value;
-                          setNewStudent(prev => ({ ...prev, phone: value }));
-                          if (errors.phone) setErrors(prev => ({ ...prev, phone: undefined }));
+                          setNewStudent(prev => ({ ...prev, name: value }));
+                          if (errors.name) setErrors(prev => ({ ...prev, name: undefined }));
                         }}
-                        disabled={newStudent.hasNoPhone}
-                        className={`flex-1 border rounded-md px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.phone ? 'border-red-500' : 'border-gray-300'} ${newStudent.hasNoPhone ? 'bg-gray-100 text-gray-500' : ''}`}
-                        placeholder="(254) 710-1234"
+                        className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
+                        placeholder="Full name"
                       />
-                      <label className="inline-flex items-center gap-2 text-sm text-gray-600">
-                        <input
-                          type="checkbox"
-                          checked={newStudent.hasNoPhone}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setNewStudent(prev => ({ ...prev, hasNoPhone: checked, phone: checked ? '' : prev.phone }));
-                            if (checked) setErrors(prev => ({ ...prev, phone: undefined }));
-                          }}
-                          className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                        />
-                        No phone on file
-                      </label>
+                      {errors.name && <p className="text-xs text-red-600 mt-1">{errors.name}</p>}
                     </div>
-                    {errors.phone && <p className="text-xs text-red-600 mt-1">{errors.phone}</p>}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                      <input
+                        type="email"
+                        value={newStudent.email}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setNewStudent(prev => ({ ...prev, email: value }));
+                          if (errors.email) setErrors(prev => ({ ...prev, email: undefined }));
+                        }}
+                        className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.email ? 'border-red-500' : 'border-gray-300'}`}
+                        placeholder="student@baylor.edu"
+                      />
+                      {errors.email && <p className="text-xs text-red-600 mt-1">{errors.email}</p>}
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                        <input
+                          type="tel"
+                          value={newStudent.phone}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setNewStudent(prev => ({ ...prev, phone: value }));
+                            if (errors.phone) setErrors(prev => ({ ...prev, phone: undefined }));
+                          }}
+                          disabled={newStudent.hasNoPhone}
+                          className={`flex-1 border rounded-md px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.phone ? 'border-red-500' : 'border-gray-300'} ${newStudent.hasNoPhone ? 'bg-gray-100 text-gray-500' : ''}`}
+                          placeholder="(254) 710-1234"
+                        />
+                        <label className="inline-flex items-center gap-2 text-sm text-gray-600">
+                          <input
+                            type="checkbox"
+                            checked={newStudent.hasNoPhone}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setNewStudent(prev => ({ ...prev, hasNoPhone: checked, phone: checked ? '' : prev.phone }));
+                              if (checked) setErrors(prev => ({ ...prev, phone: undefined }));
+                            }}
+                            className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                          />
+                          No phone on file
+                        </label>
+                      </div>
+                      {errors.phone && <p className="text-xs text-red-600 mt-1">{errors.phone}</p>}
+                    </div>
                   </div>
-                </div>
-              </section>
+                </section>
 
-              <section className="space-y-3">
-                <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Employment Window</h5>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                    <input
-                      type="date"
-                      value={newStudent.startDate || ''}
-                      onChange={(e) => setNewStudent(prev => ({ ...prev, startDate: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                    />
+                <section className="space-y-3">
+                  <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Employment Window</h5>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                      <input
+                        type="date"
+                        value={newStudent.startDate || ''}
+                        onChange={(e) => setNewStudent(prev => ({ ...prev, startDate: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                      <input
+                        type="date"
+                        value={newStudent.endDate || ''}
+                        onChange={(e) => setNewStudent(prev => ({ ...prev, endDate: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                      />
+                    </div>
                   </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                    <input
-                      type="date"
-                      value={newStudent.endDate || ''}
-                      onChange={(e) => setNewStudent(prev => ({ ...prev, endDate: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                    />
+                  <div className="flex flex-wrap items-center gap-3 text-sm text-gray-700">
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={newStudent.isActive !== false}
+                        onChange={(e) => setNewStudent(prev => ({ ...prev, isActive: e.target.checked }))}
+                        className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                      />
+                      Active student worker
+                    </label>
+                    {newStudent.endDate && (
+                      <span className="text-xs text-gray-500">Automatically inactivates after {new Date(newStudent.endDate).toLocaleDateString()}</span>
+                    )}
                   </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-3 text-sm text-gray-700">
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={newStudent.isActive !== false}
-                      onChange={(e) => setNewStudent(prev => ({ ...prev, isActive: e.target.checked }))}
-                      className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                    />
-                    Active student worker
-                  </label>
-                  {newStudent.endDate && (
-                    <span className="text-xs text-gray-500">Automatically inactivates after {new Date(newStudent.endDate).toLocaleDateString()}</span>
-                  )}
-                </div>
-              </section>
+                </section>
 
-              <section className="space-y-4">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                  <div>
-                    <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Job Assignments</h5>
-                    <p className="text-sm text-gray-600">List each job along with buildings covered and the weekly schedule.</p>
+                <section className="space-y-4">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div>
+                      <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Job Assignments</h5>
+                      <p className="text-sm text-gray-600">List each job along with buildings covered and the weekly schedule.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addAssignment}
+                      className="self-start inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-baylor-green border border-baylor-green/40 rounded-md hover:bg-baylor-green/10"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Assignment
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={addAssignment}
-                    className="self-start inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-baylor-green border border-baylor-green/40 rounded-md hover:bg-baylor-green/10"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Assignment
-                  </button>
-                </div>
 
-                {errors.assignments && <p className="text-sm text-red-600">{errors.assignments}</p>}
+                  {errors.assignments && <p className="text-sm text-red-600">{errors.assignments}</p>}
 
-                <div className="space-y-4">
-                  {(newStudent.jobs || []).map((job, idx) => {
-                    const draft = assignmentDrafts[idx] || { day: 'M', start: '', end: '' };
-                    const locations = Array.isArray(job.location) ? job.location.filter(Boolean) : [];
-                    const weeklyEntries = Array.isArray(job.weeklySchedule) ? job.weeklySchedule : [];
-                    const weeklyHours = calculateWeeklyHoursFromSchedule(weeklyEntries);
-                    return (
-                      <div key={idx} className="border border-gray-200 rounded-lg bg-gray-50/80 p-4 shadow-sm">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900">Assignment {idx + 1}</p>
-                            {locations.length > 0 && (
-                              <p className="text-xs text-gray-500 mt-1">{locations.join(', ')}</p>
-                            )}
-                          </div>
-                          {(newStudent.jobs || []).length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeAssignment(idx)}
-                              className="text-xs font-medium text-red-600 hover:text-red-700"
-                            >
-                              Remove
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Job Title *</label>
-                            <input
-                              type="text"
-                              list="jobtitle-options"
-                              value={job.jobTitle || ''}
-                              onChange={(e) => updateAssignmentField(idx, 'jobTitle', e.target.value)}
-                              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                              placeholder="e.g., Front Desk Assistant"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Supervisor</label>
-                            <input
-                              type="text"
-                              list="supervisor-options"
-                              value={job.supervisor || ''}
-                              onChange={(e) => updateAssignmentField(idx, 'supervisor', e.target.value)}
-                              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                              placeholder="Supervisor name"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Hourly Rate</label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={job.hourlyRate || ''}
-                              onChange={(e) => updateAssignmentField(idx, 'hourlyRate', e.target.value)}
-                              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                              placeholder="12.00"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Primary Location(s)</label>
-                            <MultiSelectDropdown
-                              options={assignmentBuildingOptions}
-                              selected={locations}
-                              onChange={(selected) => updateAssignmentLocations(idx, selected)}
-                              placeholder="Select building(s)"
-                            />
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-2">
-                              <input
-                                type="text"
-                                value={assignmentBuildingDrafts[idx] || ''}
-                                onChange={(e) => updateCustomLocationDraft(idx, e.target.value)}
-                                className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                                placeholder="Add another location"
-                              />
+                  <div className="space-y-4">
+                    {(newStudent.jobs || []).map((job, idx) => {
+                      const draft = assignmentDrafts[idx] || { day: 'M', start: '', end: '' };
+                      const locations = Array.isArray(job.location) ? job.location.filter(Boolean) : [];
+                      const weeklyEntries = Array.isArray(job.weeklySchedule) ? job.weeklySchedule : [];
+                      const weeklyHours = calculateWeeklyHoursFromSchedule(weeklyEntries);
+                      return (
+                        <div key={idx} className="border border-gray-200 rounded-lg bg-gray-50/80 p-4 shadow-sm">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-gray-900">Assignment {idx + 1}</p>
+                              {locations.length > 0 && (
+                                <p className="text-xs text-gray-500 mt-1">{locations.join(', ')}</p>
+                              )}
+                            </div>
+                            {(newStudent.jobs || []).length > 1 && (
                               <button
                                 type="button"
-                                onClick={() => addCustomLocation(idx)}
-                                className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white hover:bg-gray-50"
+                                onClick={() => removeAssignment(idx)}
+                                className="text-xs font-medium text-red-600 hover:text-red-700"
                               >
-                                Add
+                                Remove
                               </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 border-t border-gray-200 pt-4">
-                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                            <h6 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Weekly Schedule</h6>
-                            {weeklyEntries.length > 0 && (
-                              <span className="text-xs text-gray-500">≈ {formatHoursValue(weeklyHours)} hrs/week</span>
                             )}
                           </div>
-                          {weeklyEntries.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                              {weeklyEntries.map((entry, entryIdx) => (
-                                <span key={entryIdx} className="inline-flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 text-xs text-gray-700">
-                                  {entry.day} {formatTime12h(entry.start)} - {formatTime12h(entry.end)}
-                                  <button
-                                    type="button"
-                                    onClick={() => removeScheduleEntryFromAssignment(idx, entryIdx)}
-                                    className="text-gray-400 hover:text-gray-600"
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </button>
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-xs text-gray-500">No time blocks added yet.</p>
-                          )}
 
-                          <div className="mt-3 flex flex-wrap items-end gap-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
                             <div>
-                              <label className="block text-xs text-gray-600 mb-1">Day</label>
-                              <select
-                                className="border border-gray-300 rounded-md px-2 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                                value={draft.day || 'M'}
-                                onChange={(e) => updateAssignmentDraft(idx, { day: e.target.value })}
-                              >
-                                {WEEKDAY_OPTIONS.map(option => (
-                                  <option key={option.value} value={option.value}>{option.label}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="block text-xs text-gray-600 mb-1">Start</label>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Job Title *</label>
                               <input
-                                type="time"
-                                className="border border-gray-300 rounded-md px-2 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                                value={draft.start || ''}
-                                onChange={(e) => updateAssignmentDraft(idx, { start: e.target.value })}
+                                type="text"
+                                list="jobtitle-options"
+                                value={job.jobTitle || ''}
+                                onChange={(e) => updateAssignmentField(idx, 'jobTitle', e.target.value)}
+                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                placeholder="e.g., Front Desk Assistant"
                               />
                             </div>
                             <div>
-                              <label className="block text-xs text-gray-600 mb-1">End</label>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Supervisor</label>
                               <input
-                                type="time"
-                                className="border border-gray-300 rounded-md px-2 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                                value={draft.end || ''}
-                                onChange={(e) => updateAssignmentDraft(idx, { end: e.target.value })}
+                                type="text"
+                                list="supervisor-options"
+                                value={job.supervisor || ''}
+                                onChange={(e) => updateAssignmentField(idx, 'supervisor', e.target.value)}
+                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                placeholder="Supervisor name"
                               />
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => addScheduleEntryToAssignment(idx)}
-                              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium bg-baylor-green text-white rounded-md hover:bg-baylor-green/90"
-                            >
-                              <Plus className="h-4 w-4" />
-                              Add Time
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {errors.weeklySchedule && <p className="text-sm text-red-600">{errors.weeklySchedule}</p>}
-
-                <div className="rounded-lg bg-gray-50 border border-dashed border-gray-300 px-4 py-3 text-xs text-gray-600">
-                  <span className="font-medium text-gray-700">Buildings covered:</span>{' '}
-                  {assignmentBuildingsPreview.length > 0
-                    ? assignmentBuildingsPreview.join(', ')
-                    : 'Add locations to each assignment to populate this list.'}
-                </div>
-              </section>
-            </div>
-
-            {errors.general && (
-              <p className="text-red-500 text-sm mt-4">{errors.general}</p>
-            )}
-
-            <div className="mt-6 flex flex-col md:flex-row md:items-center md:justify-end gap-3">
-              <button
-                type="button"
-                onClick={cancelCreate}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={saveCreate}
-                className="px-4 py-2 bg-baylor-green text-white rounded-lg text-sm font-medium hover:bg-baylor-green/90"
-              >
-                <Save className="h-4 w-4 inline mr-2" />
-                Save Student
-              </button>
-            </div>
-          </div>
-        )}
-        {/* Students Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-baylor-green/5">
-                <SortableHeader label="Name" columnKey="name" sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHeader label="Email" columnKey="email" sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHeader label="Phone" columnKey="phone" sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHeader label="Weekly Schedule" columnKey="weeklySchedule" sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHeader label="Job Title" columnKey="jobTitle" sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHeader label="Supervisor" columnKey="supervisor" sortConfig={sortConfig} onSort={handleSort} />
-                <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">Building(s)</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filteredAndSortedData.map((student) => {
-                return (
-                  <tr key={student.id} className="hover:bg-gray-50">
-                    {editingId === student.id ? (
-                      // Edit row
-                      <>
-                        <td className="p-2 align-top">
-                          <input
-                            type="text"
-                            value={editFormData.name || ''}
-                            onChange={(e) => setEditFormData(prev => ({ ...prev, name: e.target.value }))}
-                            className={`w-full border rounded px-2 py-1 text-sm ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
-                          />
-                          {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
-                        </td>
-                        <td className="p-2 align-top">
-                          <input
-                            type="email"
-                            value={editFormData.email || ''}
-                            onChange={(e) => setEditFormData(prev => ({ ...prev, email: e.target.value }))}
-                            className={`w-full border rounded px-2 py-1 text-sm ${errors.email ? 'border-red-500' : 'border-gray-300'}`}
-                          />
-                          {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-                        </td>
-                        <td className="p-2 align-top">
-                          <div className="space-y-3">
-                            {/* Contact Info */}
                             <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Phone</label>
-                              <div className="flex items-center gap-2">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Hourly Rate</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={job.hourlyRate || ''}
+                                onChange={(e) => updateAssignmentField(idx, 'hourlyRate', e.target.value)}
+                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                placeholder="12.00"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Primary Location(s)</label>
+                              <MultiSelectDropdown
+                                options={assignmentBuildingOptions}
+                                selected={locations}
+                                onChange={(selected) => updateAssignmentLocations(idx, selected)}
+                                placeholder="Select building(s)"
+                              />
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-2">
                                 <input
-                                  type="tel"
-                                  value={editFormData.phone || ''}
-                                  onChange={(e) => setEditFormData(prev => ({ ...prev, phone: e.target.value }))}
-                                  disabled={editFormData.hasNoPhone}
-                                  className={`flex-1 border rounded px-2 py-1 text-sm ${errors.phone ? 'border-red-500' : 'border-gray-300'} ${editFormData.hasNoPhone ? 'bg-gray-100' : ''}`}
+                                  type="text"
+                                  value={assignmentBuildingDrafts[idx] || ''}
+                                  onChange={(e) => updateCustomLocationDraft(idx, e.target.value)}
+                                  className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                  placeholder="Add another location"
                                 />
-                                <label className="flex items-center text-xs whitespace-nowrap">
-                                  <input
-                                    type="checkbox"
-                                    checked={editFormData.hasNoPhone || false}
-                                    onChange={(e) => setEditFormData(prev => ({ ...prev, hasNoPhone: e.target.checked, phone: e.target.checked ? '' : prev.phone }))}
-                                    className="mr-1"
-                                  />
-                                  No Phone
-                                </label>
-                              </div>
-                              {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
-                            </div>
-
-                            {/* Employment Dates */}
-                            <div className="border-t pt-3">
-                              <label className="block text-xs font-medium text-gray-700 mb-2">Employment Period</label>
-                              <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                  <label className="block text-xs text-gray-600 mb-1">Start Date</label>
-                                  <input
-                                    type="date"
-                                    className="border rounded px-2 py-1 w-full text-xs"
-                                    value={editFormData.startDate || ''}
-                                    onChange={e => setEditFormData(prev => ({ ...prev, startDate: e.target.value }))}
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-xs text-gray-600 mb-1">End Date</label>
-                                  <input
-                                    type="date"
-                                    className="border rounded px-2 py-1 w-full text-xs"
-                                    value={editFormData.endDate || ''}
-                                    onChange={e => setEditFormData(prev => ({ ...prev, endDate: e.target.value }))}
-                                  />
-                                </div>
-                              </div>
-                              <div className="mt-2">
-                                <label className="flex items-center gap-2 text-xs">
-                                  <input
-                                    type="checkbox"
-                                    checked={editFormData.isActive !== false}
-                                    onChange={e => setEditFormData(prev => ({ ...prev, isActive: e.target.checked }))}
-                                    className="rounded"
-                                  />
-                                  <span className="font-medium">Active Employee</span>
-                                </label>
-                                {editFormData.endDate && (
-                                  <p className="text-xs text-gray-500 mt-1">Will auto-inactivate after end date</p>
-                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => addCustomLocation(idx)}
+                                  className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white hover:bg-gray-50"
+                                >
+                                  Add
+                                </button>
                               </div>
                             </div>
                           </div>
-                        </td>
-                        <td className="p-2 align-top" colSpan={3}>
-                          <div className="space-y-4">
-                            {/* Job Management Header */}
-                            <div className="flex items-center justify-between">
-                              <h4 className="text-sm font-medium text-gray-900">Job Management</h4>
+
+                          <div className="mt-4 border-t border-gray-200 pt-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                              <h6 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Weekly Schedule</h6>
+                              {weeklyEntries.length > 0 && (
+                                <span className="text-xs text-gray-500">≈ {formatHoursValue(weeklyHours)} hrs/week</span>
+                              )}
+                            </div>
+                            {weeklyEntries.length > 0 ? (
+                              <div className="flex flex-wrap gap-2">
+                                {weeklyEntries.map((entry, entryIdx) => (
+                                  <span key={entryIdx} className="inline-flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 text-xs text-gray-700">
+                                    {entry.day} {formatTime12h(entry.start)} - {formatTime12h(entry.end)}
+                                    <button
+                                      type="button"
+                                      onClick={() => removeScheduleEntryFromAssignment(idx, entryIdx)}
+                                      className="text-gray-400 hover:text-gray-600"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-gray-500">No time blocks added yet.</p>
+                            )}
+
+                            <div className="mt-3 flex flex-wrap items-end gap-3">
+                              <div>
+                                <label className="block text-xs text-gray-600 mb-1">Day</label>
+                                <select
+                                  className="border border-gray-300 rounded-md px-2 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                  value={draft.day || 'M'}
+                                  onChange={(e) => updateAssignmentDraft(idx, { day: e.target.value })}
+                                >
+                                  {WEEKDAY_OPTIONS.map(option => (
+                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-600 mb-1">Start</label>
+                                <input
+                                  type="time"
+                                  className="border border-gray-300 rounded-md px-2 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                  value={draft.start || ''}
+                                  onChange={(e) => updateAssignmentDraft(idx, { start: e.target.value })}
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-600 mb-1">End</label>
+                                <input
+                                  type="time"
+                                  className="border border-gray-300 rounded-md px-2 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                  value={draft.end || ''}
+                                  onChange={(e) => updateAssignmentDraft(idx, { end: e.target.value })}
+                                />
+                              </div>
                               <button
-                                onClick={() => {
-                                  setEditFormData(prev => ({ ...prev, jobs: [...(prev.jobs || []), { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] }] }));
-                                  setEditJobsDrafts(prev => ([...prev, { day: 'M', start: '', end: '' }]));
-                                }}
-                                className="px-3 py-1 bg-baylor-green text-white text-xs rounded hover:bg-baylor-green/90 transition-colors"
+                                type="button"
+                                onClick={() => addScheduleEntryToAssignment(idx)}
+                                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium bg-baylor-green text-white rounded-md hover:bg-baylor-green/90"
                               >
-                                + Add Job
+                                <Plus className="h-4 w-4" />
+                                Add Time
                               </button>
                             </div>
-
-                            {/* Jobs List */}
-                            <div className="space-y-3">
-                              {(editFormData.jobs || []).map((job, idx) => (
-                                <div key={idx} className="border border-gray-200 rounded-lg p-4 bg-gray-50/50">
-                                  {/* Job Header */}
-                                  <div className="flex items-center justify-between mb-3">
-                                    <h5 className="font-medium text-gray-900 text-sm">Job {idx + 1}</h5>
-                                    {(editFormData.jobs || []).length > 1 && (
-                                      <button
-                                        onClick={() => {
-                                          setEditFormData(prev => ({ ...prev, jobs: prev.jobs.filter((_, i) => i !== idx) }));
-                                          setEditJobsDrafts(prev => prev.filter((_, i) => i !== idx));
-                                        }}
-                                        className="text-red-600 hover:text-red-800 text-xs font-medium"
-                                      >
-                                        Remove Job
-                                      </button>
-                                    )}
-                                  </div>
-
-                                  {/* Job Details */}
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                                    <div>
-                                      <label className="block text-xs font-medium text-gray-700 mb-1">Job Title</label>
-                                      <input
-                                        type="text"
-                                        placeholder="e.g., Administrative Assistant"
-                                        value={job.jobTitle || ''}
-                                        onChange={e => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j, i) => i === idx ? { ...j, jobTitle: e.target.value } : j) }))}
-                                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="block text-xs font-medium text-gray-700 mb-1">Supervisor</label>
-                                      <input
-                                        type="text"
-                                        placeholder="Supervisor name"
-                                        value={job.supervisor || ''}
-                                        onChange={e => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j, i) => i === idx ? { ...j, supervisor: e.target.value } : j) }))}
-                                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="block text-xs font-medium text-gray-700 mb-1">Hourly Rate ($)</label>
-                                      <input
-                                        type="number"
-                                        step="0.01"
-                                        placeholder="0.00"
-                                        value={job.hourlyRate || ''}
-                                        onChange={e => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j, i) => i === idx ? { ...j, hourlyRate: e.target.value } : j) }))}
-                                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="block text-xs font-medium text-gray-700 mb-1">Location</label>
-                                      <div className="flex gap-4 items-center text-sm">
-                                        <label className="flex items-center gap-2">
-                                          <input
-                                            type="checkbox"
-                                            checked={(job.location || []).includes('Mary Gibbs Jones')}
-                                            onChange={(e) => setEditFormData(prev => ({
-                                              ...prev,
-                                              jobs: prev.jobs.map((j, i) => i === idx ? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Mary Gibbs Jones'])) : (j.location || []).filter(b => b !== 'Mary Gibbs Jones') } : j)
-                                            }))}
-                                            className="rounded"
-                                          />
-                                          Mary Gibbs Jones
-                                        </label>
-                                        <label className="flex items-center gap-2">
-                                          <input
-                                            type="checkbox"
-                                            checked={(job.location || []).includes('Goebel')}
-                                            onChange={(e) => setEditFormData(prev => ({
-                                              ...prev,
-                                              jobs: prev.jobs.map((j, i) => i === idx ? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Goebel'])) : (j.location || []).filter(b => b !== 'Goebel') } : j)
-                                            }))}
-                                            className="rounded"
-                                          />
-                                          Goebel
-                                        </label>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Schedule Section */}
-                                  <div className="border-t pt-3">
-                                    <label className="block text-xs font-medium text-gray-700 mb-2">Weekly Schedule</label>
-
-                                    {/* Add Schedule Entry */}
-                                    <div className="flex items-end gap-2 mb-3">
-                                      <div>
-                                        <label className="block text-xs text-gray-600 mb-1">Day</label>
-                                        <select
-                                          className="border border-gray-300 rounded px-2 py-1 text-sm"
-                                          value={(editJobsDrafts[idx] || {}).day || 'M'}
-                                          onChange={e => setEditJobsDrafts(prev => prev.map((d, i) => i === idx ? { ...(d || {}), day: e.target.value } : d))}
-                                        >
-                                          <option value="M">Monday</option>
-                                          <option value="T">Tuesday</option>
-                                          <option value="W">Wednesday</option>
-                                          <option value="R">Thursday</option>
-                                          <option value="F">Friday</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <label className="block text-xs text-gray-600 mb-1">Start Time</label>
-                                        <input
-                                          type="time"
-                                          className="border border-gray-300 rounded px-2 py-1 text-sm"
-                                          value={(editJobsDrafts[idx] || {}).start || ''}
-                                          onChange={e => setEditJobsDrafts(prev => prev.map((d, i) => i === idx ? { ...(d || {}), start: e.target.value } : d))}
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="block text-xs text-gray-600 mb-1">End Time</label>
-                                        <input
-                                          type="time"
-                                          className="border border-gray-300 rounded px-2 py-1 text-sm"
-                                          value={(editJobsDrafts[idx] || {}).end || ''}
-                                          onChange={e => setEditJobsDrafts(prev => prev.map((d, i) => i === idx ? { ...(d || {}), end: e.target.value } : d))}
-                                        />
-                                      </div>
-                                      <button
-                                        onClick={() => {
-                                          const draft = editJobsDrafts[idx] || { day: 'M', start: '', end: '' };
-                                          if (!draft.day || !draft.start || !draft.end) return;
-                                          if (draft.start >= draft.end) { setErrors(prev => ({ ...prev, weeklySchedule: 'End time must be after start time' })); return; }
-                                          setEditFormData(prev => ({
-                                            ...prev,
-                                            jobs: prev.jobs.map((j, i) => i === idx ? { ...j, weeklySchedule: [...(j.weeklySchedule || []), { ...draft }] } : j)
-                                          }));
-                                          setEditJobsDrafts(prev => prev.map((d, i) => i === idx ? { day: 'M', start: '', end: '' } : d));
-                                          setErrors(prev => ({ ...prev, weeklySchedule: undefined }));
-                                        }}
-                                        className="px-3 py-1 bg-baylor-green text-white text-xs rounded hover:bg-baylor-green/90 transition-colors"
-                                      >
-                                        Add Time
-                                      </button>
-                                    </div>
-
-                                    {/* Schedule Entries */}
-                                    <div className="space-y-2">
-                                      {(job.weeklySchedule || []).map((entry, k) => (
-                                        <div key={k} className="flex items-center justify-between bg-white border border-gray-200 rounded px-3 py-2">
-                                          <span className="text-sm">
-                                            {entry.day === 'M' ? 'Monday' : entry.day === 'T' ? 'Tuesday' : entry.day === 'W' ? 'Wednesday' : entry.day === 'R' ? 'Thursday' : 'Friday'}
-                                            {' '}{formatTime12h(entry.start)} - {formatTime12h(entry.end)}
-                                          </span>
-                                          <button
-                                            onClick={() => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j, i) => i === idx ? { ...j, weeklySchedule: (j.weeklySchedule || []).filter((_, x) => x !== k) } : j) }))}
-                                            className="text-red-500 hover:text-red-700 p-1"
-                                          >
-                                            <X className="h-4 w-4" />
-                                          </button>
-                                        </div>
-                                      ))}
-                                      {(job.weeklySchedule || []).length === 0 && (
-                                        <div className="text-center text-gray-500 text-sm py-4 border border-gray-200 rounded bg-gray-50">
-                                          No schedule entries yet
-                                        </div>
-                                      )}
-                                    </div>
-                                    {errors.weeklySchedule && <p className="text-red-500 text-xs mt-2">{errors.weeklySchedule}</p>}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
                           </div>
-                        </td>
-                        <td className="p-2 align-top">
-                          <div className="flex gap-3 text-xs">
-                            <label className="flex items-center gap-1">
-                              <input type="checkbox" checked={(editFormData.primaryBuildings || []).includes('Mary Gibbs Jones')} onChange={(e) => setEditFormData(prev => ({
-                                ...prev,
-                                primaryBuildings: e.target.checked
-                                  ? Array.from(new Set([...(prev.primaryBuildings || []), 'Mary Gibbs Jones']))
-                                  : (prev.primaryBuildings || []).filter(b => b !== 'Mary Gibbs Jones')
-                              }))} /> MGJ
-                            </label>
-                            <label className="flex items-center gap-1">
-                              <input type="checkbox" checked={(editFormData.primaryBuildings || []).includes('Goebel')} onChange={(e) => setEditFormData(prev => ({
-                                ...prev,
-                                primaryBuildings: e.target.checked
-                                  ? Array.from(new Set([...(prev.primaryBuildings || []), 'Goebel']))
-                                  : (prev.primaryBuildings || []).filter(b => b !== 'Goebel')
-                              }))} /> Goebel
-                            </label>
-                          </div>
-                        </td>
-                        <td className="p-2 align-top text-right">
-                          <div className="flex gap-2 justify-end">
-                            <button
-                              onClick={saveEdit}
-                              className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
-                              title="Save"
-                            >
-                              <Save size={16} />
-                            </button>
-                            <button
-                              onClick={cancelEdit}
-                              className="p-2 text-red-600 hover:bg-red-100 rounded-full"
-                              title="Cancel"
-                            >
-                              <X size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </>
-                    ) : (
-                      // Display row
-                      <>
-                        <td className="px-4 py-3 whitespace-nowrap cursor-pointer" onClick={() => setSelectedStudentForCard(student)}>
-                          <div className="flex items-center">
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {student.name}
-                              </div>
-                              <div className="text-xs text-gray-500 space-x-2">
-                                {student.startDate && (
-                                  <span>Start: {new Date(student.startDate).toLocaleDateString()}</span>
-                                )}
-                                {student.endDate && (
-                                  <span>End: {new Date(student.endDate).toLocaleDateString()}</span>
-                                )}
-                                {student.isActive === false && (
-                                  <span className="text-red-600 font-medium">Inactive</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <Mail className="h-4 w-4 text-gray-400 mr-2" />
-                            <span className="text-sm text-gray-900">{student.email || '-'}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="flex items-center">
-                            {student.hasNoPhone ? (
-                              <PhoneOff className="h-4 w-4 text-gray-400 mr-2" />
-                            ) : (
-                              <Phone className="h-4 w-4 text-gray-400 mr-2" />
-                            )}
-                            <span className="text-sm text-gray-900">
-                              {student.hasNoPhone ? 'No Phone' : formatPhoneNumber(student.phone)}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center">
-                            <Clock className="h-4 w-4 text-gray-400 mr-2" />
-                            <span className="text-sm text-gray-900">{formatWeeklySchedule(student.weeklySchedule) || '-'}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">{student.jobTitle || '-'}</span>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">{student.supervisor || '-'}</span>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">{Array.isArray(student.primaryBuildings) ? student.primaryBuildings.join(', ') : (student.primaryBuilding || '-')}</span>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
-                          <div className="flex justify-end gap-1">
-                            <button
-                              onClick={() => startEdit(student)}
-                              className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
-                              title="Edit"
-                              disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canEditStudent === false}
-                            >
-                              <Edit size={16} />
-                            </button>
-                            <button
-                              onClick={() => confirmDelete(student)}
-                              className="p-2 text-red-600 hover:bg-red-100 rounded-full"
-                              title="Delete"
-                              disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canDeleteStudent === false}
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        {filteredAndSortedData.length === 0 && (
-          <div className="text-center py-12">
-            <GraduationCap className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No student workers found</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              {filterText ? 'Try adjusting your search criteria.' : 'Get started by adding a new student worker.'}
-            </p>
-          </div>
-        )}
-      </div>
+                        </div>
+                      );
+                    })}
+                  </div>
 
-      {/* Contact Card Modal */}
-      {selectedStudentForCard && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <FacultyContactCard
-              person={selectedStudentForCard}
-              onClose={() => setSelectedStudentForCard(null)}
-              personType="student"
-              onUpdate={onStudentUpdate}
-            />
-          </div>
-        </div>
-      )}
+                  {errors.weeklySchedule && <p className="text-sm text-red-600">{errors.weeklySchedule}</p>}
 
-      {/* Delete Confirmation Modal */}
-      <DeleteConfirmDialog
-        isOpen={showDeleteConfirm}
-        record={studentToDelete}
-        recordType="student worker"
-        onConfirm={executeDelete}
-        onCancel={() => setShowDeleteConfirm(false)}
-      />
+                  <div className="rounded-lg bg-gray-50 border border-dashed border-gray-300 px-4 py-3 text-xs text-gray-600">
+                    <span className="font-medium text-gray-700">Buildings covered:</span>{' '}
+                    {assignmentBuildingsPreview.length > 0
+                      ? assignmentBuildingsPreview.join(', ')
+                      : 'Add locations to each assignment to populate this list.'}
+                  </div>
+                </section>
+              </div>
 
-      {/* Change History */}
-      {showHistory && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <h4 className="font-medium text-gray-900 mb-4">Recent Changes</h4>
-          {changeHistory.length === 0 ? (
-            <p className="text-sm text-gray-500">No changes recorded.</p>
-          ) : (
-            <div className="space-y-2">
-              {changeHistory.slice(-5).reverse().map((change, index) => (
-                <div key={index} className="text-sm">
-                  <span className="font-medium">{change.type}</span>: {change.originalData?.name}
-                  <span className="text-gray-500 ml-2">
-                    {new Date(change.timestamp).toLocaleString()}
-                  </span>
-                </div>
-              ))}
+              {errors.general && (
+                <p className="text-red-500 text-sm mt-4">{errors.general}</p>
+              )}
+
+              <div className="mt-6 flex flex-col md:flex-row md:items-center md:justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={cancelCreate}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={saveCreate}
+                  className="px-4 py-2 bg-baylor-green text-white rounded-lg text-sm font-medium hover:bg-baylor-green/90"
+                >
+                  <Save className="h-4 w-4 inline mr-2" />
+                  Save Student
+                </button>
+              </div>
             </div>
           )}
-        </div>
+          {/* Students Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-baylor-green/5">
+                  <SortableHeader label="Name" columnKey="name" sortConfig={sortConfig} onSort={handleSort} />
+                  <SortableHeader label="Email" columnKey="email" sortConfig={sortConfig} onSort={handleSort} />
+                  <SortableHeader label="Phone" columnKey="phone" sortConfig={sortConfig} onSort={handleSort} />
+                  <SortableHeader label="Weekly Schedule" columnKey="weeklySchedule" sortConfig={sortConfig} onSort={handleSort} />
+                  <SortableHeader label="Job Title" columnKey="jobTitle" sortConfig={sortConfig} onSort={handleSort} />
+                  <SortableHeader label="Supervisor" columnKey="supervisor" sortConfig={sortConfig} onSort={handleSort} />
+                  <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">Building(s)</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filteredAndSortedData.map((student) => {
+                  return (
+                    <tr key={student.id} className="hover:bg-gray-50">
+                      {editingId === student.id ? (
+                        // Edit row
+                        <>
+                          <td className="p-2 align-top">
+                            <input
+                              type="text"
+                              value={editFormData.name || ''}
+                              onChange={(e) => setEditFormData(prev => ({ ...prev, name: e.target.value }))}
+                              className={`w-full border rounded px-2 py-1 text-sm ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
+                            />
+                            {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
+                          </td>
+                          <td className="p-2 align-top">
+                            <input
+                              type="email"
+                              value={editFormData.email || ''}
+                              onChange={(e) => setEditFormData(prev => ({ ...prev, email: e.target.value }))}
+                              className={`w-full border rounded px-2 py-1 text-sm ${errors.email ? 'border-red-500' : 'border-gray-300'}`}
+                            />
+                            {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+                          </td>
+                          <td className="p-2 align-top">
+                            <div className="space-y-3">
+                              {/* Contact Info */}
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Phone</label>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="tel"
+                                    value={editFormData.phone || ''}
+                                    onChange={(e) => setEditFormData(prev => ({ ...prev, phone: e.target.value }))}
+                                    disabled={editFormData.hasNoPhone}
+                                    className={`flex-1 border rounded px-2 py-1 text-sm ${errors.phone ? 'border-red-500' : 'border-gray-300'} ${editFormData.hasNoPhone ? 'bg-gray-100' : ''}`}
+                                  />
+                                  <label className="flex items-center text-xs whitespace-nowrap">
+                                    <input
+                                      type="checkbox"
+                                      checked={editFormData.hasNoPhone || false}
+                                      onChange={(e) => setEditFormData(prev => ({ ...prev, hasNoPhone: e.target.checked, phone: e.target.checked ? '' : prev.phone }))}
+                                      className="mr-1"
+                                    />
+                                    No Phone
+                                  </label>
+                                </div>
+                                {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
+                              </div>
+
+                              {/* Employment Dates */}
+                              <div className="border-t pt-3">
+                                <label className="block text-xs font-medium text-gray-700 mb-2">Employment Period</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="block text-xs text-gray-600 mb-1">Start Date</label>
+                                    <input
+                                      type="date"
+                                      className="border rounded px-2 py-1 w-full text-xs"
+                                      value={editFormData.startDate || ''}
+                                      onChange={e => setEditFormData(prev => ({ ...prev, startDate: e.target.value }))}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs text-gray-600 mb-1">End Date</label>
+                                    <input
+                                      type="date"
+                                      className="border rounded px-2 py-1 w-full text-xs"
+                                      value={editFormData.endDate || ''}
+                                      onChange={e => setEditFormData(prev => ({ ...prev, endDate: e.target.value }))}
+                                    />
+                                  </div>
+                                </div>
+                                <div className="mt-2">
+                                  <label className="flex items-center gap-2 text-xs">
+                                    <input
+                                      type="checkbox"
+                                      checked={editFormData.isActive !== false}
+                                      onChange={e => setEditFormData(prev => ({ ...prev, isActive: e.target.checked }))}
+                                      className="rounded"
+                                    />
+                                    <span className="font-medium">Active Employee</span>
+                                  </label>
+                                  {editFormData.endDate && (
+                                    <p className="text-xs text-gray-500 mt-1">Will auto-inactivate after end date</p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-2 align-top" colSpan={3}>
+                            <div className="space-y-4">
+                              {/* Job Management Header */}
+                              <div className="flex items-center justify-between">
+                                <h4 className="text-sm font-medium text-gray-900">Job Management</h4>
+                                <button
+                                  onClick={() => {
+                                    setEditFormData(prev => ({ ...prev, jobs: [...(prev.jobs || []), { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] }] }));
+                                    setEditJobsDrafts(prev => ([...prev, { day: 'M', start: '', end: '' }]));
+                                  }}
+                                  className="px-3 py-1 bg-baylor-green text-white text-xs rounded hover:bg-baylor-green/90 transition-colors"
+                                >
+                                  + Add Job
+                                </button>
+                              </div>
+
+                              {/* Jobs List */}
+                              <div className="space-y-3">
+                                {(editFormData.jobs || []).map((job, idx) => (
+                                  <div key={idx} className="border border-gray-200 rounded-lg p-4 bg-gray-50/50">
+                                    {/* Job Header */}
+                                    <div className="flex items-center justify-between mb-3">
+                                      <h5 className="font-medium text-gray-900 text-sm">Job {idx + 1}</h5>
+                                      {(editFormData.jobs || []).length > 1 && (
+                                        <button
+                                          onClick={() => {
+                                            setEditFormData(prev => ({ ...prev, jobs: prev.jobs.filter((_, i) => i !== idx) }));
+                                            setEditJobsDrafts(prev => prev.filter((_, i) => i !== idx));
+                                          }}
+                                          className="text-red-600 hover:text-red-800 text-xs font-medium"
+                                        >
+                                          Remove Job
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {/* Job Details */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Job Title</label>
+                                        <input
+                                          type="text"
+                                          placeholder="e.g., Administrative Assistant"
+                                          value={job.jobTitle || ''}
+                                          onChange={e => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j, i) => i === idx ? { ...j, jobTitle: e.target.value } : j) }))}
+                                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Supervisor</label>
+                                        <input
+                                          type="text"
+                                          placeholder="Supervisor name"
+                                          value={job.supervisor || ''}
+                                          onChange={e => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j, i) => i === idx ? { ...j, supervisor: e.target.value } : j) }))}
+                                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Hourly Rate ($)</label>
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          placeholder="0.00"
+                                          value={job.hourlyRate || ''}
+                                          onChange={e => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j, i) => i === idx ? { ...j, hourlyRate: e.target.value } : j) }))}
+                                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Location</label>
+                                        <div className="flex gap-4 items-center text-sm">
+                                          <label className="flex items-center gap-2">
+                                            <input
+                                              type="checkbox"
+                                              checked={(job.location || []).includes('Mary Gibbs Jones')}
+                                              onChange={(e) => setEditFormData(prev => ({
+                                                ...prev,
+                                                jobs: prev.jobs.map((j, i) => i === idx ? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Mary Gibbs Jones'])) : (j.location || []).filter(b => b !== 'Mary Gibbs Jones') } : j)
+                                              }))}
+                                              className="rounded"
+                                            />
+                                            Mary Gibbs Jones
+                                          </label>
+                                          <label className="flex items-center gap-2">
+                                            <input
+                                              type="checkbox"
+                                              checked={(job.location || []).includes('Goebel')}
+                                              onChange={(e) => setEditFormData(prev => ({
+                                                ...prev,
+                                                jobs: prev.jobs.map((j, i) => i === idx ? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Goebel'])) : (j.location || []).filter(b => b !== 'Goebel') } : j)
+                                              }))}
+                                              className="rounded"
+                                            />
+                                            Goebel
+                                          </label>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Schedule Section */}
+                                    <div className="border-t pt-3">
+                                      <label className="block text-xs font-medium text-gray-700 mb-2">Weekly Schedule</label>
+
+                                      {/* Add Schedule Entry */}
+                                      <div className="flex items-end gap-2 mb-3">
+                                        <div>
+                                          <label className="block text-xs text-gray-600 mb-1">Day</label>
+                                          <select
+                                            className="border border-gray-300 rounded px-2 py-1 text-sm"
+                                            value={(editJobsDrafts[idx] || {}).day || 'M'}
+                                            onChange={e => setEditJobsDrafts(prev => prev.map((d, i) => i === idx ? { ...(d || {}), day: e.target.value } : d))}
+                                          >
+                                            <option value="M">Monday</option>
+                                            <option value="T">Tuesday</option>
+                                            <option value="W">Wednesday</option>
+                                            <option value="R">Thursday</option>
+                                            <option value="F">Friday</option>
+                                          </select>
+                                        </div>
+                                        <div>
+                                          <label className="block text-xs text-gray-600 mb-1">Start Time</label>
+                                          <input
+                                            type="time"
+                                            className="border border-gray-300 rounded px-2 py-1 text-sm"
+                                            value={(editJobsDrafts[idx] || {}).start || ''}
+                                            onChange={e => setEditJobsDrafts(prev => prev.map((d, i) => i === idx ? { ...(d || {}), start: e.target.value } : d))}
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-xs text-gray-600 mb-1">End Time</label>
+                                          <input
+                                            type="time"
+                                            className="border border-gray-300 rounded px-2 py-1 text-sm"
+                                            value={(editJobsDrafts[idx] || {}).end || ''}
+                                            onChange={e => setEditJobsDrafts(prev => prev.map((d, i) => i === idx ? { ...(d || {}), end: e.target.value } : d))}
+                                          />
+                                        </div>
+                                        <button
+                                          onClick={() => {
+                                            const draft = editJobsDrafts[idx] || { day: 'M', start: '', end: '' };
+                                            if (!draft.day || !draft.start || !draft.end) return;
+                                            if (draft.start >= draft.end) { setErrors(prev => ({ ...prev, weeklySchedule: 'End time must be after start time' })); return; }
+                                            setEditFormData(prev => ({
+                                              ...prev,
+                                              jobs: prev.jobs.map((j, i) => i === idx ? { ...j, weeklySchedule: [...(j.weeklySchedule || []), { ...draft }] } : j)
+                                            }));
+                                            setEditJobsDrafts(prev => prev.map((d, i) => i === idx ? { day: 'M', start: '', end: '' } : d));
+                                            setErrors(prev => ({ ...prev, weeklySchedule: undefined }));
+                                          }}
+                                          className="px-3 py-1 bg-baylor-green text-white text-xs rounded hover:bg-baylor-green/90 transition-colors"
+                                        >
+                                          Add Time
+                                        </button>
+                                      </div>
+
+                                      {/* Schedule Entries */}
+                                      <div className="space-y-2">
+                                        {(job.weeklySchedule || []).map((entry, k) => (
+                                          <div key={k} className="flex items-center justify-between bg-white border border-gray-200 rounded px-3 py-2">
+                                            <span className="text-sm">
+                                              {entry.day === 'M' ? 'Monday' : entry.day === 'T' ? 'Tuesday' : entry.day === 'W' ? 'Wednesday' : entry.day === 'R' ? 'Thursday' : 'Friday'}
+                                              {' '}{formatTime12h(entry.start)} - {formatTime12h(entry.end)}
+                                            </span>
+                                            <button
+                                              onClick={() => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j, i) => i === idx ? { ...j, weeklySchedule: (j.weeklySchedule || []).filter((_, x) => x !== k) } : j) }))}
+                                              className="text-red-500 hover:text-red-700 p-1"
+                                            >
+                                              <X className="h-4 w-4" />
+                                            </button>
+                                          </div>
+                                        ))}
+                                        {(job.weeklySchedule || []).length === 0 && (
+                                          <div className="text-center text-gray-500 text-sm py-4 border border-gray-200 rounded bg-gray-50">
+                                            No schedule entries yet
+                                          </div>
+                                        )}
+                                      </div>
+                                      {errors.weeklySchedule && <p className="text-red-500 text-xs mt-2">{errors.weeklySchedule}</p>}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-2 align-top">
+                            <div className="flex gap-3 text-xs">
+                              <label className="flex items-center gap-1">
+                                <input type="checkbox" checked={(editFormData.primaryBuildings || []).includes('Mary Gibbs Jones')} onChange={(e) => setEditFormData(prev => ({
+                                  ...prev,
+                                  primaryBuildings: e.target.checked
+                                    ? Array.from(new Set([...(prev.primaryBuildings || []), 'Mary Gibbs Jones']))
+                                    : (prev.primaryBuildings || []).filter(b => b !== 'Mary Gibbs Jones')
+                                }))} /> MGJ
+                              </label>
+                              <label className="flex items-center gap-1">
+                                <input type="checkbox" checked={(editFormData.primaryBuildings || []).includes('Goebel')} onChange={(e) => setEditFormData(prev => ({
+                                  ...prev,
+                                  primaryBuildings: e.target.checked
+                                    ? Array.from(new Set([...(prev.primaryBuildings || []), 'Goebel']))
+                                    : (prev.primaryBuildings || []).filter(b => b !== 'Goebel')
+                                }))} /> Goebel
+                              </label>
+                            </div>
+                          </td>
+                          <td className="p-2 align-top text-right">
+                            <div className="flex gap-2 justify-end">
+                              <button
+                                onClick={saveEdit}
+                                className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
+                                title="Save"
+                              >
+                                <Save size={16} />
+                              </button>
+                              <button
+                                onClick={cancelEdit}
+                                className="p-2 text-red-600 hover:bg-red-100 rounded-full"
+                                title="Cancel"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        // Display row
+                        <>
+                          <td className="px-4 py-3 whitespace-nowrap cursor-pointer" onClick={() => setSelectedStudentForCard(student)}>
+                            <div className="flex items-center">
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">
+                                  {student.name}
+                                </div>
+                                <div className="text-xs text-gray-500 space-x-2">
+                                  {student.startDate && (
+                                    <span>Start: {new Date(student.startDate).toLocaleDateString()}</span>
+                                  )}
+                                  {student.endDate && (
+                                    <span>End: {new Date(student.endDate).toLocaleDateString()}</span>
+                                  )}
+                                  {student.isActive === false && (
+                                    <span className="text-red-600 font-medium">Inactive</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <Mail className="h-4 w-4 text-gray-400 mr-2" />
+                              <span className="text-sm text-gray-900">{student.email || '-'}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="flex items-center">
+                              {student.hasNoPhone ? (
+                                <PhoneOff className="h-4 w-4 text-gray-400 mr-2" />
+                              ) : (
+                                <Phone className="h-4 w-4 text-gray-400 mr-2" />
+                              )}
+                              <span className="text-sm text-gray-900">
+                                {student.hasNoPhone ? 'No Phone' : formatPhoneNumber(student.phone)}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center">
+                              <Clock className="h-4 w-4 text-gray-400 mr-2" />
+                              <span className="text-sm text-gray-900">{formatWeeklySchedule(student.weeklySchedule) || '-'}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="text-sm text-gray-900">{student.jobTitle || '-'}</span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="text-sm text-gray-900">{student.supervisor || '-'}</span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="text-sm text-gray-900">{Array.isArray(student.primaryBuildings) ? student.primaryBuildings.join(', ') : (student.primaryBuilding || '-')}</span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
+                            <div className="flex justify-end gap-1">
+                              <button
+                                onClick={() => startEdit(student)}
+                                className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
+                                title="Edit"
+                                disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canEditStudent === false}
+                              >
+                                <Edit size={16} />
+                              </button>
+                              <button
+                                onClick={() => confirmDelete(student)}
+                                className="p-2 text-red-600 hover:bg-red-100 rounded-full"
+                                title="Delete"
+                                disabled={typeof window !== 'undefined' && window?.appPermissions && window.appPermissions.canDeleteStudent === false}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {filteredAndSortedData.length === 0 && (
+            <div className="text-center py-12">
+              <GraduationCap className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No student workers found</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                {filterText ? 'Try adjusting your search criteria.' : 'Get started by adding a new student worker.'}
+              </p>
+            </div>
+          )}
+
+
+          {/* Contact Card Modal */}
+          {selectedStudentForCard && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                <FacultyContactCard
+                  person={selectedStudentForCard}
+                  onClose={() => setSelectedStudentForCard(null)}
+                  personType="student"
+                  onUpdate={onStudentUpdate}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Delete Confirmation Modal */}
+          <DeleteConfirmDialog
+            isOpen={showDeleteConfirm}
+            record={studentToDelete}
+            recordType="student worker"
+            onConfirm={executeDelete}
+            onCancel={() => setShowDeleteConfirm(false)}
+          />
+
+          {/* Change History */}
+          {showHistory && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <h4 className="font-medium text-gray-900 mb-4">Recent Changes</h4>
+              {changeHistory.length === 0 ? (
+                <p className="text-sm text-gray-500">No changes recorded.</p>
+              ) : (
+                <div className="space-y-2">
+                  {changeHistory.slice(-5).reverse().map((change, index) => (
+                    <div key={index} className="text-sm">
+                      <span className="font-medium">{change.type}</span>: {change.originalData?.name}
+                      <span className="text-gray-500 ml-2">
+                        {new Date(change.timestamp).toLocaleString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
-    </>
-  )}
     />
   );
 };

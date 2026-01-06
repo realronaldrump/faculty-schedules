@@ -13,6 +13,7 @@ import { collection, getDocs, doc, updateDoc, deleteDoc, writeBatch, query, wher
 import { db } from '../firebase';
 import { DEFAULT_PERSON_SCHEMA } from './dataHygiene';
 import { logStandardization, logMerge, logBulkUpdate } from './changeLogger';
+import { parseFullName } from './dataImportUtils';
 
 // ==================== CORE DATA HYGIENE FUNCTIONS ====================
 
@@ -21,12 +22,12 @@ import { logStandardization, logMerge, logBulkUpdate } from './changeLogger';
  */
 export const comprehensiveDuplicateDetection = async () => {
   console.log('🔍 Starting comprehensive duplicate detection...');
-  
+
   try {
     // Fetch all data from database
     const [peopleSnapshot, schedulesSnapshot, roomsSnapshot] = await Promise.all([
       getDocs(collection(db, 'people')),
-      getDocs(collection(db, 'schedules')), 
+      getDocs(collection(db, 'schedules')),
       getDocs(collection(db, 'rooms'))
     ]);
 
@@ -106,7 +107,7 @@ const detectPeopleDuplicates = (people) => {
       if (nameMap.has(normalizedName)) {
         const existing = nameMap.get(normalizedName);
         const confidence = calculateNameSimilarity(person, existing);
-        
+
         if (confidence >= 0.8) {
           duplicates.push({
             type: 'name',
@@ -185,7 +186,7 @@ export const detectScheduleDuplicates = (schedules) => {
       s: (p?.startTime || '').toString().trim(),
       e: (p?.endTime || '').toString().trim()
     }));
-    norm.sort((a,b) => (a.d.localeCompare(b.d) || a.s.localeCompare(b.s) || a.e.localeCompare(b.e)));
+    norm.sort((a, b) => (a.d.localeCompare(b.d) || a.s.localeCompare(b.s) || a.e.localeCompare(b.e)));
     return norm.map(p => `${p.d}|${p.s}|${p.e}`).join('~');
   };
   const toRoomKey = (s) => {
@@ -221,7 +222,7 @@ export const detectScheduleDuplicates = (schedules) => {
           const sameCourse = normalize(existing.courseCode) === normalize(schedule.courseCode);
           const sameSection = normalize(existing.section) === normalize(schedule.section);
           const sameInstructor = normalize(existing.instructorId) === normalize(schedule.instructorId) ||
-                                 normalize(existing.instructorName) === normalize(schedule.instructorName);
+            normalize(existing.instructorName) === normalize(schedule.instructorName);
 
           if (sameCourse || sameSection || sameInstructor) {
             duplicates.push({
@@ -408,7 +409,7 @@ const detectCrossCollectionIssues = (people, schedules, rooms) => {
 export const mergePeopleRecords = async (duplicateGroup) => {
   const batch = writeBatch(db);
   const [primary, secondary] = duplicateGroup.records;
-  
+
   // Merge data, keeping the most complete record
   const mergedData = {
     ...primary,
@@ -428,12 +429,12 @@ export const mergePeopleRecords = async (duplicateGroup) => {
 
   // Update primary record
   batch.update(doc(db, 'people', primary.id), mergedData);
-  
+
   // Update all schedules that reference the secondary person
   const schedulesSnapshot = await getDocs(
     query(collection(db, 'schedules'), where('instructorId', '==', secondary.id))
   );
-  
+
   schedulesSnapshot.docs.forEach(scheduleDoc => {
     batch.update(doc(db, 'schedules', scheduleDoc.id), {
       instructorId: primary.id,
@@ -445,7 +446,7 @@ export const mergePeopleRecords = async (duplicateGroup) => {
   batch.delete(doc(db, 'people', secondary.id));
 
   await batch.commit();
-  
+
   return {
     primaryId: primary.id,
     secondaryId: secondary.id,
@@ -460,7 +461,7 @@ export const mergePeopleRecords = async (duplicateGroup) => {
 export const mergeScheduleRecords = async (duplicateGroup) => {
   const batch = writeBatch(db);
   const [primary, secondary] = duplicateGroup.records;
-  
+
   // Merge schedule data
   const mergedData = {
     ...primary,
@@ -488,12 +489,12 @@ export const mergeScheduleRecords = async (duplicateGroup) => {
 
   // Update primary record
   batch.update(doc(db, 'schedules', primary.id), mergedData);
-  
+
   // Delete secondary record
   batch.delete(doc(db, 'schedules', secondary.id));
 
   await batch.commit();
-  
+
   // Log merge action
   try {
     await logMerge(
@@ -507,7 +508,7 @@ export const mergeScheduleRecords = async (duplicateGroup) => {
     // logging should not block
     console.error('Change logging error (merge schedules):', e);
   }
-  
+
   return {
     primaryId: primary.id,
     secondaryId: secondary.id,
@@ -521,7 +522,7 @@ export const mergeScheduleRecords = async (duplicateGroup) => {
 export const mergeRoomRecords = async (duplicateGroup) => {
   const batch = writeBatch(db);
   const [primary, secondary] = duplicateGroup.records;
-  
+
   // Merge room data
   const mergedData = {
     ...primary,
@@ -535,7 +536,7 @@ export const mergeRoomRecords = async (duplicateGroup) => {
 
   // Update primary record
   batch.update(doc(db, 'rooms', primary.id), mergedData);
-  
+
   // Update all schedules that reference the secondary room (multi-room aware)
   const schedulesSnapshot = await getDocs(query(collection(db, 'schedules')));
   schedulesSnapshot.docs.forEach(scheduleDoc => {
@@ -559,7 +560,7 @@ export const mergeRoomRecords = async (duplicateGroup) => {
   batch.delete(doc(db, 'rooms', secondary.id));
 
   await batch.commit();
-  
+
   // Log merge action
   try {
     await logMerge(
@@ -572,7 +573,7 @@ export const mergeRoomRecords = async (duplicateGroup) => {
   } catch (e) {
     console.error('Change logging error (merge rooms):', e);
   }
-  
+
   return {
     primaryId: primary.id,
     secondaryId: secondary.id,
@@ -588,7 +589,7 @@ export const mergeRoomRecords = async (duplicateGroup) => {
  */
 export const standardizeAllData = async () => {
   console.log('🔧 Starting comprehensive data standardization...');
-  
+
   try {
     const [peopleSnapshot, schedulesSnapshot, roomsSnapshot] = await Promise.all([
       getDocs(collection(db, 'people')),
@@ -603,7 +604,7 @@ export const standardizeAllData = async () => {
     peopleSnapshot.docs.forEach(doc => {
       const person = doc.data();
       const standardized = standardizePersonData(person);
-      
+
       if (JSON.stringify(person) !== JSON.stringify(standardized)) {
         batch.update(doc.ref, standardized);
         updateCount++;
@@ -618,7 +619,7 @@ export const standardizeAllData = async () => {
       if (standardized.instructorId) delete standardized.instructorName;
       if (standardized.roomId) delete standardized.roomName;
       if (standardized.courseId) delete standardized.courseTitle;
-      
+
       if (JSON.stringify(schedule) !== JSON.stringify(standardized)) {
         batch.update(doc.ref, standardized);
         updateCount++;
@@ -629,7 +630,7 @@ export const standardizeAllData = async () => {
     roomsSnapshot.docs.forEach(doc => {
       const room = doc.data();
       const standardized = standardizeRoomData(room);
-      
+
       if (JSON.stringify(room) !== JSON.stringify(standardized)) {
         batch.update(doc.ref, standardized);
         updateCount++;
@@ -639,7 +640,7 @@ export const standardizeAllData = async () => {
     if (updateCount > 0) {
       await batch.commit();
       console.log(`✅ Standardized ${updateCount} records`);
-      
+
       // Log the bulk standardization operation
       await logStandardization('multiple', updateCount, 'comprehensiveDataHygiene.js - standardizeAllData');
     } else {
@@ -655,52 +656,6 @@ export const standardizeAllData = async () => {
 };
 
 /**
- * Parse full name into components
- */
-const parseFullName = (fullName) => {
-  if (!fullName) return { title: '', firstName: '', lastName: '' };
-  
-  const name = fullName.trim();
-  const parts = name.split(/\s+/);
-  
-  // Common titles
-  const titles = ['dr', 'dr.', 'mr', 'mr.', 'mrs', 'mrs.', 'ms', 'ms.', 'miss', 'prof', 'professor'];
-  
-  let title = '';
-  let firstName = '';
-  let lastName = '';
-  
-  let nameStart = 0;
-  
-  // Check for title
-  if (parts.length > 1 && titles.includes(parts[0].toLowerCase())) {
-    title = parts[0];
-    nameStart = 1;
-  }
-  
-  if (parts.length > nameStart) {
-    if (parts.length === nameStart + 1) {
-      // Only one name part after title
-      lastName = parts[nameStart];
-    } else if (parts.length === nameStart + 2) {
-      // First and last name
-      firstName = parts[nameStart];
-      lastName = parts[nameStart + 1];
-    } else {
-      // Multiple parts - take first as firstName, rest as lastName
-      firstName = parts[nameStart];
-      lastName = parts.slice(nameStart + 1).join(' ');
-    }
-  }
-  
-  return {
-    title: title,
-    firstName: firstName,
-    lastName: lastName
-  };
-};
-
-/**
  * Standardize person data
  */
 const standardizePersonData = (person) => {
@@ -708,7 +663,7 @@ const standardizePersonData = (person) => {
   let firstName = (person.firstName || '').trim();
   let lastName = (person.lastName || '').trim();
   let fullName = (person.name || '').trim();
-  
+
   // If we have a full name but no firstName/lastName, parse it
   if (fullName && (!firstName && !lastName)) {
     const parsed = parseFullName(fullName);
@@ -802,15 +757,15 @@ const standardizeRoomData = (room) => {
 const calculateNameSimilarity = (person1, person2) => {
   const name1 = `${person1.firstName} ${person1.lastName}`.toLowerCase();
   const name2 = `${person2.firstName} ${person2.lastName}`.toLowerCase();
-  
+
   if (name1 === name2) return 1.0;
-  
+
   // Simple Levenshtein distance
   const matrix = Array(name1.length + 1).fill().map(() => Array(name2.length + 1).fill(0));
-  
+
   for (let i = 0; i <= name1.length; i++) matrix[i][0] = i;
   for (let j = 0; j <= name2.length; j++) matrix[0][j] = j;
-  
+
   for (let i = 1; i <= name1.length; i++) {
     for (let j = 1; j <= name2.length; j++) {
       const cost = name1[i - 1] === name2[j - 1] ? 0 : 1;
@@ -821,7 +776,7 @@ const calculateNameSimilarity = (person1, person2) => {
       );
     }
   }
-  
+
   const maxLength = Math.max(name1.length, name2.length);
   return maxLength === 0 ? 1.0 : 1.0 - (matrix[name1.length][name2.length] / maxLength);
 };
@@ -833,7 +788,7 @@ const calculateNameSimilarity = (person1, person2) => {
  */
 export const generateDataHygieneReport = async () => {
   const duplicateResults = await comprehensiveDuplicateDetection();
-  
+
   return {
     timestamp: new Date().toISOString(),
     summary: duplicateResults.summary,
@@ -853,7 +808,7 @@ export const generateDataHygieneReport = async () => {
  */
 const generateRecommendations = (results) => {
   const recommendations = [];
-  
+
   if (results.people.duplicateCount > 0) {
     recommendations.push({
       priority: 'high',
@@ -863,37 +818,37 @@ const generateRecommendations = (results) => {
       benefit: 'Eliminates confusion when looking up faculty and staff'
     });
   }
-  
+
   if (results.schedules.duplicateCount > 0) {
     recommendations.push({
-      priority: 'medium', 
+      priority: 'medium',
       action: 'Merge duplicate schedule records',
       count: results.schedules.duplicateCount,
       description: 'Some courses appear to be scheduled multiple times. Merging removes the duplicates.',
       benefit: 'Accurate course schedules without duplicates'
     });
   }
-  
+
   if (results.rooms.duplicateCount > 0) {
     recommendations.push({
       priority: 'low',
-      action: 'Merge duplicate room records', 
+      action: 'Merge duplicate room records',
       count: results.rooms.duplicateCount,
       description: 'Some rooms are listed multiple times with slight variations in name.',
       benefit: 'Consistent room names across all schedules'
     });
   }
-  
+
   if (results.crossCollection.length > 0) {
     recommendations.push({
       priority: 'high',
       action: 'Fix broken connections',
-      count: results.crossCollection.length, 
+      count: results.crossCollection.length,
       description: 'Some schedules reference people or rooms that no longer exist in the system.',
       benefit: 'Ensures all schedule data is properly connected'
     });
   }
-  
+
   return recommendations;
 };
 
@@ -903,9 +858,9 @@ const generateRecommendations = (results) => {
 const calculateDataQualityScore = (results) => {
   const totalRecords = results.people.total + results.schedules.total + results.rooms.total;
   const totalIssues = results.summary.totalIssues;
-  
+
   if (totalRecords === 0) return 100;
-  
+
   const qualityScore = Math.max(0, 100 - (totalIssues / totalRecords) * 100);
   return Math.round(qualityScore);
 };

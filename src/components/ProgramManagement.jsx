@@ -1,13 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  Users, 
-  Edit, 
-  Save, 
-  X, 
-  Plus, 
-  Mail, 
-  Phone, 
-  MapPin, 
+import {
+  Users,
+  Edit,
+  Save,
+  X,
+  Plus,
+  Mail,
+  Phone,
+  MapPin,
   Building2,
   UserCog,
   Search,
@@ -72,14 +72,14 @@ const ProgramManagement = ({
         programId: null
       };
     }
-    
+
     // Filter out adjuncts if the toggle is off
     const facultyToProcess = showAdjuncts ? facultyData : facultyData.filter(f => !f.isAdjunct);
-    
+
     facultyToProcess.forEach(faculty => {
       // Use the program from faculty data (which comes from the programs collection)
       let programName = 'Unassigned';
-      
+
       // Find the program name from the programs list using programId
       if (faculty.programId) {
         const program = activePrograms.find(p => p.id === faculty.programId);
@@ -125,7 +125,7 @@ const ProgramManagement = ({
   // Filter faculty based on selected program and search
   const filteredFaculty = useMemo(() => {
     let faculty = facultyData || [];
-    
+
     // Filter out adjuncts if the toggle is off
     if (!showAdjuncts) {
       faculty = faculty.filter(f => !f.isAdjunct);
@@ -144,7 +144,7 @@ const ProgramManagement = ({
 
     if (searchText) {
       const searchLower = searchText.toLowerCase();
-      faculty = faculty.filter(f => 
+      faculty = faculty.filter(f =>
         f.name?.toLowerCase().includes(searchLower) ||
         f.email?.toLowerCase().includes(searchLower) ||
         f.jobTitle?.toLowerCase().includes(searchLower) ||
@@ -223,7 +223,7 @@ const ProgramManagement = ({
         updIds: newUpdIds,
         updatedAt: new Date().toISOString()
       };
-      
+
       await updateDoc(programRef, updateData);
 
       // Log the change
@@ -241,7 +241,7 @@ const ProgramManagement = ({
         'UPD Updated',
         `${faculty.name} is now an Undergraduate Program Director for ${programName}`
       );
-      
+
       setEditingUPD(null);
     } catch (error) {
       console.error('Error setting UPD:', error);
@@ -275,10 +275,10 @@ const ProgramManagement = ({
     }
 
     // Don't move if already in the target program
-    const currentProgram = Object.keys(programData).find(prog => 
+    const currentProgram = Object.keys(programData).find(prog =>
       programData[prog].faculty.some(f => f.id === draggedFaculty.id)
     );
-    
+
     if (currentProgram === targetProgramName) {
       setDraggedFaculty(null);
       return;
@@ -324,10 +324,10 @@ const ProgramManagement = ({
     if (!faculty || !newProgramName) return;
 
     // Don't move if already in the target program
-    const currentProgram = Object.keys(programData).find(program => 
+    const currentProgram = Object.keys(programData).find(program =>
       programData[program].faculty.some(f => f.id === faculty.id)
     );
-    
+
     if (currentProgram === newProgramName) return;
 
     try {
@@ -393,7 +393,7 @@ const ProgramManagement = ({
     }
 
     const programName = normalizeProgramName(newProgramName);
-    
+
     if (!programName) {
       showNotification('error', 'Invalid Name', 'Program name cannot be empty');
       return;
@@ -446,11 +446,10 @@ const ProgramManagement = ({
             }
             setShowCreateProgram(true);
           }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-            allowCreateProgram
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${allowCreateProgram
               ? 'bg-baylor-green text-white hover:bg-baylor-green/90'
               : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-          }`}
+            }`}
           disabled={!allowCreateProgram}
           title={allowCreateProgram ? 'Add a new program' : 'You do not have permission to add programs'}
         >
@@ -464,15 +463,14 @@ const ProgramManagement = ({
         {programList.map(programName => {
           const program = programData[programName];
           const isDragOver = dragOverProgram === programName;
-          
+
           return (
             <div
               key={programName}
-              className={`bg-white rounded-lg border-2 p-4 transition-all ${
-                isDragOver 
-                  ? 'border-baylor-green bg-baylor-green/5 shadow-lg' 
+              className={`bg-white rounded-lg border-2 p-4 transition-all ${isDragOver
+                  ? 'border-baylor-green bg-baylor-green/5 shadow-lg'
                   : 'border-gray-200 hover:border-baylor-green/50'
-              }`}
+                }`}
               onDragOver={(e) => handleDragOver(e, programName)}
               onDrop={(e) => handleDrop(e, programName)}
             >
@@ -494,7 +492,7 @@ const ProgramManagement = ({
                     <UserCog size={14} className="text-amber-600" />
                     UPD
                   </span>
-                  
+
                   {editingUPD === programName ? (
                     <div className="flex items-center gap-1">
                       <button
@@ -515,7 +513,7 @@ const ProgramManagement = ({
                     </button>
                   )}
                 </div>
-                
+
                 {editingUPD === programName ? (
                   <div className="mt-2 space-y-2 max-h-32 overflow-y-auto">
                     {program.faculty.filter(f => !f.isAdjunct).map(faculty => (
@@ -558,24 +556,24 @@ const ProgramManagement = ({
                     {expandedPrograms.has(programName) ? 'Show Less' : 'Show All'}
                   </button>
                 </div>
-                
+
                 <div className="space-y-2">
                   {(expandedPrograms.has(programName) ? program.faculty : program.faculty.slice(0, 3)).map(faculty => (
                     <div
                       key={faculty.id}
                       draggable
                       onDragStart={(e) => handleDragStart(e, faculty)}
-                      className="flex items-center justify-between p-2 bg-white rounded border border-gray-200 hover:border-baylor-green/30 transition-all cursor-move group"
+                      className="flex items-start justify-between gap-2 p-2 bg-white rounded border border-gray-200 hover:border-baylor-green/30 transition-all cursor-move group"
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <GripVertical size={14} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        <div className="min-w-0">
-                          <div className="font-medium text-sm text-gray-900 truncate">{faculty.name}</div>
-                          <div className="text-xs text-gray-500 truncate">{faculty.jobTitle}</div>
+                      <div className="flex items-start gap-2 flex-1">
+                        <GripVertical size={14} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <div className="font-medium text-sm text-gray-900 leading-snug">{faculty.name}</div>
+                          <div className="text-xs text-gray-500 leading-snug">{faculty.jobTitle}</div>
                         </div>
                       </div>
-                      
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                         <button
                           onClick={() => setSelectedFacultyForCard(faculty)}
                           className="p-1 text-gray-400 hover:text-baylor-green transition-colors"
@@ -601,7 +599,7 @@ const ProgramManagement = ({
                       </div>
                     </div>
                   ))}
-                  
+
                   {!expandedPrograms.has(programName) && program.faculty.length > 3 && (
                     <div className="text-center py-2">
                       <span className="text-xs text-gray-500">
@@ -629,7 +627,7 @@ const ProgramManagement = ({
               className="flex-1 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-baylor-green"
             />
           </div>
-          
+
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <Filter size={16} className="text-gray-400" />
@@ -691,102 +689,102 @@ const ProgramManagement = ({
               {filteredFaculty.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
-                    {searchText ? 'No faculty found matching your search.' : 
-                     selectedProgram !== 'all' ? 'No faculty in this program.' :
-                     showAdjuncts ? 'No faculty found.' : 'No permanent faculty found. Try enabling "Show Adjuncts".'}
+                    {searchText ? 'No faculty found matching your search.' :
+                      selectedProgram !== 'all' ? 'No faculty in this program.' :
+                        showAdjuncts ? 'No faculty found.' : 'No permanent faculty found. Try enabling "Show Adjuncts".'}
                   </td>
                 </tr>
               ) : (
                 filteredFaculty.map(faculty => {
-                  const program = Object.keys(programData).find(prog => 
+                  const program = Object.keys(programData).find(prog =>
                     programData[prog].faculty.some(f => f.id === faculty.id)
                   );
                   const isUPD = Array.isArray(programData[program]?.upds) && programData[program].upds.some(u => u.id === faculty.id);
-                
-                return (
-                  <tr 
-                    key={faculty.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, faculty)}
-                    className="hover:bg-gray-50 cursor-move"
-                    onClick={(e) => {
-                      // Only open contact card if not clicking on select dropdown
-                      if (!e.target.closest('select')) {
-                        setSelectedFacultyForCard(faculty);
-                      }
-                    }}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <GripVertical size={14} className="text-gray-400 cursor-move" title="Drag to move program" />
-                        <div>
-                          <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
-                            {faculty.name}
-                            {isUPD && <UserCog size={14} className="text-amber-600" title="Undergraduate Program Director" />}
+
+                  return (
+                    <tr
+                      key={faculty.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, faculty)}
+                      className="hover:bg-gray-50 cursor-move"
+                      onClick={(e) => {
+                        // Only open contact card if not clicking on select dropdown
+                        if (!e.target.closest('select')) {
+                          setSelectedFacultyForCard(faculty);
+                        }
+                      }}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <GripVertical size={14} className="text-gray-400 cursor-move" title="Drag to move program" />
+                          <div>
+                            <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                              {faculty.name}
+                              {isUPD && <UserCog size={14} className="text-amber-600" title="Undergraduate Program Director" />}
+                            </div>
+                            <div className="text-sm text-gray-500">{faculty.email}</div>
                           </div>
-                          <div className="text-sm text-gray-500">{faculty.email}</div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <select
-                        value={program || 'Unassigned'}
-                        onChange={(e) => handleProgramChange(faculty, e.target.value)}
-                        className="text-sm text-gray-900 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-baylor-green"
-                        onClick={(e) => e.stopPropagation()} // Prevent row click
-                      >
-                        <option value="Unassigned">Unassigned</option>
-                        {programList.map(prog => (
-                          <option key={prog} value={prog}>{prog}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{faculty.jobTitle}</div>
-                      <div className="flex gap-1 mt-1">
-                        {faculty.isTenured && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                            Tenured
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <select
+                          value={program || 'Unassigned'}
+                          onChange={(e) => handleProgramChange(faculty, e.target.value)}
+                          className="text-sm text-gray-900 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-baylor-green"
+                          onClick={(e) => e.stopPropagation()} // Prevent row click
+                        >
+                          <option value="Unassigned">Unassigned</option>
+                          {programList.map(prog => (
+                            <option key={prog} value={prog}>{prog}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{faculty.jobTitle}</div>
+                        <div className="flex gap-1 mt-1">
+                          {faculty.isTenured && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                              Tenured
+                            </span>
+                          )}
+                          {faculty.isAdjunct && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              Adjunct
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <div className="space-y-1">
+                          {faculty.phone && (
+                            <div className="flex items-center gap-1">
+                              <Phone size={12} />
+                              {faculty.phone}
+                            </div>
+                          )}
+                          {faculty.office && (
+                            <div className="flex items-center gap-1">
+                              <MapPin size={12} />
+                              {faculty.office}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {isUPD && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                            <UserCog size={12} className="mr-1" />
+                            UPD
                           </span>
                         )}
-                        {faculty.isAdjunct && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            Adjunct
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="space-y-1">
-                        {faculty.phone && (
-                          <div className="flex items-center gap-1">
-                            <Phone size={12} />
-                            {faculty.phone}
-                          </div>
-                        )}
-                        {faculty.office && (
-                          <div className="flex items-center gap-1">
-                            <MapPin size={12} />
-                            {faculty.office}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {isUPD && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                          <UserCog size={12} className="mr-1" />
-                          UPD
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button className="text-baylor-green hover:text-baylor-green/80">
-                        <MoreVertical size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                                  );
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button className="text-baylor-green hover:text-baylor-green/80">
+                          <MoreVertical size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
                 })
               )}
             </tbody>
@@ -810,14 +808,14 @@ const ProgramManagement = ({
           <div className="modal-content max-w-md">
             <div className="modal-header">
               <h3 className="modal-title">Create New Program</h3>
-              <button 
+              <button
                 onClick={() => setShowCreateProgram(false)}
                 className="modal-close"
               >
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="modal-body">
               <div className="space-y-4">
                 <div>
@@ -835,15 +833,15 @@ const ProgramManagement = ({
                 </div>
               </div>
             </div>
-            
+
             <div className="modal-footer">
-              <button 
+              <button
                 onClick={() => setShowCreateProgram(false)}
                 className="btn-ghost"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={createNewProgram}
                 className={`btn-primary ${isCreatingProgram ? 'opacity-70 cursor-not-allowed' : ''}`}
                 disabled={!newProgramName.trim() || isCreatingProgram}

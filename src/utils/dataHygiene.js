@@ -13,6 +13,7 @@ import { db } from '../firebase';
 import { logUpdate, logStandardization, logMerge } from './changeLogger';
 import { normalizedSchema } from './normalizedSchema';
 import { detectScheduleDuplicates, detectRoomDuplicates, mergeScheduleRecords, mergeRoomRecords } from './comprehensiveDataHygiene';
+import { parseFullName } from './dataImportUtils';
 
 // ---------------------------------------------------------------------------
 // PERSON SCHEMA CONSISTENCY
@@ -74,52 +75,6 @@ export const countFilledFields = (person) => {
 // ==================== DATA STANDARDIZATION ====================
 
 /**
- * Parse full name into components
- */
-const parseFullName = (fullName) => {
-  if (!fullName) return { title: '', firstName: '', lastName: '' };
-  
-  const name = fullName.trim();
-  const parts = name.split(/\s+/);
-  
-  // Common titles
-  const titles = ['dr', 'dr.', 'mr', 'mr.', 'mrs', 'mrs.', 'ms', 'ms.', 'miss', 'prof', 'professor'];
-  
-  let title = '';
-  let firstName = '';
-  let lastName = '';
-  
-  let nameStart = 0;
-  
-  // Check for title
-  if (parts.length > 1 && titles.includes(parts[0].toLowerCase())) {
-    title = parts[0];
-    nameStart = 1;
-  }
-  
-  if (parts.length > nameStart) {
-    if (parts.length === nameStart + 1) {
-      // Only one name part after title
-      lastName = parts[nameStart];
-    } else if (parts.length === nameStart + 2) {
-      // First and last name
-      firstName = parts[nameStart];
-      lastName = parts[nameStart + 1];
-    } else {
-      // Multiple parts - take first as firstName, rest as lastName
-      firstName = parts[nameStart];
-      lastName = parts.slice(nameStart + 1).join(' ');
-    }
-  }
-  
-  return {
-    title: title,
-    firstName: firstName,
-    lastName: lastName
-  };
-};
-
-/**
  * Standardize a person record
  */
 export const standardizePerson = (person) => {
@@ -127,7 +82,7 @@ export const standardizePerson = (person) => {
   let firstName = (person.firstName || '').trim();
   let lastName = (person.lastName || '').trim();
   let fullName = (person.name || '').trim();
-  
+
   // If we have a full name but no firstName/lastName, parse it
   if (fullName && (!firstName && !lastName)) {
     const parsed = parseFullName(fullName);
@@ -149,22 +104,22 @@ export const standardizePerson = (person) => {
     firstName: firstName,
     lastName: lastName,
     name: fullName,
-    
+
     // Contact standardization
     email: (person.email || '').toLowerCase().trim(),
     phone: standardizePhone(person.phone),
-    
+
     // Text field standardization
     title: (person.title || '').trim(),
     jobTitle: (person.jobTitle || '').trim(),
     department: (person.department || '').trim(),
     office: (person.office || '').trim(),
-    
+
     // Ensure roles is always an array
-    roles: Array.isArray(person.roles) ? person.roles : 
-           (person.roles && typeof person.roles === 'object') ? Object.keys(person.roles).filter(k => person.roles[k]) :
-           [],
-    
+    roles: Array.isArray(person.roles) ? person.roles :
+      (person.roles && typeof person.roles === 'object') ? Object.keys(person.roles).filter(k => person.roles[k]) :
+        [],
+
     // Update timestamp
     updatedAt: new Date().toISOString()
   };
@@ -211,23 +166,23 @@ export const standardizeSchedule = (schedule) => {
     courseTitle: (schedule.courseTitle || '').trim(),
     section: (schedule.section || '').trim(),
     crn: (schedule.crn || '').trim(), // Add CRN standardization
-    
+
     // Term standardization
     term: standardizeTerm(schedule.term),
-    
+
     // Instructor name standardization
     instructorName: (schedule.instructorName || '').trim(),
-    
+
     // Room standardization (multi-room aware)
     roomNames: Array.isArray(schedule.roomNames)
       ? schedule.roomNames.map(standardizeRoomName).filter(Boolean)
       : ((schedule.roomName ? [standardizeRoomName(schedule.roomName)] : [])),
     roomName: standardizeRoomName(schedule.roomName),
-    
+
     // Status standardization
     status: (schedule.status || 'Active').trim(),
     scheduleType: (schedule.scheduleType || 'Class Instruction').trim(),
-    
+
     // Update timestamp
     updatedAt: new Date().toISOString()
   };
@@ -246,7 +201,7 @@ export const standardizePhone = (phone) => {
  */
 export const standardizeCourseCode = (courseCode) => {
   if (!courseCode) return '';
-  
+
   const clean = courseCode.trim().toUpperCase();
   // Add space between letters and numbers if missing
   return clean.replace(/([A-Z]+)(\d+)/, '$1 $2');
@@ -257,9 +212,9 @@ export const standardizeCourseCode = (courseCode) => {
  */
 export const standardizeTerm = (term) => {
   if (!term) return '';
-  
+
   const clean = term.trim();
-  
+
   // Handle common variations
   const termMappings = {
     'fall2025': 'Fall 2025',
@@ -269,7 +224,7 @@ export const standardizeTerm = (term) => {
     'spring25': 'Spring 2025',
     'summer25': 'Summer 2025'
   };
-  
+
   const normalized = clean.toLowerCase().replace(/\s+/g, '');
   return termMappings[normalized] || clean;
 };
@@ -290,12 +245,12 @@ export const standardizeRoomName = (roomName) => {
 export const findDuplicatePeople = async () => {
   const peopleSnapshot = await getDocs(collection(db, 'people'));
   const people = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  
+
   const duplicates = [];
   const emailMap = new Map();
   const phoneMap = new Map();
   const nameMap = new Map();
-  
+
   people.forEach(person => {
     // Email duplicates (most reliable)
     if (person.email && person.email.trim()) {
@@ -320,7 +275,7 @@ export const findDuplicatePeople = async () => {
         emailMap.set(email, person);
       }
     }
-    
+
     // Phone duplicates
     if (person.phone) {
       const phone = standardizePhone(person.phone);
@@ -344,11 +299,11 @@ export const findDuplicatePeople = async () => {
         phoneMap.set(phone, person);
       }
     }
-    
+
     // Name-based duplicates (exact and fuzzy)
     if (person.firstName && person.lastName) {
       const fullName = `${person.firstName.toLowerCase().trim()} ${person.lastName.toLowerCase().trim()}`;
-      
+
       // Check for exact matches first
       if (nameMap.has(fullName)) {
         const existing = nameMap.get(fullName);
@@ -368,11 +323,11 @@ export const findDuplicatePeople = async () => {
         }
       } else {
         nameMap.set(fullName, person);
-        
+
         // Check for fuzzy matches with existing people
         for (const [existingFullName, existingPerson] of nameMap.entries()) {
           if (existingFullName === fullName) continue; // Skip self
-          
+
           const similarity = calculateFuzzyNameSimilarity(fullName, existingFullName);
           if (similarity >= 0.85) { // 85% similarity threshold
             const existingCount = countFilledFields(existingPerson);
@@ -395,7 +350,7 @@ export const findDuplicatePeople = async () => {
       }
     }
   });
-  
+
   return duplicates;
 };
 
@@ -407,14 +362,14 @@ export const findOrphanedSchedules = async () => {
     getDocs(collection(db, 'schedules')),
     getDocs(collection(db, 'people'))
   ]);
-  
+
   const schedules = schedulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   const people = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  
+
   // Create lookup maps
   const peopleByName = new Map();
   const peopleById = new Map();
-  
+
   people.forEach(person => {
     peopleById.set(person.id, person);
     if (person.firstName && person.lastName) {
@@ -422,21 +377,21 @@ export const findOrphanedSchedules = async () => {
       peopleByName.set(fullName, person);
     }
   });
-  
+
   const orphaned = schedules.filter(schedule => {
     // Check if instructor ID exists
     if (schedule.instructorId && peopleById.has(schedule.instructorId)) {
       return false;
     }
-    
+
     // Check if instructor name matches anyone
     if (schedule.instructorName && peopleByName.has(schedule.instructorName)) {
       return false;
     }
-    
+
     return true;
   });
-  
+
   return orphaned;
 };
 
@@ -447,23 +402,23 @@ export const findOrphanedSchedules = async () => {
  */
 export const mergePeople = async (primaryId, duplicateId, fieldChoices = {}) => {
   const batch = writeBatch(db);
-  
+
   // Get both records directly by ID
   const [primaryDoc, duplicateDoc] = await Promise.all([
     getDoc(doc(db, 'people', primaryId)),
     getDoc(doc(db, 'people', duplicateId))
   ]);
-  
+
   if (!primaryDoc.exists() || !duplicateDoc.exists()) {
     throw new Error('One or both records not found');
   }
-  
+
   const primary = { id: primaryDoc.id, ...primaryDoc.data() };
   const duplicate = { id: duplicateDoc.id, ...duplicateDoc.data() };
-  
+
   // Base on primary
   const merged = { ...primary };
-  
+
   // Fill missing fields from duplicate
   Object.keys(DEFAULT_PERSON_SCHEMA).forEach(key => {
     const primaryValue = merged[key];
@@ -477,10 +432,10 @@ export const mergePeople = async (primaryId, duplicateId, fieldChoices = {}) => 
       merged[key] = duplicateValue;
     }
   });
-  
+
   // Always merge roles
   merged.roles = [...new Set([...(primary.roles || []), ...(duplicate.roles || [])])];
-  
+
   // Apply field choices for conflicts
   Object.entries(fieldChoices).forEach(([field, source]) => {
     const chosenValue = source === 'primary' ? primary[field] : duplicate[field];
@@ -502,13 +457,13 @@ export const mergePeople = async (primaryId, duplicateId, fieldChoices = {}) => 
   schedulesSnapshot.docs.forEach(scheduleDoc => {
     batch.update(scheduleDoc.ref, { instructorId: primaryId });
   });
-  
+
   // Update the primary record
   batch.update(doc(db, 'people', primaryId), merged);
-  
+
   // Delete the duplicate
   batch.delete(doc(db, 'people', duplicateId));
-  
+
   await batch.commit();
 
   // Update instructorName on schedules formerly pointing to duplicate to ensure display consistency
@@ -539,7 +494,7 @@ export const mergePeople = async (primaryId, duplicateId, fieldChoices = {}) => 
   } catch (e) {
     console.error('Change logging error (merge people):', e);
   }
-  
+
   return merged;
 };
 
@@ -551,10 +506,10 @@ export const linkScheduleToPerson = async (scheduleId, personId) => {
   if (!personDoc.exists()) {
     throw new Error('Person not found');
   }
-  
+
   const person = { id: personDoc.id, ...personDoc.data() };
   const instructorName = `${person.firstName} ${person.lastName}`.trim();
-  
+
   const scheduleRef = doc(db, 'schedules', scheduleId);
   const beforeSnap = await getDoc(scheduleRef);
   const before = beforeSnap.exists() ? beforeSnap.data() : null;
@@ -585,7 +540,7 @@ export const linkScheduleToPerson = async (scheduleId, personId) => {
 export const standardizeAllData = async () => {
   const batch = writeBatch(db);
   let updateCount = 0;
-  
+
   // Standardize people
   const peopleSnapshot = await getDocs(collection(db, 'people'));
   peopleSnapshot.docs.forEach(doc => {
@@ -593,7 +548,7 @@ export const standardizeAllData = async () => {
     batch.update(doc.ref, standardized);
     updateCount++;
   });
-  
+
   // Standardize schedules
   const schedulesSnapshot = await getDocs(collection(db, 'schedules'));
   schedulesSnapshot.docs.forEach(doc => {
@@ -601,12 +556,12 @@ export const standardizeAllData = async () => {
     batch.update(doc.ref, standardized);
     updateCount++;
   });
-  
+
   await batch.commit();
-  
+
   // Log the standardization operation
   await logStandardization('multiple', updateCount, 'dataHygiene.js - standardizeAllData');
-  
+
   return { updatedRecords: updateCount };
 };
 
@@ -706,15 +661,15 @@ export const validateAndCleanBeforeSave = async (data, collection_name) => {
   switch (collection_name) {
     case 'people':
       const cleanPerson = standardizePerson(data);
-      
+
       // Check for potential duplicates
       const emailDuplicates = await findPeopleByEmail(cleanPerson.email);
       const duplicateWarnings = [];
-      
+
       if (emailDuplicates.length > 0 && !emailDuplicates.find(p => p.id === cleanPerson.id)) {
         duplicateWarnings.push(`Email ${cleanPerson.email} already exists`);
       }
-      
+
       // After cleaning
       // Enforce schema
       const schema = normalizedSchema.tables[collection_name];
@@ -735,14 +690,14 @@ export const validateAndCleanBeforeSave = async (data, collection_name) => {
         warnings: duplicateWarnings,
         isValid: duplicateWarnings.length === 0
       };
-      
+
     case 'schedules':
       return {
         cleanData: standardizeSchedule(data),
         warnings: [],
         isValid: true
       };
-      
+
     default:
       return {
         cleanData: data,
@@ -757,7 +712,7 @@ export const validateAndCleanBeforeSave = async (data, collection_name) => {
  */
 const findPeopleByEmail = async (email) => {
   if (!email) return [];
-  
+
   const peopleSnapshot = await getDocs(query(collection(db, 'people'), where('email', '==', email.toLowerCase().trim())));
   return peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
@@ -772,13 +727,13 @@ export const getDataHealthReport = async () => {
     findDuplicatePeople(),
     findOrphanedSchedules()
   ]);
-  
+
   const peopleSnapshot = await getDocs(collection(db, 'people'));
   const schedulesSnapshot = await getDocs(collection(db, 'schedules'));
-  
+
   const totalPeople = peopleSnapshot.size;
   const totalSchedules = schedulesSnapshot.size;
-  
+
   // Count people missing key info (excluding those intentionally marked as not having them)
   const people = peopleSnapshot.docs.map(doc => doc.data());
   const missingEmail = people.filter(p => !p.email || p.email.trim() === '').length;
@@ -791,7 +746,7 @@ export const getDataHealthReport = async () => {
     const isFaculty = Array.isArray(roles) ? roles.includes('faculty') : !!roles.faculty;
     return isFaculty && !p.programId;
   }).length;
-  
+
   return {
     summary: {
       totalPeople,
@@ -817,7 +772,7 @@ export const getDataHealthReport = async () => {
  */
 const calculateFuzzyNameSimilarity = (fullName1, fullName2) => {
   if (!fullName1 || !fullName2) return 0;
-  
+
   // Normalize names for comparison
   const normalize = (name) => {
     return name.toLowerCase()
@@ -825,17 +780,17 @@ const calculateFuzzyNameSimilarity = (fullName1, fullName2) => {
       .replace(/\s+/g, ' ') // Normalize spaces
       .trim();
   };
-  
+
   const n1 = normalize(fullName1);
   const n2 = normalize(fullName2);
-  
+
   // Exact match after normalization
   if (n1 === n2) return 1.0;
-  
+
   // Split into parts for more granular comparison
   const parts1 = n1.split(' ');
   const parts2 = n2.split(' ');
-  
+
   // Must have same number of name parts (first + last)
   if (parts1.length !== parts2.length) {
     // Allow for cases like "John Smith" vs "John A Smith" (different part counts)
@@ -844,7 +799,7 @@ const calculateFuzzyNameSimilarity = (fullName1, fullName2) => {
       // One has a middle initial, check if base names match
       const longer = parts1.length > parts2.length ? parts1 : parts2;
       const shorter = parts1.length < parts2.length ? parts1 : parts2;
-      
+
       // Remove middle part from longer name and compare
       const longerWithoutMiddle = [longer[0], longer[longer.length - 1]];
       if (longerWithoutMiddle[0] === shorter[0] && longerWithoutMiddle[1] === shorter[1]) {
@@ -853,14 +808,14 @@ const calculateFuzzyNameSimilarity = (fullName1, fullName2) => {
     }
     return 0; // Too different in structure
   }
-  
+
   // Compare each part
   let totalSimilarity = 0;
   for (let i = 0; i < parts1.length; i++) {
     const partSimilarity = calculatePartSimilarity(parts1[i], parts2[i]);
     totalSimilarity += partSimilarity;
   }
-  
+
   return totalSimilarity / parts1.length;
 };
 
@@ -869,13 +824,13 @@ const calculateFuzzyNameSimilarity = (fullName1, fullName2) => {
  */
 const calculatePartSimilarity = (part1, part2) => {
   if (!part1 || !part2) return 0;
-  
+
   const p1 = part1.toLowerCase().trim();
   const p2 = part2.toLowerCase().trim();
-  
+
   // Exact match
   if (p1 === p2) return 1;
-  
+
   // Common nickname mappings for first names
   const nicknames = {
     'bob': 'robert', 'bobby': 'robert', 'rob': 'robert', 'robbie': 'robert',
@@ -891,26 +846,26 @@ const calculatePartSimilarity = (part1, part2) => {
     'sue': 'susan', 'susie': 'susan', 'katie': 'katherine', 'kate': 'katherine',
     'kathy': 'katherine', 'patty': 'patricia', 'pat': 'patricia', 'trish': 'patricia'
   };
-  
+
   // Check nickname mappings (both directions)
   if (nicknames[p1] === p2 || nicknames[p2] === p1) return 0.95;
   if (Object.values(nicknames).includes(p1) && nicknames[p2] === p1) return 0.95;
   if (Object.values(nicknames).includes(p2) && nicknames[p1] === p2) return 0.95;
-  
+
   // Check if one name is a substring of the other (e.g., "Ben" vs "Benjamin")
   if (p1.startsWith(p2) || p2.startsWith(p1)) {
     const minLength = Math.min(p1.length, p2.length);
     const maxLength = Math.max(p1.length, p2.length);
     return minLength / maxLength * 0.9; // High but not perfect match
   }
-  
+
   // Basic character similarity
   const maxLen = Math.max(p1.length, p2.length);
   let matches = 0;
   for (let i = 0; i < Math.min(p1.length, p2.length); i++) {
     if (p1[i] === p2[i]) matches++;
   }
-  
+
   return matches / maxLen;
 };
 
@@ -919,11 +874,11 @@ const calculatePartSimilarity = (part1, part2) => {
  */
 const calculateHealthScore = (total, duplicates, orphaned, missingEmail) => {
   if (total === 0) return 100;
-  
+
   const issues = duplicates + orphaned + missingEmail;
   const score = Math.max(0, 100 - (issues / total) * 100);
   return Math.round(score);
-}; 
+};
 
 /**
  * Preview what standardization would change without making actual changes
@@ -932,16 +887,16 @@ export const previewStandardization = async () => {
   try {
     const peopleSnapshot = await getDocs(collection(db, 'people'));
     const people = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    
+
     const changes = [];
-    
+
     people.forEach(person => {
       const original = { ...person };
       const standardized = standardizePerson(person);
-      
+
       // Find actual differences
       const differences = [];
-      
+
       // Check name parsing issues
       if ((!original.firstName || !original.lastName) && original.name) {
         if (standardized.firstName && standardized.lastName) {
@@ -953,7 +908,7 @@ export const previewStandardization = async () => {
           });
         }
       }
-      
+
       // Check for undefined name construction
       if (original.name === 'undefined undefined' || original.name === ' ' || original.name === '') {
         if (standardized.name && standardized.name !== 'undefined undefined' && standardized.name.trim() !== '') {
@@ -965,7 +920,7 @@ export const previewStandardization = async () => {
           });
         }
       }
-      
+
       // Check phone standardization
       if (original.phone && original.phone !== standardized.phone) {
         differences.push({
@@ -975,7 +930,7 @@ export const previewStandardization = async () => {
           after: { phone: standardized.phone }
         });
       }
-      
+
       // Check email standardization
       if (original.email && original.email !== standardized.email) {
         differences.push({
@@ -985,7 +940,7 @@ export const previewStandardization = async () => {
           after: { email: standardized.email }
         });
       }
-      
+
       // Check roles standardization
       if (original.roles && !Array.isArray(original.roles) && typeof original.roles === 'object') {
         differences.push({
@@ -995,7 +950,7 @@ export const previewStandardization = async () => {
           after: { roles: standardized.roles }
         });
       }
-      
+
       if (differences.length > 0) {
         changes.push({
           personId: person.id,
@@ -1004,7 +959,7 @@ export const previewStandardization = async () => {
         });
       }
     });
-    
+
     return {
       totalRecords: people.length,
       recordsToChange: changes.length,
@@ -1029,39 +984,39 @@ export const previewStandardization = async () => {
 export const applyTargetedStandardization = async (changeIds = null) => {
   try {
     const preview = await previewStandardization();
-    
+
     // If changeIds provided, only apply those changes
-    const changesToApply = changeIds 
+    const changesToApply = changeIds
       ? preview.changes.filter(change => changeIds.includes(change.personId))
       : preview.changes;
-    
+
     if (changesToApply.length === 0) {
       return { applied: 0, skipped: 0, errors: [] };
     }
-    
+
     const batch = writeBatch(db);
     const changeLog = [];
     let applied = 0;
     let errors = [];
-    
+
     for (const change of changesToApply) {
       try {
         // Get current data
         const personRef = doc(db, 'people', change.personId);
         const personSnapshot = await getDoc(personRef);
-        
+
         if (!personSnapshot.exists()) {
           errors.push(`Person ${change.personId} not found`);
           continue;
         }
-        
+
         const currentData = personSnapshot.data();
         const standardizedData = standardizePerson(currentData);
-        
+
         // Only update if there are actual changes
         if (JSON.stringify(currentData) !== JSON.stringify(standardizedData)) {
           batch.update(personRef, standardizedData);
-          
+
           // Log the change for potential undo
           changeLog.push({
             personId: change.personId,
@@ -1071,18 +1026,18 @@ export const applyTargetedStandardization = async (changeIds = null) => {
             updatedData: standardizedData,
             changes: change.differences
           });
-          
+
           applied++;
         }
       } catch (error) {
         errors.push(`Error updating ${change.personName}: ${error.message}`);
       }
     }
-    
+
     // Commit all changes
     if (applied > 0) {
       await batch.commit();
-      
+
       // Save change log for potential undo
       if (changeLog.length > 0) {
         await addDoc(collection(db, 'standardizationHistory'), {
@@ -1093,14 +1048,14 @@ export const applyTargetedStandardization = async (changeIds = null) => {
         });
       }
     }
-    
+
     return {
       applied,
       skipped: changesToApply.length - applied,
       errors,
       changeLogId: changeLog.length > 0 ? 'saved' : null
     };
-    
+
   } catch (error) {
     console.error('Error applying targeted standardization:', error);
     throw error;
@@ -1114,12 +1069,12 @@ export const getStandardizationHistory = async (limit = 10) => {
   try {
     const historySnapshot = await getDocs(
       query(
-        collection(db, 'standardizationHistory'), 
+        collection(db, 'standardizationHistory'),
         orderBy('timestamp', 'desc'),
         limit(limit)
       )
     );
-    
+
     return historySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
     console.error('Error getting standardization history:', error);

@@ -298,7 +298,7 @@ const StaffDirectory = ({
             <div className="text-xs text-baylor-green font-medium">Part Time</div>
           )}
           {staff.isRemote && (
-            <div className="text-xs text-cyan-600 font-medium flex items-center gap-1"><Wifi size={12} /> Remote</div>
+            <div className="text-xs text-link-green font-medium flex items-center gap-1"><Wifi size={12} /> Remote</div>
           )}
         </div>
       ),

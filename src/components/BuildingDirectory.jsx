@@ -1,23 +1,24 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  Building2, 
-  MapPin, 
-  Search, 
-  Filter, 
-  Users, 
-  Mail, 
-  Phone, 
+import {
+  Building2,
+  MapPin,
+  Search,
+  Filter,
+  Users,
+  Mail,
+  Phone,
   PhoneOff,
   Building,
   BuildingIcon,
   ChevronDown,
   ChevronRight,
   UserCog,
-  Eye
+  Eye,
+  Wifi
 } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
 
-const BuildingDirectory = ({ 
+const BuildingDirectory = ({
   facultyData,
   staffData,
   showNotification,
@@ -39,10 +40,10 @@ const BuildingDirectory = ({
     }
 
     const office = officeLocation.trim();
-    
+
     // Handle common building name patterns
     const buildingKeywords = ['BUILDING', 'HALL', 'GYMNASIUM', 'TOWER', 'CENTER', 'COMPLEX'];
-    
+
     // Check if office contains building keywords
     for (const keyword of buildingKeywords) {
       const keywordIndex = office.toUpperCase().indexOf(keyword);
@@ -52,14 +53,14 @@ const BuildingDirectory = ({
         return office.substring(0, endIndex).trim();
       }
     }
-    
+
     // If no building keywords found, try to extract building name before room numbers
     // Look for patterns where building name ends before standalone numbers
     const match = office.match(/^([A-Za-z\s]+?)(\s+\d+.*)?$/);
     if (match && match[1]) {
       return match[1].trim();
     }
-    
+
     // Handle special cases like "801 WASHINGTON TOWER" where number is part of building name
     // If it starts with a number followed by words, keep it all as building name
     const startsWithNumber = office.match(/^\d+\s+[A-Za-z]/);
@@ -71,7 +72,7 @@ const BuildingDirectory = ({
       }
       return office; // Keep whole thing if no clear room pattern
     }
-    
+
     return office; // Fallback: return the whole office location
   };
 
@@ -82,7 +83,7 @@ const BuildingDirectory = ({
     }
 
     const office = officeLocation.trim();
-    
+
     // Try to extract room number - look for numbers at the end
     const roomMatch = office.match(/(\d+[A-Za-z]?)$/);
     if (roomMatch) {
@@ -101,15 +102,21 @@ const BuildingDirectory = ({
   // Combine and organize all people by building
   const buildingData = useMemo(() => {
     const buildings = {};
-    
+
     // Process faculty data
     if (showFaculty && facultyData && Array.isArray(facultyData)) {
       const facultyToProcess = showAdjuncts ? facultyData : facultyData.filter(f => !f.isAdjunct);
-      
+
       facultyToProcess.forEach(person => {
-        const buildingName = person.office ? extractBuildingName(person.office) : 'No Building';
+        // Route remote people to "Remote" section, otherwise use building
+        let buildingName;
+        if (person.isRemote) {
+          buildingName = 'Remote';
+        } else {
+          buildingName = person.office ? extractBuildingName(person.office) : 'No Building';
+        }
         const roomNumber = person.office ? extractRoomNumber(person.office) : '';
-        
+
         if (!buildings[buildingName]) {
           buildings[buildingName] = {
             name: buildingName,
@@ -134,9 +141,15 @@ const BuildingDirectory = ({
     // Process staff data
     if (showStaff && staffData && Array.isArray(staffData)) {
       staffData.forEach(person => {
-        const buildingName = person.office ? extractBuildingName(person.office) : 'No Building';
+        // Route remote people to "Remote" section, otherwise use building
+        let buildingName;
+        if (person.isRemote) {
+          buildingName = 'Remote';
+        } else {
+          buildingName = person.office ? extractBuildingName(person.office) : 'No Building';
+        }
         const roomNumber = person.office ? extractRoomNumber(person.office) : '';
-        
+
         if (!buildings[buildingName]) {
           buildings[buildingName] = {
             name: buildingName,
@@ -167,7 +180,7 @@ const BuildingDirectory = ({
         if (roomA !== roomB) {
           return roomA - roomB;
         }
-        
+
         // Then sort by name
         return (a.name || '').localeCompare(b.name || '');
       });
@@ -191,7 +204,7 @@ const BuildingDirectory = ({
     if (searchText) {
       const searchLower = searchText.toLowerCase();
       const filteredBuildings = {};
-      
+
       Object.entries(buildings).forEach(([buildingName, building]) => {
         const filteredPeople = building.people.filter(person =>
           person.name?.toLowerCase().includes(searchLower) ||
@@ -270,7 +283,7 @@ const BuildingDirectory = ({
               className="flex-1 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-baylor-green"
             />
           </div>
-          
+
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2">
               <Filter size={16} className="text-gray-400" />
@@ -297,7 +310,7 @@ const BuildingDirectory = ({
                 />
                 <span className="text-sm text-gray-700">Faculty</span>
               </label>
-              
+
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -329,7 +342,7 @@ const BuildingDirectory = ({
             <Building2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No Results Found</h3>
             <p className="text-gray-600">
-              {searchText 
+              {searchText
                 ? `No people found matching "${searchText}". Try adjusting your search or filters.`
                 : 'No people found with the current filters. Try enabling more role types.'
               }
@@ -338,21 +351,25 @@ const BuildingDirectory = ({
         ) : (
           Object.entries(filteredData)
             .sort(([a], [b]) => {
-              // Sort "No Building" last
+              // Sort "Remote" and "No Building" last, with Remote before No Building
+              if (a === 'Remote' && b === 'No Building') return -1;
+              if (a === 'No Building' && b === 'Remote') return 1;
+              if (a === 'Remote') return 1;
+              if (b === 'Remote') return -1;
               if (a === 'No Building') return 1;
               if (b === 'No Building') return -1;
               return a.localeCompare(b);
             })
             .map(([buildingName, building]) => {
               const isExpanded = expandedBuildings.has(buildingName);
-              
+
               return (
                 <div
                   key={buildingName}
                   className="bg-white rounded-lg border border-gray-200 shadow-sm"
                 >
                   {/* Building Header */}
-                  <div 
+                  <div
                     className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
                     onClick={() => toggleBuildingExpansion(buildingName)}
                   >
@@ -370,13 +387,13 @@ const BuildingDirectory = ({
                           </h2>
                           <p className="text-sm text-gray-600">
                             {building.people.length} people
-                            {building.facultyCount > 0 && building.staffCount > 0 && 
+                            {building.facultyCount > 0 && building.staffCount > 0 &&
                               ` • ${building.facultyCount} faculty, ${building.staffCount} staff`
                             }
                           </p>
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center gap-2">
                         {building.facultyCount > 0 && (
                           <span className="bg-baylor-green/10 text-baylor-green px-2 py-1 rounded-full text-xs font-medium">
@@ -421,7 +438,7 @@ const BuildingDirectory = ({
                               // Ensure a unique key by combining id and roleType (faculty/staff)
                               const rowKey = `${person.id}-${person.roleType}`;
                               return (
-                                <tr 
+                                <tr
                                   key={rowKey}
                                   className="hover:bg-gray-50 cursor-pointer"
                                   onClick={() => setSelectedPersonForCard(person)}
@@ -439,7 +456,7 @@ const BuildingDirectory = ({
                                       </div>
                                     )}
                                   </td>
-                                  
+
                                   <td className="px-4 py-3 whitespace-nowrap">
                                     <div>
                                       <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
@@ -458,10 +475,10 @@ const BuildingDirectory = ({
                                       )}
                                     </div>
                                   </td>
-                                  
+
                                   <td className="px-4 py-3 whitespace-nowrap">
                                     <div className="text-sm text-gray-900">{person.jobTitle || '-'}</div>
-                                    <div className="flex gap-1 mt-1">
+                                    <div className="flex gap-1 mt-1 flex-wrap">
                                       {person.isTenured && (
                                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
                                           Tenured
@@ -472,15 +489,21 @@ const BuildingDirectory = ({
                                           Adjunct
                                         </span>
                                       )}
+                                      {person.isRemote && (
+                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800">
+                                          <Wifi size={12} className="mr-1" />
+                                          Remote
+                                        </span>
+                                      )}
                                     </div>
                                   </td>
-                                  
+
                                   <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                                     <div className="space-y-1">
                                       {person.email && (
                                         <div className="flex items-center gap-1">
                                           <Mail size={12} />
-                                          <a 
+                                          <a
                                             href={`mailto:${person.email}`}
                                             className="text-baylor-green hover:underline"
                                             onClick={(e) => e.stopPropagation()}
@@ -503,9 +526,9 @@ const BuildingDirectory = ({
                                       )}
                                     </div>
                                   </td>
-                                  
+
                                   <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
-                                    <button 
+                                    <button
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setSelectedPersonForCard(person);

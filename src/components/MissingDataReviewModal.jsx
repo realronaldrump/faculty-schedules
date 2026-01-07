@@ -45,12 +45,12 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
           missingRecords = people.filter(person => !person.email || person.email.trim() === '');
           break;
         case 'phone':
-          missingRecords = people.filter(person => 
+          missingRecords = people.filter(person =>
             (!person.phone || person.phone.trim() === '') && !person.hasNoPhone
           );
           break;
         case 'office':
-          missingRecords = people.filter(person => 
+          missingRecords = people.filter(person =>
             (!person.office || person.office.trim() === '') && !person.hasNoOffice
           );
           break;
@@ -145,7 +145,7 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
       if (editingRecord.newEmail.trim()) {
         updates.email = editingRecord.newEmail.trim().toLowerCase();
       }
-      
+
       // Handle phone field with hasNoPhone flag
       if (editingRecord.newHasNoPhone) {
         updates.hasNoPhone = true;
@@ -154,7 +154,7 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
         updates.phone = editingRecord.newPhone.replace(/\D/g, '');
         updates.hasNoPhone = false;
       }
-      
+
       // Handle office field with hasNoOffice flag
       if (editingRecord.newHasNoOffice) {
         updates.hasNoOffice = true;
@@ -163,7 +163,7 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
         updates.office = editingRecord.newOffice.trim();
         updates.hasNoOffice = false;
       }
-      
+
       if (editingRecord.newJobTitle.trim()) {
         updates.jobTitle = editingRecord.newJobTitle.trim();
       }
@@ -187,15 +187,15 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
       );
 
       // Update local state
-      setRecords(prev => prev.map(record => 
-        record.id === editingRecord.id 
+      setRecords(prev => prev.map(record =>
+        record.id === editingRecord.id
           ? { ...record, ...updates }
           : record
       ));
 
       setEditingRecord(null);
       setSaveResults({ success: true, message: 'Record updated successfully' });
-      
+
       // Call parent callback
       if (onDataUpdated) {
         onDataUpdated();
@@ -264,12 +264,11 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
         {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
           {saveResults && (
-            <div className={`mb-4 p-3 rounded-lg ${
-              saveResults.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-            }`}>
+            <div className={`mb-4 p-3 rounded-lg ${saveResults.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+              }`}>
               <div className="flex items-center">
-                {saveResults.success ? 
-                  <CheckCircle className="w-4 h-4 mr-2" /> : 
+                {saveResults.success ?
+                  <CheckCircle className="w-4 h-4 mr-2" /> :
                   <AlertCircle className="w-4 h-4 mr-2" />
                 }
                 {saveResults.message}
@@ -279,7 +278,7 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
 
           {isLoading ? (
             <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-baylor-green mx-auto"></div>
               <p className="mt-2 text-gray-600">Loading records...</p>
             </div>
           ) : records.length === 0 ? (
@@ -294,7 +293,7 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
             <div className="space-y-4">
               <div className="mb-4">
                 <p className="text-gray-600">
-                  Found <span className="font-medium">{records.length}</span> records missing {getFieldLabel(missingDataType).toLowerCase()}. 
+                  Found <span className="font-medium">{records.length}</span> records missing {getFieldLabel(missingDataType).toLowerCase()}.
                   Review each record and add the missing information.
                 </p>
               </div>
@@ -310,12 +309,12 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                         {record.jobTitle || 'No job title'}
                       </p>
                       <p className="text-sm text-gray-500">
-                        Email: {record.email || 'Missing'} • 
-                        Phone: {record.hasNoPhone ? 'No phone' : (record.phone || 'Missing')} • 
+                        Email: {record.email || 'Missing'} •
+                        Phone: {record.hasNoPhone ? 'No phone' : (record.phone || 'Missing')} •
                         Office: {record.hasNoOffice ? 'No office' : (record.office || 'Missing')}
                       </p>
                     </div>
-                    
+
                     {editingRecord?.id === record.id ? (
                       <div className="ml-4 space-y-3 min-w-80">
                         {(missingDataType === 'email' || missingDataType === 'all') && (
@@ -327,11 +326,10 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                               type="email"
                               value={editingRecord.newEmail}
                               onChange={(e) => setEditingRecord(prev => ({ ...prev, newEmail: e.target.value }))}
-                              className={`w-full px-3 py-2 border rounded-lg ${
-                                editingRecord.newEmail && !validateEmail(editingRecord.newEmail)
-                                  ? 'border-red-300 focus:border-red-500'
-                                  : 'border-gray-300 focus:border-blue-500'
-                              } focus:outline-none focus:ring-2 focus:ring-blue-200`}
+                              className={`w-full px-3 py-2 border rounded-lg ${editingRecord.newEmail && !validateEmail(editingRecord.newEmail)
+                                ? 'border-red-300 focus:border-red-500'
+                                : 'border-gray-300 focus:border-baylor-green'
+                                } focus:outline-none focus:ring-2 focus:ring-baylor-green/20`}
                               placeholder="email@baylor.edu"
                             />
                             {editingRecord.newEmail && !validateEmail(editingRecord.newEmail) && (
@@ -339,7 +337,7 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                             )}
                           </div>
                         )}
-                        
+
                         {(missingDataType === 'phone' || missingDataType === 'all') && (
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -351,21 +349,19 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                                 value={editingRecord.newPhone}
                                 onChange={(e) => setEditingRecord(prev => ({ ...prev, newPhone: e.target.value }))}
                                 disabled={editingRecord.newHasNoPhone}
-                                className={`flex-1 px-3 py-2 border rounded-lg ${
-                                  editingRecord.newPhone && !validatePhone(editingRecord.newPhone)
-                                    ? 'border-red-300 focus:border-red-500'
-                                    : 'border-gray-300 focus:border-blue-500'
-                                } focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100 disabled:text-gray-500`}
+                                className={`flex-1 px-3 py-2 border rounded-lg ${editingRecord.newPhone && !validatePhone(editingRecord.newPhone)
+                                  ? 'border-red-300 focus:border-red-500'
+                                  : 'border-gray-300 focus:border-baylor-green'
+                                  } focus:outline-none focus:ring-2 focus:ring-baylor-green/20 disabled:bg-gray-100 disabled:text-gray-500`}
                                 placeholder="(254) 710-1234"
                               />
                               <button
                                 type="button"
                                 onClick={togglePhoneState}
-                                className={`p-2 rounded transition-colors ${
-                                  editingRecord.newHasNoPhone 
-                                    ? 'text-red-600 bg-red-100 hover:bg-red-200' 
-                                    : 'text-gray-400 hover:bg-gray-100'
-                                }`}
+                                className={`p-2 rounded transition-colors ${editingRecord.newHasNoPhone
+                                  ? 'text-red-600 bg-red-100 hover:bg-red-200'
+                                  : 'text-gray-400 hover:bg-gray-100'
+                                  }`}
                                 title={editingRecord.newHasNoPhone ? 'Mark as having no phone' : 'Mark as having phone'}
                               >
                                 {editingRecord.newHasNoPhone ? <PhoneOff size={16} /> : <Phone size={16} />}
@@ -379,7 +375,7 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                             )}
                           </div>
                         )}
-                        
+
                         {(missingDataType === 'office' || missingDataType === 'all') && (
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -391,17 +387,16 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                                 value={editingRecord.newOffice}
                                 onChange={(e) => setEditingRecord(prev => ({ ...prev, newOffice: e.target.value }))}
                                 disabled={editingRecord.newHasNoOffice}
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100 disabled:text-gray-500"
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:border-baylor-green focus:outline-none focus:ring-2 focus:ring-baylor-green/20 disabled:bg-gray-100 disabled:text-gray-500"
                                 placeholder="Building Room#"
                               />
                               <button
                                 type="button"
                                 onClick={toggleOfficeState}
-                                className={`p-2 rounded transition-colors ${
-                                  editingRecord.newHasNoOffice 
-                                    ? 'text-red-600 bg-red-100 hover:bg-red-200' 
-                                    : 'text-gray-400 hover:bg-gray-100'
-                                }`}
+                                className={`p-2 rounded transition-colors ${editingRecord.newHasNoOffice
+                                  ? 'text-red-600 bg-red-100 hover:bg-red-200'
+                                  : 'text-gray-400 hover:bg-gray-100'
+                                  }`}
                                 title={editingRecord.newHasNoOffice ? 'Mark as having no office' : 'Mark as having office'}
                               >
                                 {editingRecord.newHasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
@@ -412,7 +407,7 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                             )}
                           </div>
                         )}
-                        
+
                         {(missingDataType === 'jobTitle' || missingDataType === 'all') && (
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -422,7 +417,7 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                               type="text"
                               value={editingRecord.newJobTitle}
                               onChange={(e) => setEditingRecord(prev => ({ ...prev, newJobTitle: e.target.value }))}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-baylor-green focus:outline-none focus:ring-2 focus:ring-baylor-green/20"
                               placeholder="Professor, Lecturer, etc."
                             />
                           </div>
@@ -436,7 +431,7 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                             <select
                               value={editingRecord.newProgramId}
                               onChange={(e) => setEditingRecord(prev => ({ ...prev, newProgramId: e.target.value }))}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:border-baylor-green focus:outline-none focus:ring-2 focus:ring-baylor-green/20"
                             >
                               <option value="">Select a program...</option>
                               {programs.map(p => (
@@ -455,12 +450,12 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                               type="text"
                               value={editingRecord.newTitle}
                               onChange={(e) => setEditingRecord(prev => ({ ...prev, newTitle: e.target.value }))}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-baylor-green focus:outline-none focus:ring-2 focus:ring-baylor-green/20"
                               placeholder="Dr."
                             />
                           </div>
                         )}
-                        
+
                         <div className="flex space-x-2">
                           {canUpdateMissingData() && (
                             <button
@@ -484,7 +479,7 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                     ) : (
                       <button
                         onClick={() => startEditing(record)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90"
                       >
                         Add Missing Info
                       </button>

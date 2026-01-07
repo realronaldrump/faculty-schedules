@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  X, 
-  RotateCcw, 
-  Clock, 
-  CheckCircle, 
+import {
+  X,
+  RotateCcw,
+  Clock,
+  CheckCircle,
   AlertCircle,
   Trash2,
   Eye,
@@ -105,9 +105,9 @@ const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
 
   const getStatusColor = (status) => {
     switch (status) {
-          case 'committed': return 'text-baylor-green bg-baylor-green/10';
-    case 'rolled_back': return 'text-red-600 bg-red-50';
-    case 'preview': return 'text-baylor-gold bg-baylor-gold/10';
+      case 'committed': return 'text-baylor-green bg-baylor-green/10';
+      case 'rolled_back': return 'text-red-600 bg-red-50';
+      case 'preview': return 'text-baylor-gold bg-baylor-gold/10';
       default: return 'text-gray-600 bg-gray-50';
     }
   };
@@ -148,8 +148,8 @@ const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
     };
 
     allChanges.forEach(change => {
-      const actionKey = change.action === 'add' ? 'added' : 
-                      change.action === 'modify' ? 'modified' : 'deleted';
+      const actionKey = change.action === 'add' ? 'added' :
+        change.action === 'modify' ? 'modified' : 'deleted';
       groupedChanges[change.collection][actionKey].push(change);
     });
 
@@ -163,13 +163,13 @@ const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
             <div className="text-sm text-gray-600">Schedule Changes</div>
           </div>
           <div>
-            <div className="text-lg font-bold text-blue-600">
+            <div className="text-lg font-bold text-baylor-green">
               {Object.values(groupedChanges.people).reduce((sum, arr) => sum + arr.length, 0)}
             </div>
             <div className="text-sm text-gray-600">People Changes</div>
           </div>
           <div>
-            <div className="text-lg font-bold text-purple-600">
+            <div className="text-lg font-bold text-baylor-gold">
               {Object.values(groupedChanges.rooms).reduce((sum, arr) => sum + arr.length, 0)}
             </div>
             <div className="text-sm text-gray-600">Room Changes</div>
@@ -180,7 +180,7 @@ const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
           {Object.entries(groupedChanges).map(([collection, actions]) => {
             const CollectionIcon = getCollectionIcon(collection);
             const hasChanges = Object.values(actions).some(arr => arr.length > 0);
-            
+
             if (!hasChanges) return null;
 
             return (
@@ -195,7 +195,7 @@ const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
                     <div className="text-gray-600">Added</div>
                   </div>
                   <div className="text-center">
-                    <div className="font-semibold text-blue-600">{actions.modified.length}</div>
+                    <div className="font-semibold text-baylor-green">{actions.modified.length}</div>
                     <div className="text-gray-600">Modified</div>
                   </div>
                   <div className="text-center">
@@ -224,13 +224,13 @@ const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
               <p className="text-sm text-gray-600">This action will reverse all changes</p>
             </div>
           </div>
-          
+
           <div className="mb-6">
             <p className="text-gray-700 mb-3">
               Are you sure you want to roll back the import for <strong>{transaction.semester}</strong>?
             </p>
             <p className="text-sm text-gray-600 bg-red-50 p-3 rounded-lg">
-              ⚠️ This will permanently delete all {transaction.stats.totalChanges} imported records 
+              ⚠️ This will permanently delete all {transaction.stats.totalChanges} imported records
               and restore the database to its previous state. This action cannot be undone.
             </p>
           </div>
@@ -309,11 +309,10 @@ const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
                           <div
                             key={transaction.id}
                             onClick={() => setSelectedTransaction(transaction)}
-                            className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                              selectedTransaction?.id === transaction.id 
-                                ? 'border-baylor-green bg-baylor-green/5' 
+                            className={`p-4 border rounded-lg cursor-pointer transition-colors ${selectedTransaction?.id === transaction.id
+                                ? 'border-baylor-green bg-baylor-green/5'
                                 : 'border-gray-200 hover:border-gray-300'
-                            }`}
+                              }`}
                           >
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center space-x-2">
@@ -359,7 +358,7 @@ const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
                             <div className="flex items-center space-x-2">
                               <button
                                 onClick={() => handleDiagnoseRollback(selectedTransaction.id)}
-                                className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm flex items-center space-x-1"
+                                className="px-3 py-1 bg-baylor-green/10 text-baylor-green rounded-lg hover:bg-baylor-green/20 transition-colors text-sm flex items-center space-x-1"
                               >
                                 <Eye className="w-3 h-3" />
                                 <span>Diagnose</span>
@@ -367,10 +366,10 @@ const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
                               <button
                                 onClick={() => handleManualCleanup(selectedTransaction.id)}
                                 disabled={isCleaningUp}
-                                className="px-3 py-1 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 disabled:opacity-50 transition-colors text-sm flex items-center space-x-1"
+                                className="px-3 py-1 bg-baylor-gold/20 text-baylor-gold rounded-lg hover:bg-baylor-gold/30 disabled:opacity-50 transition-colors text-sm flex items-center space-x-1"
                               >
                                 {isCleaningUp ? (
-                                  <div className="w-3 h-3 border border-orange-700 border-t-transparent rounded-full animate-spin"></div>
+                                  <div className="w-3 h-3 border border-baylor-gold border-t-transparent rounded-full animate-spin"></div>
                                 ) : (
                                   <Database className="w-3 h-3" />
                                 )}

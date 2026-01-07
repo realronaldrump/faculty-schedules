@@ -19,13 +19,13 @@ export const fetchRecentChanges = async (limitCount = 50) => {
       orderBy('timestamp', 'desc'),
       limit(limitCount)
     );
-    
+
     const snapshot = await getDocs(changesQuery);
     const changes = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
-    
+
     return changes;
   } catch (error) {
     console.error('Error fetching recent changes:', error);
@@ -40,7 +40,7 @@ export const fetchRecentChanges = async (limitCount = 50) => {
  */
 export const formatChangeForDisplay = (change) => {
   const timeAgo = getTimeAgo(change.timestamp);
-  
+
   return {
     ...change,
     timeAgo,
@@ -69,7 +69,7 @@ const getDisplayAction = (action) => {
     'BATCH_OPERATION': 'Batch Operation',
     'UPDATE_GROUPED': 'Updated Group'
   };
-  
+
   return actionMap[action] || action;
 };
 
@@ -80,7 +80,7 @@ const getDisplayAction = (action) => {
  */
 const getDisplaySource = (source) => {
   if (!source) return 'System';
-  
+
   // Extract component/file name from path
   const parts = source.split(' - ');
   if (parts.length > 1) {
@@ -91,10 +91,10 @@ const getDisplaySource = (source) => {
       .replace(/.*\//, '') // Remove path
       .replace(/([A-Z])/g, ' $1') // Add space before capital letters
       .trim();
-    
+
     return cleanLocation || 'System';
   }
-  
+
   return source;
 };
 
@@ -108,14 +108,14 @@ const getActionColor = (action) => {
     'CREATE': 'text-green-600',
     'UPDATE': 'text-blue-600',
     'DELETE': 'text-red-600',
-    'IMPORT': 'text-purple-600',
+    'IMPORT': 'text-baylor-gold',
     'STANDARDIZE': 'text-yellow-600',
-    'MERGE': 'text-orange-600',
-    'BULK_UPDATE': 'text-indigo-600',
+    'MERGE': 'text-baylor-gold',
+    'BULK_UPDATE': 'text-baylor-green',
     'BATCH_OPERATION': 'text-gray-600',
     'UPDATE_GROUPED': 'text-blue-500'
   };
-  
+
   return colorMap[action] || 'text-gray-600';
 };
 
@@ -126,15 +126,15 @@ const getActionColor = (action) => {
  */
 const getTimeAgo = (timestamp) => {
   if (!timestamp) return 'Unknown time';
-  
+
   const now = new Date();
   const changeTime = new Date(timestamp);
   const diffMs = now - changeTime;
-  
+
   const diffMinutes = Math.floor(diffMs / (1000 * 60));
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  
+
   if (diffMinutes < 1) {
     return 'Just now';
   } else if (diffMinutes < 60) {
@@ -158,36 +158,36 @@ const getDetailedDescription = (change) => {
   if (change.action === 'CREATE') {
     return `Created new ${change.collection === 'people' ? 'person' : 'record'}`;
   }
-  
+
   if (change.action === 'DELETE') {
     return `Deleted ${change.collection === 'people' ? 'person' : 'record'}`;
   }
-  
+
   if (change.action === 'IMPORT') {
     const count = change.metadata?.importCount || 'unknown';
     return `Imported ${count} ${count === 1 ? 'record' : 'records'}`;
   }
-  
+
   if (change.action === 'BULK_UPDATE') {
     const count = change.metadata?.affectedCount || 'unknown';
     return `Updated ${count} ${count === 1 ? 'record' : 'records'} in bulk`;
   }
-  
+
   // Handle UPDATE with detailed field changes
   if (change.action === 'UPDATE') {
     const fieldChanges = change.metadata?.fieldChanges;
-    
+
     if (!fieldChanges || Object.keys(fieldChanges).length === 0) {
       return 'Updated (no specific changes detected)';
     }
-    
+
     const changes = [];
     const fieldNames = getFieldDisplayNames();
-    
+
     Object.entries(fieldChanges).forEach(([field, change]) => {
       const displayName = fieldNames[field] || field;
       const changeType = change.type;
-      
+
       if (changeType === 'added') {
         changes.push(`Added ${displayName}: "${change.to}"`);
       } else if (changeType === 'removed') {
@@ -207,7 +207,7 @@ const getDetailedDescription = (change) => {
         }
       }
     });
-    
+
     if (changes.length === 1) {
       return changes[0];
     } else if (changes.length <= 3) {
@@ -216,7 +216,7 @@ const getDetailedDescription = (change) => {
       return `Updated ${changes.length} fields: ${changes.slice(0, 2).join(', ')} and ${changes.length - 2} more`;
     }
   }
-  
+
   return `Performed ${change.action.toLowerCase()} operation`;
 };
 
@@ -257,7 +257,7 @@ const getFieldDisplayNames = () => {
  */
 export const groupChangesByDate = (changes) => {
   const groups = {};
-  
+
   changes.forEach(change => {
     const date = new Date(change.timestamp).toDateString();
     if (!groups[date]) {
@@ -265,7 +265,7 @@ export const groupChangesByDate = (changes) => {
     }
     groups[date].push(formatChangeForDisplay(change));
   });
-  
+
   return groups;
 };
 
@@ -283,14 +283,14 @@ export const getChangeSummary = (changes) => {
     byCollection: {},
     bySource: {}
   };
-  
+
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const weekStart = new Date(todayStart.getTime() - (7 * 24 * 60 * 60 * 1000));
-  
+
   changes.forEach(change => {
     const changeTime = new Date(change.timestamp);
-    
+
     // Count by time period
     if (changeTime >= todayStart) {
       summary.today++;
@@ -298,17 +298,17 @@ export const getChangeSummary = (changes) => {
     if (changeTime >= weekStart) {
       summary.thisWeek++;
     }
-    
+
     // Count by action
     summary.byAction[change.action] = (summary.byAction[change.action] || 0) + 1;
-    
+
     // Count by collection
     summary.byCollection[change.collection] = (summary.byCollection[change.collection] || 0) + 1;
-    
+
     // Count by source
     const source = getDisplaySource(change.source);
     summary.bySource[source] = (summary.bySource[source] || 0) + 1;
   });
-  
+
   return summary;
 };

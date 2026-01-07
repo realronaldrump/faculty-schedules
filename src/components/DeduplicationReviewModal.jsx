@@ -64,7 +64,7 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
     if (selectedDuplicates.size === 0) return;
 
     const selectedDuplicatesList = Array.from(selectedDuplicates).map(index => duplicates[index]);
-    
+
     console.log('Starting merge for:', selectedDuplicatesList.map(d => `${d.primary.firstName} ${d.primary.lastName} <- ${d.duplicate.firstName} ${d.duplicate.lastName}`));
 
     setProcessingMerge({ current: 0, total: selectedDuplicatesList.length });
@@ -94,10 +94,10 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
 
     setProcessingMerge(null);
     setMergeResults(results);
-    
+
     // Reload duplicates to show updated list
     await loadDuplicates();
-    
+
     if (onDuplicatesResolved) {
       onDuplicatesResolved();
     }
@@ -118,7 +118,7 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
 
   const formatFieldComparison = (fieldName, value1, value2, label, index) => {
     if (!value1 && !value2) return null;
-    
+
     const same = value1 === value2;
     const isConflict = value1 && value2 && !same;
     const selection = fieldSelections[index]?.[fieldName] || 'primary';
@@ -128,7 +128,7 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
         <span className="text-gray-500">{label}:</span>
         {isConflict ? (
           <div className="flex items-center space-x-2 mt-1">
-            <label className={`flex items-center px-2 py-1 rounded cursor-pointer ${selection === 'primary' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+            <label className={`flex items-center px-2 py-1 rounded cursor-pointer ${selection === 'primary' ? 'bg-baylor-green/10 text-baylor-green' : 'bg-gray-100 text-gray-800'}`}>
               <input
                 type="radio"
                 checked={selection === 'primary'}
@@ -138,7 +138,7 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
               {value1}
             </label>
             <ArrowRight className="w-3 h-3 text-gray-400" />
-            <label className={`flex items-center px-2 py-1 rounded cursor-pointer ${selection === 'duplicate' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+            <label className={`flex items-center px-2 py-1 rounded cursor-pointer ${selection === 'duplicate' ? 'bg-baylor-green/10 text-baylor-green' : 'bg-gray-100 text-gray-800'}`}>
               <input
                 type="radio"
                 checked={selection === 'duplicate'}
@@ -175,7 +175,7 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
           <div className="flex items-center space-x-2">
-            <Users className="w-5 h-5 text-blue-600" />
+            <Users className="w-5 h-5 text-baylor-green" />
             <h2 className="text-xl font-semibold text-gray-900">
               Review Potential Duplicates
             </h2>
@@ -196,9 +196,9 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
         {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
           {mergeResults && (
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <h3 className="font-medium text-blue-900 mb-2">Merge Results</h3>
-              <div className="text-sm text-blue-800">
+            <div className="mb-6 p-4 bg-baylor-green/5 border border-baylor-green/20 rounded-lg">
+              <h3 className="font-medium text-baylor-green mb-2">Merge Results</h3>
+              <div className="text-sm text-baylor-green">
                 <p>✅ Successfully merged {mergeResults.merged} duplicate pairs</p>
                 {mergeResults.errors.length > 0 && (
                   <div className="mt-2">
@@ -239,7 +239,7 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
 
           {isLoading ? (
             <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-baylor-green mx-auto"></div>
               <p className="mt-2 text-gray-600">Analyzing data for duplicates...</p>
             </div>
           ) : duplicates.length === 0 ? (
@@ -252,9 +252,9 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
             </div>
           ) : (
             <div className="space-y-6">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h3 className="font-medium text-blue-900 mb-2">Review Instructions</h3>
-                <div className="text-sm text-blue-800">
+              <div className="bg-baylor-green/5 border border-baylor-green/20 rounded-lg p-4">
+                <h3 className="font-medium text-baylor-green mb-2">Review Instructions</h3>
+                <div className="text-sm text-baylor-green">
                   <p className="mb-2">
                     We found {duplicates.length} potential duplicate records. Review each one carefully:
                   </p>
@@ -278,7 +278,7 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
                           type="checkbox"
                           checked={selectedDuplicates.has(index)}
                           onChange={() => toggleDuplicateSelection(index)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          className="h-4 w-4 text-baylor-green focus:ring-baylor-green border-gray-300 rounded"
                         />
                         <div className="flex items-center space-x-2">
                           <AlertTriangle className="w-4 h-4 text-yellow-600" />
@@ -375,7 +375,7 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
                     </div>
 
                     <div className="flex justify-center mt-4">
-                      <button 
+                      <button
                         onClick={() => swapPrimary(index)}
                         className="flex items-center space-x-1 px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
                       >
@@ -428,7 +428,7 @@ const DeduplicationReviewModal = ({ isOpen, onClose, onDuplicatesResolved }) => 
                   <button
                     onClick={loadDuplicates}
                     disabled={isLoading || processingMerge}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    className="px-6 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50"
                   >
                     Refresh Analysis
                   </button>

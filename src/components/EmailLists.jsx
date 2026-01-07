@@ -1128,9 +1128,9 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${person.roleType === 'faculty' ? 'bg-blue-100 text-blue-800' :
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${person.roleType === 'faculty' ? 'bg-baylor-green/10 text-baylor-green' :
                         person.roleType === 'staff' ? 'bg-green-100 text-green-800' :
-                          'bg-purple-100 text-purple-800'
+                          'bg-baylor-gold/20 text-baylor-gold'
                         }`}>
                         {person.role}
                       </span>
@@ -1140,7 +1140,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
                         </span>
                       )}
                       {person.isRemote && (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-link-green/10 text-link-green">
                           <Wifi size={12} className="mr-1" />
                           Remote
                         </span>

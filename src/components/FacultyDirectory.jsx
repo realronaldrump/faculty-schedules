@@ -361,10 +361,10 @@ const FacultyDirectory = ({
           {faculty.program && <div className="text-xs text-baylor-green font-medium">{faculty.program.name}</div>}
           {faculty.isUPD && <div className="text-xs text-amber-600 font-medium flex items-center gap-1"><UserCog size={12} /> UPD</div>}
           {faculty.isAlsoStaff && <div className="text-xs text-baylor-gold font-medium">Also Staff</div>}
-          {faculty.isAdjunct && <div className="text-xs text-blue-600 font-medium">Adjunct</div>}
-          {faculty.isTenured && <div className="text-xs text-purple-600 font-medium">Tenured</div>}
+          {faculty.isAdjunct && <div className="text-xs text-baylor-gold font-medium">Adjunct</div>}
+          {faculty.isTenured && <div className="text-xs text-baylor-gold font-medium">Tenured</div>}
           {faculty.hasPhD && <div className="text-xs text-green-600 font-medium">PhD</div>}
-          {faculty.isRemote && <div className="text-xs text-cyan-600 font-medium flex items-center gap-1"><Wifi size={12} /> Remote</div>}
+          {faculty.isRemote && <div className="text-xs text-link-green font-medium flex items-center gap-1"><Wifi size={12} /> Remote</div>}
         </div>
       ),
       renderEdit: (faculty) => (
@@ -485,7 +485,7 @@ const FacultyDirectory = ({
     }
     return (
       <div className="flex gap-1 justify-end">
-        <button onClick={(e) => { e.stopPropagation(); handleEdit(faculty); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full" disabled={typeof window !== 'undefined' && window?.appPermissions?.canEditFaculty === false}><Edit size={16} /></button>
+        <button onClick={(e) => { e.stopPropagation(); handleEdit(faculty); }} className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full" disabled={typeof window !== 'undefined' && window?.appPermissions?.canEditFaculty === false}><Edit size={16} /></button>
         <button onClick={(e) => { e.stopPropagation(); handleDelete(faculty); }} className="p-2 text-red-600 hover:bg-red-100 rounded-full" disabled={typeof window !== 'undefined' && window?.appPermissions?.canDeleteFaculty === false}><Trash2 size={16} /></button>
       </div>
     );
@@ -594,7 +594,7 @@ const FacultyDirectory = ({
       )}
       trailingActions={(
         <>
-          <button onClick={exportToCSV} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          <button onClick={exportToCSV} className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors">
             <Download size={18} /> Export CSV
           </button>
           <button

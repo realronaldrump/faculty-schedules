@@ -310,15 +310,15 @@ const AdjunctDirectory = ({
           {faculty.program && (
             <div className="text-xs text-baylor-green font-medium">{faculty.program.name}</div>
           )}
-          <div className="text-xs text-blue-600 font-medium">Adjunct</div>
+          <div className="text-xs text-baylor-gold font-medium">Adjunct</div>
           {faculty.isAlsoStaff && (
             <div className="text-xs text-baylor-gold font-medium">Also Staff</div>
           )}
           {faculty.isTenured && (
-            <div className="text-xs text-purple-600 font-medium">Tenured</div>
+            <div className="text-xs text-baylor-gold font-medium">Tenured</div>
           )}
           {faculty.isRemote && (
-            <div className="text-xs text-cyan-600 font-medium flex items-center gap-1"><Wifi size={12} /> Remote</div>
+            <div className="text-xs text-link-green font-medium flex items-center gap-1"><Wifi size={12} /> Remote</div>
           )}
         </div>
       ),
@@ -330,7 +330,7 @@ const AdjunctDirectory = ({
             <label htmlFor={`adjunct-${faculty.id}`} className="font-normal">Adjunct</label>
           </div>
           <div className="flex items-center gap-2 text-xs mt-1">
-            <input type="checkbox" id={`isTenured-${faculty.id}`} name="isTenured" checked={!!editFormData.isTenured} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-600" />
+            <input type="checkbox" id={`isTenured-${faculty.id}`} name="isTenured" checked={!!editFormData.isTenured} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
             <label htmlFor={`isTenured-${faculty.id}`} className="font-normal">Tenured</label>
           </div>
           <div className="flex items-center gap-2 text-xs mt-1">
@@ -461,7 +461,7 @@ const AdjunctDirectory = ({
     }
     return (
       <div className="flex gap-1 justify-end">
-        <button onClick={(e) => { e.stopPropagation(); handleEdit(faculty); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><Edit size={16} /></button>
+        <button onClick={(e) => { e.stopPropagation(); handleEdit(faculty); }} className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"><Edit size={16} /></button>
         <button onClick={(e) => { e.stopPropagation(); handleDelete(faculty); }} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><Trash2 size={16} /></button>
       </div>
     );

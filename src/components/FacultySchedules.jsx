@@ -530,8 +530,8 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
                   key={dayCode}
                   onClick={() => handleDayToggle(dayCode)}
                   className={`px-3 py-2 text-sm font-medium rounded-md transition-colors flex-1 ${selectedDays.includes(dayCode)
-                      ? 'bg-baylor-green text-white shadow'
-                      : 'text-gray-600 hover:bg-gray-200'
+                    ? 'bg-baylor-green text-white shadow'
+                    : 'text-gray-600 hover:bg-gray-200'
                     }`}
                 >
                   {dayName.slice(0, 3)}
@@ -560,8 +560,8 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
             </button>
           </div>
           {!showAdjuncts && (
-            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
-              <p className="text-xs text-blue-700">
+            <div className="mt-2 p-2 bg-baylor-green/5 border border-baylor-green/20 rounded-md">
+              <p className="text-xs text-baylor-green">
                 Adjunct faculty are currently hidden. Only full-time faculty schedules are displayed.
               </p>
             </div>
@@ -597,15 +597,15 @@ const FacultySchedules = ({ scheduleData, facultyData, rawScheduleData, onDataUp
 
                 return (
                   <div key={facultyName} className={`flex items-center px-3 py-1 rounded-full text-sm ${isAdjunct
-                      ? 'bg-orange-100 text-orange-700 border border-orange-200'
-                      : 'bg-baylor-green/10 text-baylor-green'
+                    ? 'bg-baylor-gold/20 text-baylor-gold border border-baylor-gold/30'
+                    : 'bg-baylor-green/10 text-baylor-green'
                     }`}>
                     <span>{facultyName}</span>
                     {programName && (
                       <span className="ml-1 text-xs opacity-75">({programName})</span>
                     )}
                     {isAdjunct && (
-                      <span className="ml-1 text-xs bg-orange-200 px-1 rounded">Adjunct</span>
+                      <span className="ml-1 text-xs bg-baylor-gold/30 px-1 rounded">Adjunct</span>
                     )}
                     <button
                       onClick={() => setSelectedFaculty(prev => prev.filter(f => f !== facultyName))}

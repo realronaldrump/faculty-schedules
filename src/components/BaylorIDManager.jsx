@@ -137,7 +137,7 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
             <p className="university-card-subtitle">Quickly view and update Baylor IDs across directory members.</p>
           </div>
           <div className="p-3 bg-baylor-green/10 rounded-lg">
-             <IdCard className="h-6 w-6 text-baylor-green" />
+            <IdCard className="h-6 w-6 text-baylor-green" />
           </div>
         </div>
 
@@ -203,7 +203,7 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
             </div>
             <button
               onClick={exportToCSV}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
             >
               <Download size={18} />
               Export CSV
@@ -299,7 +299,7 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
                         ) : (
                           <button
                             onClick={() => startEdit(person)}
-                            className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"
+                            className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
                             title="Edit Baylor ID"
                           >
                             <Edit size={16} />

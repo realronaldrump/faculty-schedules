@@ -30,8 +30,8 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
         description: 'Contact information and faculty details',
         icon: GraduationCap,
         path: 'people/people-directory',
-        color: 'bg-purple-600',
-        textColor: 'text-purple-600',
+        color: 'bg-baylor-green',
+        textColor: 'text-baylor-green',
         requiredAccess: 'people/people-directory'
       },
       {
@@ -48,8 +48,8 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
         description: 'Find overlapping availability across faculty',
         icon: Calendar,
         path: 'scheduling/group-meeting-scheduler',
-        color: 'bg-blue-600',
-        textColor: 'text-blue-600',
+        color: 'bg-baylor-gold',
+        textColor: 'text-baylor-gold',
         requiredAccess: 'scheduling/group-meeting-scheduler'
       },
       {
@@ -81,7 +81,7 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
   }, [hasAccess, onNavigate]);
 
   const QuickActionCard = ({ title, description, icon: Icon, action, color, textColor }) => (
-    <div 
+    <div
       className="university-card cursor-pointer group hover:shadow-lg transition-all duration-300 hover:scale-[1.02]"
       onClick={action}
     >
@@ -113,7 +113,7 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
           <h1 className="page-title">Dashboard</h1>
           <p className="page-subtitle">Faculty Schedule Management System</p>
         </div>
-        
+
         <div className="university-card">
           <div className="university-card-content text-center py-12">
             <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -124,7 +124,7 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
               Once schedule data is available you&apos;ll see tailored quick links here.
             </p>
             {hasAccess('administration/import-wizard') ? (
-              <button 
+              <button
                 onClick={() => onNavigate('administration/import-wizard')}
                 className="btn-primary"
               >

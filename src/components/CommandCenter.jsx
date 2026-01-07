@@ -382,8 +382,8 @@ const CommandCenter = ({
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="university-card">
               <div className="university-card-content flex items-center gap-4">
-                <div className="p-3 bg-blue-100 rounded-xl relative">
-                  <BookOpen className="w-5 h-5 text-blue-600" />
+                <div className="p-3 bg-baylor-green/10 rounded-xl relative">
+                  <BookOpen className="w-5 h-5 text-baylor-green" />
                   <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                 </div>
                 <div>
@@ -408,8 +408,8 @@ const CommandCenter = ({
 
             <div className="university-card">
               <div className="university-card-content flex items-center gap-4">
-                <div className="p-3 bg-purple-100 rounded-xl relative">
-                  <Building2 className="w-5 h-5 text-purple-600" />
+                <div className="p-3 bg-baylor-gold/20 rounded-xl relative">
+                  <Building2 className="w-5 h-5 text-baylor-gold" />
                   <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                 </div>
                 <div>
@@ -488,7 +488,7 @@ const CommandCenter = ({
               <div className="university-card-header border-b border-gray-100 px-6 py-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-blue-500" />
+                    <Clock className="w-5 h-5 text-baylor-green" />
                     <h2 className="text-lg font-semibold text-gray-900">Coming Up</h2>
                   </div>
                   <span className="text-sm text-gray-500">Next 90 min</span>
@@ -513,7 +513,7 @@ const CommandCenter = ({
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="text-sm font-medium text-blue-600">{times.startTime}</div>
+                            <div className="text-sm font-medium text-baylor-green">{times.startTime}</div>
                             <div className="text-xs text-gray-400">in {minsUntil} min</div>
                           </div>
                         </div>

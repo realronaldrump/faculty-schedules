@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  X, 
-  CheckCircle, 
-  AlertCircle, 
-  Users, 
-  Calendar, 
-  MapPin, 
-  Eye, 
+import {
+  X,
+  CheckCircle,
+  AlertCircle,
+  Users,
+  Calendar,
+  MapPin,
+  Eye,
   EyeOff,
   Check,
   AlertTriangle,
@@ -15,12 +15,12 @@ import {
   RotateCcw
 } from 'lucide-react';
 
-const ImportPreviewModal = ({ 
-  transaction, 
-  onClose, 
-  onCommit, 
+const ImportPreviewModal = ({
+  transaction,
+  onClose,
+  onCommit,
   onCancel,
-  isCommitting = false 
+  isCommitting = false
 }) => {
   const [selectedChanges, setSelectedChanges] = useState(new Set());
   const [expandedSections, setExpandedSections] = useState(new Set(['schedules', 'people', 'rooms']));
@@ -30,7 +30,7 @@ const ImportPreviewModal = ({
   const [selectedFieldsByChange, setSelectedFieldsByChange] = useState({});
 
   const allChanges = useMemo(() => transaction?.getAllChanges() || [], [transaction]);
-  
+
   const groupedChanges = useMemo(() => {
     const groups = {
       schedules: { added: [], modified: [], deleted: [] },
@@ -39,8 +39,8 @@ const ImportPreviewModal = ({
     };
 
     allChanges.forEach(change => {
-      const actionKey = change.action === 'add' ? 'added' : 
-                      change.action === 'modify' ? 'modified' : 'deleted';
+      const actionKey = change.action === 'add' ? 'added' :
+        change.action === 'modify' ? 'modified' : 'deleted';
       groups[change.collection][actionKey].push(change);
     });
 
@@ -141,9 +141,9 @@ const ImportPreviewModal = ({
 
   const getActionColor = (action) => {
     switch (action) {
-          case 'add': return 'text-baylor-green bg-baylor-green/10';
-    case 'modify': return 'text-baylor-gold bg-baylor-gold/10';
-    case 'delete': return 'text-red-600 bg-red-50';
+      case 'add': return 'text-baylor-green bg-baylor-green/10';
+      case 'modify': return 'text-baylor-gold bg-baylor-gold/10';
+      case 'delete': return 'text-red-600 bg-red-50';
       default: return 'text-gray-600 bg-gray-50';
     }
   };
@@ -172,14 +172,14 @@ const ImportPreviewModal = ({
     if (change.collection === 'schedules') {
       const meetingSummary = Array.isArray(change.newData.meetingPatterns)
         ? change.newData.meetingPatterns
-            .map((pattern) => {
-              if (pattern.day && pattern.startTime && pattern.endTime) {
-                return `${pattern.day} ${pattern.startTime}-${pattern.endTime}`;
-              }
-              return pattern.raw || '';
-            })
-            .filter(Boolean)
-            .join('\n')
+          .map((pattern) => {
+            if (pattern.day && pattern.startTime && pattern.endTime) {
+              return `${pattern.day} ${pattern.startTime}-${pattern.endTime}`;
+            }
+            return pattern.raw || '';
+          })
+          .filter(Boolean)
+          .join('\n')
         : '';
 
       return {
@@ -304,11 +304,11 @@ const ImportPreviewModal = ({
               <div className="text-sm text-gray-600">Schedule Entries</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{stats.people}</div>
+              <div className="text-2xl font-bold text-baylor-green">{stats.people}</div>
               <div className="text-sm text-gray-600">People</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">{stats.rooms}</div>
+              <div className="text-2xl font-bold text-baylor-gold">{stats.rooms}</div>
               <div className="text-sm text-gray-600">Rooms</div>
             </div>
           </div>
@@ -339,7 +339,7 @@ const ImportPreviewModal = ({
           {Object.entries(groupedChanges).map(([collection, actions]) => {
             const CollectionIcon = getCollectionIcon(collection);
             const hasChanges = Object.values(actions).some(arr => arr.length > 0);
-            
+
             if (!hasChanges) return null;
 
             return (
@@ -392,7 +392,7 @@ const ImportPreviewModal = ({
                                     onClick={() => toggleDetails(change.id)}
                                     className="p-1 hover:bg-gray-100 rounded transition-colors"
                                   >
-                                    {showDetails[change.id] ? 
+                                    {showDetails[change.id] ?
                                       <EyeOff className="w-4 h-4 text-gray-500" /> :
                                       <Eye className="w-4 h-4 text-gray-500" />
                                     }

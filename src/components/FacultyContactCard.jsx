@@ -264,7 +264,7 @@ const FacultyContactCard = ({
                             </span>
                         )}
                         {personType !== 'student' && contactPerson.isRemote && (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800">
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-link-green/10 text-link-green">
                                 <Wifi size={12} className="mr-1" />
                                 Remote
                             </span>

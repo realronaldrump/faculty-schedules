@@ -8,6 +8,46 @@ import SortableHeader from './SortableHeader';
  * Handles display, sorting, and edit/create inline modes via column definitions.
  * Virtualized using react-window for performance with large datasets.
  */
+const Row = ({ index, style, data: itemData }) => {
+    const { items, columns, editingId, editFormData, rowKeyField, onRowClick, renderActions } = itemData;
+    const record = items[index];
+    const rowId = record[rowKeyField];
+    const isEditing = editingId === rowId;
+
+    // Strip "top" style to let flex layout handle vertical alignment if needed, 
+    // but react-window uses absolute positioning. We must preserve 'style'.
+    // However, we want cells to align.
+
+    return (
+        <div
+            style={style}
+            className={`flex items-center border-b border-gray-100 hover:bg-gray-50 transition-colors ${isEditing ? 'bg-baylor-gold/5' : ''}`}
+        >
+            {columns.map((col) => (
+                <div
+                    key={col.key}
+                    className={`px-4 py-2 flex-1 min-w-0 overflow-hidden text-sm ${col.className || ''} ${onRowClick && !isEditing ? 'cursor-pointer' : ''}`}
+                    onClick={() => {
+                        if (onRowClick && !isEditing) {
+                            onRowClick(record);
+                        }
+                    }}
+                >
+                    {isEditing && col.renderEdit
+                        ? col.renderEdit(record, editFormData)
+                        : col.render(record)
+                    }
+                </div>
+            ))}
+            {renderActions && (
+                <div className="px-4 py-2 w-28 text-right flex-none flex items-center justify-end">
+                    {renderActions(record, isEditing)}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const PeopleDataTable = ({
     data = [],
     columns = [],
@@ -23,47 +63,7 @@ const PeopleDataTable = ({
     rowHeight = 60, // Default row height
     listHeight = 600 // Default list height if AutoSizer fails or is constrained
 }) => {
-
-    // Row renderer for react-window
-    const Row = ({ index, style, data: itemData }) => {
-        const { items, columns, editingId, editFormData, rowKeyField, onRowClick, renderActions } = itemData;
-        const record = items[index];
-        const rowId = record[rowKeyField];
-        const isEditing = editingId === rowId;
-
-        // Strip "top" style to let flex layout handle vertical alignment if needed, 
-        // but react-window uses absolute positioning. We must preserve 'style'.
-        // However, we want cells to align.
-
-        return (
-            <div
-                style={style}
-                className={`flex items-center border-b border-gray-100 hover:bg-gray-50 transition-colors ${isEditing ? 'bg-baylor-gold/5' : ''}`}
-            >
-                {columns.map((col) => (
-                    <div
-                        key={col.key}
-                        className={`px-4 py-2 flex-1 min-w-0 overflow-hidden text-sm ${col.className || ''} ${onRowClick && !isEditing ? 'cursor-pointer' : ''}`}
-                        onClick={() => {
-                            if (onRowClick && !isEditing) {
-                                onRowClick(record);
-                            }
-                        }}
-                    >
-                        {isEditing && col.renderEdit
-                            ? col.renderEdit(record, editFormData)
-                            : col.render(record)
-                        }
-                    </div>
-                ))}
-                {renderActions && (
-                    <div className="px-4 py-2 w-28 text-right flex-none flex items-center justify-end">
-                        {renderActions(record, isEditing)}
-                    </div>
-                )}
-            </div>
-        );
-    };
+    console.log('PeopleDataTable render:', { dataLength: data.length });
 
     const itemData = useMemo(() => ({
         items: data,
@@ -110,20 +110,23 @@ const PeopleDataTable = ({
                         {emptyMessage}
                     </div>
                 ) : (
-                    <AutoSizer>
-                        {({ height, width }) => (
-                            <List
-                                height={height}
-                                width={width}
-                                itemCount={data.length}
-                                itemSize={rowHeight} // We use a fixed height. If rows need variable height, we'd use VariableSizeList
-                                itemData={itemData}
-                                overscanCount={5}
-                            >
-                                {Row}
-                            </List>
-                        )}
-                    </AutoSizer>
+                    <AutoSizer
+                        renderProp={({ height, width }) => {
+                            console.log('AutoSizer', { height, width });
+                            return (
+                                <List
+                                    height={height || listHeight}
+                                    width={width || '100%'}
+                                    itemCount={data.length}
+                                    itemSize={rowHeight}
+                                    itemData={itemData}
+                                    overscanCount={5}
+                                >
+                                    {Row}
+                                </List>
+                            );
+                        }}
+                    />
                 )}
             </div>
         </div>

@@ -356,7 +356,6 @@ const PersonDirectory = (props) => {
     permissions = {},
     enableCreate = false,
     emptyMessage = 'No records found.',
-    rowHeight,
     tableProps,
     onClearFilters,
     changeTracking,

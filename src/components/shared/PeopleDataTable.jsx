@@ -59,7 +59,6 @@ const PeopleDataTable = ({
     rowHeight = 72, // Default row height - increased for better readability
     listHeight = 600 // Default list height if AutoSizer fails or is constrained
 }) => {
-    console.log('PeopleDataTable render:', { dataLength: data.length });
 
     const itemData = useMemo(() => ({
         items: data,
@@ -108,7 +107,6 @@ const PeopleDataTable = ({
                 ) : (
                     <AutoSizer
                         renderProp={({ height, width }) => {
-                            console.log('AutoSizer', { height, width });
                             return (
                                 <List
                                     height={height || listHeight}

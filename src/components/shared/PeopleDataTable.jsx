@@ -14,19 +14,15 @@ const Row = ({ index, style, data: itemData }) => {
     const rowId = record[rowKeyField];
     const isEditing = editingId === rowId;
 
-    // Strip "top" style to let flex layout handle vertical alignment if needed, 
-    // but react-window uses absolute positioning. We must preserve 'style'.
-    // However, we want cells to align.
-
     return (
         <div
             style={style}
-            className={`flex items-center border-b border-gray-100 hover:bg-gray-50 transition-colors ${isEditing ? 'bg-baylor-gold/5' : ''}`}
+            className={`flex items-center border-b border-gray-200 hover:bg-gray-50/80 transition-colors ${isEditing ? 'bg-baylor-gold/5' : 'bg-white'}`}
         >
             {columns.map((col) => (
                 <div
                     key={col.key}
-                    className={`px-4 py-2 flex-1 min-w-0 overflow-hidden text-sm ${col.className || ''} ${onRowClick && !isEditing ? 'cursor-pointer' : ''}`}
+                    className={`px-4 py-4 flex-1 min-w-0 overflow-hidden text-sm text-gray-900 ${col.className || ''} ${onRowClick && !isEditing ? 'cursor-pointer' : ''}`}
                     onClick={() => {
                         if (onRowClick && !isEditing) {
                             onRowClick(record);
@@ -40,7 +36,7 @@ const Row = ({ index, style, data: itemData }) => {
                 </div>
             ))}
             {renderActions && (
-                <div className="px-4 py-2 w-28 text-right flex-none flex items-center justify-end">
+                <div className="px-4 py-4 w-32 text-right flex-none flex items-center justify-end gap-1">
                     {renderActions(record, isEditing)}
                 </div>
             )}
@@ -60,7 +56,7 @@ const PeopleDataTable = ({
     createRow,
     emptyMessage = 'No records found.',
     rowKeyField = 'id',
-    rowHeight = 60, // Default row height
+    rowHeight = 72, // Default row height - increased for better readability
     listHeight = 600 // Default list height if AutoSizer fails or is constrained
 }) => {
     console.log('PeopleDataTable render:', { dataLength: data.length });
@@ -76,9 +72,9 @@ const PeopleDataTable = ({
     }), [data, columns, editingId, editFormData, rowKeyField, onRowClick, renderActions]);
 
     return (
-        <div className="w-full bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col h-[75vh] min-h-[500px]">
+        <div className="w-full bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col h-[75vh] min-h-[500px] shadow-sm">
             {/* Header */}
-            <div className="flex bg-baylor-green/5 border-b border-gray-200 shrink-0">
+            <div className="flex bg-gray-50 border-b border-gray-200 shrink-0">
                 {columns.map((col) => (
                     <SortableHeader
                         as="div"
@@ -87,11 +83,11 @@ const PeopleDataTable = ({
                         columnKey={col.key}
                         sortConfig={sortConfig}
                         onSort={onSort}
-                        className={`flex-1 px-4 py-3 text-sm min-w-0 ${col.headerClassName || ''}`}
+                        className={`flex-1 px-4 py-3.5 text-sm font-medium text-gray-700 min-w-0 ${col.headerClassName || ''}`}
                     />
                 ))}
                 {renderActions && (
-                    <div className="px-4 py-3 w-28 flex-none"></div>
+                    <div className="px-4 py-3.5 w-32 flex-none text-sm font-medium text-gray-700">Actions</div>
                 )}
             </div>
 

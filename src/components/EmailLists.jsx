@@ -44,6 +44,7 @@ const EmailLists = () => {
   const [editingPreset, setEditingPreset] = useState(null); // null for create, preset object for edit
   const [presetName, setPresetName] = useState('');
   const [presetSaving, setPresetSaving] = useState(false);
+  const [selectedPresetId, setSelectedPresetId] = useState(''); // tracks which preset is loaded
 
 
   useEffect(() => {
@@ -568,6 +569,8 @@ const EmailLists = () => {
       hasEmail: true
     });
     setSearchTerm('');
+    setSelectedPeople([]);
+    setSelectedPresetId('');
   };
 
   // Preset management handlers
@@ -677,6 +680,25 @@ const EmailLists = () => {
     return count;
   }, [filters]);
 
+  // Check if filters are at default values (adjuncts excluded)
+  const isDefaultFilters = useMemo(() => {
+    return (
+      filters.programs.include.length === 0 &&
+      filters.programs.exclude.length === 0 &&
+      filters.jobTitles.include.length === 0 &&
+      filters.jobTitles.exclude.length === 0 &&
+      filters.buildings.include.length === 0 &&
+      filters.buildings.exclude.length === 0 &&
+      filters.roleFilter === 'all' &&
+      filters.adjunct === 'exclude' &&
+      filters.tenured === 'all' &&
+      filters.upd === 'all' &&
+      filters.isRemote === 'all' &&
+      filters.hasEmail === true &&
+      searchTerm === ''
+    );
+  }, [filters, searchTerm]);
+
   const isAllSelected = selectedPeople.length === filteredData.length && filteredData.length > 0;
   const isPartiallySelected = selectedPeople.length > 0 && selectedPeople.length < filteredData.length;
 
@@ -706,6 +728,19 @@ const EmailLists = () => {
         </div>
       </div>
 
+      {/* Default Filters Notice */}
+      {isDefaultFilters && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-3">
+          <div className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-400 text-white flex items-center justify-center text-xs font-bold mt-0.5">
+            !
+          </div>
+          <div className="text-sm text-amber-800">
+            <span className="font-medium">Note:</span> Adjunct faculty are hidden by default.
+            Uncheck "Exclude Adjuncts" below or use the Advanced Filters to include them.
+          </div>
+        </div>
+      )}
+
       {/* Search and Filters */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
         <div className="flex items-center space-x-4">
@@ -725,9 +760,12 @@ const EmailLists = () => {
           <div className="flex items-center space-x-2">
             <FolderOpen className="w-4 h-4 text-gray-500" />
             <select
-              onChange={(e) => handleLoadPreset(e.target.value)}
+              value={selectedPresetId}
+              onChange={(e) => {
+                setSelectedPresetId(e.target.value);
+                handleLoadPreset(e.target.value);
+              }}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green min-w-[180px]"
-              defaultValue=""
             >
               <option value="">Load preset...</option>
               {presetsLoading ? (

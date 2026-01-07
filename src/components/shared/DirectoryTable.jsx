@@ -31,11 +31,11 @@ const DirectoryTable = ({
                                 columnKey={col.key}
                                 sortConfig={sortConfig}
                                 onSort={onSort}
-                                className={col.headerClassName || ''}
+                                className={`whitespace-nowrap ${col.headerClassName || ''}`}
                             />
                         ))}
                         {renderActions && (
-                            <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">
+                            <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green whitespace-nowrap">
                                 Actions
                             </th>
                         )}

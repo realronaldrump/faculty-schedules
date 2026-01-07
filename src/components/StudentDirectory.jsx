@@ -1350,14 +1350,14 @@ const StudentDirectory = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-baylor-green/5">
-                  <SortableHeader label="Name" columnKey="name" sortConfig={sortConfig} onSort={handleSort} />
-                  <SortableHeader label="Email" columnKey="email" sortConfig={sortConfig} onSort={handleSort} />
-                  <SortableHeader label="Phone" columnKey="phone" sortConfig={sortConfig} onSort={handleSort} />
-                  <SortableHeader label="Weekly Schedule" columnKey="weeklySchedule" sortConfig={sortConfig} onSort={handleSort} />
-                  <SortableHeader label="Job Title" columnKey="jobTitle" sortConfig={sortConfig} onSort={handleSort} />
-                  <SortableHeader label="Supervisor" columnKey="supervisor" sortConfig={sortConfig} onSort={handleSort} />
-                  <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">Building(s)</th>
-                  <th className="px-4 py-3"></th>
+                  <SortableHeader label="Name" columnKey="name" sortConfig={sortConfig} onSort={handleSort} className="whitespace-nowrap" />
+                  <SortableHeader label="Email" columnKey="email" sortConfig={sortConfig} onSort={handleSort} className="whitespace-nowrap" />
+                  <SortableHeader label="Phone" columnKey="phone" sortConfig={sortConfig} onSort={handleSort} className="whitespace-nowrap" />
+                  <SortableHeader label="Schedule" columnKey="weeklySchedule" sortConfig={sortConfig} onSort={handleSort} className="whitespace-nowrap" />
+                  <SortableHeader label="Job Title" columnKey="jobTitle" sortConfig={sortConfig} onSort={handleSort} className="whitespace-nowrap" />
+                  <SortableHeader label="Supervisor" columnKey="supervisor" sortConfig={sortConfig} onSort={handleSort} className="whitespace-nowrap" />
+                  <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green whitespace-nowrap">Building(s)</th>
+                  <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">

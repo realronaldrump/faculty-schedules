@@ -26,12 +26,14 @@ service cloud.firestore {
     }
 
     // Treat someone as admin if they have a custom claim OR match your email
+    function isAdmin() {
       return isSignedIn() && (
         // Custom claim on the Auth token
         request.auth.token.admin == true ||
         // Check Firestore user profile roles (supports array or map formats)
         userHasAdminRole()
       );
+    }
 
     // Admin-only access for sensitive operations
     function canWrite() {
@@ -169,6 +171,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isAdmin() || userHasAction('roomGrids.save');
       allow update, delete: if isAdmin() || userHasAction('roomGrids.delete');
+    }
+
+    // Email List Presets: shared presets that any signed-in user can create/edit
+    // Only admins can delete presets
+    match /emailListPresets/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
     }
   }
 }

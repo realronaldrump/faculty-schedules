@@ -1271,7 +1271,7 @@ const EmailLists = () => {
                   type="text"
                   value={presetName}
                   onChange={(e) => setPresetName(e.target.value)}
-                  placeholder="e.g., Marketing Team, All Professors"
+                  placeholder="e.g., Faculty Meeting Professors, Remote Adjuncts, etc."
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
                   autoFocus
                 />

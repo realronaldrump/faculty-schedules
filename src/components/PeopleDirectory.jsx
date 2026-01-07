@@ -5,6 +5,8 @@ import StaffDirectory from './StaffDirectory';
 import AdjunctDirectory from './AdjunctDirectory';
 import StudentDirectory from './StudentDirectory';
 import { Users, GraduationCap, UserCheck, UserPlus, User } from 'lucide-react';
+import { usePeople } from '../contexts/PeopleContext';
+import { useData } from '../contexts/DataContext';
 
 // Local tab definitions to switch between directory views
 const tabs = [
@@ -17,6 +19,8 @@ const tabs = [
 const PeopleDirectory = (props) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { loadPeople } = usePeople();
+  const { loadPrograms } = useData();
   
   // Allow an optional initialTab prop to deep-link directly to a specific view
   const { initialTab = 'faculty' } = props;
@@ -29,6 +33,11 @@ const PeopleDirectory = (props) => {
   };
   
   const [activeTab, setActiveTab] = useState(getInitialTab);
+
+  useEffect(() => {
+    loadPeople();
+    loadPrograms();
+  }, [loadPeople, loadPrograms]);
 
   // Update URL when tab changes
   const handleTabChange = (tabId) => {
@@ -118,10 +127,10 @@ const PeopleDirectory = (props) => {
 
           {/* Content */}
           <div className="mt-6">
-            {activeTab === 'faculty' && <FacultyDirectory {...props} />}
-            {activeTab === 'staff' && <StaffDirectory {...props} />}
-            {activeTab === 'adjunct' && <AdjunctDirectory {...props} />}
-            {activeTab === 'student' && <StudentDirectory {...props} />}
+            {activeTab === 'faculty' && <FacultyDirectory />}
+            {activeTab === 'staff' && <StaffDirectory />}
+            {activeTab === 'adjunct' && <AdjunctDirectory />}
+            {activeTab === 'student' && <StudentDirectory />}
           </div>
         </div>
       </div>

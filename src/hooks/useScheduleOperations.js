@@ -6,22 +6,23 @@
  */
 
 import { useCallback } from 'react';
-import { db, COLLECTIONS } from '../firebase';
+import { db } from '../firebase';
 import { doc, updateDoc, addDoc, deleteDoc, setDoc, collection } from 'firebase/firestore';
 import { parseCourseCode } from '../utils/courseUtils';
 import { logCreate, logUpdate, logDelete } from '../utils/changeLogger';
 import { useData } from '../contexts/DataContext';
+import { useSchedules } from '../contexts/ScheduleContext';
 import { useUI } from '../contexts/UIContext';
 
 const useScheduleOperations = () => {
   const {
     rawScheduleData,
     rawPeople,
-    loadData,
     canCreateSchedule,
     canEditSchedule,
     canDeleteSchedule
   } = useData();
+  const { refreshSchedules } = useSchedules();
 
   const { showNotification } = useUI();
 
@@ -241,7 +242,7 @@ const useScheduleOperations = () => {
       }
 
       // Refresh data
-      await loadData({ silent: true });
+      await refreshSchedules();
 
       if (isNewCourse) {
         showNotification('success', 'Schedule Created',
@@ -258,7 +259,7 @@ const useScheduleOperations = () => {
       console.error('❌ Error updating schedule:', error);
       showNotification('error', 'Update Failed', `Failed to update schedule: ${error.message}`);
     }
-  }, [rawScheduleData, rawPeople, loadData, canCreateSchedule, canEditSchedule, showNotification]);
+  }, [rawScheduleData, rawPeople, refreshSchedules, canCreateSchedule, canEditSchedule, showNotification]);
 
   // Handle schedule delete
   const handleScheduleDelete = useCallback(async (scheduleId) => {
@@ -286,7 +287,7 @@ const useScheduleOperations = () => {
         'useScheduleOperations - handleScheduleDelete'
       );
 
-      await loadData({ silent: true });
+      await refreshSchedules();
 
       showNotification('success', 'Schedule Deleted',
         `Course ${scheduleToDelete.courseCode} ${scheduleToDelete.section} has been removed successfully.`);
@@ -295,7 +296,7 @@ const useScheduleOperations = () => {
       console.error('❌ Error deleting schedule:', error);
       showNotification('error', 'Delete Failed', 'Failed to delete schedule. Please try again.');
     }
-  }, [rawScheduleData, loadData, canDeleteSchedule, showNotification]);
+  }, [rawScheduleData, refreshSchedules, canDeleteSchedule, showNotification]);
 
   return {
     handleDataUpdate,

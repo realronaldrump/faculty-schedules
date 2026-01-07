@@ -1,9 +1,11 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Download, Calendar, List, ZoomIn, ZoomOut } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import ExportModal from '../admin/ExportModal';
 import FacultyContactCard from '../FacultyContactCard';
 import { logExport } from '../../utils/activityLogger';
+import { useData } from '../../contexts/DataContext';
+import { usePeople } from '../../contexts/PeopleContext';
 
 const DAY_ORDER = ['M', 'T', 'W', 'R', 'F'];
 const DAY_LABELS = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
@@ -54,7 +56,9 @@ const accentForStudentAndJob = (studentId, jobTitle) => {
   return accentForString(combinedKey);
 };
 
-const StudentSchedules = ({ studentData = [] }) => {
+const StudentSchedules = () => {
+  const { studentData = [] } = useData();
+  const { loadPeople } = usePeople();
   const [selectedBuildings, setSelectedBuildings] = useState([]);
   const [selectedJobTitles, setSelectedJobTitles] = useState([]);
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
@@ -66,6 +70,10 @@ const StudentSchedules = ({ studentData = [] }) => {
   const [includeInactive, setIncludeInactive] = useState(false);
   const calendarRef = useRef(null);
   const listRef = useRef(null);
+
+  useEffect(() => {
+    loadPeople();
+  }, [loadPeople]);
 
   const buildingOptions = useMemo(() => {
     const set = new Set();
@@ -647,5 +655,4 @@ const StudentSchedules = ({ studentData = [] }) => {
 };
 
 export default StudentSchedules;
-
 

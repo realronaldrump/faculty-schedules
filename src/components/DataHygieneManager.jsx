@@ -34,6 +34,7 @@ import MissingDataReviewModal from './MissingDataReviewModal';
 import { ConfirmationDialog } from './CustomAlert';
 import OrphanedDataCleanupModal from './admin/OrphanedDataCleanupModal';
 import { logUpdate } from '../utils/changeLogger';
+import { useUI } from '../contexts/UIContext';
 
 // Link Person Modal Component
 const LinkPersonModal = ({ isOpen, onClose, onConfirm, schedule }) => {
@@ -377,7 +378,8 @@ const LinkRoomModal = ({ isOpen, onClose, onConfirm, schedule }) => {
 
 // Standardization preview removed
 
-const DataHygieneManager = ({ showNotification }) => {
+const DataHygieneManager = () => {
+  const { showNotification } = useUI();
   const [healthReport, setHealthReport] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [duplicates, setDuplicates] = useState([]);

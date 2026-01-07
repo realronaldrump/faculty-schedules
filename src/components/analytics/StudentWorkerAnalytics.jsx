@@ -1,4 +1,5 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ArrowUpDown,
   BarChart3,
@@ -22,6 +23,8 @@ import {
   getStudentAssignments
 } from '../../utils/studentWorkers';
 import FacultyContactCard from '../FacultyContactCard';
+import { useData } from '../../contexts/DataContext';
+import { usePeople } from '../../contexts/PeopleContext';
 
 const DEFAULT_FILTERS = {
   jobTitles: [],
@@ -52,7 +55,10 @@ const ProgressBar = ({ value, maxValue, label, subLabel, color = 'baylor-green' 
 
 
 
-const StudentWorkerAnalytics = ({ studentData = [], onNavigate }) => {
+const StudentWorkerAnalytics = () => {
+  const navigate = useNavigate();
+  const { studentData = [] } = useData();
+  const { loadPeople } = usePeople();
   const [searchText, setSearchText] = useState('');
   const [filters, setFilters] = useState(() => ({ ...DEFAULT_FILTERS }));
   const [sortConfig, setSortConfig] = useState({ key: 'weeklyHours', direction: 'desc' });
@@ -60,6 +66,15 @@ const StudentWorkerAnalytics = ({ studentData = [], onNavigate }) => {
   const [selectedAssignments, setSelectedAssignments] = useState([]);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
+
+  const handleNavigate = useCallback((path) => {
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    navigate(normalized);
+  }, [navigate]);
+
+  useEffect(() => {
+    loadPeople();
+  }, [loadPeople]);
 
   const assignments = useMemo(() => {
     if (!Array.isArray(studentData)) return [];
@@ -377,14 +392,12 @@ const StudentWorkerAnalytics = ({ studentData = [], onNavigate }) => {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {onNavigate && (
-            <button
-              onClick={() => onNavigate('people/people-directory?tab=student')}
-              className="px-4 py-2 rounded-lg border border-baylor-green/40 text-baylor-green hover:bg-baylor-green/10 transition-colors font-medium"
-            >
-              View Student Directory
-            </button>
-          )}
+          <button
+            onClick={() => handleNavigate('people/people-directory?tab=student')}
+            className="px-4 py-2 rounded-lg border border-baylor-green/40 text-baylor-green hover:bg-baylor-green/10 transition-colors font-medium"
+          >
+            View Student Directory
+          </button>
         </div>
       </div>
 

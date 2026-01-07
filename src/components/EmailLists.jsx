@@ -1,10 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Plus, Minus, Settings, UserCog, BookOpen, Wifi } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import FacultyContactCard from './FacultyContactCard';
 import CustomAlert from './CustomAlert';
+import { useData } from '../contexts/DataContext';
+import { usePeople } from '../contexts/PeopleContext';
 
-const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawScheduleData }) => {
+const EmailLists = () => {
+  const { facultyData = [], staffData = [], studentData = [], scheduleData = [] } = useData();
+  const { loadPeople } = usePeople();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeople, setSelectedPeople] = useState([]);
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
@@ -30,6 +34,10 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
   const [showOnlyWithCourses, setShowOnlyWithCourses] = useState(false);
   const [outlookVersion, setOutlookVersion] = useState('new'); // 'new' uses commas, 'old' uses semicolons
+
+  useEffect(() => {
+    loadPeople();
+  }, [loadPeople]);
 
   // Helper function to extract building name from office location
   const extractBuildingName = (officeLocation) => {

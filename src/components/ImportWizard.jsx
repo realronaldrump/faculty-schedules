@@ -5,8 +5,14 @@ import { parseCLSSCSV } from '../utils/dataImportUtils';
 import { previewImportChanges, commitTransaction, projectSchedulePreviewRow } from '../utils/importTransactionUtils';
 import ImportPreviewModal from './ImportPreviewModal';
 import ImportHistoryModal from './ImportHistoryModal';
+import { useSchedules } from '../contexts/ScheduleContext';
+import { usePeople } from '../contexts/PeopleContext';
+import { useUI } from '../contexts/UIContext';
 
-const ImportWizard = ({ onNavigate, showNotification, selectedSemester, availableSemesters, onSemesterDataImported }) => {
+const ImportWizard = () => {
+  const { selectedSemester, refreshSchedules } = useSchedules();
+  const { loadPeople } = usePeople();
+  const { showNotification } = useUI();
   const { canImportData, canImportSchedule } = usePermissions();
   const [step, setStep] = useState(1);
   const [fileName, setFileName] = useState('');
@@ -20,6 +26,13 @@ const ImportWizard = ({ onNavigate, showNotification, selectedSemester, availabl
   const [showHistory, setShowHistory] = useState(false);
   const [resultsSummary, setResultsSummary] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleDataRefresh = async () => {
+    await Promise.all([
+      refreshSchedules(),
+      loadPeople({ force: true })
+    ]);
+  };
 
   const isCLSS = useMemo(() => {
     if (!rawText) return false;
@@ -166,7 +179,11 @@ const ImportWizard = ({ onNavigate, showNotification, selectedSemester, availabl
       setShowPreviewModal(false);
       setPreviewTransaction(null);
       setStep(4);
-      onSemesterDataImported?.();
+      if (importType === 'schedule') {
+        await refreshSchedules();
+      } else {
+        await loadPeople({ force: true });
+      }
     } catch (e) {
       console.error('Commit error:', e);
       showNotification?.('error', 'Import Failed', e.message || 'Failed to apply changes');
@@ -350,7 +367,7 @@ const ImportWizard = ({ onNavigate, showNotification, selectedSemester, availabl
         <ImportHistoryModal
           onClose={() => setShowHistory(false)}
           showNotification={showNotification}
-          onDataRefresh={onSemesterDataImported}
+          onDataRefresh={handleDataRefresh}
         />
       )}
     </div>
@@ -358,5 +375,3 @@ const ImportWizard = ({ onNavigate, showNotification, selectedSemester, availabl
 };
 
 export default ImportWizard;
-
-

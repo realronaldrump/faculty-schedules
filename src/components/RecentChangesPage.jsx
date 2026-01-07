@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
   Clock, 
@@ -14,13 +15,25 @@ import {
   BarChart3
 } from 'lucide-react';
 import { formatChangeForDisplay, groupChangesByDate, getChangeSummary } from '../utils/recentChanges';
+import { useData } from '../contexts/DataContext';
 
-const RecentChangesPage = ({ recentChanges = [], onNavigate }) => {
+const RecentChangesPage = () => {
+  const navigate = useNavigate();
+  const { recentChanges = [], loadRecentChanges } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAction, setSelectedAction] = useState('all');
   const [selectedCollection, setSelectedCollection] = useState('all');
   const [selectedSource, setSelectedSource] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
+
+  const handleNavigate = useCallback((path) => {
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    navigate(normalized);
+  }, [navigate]);
+
+  useEffect(() => {
+    loadRecentChanges();
+  }, [loadRecentChanges]);
 
   // Get summary statistics
   const summary = useMemo(() => getChangeSummary(recentChanges), [recentChanges]);
@@ -90,7 +103,7 @@ const RecentChangesPage = ({ recentChanges = [], onNavigate }) => {
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <button 
-            onClick={() => onNavigate('dashboard')}
+            onClick={() => handleNavigate('dashboard')}
             className="btn-ghost p-2"
           >
             <ArrowLeft className="w-5 h-5" />

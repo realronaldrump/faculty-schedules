@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Users,
   Edit,
@@ -23,16 +23,16 @@ import { db, COLLECTIONS } from '../firebase';
 import { logUpdate } from '../utils/changeLogger';
 import { usePermissions } from '../utils/permissions';
 import { getProgramNameKey, isReservedProgramName, normalizeProgramName } from '../utils/programUtils';
+import { useData } from '../contexts/DataContext';
+import { usePeople } from '../contexts/PeopleContext';
+import { usePeopleOperations } from '../hooks';
+import { useUI } from '../contexts/UIContext';
 
-const ProgramManagement = ({
-  facultyData,
-  programs = [],
-  onProgramCreate,
-  onFacultyUpdate,
-  onStaffUpdate,
-  showNotification,
-  rawScheduleData
-}) => {
+const ProgramManagement = () => {
+  const { facultyData = [], programs = [], loadPrograms } = useData();
+  const { loadPeople } = usePeople();
+  const { handleProgramCreate, handleFacultyUpdate } = usePeopleOperations();
+  const { showNotification } = useUI();
   const { canAssignProgramUPD, canEditProgram, canCreateProgram } = usePermissions();
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [editingUPD, setEditingUPD] = useState(null);
@@ -47,6 +47,11 @@ const ProgramManagement = ({
   const [expandedPrograms, setExpandedPrograms] = useState(new Set());
   const allowCreateProgram = canCreateProgram();
   const activePrograms = Array.isArray(programs) ? programs : [];
+
+  useEffect(() => {
+    loadPeople();
+    loadPrograms();
+  }, [loadPeople, loadPrograms]);
 
   // Organize faculty by program using the reliable program data
   const programData = useMemo(() => {
@@ -209,7 +214,7 @@ const ProgramManagement = ({
       }
 
       // Set new UPD on the faculty member
-      await onFacultyUpdate({
+      await handleFacultyUpdate({
         ...faculty,
         isUPD: true,
         updatedAt: new Date().toISOString()
@@ -304,7 +309,7 @@ const ProgramManagement = ({
         updatedAt: new Date().toISOString()
       };
 
-      await onFacultyUpdate(updateData);
+      await handleFacultyUpdate(updateData);
 
       showNotification(
         'success',
@@ -349,7 +354,7 @@ const ProgramManagement = ({
         updatedAt: new Date().toISOString()
       };
 
-      await onFacultyUpdate(updateData);
+      await handleFacultyUpdate(updateData);
 
       showNotification(
         'success',
@@ -383,15 +388,6 @@ const ProgramManagement = ({
       return;
     }
 
-    if (!onProgramCreate) {
-      showNotification(
-        'error',
-        'Program Creation Unavailable',
-        'Program creation is not available right now. Please refresh and try again.'
-      );
-      return;
-    }
-
     const programName = normalizeProgramName(newProgramName);
 
     if (!programName) {
@@ -413,7 +409,7 @@ const ProgramManagement = ({
 
     setIsCreatingProgram(true);
     try {
-      const created = await onProgramCreate({ name: programName });
+      const created = await handleProgramCreate({ name: programName });
       if (created) {
         setNewProgramName('');
         setShowCreateProgram(false);
@@ -797,7 +793,7 @@ const ProgramManagement = ({
         <FacultyContactCard
           faculty={selectedFacultyForCard}
           onClose={() => setSelectedFacultyForCard(null)}
-          onUpdate={onFacultyUpdate}
+          onUpdate={handleFacultyUpdate}
           showNotification={showNotification}
         />
       )}

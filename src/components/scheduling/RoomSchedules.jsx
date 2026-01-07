@@ -7,8 +7,17 @@ import CourseDetailModal from './CourseDetailModal';
 import { logExport } from '../../utils/activityLogger';
 import { getBuildingFromRoom, getCanonicalBuildingList } from '../../utils/buildingUtils';
 import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
+import { useData } from '../../contexts/DataContext';
+import { usePeople } from '../../contexts/PeopleContext';
 
-const RoomSchedules = ({ scheduleData, facultyData, rawScheduleData, onNavigate }) => {
+const RoomSchedules = () => {
+  const { scheduleData = [], facultyData = [] } = useData();
+  const { loadPeople } = usePeople();
+
+  useEffect(() => {
+    loadPeople();
+  }, [loadPeople]);
+
   const getDefaultRoomScheduleDay = () => {
     const jsDay = new Date().getDay(); // 0 Sun ... 6 Sat
     const mapping = { 1: 'M', 2: 'T', 3: 'W', 4: 'R', 5: 'F' };

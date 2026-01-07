@@ -1,4 +1,5 @@
 import React, { useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Users,
   Calendar,
@@ -10,8 +11,11 @@ import {
 } from 'lucide-react';
 // Recent changes removed from dashboard
 import { useAuth } from '../contexts/AuthContext';
+import { useData } from '../contexts/DataContext';
 
-const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, selectedSemester }) => {
+const Dashboard = () => {
+  const navigate = useNavigate();
+  const { analytics, selectedSemester } = useData();
   const { user, userProfile, canAccess } = useAuth();
 
   const displayName = userProfile?.displayName || user?.displayName || (user?.email ? user.email.split('@')[0] : '');
@@ -22,6 +26,11 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
     if (typeof canAccess !== 'function') return true;
     return canAccess(pageId);
   }, [canAccess]);
+
+  const handleNavigate = useCallback((path) => {
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    navigate(normalized);
+  }, [navigate]);
 
   const quickActions = useMemo(() => {
     const actions = [
@@ -77,8 +86,8 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
 
     return actions
       .filter(action => !action.requiredAccess || hasAccess(action.requiredAccess))
-      .map(action => ({ ...action, action: () => onNavigate(action.path) }));
-  }, [hasAccess, onNavigate]);
+      .map(action => ({ ...action, action: () => handleNavigate(action.path) }));
+  }, [hasAccess, handleNavigate]);
 
   const QuickActionCard = ({ title, description, icon: Icon, action, color, textColor }) => (
     <div
@@ -125,7 +134,7 @@ const Dashboard = ({ analytics, editHistory, recentChanges = [], onNavigate, sel
             </p>
             {hasAccess('administration/import-wizard') ? (
               <button
-                onClick={() => onNavigate('administration/import-wizard')}
+                onClick={() => handleNavigate('administration/import-wizard')}
                 className="btn-primary"
               >
                 <FileText className="w-4 h-4 mr-2 inline-block" />

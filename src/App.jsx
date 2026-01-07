@@ -43,9 +43,8 @@ import MaintenancePage from './components/MaintenancePage';
 import Notification from './components/Notification';
 
 import { useAuth } from './contexts/AuthContext.jsx';
-import { useData } from './contexts/DataContext.jsx';
 import { useUI } from './contexts/UIContext.jsx';
-import { useScheduleOperations, usePeopleOperations } from './hooks';
+import { useSchedules } from './contexts/ScheduleContext.jsx';
 import { registerNavigationPages } from './utils/pageRegistry';
 
 import {
@@ -148,30 +147,16 @@ const MAINTENANCE_UNTIL = "2025-07-03T08:00:00";
 
 function App() {
   // Context hooks
-  const { user, signOut, loading: authLoading, canAccess } = useAuth();
+  const { signOut } = useAuth();
   const {
-    scheduleData,
-    facultyData,
-    staffData,
-    studentData,
-    directoryData,
-    programs,
-    analytics,
-    editHistory,
-    recentChanges,
-    rawScheduleData,
     selectedSemester,
     setSelectedSemester,
     availableSemesters,
-    loading,
-    loadData,
-    refreshData,
-    canEdit
-  } = useData();
+    loading
+  } = useSchedules();
 
   const {
     notification,
-    showNotification,
     hideNotification,
     sidebarCollapsed,
     setSidebarCollapsed,
@@ -182,19 +167,6 @@ function App() {
     showLogoutConfirm,
     setShowLogoutConfirm
   } = useUI();
-
-  // CRUD operation hooks
-  const { handleDataUpdate, handleScheduleDelete } = useScheduleOperations();
-  const {
-    handleFacultyUpdate,
-    handleFacultyDelete,
-    handleStaffUpdate,
-    handleStaffDelete,
-    handleStudentUpdate,
-    handleStudentDelete,
-    handleProgramCreate,
-    handleRevertChange
-  } = usePeopleOperations();
 
   // Router hooks
   const location = useLocation();
@@ -228,9 +200,8 @@ function App() {
     const authStatus = localStorage.getItem('isAuthenticated');
     if (authStatus === 'true') {
       setIsAuthenticated(true);
-      loadData();
     }
-  }, [loadData]);
+  }, []);
 
   // Click outside handler for semester dropdown
   useEffect(() => {
@@ -246,9 +217,6 @@ function App() {
   // Login handler
   const handleLogin = (status) => {
     setIsAuthenticated(status);
-    if (status) {
-      loadData();
-    }
   };
 
   // Logout handlers
@@ -292,38 +260,6 @@ function App() {
     return navigationItems.find(item => item.id === pathParts[0]) || null;
   };
 
-  // Props object for page components (backwards compatibility)
-  const pageProps = {
-    scheduleData,
-    directoryData,
-    facultyData,
-    staffData,
-    studentData,
-    programs,
-    analytics,
-    editHistory,
-    recentChanges,
-    onDataUpdate: handleDataUpdate,
-    onFacultyUpdate: handleFacultyUpdate,
-    onStaffUpdate: handleStaffUpdate,
-    onStudentUpdate: handleStudentUpdate,
-    onFacultyDelete: handleFacultyDelete,
-    onStaffDelete: handleStaffDelete,
-    onStudentDelete: handleStudentDelete,
-    onScheduleDelete: handleScheduleDelete,
-    onProgramCreate: handleProgramCreate,
-    onRevertChange: handleRevertChange,
-    onNavigate: handleNavigate,
-    showNotification,
-    canEdit,
-    selectedSemester,
-    availableSemesters,
-    onSemesterDataImported: refreshData,
-    pinnedPages,
-    togglePinPage,
-    rawScheduleData
-  };
-
   // Page content renderer
   const renderPageContent = () => {
     if (loading) {
@@ -339,57 +275,57 @@ function App() {
 
     switch (currentPage) {
       case 'dashboard':
-        return <ProtectedContent pageId="dashboard"><Dashboard {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="dashboard"><Dashboard /></ProtectedContent>;
       case 'command-center':
-        return <ProtectedContent pageId="command-center"><CommandCenter {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="command-center"><CommandCenter /></ProtectedContent>;
       case 'scheduling/faculty-schedules':
-        return <ProtectedContent pageId="scheduling/faculty-schedules"><FacultySchedules {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="scheduling/faculty-schedules"><FacultySchedules /></ProtectedContent>;
       case 'scheduling/group-meeting-scheduler':
-        return <ProtectedContent pageId="scheduling/group-meeting-scheduler"><GroupMeetings {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="scheduling/group-meeting-scheduler"><GroupMeetings /></ProtectedContent>;
       case 'scheduling/individual-availability':
-        return <ProtectedContent pageId="scheduling/individual-availability"><IndividualAvailability {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="scheduling/individual-availability"><IndividualAvailability /></ProtectedContent>;
       case 'scheduling/room-schedules':
-        return <ProtectedContent pageId="scheduling/room-schedules"><RoomSchedules {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="scheduling/room-schedules"><RoomSchedules /></ProtectedContent>;
       case 'scheduling/student-schedules':
-        return <ProtectedContent pageId="scheduling/student-schedules"><StudentSchedules {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="scheduling/student-schedules"><StudentSchedules /></ProtectedContent>;
       case 'people/people-directory':
-        return <ProtectedContent pageId="people/people-directory"><PeopleDirectory {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="people/people-directory"><PeopleDirectory /></ProtectedContent>;
       case 'people/baylor-id-manager':
-        return <ProtectedContent pageId="people/baylor-id-manager"><BaylorIDManager {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="people/baylor-id-manager"><BaylorIDManager /></ProtectedContent>;
       case 'analytics/program-management':
-        return <ProtectedContent pageId="analytics/program-management"><ProgramManagement {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="analytics/program-management"><ProgramManagement /></ProtectedContent>;
       case 'people/email-lists':
-        return <ProtectedContent pageId="people/email-lists"><EmailLists {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="people/email-lists"><EmailLists /></ProtectedContent>;
       case 'resources/building-directory':
-        return <ProtectedContent pageId="resources/building-directory"><BuildingDirectory {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="resources/building-directory"><BuildingDirectory /></ProtectedContent>;
       case 'analytics/department-insights':
-        return <ProtectedContent pageId="analytics/department-insights"><DepartmentInsights {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="analytics/department-insights"><DepartmentInsights /></ProtectedContent>;
       case 'analytics/student-worker-analytics':
-        return <ProtectedContent pageId="analytics/student-worker-analytics"><StudentWorkerAnalytics {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="analytics/student-worker-analytics"><StudentWorkerAnalytics /></ProtectedContent>;
       case 'analytics/course-management':
-        return <ProtectedContent pageId="analytics/course-management"><CourseManagement {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="analytics/course-management"><CourseManagement /></ProtectedContent>;
       case 'administration/recent-changes':
-        return <ProtectedContent pageId="administration/recent-changes"><RecentChangesPage {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="administration/recent-changes"><RecentChangesPage /></ProtectedContent>;
       case 'administration/import-wizard':
-        return <ProtectedContent pageId="administration/import-wizard"><ImportWizard {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="administration/import-wizard"><ImportWizard /></ProtectedContent>;
       case 'administration/data-hygiene':
-        return <ProtectedContent pageId="administration/data-hygiene"><DataHygieneManager {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="administration/data-hygiene"><DataHygieneManager /></ProtectedContent>;
       case 'administration/crn-tools':
-        return <ProtectedContent pageId="administration/crn-tools"><CRNQualityTools {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="administration/crn-tools"><CRNQualityTools /></ProtectedContent>;
       case 'administration/outlook-export':
-        return <ProtectedContent pageId="administration/outlook-export"><OutlookRoomExport {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="administration/outlook-export"><OutlookRoomExport /></ProtectedContent>;
       case 'administration/baylor-systems':
-        return <ProtectedContent pageId="administration/baylor-systems"><SystemsPage {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="administration/baylor-systems"><SystemsPage /></ProtectedContent>;
       case 'administration/baylor-acronyms':
-        return <ProtectedContent pageId="administration/baylor-acronyms"><BaylorAcronyms {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="administration/baylor-acronyms"><BaylorAcronyms /></ProtectedContent>;
       case 'resources/room-grid-generator':
-        return <ProtectedContent pageId="resources/room-grid-generator"><RoomGridGenerator {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="resources/room-grid-generator"><RoomGridGenerator /></ProtectedContent>;
       case 'administration/access-control':
-        return <ProtectedContent pageId="administration/access-control"><AccessControl {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="administration/access-control"><AccessControl /></ProtectedContent>;
       case 'administration/user-activity':
-        return <ProtectedContent pageId="administration/user-activity"><UserActivityDashboard {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="administration/user-activity"><UserActivityDashboard /></ProtectedContent>;
       default:
-        return <ProtectedContent pageId="dashboard"><Dashboard {...pageProps} /></ProtectedContent>;
+        return <ProtectedContent pageId="dashboard"><Dashboard /></ProtectedContent>;
     }
   };
 

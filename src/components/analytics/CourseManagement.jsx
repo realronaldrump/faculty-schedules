@@ -5,18 +5,24 @@ import FacultyContactCard from '../FacultyContactCard';
 import { formatChangeForDisplay } from '../../utils/recentChanges';
 import { parseCourseCode } from '../../utils/courseUtils';
 import { parseTime } from '../../utils/timeUtils';
+import { useData } from '../../contexts/DataContext';
+import { usePeople } from '../../contexts/PeopleContext';
+import { useScheduleOperations, usePeopleOperations } from '../../hooks';
+import { useUI } from '../../contexts/UIContext';
 
-const CourseManagement = ({
-  scheduleData,
-  facultyData,
-  rawScheduleData,
-  editHistory,
-  recentChanges = [],
-  onDataUpdate,
-  onScheduleDelete,
-  onRevertChange,
-  showNotification
-}) => {
+const CourseManagement = () => {
+  const {
+    scheduleData = [],
+    facultyData = [],
+    editHistory = [],
+    recentChanges = [],
+    loadEditHistory,
+    loadRecentChanges
+  } = useData();
+  const { loadPeople } = usePeople();
+  const { handleDataUpdate, handleScheduleDelete } = useScheduleOperations();
+  const { handleRevertChange } = usePeopleOperations();
+  const { showNotification } = useUI();
   const [editingRowId, setEditingRowId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [historyVisible, setHistoryVisible] = useState(false);
@@ -48,6 +54,12 @@ const CourseManagement = ({
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [selectedExportFields, setSelectedExportFields] = useState([]);
   const [selectedRows, setSelectedRows] = useState(new Set());
+
+  useEffect(() => {
+    loadPeople();
+    loadEditHistory();
+    loadRecentChanges();
+  }, [loadPeople, loadEditHistory, loadRecentChanges]);
 
   const computeCourseMetadata = (courseCode) => {
     if (!courseCode || typeof courseCode !== 'string') {
@@ -604,7 +616,7 @@ const CourseManagement = ({
       return;
     }
 
-    onDataUpdate(editFormData);
+    handleDataUpdate(editFormData);
     setEditingRowId(null);
     setEditFormData({});
   };
@@ -652,7 +664,7 @@ const CourseManagement = ({
       title: 'Delete Schedule Entry',
       message: 'Are you sure you want to delete this schedule entry? This action cannot be undone.',
       onConfirm: () => {
-        if (onScheduleDelete) onScheduleDelete(scheduleId);
+        handleScheduleDelete(scheduleId);
         setInlineConfirm({ isOpen: false });
       },
       onCancel: () => setInlineConfirm({ isOpen: false })
@@ -685,7 +697,7 @@ const CourseManagement = ({
       catalogNumber,
       'Course Type': program
     };
-    onDataUpdate(courseWithId);
+    handleDataUpdate(courseWithId);
     setNewCourseData({});
     setShowAddCourseForm(false);
   };
@@ -1432,7 +1444,7 @@ const CourseManagement = ({
                     </div>
                     {!change.isRevert && (
                       <button
-                        onClick={() => onRevertChange(change, index)}
+                        onClick={() => handleRevertChange(change, index)}
                         className="p-2 rounded-full text-gray-600 hover:bg-gray-200 transition-colors"
                         title="Revert this change"
                       >

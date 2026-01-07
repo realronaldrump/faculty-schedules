@@ -141,6 +141,7 @@ export const PeopleProvider = ({ children }) => {
         people: rawPeople,
         loading,
         error,
+        loaded,
         loadPeople,
         addPerson,
         updatePerson,
@@ -148,7 +149,7 @@ export const PeopleProvider = ({ children }) => {
         facultyData,
         staffData,
         studentData
-    }), [rawPeople, loading, error, loadPeople, addPerson, updatePerson, deletePerson, facultyData, staffData, studentData]);
+    }), [rawPeople, loading, error, loaded, loadPeople, addPerson, updatePerson, deletePerson, facultyData, staffData, studentData]);
 
     return (
         <PeopleContext.Provider value={value}>

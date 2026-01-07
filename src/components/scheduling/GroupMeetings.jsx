@@ -2,8 +2,12 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, Clock, Users, Calendar, X, CheckCircle, Eye, GraduationCap } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
 import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
+import { useData } from '../../contexts/DataContext';
+import { usePeople } from '../../contexts/PeopleContext';
 
-const GroupMeetings = ({ scheduleData, facultyData, rawScheduleData, onNavigate }) => {
+const GroupMeetings = () => {
+  const { scheduleData = [], facultyData = [] } = useData();
+  const { loadPeople } = usePeople();
   const [selectedProfessors, setSelectedProfessors] = useState([]);
   const [meetingDuration, setMeetingDuration] = useState(60);
   const [bufferTime, setBufferTime] = useState(15);
@@ -17,6 +21,10 @@ const GroupMeetings = ({ scheduleData, facultyData, rawScheduleData, onNavigate 
   const [isProgramDropdownOpen, setIsProgramDropdownOpen] = useState(false);
   const [programSearchTerm, setProgramSearchTerm] = useState('');
   const programDropdownRef = useRef(null);
+
+  useEffect(() => {
+    loadPeople();
+  }, [loadPeople]);
 
   // Close room modal when clicking outside
   useEffect(() => {

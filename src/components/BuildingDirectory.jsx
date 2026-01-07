@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Building2,
   MapPin,
@@ -17,14 +17,12 @@ import {
   Wifi
 } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
+import { useData } from '../contexts/DataContext';
+import { usePeople } from '../contexts/PeopleContext';
 
-const BuildingDirectory = ({
-  facultyData,
-  staffData,
-  showNotification,
-  scheduleData,
-  rawScheduleData
-}) => {
+const BuildingDirectory = () => {
+  const { facultyData = [], staffData = [] } = useData();
+  const { loadPeople } = usePeople();
   const [selectedPersonForCard, setSelectedPersonForCard] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [selectedBuilding, setSelectedBuilding] = useState('all');
@@ -32,6 +30,10 @@ const BuildingDirectory = ({
   const [showStaff, setShowStaff] = useState(true);
   const [showFaculty, setShowFaculty] = useState(true);
   const [showAdjuncts, setShowAdjuncts] = useState(true);
+
+  useEffect(() => {
+    loadPeople();
+  }, [loadPeople]);
 
   // Helper function to extract building name from office location
   const extractBuildingName = (officeLocation) => {

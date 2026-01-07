@@ -7,8 +7,10 @@ import { db } from '../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { logUpdate } from '../utils/changeLogger';
 import MultiSelectDropdown from './MultiSelectDropdown';
+import { useUI } from '../contexts/UIContext';
 
-const CRNQualityTools = ({ showNotification }) => {
+const CRNQualityTools = () => {
+  const { showNotification } = useUI();
   const { canUpdateCRN } = usePermissions();
   const [analysis, setAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -407,5 +409,4 @@ const CRNQualityTools = ({ showNotification }) => {
 };
 
 export default CRNQualityTools;
-
 

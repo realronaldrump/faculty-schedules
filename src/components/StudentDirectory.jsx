@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Edit, Save, X, GraduationCap, Mail, Phone, PhoneOff, Clock, Search, Plus, RotateCcw, History, Trash2, Filter, Download, BarChart3, ArrowRight } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import FacultyContactCard from './FacultyContactCard';
@@ -11,6 +12,9 @@ import {
   getStudentAssignments
 } from '../utils/studentWorkers';
 import { formatPhoneNumber } from '../utils/directoryUtils';
+import { useData } from '../contexts/DataContext';
+import { usePeopleOperations } from '../hooks';
+import { useUI } from '../contexts/UIContext';
 
 const WEEKDAY_OPTIONS = [
   { value: 'M', label: 'Mon' },
@@ -126,7 +130,11 @@ const toComparableValue = (value) => {
   return String(value).toLowerCase();
 };
 
-const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStudentDelete, showNotification, onNavigate }) => {
+const StudentDirectory = () => {
+  const navigate = useNavigate();
+  const { studentData } = useData();
+  const { handleStudentUpdate, handleStudentDelete } = usePeopleOperations();
+  const { showNotification } = useUI();
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [filterText, setFilterText] = useState('');
@@ -484,11 +492,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
   };
 
   const goToAnalyticsPage = () => {
-    if (typeof onNavigate === 'function') {
-      onNavigate('analytics/student-worker-analytics');
-    } else if (typeof window !== 'undefined') {
-      window.location.hash = '#analytics/student-worker-analytics';
-    }
+    navigate('/analytics/student-worker-analytics');
   };
 
   const startEdit = (student) => {
@@ -582,7 +586,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
         newData: { ...editFormData }
       }]);
 
-      await onStudentUpdate(payload);
+      await handleStudentUpdate(payload);
       setEditingId(null);
       setEditFormData({});
       setErrors({});
@@ -622,7 +626,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     }
 
     try {
-      await onStudentUpdate({ ...payload, isActive: payload.isActive !== undefined ? payload.isActive : true });
+      await handleStudentUpdate({ ...payload, isActive: payload.isActive !== undefined ? payload.isActive : true });
       setIsCreating(false);
       resetCreateState();
       setErrors({});
@@ -641,7 +645,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
   };
 
   const executeDelete = async () => {
-    if (studentToDelete && onStudentDelete) {
+    if (studentToDelete) {
       try {
         // Save to history for undo
         setChangeHistory(prev => [...prev, {
@@ -650,7 +654,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
           originalData: studentToDelete
         }]);
 
-        await onStudentDelete(studentToDelete.id);
+        await handleStudentDelete(studentToDelete.id);
         setShowDeleteConfirm(false);
         setStudentToDelete(null);
       } catch (error) {
@@ -663,9 +667,9 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
     const lastChange = changeHistory[changeHistory.length - 1];
     if (lastChange) {
       if (lastChange.type === 'update') {
-        onStudentUpdate(lastChange.originalData);
+        handleStudentUpdate(lastChange.originalData);
       } else if (lastChange.type === 'delete') {
-        onStudentUpdate(lastChange.originalData);
+        handleStudentUpdate(lastChange.originalData);
       }
       setChangeHistory(prev => prev.slice(0, -1));
     }
@@ -1774,7 +1778,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
                   person={selectedStudentForCard}
                   onClose={() => setSelectedStudentForCard(null)}
                   personType="student"
-                  onUpdate={onStudentUpdate}
+                  onUpdate={handleStudentUpdate}
                 />
               </div>
             </div>

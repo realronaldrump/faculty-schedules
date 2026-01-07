@@ -4,8 +4,10 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy 
 import { PlusCircle, Edit, Trash2, Save, XCircle, AlertTriangle } from 'lucide-react';
 import { logCreate, logUpdate, logDelete } from '../utils/changeLogger';
 import { usePermissions } from '../utils/permissions';
+import { useUI } from '../contexts/UIContext';
 
-const BaylorAcronyms = ({ showNotification }) => {
+const BaylorAcronyms = () => {
+    const { showNotification } = useUI();
     const { canCreateAcronym, canEditAcronym, canDeleteAcronym } = usePermissions();
     const [acronyms, setAcronyms] = useState([]);
     const [categories, setCategories] = useState([]);

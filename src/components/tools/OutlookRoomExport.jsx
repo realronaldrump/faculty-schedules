@@ -3,6 +3,9 @@ import { Calendar, Download, MapPin, Plus, Trash2, AlertCircle, FileArchive, Che
 import JSZip from 'jszip';
 import { parseMeetingPatterns } from '../../utils/dataImportUtils';
 import { logExport } from '../../utils/activityLogger';
+import { useData } from '../../contexts/DataContext';
+import { useSchedules } from '../../contexts/ScheduleContext';
+import { useUI } from '../../contexts/UIContext';
 
 const STORAGE_KEY = 'tools.outlook-export.term-configs';
 
@@ -221,7 +224,10 @@ const buildVTimezone = () => [
   'END:VTIMEZONE'
 ];
 
-const OutlookRoomExport = ({ rawScheduleData = [], availableSemesters = [], showNotification }) => {
+const OutlookRoomExport = () => {
+  const { rawScheduleData = [] } = useData();
+  const { availableSemesters = [] } = useSchedules();
+  const { showNotification } = useUI();
   const [termConfigs, setTermConfigs] = useState(() => {
     if (typeof window === 'undefined') return {};
     try {

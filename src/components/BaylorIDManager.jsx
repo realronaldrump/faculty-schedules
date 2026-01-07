@@ -1,6 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { IdCard, Search, Edit, Save, X, Filter, CheckCircle2, AlertCircle, Download } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
+import { usePeople } from '../contexts/PeopleContext';
+import { usePeopleOperations } from '../hooks';
+import { useUI } from '../contexts/UIContext';
+import { usePermissions } from '../utils/permissions';
 
 const hasRole = (person, roleKey) => {
   const roles = person?.roles;
@@ -25,7 +29,11 @@ const getPersonType = (person) => {
   return 'faculty'; // default to faculty
 };
 
-const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, onStudentUpdate, showNotification, canEdit }) => {
+const BaylorIDManager = () => {
+  const { people: directoryData, loadPeople } = usePeople();
+  const { handleFacultyUpdate, handleStaffUpdate, handleStudentUpdate } = usePeopleOperations();
+  const { showNotification } = useUI();
+  const { canEdit } = usePermissions();
   const [filterText, setFilterText] = useState('');
   const [roleChecks, setRoleChecks] = useState({ faculty: true, adjunct: true, staff: true, studentWorkers: true });
   const [onlyMissing, setOnlyMissing] = useState(false);
@@ -33,6 +41,10 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
   const [baylorIdDraft, setBaylorIdDraft] = useState('');
   const [error, setError] = useState('');
   const [selectedPersonForCard, setSelectedPersonForCard] = useState(null);
+
+  useEffect(() => {
+    loadPeople();
+  }, [loadPeople]);
 
   const people = useMemo(() => Array.isArray(directoryData) ? directoryData : [], [directoryData]);
 
@@ -112,12 +124,12 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
     const payload = { id: person.id, baylorId: baylorIdDraft.replace(/\D/g, '') };
     const roles = getDisplayRoleLabels(person);
     try {
-      if (roles.includes('student') && onStudentUpdate) {
-        await onStudentUpdate(payload);
-      } else if (roles.includes('staff') && !roles.includes('faculty') && onStaffUpdate) {
-        await onStaffUpdate(payload);
-      } else if (onFacultyUpdate) {
-        await onFacultyUpdate(payload, person);
+      if (roles.includes('student')) {
+        await handleStudentUpdate(payload);
+      } else if (roles.includes('staff') && !roles.includes('faculty')) {
+        await handleStaffUpdate(payload);
+      } else {
+        await handleFacultyUpdate(payload, person);
       }
       setEditingId(null);
       setBaylorIdDraft('');
@@ -335,5 +347,3 @@ const BaylorIDManager = ({ directoryData = [], onFacultyUpdate, onStaffUpdate, o
 };
 
 export default BaylorIDManager;
-
-

@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   BarChart3,
   Users,
@@ -13,8 +14,13 @@ import {
 } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
 import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
+import { useData } from '../../contexts/DataContext';
+import { usePeople } from '../../contexts/PeopleContext';
 
-const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analytics, selectedSemester, onNavigate }) => {
+const DepartmentInsights = () => {
+  const navigate = useNavigate();
+  const { scheduleData = [], facultyData = [], analytics, selectedSemester } = useData();
+  const { loadPeople } = usePeople();
   const [showWarning, setShowWarning] = useState(() => localStorage.getItem('insightsWarningDismissed') !== 'true');
   const [facultySort, setFacultySort] = useState({ key: 'totalHours', direction: 'desc' });
   const [roomSort, setRoomSort] = useState({ key: 'hours', direction: 'desc' });
@@ -22,6 +28,15 @@ const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analyt
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
 
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
+
+  const handleNavigate = useCallback((path) => {
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    navigate(normalized);
+  }, [navigate]);
+
+  useEffect(() => {
+    loadPeople();
+  }, [loadPeople]);
 
   // Calculate hourly usage (specific to this component)
   const filteredHourCounts = useMemo(() => {
@@ -150,7 +165,7 @@ const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analyt
           <h2 className="text-xl font-semibold text-gray-900 mb-2">No Data Available</h2>
           <p className="text-gray-600 mb-6">Import schedule data to view department analytics and insights</p>
           <button
-            onClick={() => onNavigate('administration/data-import')}
+            onClick={() => handleNavigate('administration/data-import')}
             className="px-6 py-3 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors font-medium"
           >
             Import Schedule Data
@@ -184,7 +199,7 @@ const DepartmentInsights = ({ scheduleData, facultyData, rawScheduleData, analyt
               <p className="text-sm mt-1">
                 This data is still being refined and may not reflect the final schedule. Please verify any critical information with the department and official University{' '}
                 <button
-                  onClick={() => onNavigate('administration/baylor-systems')}
+                  onClick={() => handleNavigate('administration/baylor-systems')}
                   className="text-baylor-gold hover:text-baylor-green underline transition-colors"
                 >
                   systems

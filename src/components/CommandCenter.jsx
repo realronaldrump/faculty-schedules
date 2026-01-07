@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Clock,
   Users,
@@ -15,17 +16,25 @@ import {
 } from 'lucide-react';
 import { getBuildingFromRoom, normalizeBuildingName, getCanonicalBuildingList, buildingMatches } from '../utils/buildingUtils';
 import { formatMinutesToTime } from '../utils/timeUtils';
+import { useData } from '../contexts/DataContext';
+import { usePeople } from '../contexts/PeopleContext';
 
-const CommandCenter = ({
-  scheduleData = [],
-  studentData = [],
-  facultyData = [],
-  selectedSemester,
-  onNavigate
-}) => {
+const CommandCenter = () => {
+  const navigate = useNavigate();
+  const { scheduleData = [], studentData = [], facultyData = [], selectedSemester } = useData();
+  const { loadPeople } = usePeople();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedBuilding, setSelectedBuilding] = useState('');
+
+  const handleNavigate = useCallback((path) => {
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    navigate(normalized);
+  }, [navigate]);
+
+  useEffect(() => {
+    loadPeople();
+  }, [loadPeople]);
 
   // Auto-refresh every 60 seconds
   useEffect(() => {
@@ -538,7 +547,7 @@ const CommandCenter = ({
                     <h2 className="text-lg font-semibold text-gray-900">Student Workers On Duty</h2>
                   </div>
                   <button
-                    onClick={() => onNavigate?.('scheduling/student-schedules')}
+                    onClick={() => handleNavigate('scheduling/student-schedules')}
                     className="text-sm text-baylor-green hover:text-baylor-gold flex items-center gap-1"
                   >
                     View all
@@ -598,28 +607,28 @@ const CommandCenter = ({
 
           {/* Quick Links */}
           <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-            <button onClick={() => onNavigate?.('scheduling/faculty-schedules')} className="university-card group cursor-pointer hover:shadow-md transition-all">
+            <button onClick={() => handleNavigate('scheduling/faculty-schedules')} className="university-card group cursor-pointer hover:shadow-md transition-all">
               <div className="university-card-content flex items-center gap-3">
                 <Calendar className="w-5 h-5 text-baylor-green group-hover:text-baylor-gold transition-colors" />
                 <span className="text-sm font-medium text-gray-700">Faculty Schedules</span>
                 <ChevronRight className="w-4 h-4 text-gray-400 ml-auto group-hover:translate-x-1 transition-transform" />
               </div>
             </button>
-            <button onClick={() => onNavigate?.('scheduling/room-schedules')} className="university-card group cursor-pointer hover:shadow-md transition-all">
+            <button onClick={() => handleNavigate('scheduling/room-schedules')} className="university-card group cursor-pointer hover:shadow-md transition-all">
               <div className="university-card-content flex items-center gap-3">
                 <Building2 className="w-5 h-5 text-baylor-green group-hover:text-baylor-gold transition-colors" />
                 <span className="text-sm font-medium text-gray-700">Room Schedules</span>
                 <ChevronRight className="w-4 h-4 text-gray-400 ml-auto group-hover:translate-x-1 transition-transform" />
               </div>
             </button>
-            <button onClick={() => onNavigate?.('scheduling/student-schedules')} className="university-card group cursor-pointer hover:shadow-md transition-all">
+            <button onClick={() => handleNavigate('scheduling/student-schedules')} className="university-card group cursor-pointer hover:shadow-md transition-all">
               <div className="university-card-content flex items-center gap-3">
                 <Users className="w-5 h-5 text-baylor-green group-hover:text-baylor-gold transition-colors" />
                 <span className="text-sm font-medium text-gray-700">Student Schedules</span>
                 <ChevronRight className="w-4 h-4 text-gray-400 ml-auto group-hover:translate-x-1 transition-transform" />
               </div>
             </button>
-            <button onClick={() => onNavigate?.('people/people-directory')} className="university-card group cursor-pointer hover:shadow-md transition-all">
+            <button onClick={() => handleNavigate('people/people-directory')} className="university-card group cursor-pointer hover:shadow-md transition-all">
               <div className="university-card-content flex items-center gap-3">
                 <GraduationCap className="w-5 h-5 text-baylor-green group-hover:text-baylor-gold transition-colors" />
                 <span className="text-sm font-medium text-gray-700">People Directory</span>

@@ -1,15 +1,25 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { User, Calendar, Clock, Search, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
 import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
+import { useData } from '../../contexts/DataContext';
+import { useSchedules } from '../../contexts/ScheduleContext';
+import { usePeople } from '../../contexts/PeopleContext';
 
-const IndividualAvailability = ({ scheduleData, facultyData, rawScheduleData, selectedSemester }) => {
+const IndividualAvailability = () => {
+  const { scheduleData = [], facultyData = [] } = useData();
+  const { selectedSemester } = useSchedules();
+  const { loadPeople } = usePeople();
   const [selectedIndividual, setSelectedIndividual] = useState('');
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
+
+  useEffect(() => {
+    loadPeople();
+  }, [loadPeople]);
 
   // Get unique instructors - use relational data when available
   const uniqueInstructors = useMemo(() =>

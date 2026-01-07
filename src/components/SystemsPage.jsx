@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, Settings, GraduationCap, Calendar, IdCard, BookOpen, Save } from 'lucide-react';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { logUpdate, logCreate } from '../utils/changeLogger';
 import { useAuth } from '../contexts/AuthContext';
+import { useSchedules } from '../contexts/ScheduleContext';
+import { useUI } from '../contexts/UIContext';
 
-const SystemsPage = ({ onNavigate, availableSemesters, showNotification }) => {
+const SystemsPage = () => {
+  const navigate = useNavigate();
+  const { availableSemesters = [] } = useSchedules();
+  const { showNotification } = useUI();
   const { canAccess } = useAuth();
   const [defaultTerm, setDefaultTerm] = useState('');
   const [selectedTerm, setSelectedTerm] = useState('');
@@ -242,7 +248,7 @@ const SystemsPage = ({ onNavigate, availableSemesters, showNotification }) => {
     <div className="space-y-6">
       {/* Back Navigation */}
       <button 
-        onClick={() => onNavigate('dashboard')}
+        onClick={() => navigate('/dashboard')}
         className="flex items-center text-baylor-green hover:text-baylor-green/80 transition-colors font-medium"
       >
         <ArrowLeft size={20} className="mr-2" />
@@ -457,7 +463,7 @@ const SystemsPage = ({ onNavigate, availableSemesters, showNotification }) => {
               For questions about this HSD Dashboard application, contact Davis! (davis_deaton1@balyor.edu).
             </p>
             <button 
-              onClick={() => onNavigate('dashboard')}
+              onClick={() => navigate('/dashboard')}
               className="text-sm text-baylor-green hover:underline font-medium"
             >
               Return to Dashboard →

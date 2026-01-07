@@ -10,6 +10,7 @@ import { db, COLLECTIONS } from '../firebase';
 import { doc, updateDoc, addDoc, deleteDoc, setDoc, collection } from 'firebase/firestore';
 import { logCreate, logUpdate, logDelete } from '../utils/changeLogger';
 import { useData } from '../contexts/DataContext';
+import { usePeople } from '../contexts/PeopleContext';
 import { useUI } from '../contexts/UIContext';
 import { getProgramNameKey, isReservedProgramName, normalizeProgramName } from '../utils/programUtils';
 
@@ -17,7 +18,7 @@ const usePeopleOperations = () => {
   const {
     rawPeople,
     rawPrograms,
-    loadData,
+    loadPrograms,
     canEdit,
     canEditFaculty,
     canCreateFaculty,
@@ -29,6 +30,7 @@ const usePeopleOperations = () => {
     canDeleteStudent,
     canCreateProgram
   } = useData();
+  const { loadPeople } = usePeople();
 
   const { showNotification } = useUI();
 
@@ -100,7 +102,7 @@ const usePeopleOperations = () => {
         );
       }
 
-      await loadData({ silent: true });
+      await loadPeople({ force: true });
 
       const successMessage = isNewFaculty
         ? `${facultyToUpdate.name} has been added to the directory successfully.`
@@ -115,7 +117,7 @@ const usePeopleOperations = () => {
         : 'Failed to update faculty member. Please try again.';
       showNotification('error', 'Operation Failed', errorMessage);
     }
-  }, [loadData, canCreateFaculty, canEditFaculty, showNotification]);
+  }, [loadPeople, canCreateFaculty, canEditFaculty, showNotification]);
 
   // Handle faculty delete
   const handleFacultyDelete = useCallback(async (facultyToDelete) => {
@@ -137,7 +139,7 @@ const usePeopleOperations = () => {
         'usePeopleOperations - handleFacultyDelete'
       );
 
-      await loadData({ silent: true });
+      await loadPeople({ force: true });
 
       showNotification('success', 'Faculty Deleted', `${facultyToDelete.name} has been removed from the directory.`);
 
@@ -145,7 +147,7 @@ const usePeopleOperations = () => {
       console.error('❌ Error deleting faculty:', error);
       showNotification('error', 'Delete Failed', 'Failed to delete faculty member. Please try again.');
     }
-  }, [loadData, canDeleteFaculty, showNotification]);
+  }, [loadPeople, canDeleteFaculty, showNotification]);
 
   // Handle staff update/create
   const handleStaffUpdate = useCallback(async (staffToUpdate) => {
@@ -208,7 +210,7 @@ const usePeopleOperations = () => {
         );
       }
 
-      await loadData({ silent: true });
+      await loadPeople({ force: true });
 
       const successMessage = action === 'CREATE'
         ? `${staffToUpdate.name} has been created successfully.`
@@ -220,7 +222,7 @@ const usePeopleOperations = () => {
       console.error('❌ Error updating staff:', error);
       showNotification('error', 'Operation Failed', 'Failed to save staff member. Please try again.');
     }
-  }, [rawPeople, loadData, canCreateStaff, canEditStaff, showNotification]);
+  }, [rawPeople, loadPeople, canCreateStaff, canEditStaff, showNotification]);
 
   // Handle staff delete
   const handleStaffDelete = useCallback(async (staffToDelete) => {
@@ -242,7 +244,7 @@ const usePeopleOperations = () => {
         'usePeopleOperations - handleStaffDelete'
       );
 
-      await loadData({ silent: true });
+      await loadPeople({ force: true });
 
       showNotification('success', 'Staff Deleted', `${staffToDelete.name} has been removed from the directory.`);
 
@@ -250,7 +252,7 @@ const usePeopleOperations = () => {
       console.error('❌ Error deleting staff:', error);
       showNotification('error', 'Delete Failed', 'Failed to delete staff member. Please try again.');
     }
-  }, [loadData, canEdit, showNotification]);
+  }, [loadPeople, canEdit, showNotification]);
 
   // Handle student update/create
   const handleStudentUpdate = useCallback(async (studentToUpdate) => {
@@ -324,7 +326,7 @@ const usePeopleOperations = () => {
             { ...updateData, createdAt: new Date().toISOString() },
             'usePeopleOperations - handleStudentUpdate'
           );
-          await loadData({ silent: true });
+          await loadPeople({ force: true });
           showNotification('success', 'Student Added', `${studentToUpdate.name} has been added to the student worker directory successfully.`);
           return;
         }
@@ -340,7 +342,7 @@ const usePeopleOperations = () => {
         );
       }
 
-      await loadData({ silent: true });
+      await loadPeople({ force: true });
 
       const successMessage = isNewStudent
         ? `${studentToUpdate.name} has been added to the student worker directory successfully.`
@@ -358,7 +360,7 @@ const usePeopleOperations = () => {
         showNotification('error', 'Operation Failed', !studentToUpdate.id ? 'Failed to add student worker. Please try again.' : `Failed to update student worker. ${friendly}`);
       }
     }
-  }, [rawPeople, loadData, canCreateStudent, canEditStudent, showNotification]);
+  }, [rawPeople, loadPeople, canCreateStudent, canEditStudent, showNotification]);
 
   // Handle student delete
   const handleStudentDelete = useCallback(async (studentToDelete) => {
@@ -384,7 +386,7 @@ const usePeopleOperations = () => {
         'usePeopleOperations - handleStudentDelete'
       );
 
-      await loadData({ silent: true });
+      await loadPeople({ force: true });
 
       showNotification('success', 'Student Deleted', `${entityName} has been removed from the directory.`);
 
@@ -392,7 +394,7 @@ const usePeopleOperations = () => {
       console.error('❌ Error deleting student:', error);
       showNotification('error', 'Delete Failed', 'Failed to delete student worker. Please try again.');
     }
-  }, [rawPeople, loadData, canDeleteStudent, showNotification]);
+  }, [rawPeople, loadPeople, canDeleteStudent, showNotification]);
 
   // Handle program create
   const handleProgramCreate = useCallback(async (programInput = {}) => {
@@ -439,7 +441,7 @@ const usePeopleOperations = () => {
         'usePeopleOperations - handleProgramCreate'
       );
 
-      await loadData({ silent: true });
+      await loadPrograms({ force: true });
 
       showNotification('success', 'Program Added', `${normalizedName} has been added successfully.`);
       return { id: programRef.id, ...programData };
@@ -448,7 +450,7 @@ const usePeopleOperations = () => {
       showNotification('error', 'Program Creation Failed', 'Failed to create program. Please try again.');
       return null;
     }
-  }, [rawPrograms, loadData, canCreateProgram, showNotification]);
+  }, [rawPrograms, loadPrograms, canCreateProgram, showNotification]);
 
   // Handle revert change (placeholder)
   const handleRevertChange = useCallback(async (changeToRevert) => {

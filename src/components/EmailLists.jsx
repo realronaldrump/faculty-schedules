@@ -1,14 +1,19 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Plus, Minus, Settings, UserCog, BookOpen, Wifi } from 'lucide-react';
+import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Plus, Minus, Settings, UserCog, BookOpen, Wifi, Save, Edit2, Trash2, FolderOpen } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import FacultyContactCard from './FacultyContactCard';
 import CustomAlert from './CustomAlert';
 import { useData } from '../contexts/DataContext';
 import { usePeople } from '../contexts/PeopleContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useEmailListPresets } from '../hooks/useEmailListPresets';
 
 const EmailLists = () => {
   const { facultyData = [], staffData = [], studentData = [], scheduleData = [] } = useData();
   const { loadPeople } = usePeople();
+  const { isAdmin, user } = useAuth();
+  const { presets, loading: presetsLoading, createPreset, updatePreset, deletePreset } = useEmailListPresets();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeople, setSelectedPeople] = useState([]);
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
@@ -30,10 +35,16 @@ const EmailLists = () => {
     hasEmail: true
   });
   const [showFilters, setShowFilters] = useState(false);
-  const [activeFilterPreset, setActiveFilterPreset] = useState('');
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
   const [showOnlyWithCourses, setShowOnlyWithCourses] = useState(false);
   const [outlookVersion, setOutlookVersion] = useState('new'); // 'new' uses commas, 'old' uses semicolons
+
+  // Preset management state
+  const [showPresetModal, setShowPresetModal] = useState(false);
+  const [editingPreset, setEditingPreset] = useState(null); // null for create, preset object for edit
+  const [presetName, setPresetName] = useState('');
+  const [presetSaving, setPresetSaving] = useState(false);
+
 
   useEffect(() => {
     loadPeople();
@@ -80,104 +91,6 @@ const EmailLists = () => {
     }
 
     return office; // Fallback: return the whole office location
-  };
-
-  // Filter presets for common use cases
-  const filterPresets = {
-    'all-faculty': {
-      name: 'All Faculty',
-      filters: {
-        programs: { include: [], exclude: [] },
-        jobTitles: { include: [], exclude: [] },
-        buildings: { include: [], exclude: [] },
-        roleFilter: 'faculty',
-        adjunct: 'all',
-        tenured: 'all',
-        upd: 'all',
-        hasEmail: true
-      }
-    },
-    'tenured-faculty': {
-      name: 'Tenured Faculty',
-      filters: {
-        programs: { include: [], exclude: [] },
-        jobTitles: { include: [], exclude: [] },
-        buildings: { include: [], exclude: [] },
-        roleFilter: 'faculty',
-        adjunct: 'all',
-        tenured: 'include',
-        upd: 'all',
-        hasEmail: true
-      }
-    },
-    'adjunct-faculty': {
-      name: 'Adjunct Faculty',
-      filters: {
-        programs: { include: [], exclude: [] },
-        jobTitles: { include: [], exclude: [] },
-        buildings: { include: [], exclude: [] },
-        roleFilter: 'faculty',
-        adjunct: 'include',
-        tenured: 'all',
-        upd: 'all',
-        hasEmail: true
-      }
-    },
-    'upd-faculty': {
-      name: 'UPD Faculty',
-      filters: {
-        programs: { include: [], exclude: [] },
-        jobTitles: { include: [], exclude: [] },
-        buildings: { include: [], exclude: [] },
-        roleFilter: 'faculty',
-        adjunct: 'all',
-        tenured: 'all',
-        upd: 'include',
-        hasEmail: true
-      }
-    },
-    'all-staff': {
-      name: 'All Staff',
-      filters: {
-        programs: { include: [], exclude: [] },
-        jobTitles: { include: [], exclude: [] },
-        buildings: { include: [], exclude: [] },
-        roleFilter: 'staff',
-        adjunct: 'all',
-        tenured: 'all',
-        upd: 'all',
-        isRemote: 'all',
-        hasEmail: true
-      }
-    },
-    'remote-faculty': {
-      name: 'Remote Faculty',
-      filters: {
-        programs: { include: [], exclude: [] },
-        jobTitles: { include: [], exclude: [] },
-        buildings: { include: [], exclude: [] },
-        roleFilter: 'faculty',
-        adjunct: 'all',
-        tenured: 'all',
-        upd: 'all',
-        isRemote: 'include',
-        hasEmail: true
-      }
-    },
-    'remote-staff': {
-      name: 'Remote Staff',
-      filters: {
-        programs: { include: [], exclude: [] },
-        jobTitles: { include: [], exclude: [] },
-        buildings: { include: [], exclude: [] },
-        roleFilter: 'staff',
-        adjunct: 'all',
-        tenured: 'all',
-        upd: 'all',
-        isRemote: 'include',
-        hasEmail: true
-      }
-    }
   };
 
   // Combine faculty and staff data, removing duplicates and calculating course counts
@@ -655,20 +568,94 @@ const EmailLists = () => {
       hasEmail: true
     });
     setSearchTerm('');
-    setActiveFilterPreset('');
   };
 
-  const applyFilterPreset = (presetKey) => {
-    if (presetKey === '') {
-      clearFilters();
-      setActiveFilterPreset('');
+  // Preset management handlers
+  const handleOpenCreatePreset = () => {
+    if (selectedPeople.length === 0) {
+      showNotification('Please select at least one person to create a preset', 'error');
+      return;
+    }
+    setEditingPreset(null);
+    setPresetName('');
+    setShowPresetModal(true);
+  };
+
+  const handleOpenEditPreset = (preset) => {
+    setEditingPreset(preset);
+    setPresetName(preset.name);
+    // Load the preset's people into selection
+    setSelectedPeople(preset.personIds || []);
+    setShowPresetModal(true);
+  };
+
+  const handleSavePreset = async () => {
+    if (!presetName.trim()) {
+      showNotification('Please enter a preset name', 'error');
+      return;
+    }
+    if (selectedPeople.length === 0) {
+      showNotification('Please select at least one person', 'error');
       return;
     }
 
-    const preset = filterPresets[presetKey];
+    setPresetSaving(true);
+    try {
+      if (editingPreset) {
+        await updatePreset(editingPreset.id, presetName, selectedPeople);
+        showNotification(`Preset "${presetName}" updated successfully`);
+      } else {
+        await createPreset(presetName, selectedPeople);
+        showNotification(`Preset "${presetName}" created successfully`);
+      }
+      setShowPresetModal(false);
+      setPresetName('');
+      setEditingPreset(null);
+    } catch (error) {
+      console.error('Error saving preset:', error);
+      showNotification(`Failed to save preset: ${error.message}`, 'error');
+    } finally {
+      setPresetSaving(false);
+    }
+  };
+
+  const handleDeletePreset = async (preset) => {
+    if (!isAdmin) {
+      showNotification('Only administrators can delete presets', 'error');
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to delete the preset "${preset.name}"?`)) {
+      return;
+    }
+    try {
+      await deletePreset(preset.id);
+      showNotification(`Preset "${preset.name}" deleted`);
+    } catch (error) {
+      console.error('Error deleting preset:', error);
+      showNotification(`Failed to delete preset: ${error.message}`, 'error');
+    }
+  };
+
+  const handleLoadPreset = (presetId) => {
+    if (!presetId) {
+      setSelectedPeople([]);
+      return;
+    }
+    const preset = presets.find(p => p.id === presetId);
     if (preset) {
-      setFilters(preset.filters);
-      setActiveFilterPreset(presetKey);
+      // Filter to only include IDs that still exist in combined data
+      const validIds = preset.personIds.filter(id =>
+        combinedDirectoryData.some(person => person.id === id)
+      );
+      setSelectedPeople(validIds);
+      if (validIds.length !== preset.personIds.length) {
+        showNotification(
+          `Loaded ${validIds.length} of ${preset.personIds.length} people (some may have been removed)`,
+          'info'
+        );
+      } else {
+        showNotification(`Loaded preset "${preset.name}" with ${validIds.length} people`);
+      }
     }
   };
 
@@ -734,19 +721,38 @@ const EmailLists = () => {
             />
           </div>
 
-          {/* Filter Presets */}
+          {/* Saved Presets */}
           <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-600 whitespace-nowrap">Quick filters:</span>
+            <FolderOpen className="w-4 h-4 text-gray-500" />
             <select
-              value={activeFilterPreset}
-              onChange={(e) => applyFilterPreset(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+              onChange={(e) => handleLoadPreset(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green min-w-[180px]"
+              defaultValue=""
             >
-              <option value="">Custom filters</option>
-              {Object.entries(filterPresets).map(([key, preset]) => (
-                <option key={key} value={key}>{preset.name}</option>
-              ))}
+              <option value="">Load preset...</option>
+              {presetsLoading ? (
+                <option disabled>Loading...</option>
+              ) : presets.length === 0 ? (
+                <option disabled>No presets saved</option>
+              ) : (
+                presets.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.name} ({preset.personIds?.length || 0} people)
+                  </option>
+                ))
+              )}
             </select>
+
+            {/* Save as Preset Button */}
+            <button
+              onClick={handleOpenCreatePreset}
+              disabled={selectedPeople.length === 0}
+              className="flex items-center px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title={selectedPeople.length === 0 ? 'Select people first' : 'Save selected people as preset'}
+            >
+              <Save className="w-4 h-4 mr-1" />
+              Save Preset
+            </button>
           </div>
 
           {/* Exclude Adjuncts Toggle */}
@@ -1195,6 +1201,133 @@ const EmailLists = () => {
           faculty={selectedFacultyForCard}
           onClose={() => setSelectedFacultyForCard(null)}
         />
+      )}
+
+      {/* Preset Management Section */}
+      {presets.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <h3 className="text-lg font-medium text-gray-900 mb-3 flex items-center gap-2">
+            <FolderOpen className="w-5 h-5 text-baylor-green" />
+            Saved Presets
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {presets.map((preset) => (
+              <div
+                key={preset.id}
+                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-baylor-green/50 transition-colors"
+              >
+                <div className="flex-1 min-w-0">
+                  <button
+                    onClick={() => handleLoadPreset(preset.id)}
+                    className="font-medium text-gray-900 hover:text-baylor-green truncate block w-full text-left"
+                    title={`Load "${preset.name}"`}
+                  >
+                    {preset.name}
+                  </button>
+                  <p className="text-xs text-gray-500 truncate">
+                    {preset.personIds?.length || 0} people
+                    {preset.createdBy && <span className="ml-1">• by {preset.createdBy.split('@')[0]}</span>}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 ml-2">
+                  <button
+                    onClick={() => handleOpenEditPreset(preset)}
+                    className="p-1.5 text-gray-400 hover:text-baylor-green hover:bg-gray-100 rounded transition-colors"
+                    title="Edit preset"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => handleDeletePreset(preset)}
+                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                      title="Delete preset (admin only)"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Preset Modal */}
+      {showPresetModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 bg-baylor-green">
+              <h3 className="text-lg font-semibold text-white">
+                {editingPreset ? 'Edit Preset' : 'Create New Preset'}
+              </h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Preset Name
+                </label>
+                <input
+                  type="text"
+                  value={presetName}
+                  onChange={(e) => setPresetName(e.target.value)}
+                  placeholder="e.g., Marketing Team, All Professors"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  autoFocus
+                />
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-sm text-gray-600">
+                  <span className="font-medium">{selectedPeople.length}</span> people will be saved in this preset
+                </p>
+                {selectedPeople.length > 0 && (
+                  <div className="mt-2 max-h-32 overflow-y-auto">
+                    <ul className="text-xs text-gray-500 space-y-0.5">
+                      {combinedDirectoryData
+                        .filter(p => selectedPeople.includes(p.id))
+                        .slice(0, 10)
+                        .map(p => (
+                          <li key={p.id} className="truncate">• {p.name}</li>
+                        ))}
+                      {selectedPeople.length > 10 && (
+                        <li className="text-gray-400 italic">...and {selectedPeople.length - 10} more</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowPresetModal(false);
+                  setPresetName('');
+                  setEditingPreset(null);
+                }}
+                className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSavePreset}
+                disabled={!presetName.trim() || selectedPeople.length === 0 || presetSaving}
+                className="px-4 py-2 text-sm bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              >
+                {presetSaving ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    {editingPreset ? 'Update Preset' : 'Save Preset'}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Notification */}

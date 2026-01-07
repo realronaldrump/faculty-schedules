@@ -117,7 +117,7 @@ export const firebaseErrorHandler = {
 
     const code = error.code || 'unknown';
     const friendlyMessage = errorMessages[code] || errorMessages['unknown'];
-    
+
     return {
       code,
       message: error.message,
@@ -131,7 +131,7 @@ export const firebaseErrorHandler = {
   // Handle errors with user notification
   handleError(error, context = 'operation') {
     const parsed = this.parseError(error);
-    
+
     console.error(`Firebase error in ${context}:`, {
       code: parsed.code,
       message: parsed.message,
@@ -156,7 +156,8 @@ export const COLLECTIONS = {
   PROGRAMS: 'programs',
   COURSES: 'courses',
   TERMS: 'terms',
-  DEPARTMENTS: 'departments'
+  DEPARTMENTS: 'departments',
+  EMAIL_LIST_PRESETS: 'emailListPresets'
 };
 
 // Data validation utilities
@@ -193,7 +194,7 @@ export const validationUtils = {
   // Validate time format
   validateTime(timeStr) {
     if (!timeStr) return { isValid: false, message: 'Time is required' };
-    
+
     const timeRegex = /^(1[0-2]|0?[1-9]):([0-5][0-9])\s?(AM|PM)$/i;
     return {
       isValid: timeRegex.test(timeStr),
@@ -225,19 +226,19 @@ export const performanceMonitor = {
 
   end() {
     if (!this.timer) return null;
-    
+
     const duration = performance.now() - this.timer.startTime;
     const result = {
       operation: this.timer.operation,
       duration: Math.round(duration),
       timestamp: new Date().toISOString()
     };
-    
+
     // Log slow operations in development
     if (isDevelopment && duration > 1000) {
       console.warn(`🐌 Slow operation detected: ${result.operation} took ${result.duration}ms`);
     }
-    
+
     this.timer = null;
     return result;
   }

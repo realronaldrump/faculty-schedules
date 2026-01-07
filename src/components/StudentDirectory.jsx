@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { Edit, Save, X, GraduationCap, Mail, Phone, PhoneOff, Clock, Search, Plus, RotateCcw, History, Trash2, Filter, Download, BarChart3, ArrowRight } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import FacultyContactCard from './FacultyContactCard';
-import { DeleteConfirmDialog, UniversalDirectory } from './shared';
+import { DeleteConfirmDialog } from './shared';
+import PersonDirectory from './PersonDirectory';
 import SortableHeader from './shared/SortableHeader';
 import {
   calculateWeeklyHoursFromSchedule,
@@ -816,7 +817,7 @@ const StudentDirectory = ({ studentData, rawScheduleData, onStudentUpdate, onStu
   // SortableHeader now imported from ./shared/SortableHeader
 
   return (
-    <UniversalDirectory
+    <PersonDirectory
       type="people"
       countLabel=""
       title="Student Directory"

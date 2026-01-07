@@ -116,3 +116,66 @@ export const getDirectoryInputClass = (fieldName, errors) => {
     const baseClass = "w-full p-1 border rounded bg-baylor-gold/10";
     return errors[fieldName] ? `${baseClass} border-red-500` : `${baseClass} border-baylor-gold`;
 };
+
+/**
+ * Dedupe directory records based on name/email, keeping the record with more fields populated.
+ * @param {Array} records
+ * @returns {Array}
+ */
+export const dedupeDirectoryRecords = (records = []) => {
+    if (!Array.isArray(records)) return [];
+
+    const uniqueMap = new Map();
+    records.forEach((record) => {
+        const key = `${record.name?.toLowerCase()}-${(record.email || 'no-email').toLowerCase()}`;
+        if (!uniqueMap.has(key)) {
+            uniqueMap.set(key, record);
+            return;
+        }
+        const existing = uniqueMap.get(key);
+        const existingFields = Object.values(existing).filter((value) => value && value !== '').length;
+        const newFields = Object.values(record).filter((value) => value && value !== '').length;
+        if (newFields > existingFields) {
+            uniqueMap.set(key, record);
+        }
+    });
+
+    return Array.from(uniqueMap.values());
+};
+
+/**
+ * Build common filter option lists from directory records.
+ * @param {Array} records
+ * @param {Object} options
+ * @param {boolean} options.includePrograms
+ * @returns {Object}
+ */
+export const buildDirectoryFilterOptions = (records = [], { includePrograms = false } = {}) => {
+    const programsSet = new Set();
+    const jobTitles = new Set();
+    const buildings = new Set();
+
+    if (!Array.isArray(records)) {
+        return { programs: [], jobTitles: [], buildings: [] };
+    }
+
+    records.forEach((person) => {
+        if (includePrograms && person.program?.name) {
+            programsSet.add(person.program.name);
+        }
+        if (person.jobTitle) {
+            jobTitles.add(person.jobTitle);
+        }
+        if (person.office) {
+            buildings.add(extractBuildingName(person.office));
+        } else {
+            buildings.add('No Building');
+        }
+    });
+
+    return {
+        programs: Array.from(programsSet).sort(),
+        jobTitles: Array.from(jobTitles).sort(),
+        buildings: Array.from(buildings).sort()
+    };
+};

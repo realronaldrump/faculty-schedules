@@ -814,28 +814,28 @@
     break-inside: avoid;
   }
   
-  /* Optimize colors for printing */
+  /* Optimize colors for printing - using official Baylor brand colors */
   .bg-baylor-green {
-    background-color: #1e3a8a !important;
+    background-color: #154734 !important; /* Official Baylor Green */
     color: white !important;
   }
   
   .bg-baylor-gold {
-    background-color: #fbbf24 !important;
-    color: #1e3a8a !important;
+    background-color: #FFB81C !important; /* Official University Gold */
+    color: #154734 !important;
   }
   
   .text-baylor-green {
-    color: #1e3a8a !important;
+    color: #154734 !important;
   }
   
   .text-baylor-gold {
-    color: #fbbf24 !important;
+    color: #FFB81C !important;
   }
   
   /* Ensure borders print properly */
   .border-baylor-green {
-    border-color: #1e3a8a !important;
+    border-color: #154734 !important;
   }
   
   /* Remove shadows and hover effects for print */

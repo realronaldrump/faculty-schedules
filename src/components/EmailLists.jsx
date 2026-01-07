@@ -650,7 +650,27 @@ const EmailLists = () => {
       const validIds = preset.personIds.filter(id =>
         combinedDirectoryData.some(person => person.id === id)
       );
+      // 1. Identify valid people for this preset
+      const selectedPeopleData = combinedDirectoryData.filter(p => validIds.includes(p.id));
+      const hasAdjuncts = selectedPeopleData.some(p => p.isAdjunct);
+
+      // 2. Reset filters to ensure visibility, but handle adjuncts dynamically
+      setFilters({
+        programs: { include: [], exclude: [] },
+        jobTitles: { include: [], exclude: [] },
+        buildings: { include: [], exclude: [] },
+        roleFilter: 'all',
+        adjunct: hasAdjuncts ? 'all' : 'exclude', // Unhide adjuncts if needed
+        tenured: 'all',
+        upd: 'all',
+        isRemote: 'all',
+        hasEmail: true
+      });
+      setSearchTerm('');
+
+      // 3. Set the selection
       setSelectedPeople(validIds);
+
       if (validIds.length !== preset.personIds.length) {
         showNotification(
           `Loaded ${validIds.length} of ${preset.personIds.length} people (some may have been removed)`,
@@ -821,15 +841,14 @@ const EmailLists = () => {
           </button>
 
           {/* Clear Filters */}
-          {(searchTerm || activeFilterCount > 0) && (
-            <button
-              onClick={clearFilters}
-              className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              <X className="w-4 h-4 mr-1" />
-              Clear All
-            </button>
-          )}
+          <button
+            onClick={clearFilters}
+            disabled={isDefaultFilters && selectedPeople.length === 0 && !selectedPresetId}
+            className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white disabled:text-gray-400"
+          >
+            <X className="w-4 h-4 mr-1" />
+            Clear All
+          </button>
         </div>
 
         {/* Expanded Filters */}
@@ -1196,11 +1215,12 @@ const EmailLists = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${person.roleType === 'faculty' ? 'bg-baylor-green/10 text-baylor-green' :
-                        person.roleType === 'staff' ? 'bg-green-100 text-green-800' :
-                          'bg-baylor-gold/20 text-baylor-gold'
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${person.isAdjunct ? 'bg-purple-100 text-purple-800' :
+                        person.roleType === 'faculty' ? 'bg-baylor-green/10 text-baylor-green' :
+                          person.roleType === 'staff' ? 'bg-green-100 text-green-800' :
+                            'bg-baylor-gold/20 text-baylor-gold'
                         }`}>
-                        {person.role}
+                        {person.isAdjunct ? 'Adjunct' : person.role}
                       </span>
                       {person.isUPD && (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">

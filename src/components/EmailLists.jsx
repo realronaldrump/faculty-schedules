@@ -1139,6 +1139,12 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
                           UPD
                         </span>
                       )}
+                      {person.isRemote && (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800">
+                          <Wifi size={12} className="mr-1" />
+                          Remote
+                        </span>
+                      )}
                       {(person.roleType === 'faculty' || person.roleType === 'both') && person.courseCount > 0 && (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-baylor-green/10 text-baylor-green">
                           {person.courseCount} course{person.courseCount !== 1 ? 's' : ''}

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Mail, Phone, Building, BookOpen, Clock, GraduationCap, User } from 'lucide-react';
+import { X, Mail, Phone, Building, BookOpen, Clock, GraduationCap, User, Wifi } from 'lucide-react';
 import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { logUpdate } from '../utils/changeLogger';
@@ -158,7 +158,7 @@ const FacultyContactCard = ({
         if (personType === 'student') {
             return 'Student Worker';
         }
-        
+
         if (contactPerson.isAlsoStaff || contactPerson.isAlsoFaculty) {
             return 'Faculty & Staff';
         }
@@ -263,9 +263,15 @@ const FacultyContactCard = ({
                                 UPD
                             </span>
                         )}
+                        {personType !== 'student' && contactPerson.isRemote && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800">
+                                <Wifi size={12} className="mr-1" />
+                                Remote
+                            </span>
+                        )}
                     </div>
                 </div>
-                
+
                 <div className="mt-6 space-y-4">
                     <div className="flex items-center">
                         <Mail size={18} className="text-baylor-green mr-4" />

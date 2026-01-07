@@ -1,5 +1,6 @@
 import React from 'react';
 import PeopleDataTable from './PeopleDataTable';
+import DirectoryTable from './DirectoryTable';
 import { DirectorySearchBar, DirectoryFiltersPanel, NameSortToggle } from './DirectoryFilters';
 
 const UniversalDirectory = ({
@@ -28,6 +29,7 @@ const UniversalDirectory = ({
   bodyTop,
   bodyBottom,
   tableProps = {},
+  useHtmlTable = false, // Use standard HTML table instead of virtualized PeopleDataTable
   children
 }) => {
   const count = Array.isArray(data) ? data.length : 0;
@@ -37,6 +39,8 @@ const UniversalDirectory = ({
   const resolvedCountLabel = countLabel !== undefined
     ? countLabel
     : (type === 'people' ? 'members' : 'records');
+
+  const TableComponent = useHtmlTable ? DirectoryTable : PeopleDataTable;
 
   return (
     <div className="space-y-6">
@@ -77,7 +81,7 @@ const UniversalDirectory = ({
           : (
             <>
               {bodyTop}
-              <PeopleDataTable
+              <TableComponent
                 data={data}
                 columns={columns}
                 sortConfig={sortConfig}
@@ -95,3 +99,4 @@ const UniversalDirectory = ({
 };
 
 export default UniversalDirectory;
+

@@ -17,7 +17,7 @@ const Row = ({ index, style, data: itemData }) => {
     return (
         <div
             style={style}
-            className={`flex items-center border-b border-gray-200 hover:bg-gray-50/80 transition-colors ${isEditing ? 'bg-baylor-gold/5' : 'bg-white'}`}
+            className={`flex items-center border-b border-gray-200 hover:bg-gray-50 transition-colors ${isEditing ? 'bg-baylor-gold/5' : 'bg-white'}`}
         >
             {columns.map((col) => (
                 <div
@@ -74,7 +74,7 @@ const PeopleDataTable = ({
     return (
         <div className="w-full bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col h-[75vh] min-h-[500px] shadow-sm">
             {/* Header */}
-            <div className="flex bg-gray-50 border-b border-gray-200 shrink-0">
+            <div className="flex bg-baylor-green/5 border-b border-gray-200 shrink-0">
                 {columns.map((col) => (
                     <SortableHeader
                         as="div"
@@ -83,11 +83,11 @@ const PeopleDataTable = ({
                         columnKey={col.key}
                         sortConfig={sortConfig}
                         onSort={onSort}
-                        className={`flex-1 px-4 py-3.5 text-sm font-medium text-gray-700 min-w-0 ${col.headerClassName || ''}`}
+                        className={`flex-1 min-w-0 ${col.headerClassName || ''}`}
                     />
                 ))}
                 {renderActions && (
-                    <div className="px-4 py-3.5 w-32 flex-none text-sm font-medium text-gray-700">Actions</div>
+                    <div className="px-4 py-3 w-32 flex-none font-serif font-semibold text-baylor-green">Actions</div>
                 )}
             </div>
 

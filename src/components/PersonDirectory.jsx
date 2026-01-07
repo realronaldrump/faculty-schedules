@@ -765,9 +765,9 @@ const PersonDirectory = (props) => {
         renderActions,
         createRow,
         emptyMessage,
-        rowHeight,
         ...tableProps
       }}
+      useHtmlTable={true}
     >
       {renderContactCard && selectedRecord && renderContactCard({
         record: selectedRecord,

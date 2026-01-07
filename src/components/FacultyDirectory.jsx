@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Edit, Save, X, BookUser, Phone, PhoneOff, Building, BuildingIcon, Plus, Trash2, BookOpen, UserCog, Download } from 'lucide-react';
+import { Edit, Save, X, BookUser, Phone, PhoneOff, Building, BuildingIcon, Plus, Trash2, BookOpen, UserCog, Download, Wifi } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import { formatPhoneNumber, extractBuildingName } from '../utils/directoryUtils';
@@ -30,7 +30,8 @@ const FacultyDirectory = ({
     courseCount: 'all',
     isAlsoStaff: 'all',
     hasPhD: 'all',
-    hasBaylorId: 'all'
+    hasBaylorId: 'all',
+    isRemote: 'all'
   };
 
   const createEmptyFaculty = useCallback(() => ({
@@ -46,6 +47,7 @@ const FacultyDirectory = ({
     hasNoPhone: false,
     hasNoOffice: false,
     hasPhD: false,
+    isRemote: false,
   }), []);
 
   // Shared state
@@ -258,6 +260,9 @@ const FacultyDirectory = ({
     if (filters.hasPhD !== 'all') {
       data = data.filter(person => filters.hasPhD === 'include' ? person.hasPhD : !person.hasPhD);
     }
+    if (filters.isRemote !== 'all') {
+      data = data.filter(person => filters.isRemote === 'include' ? person.isRemote : !person.isRemote);
+    }
 
     // Course count filter
     if (showOnlyWithCourses || filters.courseCount === 'with-courses') {
@@ -317,7 +322,7 @@ const FacultyDirectory = ({
 
   // Export to CSV
   const exportToCSV = useCallback(() => {
-    const headers = ['Name', 'Program', 'Job Title', 'Email', 'Phone', 'Office', 'Baylor ID', 'Courses'];
+    const headers = ['Name', 'Program', 'Job Title', 'Email', 'Phone', 'Office', 'Baylor ID', 'Courses', 'Remote'];
     const rows = sortedAndFilteredData.map(faculty => [
       faculty.name || '',
       faculty.program?.name || '',
@@ -326,7 +331,8 @@ const FacultyDirectory = ({
       faculty.hasNoPhone ? 'No phone' : formatPhoneNumber(faculty.phone),
       faculty.hasNoOffice ? 'No office' : (faculty.office || ''),
       faculty.baylorId || 'Not assigned',
-      faculty.courseCount || 0
+      faculty.courseCount || 0,
+      faculty.isRemote ? 'Yes' : 'No'
     ]);
 
     const csvContent = [headers, ...rows]
@@ -358,6 +364,7 @@ const FacultyDirectory = ({
           {faculty.isAdjunct && <div className="text-xs text-blue-600 font-medium">Adjunct</div>}
           {faculty.isTenured && <div className="text-xs text-purple-600 font-medium">Tenured</div>}
           {faculty.hasPhD && <div className="text-xs text-green-600 font-medium">PhD</div>}
+          {faculty.isRemote && <div className="text-xs text-cyan-600 font-medium flex items-center gap-1"><Wifi size={12} /> Remote</div>}
         </div>
       ),
       renderEdit: (faculty) => (
@@ -378,6 +385,17 @@ const FacultyDirectory = ({
           <div className="flex items-center gap-2 text-xs mt-1">
             <input type="checkbox" id={`hasPhD-${faculty.id}`} name="hasPhD" checked={!!editFormData.hasPhD} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
             <label htmlFor={`hasPhD-${faculty.id}`} className="font-normal">Has PhD</label>
+          </div>
+          <div className="flex items-center gap-2 text-xs mt-1">
+            <input type="checkbox" id={`isRemote-${faculty.id}`} name="isRemote" checked={!!editFormData.isRemote} onChange={(e) => {
+              const isChecked = e.target.checked;
+              setEditFormData(prev => ({
+                ...prev,
+                isRemote: isChecked,
+                ...(isChecked ? { hasNoOffice: true, office: '' } : {})
+              }));
+            }} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+            <label htmlFor={`isRemote-${faculty.id}`} className="font-normal">Remote</label>
           </div>
         </div>
       )
@@ -453,7 +471,7 @@ const FacultyDirectory = ({
       render: (faculty) => faculty.courseCount,
       renderEdit: (faculty) => <div className="text-sm text-gray-600">{faculty.courseCount || 0}</div>
     }
-  ], [editFormData, errors, handleChange, toggleEditPhoneState, toggleEditOfficeState, getInputClass, programs]);
+  ], [editFormData, setEditFormData, errors, handleChange, toggleEditPhoneState, toggleEditOfficeState, getInputClass, programs]);
 
   // Render actions column
   const renderActions = (faculty, isEditing) => {
@@ -493,6 +511,10 @@ const FacultyDirectory = ({
         <div className="flex items-center gap-2 text-xs mt-1">
           <input type="checkbox" id="new-hasPhD" name="hasPhD" checked={newRecord.hasPhD} onChange={handleCreateChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
           <label htmlFor="new-hasPhD" className="font-normal">Has PhD</label>
+        </div>
+        <div className="flex items-center gap-2 text-xs mt-1">
+          <input type="checkbox" id="new-isRemote" name="isRemote" checked={newRecord.isRemote} onChange={(e) => { handleCreateChange(e); if (e.target.checked) { setNewRecord(prev => ({ ...prev, hasNoOffice: true, office: '' })); } }} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+          <label htmlFor="new-isRemote" className="font-normal">Remote</label>
         </div>
       </div>
       <div className="px-4 py-2 flex-1 min-w-0 text-sm align-top">
@@ -598,7 +620,7 @@ const FacultyDirectory = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">Buildings</label>
             <MultiSelectDropdown options={filterOptions.buildings} selected={filters.buildings} onChange={(selected) => setFilters(prev => ({ ...prev, buildings: selected }))} placeholder="Select buildings..." />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-8 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Adjunct Status</label>
               <select value={filters.adjunct} onChange={(e) => setFilters(prev => ({ ...prev, adjunct: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green">
@@ -653,6 +675,14 @@ const FacultyDirectory = ({
                 <option value="all">All</option>
                 <option value="with-id">Has Baylor ID</option>
                 <option value="without-id">Missing Baylor ID</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Remote Status</label>
+              <select value={filters.isRemote} onChange={(e) => setFilters(prev => ({ ...prev, isRemote: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green">
+                <option value="all">All</option>
+                <option value="include">Remote Only</option>
+                <option value="exclude">Exclude Remote</option>
               </select>
             </div>
           </div>

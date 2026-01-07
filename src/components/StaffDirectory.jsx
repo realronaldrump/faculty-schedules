@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Edit, Save, X, Users, Phone, PhoneOff, Building, BuildingIcon, Plus, RotateCcw, History, Trash2 } from 'lucide-react';
+import { Edit, Save, X, Users, Phone, PhoneOff, Building, BuildingIcon, Plus, RotateCcw, History, Trash2, Wifi } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import { adaptPeopleToStaff } from '../utils/dataAdapter';
@@ -24,7 +24,8 @@ const StaffDirectory = ({
     jobTitles: [],
     buildings: [],
     isFullTime: 'all',
-    isAlsoFaculty: 'all'
+    isAlsoFaculty: 'all',
+    isRemote: 'all'
   };
 
   const createEmptyStaff = useCallback(() => ({
@@ -37,6 +38,7 @@ const StaffDirectory = ({
     isAlsoFaculty: false,
     hasNoPhone: false,
     hasNoOffice: false,
+    isRemote: false,
   }), []);
 
   // Shared state
@@ -224,6 +226,15 @@ const StaffDirectory = ({
       });
     }
 
+    // Remote filter
+    if (filters.isRemote !== 'all') {
+      data = data.filter(person => {
+        if (filters.isRemote === 'include') return person.isRemote;
+        if (filters.isRemote === 'exclude') return !person.isRemote;
+        return true;
+      });
+    }
+
     // Sorting
     data.sort((a, b) => {
       let valA, valB;
@@ -286,6 +297,9 @@ const StaffDirectory = ({
           {staff.isFullTime === false && (
             <div className="text-xs text-baylor-green font-medium">Part Time</div>
           )}
+          {staff.isRemote && (
+            <div className="text-xs text-cyan-600 font-medium flex items-center gap-1"><Wifi size={12} /> Remote</div>
+          )}
         </div>
       ),
       renderEdit: (staff) => (
@@ -298,6 +312,17 @@ const StaffDirectory = ({
           <div className="flex items-center gap-2 text-xs mt-1">
             <input type="checkbox" id={`isAlsoFaculty-${staff.id}`} name="isAlsoFaculty" checked={!!editFormData.isAlsoFaculty} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
             <label htmlFor={`isAlsoFaculty-${staff.id}`} className="font-normal">Also a faculty member</label>
+          </div>
+          <div className="flex items-center gap-2 text-xs mt-1">
+            <input type="checkbox" id={`isRemote-${staff.id}`} name="isRemote" checked={!!editFormData.isRemote} onChange={(e) => {
+              const isChecked = e.target.checked;
+              setEditFormData(prev => ({
+                ...prev,
+                isRemote: isChecked,
+                ...(isChecked ? { hasNoOffice: true, office: '' } : {})
+              }));
+            }} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+            <label htmlFor={`isRemote-${staff.id}`} className="font-normal">Remote</label>
           </div>
         </div>
       )
@@ -372,7 +397,7 @@ const StaffDirectory = ({
         </div>
       )
     }
-  ], [editFormData, errors, handleChange, toggleEditPhoneState, toggleEditOfficeState, getInputClass]);
+  ], [editFormData, setEditFormData, errors, handleChange, toggleEditPhoneState, toggleEditOfficeState, getInputClass]);
 
   // Render actions column
   const renderActions = (staff, isEditing) => {
@@ -405,6 +430,10 @@ const StaffDirectory = ({
         <div className="flex items-center gap-2 text-xs mt-1">
           <input type="checkbox" id="new-isAlsoFaculty" name="isAlsoFaculty" checked={newRecord.isAlsoFaculty} onChange={handleCreateChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
           <label htmlFor="new-isAlsoFaculty" className="font-normal">Also a faculty member</label>
+        </div>
+        <div className="flex items-center gap-2 text-xs mt-1">
+          <input type="checkbox" id="new-isRemote" name="isRemote" checked={newRecord.isRemote} onChange={(e) => { handleCreateChange(e); if (e.target.checked) { setNewRecord(prev => ({ ...prev, hasNoOffice: true, office: '' })); } }} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+          <label htmlFor="new-isRemote" className="font-normal">Remote</label>
         </div>
       </div>
       <div className="px-4 py-2 flex-1 min-w-0 text-sm align-top">
@@ -500,6 +529,14 @@ const StaffDirectory = ({
                 <option value="all">All</option>
                 <option value="include">Also Faculty</option>
                 <option value="exclude">Staff Only</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Remote Status</label>
+              <select value={filters.isRemote} onChange={(e) => setFilters(prev => ({ ...prev, isRemote: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green">
+                <option value="all">All</option>
+                <option value="include">Remote Only</option>
+                <option value="exclude">Exclude Remote</option>
               </select>
             </div>
           </div>

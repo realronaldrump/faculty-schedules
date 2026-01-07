@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Edit, Save, X, BookUser, Phone, PhoneOff, Building, BuildingIcon, Plus, RotateCcw, History, Trash2, BookOpen, Download } from 'lucide-react';
+import { Edit, Save, X, BookUser, Phone, PhoneOff, Building, BuildingIcon, Plus, RotateCcw, History, Trash2, BookOpen, Download, Wifi } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import { formatPhoneNumber, extractBuildingName } from '../utils/directoryUtils';
@@ -24,7 +24,8 @@ const AdjunctDirectory = ({
     programs: [],
     jobTitles: [],
     buildings: [],
-    courseCount: 'all'
+    courseCount: 'all',
+    isRemote: 'all'
   };
 
   const createEmptyAdjunct = useCallback(() => ({
@@ -39,6 +40,7 @@ const AdjunctDirectory = ({
     isAlsoStaff: false,
     hasNoPhone: false,
     hasNoOffice: false,
+    isRemote: false,
   }), []);
 
   // Shared state
@@ -238,6 +240,11 @@ const AdjunctDirectory = ({
       data = data.filter(person => person.courseCount === 0);
     }
 
+    // Remote filter
+    if (filters.isRemote !== 'all') {
+      data = data.filter(person => filters.isRemote === 'include' ? person.isRemote : !person.isRemote);
+    }
+
     // Sorting
     data.sort((a, b) => {
       let valA, valB;
@@ -310,6 +317,9 @@ const AdjunctDirectory = ({
           {faculty.isTenured && (
             <div className="text-xs text-purple-600 font-medium">Tenured</div>
           )}
+          {faculty.isRemote && (
+            <div className="text-xs text-cyan-600 font-medium flex items-center gap-1"><Wifi size={12} /> Remote</div>
+          )}
         </div>
       ),
       renderEdit: (faculty) => (
@@ -326,6 +336,17 @@ const AdjunctDirectory = ({
           <div className="flex items-center gap-2 text-xs mt-1">
             <input type="checkbox" id={`isAlsoStaff-${faculty.id}`} name="isAlsoStaff" checked={!!editFormData.isAlsoStaff} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
             <label htmlFor={`isAlsoStaff-${faculty.id}`} className="font-normal">Also a staff member</label>
+          </div>
+          <div className="flex items-center gap-2 text-xs mt-1">
+            <input type="checkbox" id={`isRemote-${faculty.id}`} name="isRemote" checked={!!editFormData.isRemote} onChange={(e) => {
+              const isChecked = e.target.checked;
+              setEditFormData(prev => ({
+                ...prev,
+                isRemote: isChecked,
+                ...(isChecked ? { hasNoOffice: true, office: '' } : {})
+              }));
+            }} className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+            <label htmlFor={`isRemote-${faculty.id}`} className="font-normal">Remote</label>
           </div>
         </div>
       )
@@ -426,7 +447,7 @@ const AdjunctDirectory = ({
         <div className="text-sm text-gray-600">{faculty.courseCount || 0}</div>
       )
     }
-  ], [editFormData, errors, handleChange, toggleEditPhoneState, toggleEditOfficeState, getInputClass, programs]);
+  ], [editFormData, setEditFormData, errors, handleChange, toggleEditPhoneState, toggleEditOfficeState, getInputClass, programs]);
 
   // Render actions column
   const renderActions = (faculty, isEditing) => {
@@ -500,6 +521,14 @@ const AdjunctDirectory = ({
                 <option value="all">All</option>
                 <option value="with-courses">Teaching Courses</option>
                 <option value="without-courses">Not Teaching</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Remote Status</label>
+              <select value={filters.isRemote} onChange={(e) => setFilters(prev => ({ ...prev, isRemote: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green">
+                <option value="all">All</option>
+                <option value="include">Remote Only</option>
+                <option value="exclude">Exclude Remote</option>
               </select>
             </div>
           </div>

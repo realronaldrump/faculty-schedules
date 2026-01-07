@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Plus, Minus, Settings, UserCog, BookOpen } from 'lucide-react';
+import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Plus, Minus, Settings, UserCog, BookOpen, Wifi } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import FacultyContactCard from './FacultyContactCard';
 import CustomAlert from './CustomAlert';
@@ -21,6 +21,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
     adjunct: 'all', // 'all', 'include', 'exclude'
     tenured: 'all', // 'all', 'include', 'exclude'
     upd: 'all', // 'all', 'include', 'exclude' - NEW UPD filter
+    isRemote: 'all', // 'all', 'include', 'exclude' - Remote filter
     // Email filter
     hasEmail: true
   });
@@ -37,10 +38,10 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
     }
 
     const office = officeLocation.trim();
-    
+
     // Handle common building name patterns
     const buildingKeywords = ['BUILDING', 'HALL', 'GYMNASIUM', 'TOWER', 'CENTER', 'COMPLEX'];
-    
+
     // Check if office contains building keywords
     for (const keyword of buildingKeywords) {
       const keywordIndex = office.toUpperCase().indexOf(keyword);
@@ -50,14 +51,14 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
         return office.substring(0, endIndex).trim();
       }
     }
-    
+
     // If no building keywords found, try to extract building name before room numbers
     // Look for patterns where building name ends before standalone numbers
     const match = office.match(/^([A-Za-z\s]+?)(\s+\d+.*)?$/);
     if (match && match[1]) {
       return match[1].trim();
     }
-    
+
     // Handle special cases like "801 WASHINGTON TOWER" where number is part of building name
     // If it starts with a number followed by words, keep it all as building name
     const startsWithNumber = office.match(/^\d+\s+[A-Za-z]/);
@@ -69,7 +70,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
       }
       return office; // Keep whole thing if no clear room pattern
     }
-    
+
     return office; // Fallback: return the whole office location
   };
 
@@ -137,6 +138,35 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
         adjunct: 'all',
         tenured: 'all',
         upd: 'all',
+        isRemote: 'all',
+        hasEmail: true
+      }
+    },
+    'remote-faculty': {
+      name: 'Remote Faculty',
+      filters: {
+        programs: { include: [], exclude: [] },
+        jobTitles: { include: [], exclude: [] },
+        buildings: { include: [], exclude: [] },
+        roleFilter: 'faculty',
+        adjunct: 'all',
+        tenured: 'all',
+        upd: 'all',
+        isRemote: 'include',
+        hasEmail: true
+      }
+    },
+    'remote-staff': {
+      name: 'Remote Staff',
+      filters: {
+        programs: { include: [], exclude: [] },
+        jobTitles: { include: [], exclude: [] },
+        buildings: { include: [], exclude: [] },
+        roleFilter: 'staff',
+        adjunct: 'all',
+        tenured: 'all',
+        upd: 'all',
+        isRemote: 'include',
         hasEmail: true
       }
     }
@@ -145,25 +175,25 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
   // Combine faculty and staff data, removing duplicates and calculating course counts
   const combinedDirectoryData = useMemo(() => {
     const allPeople = [];
-    
+
     // Add faculty data with role indicator and course count calculation
     if (facultyData && Array.isArray(facultyData)) {
       facultyData.forEach(person => {
         // Calculate course count for faculty
         const facultyName = person.name;
         const facultyCourses = scheduleData.filter(schedule => {
-          const instructorName = schedule.instructor ? 
+          const instructorName = schedule.instructor ?
             `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim() :
             (schedule.instructorName || schedule.Instructor || '');
-          
+
           return instructorName === facultyName;
         });
-        
+
         // Get unique courses (by course code)
-        const uniqueCourses = [...new Set(facultyCourses.map(schedule => 
+        const uniqueCourses = [...new Set(facultyCourses.map(schedule =>
           schedule.courseCode || schedule.Course || ''
         ))].filter(courseCode => courseCode.trim() !== '');
-        
+
         allPeople.push({
           ...person,
           role: 'Faculty',
@@ -181,7 +211,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
         });
       });
     }
-    
+
     // Add staff data with role indicator
     if (staffData && Array.isArray(staffData)) {
       staffData.forEach(person => {
@@ -194,13 +224,13 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
         });
       });
     }
-    
+
     // Remove duplicates (people who are both faculty and staff)
     const uniqueMap = new Map();
-    
+
     allPeople.forEach(person => {
       const key = `${person.name?.toLowerCase()}-${(person.email || 'no-email').toLowerCase()}`;
-      
+
       if (!uniqueMap.has(key)) {
         uniqueMap.set(key, person);
       } else {
@@ -220,14 +250,14 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
           // Keep the one with more complete data
           const existingFields = Object.values(existing).filter(v => v && v !== '').length;
           const newFields = Object.values(person).filter(v => v && v !== '').length;
-          
+
           if (newFields > existingFields) {
             uniqueMap.set(key, person);
           }
         }
       }
     });
-    
+
     return Array.from(uniqueMap.values());
   }, [facultyData, staffData, scheduleData]);
 
@@ -247,7 +277,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
           programs.add(parts[0].trim());
         }
       }
-      
+
       if (person.jobTitle) {
         jobTitles.add(person.jobTitle);
       }
@@ -326,7 +356,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
     // Search term filter
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(person => 
+      filtered = filtered.filter(person =>
         person.name?.toLowerCase().includes(term) ||
         person.email?.toLowerCase().includes(term) ||
         person.jobTitle?.toLowerCase().includes(term) ||
@@ -339,7 +369,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
     if (filters.programs.include.length > 0 || filters.programs.exclude.length > 0) {
       filtered = filtered.filter(person => {
         let programName = '';
-        
+
         // Check faculty program field first
         if (person.program && person.program.name) {
           programName = person.program.name;
@@ -348,12 +378,12 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
           const parts = person.jobTitle.split(' - ');
           programName = parts.length > 1 ? parts[0].trim() : '';
         }
-        
+
         // Apply include filter
         const includeMatch = filters.programs.include.length === 0 || filters.programs.include.includes(programName);
         // Apply exclude filter
         const excludeMatch = filters.programs.exclude.length === 0 || !filters.programs.exclude.includes(programName);
-        
+
         return includeMatch && excludeMatch;
       });
     }
@@ -362,12 +392,12 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
     if (filters.jobTitles.include.length > 0 || filters.jobTitles.exclude.length > 0) {
       filtered = filtered.filter(person => {
         const jobTitle = person.jobTitle || '';
-        
+
         // Apply include filter
         const includeMatch = filters.jobTitles.include.length === 0 || filters.jobTitles.include.includes(jobTitle);
         // Apply exclude filter
         const excludeMatch = filters.jobTitles.exclude.length === 0 || !filters.jobTitles.exclude.includes(jobTitle);
-        
+
         return includeMatch && excludeMatch;
       });
     }
@@ -376,12 +406,12 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
     if (filters.buildings.include.length > 0 || filters.buildings.exclude.length > 0) {
       filtered = filtered.filter(person => {
         const buildingName = person.office ? extractBuildingName(person.office) : 'No Building';
-        
+
         // Apply include filter
         const includeMatch = filters.buildings.include.length === 0 || filters.buildings.include.includes(buildingName);
         // Apply exclude filter
         const excludeMatch = filters.buildings.exclude.length === 0 || !filters.buildings.exclude.includes(buildingName);
-        
+
         return includeMatch && excludeMatch;
       });
     }
@@ -438,6 +468,18 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
       });
     }
 
+    // Remote filter
+    if (filters.isRemote !== 'all') {
+      filtered = filtered.filter(person => {
+        if (filters.isRemote === 'include') {
+          return person.isRemote;
+        } else if (filters.isRemote === 'exclude') {
+          return !person.isRemote;
+        }
+        return true;
+      });
+    }
+
     // Has email filter
     if (filters.hasEmail) {
       filtered = filtered.filter(person => person.email && person.email.trim() !== '');
@@ -477,8 +519,8 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
   };
 
   const handleSelectPerson = (personId) => {
-    setSelectedPeople(prev => 
-      prev.includes(personId) 
+    setSelectedPeople(prev =>
+      prev.includes(personId)
         ? prev.filter(id => id !== personId)
         : [...prev, personId]
     );
@@ -490,14 +532,14 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
 
   const generateEmailList = (format) => {
     const selectedData = getSelectedPeopleData();
-    
+
     if (selectedData.length === 0) {
       showNotification('Please select at least one person to generate an email list', 'error');
       return;
     }
 
     let emailString = '';
-    
+
     switch (format) {
       case 'outlook':
         emailString = generateOutlookFormat(selectedData);
@@ -507,7 +549,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
         emailString = generateGmailFormat(selectedData);
         break;
     }
-    
+
     copyToClipboard(emailString);
     // Show a generic success notification
     showNotification(`Email list copied to clipboard with ${selectedData.length} contacts`);
@@ -518,7 +560,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
       .filter(person => person.email && person.email.trim() !== '')
       .map(person => `"${person.name}" <${person.email}>`)
       .join('; ');
-    
+
     return emails;
   };
 
@@ -530,7 +572,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
     return emails.join(separator);
   };
 
-  
+
 
   const copyToClipboard = async (text) => {
     try {
@@ -551,7 +593,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
     // CSV Headers
     const headers = [
       'Name', 'Email', 'Phone', 'Role', 'Job Title', 'Program', 'Office', 'Building',
-      'Is Adjunct', 'Is Tenured', 'Is UPD',
+      'Is Adjunct', 'Is Tenured', 'Is UPD', 'Is Remote',
       'Course Count (current semester)', 'Courses Taught (current semester)'
     ];
 
@@ -568,6 +610,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
       'Is Adjunct': p.isAdjunct ? 'Yes' : 'No',
       'Is Tenured': p.isTenured ? 'Yes' : 'No',
       'Is UPD': p.isUPD ? 'Yes' : 'No',
+      'Is Remote': p.isRemote ? 'Yes' : 'No',
       'Course Count (current semester)': p.courseCount || 0,
       'Courses Taught (current semester)': p.courses && p.courses.length > 0
         ? p.courses.map(c => `${c.courseCode} (${c.credits} cr) - ${c.courseTitle}`).join('; ')
@@ -600,6 +643,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
       adjunct: 'all',
       tenured: 'all',
       upd: 'all',
+      isRemote: 'all',
       hasEmail: true
     });
     setSearchTerm('');
@@ -612,7 +656,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
       setActiveFilterPreset('');
       return;
     }
-    
+
     const preset = filterPresets[presetKey];
     if (preset) {
       setFilters(preset.filters);
@@ -633,6 +677,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
     if (filters.adjunct !== 'all') count++;
     if (filters.tenured !== 'all') count++;
     if (filters.upd !== 'all') count++;
+    if (filters.isRemote !== 'all') count++;
     if (!filters.hasEmail) count++;
     return count;
   }, [filters]);
@@ -680,7 +725,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
             />
           </div>
-          
+
           {/* Filter Presets */}
           <div className="flex items-center space-x-2">
             <span className="text-sm text-gray-600 whitespace-nowrap">Quick filters:</span>
@@ -695,13 +740,12 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
               ))}
             </select>
           </div>
-          
+
           {/* Filter Toggle */}
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center px-4 py-2 border rounded-lg transition-colors ${
-              showFilters ? 'bg-baylor-green text-white border-baylor-green' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-            }`}
+            className={`flex items-center px-4 py-2 border rounded-lg transition-colors ${showFilters ? 'bg-baylor-green text-white border-baylor-green' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
           >
             <Settings className="w-4 h-4 mr-2" />
             Advanced Filters
@@ -732,8 +776,8 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
                 <MultiSelectDropdown
                   options={filterOptions.programs}
                   selected={filters.programs.include}
-                  onChange={(selected) => setFilters(prev => ({ 
-                    ...prev, 
+                  onChange={(selected) => setFilters(prev => ({
+                    ...prev,
                     programs: { ...prev.programs, include: selected }
                   }))}
                   placeholder="Select programs to include..."
@@ -746,8 +790,8 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
                 <MultiSelectDropdown
                   options={filterOptions.programs}
                   selected={filters.programs.exclude}
-                  onChange={(selected) => setFilters(prev => ({ 
-                    ...prev, 
+                  onChange={(selected) => setFilters(prev => ({
+                    ...prev,
                     programs: { ...prev.programs, exclude: selected }
                   }))}
                   placeholder="Select programs to exclude..."
@@ -764,8 +808,8 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
                 <MultiSelectDropdown
                   options={filterOptions.jobTitles}
                   selected={filters.jobTitles.include}
-                  onChange={(selected) => setFilters(prev => ({ 
-                    ...prev, 
+                  onChange={(selected) => setFilters(prev => ({
+                    ...prev,
                     jobTitles: { ...prev.jobTitles, include: selected }
                   }))}
                   placeholder="Select job titles to include..."
@@ -778,8 +822,8 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
                 <MultiSelectDropdown
                   options={filterOptions.jobTitles}
                   selected={filters.jobTitles.exclude}
-                  onChange={(selected) => setFilters(prev => ({ 
-                    ...prev, 
+                  onChange={(selected) => setFilters(prev => ({
+                    ...prev,
                     jobTitles: { ...prev.jobTitles, exclude: selected }
                   }))}
                   placeholder="Select job titles to exclude..."
@@ -796,8 +840,8 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
                 <MultiSelectDropdown
                   options={filterOptions.buildings}
                   selected={filters.buildings.include}
-                  onChange={(selected) => setFilters(prev => ({ 
-                    ...prev, 
+                  onChange={(selected) => setFilters(prev => ({
+                    ...prev,
                     buildings: { ...prev.buildings, include: selected }
                   }))}
                   placeholder="Select buildings to include..."
@@ -810,8 +854,8 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
                 <MultiSelectDropdown
                   options={filterOptions.buildings}
                   selected={filters.buildings.exclude}
-                  onChange={(selected) => setFilters(prev => ({ 
-                    ...prev, 
+                  onChange={(selected) => setFilters(prev => ({
+                    ...prev,
                     buildings: { ...prev.buildings, exclude: selected }
                   }))}
                   placeholder="Select buildings to exclude..."
@@ -884,6 +928,21 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Remote Status
+                </label>
+                <select
+                  value={filters.isRemote}
+                  onChange={(e) => setFilters(prev => ({ ...prev, isRemote: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                >
+                  <option value="all">All</option>
+                  <option value="include">Remote Only</option>
+                  <option value="exclude">Exclude Remote</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Email Requirement
                 </label>
                 <select
@@ -909,7 +968,7 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
               Choose a format to export the selected contact email list
             </p>
           </div>
-          
+
           <div className="flex items-center space-x-3">
             <div className="hidden sm:flex items-center space-x-2">
               <span className="text-sm text-gray-600 whitespace-nowrap">Outlook version:</span>
@@ -930,9 +989,9 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
               <Mail className="w-4 h-4 mr-2" />
               Copy Emails
             </button>
-            
-            
-            
+
+
+
             <button
               onClick={downloadCSV}
               disabled={selectedPeople.length === 0}
@@ -965,21 +1024,19 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
                 <div className="flex rounded-lg border border-gray-300 overflow-hidden">
                   <button
                     onClick={() => setNameSort('firstName')}
-                    className={`px-3 py-1 text-xs ${
-                      nameSort === 'firstName' 
-                        ? 'bg-baylor-green text-white' 
-                        : 'bg-white text-gray-700 hover:bg-gray-50'
-                    }`}
+                    className={`px-3 py-1 text-xs ${nameSort === 'firstName'
+                      ? 'bg-baylor-green text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
                   >
                     First Name
                   </button>
                   <button
                     onClick={() => setNameSort('lastName')}
-                    className={`px-3 py-1 text-xs ${
-                      nameSort === 'lastName' 
-                        ? 'bg-baylor-green text-white' 
-                        : 'bg-white text-gray-700 hover:bg-gray-50'
-                    }`}
+                    className={`px-3 py-1 text-xs ${nameSort === 'lastName'
+                      ? 'bg-baylor-green text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
                   >
                     Last Name
                   </button>
@@ -1071,11 +1128,10 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        person.roleType === 'faculty' ? 'bg-blue-100 text-blue-800' :
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${person.roleType === 'faculty' ? 'bg-blue-100 text-blue-800' :
                         person.roleType === 'staff' ? 'bg-green-100 text-green-800' :
-                        'bg-purple-100 text-purple-800'
-                      }`}>
+                          'bg-purple-100 text-purple-800'
+                        }`}>
                         {person.role}
                       </span>
                       {person.isUPD && (
@@ -1113,9 +1169,8 @@ const EmailLists = ({ facultyData, staffData, studentData, scheduleData, rawSche
 
       {/* Notification */}
       {notification.show && (
-        <div className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg ${
-                      notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-baylor-green text-white'
-        }`}>
+        <div className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg ${notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-baylor-green text-white'
+          }`}>
           <div className="flex items-center">
             {notification.type === 'error' ? (
               <X className="w-5 h-5 mr-2" />

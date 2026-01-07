@@ -22,7 +22,7 @@ const EmailLists = () => {
     // Role filters - simplified to radio buttons
     roleFilter: 'all', // 'all', 'faculty', 'staff', 'both'
     // Boolean filters with include/exclude options
-    adjunct: 'all', // 'all', 'include', 'exclude'
+    adjunct: 'exclude', // 'all', 'include', 'exclude'
     tenured: 'all', // 'all', 'include', 'exclude'
     upd: 'all', // 'all', 'include', 'exclude' - NEW UPD filter
     isRemote: 'all', // 'all', 'include', 'exclude' - Remote filter
@@ -648,7 +648,7 @@ const EmailLists = () => {
       jobTitles: { include: [], exclude: [] },
       buildings: { include: [], exclude: [] },
       roleFilter: 'all',
-      adjunct: 'all',
+      adjunct: 'exclude',
       tenured: 'all',
       upd: 'all',
       isRemote: 'all',
@@ -748,6 +748,22 @@ const EmailLists = () => {
               ))}
             </select>
           </div>
+
+          {/* Exclude Adjuncts Toggle */}
+          <label className="flex items-center space-x-2 text-sm text-gray-700 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={filters.adjunct === 'exclude'}
+              onChange={(e) => {
+                setFilters(prev => ({
+                  ...prev,
+                  adjunct: e.target.checked ? 'exclude' : 'all'
+                }));
+              }}
+              className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+            />
+            <span>Exclude Adjuncts</span>
+          </label>
 
           {/* Filter Toggle */}
           <button

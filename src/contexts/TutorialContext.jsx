@@ -124,6 +124,114 @@ export const TUTORIALS = {
         action: null
       }
     ]
+  },
+  'room-schedules': {
+    id: 'room-schedules',
+    title: 'Room Schedules Tutorial',
+    description: 'Learn how to view classroom usage, filter by building and room, switch between view modes, and understand utilization statistics.',
+    estimatedTime: '4 min',
+    category: 'Scheduling',
+    targetPage: 'scheduling/room-schedules',
+    steps: [
+      {
+        id: 'welcome',
+        title: 'Welcome to Room Schedules',
+        content: 'This tool helps you visualize classroom usage across the department. You can see which rooms are occupied, find available spaces, and analyze utilization patterns.',
+        target: null,
+        position: 'center',
+        action: null
+      },
+      {
+        id: 'day-selector',
+        title: 'Select a Day',
+        content: 'Use these buttons to switch between weekdays. The schedule will update to show classes for the selected day.',
+        target: '[data-tutorial="day-selector"]',
+        position: 'bottom',
+        action: 'Try clicking a different day to see how the schedule changes',
+        actionType: 'click'
+      },
+      {
+        id: 'room-search',
+        title: 'Search for Rooms',
+        content: 'Type a room number or partial name to quickly filter the room list. This is helpful when you\'re looking for a specific classroom.',
+        target: '[data-tutorial="room-search"]',
+        position: 'bottom',
+        action: null
+      },
+      {
+        id: 'building-filter',
+        title: 'Filter by Building',
+        content: 'Use this dropdown to show only rooms in a specific building. Great for focusing on classrooms in your area.',
+        target: '[data-tutorial="building-filter"]',
+        position: 'bottom',
+        action: null
+      },
+      {
+        id: 'room-selector',
+        title: 'Select a Specific Room',
+        content: 'Choose a single room to view its complete schedule. This isolates one room for detailed viewing.',
+        target: '[data-tutorial="room-selector"]',
+        position: 'bottom',
+        action: null
+      },
+      {
+        id: 'view-mode',
+        title: 'Choose Your View',
+        content: 'Switch between different visualizations: Timeline shows a Gantt-style chart, List shows detailed cards, Week shows the full week, and Calendar shows a monthly view.',
+        target: '[data-tutorial="view-mode-toggle"]',
+        position: 'bottom',
+        action: 'Try switching to a different view mode',
+        actionType: 'click'
+      },
+      {
+        id: 'only-in-use',
+        title: 'Filter Active Rooms',
+        content: 'Toggle this on to hide rooms with no scheduled classes. This helps you focus on rooms that are actively being used for classes.',
+        target: '[data-tutorial="only-in-use-toggle"]',
+        position: 'top',
+        action: null
+      },
+      {
+        id: 'density',
+        title: 'Adjust Display Density',
+        content: 'Switch between Comfortable (more spacing) and Compact (more rooms visible) layouts depending on your preference.',
+        target: '[data-tutorial="density-toggle"]',
+        position: 'top',
+        action: null
+      },
+      {
+        id: 'sort-by',
+        title: 'Sort Rooms',
+        content: 'Sort rooms alphabetically by name, by number of sessions, or by utilization percentage to find the most or least used classrooms.',
+        target: '[data-tutorial="sort-by"]',
+        position: 'top',
+        action: null
+      },
+      {
+        id: 'stats-cards',
+        title: 'Utilization Statistics',
+        content: 'These cards show key metrics: total rooms displayed, number of class sessions, total teaching hours, and average utilization (based on a 9-hour day from 8AM-5PM).',
+        target: '[data-tutorial="stats-cards"]',
+        position: 'top',
+        action: null
+      },
+      {
+        id: 'schedule-display',
+        title: 'Explore the Schedule',
+        content: 'Click on any class block to see course details including the instructor, meeting pattern, and room information. You can also click instructor names to view their contact card.',
+        target: '[data-tutorial="schedule-display"]',
+        position: 'top',
+        action: null
+      },
+      {
+        id: 'complete',
+        title: 'You\'re Ready!',
+        content: 'You now know how to navigate Room Schedules. Use this tool to check room availability, analyze classroom usage, and find the best spaces for your needs.',
+        target: null,
+        position: 'center',
+        action: null
+      }
+    ]
   }
 };
 

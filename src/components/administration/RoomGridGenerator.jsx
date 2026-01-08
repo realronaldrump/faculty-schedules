@@ -1161,7 +1161,11 @@ const RoomGridGenerator = () => {
                             <p>Your generated schedule will appear here. You can click on fields to edit them before printing.</p>
                         </div>
                     ) : (
-                        <div ref={printRef} dangerouslySetInnerHTML={{ __html: scheduleHtml }}></div>
+                        <div
+                            ref={printRef}
+                            style={{ width: '100%', maxWidth: '8in', margin: '0 auto' }}
+                            dangerouslySetInnerHTML={{ __html: scheduleHtml }}
+                        ></div>
                     )}
                 </div>
             </div>
@@ -1187,7 +1191,7 @@ const RoomGridGenerator = () => {
                     --danger-border: #fecaca;
                     --green-dark: #0f3a2a;
                     background: var(--sheet-bg); 
-                    width: 8in; 
+                    width: 100%; 
                     max-width: 100%;
                     min-height: 5in; 
                     margin: 0 auto; 
@@ -1295,7 +1299,7 @@ const RoomGridGenerator = () => {
                 .weekly-sheet { 
                     padding: 0.35in; 
                     padding-top: 0; 
-                    width: 8in;
+                    width: 100%;
                     max-width: 100%;
                 }
                 .weekly-header {

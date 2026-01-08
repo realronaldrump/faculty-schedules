@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { MapPin, Calendar, CalendarDays, Clock, Search, Grid, List, Filter, Building2, X, SlidersHorizontal, ArrowUpDown, Download, Printer } from 'lucide-react';
+import { MapPin, Calendar, CalendarDays, Clock, Search, Grid, List, Filter, Building2, X, SlidersHorizontal, ArrowUpDown, Download, Printer, Play } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
 import WeekView from './WeekView';
 import RoomCalendarView from './RoomCalendarView';
@@ -9,10 +9,12 @@ import { getBuildingFromRoom, getCanonicalBuildingList } from '../../utils/build
 import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
 import { useData } from '../../contexts/DataContext';
 import { usePeople } from '../../contexts/PeopleContext';
+import { useTutorial } from '../../contexts/TutorialContext';
 
 const RoomSchedules = () => {
   const { scheduleData = [], facultyData = [] } = useData();
   const { loadPeople } = usePeople();
+  const { startTutorial } = useTutorial();
 
   useEffect(() => {
     loadPeople();
@@ -479,9 +481,31 @@ const RoomSchedules = () => {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Room Schedules</h1>
-        <p className="text-gray-600">View classroom usage and availability across the department</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Room Schedules</h1>
+          <p className="text-gray-600">View classroom usage and availability across the department</p>
+        </div>
+        <button
+          onClick={() => {
+            // Reset page to default state before starting tutorial
+            setRoomScheduleDay(getDefaultRoomScheduleDay());
+            setViewMode('timeline');
+            setSelectedRoom('');
+            setSearchTerm('');
+            setSelectedBuilding('');
+            setShowOnlyInUse(false);
+            setDensity('comfortable');
+            setSortBy('room');
+            setWeekViewMode('all');
+            startTutorial('room-schedules');
+          }}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm text-baylor-green border border-baylor-green rounded-lg hover:bg-baylor-green/5 transition-colors"
+          title="Learn how to use Room Schedules"
+        >
+          <Play className="w-4 h-4" />
+          Tutorial
+        </button>
       </div>
 
       {/* Controls */}
@@ -506,7 +530,7 @@ const RoomSchedules = () => {
             {/* Day Selector */}
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-2">Select Day</label>
-              <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+              <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg" data-tutorial="day-selector">
                 {Object.entries(dayNames).map(([dayCode, dayName]) => (
                   <button
                     key={dayCode}
@@ -528,7 +552,7 @@ const RoomSchedules = () => {
             {/* Room Filter */}
             <div className="flex-1 max-w-full">
               <label className="block text-sm font-medium text-gray-700 mb-2">Filter Rooms</label>
-              <div className="relative">
+              <div className="relative" data-tutorial="room-search">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
                 <input
                   type="text"
@@ -543,7 +567,7 @@ const RoomSchedules = () => {
             {/* Building Filter */}
             <div className="flex-1 max-w-full">
               <label className="block text-sm font-medium text-gray-700 mb-2">Building</label>
-              <div className="relative">
+              <div className="relative" data-tutorial="building-filter">
                 <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
                 <select
                   value={selectedBuilding}
@@ -561,7 +585,7 @@ const RoomSchedules = () => {
             {/* Room Selector */}
             <div className="flex-1 max-w-full">
               <label className="block text-sm font-medium text-gray-700 mb-2">Room</label>
-              <div className="relative">
+              <div className="relative" data-tutorial="room-selector">
                 <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
                 <select
                   value={selectedRoom}
@@ -579,7 +603,7 @@ const RoomSchedules = () => {
             {/* View Mode Toggle */}
             <div className="flex-1 max-w-full">
               <label className="block text-sm font-medium text-gray-700 mb-2">View Mode</label>
-              <div className="flex flex-wrap items-center gap-1 bg-gray-100 p-1 rounded-lg">
+              <div className="flex flex-wrap items-center gap-1 bg-gray-100 p-1 rounded-lg" data-tutorial="view-mode-toggle">
                 <button
                   onClick={() => setViewMode('timeline')}
                   className={`px-2 py-2 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${viewMode === 'timeline'
@@ -627,7 +651,7 @@ const RoomSchedules = () => {
           {/* Row 3: Only-in-use, Density, Sort, Week View Mode */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
             {/* Only In Use Toggle */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3" data-tutorial="only-in-use-toggle">
               <label className="text-sm font-medium text-gray-700">Only rooms in use</label>
               <button
                 onClick={() => setShowOnlyInUse(v => !v)}
@@ -639,7 +663,7 @@ const RoomSchedules = () => {
             </div>
 
             {/* Density Toggle */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2" data-tutorial="density-toggle">
               <label className="text-sm font-medium text-gray-700">Density</label>
               <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
                 <button
@@ -654,7 +678,7 @@ const RoomSchedules = () => {
             </div>
 
             {/* Sort */}
-            <div className="flex-1 max-w-full">
+            <div className="flex-1 max-w-full" data-tutorial="sort-by">
               <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
               <div className="relative">
                 <ArrowUpDown className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
@@ -696,7 +720,7 @@ const RoomSchedules = () => {
 
       {/* Summary Stats (hide in week view) */}
       {viewMode !== 'week' && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4" data-tutorial="stats-cards">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="text-sm text-gray-600">Rooms Shown</div>
             <div className="text-2xl font-bold text-baylor-green">
@@ -729,7 +753,7 @@ const RoomSchedules = () => {
       )}
 
       {/* Schedule Display */}
-      <div>
+      <div data-tutorial="schedule-display">
         {viewMode !== 'week' && (
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-serif font-semibold text-baylor-green">

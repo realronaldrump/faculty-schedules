@@ -1,11 +1,6 @@
 import React, { useState } from 'react';
-import { X, FileText, Image, File } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { X, Image } from 'lucide-react';
 import html2canvas from 'html2canvas';
-import html2pdf from 'html2pdf.js';
-// Excel export removed per request
 
 const ExportModal = ({ isOpen, onClose, scheduleTableRef, title, onExport }) => {
     if (!isOpen) return null;
@@ -15,11 +10,6 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title, onExport }) => 
     const [customWidth, setCustomWidth] = useState(8.5);
     const [customHeight, setCustomHeight] = useState(11);
     const [orientation, setOrientation] = useState('portrait');
-    const [margin, setMargin] = useState(0.25);
-
-    // Determine if the rendered content contains a table (MWF/TR views)
-    const containerForCheck = scheduleTableRef?.current;
-    const hasTable = !!(containerForCheck && containerForCheck.querySelector('table'));
 
     const downloadBlob = (blob, filename) => {
         const link = document.createElement('a');
@@ -31,9 +21,8 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title, onExport }) => 
         setTimeout(() => URL.revokeObjectURL(link.href), 0);
     };
 
-    const handleExport = async (format) => {
+    const handleExport = async (format = 'png') => {
         const container = scheduleTableRef.current;
-        const table = container ? container.querySelector('table') : null;
         if (!container) {
             console.error('Nothing to export.');
             onClose();
@@ -46,100 +35,69 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title, onExport }) => 
         }
 
         try {
-            if (format === 'csv') {
-                if (!table) {
-                    console.warn('CSV export requires a table.');
-                    onClose();
-                    return;
-                }
-                const tableClone = table.cloneNode(true);
-                // Remove interactive controls from clone
-                tableClone.querySelectorAll('.export-ignore').forEach(el => el.remove());
-                const wb = XLSX.utils.table_to_book(tableClone);
-                const ws = wb.Sheets[wb.SheetNames[0]];
-                const csv = XLSX.utils.sheet_to_csv(ws);
-                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                downloadBlob(blob, `${title}.csv`);
-            } else if (format === 'pdf') {
-                // Determine size settings
-                let unit = 'in';
-                let formatSize = [7, 5];
-                if (presetSize === 'letter') {
-                    formatSize = [8.5, 11];
-                } else if (presetSize === 'custom') {
-                    unit = customUnit;
-                    formatSize = [Number(customWidth) || 7, Number(customHeight) || 5];
-                }
+            if (format !== 'png') {
+                console.warn(`Unsupported export format: ${format}`);
+                onClose();
+                return;
+            }
 
-                // Swap if landscape selected
-                const finalFormat = orientation === 'landscape' ? [formatSize[1], formatSize[0]] : formatSize;
+            // Calculate target dimensions for PNG export
+            const DPI = 96; // Standard screen DPI
+            let targetWidthPx, targetHeightPx;
 
-                await html2pdf().set({
-                    filename: `${title}.pdf`,
-                    margin: margin || 0,
-                    image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2, useCORS: true, backgroundColor: null, ignoreElements: (el) => el && el.classList && el.classList.contains('export-ignore') },
-                    jsPDF: { unit, format: finalFormat, orientation }
-                }).from(container).save();
-            } else if (format === 'png') {
-                // Calculate target dimensions for PNG export
-                const DPI = 96; // Standard screen DPI
-                let targetWidthPx, targetHeightPx;
+            if (presetSize === 'letter') {
+                targetWidthPx = 8.5 * DPI;
+                targetHeightPx = 11 * DPI;
+            } else if (presetSize === 'custom') {
+                const unitMultiplier = customUnit === 'mm' ? 0.0393701 : customUnit === 'pt' ? 0.0138889 : 1; // Convert to inches, then to pixels
+                targetWidthPx = (Number(customWidth) || 8.5) * unitMultiplier * DPI;
+                targetHeightPx = (Number(customHeight) || 11) * unitMultiplier * DPI;
+            } else {
+                // Default 7x5
+                targetWidthPx = 7 * DPI;
+                targetHeightPx = 5 * DPI;
+            }
 
-                if (presetSize === 'letter') {
-                    targetWidthPx = 8.5 * DPI;
-                    targetHeightPx = 11 * DPI;
-                } else if (presetSize === 'custom') {
-                    const unitMultiplier = customUnit === 'mm' ? 0.0393701 : customUnit === 'pt' ? 0.0138889 : 1; // Convert to inches, then to pixels
-                    targetWidthPx = (Number(customWidth) || 8.5) * unitMultiplier * DPI;
-                    targetHeightPx = (Number(customHeight) || 11) * unitMultiplier * DPI;
-                } else {
-                    // Default 7x5
-                    targetWidthPx = 7 * DPI;
-                    targetHeightPx = 5 * DPI;
-                }
+            // Apply orientation
+            if (orientation === 'landscape') {
+                [targetWidthPx, targetHeightPx] = [targetHeightPx, targetWidthPx];
+            }
 
-                // Apply orientation
-                if (orientation === 'landscape') {
-                    [targetWidthPx, targetHeightPx] = [targetHeightPx, targetWidthPx];
-                }
+            // Store original styles
+            const originalWidth = container.style.width;
+            const originalHeight = container.style.height;
+            const originalMaxWidth = container.style.maxWidth;
+            const originalMaxHeight = container.style.maxHeight;
 
-                // Store original styles
-                const originalWidth = container.style.width;
-                const originalHeight = container.style.height;
-                const originalMaxWidth = container.style.maxWidth;
-                const originalMaxHeight = container.style.maxHeight;
+            // Temporarily set container to target size
+            container.style.width = `${targetWidthPx}px`;
+            container.style.height = `${targetHeightPx}px`;
+            container.style.maxWidth = `${targetWidthPx}px`;
+            container.style.maxHeight = `${targetHeightPx}px`;
+            container.style.overflow = 'hidden';
 
-                // Temporarily set container to target size
-                container.style.width = `${targetWidthPx}px`;
-                container.style.height = `${targetHeightPx}px`;
-                container.style.maxWidth = `${targetWidthPx}px`;
-                container.style.maxHeight = `${targetHeightPx}px`;
-                container.style.overflow = 'hidden';
+            try {
+                // Capture with size constraints
+                const canvas = await html2canvas(container, {
+                    width: targetWidthPx,
+                    height: targetHeightPx,
+                    scale: 2,
+                    backgroundColor: null,
+                    useCORS: true,
+                    ignoreElements: (el) => el && el.classList && el.classList.contains('export-ignore')
+                });
 
-                try {
-                    // Capture with size constraints
-                    const canvas = await html2canvas(container, {
-                        width: targetWidthPx,
-                        height: targetHeightPx,
-                        scale: 2,
-                        backgroundColor: null,
-                        useCORS: true,
-                        ignoreElements: (el) => el && el.classList && el.classList.contains('export-ignore')
-                    });
-
-                    const dataUrl = canvas.toDataURL('image/png');
-                    const res = await fetch(dataUrl);
-                    const blob = await res.blob();
-                    downloadBlob(blob, `${title}.png`);
-                } finally {
-                    // Restore original styles
-                    container.style.width = originalWidth;
-                    container.style.height = originalHeight;
-                    container.style.maxWidth = originalMaxWidth;
-                    container.style.maxHeight = originalMaxHeight;
-                    container.style.overflow = '';
-                }
+                const dataUrl = canvas.toDataURL('image/png');
+                const res = await fetch(dataUrl);
+                const blob = await res.blob();
+                downloadBlob(blob, `${title}.png`);
+            } finally {
+                // Restore original styles
+                container.style.width = originalWidth;
+                container.style.height = originalHeight;
+                container.style.maxWidth = originalMaxWidth;
+                container.style.maxHeight = originalMaxHeight;
+                container.style.overflow = '';
             }
         } catch (err) {
             console.error('Export failed:', err);
@@ -158,16 +116,7 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title, onExport }) => 
                     </button>
                 </div>
                 <div className="p-6">
-                    <div className="grid grid-cols-2 gap-4">
-                        <button onClick={() => handleExport('csv')} disabled={!hasTable} className={`export-option ${!hasTable ? 'opacity-50 cursor-not-allowed' : ''}`} title="Export as CSV">
-                            <FileText className="w-8 h-8 mx-auto mb-2" />
-                            <span>CSV</span>
-                        </button>
-                        {/* Excel export removed */}
-                        <button onClick={() => handleExport('pdf')} className="export-option" title="Export as PDF">
-                            <File className="w-8 h-8 mx-auto mb-2" />
-                            <span>PDF</span>
-                        </button>
+                    <div className="grid grid-cols-1 gap-4">
                         <button onClick={() => handleExport('png')} className="export-option" title="Export as PNG image">
                             <Image className="w-8 h-8 mx-auto mb-2" />
                             <span>PNG</span>
@@ -202,19 +151,12 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title, onExport }) => 
                                 </div>
                             </div>
                         )}
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Orientation</label>
-                                <select value={orientation} onChange={(e) => setOrientation(e.target.value)} className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                                    <option value="portrait">Portrait</option>
-                                    <option value="landscape">Landscape</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Margins</label>
-                                <input type="number" step="0.05" value={margin} onChange={(e) => setMargin(Number(e.target.value))} className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" />
-                                <p className="text-xs text-gray-500 mt-1">inches</p>
-                            </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Orientation</label>
+                            <select value={orientation} onChange={(e) => setOrientation(e.target.value)} className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="portrait">Portrait</option>
+                                <option value="landscape">Landscape</option>
+                            </select>
                         </div>
                     </div>
                 </div>

@@ -65,6 +65,47 @@ const EmailLists = () => {
     loadPeople();
   }, [loadPeople]);
 
+  // Reset page to expected state when starting tutorial
+  const resetForTutorial = () => {
+    // Switch to Faculty & Staff tab
+    setActiveTab('faculty-staff');
+    // Collapse advanced filters
+    setShowFilters(false);
+    // Clear search
+    setSearchTerm('');
+    // Reset filters to defaults
+    setFilters({
+      programs: { include: [], exclude: [] },
+      jobTitles: { include: [], exclude: [] },
+      buildings: { include: [], exclude: [] },
+      roleFilter: 'all',
+      adjunct: 'exclude',
+      tenured: 'all',
+      upd: 'all',
+      isRemote: 'all',
+      hasEmail: true
+    });
+    // Clear selections
+    setSelectedPeople([]);
+    setSelectedPresetId('');
+    // Reset student filters too
+    setStudentSearchTerm('');
+    setSelectedStudents([]);
+    setStudentFilters({
+      buildings: { include: [], exclude: [] },
+      jobTitles: { include: [], exclude: [] },
+      hasEmail: true
+    });
+    // Reset other options
+    setShowOnlyWithCourses(false);
+  };
+
+  // Handle starting tutorial with page reset
+  const handleStartTutorial = () => {
+    resetForTutorial();
+    startTutorial('email-lists');
+  };
+
   // Helper function to extract building name from office location
   const extractBuildingName = (officeLocation) => {
     if (!officeLocation || officeLocation.trim() === '') {
@@ -942,7 +983,7 @@ const EmailLists = () => {
         <div className="flex items-center space-x-4">
           {/* Start Tutorial Button */}
           <button
-            onClick={() => startTutorial('email-lists')}
+            onClick={handleStartTutorial}
             className="flex items-center gap-2 px-3 py-1.5 text-sm text-baylor-green border border-baylor-green rounded-lg hover:bg-baylor-green/5 transition-colors"
             title="Learn how to use Email Lists"
           >

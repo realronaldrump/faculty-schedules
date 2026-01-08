@@ -220,7 +220,12 @@ export const AuthProvider = ({ children }) => {
       }
       setLoadedAccess(true);
     }, () => {
-      setRolePermissions({ admin: { '*': true }, staff: {}, faculty: {}, viewer: { 'dashboard': true } });
+      setRolePermissions({
+        admin: { pages: { '*': true }, actions: { '*': true } },
+        staff: { pages: {}, actions: {} },
+        faculty: { pages: {}, actions: {} },
+        viewer: { pages: { 'dashboard': true }, actions: {} }
+      });
       setLoadedAccess(true);
     });
     return () => stop();

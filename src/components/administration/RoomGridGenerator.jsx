@@ -1230,14 +1230,19 @@ const RoomGridGenerator = () => {
                     width: 100%;
                     height: 100%;
                     table-layout: fixed;
-                    font-size: 12px;
+                    font-size: 11px;
+                    line-height: 1.2;
                     color: var(--text-strong);
                 }
                 .schedule-table th, .schedule-table td {
                     border: 1px solid var(--neutral-border);
-                    padding: 10px;
+                    padding: 6px;
                     text-align: left;
                     vertical-align: top;
+                }
+                .schedule-table td {
+                    overflow: hidden;
+                    word-break: break-word;
                 }
                 .schedule-table tbody tr {
                     height: var(--rowHeight, auto);
@@ -1247,40 +1252,44 @@ const RoomGridGenerator = () => {
                     color: #ffffff;
                     text-align: center;
                     border-bottom: 3px solid var(--baylor-gold);
-                    padding-top: 14px;
-                    padding-bottom: 14px;
+                    padding-top: 10px;
+                    padding-bottom: 10px;
                 }
                 .schedule-table thead .text-2xl {
-                    font-size: 18px;
+                    font-size: 16px;
                     letter-spacing: 0.5px;
                 }
                 .schedule-table thead .text-lg {
-                    font-size: 13px;
+                    font-size: 12px;
                     opacity: 0.95;
                 }
                 .schedule-table thead .text-md {
-                    font-size: 12px;
+                    font-size: 11px;
                     opacity: 0.9;
                 }
                 .time-slot {
                     font-weight: 700;
-                    width: 1.15in;
+                    width: 1.05in;
                     background-color: var(--accent-bg);
                     color: var(--baylor-green);
                     text-align: center;
+                    font-size: 11px;
                 }
                 .class-entry {
                     font-weight: 700;
                     color: var(--baylor-green);
+                    font-size: 11px;
+                    line-height: 1.1;
                 }
                 .prof-entry {
-                    font-size: 11px;
+                    font-size: 10px;
                     color: var(--text-muted);
+                    line-height: 1.1;
                 }
                 .schedule-table hr {
                     border: 0;
                     border-top: 1px solid var(--neutral-border);
-                    margin: 6px 0;
+                    margin: 4px 0;
                 }
                 [contenteditable="true"] {
                     cursor: pointer;
@@ -1318,7 +1327,7 @@ const RoomGridGenerator = () => {
                     .weekly-grid .class-instructor { font-size: 10px; }
                     .weekly-grid .class-time { font-size: 9px; }
                     .schedule-table { font-size: 10pt; }
-                    .schedule-table th, .schedule-table td { padding: 8pt; }
+                    .schedule-table th, .schedule-table td { padding: 6pt; }
                 }
  
                  /* Weekly grid layout */
@@ -1333,8 +1342,8 @@ const RoomGridGenerator = () => {
                     color: #ffffff;
                     text-align: center;
                     border-bottom: 3px solid var(--baylor-gold);
-                    padding: 14px;
-                    margin: 0 0 10px 0;
+                    padding: 10px;
+                    margin: 0 0 8px 0;
                     position: relative;
                 }
                 .weekly-header .header-left { display: table; margin: 0 auto; }
@@ -1343,8 +1352,8 @@ const RoomGridGenerator = () => {
                 .inline-form label { font-size: 12px; color: var(--text-muted); }
                 .inline-input { border: 1px solid var(--neutral-border-strong); border-radius: 4px; padding: 4px 6px; font-size: 12px; }
                 .inline-btn { padding: 4px 8px; font-size: 12px; }
-                .weekly-header .text-2xl { font-size: 18px; letter-spacing: 0.5px; }
-                .weekly-header .text-md { font-size: 12px; opacity: 0.9; }
+                .weekly-header .text-2xl { font-size: 16px; letter-spacing: 0.4px; }
+                .weekly-header .text-md { font-size: 11px; opacity: 0.9; }
                 .weekly-grid { 
                     display: grid; 
                     grid-template-columns: 0.9in repeat(5, 1fr);
@@ -1361,24 +1370,25 @@ const RoomGridGenerator = () => {
                     grid-row: 1;
                     background: var(--baylor-green);
                     color: #fff;
-                    font-size: 14px;
+                    font-size: 12px;
                     font-weight: 700;
                     text-align: center;
-                    padding: 10px 6px;
+                    padding: 6px 4px;
                     border-bottom: 2px solid var(--baylor-gold);
                 }
                 .weekly-grid .hour-label { 
                     font-weight: 700; 
-                    font-size: 12px;
+                    font-size: 10px;
                     color: var(--baylor-green); 
                     display: flex; 
                     align-items: flex-start; 
                     justify-content: center; 
                     text-align: center;
-                    padding: 6px 4px; 
+                    padding: 4px 2px; 
                     border-top: 1px solid var(--neutral-border); 
                     border-right: 1px solid var(--neutral-border);
                     background: var(--row-bg); 
+                    line-height: 1.1;
                 }
                 .weekly-grid .hour-line { 
                     border-top: 1px solid var(--neutral-border); 
@@ -1386,31 +1396,31 @@ const RoomGridGenerator = () => {
                 .weekly-grid .class-block { 
                     background-color: var(--block-bg);
                     border: 1px solid var(--baylor-green);
-                    border-left: 4px solid var(--baylor-green);
-                    border-radius: 6px;
-                    padding: 8px 10px; 
-                    margin: 2px 3px; 
+                    border-left: 3px solid var(--baylor-green);
+                    border-radius: 4px;
+                    padding: 4px 6px; 
+                    margin: 1px 2px; 
                     box-shadow: 0 2px 4px rgba(0,0,0,0.08);
                     display: flex; 
                     flex-direction: column; 
                     justify-content: center;
                     align-items: center;
                     text-align: center;
-                    gap: 3px; 
+                    gap: 2px; 
                     overflow: hidden;
                     word-break: break-word;
-                    font-size: 13px;
+                    font-size: 11px;
                     position: relative;
-                    min-height: 50px;
+                    line-height: 1.1;
                 }
-                .weekly-grid .class-title { font-weight: 700; color: var(--baylor-green); font-size: 14px; line-height: 1.3; letter-spacing: 0.3px; }
-                .weekly-grid .class-instructor { font-size: 12px; color: var(--text-muted); line-height: 1.3; }
-                .weekly-grid .class-time { font-size: 11px; color: var(--text-strong); line-height: 1.3; font-weight: 500; }
+                .weekly-grid .class-title { font-weight: 700; color: var(--baylor-green); font-size: 11px; line-height: 1.1; letter-spacing: 0.2px; }
+                .weekly-grid .class-instructor { font-size: 10px; color: var(--text-muted); line-height: 1.1; }
+                .weekly-grid .class-time { font-size: 9px; color: var(--text-strong); line-height: 1.1; font-weight: 500; }
 
                 /* Editing helpers */
                 .slot-toolbar { display: flex; justify-content: flex-end; }
                 .slot-add-btn { background: var(--edit-bg); color: var(--baylor-green); border: 1px solid var(--edit-border); border-radius: 4px; padding: 2px 6px; font-size: 11px; cursor: pointer; }
-                .class-list { display: flex; flex-direction: column; gap: 6px; }
+                .class-list { display: flex; flex-direction: column; gap: 4px; }
                 .class-entry-wrapper { position: relative; padding-right: 18px; }
                 .delete-entry-btn { position: absolute; top: 0; right: 0; background: var(--danger-bg); color: var(--danger-text); border: 1px solid var(--danger-border); width: 16px; height: 16px; line-height: 14px; text-align: center; border-radius: 4px; cursor: pointer; font-size: 12px; }
                 .delete-block-btn { top: 4px; right: 4px; }

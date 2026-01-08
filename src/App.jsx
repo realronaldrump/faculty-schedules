@@ -41,6 +41,7 @@ import ProtectedContent from './components/ProtectedContent.jsx';
 import AccessControl from './components/administration/AccessControl.jsx';
 import MaintenancePage from './components/MaintenancePage';
 import Notification from './components/Notification';
+import { TutorialPage, TutorialOverlay } from './components/help';
 
 import { useAuth } from './contexts/AuthContext.jsx';
 import { useUI } from './contexts/UIContext.jsx';
@@ -59,7 +60,9 @@ import {
   ChevronDown,
   X,
   Database,
-  Radio
+  Radio,
+  BookOpen,
+  HelpCircle
 } from 'lucide-react';
 
 // ==================== NAVIGATION CONFIGURATION ====================
@@ -134,6 +137,12 @@ const navigationItems = [
       { id: 'recent-changes', label: 'Recent Changes', path: 'administration/recent-changes' },
       { id: 'baylor-systems', label: 'Baylor Systems', path: 'administration/baylor-systems' }
     ]
+  },
+  {
+    id: 'help',
+    label: 'Help & Tutorials',
+    icon: HelpCircle,
+    path: 'help/tutorials'
   }
 ];
 
@@ -324,6 +333,8 @@ function App() {
         return <ProtectedContent pageId="administration/access-control"><AccessControl /></ProtectedContent>;
       case 'administration/user-activity':
         return <ProtectedContent pageId="administration/user-activity"><UserActivityDashboard /></ProtectedContent>;
+      case 'help/tutorials':
+        return <ProtectedContent pageId="help/tutorials"><TutorialPage /></ProtectedContent>;
       default:
         return <ProtectedContent pageId="dashboard"><Dashboard /></ProtectedContent>;
     }
@@ -519,6 +530,9 @@ function App() {
         message={notification.message}
         onClose={hideNotification}
       />
+
+      {/* Tutorial Overlay - renders on top of everything when a tutorial is active */}
+      <TutorialOverlay />
     </div>
   );
 }

@@ -5,7 +5,7 @@
  * Components can import from here instead of individual context files.
  *
  * Usage:
- *   import { useData, useUI, useAuth } from '../contexts';
+ *   import { useData, useUI, useAuth, useTutorial } from '../contexts';
  */
 
 // Authentication context
@@ -16,3 +16,6 @@ export { DataProvider, useData } from './DataContext';
 
 // UI context - notifications, sidebar, modals
 export { UIProvider, useUI } from './UIContext';
+
+// Tutorial context - help system, tutorials, tooltips
+export { TutorialProvider, useTutorial, TUTORIALS, HELP_HINTS } from './TutorialContext';

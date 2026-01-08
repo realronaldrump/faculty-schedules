@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Plus, Minus, Settings, UserCog, BookOpen, Wifi, Save, Edit2, Trash2, FolderOpen, GraduationCap } from 'lucide-react';
+import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Plus, Minus, Settings, UserCog, BookOpen, Wifi, Save, Edit2, Trash2, FolderOpen, GraduationCap, HelpCircle, Play } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import FacultyContactCard from '../FacultyContactCard';
 import CustomAlert from '../CustomAlert';
@@ -7,12 +7,15 @@ import { useData } from '../../contexts/DataContext';
 import { usePeople } from '../../contexts/PeopleContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEmailListPresets } from '../../hooks/useEmailListPresets';
+import { useTutorial } from '../../contexts/TutorialContext';
+import { HelpTooltip, HintBanner } from '../help/Tooltip';
 
 const EmailLists = () => {
   const { facultyData = [], staffData = [], studentData = [], scheduleData = [] } = useData();
   const { loadPeople } = usePeople();
   const { isAdmin, user } = useAuth();
   const { presets, loading: presetsLoading, createPreset, updatePreset, deletePreset } = useEmailListPresets();
+  const { startTutorial, activeTutorial } = useTutorial();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeople, setSelectedPeople] = useState([]);
@@ -924,12 +927,28 @@ const EmailLists = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Email Lists</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900">Email Lists</h1>
+            <HelpTooltip
+              content="This tool helps you create customized email lists for faculty, staff, and student workers."
+              position="right"
+              variant="help"
+            />
+          </div>
           <p className="text-gray-600 mt-1">
             Filter and select faculty and staff to create email lists for any email client
           </p>
         </div>
         <div className="flex items-center space-x-4">
+          {/* Start Tutorial Button */}
+          <button
+            onClick={() => startTutorial('email-lists')}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm text-baylor-green border border-baylor-green rounded-lg hover:bg-baylor-green/5 transition-colors"
+            title="Learn how to use Email Lists"
+          >
+            <Play className="w-4 h-4" />
+            Tutorial
+          </button>
           {activeFilterCount > 0 && (
             <div className="flex items-center text-sm text-baylor-green">
               <Filter className="w-4 h-4 mr-1" />
@@ -946,7 +965,7 @@ const EmailLists = () => {
       </div>
 
       {/* Tab Selectors */}
-      <div>
+      <div data-tutorial="audience-tabs">
         <div className="border-b border-gray-200 mb-4">
           <nav className="-mb-px flex space-x-8" aria-label="Tabs">
             <button
@@ -993,7 +1012,7 @@ const EmailLists = () => {
           <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
             <div className="flex items-center space-x-4">
               {/* Search */}
-              <div className="flex-1 relative">
+              <div className="flex-1 relative" data-tutorial="search-input">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="text"
@@ -1005,7 +1024,7 @@ const EmailLists = () => {
               </div>
 
               {/* Saved Presets */}
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2" data-tutorial="preset-dropdown">
                 <FolderOpen className="w-4 h-4 text-gray-500" />
                 <select
                   value={selectedPresetId}
@@ -1035,6 +1054,7 @@ const EmailLists = () => {
                   disabled={selectedPeople.length === 0}
                   className="flex items-center px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   title={selectedPeople.length === 0 ? 'Select people first' : 'Save selected people as preset'}
+                  data-tutorial="save-preset-btn"
                 >
                   <Save className="w-4 h-4 mr-1" />
                   Save Preset
@@ -1042,7 +1062,7 @@ const EmailLists = () => {
               </div>
 
               {/* Exclude Adjuncts Toggle */}
-              <label className="flex items-center space-x-2 text-sm text-gray-700 cursor-pointer select-none">
+              <label className="flex items-center space-x-2 text-sm text-gray-700 cursor-pointer select-none" data-tutorial="adjunct-checkbox">
                 <input
                   type="checkbox"
                   checked={filters.adjunct === 'exclude'}
@@ -1055,6 +1075,11 @@ const EmailLists = () => {
                   className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                 />
                 <span>Exclude Adjuncts</span>
+                <HelpTooltip
+                  content="Adjunct faculty are part-time instructors. They are hidden by default because most communications are for full-time faculty."
+                  position="bottom"
+                  variant="help"
+                />
               </label>
 
               {/* Filter Toggle */}
@@ -1062,6 +1087,7 @@ const EmailLists = () => {
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center px-4 py-2 border rounded-lg transition-colors ${showFilters ? 'bg-baylor-green text-white border-baylor-green' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                   }`}
+                data-tutorial="advanced-filters-btn"
               >
                 <Settings className="w-4 h-4 mr-2" />
                 Advanced Filters
@@ -1083,10 +1109,15 @@ const EmailLists = () => {
             {showFilters && (
               <div className="pt-4 border-t border-gray-200 space-y-6">
                 {/* Programs Filter */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-tutorial="program-filters">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                       Include Programs
+                      <HelpTooltip
+                        content="Select programs to only show people from those programs. Leave empty to show all."
+                        position="right"
+                        variant="help"
+                      />
                     </label>
                     <MultiSelectDropdown
                       options={filterOptions.programs}
@@ -1278,14 +1309,21 @@ const EmailLists = () => {
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-medium text-gray-900">Export Selected People</h3>
+                <h3 className="text-lg font-medium text-gray-900 flex items-center gap-2">
+                  Export Selected People
+                  <HelpTooltip
+                    content="Select people from the list below, then use these buttons to copy their emails or download a CSV file."
+                    position="right"
+                    variant="help"
+                  />
+                </h3>
                 <p className="text-sm text-gray-600 mt-1">
                   Choose a format to export the selected contact email list
                 </p>
               </div>
 
-              <div className="flex items-center space-x-3">
-                <div className="hidden sm:flex items-center space-x-2">
+              <div className="flex items-center space-x-3" data-tutorial="export-buttons">
+                <div className="hidden sm:flex items-center space-x-2" data-tutorial="outlook-version">
                   <span className="text-sm text-gray-600 whitespace-nowrap">Outlook version:</span>
                   <select
                     value={outlookVersion}
@@ -1295,6 +1333,11 @@ const EmailLists = () => {
                     <option value="new">New (comma)</option>
                     <option value="old">Old (semicolon)</option>
                   </select>
+                  <HelpTooltip
+                    content="New Outlook uses commas between emails. Older versions use semicolons. Choose based on your email client."
+                    position="left"
+                    variant="help"
+                  />
                 </div>
                 <button
                   onClick={() => generateEmailList('gmail')}
@@ -1359,7 +1402,7 @@ const EmailLists = () => {
                   </div>
                 )}
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between" data-tutorial="select-all-checkbox">
                 <label className="flex items-center">
                   <input
                     type="checkbox"
@@ -1373,6 +1416,11 @@ const EmailLists = () => {
                   <span className="ml-3 text-sm font-medium text-gray-700">
                     Select All ({filteredData.length} people)
                   </span>
+                  <HelpTooltip
+                    content="Click to select/deselect all people in the current filtered list. Only selected people will be included in your email export."
+                    position="right"
+                    variant="help"
+                  />
                 </label>
                 {selectedPeople.length > 0 && (
                   <span className="text-sm text-baylor-green font-medium">

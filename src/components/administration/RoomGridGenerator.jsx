@@ -619,6 +619,25 @@ const RoomGridGenerator = () => {
         fileUploaderRef.current.click();
     };
 
+    const updateTableSizing = useCallback(() => {
+        const container = printRef.current;
+        if (!container) return;
+        const sheet = container.querySelector('.schedule-sheet');
+        if (!sheet) return;
+        const table = sheet.querySelector('.schedule-table');
+        if (!table) return;
+        const header = table.querySelector('thead');
+        const rows = table.querySelectorAll('tbody tr');
+        if (!header || rows.length === 0) return;
+        const sheetStyles = getComputedStyle(sheet);
+        const paddingTop = parseFloat(sheetStyles.paddingTop) || 0;
+        const paddingBottom = parseFloat(sheetStyles.paddingBottom) || 0;
+        const availableHeight = sheet.clientHeight - paddingTop - paddingBottom - header.offsetHeight;
+        if (availableHeight <= 0) return;
+        const rowHeight = Math.floor(availableHeight / rows.length);
+        sheet.style.setProperty('--rowHeight', `${rowHeight}px`);
+    }, []);
+
     // Delegated events for add/delete within rendered HTML
     useEffect(() => {
         const container = printRef.current;
@@ -744,8 +763,12 @@ const RoomGridGenerator = () => {
             }
         };
         container.addEventListener('click', handleClick);
-        return () => container.removeEventListener('click', handleClick);
-    }, [scheduleHtml]);
+        const resizeId = requestAnimationFrame(updateTableSizing);
+        return () => {
+            cancelAnimationFrame(resizeId);
+            container.removeEventListener('click', handleClick);
+        };
+    }, [scheduleHtml, updateTableSizing]);
 
     // Firestore: saved grids
     const fetchSavedGrids = useCallback(async () => {
@@ -1116,6 +1139,7 @@ const RoomGridGenerator = () => {
                 onClose={() => setIsExportModalOpen(false)}
                 scheduleTableRef={printRef}
                 title={`${selectedBuilding}-${selectedRoom}-${selectedDayType}-${semester}`}
+                onExport={() => updateTableSizing()}
             />
 
             {/* Alert Dialog */}
@@ -1163,7 +1187,7 @@ const RoomGridGenerator = () => {
                     ) : (
                         <div
                             ref={printRef}
-                            style={{ width: '100%', maxWidth: '7in', margin: '0 auto' }}
+                            style={{ margin: '0 auto' }}
                             dangerouslySetInnerHTML={{ __html: scheduleHtml }}
                         ></div>
                     )}
@@ -1192,18 +1216,20 @@ const RoomGridGenerator = () => {
                     --green-dark: #0f3a2a;
                     background: var(--sheet-bg);
                     box-sizing: border-box;
-                    width: 100%;
-                    max-width: 7in;
-                    aspect-ratio: 7 / 5;
-                    margin: 0 auto; 
-                    padding: 0.35in; 
-                    border: 1px solid var(--neutral-border); 
-                    border-radius: 10px; 
+                    width: 7in;
+                    height: 5in;
+                    margin: 0 auto;
+                    padding: 0.35in;
+                    border: 1px solid var(--neutral-border);
+                    border-radius: 10px;
                     box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+                    overflow: hidden;
                 }
                 .schedule-table {
                     border-collapse: collapse;
                     width: 100%;
+                    height: 100%;
+                    table-layout: fixed;
                     font-size: 12px;
                     color: var(--text-strong);
                 }
@@ -1212,6 +1238,9 @@ const RoomGridGenerator = () => {
                     padding: 10px;
                     text-align: left;
                     vertical-align: top;
+                }
+                .schedule-table tbody tr {
+                    height: var(--rowHeight, auto);
                 }
                 .schedule-table thead th {
                     background-color: var(--baylor-green);
@@ -1272,9 +1301,8 @@ const RoomGridGenerator = () => {
                         box-shadow: none; 
                         border-radius: 0; 
                         border: none;
-                        width: 100% !important; 
-                        max-width: 7in !important;
-                        min-height: auto; 
+                        width: 7in !important;
+                        height: 5in !important;
                         padding: 0; 
                         margin: 0 auto;
                     }
@@ -1306,7 +1334,7 @@ const RoomGridGenerator = () => {
                     text-align: center;
                     border-bottom: 3px solid var(--baylor-gold);
                     padding: 14px;
-                    margin: 0 -0.4in 10px -0.4in;
+                    margin: 0 0 10px 0;
                     position: relative;
                 }
                 .weekly-header .header-left { display: table; margin: 0 auto; }

@@ -486,7 +486,7 @@ const RoomGridGenerator = () => {
             if (starts.length) earliest = Math.min(earliest, ...starts);
             if (ends.length) latest = Math.max(latest, ...ends);
         } catch { }
-        const step = 15; // minutes per grid row (visual height set via --rowHeight CSS)
+        const step = 15; // minutes per grid row (visual height scales to fit the sheet)
         const start = roundDownTo(earliest, 60); // snap to hour for cleaner labels
         const end = roundUpTo(latest, 30);
         const slots = Math.max(1, Math.round((end - start) / step));
@@ -527,7 +527,7 @@ const RoomGridGenerator = () => {
         ).join('');
 
         const grid = `
-            <div class="weekly-grid" style="--rows:${slots}; --rowHeight: 24px;" data-start="${start}" data-end="${end}" data-step="${step}" data-headeroffset="${headerOffset}">
+            <div class="weekly-grid" style="--rows:${slots};" data-start="${start}" data-end="${end}" data-step="${step}" data-headeroffset="${headerOffset}">
                 ${hourMarks.join('')}
                 ${vLines}
                 ${blocks}
@@ -1163,7 +1163,7 @@ const RoomGridGenerator = () => {
                     ) : (
                         <div
                             ref={printRef}
-                            style={{ width: '100%', maxWidth: '8in', margin: '0 auto' }}
+                            style={{ width: '100%', maxWidth: '7in', margin: '0 auto' }}
                             dangerouslySetInnerHTML={{ __html: scheduleHtml }}
                         ></div>
                     )}
@@ -1190,10 +1190,11 @@ const RoomGridGenerator = () => {
                     --danger-text: #991b1b;
                     --danger-border: #fecaca;
                     --green-dark: #0f3a2a;
-                    background: var(--sheet-bg); 
-                    width: 100%; 
-                    max-width: 100%;
-                    min-height: 5in; 
+                    background: var(--sheet-bg);
+                    box-sizing: border-box;
+                    width: 100%;
+                    max-width: 7in;
+                    aspect-ratio: 7 / 5;
                     margin: 0 auto; 
                     padding: 0.35in; 
                     border: 1px solid var(--neutral-border); 
@@ -1264,7 +1265,7 @@ const RoomGridGenerator = () => {
                     border-radius: 2px;
                 }
                 @media print {
-                    @page { size: letter portrait; margin: 0.35in; }
+                    @page { size: 7in 5in; margin: 0.35in; }
                     .schedule-sheet { 
                         -webkit-print-color-adjust: exact; 
                         print-color-adjust: exact; 
@@ -1272,7 +1273,7 @@ const RoomGridGenerator = () => {
                         border-radius: 0; 
                         border: none;
                         width: 100% !important; 
-                        max-width: 8in !important;
+                        max-width: 7in !important;
                         min-height: auto; 
                         padding: 0; 
                         margin: 0 auto;
@@ -1280,9 +1281,6 @@ const RoomGridGenerator = () => {
                     .weekly-sheet {
                         padding: 0.25in;
                         padding-top: 0;
-                    }
-                    .weekly-grid {
-                        --rowHeight: 18px !important;
                     }
                     .weekly-grid .class-block {
                         padding: 4px 6px;
@@ -1299,8 +1297,8 @@ const RoomGridGenerator = () => {
                 .weekly-sheet { 
                     padding: 0.35in; 
                     padding-top: 0; 
-                    width: 100%;
-                    max-width: 100%;
+                    display: flex;
+                    flex-direction: column;
                 }
                 .weekly-header {
                     background-color: var(--baylor-green);
@@ -1322,11 +1320,13 @@ const RoomGridGenerator = () => {
                 .weekly-grid { 
                     display: grid; 
                     grid-template-columns: 0.9in repeat(5, 1fr);
-                    grid-template-rows: auto repeat(var(--rows), var(--rowHeight));
+                    grid-template-rows: auto repeat(var(--rows), minmax(0, 1fr));
                     position: relative; 
                     gap: 0; 
                     border: 1px solid var(--neutral-border);
                     min-width: 100%;
+                    flex: 1 1 auto;
+                    min-height: 0;
                 }
                 .weekly-grid .day-header {
                     position: sticky; top: 0; z-index: 2;

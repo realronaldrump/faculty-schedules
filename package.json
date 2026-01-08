@@ -30,9 +30,6 @@
     "exceljs": "^4.4.0",
     "firebase": "^10.14.1",
     "html2canvas": "^1.4.1",
-    "html2pdf.js": "^0.10.3",
-    "jspdf": "^3.0.1",
-    "jspdf-autotable": "^5.0.2",
     "jszip": "^3.10.1",
     "lucide-react": "^0.513.0",
     "papaparse": "^5.5.3",
@@ -46,7 +43,6 @@
     "react-virtualized-auto-sizer": "^2.0.2",
     "react-window": "^1.8.10",
     "uuid": "^9.0.1",
-    "xlsx": "^0.18.5",
     "zustand": "^4.5.7"
   },
   "devDependencies": {

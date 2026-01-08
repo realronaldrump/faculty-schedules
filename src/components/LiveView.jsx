@@ -19,7 +19,7 @@ import { formatMinutesToTime } from '../utils/timeUtils';
 import { useData } from '../contexts/DataContext';
 import { usePeople } from '../contexts/PeopleContext';
 
-const CommandCenter = () => {
+const LiveView = () => {
   const navigate = useNavigate();
   const { scheduleData = [], studentData = [], facultyData = [], selectedSemester } = useData();
   const { loadPeople } = usePeople();
@@ -642,4 +642,4 @@ const CommandCenter = () => {
   );
 };
 
-export default CommandCenter;
+export default LiveView;

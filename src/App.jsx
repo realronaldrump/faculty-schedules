@@ -33,7 +33,7 @@ import RecentChangesPage from './components/administration/RecentChangesPage';
 import RoomGridGenerator from './components/administration/RoomGridGenerator';
 import UserActivityDashboard from './components/administration/UserActivityDashboard';
 import BaylorIDManager from './components/people/BaylorIDManager';
-import CommandCenter from './components/CommandCenter';
+import LiveView from './components/LiveView';
 import EmailLists from './components/people/EmailLists';
 import BuildingDirectory from './components/resources/BuildingDirectory';
 import Login from './components/Login';
@@ -72,10 +72,10 @@ const navigationItems = [
     path: 'dashboard'
   },
   {
-    id: 'command-center',
+    id: 'live-view',
     label: 'Live View',
     icon: Radio,
-    path: 'command-center'
+    path: 'live-view'
   },
   {
     id: 'scheduling',
@@ -276,8 +276,8 @@ function App() {
     switch (currentPage) {
       case 'dashboard':
         return <ProtectedContent pageId="dashboard"><Dashboard /></ProtectedContent>;
-      case 'command-center':
-        return <ProtectedContent pageId="command-center"><CommandCenter /></ProtectedContent>;
+      case 'live-view':
+        return <ProtectedContent pageId="live-view"><LiveView /></ProtectedContent>;
       case 'scheduling/faculty-schedules':
         return <ProtectedContent pageId="scheduling/faculty-schedules"><FacultySchedules /></ProtectedContent>;
       case 'scheduling/group-meeting-scheduler':
@@ -373,7 +373,7 @@ function App() {
               currentPage={currentPage}
               onNavigate={(path) => { setMobileSidebarOpen(false); handleNavigate(path); }}
               collapsed={false}
-              onToggleCollapse={() => {}}
+              onToggleCollapse={() => { }}
               selectedSemester={selectedSemester}
               pinnedPages={pinnedPages}
               togglePinPage={togglePinPage}
@@ -442,9 +442,8 @@ function App() {
                             setSelectedSemester(semester);
                             setShowSemesterDropdown(false);
                           }}
-                          className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${
-                            semester === selectedSemester ? 'bg-baylor-green/5 text-baylor-green font-medium' : 'text-gray-900'
-                          }`}
+                          className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${semester === selectedSemester ? 'bg-baylor-green/5 text-baylor-green font-medium' : 'text-gray-900'
+                            }`}
                         >
                           {semester}
                         </button>
@@ -470,11 +469,10 @@ function App() {
                   <button
                     key={child.id}
                     onClick={() => handleNavigate(child.path)}
-                    className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                      currentPage === child.path
-                        ? 'bg-baylor-green/10 text-baylor-green border-baylor-green/30'
-                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-                    }`}
+                    className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${currentPage === child.path
+                      ? 'bg-baylor-green/10 text-baylor-green border-baylor-green/30'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                      }`}
                   >
                     {child.label}
                   </button>

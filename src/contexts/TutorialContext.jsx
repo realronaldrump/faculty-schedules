@@ -232,6 +232,65 @@ export const TUTORIALS = {
         action: null
       }
     ]
+  },
+  'people-directory': {
+    id: 'people-directory',
+    title: 'People Directory Tutorial',
+    description: 'Learn how to browse, search, and manage faculty, staff, and student workers in the directory.',
+    estimatedTime: '3 min',
+    category: 'People Management',
+    targetPage: 'people/people-directory',
+    steps: [
+      {
+        id: 'welcome',
+        title: 'Welcome to People Directory',
+        content: 'This is your central hub for viewing and managing information about faculty, staff, adjuncts, and student workers in the department.',
+        target: null,
+        position: 'center',
+        action: null
+      },
+      {
+        id: 'category-cards',
+        title: 'Quick Access Cards',
+        content: 'Click any of these cards to quickly jump to a specific category. The active category is highlighted with a green border.',
+        target: '[data-tutorial="category-cards"]',
+        position: 'bottom',
+        action: 'Try clicking a different category card',
+        actionType: 'click'
+      },
+      {
+        id: 'directory-tabs',
+        title: 'Directory Tabs',
+        content: 'The tab bar provides another way to switch between categories. Both the cards above and these tabs stay in sync.',
+        target: '[data-tutorial="directory-tabs"]',
+        position: 'bottom',
+        action: null
+      },
+      {
+        id: 'directory-content',
+        title: 'Directory Table',
+        content: 'This table displays all people in the selected category. Each row shows key information like name, email, phone, office, and job title. Click column headers to sort.',
+        target: '[data-tutorial="directory-content"]',
+        position: 'top',
+        action: null
+      },
+      {
+        id: 'row-click',
+        title: 'View Contact Details',
+        content: 'Click any row to open a detailed contact card with full information, including weekly schedule for faculty members.',
+        target: '[data-tutorial="directory-content"]',
+        position: 'top',
+        action: null
+      },
+      {
+        id: 'complete',
+        title: 'You\'re All Set!',
+        content: 'You now know how to navigate the People Directory. Use the category cards or tabs to switch views, and click any person to see their full details.',
+        target: null,
+        position: 'center',
+        action: null
+      }
+    ]
   }
 };
 

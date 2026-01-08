@@ -346,7 +346,7 @@ const TutorialPage = () => {
       <div className="bg-gradient-to-r from-baylor-green/5 to-baylor-gold/5 rounded-xl border border-baylor-green/20 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-2">More Tutorials Coming Soon</h2>
         <p className="text-gray-600 mb-4">
-          We're working on additional tutorials to help you get the most out of the HSD Dashboard.
+          I'm working on additional tutorials to help you get the most out of the HSD Dashboard.
           Check back for tutorials on scheduling, analytics, and more.
         </p>
         <div className="flex flex-wrap gap-2">

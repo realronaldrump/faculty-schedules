@@ -1778,7 +1778,23 @@ const EmailLists = () => {
                 <h3 className="text-lg font-medium text-gray-900">Export Students</h3>
                 <p className="text-sm text-gray-600">{selectedStudents.length} students selected</p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-3">
+                <div className="hidden sm:flex items-center space-x-2">
+                  <span className="text-sm text-gray-600 whitespace-nowrap">Outlook version:</span>
+                  <select
+                    value={outlookVersion}
+                    onChange={(e) => setOutlookVersion(e.target.value)}
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                  >
+                    <option value="new">New (comma)</option>
+                    <option value="old">Old (semicolon)</option>
+                  </select>
+                  <HelpTooltip
+                    content="New Outlook uses commas between emails. Older versions use semicolons. Choose based on your email client."
+                    position="left"
+                    variant="help"
+                  />
+                </div>
                 <button
                   onClick={() => generateEmailList('gmail')}
                   disabled={selectedStudents.length === 0}

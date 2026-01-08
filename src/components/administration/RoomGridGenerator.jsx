@@ -1165,6 +1165,7 @@ const RoomGridGenerator = () => {
                 onClose={() => setIsExportModalOpen(false)}
                 scheduleTableRef={showExportableWeek ? exportableRef : printRef}
                 title={`${selectedBuilding}-${selectedRoom}-${selectedDayType}-${semester}`}
+                exportScale={3}
                 onExport={showExportableWeek ? undefined : () => updateTableSizing()}
             />
 

@@ -29,6 +29,7 @@
     "dompurify": "^3.0.9",
     "exceljs": "^4.4.0",
     "firebase": "^10.14.1",
+    "html-to-image": "^1.11.13",
     "html2canvas": "^1.4.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.513.0",

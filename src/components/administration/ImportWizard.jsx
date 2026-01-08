@@ -1,13 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { usePermissions } from '../utils/permissions';
+import { usePermissions } from '../../utils/permissions';
 import { Upload, CheckCircle, AlertCircle, Eye, History, ChevronRight, Calendar, Users } from 'lucide-react';
-import { parseCLSSCSV } from '../utils/dataImportUtils';
-import { previewImportChanges, commitTransaction, projectSchedulePreviewRow } from '../utils/importTransactionUtils';
+import { parseCLSSCSV } from '../../utils/dataImportUtils';
+import { previewImportChanges, commitTransaction, projectSchedulePreviewRow } from '../../utils/importTransactionUtils';
 import ImportPreviewModal from './ImportPreviewModal';
 import ImportHistoryModal from './ImportHistoryModal';
-import { useSchedules } from '../contexts/ScheduleContext';
-import { usePeople } from '../contexts/PeopleContext';
-import { useUI } from '../contexts/UIContext';
+import { useSchedules } from '../../contexts/ScheduleContext';
+import { usePeople } from '../../contexts/PeopleContext';
+import { useUI } from '../../contexts/UIContext';
 
 const ImportWizard = () => {
   const { selectedSemester, refreshSchedules } = useSchedules();

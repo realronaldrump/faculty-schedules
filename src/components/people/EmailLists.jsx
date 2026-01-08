@@ -1,12 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Plus, Minus, Settings, UserCog, BookOpen, Wifi, Save, Edit2, Trash2, FolderOpen, GraduationCap } from 'lucide-react';
-import MultiSelectDropdown from './MultiSelectDropdown';
-import FacultyContactCard from './FacultyContactCard';
-import CustomAlert from './CustomAlert';
-import { useData } from '../contexts/DataContext';
-import { usePeople } from '../contexts/PeopleContext';
-import { useAuth } from '../contexts/AuthContext';
-import { useEmailListPresets } from '../hooks/useEmailListPresets';
+import MultiSelectDropdown from '../MultiSelectDropdown';
+import FacultyContactCard from '../FacultyContactCard';
+import CustomAlert from '../CustomAlert';
+import { useData } from '../../contexts/DataContext';
+import { usePeople } from '../../contexts/PeopleContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { useEmailListPresets } from '../../hooks/useEmailListPresets';
 
 const EmailLists = () => {
   const { facultyData = [], staffData = [], studentData = [], scheduleData = [] } = useData();

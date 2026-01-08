@@ -14,8 +14,8 @@ import {
   RefreshCw,
   BarChart3
 } from 'lucide-react';
-import { formatChangeForDisplay, groupChangesByDate, getChangeSummary } from '../utils/recentChanges';
-import { useData } from '../contexts/DataContext';
+import { formatChangeForDisplay, groupChangesByDate, getChangeSummary } from '../../utils/recentChanges';
+import { useData } from '../../contexts/DataContext';
 
 const RecentChangesPage = () => {
   const navigate = useNavigate();

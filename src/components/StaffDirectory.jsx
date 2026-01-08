@@ -1,6 +1,6 @@
 import React from 'react';
 import PersonDirectory from './PersonDirectory';
-import { staffDirectoryConfig } from './personDirectoryConfigs.jsx';
+import { staffDirectoryConfig } from './PersonDirectoryConfigs.jsx';
 import { useData } from '../contexts/DataContext';
 import { usePeopleOperations } from '../hooks';
 

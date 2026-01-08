@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, User, Mail, Phone, PhoneOff, Building, BuildingIcon, AlertCircle, CheckCircle, BookUser } from 'lucide-react';
 import { doc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
-import { db, COLLECTIONS } from '../firebase';
-import { DEFAULT_PERSON_SCHEMA } from '../utils/dataHygiene';
-import { logUpdate } from '../utils/changeLogger';
-import { usePermissions } from '../utils/permissions';
+import { db, COLLECTIONS } from '../../firebase';
+import { DEFAULT_PERSON_SCHEMA } from '../../utils/dataHygiene';
+import { logUpdate } from '../../utils/changeLogger';
+import { usePermissions } from '../../utils/permissions';
 
 const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataType = 'email' }) => {
   const [records, setRecords] = useState([]);

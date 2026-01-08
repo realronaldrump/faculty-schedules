@@ -1,10 +1,10 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { IdCard, Search, Edit, Save, X, Filter, CheckCircle2, AlertCircle, Download } from 'lucide-react';
-import FacultyContactCard from './FacultyContactCard';
-import { usePeople } from '../contexts/PeopleContext';
-import { usePeopleOperations } from '../hooks';
-import { useUI } from '../contexts/UIContext';
-import { usePermissions } from '../utils/permissions';
+import FacultyContactCard from '../FacultyContactCard';
+import { usePeople } from '../../contexts/PeopleContext';
+import { usePeopleOperations } from '../../hooks';
+import { useUI } from '../../contexts/UIContext';
+import { usePermissions } from '../../utils/permissions';
 
 const hasRole = (person, roleKey) => {
   const roles = person?.roles;

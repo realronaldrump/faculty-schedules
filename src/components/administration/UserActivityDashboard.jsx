@@ -23,8 +23,8 @@ import {
   getActivityStats,
   subscribeToActivities,
   ACTIVITY_TYPES
-} from '../utils/activityLogger';
-import { db } from '../firebase';
+} from '../../utils/activityLogger';
+import { db } from '../../firebase';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 
 const UserActivityDashboard = () => {

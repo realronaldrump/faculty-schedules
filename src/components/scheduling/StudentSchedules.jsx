@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Download, Calendar, List, ZoomIn, ZoomOut } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
-import ExportModal from '../admin/ExportModal';
+import ExportModal from '../administration/ExportModal';
 import FacultyContactCard from '../FacultyContactCard';
 import { logExport } from '../../utils/activityLogger';
 import { useData } from '../../contexts/DataContext';

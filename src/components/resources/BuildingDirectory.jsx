@@ -16,9 +16,9 @@ import {
   Eye,
   Wifi
 } from 'lucide-react';
-import FacultyContactCard from './FacultyContactCard';
-import { useData } from '../contexts/DataContext';
-import { usePeople } from '../contexts/PeopleContext';
+import FacultyContactCard from '../FacultyContactCard';
+import { useData } from '../../contexts/DataContext';
+import { usePeople } from '../../contexts/PeopleContext';
 
 const BuildingDirectory = () => {
   const { facultyData = [], staffData = [] } = useData();

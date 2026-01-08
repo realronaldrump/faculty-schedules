@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { usePermissions } from '../utils/permissions';
+import { usePermissions } from '../../utils/permissions';
 import { Database, AlertCircle, Save, Search, Pencil, X } from 'lucide-react';
-import { analyzeCRNCoverage } from '../utils/crnMigrationUtils';
-import { fetchSchedulesWithRelationalData } from '../utils/dataImportUtils';
-import { db } from '../firebase';
+import { analyzeCRNCoverage } from '../../utils/crnMigrationUtils';
+import { fetchSchedulesWithRelationalData } from '../../utils/dataImportUtils';
+import { db } from '../../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
-import { logUpdate } from '../utils/changeLogger';
-import MultiSelectDropdown from './MultiSelectDropdown';
-import { useUI } from '../contexts/UIContext';
+import { logUpdate } from '../../utils/changeLogger';
+import MultiSelectDropdown from '../MultiSelectDropdown';
+import { useUI } from '../../contexts/UIContext';
 
 const CRNQualityTools = () => {
   const { showNotification } = useUI();

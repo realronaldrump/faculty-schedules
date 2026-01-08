@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import FacultyDirectory from './FacultyDirectory';
-import StaffDirectory from './StaffDirectory';
-import AdjunctDirectory from './AdjunctDirectory';
-import StudentDirectory from './StudentDirectory';
+import FacultyDirectory from '../FacultyDirectory';
+import StaffDirectory from '../StaffDirectory';
+import AdjunctDirectory from '../AdjunctDirectory';
+import StudentDirectory from '../StudentDirectory';
 import { Users, GraduationCap, UserCheck, UserPlus, User } from 'lucide-react';
-import { usePeople } from '../contexts/PeopleContext';
-import { useData } from '../contexts/DataContext';
+import { usePeople } from '../../contexts/PeopleContext';
+import { useData } from '../../contexts/DataContext';
 
 // Local tab definitions to switch between directory views
 const tabs = [

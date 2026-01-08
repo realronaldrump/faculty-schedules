@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { db } from '../firebase';
+import { db } from '../../firebase';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import { PlusCircle, Edit, Trash2, Save, XCircle, AlertTriangle } from 'lucide-react';
-import { logCreate, logUpdate, logDelete } from '../utils/changeLogger';
-import { usePermissions } from '../utils/permissions';
-import { useUI } from '../contexts/UIContext';
+import { logCreate, logUpdate, logDelete } from '../../utils/changeLogger';
+import { usePermissions } from '../../utils/permissions';
+import { useUI } from '../../contexts/UIContext';
 
 const BaylorAcronyms = () => {
     const { showNotification } = useUI();

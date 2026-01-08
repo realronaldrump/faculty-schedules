@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { User, Calendar, Clock, Search, ChevronDown, ChevronsUpDown, Grid, List, Plus, X, Eye, Info, Building, BookOpen, Users, GraduationCap } from 'lucide-react';
-import FacultyContactCard from './FacultyContactCard';
-import { parseTime, formatMinutesToTime } from '../utils/timeUtils';
-import { useData } from '../contexts/DataContext';
-import { usePeople } from '../contexts/PeopleContext';
+import FacultyContactCard from '../FacultyContactCard';
+import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
+import { useData } from '../../contexts/DataContext';
+import { usePeople } from '../../contexts/PeopleContext';
 
 const FacultySchedules = () => {
   const { scheduleData = [], facultyData = [] } = useData();

@@ -13,7 +13,7 @@ import {
   Database,
   AlertTriangle
 } from 'lucide-react';
-import { getImportTransactions, rollbackTransaction, deleteTransaction, diagnoseRollbackEffectiveness, manualCleanupImportedData } from '../utils/importTransactionUtils';
+import { getImportTransactions, rollbackTransaction, deleteTransaction, diagnoseRollbackEffectiveness, manualCleanupImportedData } from '../../utils/importTransactionUtils';
 
 const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
   const [transactions, setTransactions] = useState([]);

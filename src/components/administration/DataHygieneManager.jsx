@@ -18,23 +18,23 @@ import {
   Edit
 } from 'lucide-react';
 import { collection, getDocs, doc, updateDoc, query, where } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db } from '../../firebase';
 import {
   getDataHealthReport,
   findOrphanedSchedules,
   mergePeople,
   linkScheduleToPerson
-} from '../utils/dataHygiene';
-import { generateDataHygieneReport, mergeScheduleRecords, mergeRoomRecords } from '../utils/comprehensiveDataHygiene';
+} from '../../utils/dataHygiene';
+import { generateDataHygieneReport, mergeScheduleRecords, mergeRoomRecords } from '../../utils/comprehensiveDataHygiene';
 import { collection as fbCollection, getDocs as fbGetDocs, writeBatch as fbWriteBatch, doc as fbDoc } from 'firebase/firestore';
-import { logBulkUpdate } from '../utils/changeLogger';
-import { fetchPeople } from '../utils/dataAdapter';
+import { logBulkUpdate } from '../../utils/changeLogger';
+import { fetchPeople } from '../../utils/dataAdapter';
 import MissingDataReviewModal from './MissingDataReviewModal';
 // DeduplicationReviewModal removed from wizard-first UI
-import { ConfirmationDialog } from './CustomAlert';
-import OrphanedDataCleanupModal from './admin/OrphanedDataCleanupModal';
-import { logUpdate } from '../utils/changeLogger';
-import { useUI } from '../contexts/UIContext';
+import { ConfirmationDialog } from '../CustomAlert';
+import OrphanedDataCleanupModal from './OrphanedDataCleanupModal';
+import { logUpdate } from '../../utils/changeLogger';
+import { useUI } from '../../contexts/UIContext';
 
 // Link Person Modal Component
 const LinkPersonModal = ({ isOpen, onClose, onConfirm, schedule }) => {

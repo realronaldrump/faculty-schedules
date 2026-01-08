@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, Settings, GraduationCap, Calendar, IdCard, BookOpen, Save } from 'lucide-react';
-import { db } from '../firebase';
+import { db } from '../../firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { logUpdate, logCreate } from '../utils/changeLogger';
-import { useAuth } from '../contexts/AuthContext';
-import { useSchedules } from '../contexts/ScheduleContext';
-import { useUI } from '../contexts/UIContext';
+import { logUpdate, logCreate } from '../../utils/changeLogger';
+import { useAuth } from '../../contexts/AuthContext';
+import { useSchedules } from '../../contexts/ScheduleContext';
+import { useUI } from '../../contexts/UIContext';
 
 const SystemsPage = () => {
   const navigate = useNavigate();

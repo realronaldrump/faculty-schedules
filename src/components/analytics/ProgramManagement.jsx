@@ -17,16 +17,16 @@ import {
   MoreVertical,
   Check
 } from 'lucide-react';
-import FacultyContactCard from './FacultyContactCard';
+import FacultyContactCard from '../FacultyContactCard';
 import { doc, updateDoc } from 'firebase/firestore';
-import { db, COLLECTIONS } from '../firebase';
-import { logUpdate } from '../utils/changeLogger';
-import { usePermissions } from '../utils/permissions';
-import { getProgramNameKey, isReservedProgramName, normalizeProgramName } from '../utils/programUtils';
-import { useData } from '../contexts/DataContext';
-import { usePeople } from '../contexts/PeopleContext';
-import { usePeopleOperations } from '../hooks';
-import { useUI } from '../contexts/UIContext';
+import { db, COLLECTIONS } from '../../firebase';
+import { logUpdate } from '../../utils/changeLogger';
+import { usePermissions } from '../../utils/permissions';
+import { getProgramNameKey, isReservedProgramName, normalizeProgramName } from '../../utils/programUtils';
+import { useData } from '../../contexts/DataContext';
+import { usePeople } from '../../contexts/PeopleContext';
+import { usePeopleOperations } from '../../hooks';
+import { useUI } from '../../contexts/UIContext';
 
 const ProgramManagement = () => {
   const { facultyData = [], programs = [], loadPrograms } = useData();

@@ -18,6 +18,7 @@ import {
   Pause,
   SkipForward,
   CheckCircle,
+  CheckCircle2,
   Circle,
   Target,
   Hand
@@ -69,6 +70,45 @@ const Spotlight = ({ targetRect, padding = 8 }) => {
         }}
       />
     </div>
+  );
+};
+
+// Click blocker that creates a "frame" around the target, leaving the target interactable
+const ClickBlockerFrame = ({ targetRect, padding = 8 }) => {
+  // If no target, block entire screen
+  if (!targetRect) {
+    return <div className="fixed inset-0 z-[9997]" />;
+  }
+
+  const { top, left, width, height } = targetRect;
+  const holeTop = top - padding;
+  const holeLeft = left - padding;
+  const holeWidth = width + padding * 2;
+  const holeHeight = height + padding * 2;
+
+  return (
+    <>
+      {/* Top blocker */}
+      <div
+        className="fixed left-0 right-0 z-[9997]"
+        style={{ top: 0, height: Math.max(0, holeTop) }}
+      />
+      {/* Bottom blocker */}
+      <div
+        className="fixed left-0 right-0 bottom-0 z-[9997]"
+        style={{ top: holeTop + holeHeight }}
+      />
+      {/* Left blocker */}
+      <div
+        className="fixed top-0 bottom-0 z-[9997]"
+        style={{ left: 0, width: Math.max(0, holeLeft) }}
+      />
+      {/* Right blocker */}
+      <div
+        className="fixed top-0 bottom-0 right-0 z-[9997]"
+        style={{ left: holeLeft + holeWidth }}
+      />
+    </>
   );
 };
 
@@ -152,7 +192,9 @@ const InstructionCard = ({
   onSkip,
   onClose,
   isFirst,
-  isLast
+  isLast,
+  canAdvance,
+  actionCompleted
 }) => {
   const cardRef = useRef(null);
 
@@ -195,11 +237,22 @@ const InstructionCard = ({
 
         {/* Action hint */}
         {step.action && (
-          <div className="flex items-start gap-2 p-3 bg-baylor-gold/10 border border-baylor-gold/30 rounded-lg mb-4">
-            <Hand className="w-5 h-5 text-baylor-gold flex-shrink-0 mt-0.5" />
+          <div className={`flex items-start gap-2 p-3 border rounded-lg mb-4 transition-colors ${actionCompleted
+            ? 'bg-green-50 border-green-300'
+            : 'bg-baylor-gold/10 border-baylor-gold/30'
+            }`}>
+            {actionCompleted ? (
+              <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+            ) : (
+              <Hand className="w-5 h-5 text-baylor-gold flex-shrink-0 mt-0.5 animate-bounce" />
+            )}
             <div>
-              <span className="text-sm font-medium text-gray-700">Try it:</span>
-              <span className="text-sm text-gray-600 ml-1">{step.action}</span>
+              <span className={`text-sm font-medium ${actionCompleted ? 'text-green-700' : 'text-gray-700'}`}>
+                {actionCompleted ? 'Done!' : 'Try it:'}
+              </span>
+              <span className={`text-sm ml-1 ${actionCompleted ? 'text-green-600 line-through' : 'text-gray-600'}`}>
+                {step.action}
+              </span>
             </div>
           </div>
         )}
@@ -209,13 +262,12 @@ const InstructionCard = ({
           {Array.from({ length: totalSteps }).map((_, idx) => (
             <div
               key={idx}
-              className={`w-2 h-2 rounded-full transition-colors ${
-                idx < stepNumber
-                  ? 'bg-baylor-green'
-                  : idx === stepNumber - 1
+              className={`w-2 h-2 rounded-full transition-colors ${idx < stepNumber
+                ? 'bg-baylor-green'
+                : idx === stepNumber - 1
                   ? 'bg-baylor-gold'
                   : 'bg-gray-300'
-              }`}
+                }`}
             />
           ))}
         </div>
@@ -241,7 +293,12 @@ const InstructionCard = ({
           )}
           <button
             onClick={onNext}
-            className="flex items-center gap-1 px-4 py-1.5 text-sm bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+            disabled={!canAdvance}
+            className={`flex items-center gap-1 px-4 py-1.5 text-sm rounded-lg transition-colors ${canAdvance
+              ? 'bg-baylor-green text-white hover:bg-baylor-green/90'
+              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            title={!canAdvance ? 'Complete the action above to continue' : ''}
           >
             {isLast ? (
               <>
@@ -270,23 +327,30 @@ const TutorialOverlay = () => {
     isPaused,
     nextStep,
     prevStep,
-    endTutorial
+    endTutorial,
+    actionCompleted,
+    markActionCompleted
   } = useTutorial();
 
   const [targetRect, setTargetRect] = useState(null);
+  const [targetElement, setTargetElement] = useState(null);
   const [cardPosition, setCardPosition] = useState({ top: 0, left: 0, position: 'center' });
   const cardSize = { width: 384, height: 300 }; // Approximate card dimensions
+
+  // Calculate if user can advance to next step
+  const canAdvance = !currentStep?.action || actionCompleted;
 
   // Find and track the target element
   const updateTargetPosition = useCallback(() => {
     if (!currentStep || !currentStep.target) {
       setTargetRect(null);
+      setTargetElement(null);
       return;
     }
 
-    const targetElement = document.querySelector(currentStep.target);
-    if (targetElement) {
-      const rect = targetElement.getBoundingClientRect();
+    const element = document.querySelector(currentStep.target);
+    if (element) {
+      const rect = element.getBoundingClientRect();
       setTargetRect({
         top: rect.top,
         left: rect.left,
@@ -295,6 +359,7 @@ const TutorialOverlay = () => {
         bottom: rect.bottom,
         right: rect.right
       });
+      setTargetElement(element);
 
       // Scroll element into view if needed
       const isInViewport =
@@ -304,7 +369,7 @@ const TutorialOverlay = () => {
         rect.right <= window.innerWidth;
 
       if (!isInViewport) {
-        targetElement.scrollIntoView({
+        element.scrollIntoView({
           behavior: 'smooth',
           block: 'center',
           inline: 'center'
@@ -312,6 +377,7 @@ const TutorialOverlay = () => {
       }
     } else {
       setTargetRect(null);
+      setTargetElement(null);
     }
   }, [currentStep]);
 
@@ -346,6 +412,39 @@ const TutorialOverlay = () => {
     };
   }, [activeTutorial, currentStep, isPaused, updateTargetPosition]);
 
+  // Listen for action completion on target element
+  useEffect(() => {
+    if (!currentStep?.action || !targetElement || actionCompleted) return;
+
+    const actionType = currentStep.actionType;
+
+    const handleActionComplete = () => {
+      markActionCompleted();
+    };
+
+    if (actionType === 'click') {
+      // For click actions, listen for click on the target or its descendants
+      targetElement.addEventListener('click', handleActionComplete, { capture: true });
+    } else if (actionType === 'type') {
+      // For type actions, find input elements and listen for input events
+      const inputs = targetElement.querySelectorAll('input, textarea');
+      const input = inputs.length > 0 ? inputs[0] : targetElement;
+      input.addEventListener('input', handleActionComplete);
+      input.addEventListener('change', handleActionComplete);
+
+      return () => {
+        input.removeEventListener('input', handleActionComplete);
+        input.removeEventListener('change', handleActionComplete);
+      };
+    }
+
+    return () => {
+      if (actionType === 'click') {
+        targetElement.removeEventListener('click', handleActionComplete, { capture: true });
+      }
+    };
+  }, [currentStep, targetElement, actionCompleted, markActionCompleted]);
+
   // Keyboard navigation
   useEffect(() => {
     if (!activeTutorial) return;
@@ -355,7 +454,7 @@ const TutorialOverlay = () => {
         case 'ArrowRight':
         case 'Enter':
           e.preventDefault();
-          nextStep();
+          nextStep(); // nextStep already checks canAdvance internally
           break;
         case 'ArrowLeft':
           e.preventDefault();
@@ -382,27 +481,8 @@ const TutorialOverlay = () => {
       {/* Spotlight overlay */}
       <Spotlight targetRect={targetRect} />
 
-      {/* Click blocker (allows clicks on the target element) */}
-      <div
-        className="fixed inset-0 z-[9998]"
-        onClick={(e) => {
-          // Allow clicks on the target element
-          if (targetRect) {
-            const x = e.clientX;
-            const y = e.clientY;
-            const isOnTarget =
-              x >= targetRect.left &&
-              x <= targetRect.right &&
-              y >= targetRect.top &&
-              y <= targetRect.bottom;
-            if (isOnTarget) {
-              return; // Don't block click
-            }
-          }
-          e.stopPropagation();
-        }}
-        style={{ pointerEvents: targetRect ? 'auto' : 'none' }}
-      />
+      {/* Click blocker frame - blocks clicks outside target, leaves target fully interactive */}
+      <ClickBlockerFrame targetRect={targetRect} />
 
       {/* Instruction card */}
       <InstructionCard
@@ -416,6 +496,8 @@ const TutorialOverlay = () => {
         onClose={() => endTutorial(false)}
         isFirst={currentStepIndex === 0}
         isLast={currentStepIndex === activeTutorial.steps.length - 1}
+        canAdvance={canAdvance}
+        actionCompleted={actionCompleted}
       />
     </>
   );

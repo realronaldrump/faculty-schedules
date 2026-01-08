@@ -45,7 +45,8 @@ export const TUTORIALS = {
         content: 'Use the search bar to quickly find specific people by name, email, job title, or office location.',
         target: '[data-tutorial="search-input"]',
         position: 'bottom',
-        action: 'Try typing a name in the search box'
+        action: 'Try typing a name in the search box',
+        actionType: 'type'
       },
       {
         id: 'presets',
@@ -69,7 +70,8 @@ export const TUTORIALS = {
         content: 'Click here to access powerful filtering options including programs, job titles, buildings, tenure status, and more.',
         target: '[data-tutorial="advanced-filters-btn"]',
         position: 'bottom',
-        action: 'Click to expand the advanced filters panel'
+        action: 'Click to expand the advanced filters panel',
+        actionType: 'click'
       },
       {
         id: 'filter-programs',
@@ -86,7 +88,8 @@ export const TUTORIALS = {
         content: 'Click the checkbox next to each person to select them, or use "Select All" to select everyone in the filtered list.',
         target: '[data-tutorial="select-all-checkbox"]',
         position: 'top',
-        action: 'Try selecting a few people from the list'
+        action: 'Try selecting a few people from the list',
+        actionType: 'click'
       },
       {
         id: 'export-options',
@@ -151,6 +154,7 @@ export const TutorialProvider = ({ children }) => {
   const [activeTutorial, setActiveTutorial] = useState(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const [actionCompleted, setActionCompleted] = useState(false);
 
   // User preferences
   const [showTooltips, setShowTooltips] = useState(() => {
@@ -202,6 +206,7 @@ export const TutorialProvider = ({ children }) => {
       setActiveTutorial(tutorial);
       setCurrentStepIndex(0);
       setIsPaused(false);
+      setActionCompleted(false);
     }
   }, []);
 
@@ -215,16 +220,28 @@ export const TutorialProvider = ({ children }) => {
     setActiveTutorial(null);
     setCurrentStepIndex(0);
     setIsPaused(false);
+    setActionCompleted(false);
   }, [activeTutorial]);
 
   // Navigate tutorial steps
   const nextStep = useCallback(() => {
+    const currentStep = activeTutorial?.steps[currentStepIndex];
+    // Block if action is required but not completed
+    if (currentStep?.action && !actionCompleted) {
+      return;
+    }
     if (activeTutorial && currentStepIndex < activeTutorial.steps.length - 1) {
       setCurrentStepIndex(prev => prev + 1);
+      setActionCompleted(false); // Reset for next step
     } else if (activeTutorial) {
       endTutorial(true);
     }
-  }, [activeTutorial, currentStepIndex, endTutorial]);
+  }, [activeTutorial, currentStepIndex, actionCompleted, endTutorial]);
+
+  // Mark current action as completed
+  const markActionCompleted = useCallback(() => {
+    setActionCompleted(true);
+  }, []);
 
   const prevStep = useCallback(() => {
     if (currentStepIndex > 0) {
@@ -296,6 +313,7 @@ export const TutorialProvider = ({ children }) => {
     currentStep,
     isPaused,
     progress,
+    actionCompleted,
 
     // Tutorial actions
     startTutorial,
@@ -305,6 +323,7 @@ export const TutorialProvider = ({ children }) => {
     goToStep,
     pauseTutorial,
     resumeTutorial,
+    markActionCompleted,
 
     // Completion tracking
     completedTutorials,
@@ -332,6 +351,7 @@ export const TutorialProvider = ({ children }) => {
     currentStep,
     isPaused,
     progress,
+    actionCompleted,
     startTutorial,
     endTutorial,
     nextStep,
@@ -339,6 +359,7 @@ export const TutorialProvider = ({ children }) => {
     goToStep,
     pauseTutorial,
     resumeTutorial,
+    markActionCompleted,
     completedTutorials,
     isTutorialCompleted,
     showTooltips,

@@ -27,7 +27,12 @@ import { useTutorial } from '../../contexts/TutorialContext';
 
 // Spotlight effect that highlights the target element
 const Spotlight = ({ targetRect, padding = 8 }) => {
-  if (!targetRect) return null;
+  // When no target, show a uniform dark overlay (for intro/outro steps)
+  if (!targetRect) {
+    return (
+      <div className="fixed inset-0 z-[9998] pointer-events-none bg-black/60" />
+    );
+  }
 
   const { top, left, width, height } = targetRect;
 

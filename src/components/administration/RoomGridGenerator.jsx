@@ -3,6 +3,7 @@ import DOMPurify from 'dompurify';
 import Papa from 'papaparse';
 import { Upload, X, Trash2, FileText, Download, Save as SaveIcon, Database, ArrowLeft } from 'lucide-react';
 import ExportModal from './ExportModal';
+import ExportableRoomSchedule from './ExportableRoomSchedule';
 import { db } from '../../firebase';
 import { collection, addDoc, getDocs, deleteDoc, doc, query, where, orderBy, limit } from 'firebase/firestore';
 import { logCreate, logDelete } from '../../utils/changeLogger';
@@ -43,7 +44,12 @@ const RoomGridGenerator = () => {
     const [alertDialog, setAlertDialog] = useState({ isOpen: false, message: '', title: '' });
     const [deleteConfirmDialog, setDeleteConfirmDialog] = useState({ isOpen: false, grid: null });
 
+    // State for the new exportable weekly schedule
+    const [weeklyClasses, setWeeklyClasses] = useState([]);
+    const [showExportableWeek, setShowExportableWeek] = useState(false);
+
     const printRef = useRef();
+    const exportableRef = useRef();
     const fileInputRef = useRef();
 
     const timeSlots = {
@@ -74,6 +80,8 @@ const RoomGridGenerator = () => {
         }
         setSelectedRoom('');
         setScheduleHtml('');
+        setWeeklyClasses([]);
+        setShowExportableWeek(false);
         setMessage({ text: '', type: '' });
     };
 
@@ -373,7 +381,7 @@ const RoomGridGenerator = () => {
         }
 
         if (selectedDayType === 'WEEK') {
-            generateWeeklySchedule();
+            generateExportableWeeklySchedule();
             return;
         }
 
@@ -470,6 +478,24 @@ const RoomGridGenerator = () => {
     const roundDownTo = (mins, step) => Math.floor(mins / step) * step;
     const roundUpTo = (mins, step) => Math.ceil(mins / step) * step;
 
+    // New exportable weekly schedule using the clean React component
+    const generateExportableWeeklySchedule = () => {
+        const relevant = allClassData.filter(c => c.building === selectedBuilding && c.room === selectedRoom);
+        if (relevant.length === 0) {
+            setWeeklyClasses([]);
+            setShowExportableWeek(false);
+            setScheduleHtml(`<div class="text-center p-8 text-gray-500">No classes found for ${selectedBuilding} ${selectedRoom}.</div>`);
+            return;
+        }
+
+        // Set up the classes for the exportable component
+        setWeeklyClasses(relevant);
+        setShowExportableWeek(true);
+        setScheduleHtml(''); // Clear the old HTML-based schedule
+        showMessage("Weekly schedule generated. Click Export to save as PNG.", 'success');
+    };
+
+    // Legacy weekly schedule (kept for reference, but no longer used)
     const generateWeeklySchedule = () => {
         const relevant = allClassData.filter(c => c.building === selectedBuilding && c.room === selectedRoom);
         if (relevant.length === 0) {
@@ -1137,9 +1163,9 @@ const RoomGridGenerator = () => {
             <ExportModal
                 isOpen={isExportModalOpen}
                 onClose={() => setIsExportModalOpen(false)}
-                scheduleTableRef={printRef}
+                scheduleTableRef={showExportableWeek ? exportableRef : printRef}
                 title={`${selectedBuilding}-${selectedRoom}-${selectedDayType}-${semester}`}
-                onExport={() => updateTableSizing()}
+                onExport={showExportableWeek ? undefined : () => updateTableSizing()}
             />
 
             {/* Alert Dialog */}
@@ -1167,7 +1193,8 @@ const RoomGridGenerator = () => {
 
             <div className="university-card mt-8">
                 <div className="university-card-content min-h-[400px]">
-                    {scheduleHtml && (
+                    {/* Export button - show for either old HTML schedules or new exportable component */}
+                    {(scheduleHtml || showExportableWeek) && (
                         <div className="flex justify-end mb-4">
                             <button onClick={() => setIsExportModalOpen(true)} className="btn-secondary">
                                 <Download className="w-4 h-4 mr-2" />
@@ -1179,17 +1206,29 @@ const RoomGridGenerator = () => {
                         <div className="text-center text-gray-500 flex flex-col items-center justify-center h-full">
                             <p>Processing file...</p>
                         </div>
-                    ) : !scheduleHtml ? (
-                        <div className="text-center text-gray-500 flex flex-col items-center justify-center h-full">
-                            <FileText className="w-16 h-16 text-gray-300 mb-4" />
-                            <p>Your generated schedule will appear here. You can click on fields to edit them before printing.</p>
+                    ) : showExportableWeek ? (
+                        /* New exportable weekly schedule component */
+                        <div style={{ display: 'flex', justifyContent: 'center' }}>
+                            <ExportableRoomSchedule
+                                ref={exportableRef}
+                                roomName={selectedRoom}
+                                buildingName={selectedBuilding}
+                                semester={semester}
+                                classes={weeklyClasses}
+                            />
                         </div>
-                    ) : (
+                    ) : scheduleHtml ? (
+                        /* Legacy HTML-based schedules (MWF/TR) */
                         <div
                             ref={printRef}
                             style={{ margin: '0 auto' }}
                             dangerouslySetInnerHTML={{ __html: scheduleHtml }}
                         ></div>
+                    ) : (
+                        <div className="text-center text-gray-500 flex flex-col items-center justify-center h-full">
+                            <FileText className="w-16 h-16 text-gray-300 mb-4" />
+                            <p>Your generated schedule will appear here. You can click on fields to edit them before printing.</p>
+                        </div>
                     )}
                 </div>
             </div>

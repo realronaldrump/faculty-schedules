@@ -22,55 +22,77 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title, onExport }) => 
             return;
         }
 
-        // Call the onExport callback if provided
+        // Call the onExport callback if provided (for legacy HTML schedules)
         if (onExport) {
             await onExport('png');
         }
 
         try {
-            // Calculate target dimensions for PNG export
-            const DPI = 96; // Standard screen DPI
-            const targetWidthPx = 7 * DPI;
-            const targetHeightPx = 5 * DPI;
+            // Target dimensions: 7 x 5 inches
+            // We use 96 DPI as the base for layout, but capture at 2x scale for print quality
+            const BASE_DPI = 96;
+            const targetWidthPx = 7 * BASE_DPI;   // 672px
+            const targetHeightPx = 5 * BASE_DPI;  // 480px
 
             // Store original styles
             const originalWidth = container.style.width;
             const originalHeight = container.style.height;
             const originalMaxWidth = container.style.maxWidth;
             const originalMaxHeight = container.style.maxHeight;
+            const originalMinWidth = container.style.minWidth;
+            const originalMinHeight = container.style.minHeight;
+            const originalOverflow = container.style.overflow;
 
-            // Temporarily set container to target size
+            // Force the container to exact dimensions
             container.style.width = `${targetWidthPx}px`;
             container.style.height = `${targetHeightPx}px`;
             container.style.maxWidth = `${targetWidthPx}px`;
             container.style.maxHeight = `${targetHeightPx}px`;
+            container.style.minWidth = `${targetWidthPx}px`;
+            container.style.minHeight = `${targetHeightPx}px`;
             container.style.overflow = 'hidden';
 
+            // Give the browser a moment to apply the styles
+            await new Promise(resolve => setTimeout(resolve, 50));
+
             try {
-                // Capture with size constraints
+                // Capture at 2x scale for high quality (effective 192 DPI)
+                // This produces a 1344 x 960 pixel image which prints sharply at 7x5 inches
                 const canvas = await html2canvas(container, {
                     width: targetWidthPx,
                     height: targetHeightPx,
                     scale: 2,
-                    backgroundColor: null,
+                    backgroundColor: '#ffffff',
                     useCORS: true,
-                    ignoreElements: (el) => el && el.classList && el.classList.contains('export-ignore')
+                    logging: false,
+                    allowTaint: false,
+                    ignoreElements: (el) => {
+                        if (!el || !el.classList) return false;
+                        return el.classList.contains('export-ignore');
+                    }
                 });
 
-                const dataUrl = canvas.toDataURL('image/png');
+                // Convert to PNG blob and download
+                const dataUrl = canvas.toDataURL('image/png', 1.0);
                 const res = await fetch(dataUrl);
                 const blob = await res.blob();
-                downloadBlob(blob, `${title}.png`);
+
+                // Clean filename
+                const cleanTitle = (title || 'schedule').replace(/[^a-zA-Z0-9-_]/g, '-');
+                downloadBlob(blob, `${cleanTitle}.png`);
             } finally {
                 // Restore original styles
                 container.style.width = originalWidth;
                 container.style.height = originalHeight;
                 container.style.maxWidth = originalMaxWidth;
                 container.style.maxHeight = originalMaxHeight;
-                container.style.overflow = '';
+                container.style.minWidth = originalMinWidth;
+                container.style.minHeight = originalMinHeight;
+                container.style.overflow = originalOverflow;
             }
         } catch (err) {
             console.error('Export failed:', err);
+            alert('Export failed. Please try again.');
         } finally {
             onClose();
         }
@@ -86,10 +108,14 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title, onExport }) => 
                     </button>
                 </div>
                 <div className="p-6">
+                    <p className="text-sm text-gray-600 mb-4">
+                        Export your room schedule as a high-quality PNG image sized for door tags.
+                    </p>
                     <div className="grid grid-cols-1 gap-4">
                         <button onClick={handleExport} className="export-option" title="Export as PNG image">
-                            <Image className="w-8 h-8 mx-auto mb-2" />
-                            <span>PNG (7 x 5 in)</span>
+                            <Image className="w-8 h-8 mx-auto mb-2 text-baylor-green" />
+                            <span className="font-medium">PNG Image</span>
+                            <span className="text-xs text-gray-500 block mt-1">7 × 5 inches (1344 × 960 px)</span>
                         </button>
                     </div>
                 </div>

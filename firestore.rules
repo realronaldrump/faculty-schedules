@@ -4,28 +4,85 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function isSignedIn() { return request.auth != null; }
 
-    // Check user's Firestore profile for admin role (supports array or map formats)
-    function userHasAdminRole() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-        (
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles is list &&
-          'admin' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles
-        ) || (
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles is map &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.admin == true
-        )
+    function userDoc() { return /databases/$(database)/documents/users/$(request.auth.uid); }
+    function accessControlDoc() { return /databases/$(database)/documents/settings/accessControl; }
+    function hasUserProfile() { return isSignedIn() && exists(userDoc()); }
+
+    // Check user's Firestore profile for a role (supports list/map/string formats)
+    function userHasRole(role) {
+      return hasUserProfile() && (
+        (get(userDoc()).data.roles is list && role in get(userDoc()).data.roles) ||
+        (get(userDoc()).data.roles is map && get(userDoc()).data.roles[role] == true) ||
+        (get(userDoc()).data.roles is string && get(userDoc()).data.roles == role)
       );
     }
 
-    // Check if user has a specific action permission in their user profile
-    function userHasAction(actionKey) {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.actions != null) &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.actions[actionKey] == true);
+    // Check user's Firestore profile for admin role (supports list/map/string formats)
+    function userHasAdminRole() {
+      return userHasRole('admin');
     }
 
-    // Treat someone as admin if they have a custom claim OR match your email
+    // Direct user action grants (supports wildcard)
+    function userHasDirectAction(actionKey) {
+      return hasUserProfile() &&
+        get(userDoc()).data.actions is map &&
+        (
+          get(userDoc()).data.actions[actionKey] == true ||
+          get(userDoc()).data.actions['*'] == true
+        );
+    }
+
+    // User overrides (new schema) for action grants
+    function userHasOverrideAction(actionKey) {
+      return hasUserProfile() &&
+        get(userDoc()).data.overrides is map &&
+        get(userDoc()).data.overrides.actions is map &&
+        (
+          get(userDoc()).data.overrides.actions[actionKey] == true ||
+          get(userDoc()).data.overrides.actions['*'] == true
+        );
+    }
+
+    // Role-based action grants from settings/accessControl (supports wildcard)
+    function roleHasAction(role, actionKey) {
+      return exists(accessControlDoc()) &&
+        get(accessControlDoc()).data.rolePermissions is map &&
+        get(accessControlDoc()).data.rolePermissions[role] is map &&
+        get(accessControlDoc()).data.rolePermissions[role].actions is map &&
+        (
+          get(accessControlDoc()).data.rolePermissions[role].actions[actionKey] == true ||
+          get(accessControlDoc()).data.rolePermissions[role].actions['*'] == true
+        );
+    }
+
+    function userHasRoleAction(actionKey) {
+      return hasUserProfile() && (
+        (get(userDoc()).data.roles is list && (
+          (get(userDoc()).data.roles.size() > 0 && roleHasAction(get(userDoc()).data.roles[0], actionKey)) ||
+          (get(userDoc()).data.roles.size() > 1 && roleHasAction(get(userDoc()).data.roles[1], actionKey)) ||
+          (get(userDoc()).data.roles.size() > 2 && roleHasAction(get(userDoc()).data.roles[2], actionKey))
+        )) ||
+        (get(userDoc()).data.roles is map && (
+          (get(userDoc()).data.roles.admin == true && roleHasAction('admin', actionKey)) ||
+          (get(userDoc()).data.roles.staff == true && roleHasAction('staff', actionKey)) ||
+          (get(userDoc()).data.roles.faculty == true && roleHasAction('faculty', actionKey)) ||
+          (get(userDoc()).data.roles.viewer == true && roleHasAction('viewer', actionKey))
+        )) ||
+        (get(userDoc()).data.roles is string && roleHasAction(get(userDoc()).data.roles, actionKey))
+      );
+    }
+
+    // Check if user has a specific action permission (direct, override, or role-based)
+    function userHasAction(actionKey) {
+      return isSignedIn() && (
+        isAdmin() ||
+        userHasDirectAction(actionKey) ||
+        userHasOverrideAction(actionKey) ||
+        userHasRoleAction(actionKey)
+      );
+    }
+
+    // Treat someone as admin if they have a custom claim or admin role
     function isAdmin() {
       return isSignedIn() && (
         // Custom claim on the Auth token

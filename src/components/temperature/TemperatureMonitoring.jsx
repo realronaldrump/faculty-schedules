@@ -1226,8 +1226,8 @@ const TemperatureMonitoring = () => {
     }
   };
 
-  const missingMarkers = roomsForBuilding.filter((room) => !markerMap[room.id]);
   const markerMap = editingPositions ? markerDrafts : (buildingSettings?.markers || {});
+  const missingMarkers = roomsForBuilding.filter((room) => !markerMap[room.id]);
 
   const currentSnapshotLabel = snapshotTimes.find((slot) => slot.id === selectedSnapshotId)?.label || '';
 

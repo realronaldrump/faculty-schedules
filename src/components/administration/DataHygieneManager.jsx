@@ -2125,6 +2125,50 @@ const DataHygieneManager = () => {
         type="warning"
       />
 
+      <ConfirmationDialog
+        isOpen={mergePeopleConfirm.isOpen}
+        title="Merge Duplicate People?"
+        message="Merge these people records? This will permanently remove the duplicate record."
+        confirmText={mergePeopleLoading ? "Merging..." : "Merge Records"}
+        cancelText="Cancel"
+        onConfirm={handleConfirmMergePeople}
+        onCancel={handleCancelMergePeople}
+        type="danger"
+      />
+
+      <ConfirmationDialog
+        isOpen={notDuplicateDialog.isOpen}
+        title="Mark as Not Duplicate?"
+        message="We will stop flagging this pair. Add a note if helpful."
+        confirmText={notDuplicateSaving ? "Saving..." : "Mark Not Duplicate"}
+        cancelText="Cancel"
+        onConfirm={handleConfirmNotDuplicate}
+        onCancel={handleCancelNotDuplicate}
+        type="info"
+      >
+        <div className="space-y-2">
+          <label
+            htmlFor="not-duplicate-reason"
+            className="text-sm font-medium text-gray-700"
+          >
+            Reason (optional)
+          </label>
+          <textarea
+            id="not-duplicate-reason"
+            value={notDuplicateReason}
+            onChange={(e) => setNotDuplicateReason(e.target.value)}
+            disabled={notDuplicateSaving}
+            rows={3}
+            placeholder="Example: distinct departments or different employee IDs"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green disabled:opacity-60"
+          />
+          <p className="text-xs text-gray-500">
+            This note is optional and only visible to admins reviewing data
+            hygiene history.
+          </p>
+        </div>
+      </ConfirmationDialog>
+
       {/* Deduplication modal removed */}
 
       {/* Link Person Modal */}

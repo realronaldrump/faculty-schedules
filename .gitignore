@@ -30,3 +30,6 @@ temperature_examples/
 firestore-export/
 # local firestore export artifacts
 firestore-export/
+firebase-service-account.json
+*serviceAccountKey*.json
+*service-account*.json

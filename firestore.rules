@@ -210,7 +210,7 @@ service cloud.firestore {
     // Dedupe decisions: allow hygiene tooling to persist "not a duplicate" choices
     match /dedupeDecisions/{id} {
       allow read: if isSignedIn();
-      allow write: if isAdmin() || userHasAction('data.hygiene');
+      allow write: if isAdmin() || userHasAction('data.hygiene') || userHasAction('data.deduplication');
     }
 
     // Room grids: allow non-admin writes if the user has explicit action grants

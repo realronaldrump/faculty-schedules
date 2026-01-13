@@ -101,12 +101,12 @@ export const createPersonModel = (rawData) => {
     isFullTime: rawData.isFullTime !== undefined ? rawData.isFullTime : true,
     isTenured:
       (Array.isArray(rawData.roles) && rawData.roles.includes("faculty")) ||
-      (typeof rawData.roles === "object" && rawData.roles?.faculty)
+        (typeof rawData.roles === "object" && rawData.roles?.faculty)
         ? rawData.isTenured || false
         : false,
     isUPD:
       (Array.isArray(rawData.roles) && rawData.roles.includes("faculty")) ||
-      (typeof rawData.roles === "object" && rawData.roles?.faculty)
+        (typeof rawData.roles === "object" && rawData.roles?.faculty)
         ? rawData.isUPD || false
         : false,
     programId: rawData.programId || null, // Reference to programs collection
@@ -142,8 +142,8 @@ export const createScheduleModel = (rawData) => {
   const instructorIds = Array.isArray(rawData.instructorIds)
     ? rawData.instructorIds
     : instructorAssignments
-        .map((assignment) => assignment?.personId)
-        .filter(Boolean);
+      .map((assignment) => assignment?.personId)
+      .filter(Boolean);
 
   // Create basic schedule model
   const schedule = {
@@ -178,8 +178,8 @@ export const createScheduleModel = (rawData) => {
     roomId: rawData.roomId || null,
     roomNames: Array.isArray(rawData.roomNames)
       ? rawData.roomNames
-          .map((n) => (n || "").toString().trim())
-          .filter(Boolean)
+        .map((n) => (n || "").toString().trim())
+        .filter(Boolean)
       : (rawData.roomName || "").trim()
         ? [(rawData.roomName || "").trim()]
         : [],
@@ -346,7 +346,7 @@ export const parseInstructorField = (instructorField) => {
 
   // Parse format: "LastName, FirstName (ID) [Primary, 100%]" or "[50%]"
   const match = cleanField.match(
-    /^([^,]+),\s*([^\(\[]+?)(?:\s*\(([^)]+)\))?(?:\s*\[([^\]]+)\])?$/,
+    /^([^,]+),\s*([^([]+?)(?:\s*\(([^)]+)\))?(?:\s*\[([^\]]+)\])?$/,
   );
 
   if (match) {
@@ -776,8 +776,8 @@ export const processDirectoryImport = async (csvData, options = {}) => {
       // Match strictly by email for idempotent upsert behavior
       const existingMatch = personData.email
         ? existingPeople.find(
-            (p) => (p.email || "").toLowerCase() === personData.email,
-          )
+          (p) => (p.email || "").toLowerCase() === personData.email,
+        )
         : null;
 
       if (existingMatch) {
@@ -1187,7 +1187,7 @@ export const processScheduleImport = async (csvData) => {
       instructorId = primaryAssignment?.personId || null;
       instructorData = instructorId
         ? instructorPeople.get(instructorId) ||
-          existingPeople.find((p) => p.id === instructorId)
+        existingPeople.find((p) => p.id === instructorId)
         : null;
 
       const normalizedRoomLabel = (roomName || "").trim();
@@ -1435,7 +1435,7 @@ export const processScheduleImport = async (csvData) => {
           (s) =>
             (s.courseCode || "") === (scheduleData.courseCode || "") &&
             normalizeSection(s.section) ===
-              normalizeSection(scheduleData.section) &&
+            normalizeSection(scheduleData.section) &&
             (s.term || "") === (scheduleData.term || ""),
         );
       }
@@ -1946,14 +1946,14 @@ export const fetchSchedulesByTerms = async ({
       const queries =
         normalizedTermCodes.length > 0
           ? chunkItems(normalizedTermCodes).map((chunk) =>
-              query(
-                collection(db, "schedules"),
-                where("termCode", "in", chunk),
-              ),
-            )
+            query(
+              collection(db, "schedules"),
+              where("termCode", "in", chunk),
+            ),
+          )
           : chunkItems(normalizedTerms).map((chunk) =>
-              query(collection(db, "schedules"), where("term", "in", chunk)),
-            );
+            query(collection(db, "schedules"), where("term", "in", chunk)),
+          );
 
       for (const q of queries) {
         const schedulesSnapshot = await getDocs(q);

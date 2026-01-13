@@ -189,11 +189,10 @@ const LinkPersonModal = ({ isOpen, onClose, onConfirm, schedule }) => {
               {filteredPeople.map((person) => (
                 <div
                   key={person.id}
-                  className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${
-                    selectedPerson?.id === person.id
+                  className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${selectedPerson?.id === person.id
                       ? "bg-blue-50 border-l-4 border-blue-500"
                       : ""
-                  }`}
+                    }`}
                   onClick={() => setSelectedPerson(person)}
                 >
                   <div className="flex items-center justify-between">
@@ -385,11 +384,10 @@ const LinkRoomModal = ({ isOpen, onClose, onConfirm, schedule }) => {
               {filteredRooms.map((room) => (
                 <div
                   key={room.id}
-                  className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${
-                    selectedRoom?.id === room.id
+                  className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${selectedRoom?.id === room.id
                       ? "bg-blue-50 border-l-4 border-blue-500"
                       : ""
-                  }`}
+                    }`}
                   onClick={() => setSelectedRoom(room)}
                 >
                   <div className="flex items-center justify-between">
@@ -1377,79 +1375,79 @@ const DataHygieneManager = () => {
       {/* Data Quality Actions */}
       {wizardStep === "analyze" && (
         <div className="bg-white rounded-lg shadow-sm border p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Recommended Next Steps
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center mb-2">
-              <RefreshCw className="w-5 h-5 text-baylor-green mr-2" />
-              <h4 className="font-medium text-gray-900">Standardize & Validate</h4>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Recommended Next Steps
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
+            <div className="p-4 border rounded-lg">
+              <div className="flex items-center mb-2">
+                <RefreshCw className="w-5 h-5 text-baylor-green mr-2" />
+                <h4 className="font-medium text-gray-900">Standardize & Validate</h4>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">
+                Normalize names, term codes, and room labels so the app uses one consistent format.
+              </p>
+              <button
+                onClick={() => setWizardStep("standardize")}
+                className="w-full px-3 py-2 bg-green-100 text-green-800 rounded-lg hover:bg-green-200"
+              >
+                Preview Standardization
+              </button>
             </div>
-            <p className="text-sm text-gray-600 mb-3">
-              Normalize names, term codes, and room labels so the app uses one consistent format.
-            </p>
-            <button
-              onClick={() => setWizardStep("standardize")}
-              className="w-full px-3 py-2 bg-green-100 text-green-800 rounded-lg hover:bg-green-200"
-            >
-              Preview Standardization
-            </button>
-          </div>
 
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center mb-2">
-              <Users className="w-5 h-5 text-blue-600 mr-2" />
-              <h4 className="font-medium text-gray-900">Review Duplicates</h4>
+            <div className="p-4 border rounded-lg">
+              <div className="flex items-center mb-2">
+                <Users className="w-5 h-5 text-blue-600 mr-2" />
+                <h4 className="font-medium text-gray-900">Review Duplicates</h4>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">
+                {duplicates.length + duplicateSchedules.length + duplicateRooms.length} potential duplicates found.
+              </p>
+              <button
+                onClick={() => setWizardStep("duplicates")}
+                className="w-full px-3 py-2 bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200"
+              >
+                Review Duplicates
+              </button>
             </div>
-            <p className="text-sm text-gray-600 mb-3">
-              {duplicates.length + duplicateSchedules.length + duplicateRooms.length} potential duplicates found.
-            </p>
-            <button
-              onClick={() => setWizardStep("duplicates")}
-              className="w-full px-3 py-2 bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200"
-            >
-              Review Duplicates
-            </button>
-          </div>
 
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center mb-2">
-              <Link className="w-5 h-5 text-red-600 mr-2" />
-              <h4 className="font-medium text-gray-900">
-                Repair Links
-              </h4>
+            <div className="p-4 border rounded-lg">
+              <div className="flex items-center mb-2">
+                <Link className="w-5 h-5 text-red-600 mr-2" />
+                <h4 className="font-medium text-gray-900">
+                  Repair Links
+                </h4>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">
+                Fix schedules without instructors or rooms and repair broken references.
+              </p>
+              <button
+                onClick={() => setWizardStep("links")}
+                className="w-full px-3 py-2 bg-red-100 text-red-800 rounded-lg hover:bg-red-200"
+              >
+                Fix Links
+              </button>
             </div>
-            <p className="text-sm text-gray-600 mb-3">
-              Fix schedules without instructors or rooms and repair broken references.
-            </p>
-            <button
-              onClick={() => setWizardStep("links")}
-              className="w-full px-3 py-2 bg-red-100 text-red-800 rounded-lg hover:bg-red-200"
-            >
-              Fix Links
-            </button>
-          </div>
 
-          <div className="p-4 border rounded-lg">
-            <div className="flex items-center mb-2">
-              <Edit className="w-5 h-5 text-purple-600 mr-2" />
-              <h4 className="font-medium text-gray-900">
-                Complete Missing Data
-              </h4>
+            <div className="p-4 border rounded-lg">
+              <div className="flex items-center mb-2">
+                <Edit className="w-5 h-5 text-purple-600 mr-2" />
+                <h4 className="font-medium text-gray-900">
+                  Complete Missing Data
+                </h4>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">
+                Add missing email, phone, office, and job title information.
+              </p>
+              <button
+                onClick={() => setWizardStep("missing")}
+                className="w-full px-3 py-2 bg-purple-100 text-purple-800 rounded-lg hover:bg-purple-200"
+              >
+                Review Missing Data
+              </button>
             </div>
-            <p className="text-sm text-gray-600 mb-3">
-              Add missing email, phone, office, and job title information.
-            </p>
-            <button
-              onClick={() => setWizardStep("missing")}
-              className="w-full px-3 py-2 bg-purple-100 text-purple-800 rounded-lg hover:bg-purple-200"
-            >
-              Review Missing Data
-            </button>
           </div>
         </div>
-      </div>
       )}
 
       {/* Interactive Missing Data Summary */}
@@ -1657,35 +1655,35 @@ const DataHygieneManager = () => {
                 duplicateSchedules.length +
                 duplicateRooms.length >
                 0 && (
-                <div className="flex items-center gap-2">
-                  {selectedDuplicates.length > 0 && (
-                    <>
-                      <span className="text-sm text-gray-600">
-                        {selectedDuplicates.length} selected
-                      </span>
-                      <button
-                        onClick={() =>
-                          handleBatchMerge(
-                            duplicates.some((d) =>
-                              selectedDuplicates.includes(d),
+                  <div className="flex items-center gap-2">
+                    {selectedDuplicates.length > 0 && (
+                      <>
+                        <span className="text-sm text-gray-600">
+                          {selectedDuplicates.length} selected
+                        </span>
+                        <button
+                          onClick={() =>
+                            handleBatchMerge(
+                              duplicates.some((d) =>
+                                selectedDuplicates.includes(d),
+                              )
+                                ? "people"
+                                : duplicateSchedules.some((d) =>
+                                  selectedDuplicates.includes(d),
+                                )
+                                  ? "schedules"
+                                  : "rooms",
                             )
-                              ? "people"
-                              : duplicateSchedules.some((d) =>
-                                    selectedDuplicates.includes(d),
-                                  )
-                                ? "schedules"
-                                : "rooms",
-                          )
-                        }
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700"
-                      >
-                        <Zap className="w-4 h-4" />
-                        Merge Selected ({selectedDuplicates.length})
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
+                          }
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700"
+                        >
+                          <Zap className="w-4 h-4" />
+                          Merge Selected ({selectedDuplicates.length})
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
             </div>
           </div>
           <div className="p-6">
@@ -2322,7 +2320,7 @@ const StandardizationPreview = ({ preview }) => {
                             {diff.field}:
                           </span>
                           <span>
-                            {formatPreviewValue(diff.before)} ->{" "}
+                            {formatPreviewValue(diff.before)} &rarr;{" "}
                             {formatPreviewValue(diff.after)}
                           </span>
                         </div>
@@ -2429,13 +2427,12 @@ const Recommendations = ({ recommendations }) => {
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center space-x-2">
                 <span
-                  className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    rec.priority === "high"
+                  className={`px-2 py-1 rounded-full text-xs font-medium ${rec.priority === "high"
                       ? "bg-red-100 text-red-800"
                       : rec.priority === "medium"
                         ? "bg-yellow-100 text-yellow-800"
                         : "bg-blue-100 text-blue-800"
-                  }`}
+                    }`}
                 >
                   {rec.priority === "high"
                     ? "Important"

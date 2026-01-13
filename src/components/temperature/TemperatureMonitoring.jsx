@@ -95,7 +95,7 @@ const isValidTimeZone = (timeZone) => {
 };
 
 const TemperatureMonitoring = () => {
-  const { isAdmin, loading: authLoading } = useAuth();
+  const { isAdmin, loading: authLoading, user } = useAuth();
   const { showNotification } = useUI();
   const mapRef = useRef(null);
   const dragStateRef = useRef(null);
@@ -194,7 +194,7 @@ const TemperatureMonitoring = () => {
   }, [pendingMappings, mappingOverrides]);
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !user) return;
     let active = true;
     const loadRooms = async () => {
       setRoomsLoading(true);
@@ -233,7 +233,7 @@ const TemperatureMonitoring = () => {
   }, [selectedBuilding]);
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !user) return;
     if (!selectedBuilding) return;
     let active = true;
     const loadSettings = async () => {
@@ -285,7 +285,7 @@ const TemperatureMonitoring = () => {
   }, [selectedSnapshotId, snapshotTimes]);
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !user) return;
     if (!selectedBuilding) return;
     let active = true;
     const loadDevices = async () => {
@@ -312,7 +312,7 @@ const TemperatureMonitoring = () => {
   }, [selectedBuilding, authLoading]);
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !user) return;
     if (!selectedBuilding || !selectedDate) return;
     let active = true;
     const loadSnapshots = async () => {

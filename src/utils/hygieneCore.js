@@ -306,7 +306,8 @@ export const standardizeSchedule = (schedule = {}) => {
         ...instructorAssignments.map((assignment) => assignment.personId),
       ]),
     ).filter(Boolean);
-    const instructorId = schedule.instructorId || primaryAssignment?.personId;
+    const instructorId =
+      schedule.instructorId || primaryAssignment?.personId || "";
 
     return {
       roomNames,

@@ -440,45 +440,57 @@ const TemperatureMonitoring = () => {
 
   const handleFloorplanUpload = async (file) => {
     if (!file || !selectedBuilding || !isAdmin) return;
+
+    // specific check for Firestore document size limit (approx 1MB minus metadata)
+    if (file.size > 900 * 1024) {
+      showNotification('error', 'File Too Large', 'For database storage, image must be under 900KB. Please compress the PNG.');
+      return;
+    }
+
     try {
-      const dimensions = await new Promise((resolve, reject) => {
-        const img = new Image();
-        const url = URL.createObjectURL(file);
-        img.onload = () => {
-          resolve({ width: img.width, height: img.height });
-          URL.revokeObjectURL(url);
+      const { base64, width, height } = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            resolve({
+              base64: e.target.result,
+              width: img.width,
+              height: img.height
+            });
+          };
+          img.onerror = () => reject(new Error('Invalid image file.'));
+          img.src = e.target.result;
         };
-        img.onerror = () => {
-          URL.revokeObjectURL(url);
-          reject(new Error('Image load failed'));
-        };
-        img.src = url;
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(file);
       });
+
       const buildingKey = toBuildingKey(selectedBuilding);
-      const storagePath = `temperature-floorplans/${buildingKey}/${Date.now()}_${file.name}`;
-      const storageRef = ref(storage, storagePath);
-      await uploadBytes(storageRef, file);
-      const downloadUrl = await getDownloadURL(storageRef);
+
+      // Store directly in Firestore structure
       const floorplan = {
-        storagePath,
-        downloadUrl,
-        width: dimensions.width,
-        height: dimensions.height,
+        storagePath: null, // No external storage used
+        downloadUrl: base64, // Data URL serves as the source
+        width,
+        height,
         updatedAt: new Date().toISOString()
       };
+
       await setDoc(doc(db, 'temperatureBuildingSettings', buildingKey), {
         buildingName: selectedBuilding,
         floorplan,
         updatedAt: serverTimestamp()
       }, { merge: true });
+
       setBuildingSettings((prev) => ({
         ...prev,
         floorplan
       }));
-      showNotification('success', 'Floorplan Uploaded', 'PNG floorplan saved for this building.');
+      showNotification('success', 'Floorplan Saved', 'Floorplan saved directly to database.');
     } catch (error) {
-      console.error('Error uploading floorplan:', error);
-      showNotification('error', 'Upload Failed', 'Unable to upload floorplan PNG.');
+      console.error('Error saving floorplan:', error);
+      showNotification('error', 'Save Failed', 'Unable to save floorplan to database.');
     }
   };
 

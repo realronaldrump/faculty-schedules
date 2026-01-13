@@ -95,7 +95,7 @@ const isValidTimeZone = (timeZone) => {
 };
 
 const TemperatureMonitoring = () => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, loading: authLoading } = useAuth();
   const { showNotification } = useUI();
   const mapRef = useRef(null);
   const dragStateRef = useRef(null);
@@ -194,6 +194,7 @@ const TemperatureMonitoring = () => {
   }, [pendingMappings, mappingOverrides]);
 
   useEffect(() => {
+    if (authLoading) return;
     let active = true;
     const loadRooms = async () => {
       setRoomsLoading(true);
@@ -212,7 +213,7 @@ const TemperatureMonitoring = () => {
     return () => {
       active = false;
     };
-  }, [showNotification]);
+  }, [showNotification, authLoading]);
 
   useEffect(() => {
     if (!selectedBuilding && buildingList.length > 0) {
@@ -232,6 +233,7 @@ const TemperatureMonitoring = () => {
   }, [selectedBuilding]);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!selectedBuilding) return;
     let active = true;
     const loadSettings = async () => {
@@ -266,7 +268,7 @@ const TemperatureMonitoring = () => {
       }
     };
     loadSettings();
-  }, [selectedBuilding, showNotification]);
+  }, [selectedBuilding, showNotification, authLoading]);
 
   useEffect(() => {
     if (!selectedDate && buildingSettings?.timezone) {
@@ -283,6 +285,7 @@ const TemperatureMonitoring = () => {
   }, [selectedSnapshotId, snapshotTimes]);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!selectedBuilding) return;
     let active = true;
     const loadDevices = async () => {
@@ -306,9 +309,10 @@ const TemperatureMonitoring = () => {
     return () => {
       active = false;
     };
-  }, [selectedBuilding]);
+  }, [selectedBuilding, authLoading]);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!selectedBuilding || !selectedDate) return;
     let active = true;
     const loadSnapshots = async () => {
@@ -333,7 +337,7 @@ const TemperatureMonitoring = () => {
     return () => {
       active = false;
     };
-  }, [selectedBuilding, selectedDate, showNotification]);
+  }, [selectedBuilding, selectedDate, showNotification, authLoading]);
 
   useEffect(() => {
     if (!selectedBuilding) return;

@@ -19,6 +19,7 @@ import {
 import FacultyContactCard from '../FacultyContactCard';
 import { useData } from '../../contexts/DataContext';
 import { usePeople } from '../../contexts/PeopleContext';
+import { extractBuildingName } from '../../utils/directoryUtils';
 
 const BuildingDirectory = () => {
   const { facultyData = [], staffData = [] } = useData();
@@ -34,49 +35,6 @@ const BuildingDirectory = () => {
   useEffect(() => {
     loadPeople();
   }, [loadPeople]);
-
-  // Helper function to extract building name from office location
-  const extractBuildingName = (officeLocation) => {
-    if (!officeLocation || officeLocation.trim() === '') {
-      return 'No Building';
-    }
-
-    const office = officeLocation.trim();
-
-    // Handle common building name patterns
-    const buildingKeywords = ['BUILDING', 'HALL', 'GYMNASIUM', 'TOWER', 'CENTER', 'COMPLEX'];
-
-    // Check if office contains building keywords
-    for (const keyword of buildingKeywords) {
-      const keywordIndex = office.toUpperCase().indexOf(keyword);
-      if (keywordIndex !== -1) {
-        // Include everything up to and including the keyword
-        const endIndex = keywordIndex + keyword.length;
-        return office.substring(0, endIndex).trim();
-      }
-    }
-
-    // If no building keywords found, try to extract building name before room numbers
-    // Look for patterns where building name ends before standalone numbers
-    const match = office.match(/^([A-Za-z\s]+?)(\s+\d+.*)?$/);
-    if (match && match[1]) {
-      return match[1].trim();
-    }
-
-    // Handle special cases like "801 WASHINGTON TOWER" where number is part of building name
-    // If it starts with a number followed by words, keep it all as building name
-    const startsWithNumber = office.match(/^\d+\s+[A-Za-z]/);
-    if (startsWithNumber) {
-      // Look for room-like patterns at the end
-      const roomPattern = office.match(/^(.+?)(\s+\d{2,4}(\s+\d+)*)$/);
-      if (roomPattern) {
-        return roomPattern[1].trim();
-      }
-      return office; // Keep whole thing if no clear room pattern
-    }
-
-    return office; // Fallback: return the whole office location
-  };
 
   // Helper function to extract room number from office location
   const extractRoomNumber = (officeLocation) => {

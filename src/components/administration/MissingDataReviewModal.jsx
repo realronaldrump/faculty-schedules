@@ -5,6 +5,7 @@ import { db, COLLECTIONS } from '../../firebase';
 import { DEFAULT_PERSON_SCHEMA } from '../../utils/dataHygiene';
 import { logUpdate } from '../../utils/changeLogger';
 import { usePermissions } from '../../utils/permissions';
+import { isStudentWorker } from '../../utils/peopleUtils';
 
 const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataType = 'email' }) => {
   const [records, setRecords] = useState([]);
@@ -51,7 +52,9 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
           break;
         case 'office':
           missingRecords = people.filter(person =>
-            (!person.office || person.office.trim() === '') && !person.hasNoOffice
+            !isStudentWorker(person) &&
+            (!person.office || person.office.trim() === '') &&
+            !person.hasNoOffice
           );
           break;
         case 'jobTitle':
@@ -72,7 +75,9 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
 
             const missingEmail = !person.email || person.email.trim() === '';
             const missingPhone = (!person.phone || person.phone.trim() === '') && !person.hasNoPhone;
-            const missingOffice = (!person.office || person.office.trim() === '') && !person.hasNoOffice;
+            const missingOffice = !isStudentWorker(person) &&
+              (!person.office || person.office.trim() === '') &&
+              !person.hasNoOffice;
             const missingJob = (!person.jobTitle || person.jobTitle.trim() === '');
             const missingProg = isFaculty && !person.programId;
 
@@ -98,7 +103,7 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
       newTitle: record.title || '',
       newProgramId: record.programId || '',
       newHasNoPhone: record.hasNoPhone || false,
-      newHasNoOffice: record.hasNoOffice || false
+      newHasNoOffice: record.hasNoOffice || isStudentWorker(record)
     });
   };
 
@@ -298,22 +303,28 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                 </p>
               </div>
 
-              {records.map((record) => (
-                <div key={record.id} className="border rounded-lg p-4 bg-gray-50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <h4 className="font-medium text-gray-900">
-                        {record.firstName} {record.lastName}
-                      </h4>
-                      <p className="text-sm text-gray-600">
-                        {record.jobTitle || 'No job title'}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        Email: {record.email || 'Missing'} •
-                        Phone: {record.hasNoPhone ? 'No phone' : (record.phone || 'Missing')} •
-                        Office: {record.hasNoOffice ? 'No office' : (record.office || 'Missing')}
-                      </p>
-                    </div>
+              {records.map((record) => {
+                const studentWorker = isStudentWorker(record);
+                const officeLabel = (record.hasNoOffice || studentWorker)
+                  ? 'No office'
+                  : (record.office || 'Missing');
+
+                return (
+                  <div key={record.id} className="border rounded-lg p-4 bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <h4 className="font-medium text-gray-900">
+                          {record.firstName} {record.lastName}
+                        </h4>
+                        <p className="text-sm text-gray-600">
+                          {record.jobTitle || 'No job title'}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          Email: {record.email || 'Missing'} •
+                          Phone: {record.hasNoPhone ? 'No phone' : (record.phone || 'Missing')} •
+                          Office: {officeLabel}
+                        </p>
+                      </div>
 
                     {editingRecord?.id === record.id ? (
                       <div className="ml-4 space-y-3 min-w-80">
@@ -484,9 +495,10 @@ const MissingDataReviewModal = ({ isOpen, onClose, onDataUpdated, missingDataTyp
                         Add Missing Info
                       </button>
                     )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

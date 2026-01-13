@@ -23,12 +23,21 @@ const buildCourseCounts = (records = [], scheduleData = [], filterFn = () => tru
   return records
     .filter(filterFn)
     .map((faculty) => {
-      const facultyName = faculty.name;
       const facultyCourses = (scheduleData || []).filter((schedule) => {
-        const instructorName = schedule.instructor
-          ? `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim()
-          : (schedule.instructorName || schedule.Instructor || '');
-        return instructorName === facultyName;
+        const scheduleInstructorIds = Array.isArray(schedule.instructorIds)
+          ? schedule.instructorIds
+          : [];
+        const primaryInstructorId = schedule.instructorId || schedule.InstructorId || '';
+        const effectiveIds = scheduleInstructorIds.length > 0
+          ? scheduleInstructorIds
+          : (primaryInstructorId ? [primaryInstructorId] : []);
+        if (effectiveIds.length > 0) {
+          return effectiveIds.includes(faculty.id);
+        }
+        const fallbackNames = Array.isArray(schedule.instructorNames)
+          ? schedule.instructorNames
+          : [schedule.instructorName || schedule.Instructor || ''].filter(Boolean);
+        return fallbackNames.includes(faculty.name);
       });
 
       const uniqueCourses = [...new Set(facultyCourses.map((schedule) =>

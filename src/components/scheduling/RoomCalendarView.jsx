@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { MapPin, Download, Printer, Clock, Calendar } from 'lucide-react';
 import CourseDetailModal from './CourseDetailModal';
 import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
+import { getBuildingFromRoom } from '../../utils/buildingUtils';
 
 const RoomCalendarView = ({
     scheduleData,
@@ -21,6 +22,57 @@ const RoomCalendarView = ({
         return now.getHours() * 60 + now.getMinutes();
     });
 
+    const splitInstructorNames = (value) => {
+        if (!value) return [];
+        return String(value)
+            .split(/;|\/|\s+&\s+|\s+and\s+/i)
+            .map((part) => part.replace(/\[[^\]]*\]/g, '').replace(/\([^)]*\)/g, '').trim())
+            .filter(Boolean);
+    };
+
+    const getInstructorNames = (item) => {
+        if (Array.isArray(item?.instructorNames) && item.instructorNames.length > 0) {
+            return item.instructorNames;
+        }
+        const fallback = item?.Instructor || item?.instructorName || '';
+        return splitInstructorNames(fallback);
+    };
+
+    const getInstructorEntries = (item) => {
+        const names = getInstructorNames(item);
+        if (names.length === 0) return [];
+        const ids = Array.isArray(item?.instructorIds) ? item.instructorIds.filter(Boolean) : [];
+        if (ids.length === names.length) {
+            return names.map((name, idx) => ({ name, id: ids[idx] }));
+        }
+        if (ids.length === 1 && names.length === 1) {
+            return [{ name: names[0], id: ids[0] }];
+        }
+        return names.map((name) => ({ name }));
+    };
+
+    const renderInstructorButtons = (item) => {
+        const entries = getInstructorEntries(item);
+        if (entries.length === 0) return <span>—</span>;
+        return entries.map((entry, idx) => {
+            const label = `${entry.name}${idx < entries.length - 1 ? ' / ' : ''}`;
+            if (!onShowContactCard) return <span key={`${entry.name}-${idx}`}>{label}</span>;
+            return (
+                <button
+                    key={`${entry.name}-${idx}`}
+                    type="button"
+                    className="hover:underline"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onShowContactCard(entry.id || entry.name, entry.name);
+                    }}
+                >
+                    {label}
+                </button>
+            );
+        });
+    };
+
     // Update current time every minute
     useEffect(() => {
         const interval = setInterval(() => {
@@ -31,16 +83,6 @@ const RoomCalendarView = ({
     }, []);
 
     const dayStartMinutes = 8 * 60; // 8:00 AM
-
-    // Get building from room name
-    const getBuildingFromRoom = (room) => {
-        if (!room) return '';
-        const trimmed = room.trim().replace(/\s{2,}/g, ' ');
-        if (!trimmed) return '';
-        const match = trimmed.match(/^(.*?)(?=\s(?:[A-Za-z-]*\d))/);
-        const name = (match && match[1] ? match[1] : trimmed).trim();
-        return name || trimmed.split(' ')[0];
-    };
 
     // Get meeting pattern for a course
     const getMeetingPattern = (courseCode, startTime, endTime) => {
@@ -221,7 +263,7 @@ const RoomCalendarView = ({
             }
             return sum;
         }, 0);
-        const uniqueInstructors = new Set(allSessions.map(s => s.Instructor).filter(Boolean)).size;
+        const uniqueInstructors = new Set(allSessions.flatMap(getInstructorNames)).size;
         const uniqueCourses = new Set(allSessions.map(s => s.Course).filter(Boolean)).size;
 
         return { totalSessions, totalHours, uniqueInstructors, uniqueCourses };
@@ -380,16 +422,13 @@ const RoomCalendarView = ({
                                                     ? 'bg-baylor-gold text-baylor-green ring-2 ring-baylor-gold/40'
                                                     : 'bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green'
                                                     }`}
-                                                title={`${item.Course} • ${item['Start Time']} - ${item['End Time']} • ${item.Instructor}`}
+                                                title={`${item.Course} • ${item['Start Time']} - ${item['End Time']} • ${getInstructorNames(item).join(' / ') || item.Instructor || ''}`}
                                                 onClick={() => openCourseCard(item)}
                                             >
                                                 <div className="font-bold truncate">{item.Course}</div>
-                                                <button
-                                                    className="truncate hover:underline w-full text-left"
-                                                    onClick={(e) => { e.stopPropagation(); onShowContactCard?.(item.Instructor); }}
-                                                >
-                                                    {item.Instructor}
-                                                </button>
+                                                <div className="truncate">
+                                                    {renderInstructorButtons(item)}
+                                                </div>
                                                 <div className="text-[0.65rem] opacity-80">
                                                     {item['Start Time']} - {item['End Time']}
                                                 </div>

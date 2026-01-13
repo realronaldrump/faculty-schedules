@@ -259,7 +259,9 @@ const AccessControl = () => {
       await updateDoc(uRef, { roles: finalRoles, updatedAt: serverTimestamp() });
       await logUpdate(`User Roles - ${data.email}`, 'users', uid, { roles: finalRoles }, data, 'AccessControl.jsx - quickToggleRole');
       await loadData();
-    } catch (e) {}
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const toggleDisable = async (uid, disabled) => {
@@ -271,7 +273,9 @@ const AccessControl = () => {
       await updateDoc(uRef, payload);
       await logUpdate(`User ${disabled ? 'Disabled' : 'Enabled'} - ${data.email}`, 'users', uid, payload, data, 'AccessControl.jsx - toggleDisable');
       await loadData();
-    } catch (e) {}
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const openDeleteUserModal = async (uid) => {

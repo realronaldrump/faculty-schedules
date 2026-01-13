@@ -7,12 +7,14 @@
 
 import { useCallback } from 'react';
 import { db, COLLECTIONS } from '../firebase';
-import { doc, updateDoc, addDoc, deleteDoc, setDoc, collection } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where, addDoc } from 'firebase/firestore';
 import { logCreate, logUpdate, logDelete } from '../utils/changeLogger';
 import { useData } from '../contexts/DataContext';
 import { usePeople } from '../contexts/PeopleContext';
 import { useUI } from '../contexts/UIContext';
 import { getProgramNameKey, isReservedProgramName, normalizeProgramName } from '../utils/programUtils';
+import { deletePersonSafely } from '../utils/dataHygiene';
+import { extractRoomNumberFromLabel, normalizeRoomNumber, parseRoomLabel } from '../utils/roomUtils';
 
 const usePeopleOperations = () => {
   const {
@@ -28,11 +30,117 @@ const usePeopleOperations = () => {
     canEditStudent,
     canCreateStudent,
     canDeleteStudent,
-    canCreateProgram
+    canCreateProgram,
+    canCreateRoom,
+    canEditRoom
   } = useData();
   const { loadPeople } = usePeople();
 
   const { showNotification } = useUI();
+
+  const resolveOfficeRoomId = useCallback(async (personData, { allowCreate = true } = {}) => {
+    const office = (personData?.office || '').toString().trim();
+    const hasNoOffice = personData?.hasNoOffice === true || personData?.isRemote === true;
+
+    if (hasNoOffice || !office) return '';
+
+    const parsed = parseRoomLabel(office);
+    if (!parsed?.roomKey) return '';
+
+    const now = new Date().toISOString();
+    const roomKey = parsed.roomKey;
+
+    // 1) Deterministic doc id (preferred)
+    try {
+      const directSnap = await getDoc(doc(db, COLLECTIONS.ROOMS, roomKey));
+      if (directSnap.exists()) {
+        if (typeof canEditRoom === 'function' && canEditRoom()) {
+          setDoc(doc(db, COLLECTIONS.ROOMS, roomKey), {
+            building: parsed.building,
+            roomNumber: parsed.roomNumber,
+            roomKey,
+            displayName: parsed.displayName,
+            updatedAt: now
+          }, { merge: true }).catch(() => null);
+        }
+        return roomKey;
+      }
+    } catch (error) {
+      void error;
+    }
+
+    // 2) Legacy rooms with `roomKey` field but non-deterministic document IDs
+    try {
+      const byKeySnap = await getDocs(query(
+        collection(db, COLLECTIONS.ROOMS),
+        where('roomKey', '==', roomKey)
+      ));
+      if (!byKeySnap.empty) {
+        const docId = byKeySnap.docs[0].id;
+        if (typeof canEditRoom === 'function' && canEditRoom()) {
+          setDoc(doc(db, COLLECTIONS.ROOMS, docId), {
+            building: parsed.building,
+            roomNumber: parsed.roomNumber,
+            roomKey,
+            displayName: parsed.displayName,
+            updatedAt: now
+          }, { merge: true }).catch(() => null);
+        }
+        return docId;
+      }
+    } catch (error) {
+      void error;
+    }
+
+    // 3) Building-only query (avoids composite index) + local match on room number
+    try {
+      const byBuildingSnap = await getDocs(query(
+        collection(db, COLLECTIONS.ROOMS),
+        where('building', '==', parsed.building)
+      ));
+
+      const targetNumber = normalizeRoomNumber(parsed.roomNumber);
+      const matchDoc = byBuildingSnap.docs.find((docSnap) => {
+        const data = docSnap.data() || {};
+        const candidateKey = (data.roomKey || '').toString().trim();
+        if (candidateKey && candidateKey === roomKey) return true;
+        const candidateNumber = normalizeRoomNumber(
+          data.roomNumber || extractRoomNumberFromLabel(data.displayName || data.name || '')
+        );
+        return candidateNumber && candidateNumber === targetNumber;
+      });
+
+      if (matchDoc) {
+        return matchDoc.id;
+      }
+    } catch (error) {
+      void error;
+    }
+
+    const canCreate = typeof canCreateRoom === 'function' ? canCreateRoom() : false;
+    if (!allowCreate || !canCreate) return '';
+
+    const newRoom = {
+      name: parsed.displayName,
+      displayName: parsed.displayName,
+      building: parsed.building,
+      roomNumber: parsed.roomNumber,
+      roomKey,
+      capacity: null,
+      type: 'Office',
+      isActive: true,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    try {
+      await setDoc(doc(db, COLLECTIONS.ROOMS, roomKey), newRoom, { merge: true });
+      return roomKey;
+    } catch (error) {
+      console.warn('Unable to create office room record:', error);
+      return '';
+    }
+  }, [canCreateRoom, canEditRoom]);
 
   // Handle faculty update/create
   const handleFacultyUpdate = useCallback(async (facultyToUpdate, originalData = null) => {
@@ -81,6 +189,26 @@ const usePeopleOperations = () => {
         updatedAt: new Date().toISOString()
       };
 
+      const nextOffice = (cleanData.office || '').toString().trim();
+      const nextHasNoOffice = cleanData.hasNoOffice === true || cleanData.isRemote === true;
+      const prevOffice = (originalData?.office || '').toString().trim();
+      const prevOfficeRoomId = (originalData?.officeRoomId || '').toString().trim();
+
+      if (nextHasNoOffice || !nextOffice) {
+        updateData.officeRoomId = '';
+      } else {
+        const officeChanged = prevOffice !== nextOffice;
+        const missingLink = !prevOfficeRoomId && !(cleanData.officeRoomId || '').toString().trim();
+        if (officeChanged || missingLink) {
+          const resolvedRoomId = await resolveOfficeRoomId(cleanData);
+          if (resolvedRoomId) {
+            updateData.officeRoomId = resolvedRoomId;
+          } else if (officeChanged) {
+            updateData.officeRoomId = '';
+          }
+        }
+      }
+
       if (isNewFaculty) {
         await setDoc(facultyRef, updateData);
         await logCreate(
@@ -117,7 +245,7 @@ const usePeopleOperations = () => {
         : 'Failed to update faculty member. Please try again.';
       showNotification('error', 'Operation Failed', errorMessage);
     }
-  }, [loadPeople, canCreateFaculty, canEditFaculty, showNotification]);
+  }, [loadPeople, canCreateFaculty, canEditFaculty, showNotification, resolveOfficeRoomId]);
 
   // Handle faculty delete
   const handleFacultyDelete = useCallback(async (facultyToDelete) => {
@@ -129,7 +257,7 @@ const usePeopleOperations = () => {
     console.log('🗑️ Deleting faculty member:', facultyToDelete);
 
     try {
-      await deleteDoc(doc(db, 'people', facultyToDelete.id));
+      await deletePersonSafely(facultyToDelete.id);
 
       await logDelete(
         `Faculty - ${facultyToDelete.name}`,
@@ -145,7 +273,8 @@ const usePeopleOperations = () => {
 
     } catch (error) {
       console.error('❌ Error deleting faculty:', error);
-      showNotification('error', 'Delete Failed', 'Failed to delete faculty member. Please try again.');
+      const message = error?.message || 'Failed to delete faculty member. Please try again.';
+      showNotification('error', 'Delete Failed', message);
     }
   }, [loadPeople, canDeleteFaculty, showNotification]);
 
@@ -171,6 +300,9 @@ const usePeopleOperations = () => {
         Object.entries(staffToUpdate).filter(([_, value]) => value !== undefined)
       );
 
+      const nextOffice = (cleanStaffData.office || '').toString().trim();
+      const nextHasNoOffice = cleanStaffData.hasNoOffice === true || cleanStaffData.isRemote === true;
+
       if (staffToUpdate.id) {
         originalData = rawPeople.find(p => p.id === staffToUpdate.id) || null;
         const staffRef = doc(db, 'people', staffToUpdate.id);
@@ -178,6 +310,24 @@ const usePeopleOperations = () => {
           ...cleanStaffData,
           updatedAt: new Date().toISOString()
         };
+
+        const prevOffice = (originalData?.office || '').toString().trim();
+        const prevOfficeRoomId = (originalData?.officeRoomId || '').toString().trim();
+
+        if (nextHasNoOffice || !nextOffice) {
+          updateData.officeRoomId = '';
+        } else {
+          const officeChanged = prevOffice !== nextOffice;
+          const missingLink = !prevOfficeRoomId && !(cleanStaffData.officeRoomId || '').toString().trim();
+          if (officeChanged || missingLink) {
+            const resolvedRoomId = await resolveOfficeRoomId(cleanStaffData);
+            if (resolvedRoomId) {
+              updateData.officeRoomId = resolvedRoomId;
+            } else if (officeChanged) {
+              updateData.officeRoomId = '';
+            }
+          }
+        }
 
         await updateDoc(staffRef, updateData);
         docRef = staffRef;
@@ -197,6 +347,15 @@ const usePeopleOperations = () => {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
+
+        if (nextHasNoOffice || !nextOffice) {
+          createData.officeRoomId = '';
+        } else {
+          const resolvedRoomId = await resolveOfficeRoomId(cleanStaffData);
+          if (resolvedRoomId) {
+            createData.officeRoomId = resolvedRoomId;
+          }
+        }
 
         docRef = await addDoc(collection(db, 'people'), createData);
         action = 'CREATE';
@@ -222,7 +381,7 @@ const usePeopleOperations = () => {
       console.error('❌ Error updating staff:', error);
       showNotification('error', 'Operation Failed', 'Failed to save staff member. Please try again.');
     }
-  }, [rawPeople, loadPeople, canCreateStaff, canEditStaff, showNotification]);
+  }, [rawPeople, loadPeople, canCreateStaff, canEditStaff, showNotification, resolveOfficeRoomId]);
 
   // Handle staff delete
   const handleStaffDelete = useCallback(async (staffToDelete) => {
@@ -234,7 +393,7 @@ const usePeopleOperations = () => {
     console.log('🗑️ Deleting staff member:', staffToDelete);
 
     try {
-      await deleteDoc(doc(db, 'people', staffToDelete.id));
+      await deletePersonSafely(staffToDelete.id);
 
       await logDelete(
         `Staff - ${staffToDelete.name}`,
@@ -250,7 +409,8 @@ const usePeopleOperations = () => {
 
     } catch (error) {
       console.error('❌ Error deleting staff:', error);
-      showNotification('error', 'Delete Failed', 'Failed to delete staff member. Please try again.');
+      const message = error?.message || 'Failed to delete staff member. Please try again.';
+      showNotification('error', 'Delete Failed', message);
     }
   }, [loadPeople, canEdit, showNotification]);
 
@@ -295,11 +455,16 @@ const usePeopleOperations = () => {
             derivedIsActive = end >= new Date();
           }
         }
-      } catch (_) {}
+      } catch (error) {
+        void error;
+      }
 
       const updateData = {
         ...cleanStudentData,
         roles: ['student'],
+        hasNoOffice: true,
+        office: '',
+        officeRoomId: '',
         isActive: (cleanStudentData.isActive !== undefined ? cleanStudentData.isActive : (derivedIsActive !== undefined ? derivedIsActive : true)),
         updatedAt: new Date().toISOString()
       };
@@ -376,7 +541,7 @@ const usePeopleOperations = () => {
       const existing = rawPeople.find(p => p.id === studentId) || null;
       const entityName = existing?.name || (typeof studentToDelete === 'object' ? studentToDelete.name : 'Unknown');
 
-      await deleteDoc(doc(db, 'people', studentId));
+      await deletePersonSafely(studentId);
 
       await logDelete(
         `Student - ${entityName}`,
@@ -392,7 +557,8 @@ const usePeopleOperations = () => {
 
     } catch (error) {
       console.error('❌ Error deleting student:', error);
-      showNotification('error', 'Delete Failed', 'Failed to delete student worker. Please try again.');
+      const message = error?.message || 'Failed to delete student worker. Please try again.';
+      showNotification('error', 'Delete Failed', message);
     }
   }, [rawPeople, loadPeople, canDeleteStudent, showNotification]);
 

@@ -9,17 +9,20 @@ export function registerActionKey(key) {
     if (typeof key === 'string' && key.trim()) {
       actionKeys.add(key.trim());
     }
-  } catch (_) {}
+  } catch (error) {
+    void error;
+  }
 }
 
 export function registerActionKeys(keys) {
   try {
     if (Array.isArray(keys)) keys.forEach(registerActionKey);
-  } catch (_) {}
+  } catch (error) {
+    void error;
+  }
 }
 
 export function getAllRegisteredActionKeys() {
   return Array.from(actionKeys);
 }
-
 

@@ -40,6 +40,22 @@ service cloud.firestore {
       return isAdmin();
     }
 
+    function termIsLocked(termCode) {
+      return termCode is string &&
+        termCode.size() > 0 &&
+        exists(/databases/$(database)/documents/terms/$(termCode)) &&
+        (
+          get(/databases/$(database)/documents/terms/$(termCode)).data.status == 'archived' ||
+          get(/databases/$(database)/documents/terms/$(termCode)).data.locked == true
+        );
+    }
+
+    function canWriteScheduleTerm(termCode) {
+      return termCode is string &&
+        termCode.size() > 0 &&
+        !termIsLocked(termCode);
+    }
+
     // Settings collection: everyone signed-in can read; only admin writes
     match /settings/{docId} {
       allow read: if isSignedIn();
@@ -90,9 +106,12 @@ service cloud.firestore {
     // Schedules collection: granular permissions
     match /schedules/{id} {
       allow read: if isSignedIn();
-      allow create: if isAdmin() || userHasAction('schedule.create');
-      allow update: if isAdmin() || userHasAction('schedule.edit') || userHasAction('schedule.bulk.edit');
-      allow delete: if isAdmin() || userHasAction('schedule.delete');
+      allow create: if isAdmin() ||
+        (userHasAction('schedule.create') && canWriteScheduleTerm(request.resource.data.termCode));
+      allow update: if isAdmin() ||
+        ((userHasAction('schedule.edit') || userHasAction('schedule.bulk.edit')) && canWriteScheduleTerm(request.resource.data.termCode));
+      allow delete: if isAdmin() ||
+        (userHasAction('schedule.delete') && canWriteScheduleTerm(resource.data.termCode));
     }
 
     // Programs collection: granular permissions
@@ -186,6 +205,12 @@ service cloud.firestore {
       allow read: if isAdmin();
       // Only admins can create/update/delete import transactions
       allow write: if canWrite();
+    }
+
+    // Dedupe decisions: allow hygiene tooling to persist "not a duplicate" choices
+    match /dedupeDecisions/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || userHasAction('data.hygiene');
     }
 
     // Room grids: allow non-admin writes if the user has explicit action grants

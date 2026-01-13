@@ -9,6 +9,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useEmailListPresets } from '../../hooks/useEmailListPresets';
 import { useTutorial } from '../../contexts/TutorialContext';
 import { HelpTooltip, HintBanner } from '../help/Tooltip';
+import { extractBuildingName } from '../../utils/directoryUtils';
 
 const EmailLists = () => {
   const { facultyData = [], staffData = [], studentData = [], scheduleData = [] } = useData();
@@ -106,49 +107,6 @@ const EmailLists = () => {
     startTutorial('email-lists');
   };
 
-  // Helper function to extract building name from office location
-  const extractBuildingName = (officeLocation) => {
-    if (!officeLocation || officeLocation.trim() === '') {
-      return 'No Building';
-    }
-
-    const office = officeLocation.trim();
-
-    // Handle common building name patterns
-    const buildingKeywords = ['BUILDING', 'HALL', 'GYMNASIUM', 'TOWER', 'CENTER', 'COMPLEX'];
-
-    // Check if office contains building keywords
-    for (const keyword of buildingKeywords) {
-      const keywordIndex = office.toUpperCase().indexOf(keyword);
-      if (keywordIndex !== -1) {
-        // Include everything up to and including the keyword
-        const endIndex = keywordIndex + keyword.length;
-        return office.substring(0, endIndex).trim();
-      }
-    }
-
-    // If no building keywords found, try to extract building name before room numbers
-    // Look for patterns where building name ends before standalone numbers
-    const match = office.match(/^([A-Za-z\s]+?)(\s+\d+.*)?$/);
-    if (match && match[1]) {
-      return match[1].trim();
-    }
-
-    // Handle special cases like "801 WASHINGTON TOWER" where number is part of building name
-    // If it starts with a number followed by words, keep it all as building name
-    const startsWithNumber = office.match(/^\d+\s+[A-Za-z]/);
-    if (startsWithNumber) {
-      // Look for room-like patterns at the end
-      const roomPattern = office.match(/^(.+?)(\s+\d{2,4}(\s+\d+)*)$/);
-      if (roomPattern) {
-        return roomPattern[1].trim();
-      }
-      return office; // Keep whole thing if no clear room pattern
-    }
-
-    return office; // Fallback: return the whole office location
-  };
-
   // Combine faculty and staff data, removing duplicates and calculating course counts
   const combinedDirectoryData = useMemo(() => {
     const allPeople = [];
@@ -157,13 +115,21 @@ const EmailLists = () => {
     if (facultyData && Array.isArray(facultyData)) {
       facultyData.forEach(person => {
         // Calculate course count for faculty
-        const facultyName = person.name;
         const facultyCourses = scheduleData.filter(schedule => {
-          const instructorName = schedule.instructor ?
-            `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim() :
-            (schedule.instructorName || schedule.Instructor || '');
-
-          return instructorName === facultyName;
+          const scheduleInstructorIds = Array.isArray(schedule.instructorIds)
+            ? schedule.instructorIds
+            : [];
+          const primaryInstructorId = schedule.instructorId || schedule.InstructorId || '';
+          const effectiveIds = scheduleInstructorIds.length > 0
+            ? scheduleInstructorIds
+            : (primaryInstructorId ? [primaryInstructorId] : []);
+          if (effectiveIds.length > 0) {
+            return effectiveIds.includes(person.id);
+          }
+          const fallbackNames = Array.isArray(schedule.instructorNames)
+            ? schedule.instructorNames
+            : [schedule.instructorName || schedule.Instructor || ''].filter(Boolean);
+          return fallbackNames.includes(person.name);
         });
 
         // Get unique courses (by course code)
@@ -235,7 +201,6 @@ const EmailLists = () => {
       }
     });
 
-    return Array.from(uniqueMap.values());
     return Array.from(uniqueMap.values());
   }, [facultyData, staffData, scheduleData]);
 

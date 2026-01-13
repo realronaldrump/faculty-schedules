@@ -18,12 +18,15 @@ firebase-service-account.json
 .env
 .env.*
 import-data.js
-data-samples/CLSS-export-sample.csv
-data-samples/directory-export.csv
-data-samples/export.csv
-data-samples/Filemaker.csv
-data-samples/directoryexporttest2.csv
+# data-samples/CLSS-export-sample.csv
+# data-samples/directory-export.csv
+# data-samples/export.csv
+# data-samples/Filemaker.csv
+# data-samples/directoryexporttest2.csv
 # data-samples/CLSSFall2025.csv
 
 # data-samples/CLSSSpring2025.csv
 temperature_examples/
+firestore-export/
+# local firestore export artifacts
+firestore-export/

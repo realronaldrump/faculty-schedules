@@ -8,7 +8,7 @@ import { logActivity, logInteraction, ACTIVITY_TYPES } from '../utils/activityLo
  * Captures clicks, form submissions, navigation, and other events
  */
 export const withActivityTracking = (WrappedComponent, componentName, options = {}) => {
-  return React.forwardRef((props, ref) => {
+  const ActivityTrackedComponent = React.forwardRef((props, ref) => {
     const componentRef = useRef(null);
     const startTimeRef = useRef(Date.now());
 
@@ -119,6 +119,15 @@ export const withActivityTracking = (WrappedComponent, componentName, options = 
       </div>
     );
   });
+
+  const wrappedName =
+    componentName ||
+    WrappedComponent.displayName ||
+    WrappedComponent.name ||
+    'Component';
+  ActivityTrackedComponent.displayName = `withActivityTracking(${wrappedName})`;
+
+  return ActivityTrackedComponent;
 };
 
 /**

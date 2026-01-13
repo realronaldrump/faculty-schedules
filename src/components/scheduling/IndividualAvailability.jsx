@@ -23,12 +23,15 @@ const IndividualAvailability = () => {
 
   // Get unique instructors - use relational data when available
   const uniqueInstructors = useMemo(() =>
-    [...new Set(scheduleData.map(item => {
-      if (item.instructor) {
-        return `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim();
-      }
-      return item.Instructor || item.instructorName || '';
-    }))].filter(i => i !== 'Staff').sort(),
+    [...new Set(scheduleData.flatMap(item => {
+      const fallbackName = item.instructor
+        ? `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim()
+        : (item.Instructor || item.instructorName || '');
+      const list = Array.isArray(item.instructorNames) && item.instructorNames.length > 0
+        ? item.instructorNames
+        : [fallbackName].filter(Boolean);
+      return list;
+    }))].filter(i => i && i !== 'Staff').sort(),
     [scheduleData]
   );
 
@@ -46,18 +49,22 @@ const IndividualAvailability = () => {
 
     ['M', 'T', 'W', 'R', 'F'].forEach(day => {
       const professorSchedule = scheduleData.filter(item => {
-        const instructorName = item.instructor ?
-          `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim() :
-          (item.Instructor || item.instructorName || '');
+        const fallbackName = item.instructor
+          ? `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim()
+          : (item.Instructor || item.instructorName || '');
+        const instructorNames = Array.isArray(item.instructorNames) && item.instructorNames.length > 0
+          ? item.instructorNames
+          : [fallbackName].filter(Boolean);
+        const matchesInstructor = instructorNames.includes(professor);
 
         // For normalized data, check meeting patterns for the day
         if (item.meetingPatterns) {
-          return instructorName === professor &&
+          return matchesInstructor &&
             item.meetingPatterns.some(pattern => pattern.day === day);
         }
 
         // Fallback to direct day field
-        return instructorName === professor && item.Day === day;
+        return matchesInstructor && item.Day === day;
       });
 
       const busyPeriodsRaw = professorSchedule
@@ -71,7 +78,9 @@ const IndividualAvailability = () => {
                 end: parseTime(pattern.endTime),
                 course: item.courseCode,
                 room: (() => {
-                  if (item.isOnline) return 'Online';
+                  if (item.locationType === 'no_room' || item.isOnline) {
+                    return item.locationLabel || 'No Room Needed';
+                  }
                   const names = Array.isArray(item.roomNames) && item.roomNames.length > 0
                     ? item.roomNames
                     : [item.room ? item.room.displayName : item.roomName].filter(Boolean);
@@ -88,7 +97,7 @@ const IndividualAvailability = () => {
             course: item.Course,
             room: item.Room,
             // Normalize online display
-            ...(item.isOnline ? { room: 'Online' } : {}),
+            ...((item.locationType === 'no_room' || item.isOnline) ? { room: item.locationLabel || 'No Room Needed' } : {}),
             title: item['Course Title']
           }];
         })

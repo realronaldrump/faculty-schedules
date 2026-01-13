@@ -1,8 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
   X,
-  CheckCircle,
-  AlertCircle,
   Users,
   Calendar,
   MapPin,
@@ -10,10 +8,9 @@ import {
   EyeOff,
   Check,
   AlertTriangle,
-  Database,
-  Trash2,
-  RotateCcw
+  Database
 } from 'lucide-react';
+import { usePeople } from '../../contexts/PeopleContext';
 
 const ImportPreviewModal = ({
   transaction,
@@ -28,8 +25,13 @@ const ImportPreviewModal = ({
   const [selectAll, setSelectAll] = useState(true);
   // Per-change field selections for 'modify' actions: changeId -> Set(fieldKey)
   const [selectedFieldsByChange, setSelectedFieldsByChange] = useState({});
+  const { people: directoryPeople, loadPeople } = usePeople();
+  const [matchResolutions, setMatchResolutions] = useState({});
+  const [matchSearchTerms, setMatchSearchTerms] = useState({});
 
   const allChanges = useMemo(() => transaction?.getAllChanges() || [], [transaction]);
+  const matchingIssues = useMemo(() => transaction?.matchingIssues || [], [transaction]);
+  const people = useMemo(() => Array.isArray(directoryPeople) ? directoryPeople : [], [directoryPeople]);
 
   const groupedChanges = useMemo(() => {
     const groups = {
@@ -46,6 +48,14 @@ const ImportPreviewModal = ({
 
     return groups;
   }, [allChanges]);
+
+  const pendingPersonChangeIds = useMemo(() => {
+    return new Set(
+      matchingIssues
+        .map((issue) => issue.pendingPersonChangeId)
+        .filter(Boolean)
+    );
+  }, [matchingIssues]);
 
   // Build index of groupKey -> changeIds for cascading select/deselect
   const groupIndex = useMemo(() => {
@@ -69,12 +79,31 @@ const ImportPreviewModal = ({
     };
   }, [selectedChanges, allChanges]);
 
-  // Initialize with all changes selected
+  const updateSelectedChanges = (nextSelected) => {
+    setSelectedChanges(nextSelected);
+    setSelectAll(nextSelected.size === allChanges.length);
+  };
+
+  React.useEffect(() => {
+    if (matchingIssues.length > 0) {
+      loadPeople();
+    }
+  }, [matchingIssues.length, loadPeople]);
+
+  React.useEffect(() => {
+    setMatchResolutions({});
+    setMatchSearchTerms({});
+  }, [transaction?.id]);
+
+  // Initialize with all changes selected, excluding pending people until resolved
   React.useEffect(() => {
     if (allChanges.length > 0 && selectedChanges.size === 0) {
-      setSelectedChanges(new Set(allChanges.map(c => c.id)));
+      const initial = new Set(allChanges.map(c => c.id));
+      pendingPersonChangeIds.forEach((id) => initial.delete(id));
+      setSelectedChanges(initial);
+      setSelectAll(initial.size === allChanges.length);
     }
-  }, [allChanges]);
+  }, [allChanges, pendingPersonChangeIds, transaction?.id]);
 
   const toggleChange = (changeId) => {
     const newSelected = new Set(selectedChanges);
@@ -85,17 +114,15 @@ const ImportPreviewModal = ({
     related.forEach((id) => {
       if (removing) newSelected.delete(id); else newSelected.add(id);
     });
-    setSelectedChanges(newSelected);
-    setSelectAll(newSelected.size === allChanges.length);
+    updateSelectedChanges(newSelected);
   };
 
   const toggleSelectAll = () => {
     if (selectAll) {
-      setSelectedChanges(new Set());
+      updateSelectedChanges(new Set());
     } else {
-      setSelectedChanges(new Set(allChanges.map(c => c.id)));
+      updateSelectedChanges(new Set(allChanges.map(c => c.id)));
     }
-    setSelectAll(!selectAll);
   };
 
   const toggleSection = (sectionId) => {
@@ -115,6 +142,41 @@ const ImportPreviewModal = ({
     }));
   };
 
+  const unresolvedMatchCount = useMemo(
+    () => matchingIssues.filter(issue => !matchResolutions[issue.id]).length,
+    [matchingIssues, matchResolutions]
+  );
+
+  const applyResolution = (issue, resolution) => {
+    setMatchResolutions(prev => ({
+      ...prev,
+      [issue.id]: resolution
+    }));
+
+    if (issue.pendingPersonChangeId) {
+      const nextSelected = new Set(selectedChanges);
+      if (resolution.action === 'create') {
+        nextSelected.add(issue.pendingPersonChangeId);
+      } else {
+        nextSelected.delete(issue.pendingPersonChangeId);
+      }
+      updateSelectedChanges(nextSelected);
+    }
+  };
+
+  const clearResolution = (issue) => {
+    setMatchResolutions(prev => {
+      const next = { ...prev };
+      delete next[issue.id];
+      return next;
+    });
+    if (issue.pendingPersonChangeId) {
+      const nextSelected = new Set(selectedChanges);
+      nextSelected.delete(issue.pendingPersonChangeId);
+      updateSelectedChanges(nextSelected);
+    }
+  };
+
   const handleCommit = () => {
     const selectedChangeIds = Array.from(selectedChanges);
     // Build mapping of selected field keys for modify changes
@@ -127,7 +189,12 @@ const ImportPreviewModal = ({
         }
       }
     });
-    onCommit(transaction.id, selectedChangeIds.length === allChanges.length ? null : selectedChangeIds, fieldMap);
+    onCommit(
+      transaction.id,
+      selectedChangeIds.length === allChanges.length ? null : selectedChangeIds,
+      fieldMap,
+      matchResolutions
+    );
   };
 
   const getCollectionIcon = (collection) => {
@@ -191,11 +258,19 @@ const ImportPreviewModal = ({
         'Term': change.newData.term || '',
         'Term Code': change.newData.termCode || '',
         'Academic Year': change.newData.academicYear || '',
-        'Instructor Name': change.newData.instructorName || '',
+        'Instructor(s)': change.newData.instructorName || '',
         'Instructor Baylor ID': change.newData.instructorBaylorId || '',
-        'Instructor ID (linked)': change.newData.instructorId || '',
-        'Room Names': Array.isArray(change.newData.roomNames) ? change.newData.roomNames.join(', ') : (change.newData.roomName || ''),
-        'Room IDs': Array.isArray(change.newData.roomIds) ? change.newData.roomIds.join(', ') : '',
+        'Instructor IDs (linked)': Array.isArray(change.newData.instructorIds)
+          ? change.newData.instructorIds.join(', ')
+          : (change.newData.instructorId || ''),
+        'Location Type': change.newData.locationType || '',
+        'Location Label': change.newData.locationLabel || '',
+        'Room Names': Array.isArray(change.newData.roomNames)
+          ? change.newData.roomNames.join(', ')
+          : (change.newData.roomName || ''),
+        'Room IDs': Array.isArray(change.newData.roomIds)
+          ? change.newData.roomIds.join(', ')
+          : '',
         'Schedule Type': change.newData.scheduleType || '',
         'Status': change.newData.status || '',
         'Meeting Patterns': meetingSummary
@@ -334,6 +409,174 @@ const ImportPreviewModal = ({
           </div>
         </div>
 
+        {matchingIssues.length > 0 && (
+          <div className="p-6 border-b border-gray-200 bg-white">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Resolve People Matches</h3>
+                <p className="text-sm text-gray-600">
+                  Link imported instructors to existing people or explicitly create new records.
+                </p>
+              </div>
+              {unresolvedMatchCount > 0 && (
+                <div className="flex items-center space-x-2 text-sm text-red-600">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>{unresolvedMatchCount} unresolved</span>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              {matchingIssues.map((issue) => {
+                const proposed = issue.proposedPerson || {};
+                const proposedName = `${proposed.firstName || ''} ${proposed.lastName || ''}`.trim() || 'Unnamed';
+                const resolution = matchResolutions[issue.id];
+                const searchTerm = matchSearchTerms[issue.id] || '';
+                const normalizedSearch = searchTerm.trim().toLowerCase();
+                const searchResults = normalizedSearch.length >= 2
+                  ? people
+                    .filter((person) => {
+                      const name = `${person.firstName || ''} ${person.lastName || ''}`.toLowerCase();
+                      const email = (person.email || '').toLowerCase();
+                      const id = (person.baylorId || '').toLowerCase();
+                      return name.includes(normalizedSearch) || email.includes(normalizedSearch) || id.includes(normalizedSearch);
+                    })
+                    .slice(0, 6)
+                  : [];
+
+                const resolvedPerson = resolution?.action === 'link'
+                  ? people.find((person) => person.id === resolution.personId) ||
+                    issue.candidates?.find((candidate) => candidate.id === resolution.personId)
+                  : null;
+
+                return (
+                  <div key={issue.id} className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">{proposedName}</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {proposed.baylorId ? `Baylor ID ${proposed.baylorId}` : 'No Baylor ID'}{' '}
+                          {proposed.email ? `• ${proposed.email}` : ''}
+                        </div>
+                        {issue.importType === 'schedule' && Array.isArray(issue.scheduleChangeIds) && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {issue.scheduleChangeIds.length} schedule{issue.scheduleChangeIds.length === 1 ? '' : 's'} affected
+                          </div>
+                        )}
+                        {issue.reason && (
+                          <div className="text-xs text-gray-500 mt-1">{issue.reason}</div>
+                        )}
+                      </div>
+                      <div className="text-xs">
+                        {resolution ? (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-800">
+                            {resolution.action === 'create' ? 'Create new' : 'Linked'}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full bg-yellow-100 text-yellow-800">
+                            Needs resolution
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {resolution?.action === 'link' && resolvedPerson && (
+                      <div className="mt-2 text-xs text-gray-600">
+                        Linked to {resolvedPerson.firstName} {resolvedPerson.lastName}
+                        {resolvedPerson.baylorId ? ` • ${resolvedPerson.baylorId}` : ''}
+                      </div>
+                    )}
+
+                    {issue.candidates?.length > 0 && (
+                      <div className="mt-3">
+                        <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                          Suggested matches
+                        </div>
+                        <div className="space-y-2">
+                          {issue.candidates.map((candidate) => (
+                            <div key={candidate.id} className="flex items-center justify-between border border-gray-200 rounded-md px-3 py-2">
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">
+                                  {candidate.firstName} {candidate.lastName}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {candidate.email || 'No email'}{candidate.baylorId ? ` • ${candidate.baylorId}` : ''}
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => applyResolution(issue, { action: 'link', personId: candidate.id })}
+                                className="text-sm px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50"
+                              >
+                                Link
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="mt-3">
+                      <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                        Search people
+                      </div>
+                      <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setMatchSearchTerms(prev => ({ ...prev, [issue.id]: e.target.value }))}
+                        placeholder="Search by name, email, or Baylor ID..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                      {normalizedSearch.length >= 2 && (
+                        <div className="mt-2 space-y-2">
+                          {searchResults.length === 0 ? (
+                            <div className="text-xs text-gray-500">No people found.</div>
+                          ) : (
+                            searchResults.map((person) => (
+                              <div key={person.id} className="flex items-center justify-between border border-gray-200 rounded-md px-3 py-2">
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {person.firstName} {person.lastName}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {person.email || 'No email'}{person.baylorId ? ` • ${person.baylorId}` : ''}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => applyResolution(issue, { action: 'link', personId: person.id })}
+                                  className="text-sm px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50"
+                                >
+                                  Link
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between">
+                      <button
+                        onClick={() => applyResolution(issue, { action: 'create' })}
+                        className="text-sm px-3 py-2 bg-baylor-green text-white rounded-md hover:bg-baylor-green/90"
+                      >
+                        Create new person
+                      </button>
+                      {resolution && (
+                        <button
+                          onClick={() => clearResolution(issue)}
+                          className="text-sm text-gray-600 hover:text-gray-900"
+                        >
+                          Clear selection
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Changes List */}
         <div className="flex-1 overflow-y-auto p-6">
           {Object.entries(groupedChanges).map(([collection, actions]) => {
@@ -429,12 +672,21 @@ const ImportPreviewModal = ({
         {/* Footer */}
         <div className="p-6 border-t border-gray-200 bg-gray-50">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2 text-sm text-gray-600">
-              <AlertTriangle className="w-4 h-4" />
-              <span>
-                Changes will be applied to the database and can be rolled back later if needed.
-              </span>
-            </div>
+            {unresolvedMatchCount > 0 ? (
+              <div className="flex items-center space-x-2 text-sm text-red-600">
+                <AlertTriangle className="w-4 h-4" />
+                <span>
+                  Resolve all people matches before applying changes.
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <AlertTriangle className="w-4 h-4" />
+                <span>
+                  Changes will be applied to the database and can be rolled back later if needed.
+                </span>
+              </div>
+            )}
             <div className="flex items-center space-x-3">
               <button
                 onClick={onCancel}
@@ -445,7 +697,7 @@ const ImportPreviewModal = ({
               </button>
               <button
                 onClick={handleCommit}
-                disabled={stats.selected === 0 || isCommitting}
+                disabled={stats.selected === 0 || unresolvedMatchCount > 0 || isCommitting}
                 className="px-6 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >
                 {isCommitting ? (

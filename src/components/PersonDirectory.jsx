@@ -319,12 +319,8 @@ const getPermissionValue = (permission, record) => {
   return true;
 };
 
-const PersonDirectory = (props) => {
+const ConfiguredPersonDirectory = (props) => {
   const { config } = props;
-
-  if (!config) {
-    return <UniversalDirectory {...props} />;
-  }
 
   const {
     config: _config,
@@ -783,6 +779,14 @@ const PersonDirectory = (props) => {
       />
     </UniversalDirectory>
   );
+};
+
+const PersonDirectory = (props) => {
+  if (!props.config) {
+    return <UniversalDirectory {...props} />;
+  }
+
+  return <ConfiguredPersonDirectory {...props} />;
 };
 
 export default PersonDirectory;

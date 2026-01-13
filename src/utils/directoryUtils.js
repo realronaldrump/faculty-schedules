@@ -8,6 +8,8 @@
  * - StudentDirectory
  */
 
+import { getBuildingFromRoom } from './buildingUtils';
+
 /**
  * Format a 10-digit phone number as (XXX) XXX - XXXX
  * @param {string} phoneStr - Raw phone number (digits only or formatted)
@@ -35,41 +37,9 @@ export const extractBuildingName = (officeLocation) => {
         return 'No Building';
     }
 
-    const office = officeLocation.trim();
-
-    // Handle common building name patterns
-    const buildingKeywords = ['BUILDING', 'HALL', 'GYMNASIUM', 'TOWER', 'CENTER', 'COMPLEX'];
-
-    // Check if office contains building keywords
-    for (const keyword of buildingKeywords) {
-        const keywordIndex = office.toUpperCase().indexOf(keyword);
-        if (keywordIndex !== -1) {
-            // Include everything up to and including the keyword
-            const endIndex = keywordIndex + keyword.length;
-            return office.substring(0, endIndex).trim();
-        }
-    }
-
-    // If no building keywords found, try to extract building name before room numbers
-    // Look for patterns where building name ends before standalone numbers
-    const match = office.match(/^([A-Za-z\s]+?)(\s+\d+.*)?$/);
-    if (match && match[1]) {
-        return match[1].trim();
-    }
-
-    // Handle special cases like "801 WASHINGTON TOWER" where number is part of building name
-    // If it starts with a number followed by words, keep it all as building name
-    const startsWithNumber = office.match(/^\d+\s+[A-Za-z]/);
-    if (startsWithNumber) {
-        // Look for room-like patterns at the end
-        const roomPattern = office.match(/^(.+?)(\s+\d{2,4}(\s+\d+)*)$/);
-        if (roomPattern) {
-            return roomPattern[1].trim();
-        }
-        return office; // Keep whole thing if no clear room pattern
-    }
-
-    return office; // Fallback: return the whole office location
+    const building = getBuildingFromRoom(officeLocation);
+    if (!building || !building.trim()) return 'No Building';
+    return building;
 };
 
 /**

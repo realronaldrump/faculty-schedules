@@ -6,14 +6,17 @@ import { previewImportChanges, commitTransaction, projectSchedulePreviewRow } fr
 import ImportPreviewModal from './ImportPreviewModal';
 import ImportHistoryModal from './ImportHistoryModal';
 import { useSchedules } from '../../contexts/ScheduleContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { usePeople } from '../../contexts/PeopleContext';
 import { useUI } from '../../contexts/UIContext';
+import { normalizeTermLabel } from '../../utils/termUtils';
 
 const ImportWizard = () => {
-  const { selectedSemester, refreshSchedules } = useSchedules();
+  const { selectedSemester, refreshSchedules, refreshTerms, isTermLocked } = useSchedules();
+  const { isAdmin } = useAuth();
   const { loadPeople } = usePeople();
   const { showNotification } = useUI();
-  const { canImportData, canImportSchedule } = usePermissions();
+  const { canImportData, canImportSchedule, canCreateRoom } = usePermissions();
   const [step, setStep] = useState(1);
   const [fileName, setFileName] = useState('');
   const [rawText, setRawText] = useState('');
@@ -30,6 +33,7 @@ const ImportWizard = () => {
   const handleDataRefresh = async () => {
     await Promise.all([
       refreshSchedules(),
+      refreshTerms?.(),
       loadPeople({ force: true })
     ]);
   };
@@ -148,7 +152,10 @@ const ImportWizard = () => {
         setPreviewTransaction(tx);
         setShowPreviewModal(true);
       } else {
-        const tx = await previewImportChanges(csvData, 'directory', semester || '', { persist: true });
+        const tx = await previewImportChanges(csvData, 'directory', semester || '', {
+          persist: true,
+          includeOfficeRooms: typeof canCreateRoom === 'function' ? canCreateRoom() : isAdmin
+        });
         setPreviewTransaction(tx);
         setShowPreviewModal(true);
       }
@@ -161,7 +168,7 @@ const ImportWizard = () => {
     }
   };
 
-  const handleCommit = async (transactionId, selectedChanges = null, selectedFieldMap = null) => {
+  const handleCommit = async (transactionId, selectedChanges = null, selectedFieldMap = null, matchResolutions = null) => {
     if (importType === 'schedule' && !canImportSchedule()) {
       showNotification?.('warning', 'Permission Denied', 'You do not have permission to import schedules.');
       return;
@@ -170,9 +177,14 @@ const ImportWizard = () => {
       showNotification?.('warning', 'Permission Denied', 'You do not have permission to import data.');
       return;
     }
+    const importTerm = normalizeTermLabel(detectedTerm || selectedSemester || '');
+    if (importType === 'schedule' && importTerm && isTermLocked?.(importTerm) && !isAdmin) {
+      showNotification?.('warning', 'Term Locked', `Schedules for ${importTerm} are archived or locked. Import is disabled.`);
+      return;
+    }
     setIsCommitting(true);
     try {
-      const result = await commitTransaction(transactionId, selectedChanges, selectedFieldMap);
+      const result = await commitTransaction(transactionId, selectedChanges, selectedFieldMap, matchResolutions);
       const stats = result.getSummary().stats;
       setResultsSummary({ total: stats.totalChanges, schedulesAdded: stats.schedulesAdded, peopleAdded: stats.peopleAdded, roomsAdded: stats.roomsAdded, semester: result.getSummary().semester });
       showNotification?.('success', 'Import Applied', `Applied ${stats.totalChanges} changes`);
@@ -181,6 +193,7 @@ const ImportWizard = () => {
       setStep(4);
       if (importType === 'schedule') {
         await refreshSchedules();
+        await refreshTerms?.();
       } else {
         await loadPeople({ force: true });
       }

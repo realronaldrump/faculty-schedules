@@ -9,8 +9,10 @@
 
 import React, { createContext, useContext, useState, useMemo, useCallback } from 'react';
 import { db } from '../firebase';
-import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, addDoc } from 'firebase/firestore';
 import { adaptPeopleToFaculty, adaptPeopleToStaff } from '../utils/dataAdapter';
+import { buildPeopleIndex } from '../utils/peopleUtils';
+import { deletePersonSafely } from '../utils/dataHygiene';
 import { logCreate, logUpdate, logDelete } from '../utils/changeLogger';
 
 const PeopleContext = createContext(null);
@@ -98,7 +100,7 @@ export const PeopleProvider = ({ children }) => {
 
     const deletePerson = useCallback(async (id) => {
         try {
-            await deleteDoc(doc(db, 'people', id));
+            await deletePersonSafely(id);
             const currentPerson = rawPeople.find(p => p.id === id);
             setRawPeople(prev => prev.filter(p => p.id !== id));
 
@@ -115,6 +117,9 @@ export const PeopleProvider = ({ children }) => {
         }
     }, [rawPeople]);
 
+    const peopleIndex = useMemo(() => buildPeopleIndex(rawPeople), [rawPeople]);
+    const canonicalPeople = useMemo(() => peopleIndex.canonicalPeople, [peopleIndex]);
+
     // Derived Data Helpers
     const facultyData = useMemo(() => {
         // Note: adaptPeopleToFaculty traditionally took schedule/program data to calculate load.
@@ -122,23 +127,25 @@ export const PeopleProvider = ({ children }) => {
         // This adapter might need to be resilient to missing schedule data if we are decoupling tightly.
         // For now, pass empty arrays if we don't have them in this context. 
         // Ideally, "Load" calculation happens in a "ReportingContext" or similar that consumes both.
-        return adaptPeopleToFaculty(rawPeople, [], []);
-    }, [rawPeople]);
+        return adaptPeopleToFaculty(canonicalPeople, [], []);
+    }, [canonicalPeople]);
 
-    const staffData = useMemo(() => adaptPeopleToStaff(rawPeople, [], []), [rawPeople]);
+    const staffData = useMemo(() => adaptPeopleToStaff(canonicalPeople, [], []), [canonicalPeople]);
 
     const studentData = useMemo(() => {
         // Re-implement student filter logic from DataContext
-        return rawPeople.filter(person => {
+        return canonicalPeople.filter(person => {
             if (!person.roles) return false;
             if (Array.isArray(person.roles)) return person.roles.includes('student');
             if (typeof person.roles === 'object') return person.roles.student === true;
             return false;
         });
-    }, [rawPeople]);
+    }, [canonicalPeople]);
 
     const value = useMemo(() => ({
-        people: rawPeople,
+        people: canonicalPeople,
+        allPeople: rawPeople,
+        peopleIndex,
         loading,
         error,
         loaded,
@@ -149,7 +156,7 @@ export const PeopleProvider = ({ children }) => {
         facultyData,
         staffData,
         studentData
-    }), [rawPeople, loading, error, loaded, loadPeople, addPerson, updatePerson, deletePerson, facultyData, staffData, studentData]);
+    }), [canonicalPeople, rawPeople, peopleIndex, loading, error, loaded, loadPeople, addPerson, updatePerson, deletePerson, facultyData, staffData, studentData]);
 
     return (
         <PeopleContext.Provider value={value}>

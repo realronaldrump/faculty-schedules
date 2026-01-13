@@ -64,16 +64,25 @@ const GroupMeetings = () => {
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
 
   // Helper to normalize instructor names from schedule items
-  const getInstructorName = (item) => {
-    if (item?.instructor && (item.instructor.firstName || item.instructor.lastName)) {
-      return `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim();
+  const getInstructorNames = (item) => {
+    if (Array.isArray(item?.instructorNames) && item.instructorNames.length > 0) {
+      return item.instructorNames;
     }
-    return item?.Instructor || item?.instructorName || '';
+    if (item?.instructor && (item.instructor.firstName || item.instructor.lastName)) {
+      const fallback = `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim();
+      return fallback ? [fallback] : [];
+    }
+    const raw = item?.Instructor || item?.instructorName || '';
+    if (!raw) return [];
+    return String(raw)
+      .split(/;|\/|\s+&\s+|\s+and\s+/i)
+      .map((part) => part.replace(/\[[^\]]*\]/g, '').replace(/\([^)]*\)/g, '').trim())
+      .filter(Boolean);
   };
 
   // Get unique instructors (respects adjunct filter)
   const uniqueInstructors = useMemo(() => {
-    const names = [...new Set(scheduleData.map(getInstructorName).filter(Boolean))];
+    const names = [...new Set(scheduleData.flatMap(getInstructorNames).filter(Boolean))];
     if (!showAdjuncts) {
       return names
         .filter(name => {
@@ -148,7 +157,7 @@ const GroupMeetings = () => {
       const busyPeriods = [];
       selectedProfessors.forEach(professor => {
         // Include all professors in scheduling analysis (normalized instructor name)
-        scheduleData.filter(item => getInstructorName(item) === professor && item.Day === day).forEach(item => {
+        scheduleData.filter(item => getInstructorNames(item).includes(professor) && item.Day === day).forEach(item => {
           const start = parseTime(item['Start Time']);
           const end = parseTime(item['End Time']);
           if (start !== null && end !== null) {

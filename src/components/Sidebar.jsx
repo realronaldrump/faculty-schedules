@@ -226,7 +226,7 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
 
       {/* Tooltip styles for collapsed state */}
       {collapsed && (
-        <style jsx>{`
+        <style>{`
           .nav-item:hover::after {
             content: attr(title);
             position: absolute;

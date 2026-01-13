@@ -63,11 +63,6 @@ export const Tooltip = ({
   const timeoutRef = useRef(null);
   const { showTooltips } = useTutorial();
 
-  // Don't render if tooltips are disabled
-  if (!showTooltips) {
-    return children || null;
-  }
-
   const handleMouseEnter = () => {
     timeoutRef.current = setTimeout(() => {
       setIsVisible(true);
@@ -129,6 +124,10 @@ export const Tooltip = ({
     left: 'right-0 top-1/2 -translate-y-1/2 translate-x-full border-t-transparent border-b-transparent border-r-transparent',
     right: 'left-0 top-1/2 -translate-y-1/2 -translate-x-full border-t-transparent border-b-transparent border-l-transparent'
   };
+
+  if (!showTooltips) {
+    return children || null;
+  }
 
   return (
     <>

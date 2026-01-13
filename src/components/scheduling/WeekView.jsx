@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { MapPin, Download, Printer } from 'lucide-react';
 import CourseDetailModal from './CourseDetailModal';
 import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
+import { getBuildingFromRoom } from '../../utils/buildingUtils';
+import { useAppConfig } from '../../contexts/AppConfigContext';
 
 const WeekView = ({
   scheduleData,
@@ -14,6 +16,7 @@ const WeekView = ({
   onExport,
   onPrint
 }) => {
+  const { buildingConfigVersion } = useAppConfig();
   const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
   const dayOrder = ['M', 'T', 'W', 'R', 'F'];
 
@@ -23,14 +26,55 @@ const WeekView = ({
   // Time scale configuration (dynamic 8:00 AM to last class end)
   const dayStartMinutes = 8 * 60;
 
-  // Get building from room name
-  const getBuildingFromRoom = (room) => {
-    if (!room) return '';
-    const trimmed = room.trim().replace(/\s{2,}/g, ' ');
-    if (!trimmed) return '';
-    const match = trimmed.match(/^(.*?)(?=\s(?:[A-Za-z-]*\d))/);
-    const name = (match && match[1] ? match[1] : trimmed).trim();
-    return name || trimmed.split(' ')[0];
+  const splitInstructorNames = (value) => {
+    if (!value) return [];
+    return String(value)
+      .split(/;|\/|\s+&\s+|\s+and\s+/i)
+      .map((part) => part.replace(/\[[^\]]*\]/g, '').replace(/\([^)]*\)/g, '').trim())
+      .filter(Boolean);
+  };
+
+  const getInstructorNames = (item) => {
+    if (Array.isArray(item?.instructorNames) && item.instructorNames.length > 0) {
+      return item.instructorNames;
+    }
+    const fallback = item?.Instructor || item?.instructorName || '';
+    return splitInstructorNames(fallback);
+  };
+
+  const getInstructorEntries = (item) => {
+    const names = getInstructorNames(item);
+    if (names.length === 0) return [];
+    const ids = Array.isArray(item?.instructorIds) ? item.instructorIds.filter(Boolean) : [];
+    if (ids.length === names.length) {
+      return names.map((name, idx) => ({ name, id: ids[idx] }));
+    }
+    if (ids.length === 1 && names.length === 1) {
+      return [{ name: names[0], id: ids[0] }];
+    }
+    return names.map((name) => ({ name }));
+  };
+
+  const renderInstructorButtons = (item) => {
+    const entries = getInstructorEntries(item);
+    if (entries.length === 0) return <span>—</span>;
+    return entries.map((entry, idx) => {
+      const label = `${entry.name}${idx < entries.length - 1 ? ' / ' : ''}`;
+      if (!onShowContactCard) return <span key={`${entry.name}-${idx}`}>{label}</span>;
+      return (
+        <button
+          key={`${entry.name}-${idx}`}
+          type="button"
+          className="hover:underline"
+          onClick={(e) => {
+            e.stopPropagation();
+            onShowContactCard(entry.id || entry.name, entry.name);
+          }}
+        >
+          {label}
+        </button>
+      );
+    });
   };
 
   // Calculate weekly room schedules
@@ -192,7 +236,7 @@ const WeekView = ({
       groups[building].sort();
     }
     return groups;
-  }, [weeklyRoomSchedules]);
+  }, [weeklyRoomSchedules, buildingConfigVersion]);
 
   // Build per-building schedules split into two grids: MWF and TR.
   // Each class appears ONCE per room (de-duped across days), with meeting pattern stored on the item.
@@ -251,7 +295,7 @@ const WeekView = ({
     });
 
     return result;
-  }, [scheduleData, filteredRooms, selectedRoom, getMeetingPattern]);
+  }, [scheduleData, filteredRooms, selectedRoom, getMeetingPattern, buildingConfigVersion]);
 
   // --- Overlap layout: place overlapping items side-by-side per room ---
   const layoutRoomEvents = (items) => {
@@ -461,12 +505,9 @@ const WeekView = ({
                                 onClick={() => openCourseCard(item)}
                               >
                                 <div className="font-bold truncate">{item.Course}</div>
-                                <button
-                                  className="truncate hover:underline w-full text-left"
-                                  onClick={(e) => { e.stopPropagation(); onShowContactCard(item.Instructor); }}
-                                >
-                                  {item.Instructor}
-                                </button>
+                                <div className="truncate">
+                                  {renderInstructorButtons(item)}
+                                </div>
                                 <div className="text-[0.7rem] opacity-80">
                                   {item['Start Time']} - {item['End Time']}
                                 </div>

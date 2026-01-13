@@ -5,10 +5,12 @@ import FacultyContactCard from '../FacultyContactCard';
 import { formatChangeForDisplay } from '../../utils/recentChanges';
 import { parseCourseCode } from '../../utils/courseUtils';
 import { parseTime } from '../../utils/timeUtils';
+import { getBuildingFromRoom } from '../../utils/buildingUtils';
 import { useData } from '../../contexts/DataContext';
 import { usePeople } from '../../contexts/PeopleContext';
 import { useScheduleOperations, usePeopleOperations } from '../../hooks';
 import { useUI } from '../../contexts/UIContext';
+import { useAppConfig } from '../../contexts/AppConfigContext';
 
 const CourseManagement = () => {
   const {
@@ -23,6 +25,7 @@ const CourseManagement = () => {
   const { handleDataUpdate, handleScheduleDelete } = useScheduleOperations();
   const { handleRevertChange } = usePeopleOperations();
   const { showNotification } = useUI();
+  const { buildingConfigVersion } = useAppConfig();
   const [editingRowId, setEditingRowId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [historyVisible, setHistoryVisible] = useState(false);
@@ -81,31 +84,12 @@ const CourseManagement = () => {
     if (!roomName || typeof roomName !== 'string') {
       return 'Other';
     }
-
-    const cleaned = roomName.trim();
-    if (!cleaned) return 'Other';
-
-    const lowered = cleaned.toLowerCase();
-    if (lowered.includes('online')) {
-      return 'Online';
-    }
+    const lowered = roomName.toLowerCase();
     if (lowered.includes('no room needed')) {
       return 'No Room Needed';
     }
-    if (lowered.includes('off campus')) {
-      return 'Off Campus';
-    }
-
-    const buildingMatch = cleaned.match(/^([^0-9]+)/);
-    if (buildingMatch) {
-      const withoutParens = buildingMatch[1].replace(/\([^)]*\)/g, '').trim();
-      if (withoutParens) {
-        return withoutParens;
-      }
-    }
-
-    const fallback = cleaned.replace(/\([^)]*\)/g, '').trim();
-    return fallback || 'Other';
+    const building = getBuildingFromRoom(roomName);
+    return building || 'Other';
   };
 
   const computedNewCourseCredits = useMemo(
@@ -142,6 +126,10 @@ const CourseManagement = () => {
       .sort((a, b) => a.lastName.localeCompare(b.lastName));
   }, [facultyData]);
 
+  const facultyById = useMemo(() => {
+    return new Map((facultyData || []).map(faculty => [faculty.id, faculty]));
+  }, [facultyData]);
+
   // Process recent changes to show schedule-related changes in the legacy format
   const processedChanges = useMemo(() => {
     // Filter for schedule-related changes and convert to legacy format
@@ -174,10 +162,19 @@ const CourseManagement = () => {
   }, [recentChanges, editHistory]);
 
   // Get unique values for filters (using display names)
-  const uniqueInstructors = useMemo(() =>
-    [...new Set(scheduleData.filter(item => item && item.Instructor).map(item => item.Instructor))].sort(),
-    [scheduleData]
-  );
+  const uniqueInstructors = useMemo(() => {
+    const names = new Set();
+    scheduleData.forEach(item => {
+      if (!item) return;
+      const list = Array.isArray(item.instructorNames) && item.instructorNames.length > 0
+        ? item.instructorNames
+        : (item.Instructor ? [item.Instructor] : []);
+      list.forEach((name) => {
+        if (name) names.add(name);
+      });
+    });
+    return Array.from(names).sort();
+  }, [scheduleData]);
 
   const uniqueRooms = useMemo(() => {
     const all = [];
@@ -187,7 +184,10 @@ const CourseManagement = () => {
         item.Room.split(';').map(s => s.trim()).filter(Boolean).forEach(r => all.push(r));
       }
     });
-    return [...new Set(all)].filter(r => r.toLowerCase() !== 'online').sort();
+    return [...new Set(all)].filter(r => {
+      const lower = r.toLowerCase();
+      return lower !== 'online' && !lower.includes('no room needed');
+    }).sort();
   }, [scheduleData]);
 
   const uniqueTerms = useMemo(() =>
@@ -264,7 +264,7 @@ const CourseManagement = () => {
       programs: Array.from(programs).sort(),
       buildings: Array.from(buildings).sort()
     };
-  }, [scheduleData]);
+  }, [scheduleData, buildingConfigVersion]);
 
   // Filter presets for common use cases
   const filterPresets = {
@@ -341,10 +341,14 @@ const CourseManagement = () => {
       const lowercasedFilter = filters.searchTerm.toLowerCase().trim();
       data = data.filter(item => {
         if (!item) return false;
+        const instructorNames = Array.isArray(item.instructorNames) && item.instructorNames.length > 0
+          ? item.instructorNames
+          : [item.Instructor || item.instructorName || ''].filter(Boolean);
+        const matchesInstructor = instructorNames.some(name => name.toLowerCase().includes(lowercasedFilter));
         return (
           (item.Course?.toLowerCase().includes(lowercasedFilter)) ||
           (item['Course Title']?.toLowerCase().includes(lowercasedFilter)) ||
-          (item.Instructor?.toLowerCase().includes(lowercasedFilter)) ||
+          matchesInstructor ||
           (item.Room?.toLowerCase().includes(lowercasedFilter)) ||
           (item.CRN?.toString().toLowerCase().includes(lowercasedFilter)) ||
           (item.Term?.toLowerCase().includes(lowercasedFilter)) ||
@@ -355,7 +359,13 @@ const CourseManagement = () => {
 
     // Apply basic multi-select filters
     if (filters.instructor && Array.isArray(filters.instructor) && filters.instructor.length > 0) {
-      data = data.filter(item => item && item.Instructor && filters.instructor.includes(item.Instructor));
+      data = data.filter(item => {
+        if (!item) return false;
+        const list = Array.isArray(item.instructorNames) && item.instructorNames.length > 0
+          ? item.instructorNames
+          : (item.Instructor ? [item.Instructor] : []);
+        return list.some((name) => filters.instructor.includes(name));
+      });
     }
 
     if (filters.day && Array.isArray(filters.day) && filters.day.length > 0) {
@@ -433,13 +443,28 @@ const CourseManagement = () => {
     // Apply adjunct filter
     if (filters.adjunct && filters.adjunct !== 'all') {
       data = data.filter(item => {
-        if (!item || !item.Instructor || !facultyData) return true;
-
-        const faculty = facultyData.find(f => f.name === item.Instructor);
+        if (!item || !facultyData) return true;
+        const instructorIds = Array.isArray(item.instructorIds) && item.instructorIds.length > 0
+          ? item.instructorIds
+          : (item.instructorId ? [item.instructorId] : []);
+        const instructorNames = Array.isArray(item.instructorNames) && item.instructorNames.length > 0
+          ? item.instructorNames
+          : (item.Instructor ? [item.Instructor] : []);
+        const instructors = instructorIds
+          .map(id => facultyById.get(id))
+          .filter(Boolean);
+        if (instructors.length === 0) {
+          instructorNames.forEach((name) => {
+            const match = facultyData.find(f => f.name === name);
+            if (match) instructors.push(match);
+          });
+        }
+        if (instructors.length === 0) return true;
+        const hasAdjunct = instructors.some(faculty => faculty?.isAdjunct);
         if (filters.adjunct === 'include') {
-          return faculty?.isAdjunct === true;
+          return hasAdjunct;
         } else if (filters.adjunct === 'exclude') {
-          return faculty?.isAdjunct !== true;
+          return !hasAdjunct;
         }
         return true;
       });
@@ -448,13 +473,28 @@ const CourseManagement = () => {
     // Apply tenured filter
     if (filters.tenured && filters.tenured !== 'all') {
       data = data.filter(item => {
-        if (!item || !item.Instructor || !facultyData) return true;
-
-        const faculty = facultyData.find(f => f.name === item.Instructor);
+        if (!item || !facultyData) return true;
+        const instructorIds = Array.isArray(item.instructorIds) && item.instructorIds.length > 0
+          ? item.instructorIds
+          : (item.instructorId ? [item.instructorId] : []);
+        const instructorNames = Array.isArray(item.instructorNames) && item.instructorNames.length > 0
+          ? item.instructorNames
+          : (item.Instructor ? [item.Instructor] : []);
+        const instructors = instructorIds
+          .map(id => facultyById.get(id))
+          .filter(Boolean);
+        if (instructors.length === 0) {
+          instructorNames.forEach((name) => {
+            const match = facultyData.find(f => f.name === name);
+            if (match) instructors.push(match);
+          });
+        }
+        if (instructors.length === 0) return true;
+        const hasTenured = instructors.some(faculty => faculty?.isTenured);
         if (filters.tenured === 'include') {
-          return faculty?.isTenured === true;
+          return hasTenured;
         } else if (filters.tenured === 'exclude') {
-          return faculty?.isTenured !== true;
+          return !hasTenured;
         }
         return true;
       });
@@ -487,7 +527,10 @@ const CourseManagement = () => {
     const groupedMap = {};
     data.forEach(item => {
       if (!item) return;
-      const key = `${item.Course}|${item.Section}|${item.Term}|${item.CRN}|${item.Instructor}|${item['Start Time']}|${item['End Time']}|${(item.Room || '')}`;
+      const instructorKey = Array.isArray(item.instructorNames) && item.instructorNames.length > 0
+        ? item.instructorNames.join(' / ')
+        : (item.Instructor || item.instructorName || '');
+      const key = `${item.Course}|${item.Section}|${item.Term}|${item.CRN}|${instructorKey}|${item['Start Time']}|${item['End Time']}|${(item.Room || '')}`;
       if (!groupedMap[key]) {
         groupedMap[key] = { ...item, _daySet: new Set(item.Day ? [item.Day] : []), _originalIds: [item.id] };
       } else if (item.Day) {
@@ -547,7 +590,7 @@ const CourseManagement = () => {
     }
 
     return data;
-  }, [scheduleData, filters, sortConfig, facultyData]);
+  }, [scheduleData, filters, sortConfig, facultyData, buildingConfigVersion]);
 
   const validateScheduleData = (data) => {
     const errors = [];
@@ -637,6 +680,14 @@ const CourseManagement = () => {
           'Course Type': metadata.program || prev['Course Type'] || ''
         };
       }
+      if (name === 'instructorId') {
+        const faculty = facultyById.get(value) || null;
+        return {
+          ...prev,
+          instructorId: value,
+          Instructor: faculty?.name || ''
+        };
+      }
       return { ...prev, [name]: value };
     });
   };
@@ -651,8 +702,9 @@ const CourseManagement = () => {
     });
   };
 
-  const handleShowContactCard = (facultyName) => {
-    const faculty = facultyData.find(f => f.name === facultyName);
+  const handleShowContactCard = (facultyId, fallbackName = '') => {
+    const faculty = facultyById.get(facultyId) ||
+      facultyData.find(f => f.name === fallbackName);
     if (faculty) {
       setSelectedFacultyForCard(faculty);
     }
@@ -716,6 +768,14 @@ const CourseManagement = () => {
           subjectCode: metadata.program,
           catalogNumber: metadata.catalogNumber,
           'Course Type': metadata.program
+        };
+      }
+      if (name === 'instructorId') {
+        const faculty = facultyById.get(value) || null;
+        return {
+          ...prev,
+          instructorId: value,
+          Instructor: faculty?.name || ''
         };
       }
       return { ...prev, [name]: value };
@@ -824,11 +884,29 @@ const CourseManagement = () => {
     const stats = {
       totalSessions: scheduleData.length,
       uniqueCourses: new Set(scheduleData.filter(s => s && s.Course).map(s => s.Course)).size,
-      uniqueInstructors: new Set(scheduleData.filter(s => s && s.Instructor).map(s => s.Instructor)).size,
+      uniqueInstructors: new Set(scheduleData.flatMap(s => {
+        if (!s) return [];
+        if (Array.isArray(s.instructorNames) && s.instructorNames.length > 0) return s.instructorNames;
+        return s.Instructor ? [s.Instructor] : [];
+      })).size,
       adjunctTaughtSessions: scheduleData.filter(s => {
-        if (!s || !s.Instructor || !facultyData) return false;
-        const faculty = facultyData.find(f => f.name === s.Instructor);
-        return faculty?.isAdjunct;
+        if (!s || !facultyData) return false;
+        const instructorIds = Array.isArray(s.instructorIds) && s.instructorIds.length > 0
+          ? s.instructorIds
+          : (s.instructorId ? [s.instructorId] : []);
+        const instructorNames = Array.isArray(s.instructorNames) && s.instructorNames.length > 0
+          ? s.instructorNames
+          : (s.Instructor ? [s.Instructor] : []);
+        const instructors = instructorIds
+          .map(id => facultyById.get(id))
+          .filter(Boolean);
+        if (instructors.length === 0) {
+          instructorNames.forEach((name) => {
+            const match = facultyData.find(f => f.name === name);
+            if (match) instructors.push(match);
+          });
+        }
+        return instructors.some(faculty => faculty?.isAdjunct);
       }).length
     };
 
@@ -980,15 +1058,14 @@ const CourseManagement = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Instructor *</label>
                 <select
-                  name="Instructor"
-                  value={newCourseData.Instructor || ''}
+                  name="instructorId"
+                  value={newCourseData.instructorId || ''}
                   onChange={handleNewCourseChange}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
                 >
-                  <option value="">Select Instructor</option>
-                  <option value="Staff">Staff</option>
+                  <option value="">Unassigned</option>
                   {sortedFaculty.map(faculty => (
-                    <option key={faculty.id} value={faculty.originalName}>
+                    <option key={faculty.id} value={faculty.id}>
                       {faculty.displayName}
                     </option>
                   ))}
@@ -1426,7 +1503,7 @@ const CourseManagement = () => {
                         <p className="text-gray-600">
                           <button
                             className="font-bold hover:underline"
-                            onClick={() => handleShowContactCard(change.instructor)}
+                            onClick={() => handleShowContactCard(change.instructorIds?.[0] || change.instructorId || '', change.instructor)}
                           >
                             {change.instructor}
                           </button>
@@ -1491,15 +1568,14 @@ const CourseManagement = () => {
                       <>
                         <td className="p-1">
                           <select
-                            name="Instructor"
-                            value={editFormData.Instructor || ''}
+                            name="instructorId"
+                            value={editFormData.instructorId || ''}
                             onChange={handleEditFormChange}
                             className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
                           >
-                            <option value="">Select Instructor</option>
-                            <option value="Staff">Staff</option>
+                            <option value="">Unassigned</option>
                             {sortedFaculty.map(faculty => (
-                              <option key={faculty.id} value={faculty.originalName}>
+                              <option key={faculty.id} value={faculty.id}>
                                 {faculty.displayName}
                               </option>
                             ))}
@@ -1673,7 +1749,7 @@ const CourseManagement = () => {
                         <td className="px-4 py-3 text-gray-700">
                           <button
                             className="hover:underline text-left"
-                            onClick={() => handleShowContactCard(row.Instructor)}
+                            onClick={() => handleShowContactCard(row.instructorIds?.[0] || row.instructorId || '', row.Instructor)}
                           >
                             {row.Instructor}
                           </button>

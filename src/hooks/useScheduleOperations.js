@@ -5,26 +5,38 @@
  * in App.jsx, including create, update, and delete operations.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { db } from '../firebase';
-import { doc, updateDoc, addDoc, deleteDoc, setDoc, collection } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, setDoc, collection, deleteField } from 'firebase/firestore';
 import { parseCourseCode } from '../utils/courseUtils';
+import { buildPeopleIndex } from '../utils/peopleUtils';
+import { getInstructorDisplayName, UNASSIGNED } from '../utils/dataAdapter';
 import { logCreate, logUpdate, logDelete } from '../utils/changeLogger';
 import { useData } from '../contexts/DataContext';
 import { useSchedules } from '../contexts/ScheduleContext';
 import { useUI } from '../contexts/UIContext';
+import { useAuth } from '../contexts/AuthContext';
+import { normalizeTermLabel, termCodeFromLabel } from '../utils/termUtils';
 
 const useScheduleOperations = () => {
   const {
     rawScheduleData,
     rawPeople,
+    allPeople,
+    peopleIndex,
     canCreateSchedule,
     canEditSchedule,
     canDeleteSchedule
   } = useData();
-  const { refreshSchedules } = useSchedules();
+  const { refreshSchedules, selectedSemester, isTermLocked } = useSchedules();
 
   const { showNotification } = useUI();
+  const { isAdmin } = useAuth();
+
+  const resolvedPeopleIndex = useMemo(() => (
+    peopleIndex || buildPeopleIndex(allPeople || rawPeople)
+  ), [peopleIndex, allPeople, rawPeople]);
+  const peopleMap = useMemo(() => resolvedPeopleIndex.peopleMap || new Map(), [resolvedPeopleIndex]);
 
   // Handle schedule update/create
   const handleDataUpdate = useCallback(async (updatedRow) => {
@@ -74,26 +86,76 @@ const useScheduleOperations = () => {
 
       // Resolve instructor reference by ID (strict matching)
       let instructorId = null;
-      if (updatedRow.Instructor && updatedRow.Instructor !== 'Staff') {
-        // First try to match by ID if provided
-        if (updatedRow.instructorId) {
-          const instructor = rawPeople.find(p => p.id === updatedRow.instructorId);
-          if (instructor) {
-            instructorId = instructor.id;
-          }
+      if (updatedRow.instructorId) {
+        const resolvedId = resolvedPeopleIndex.resolvePersonId
+          ? resolvedPeopleIndex.resolvePersonId(updatedRow.instructorId)
+          : updatedRow.instructorId;
+        const instructor = resolvedId ? peopleMap.get(resolvedId) : null;
+        if (instructor) {
+          instructorId = instructor.id;
         }
-        // Fallback to exact name match
-        if (!instructorId) {
-          const instructor = rawPeople.find(person => person.name === updatedRow.Instructor);
-          if (instructor) {
-            instructorId = instructor.id;
-          } else {
-            console.warn('⚠️ Instructor not found in people collection:', updatedRow.Instructor);
-          }
+      }
+      // Fallback to exact name match
+      if (!instructorId && updatedRow.Instructor && updatedRow.Instructor !== 'Staff') {
+        const instructor = rawPeople.find(person => person.name === updatedRow.Instructor);
+        if (instructor) {
+          instructorId = instructor.id;
+        } else {
+          console.warn('⚠️ Instructor not found in people collection:', updatedRow.Instructor);
         }
       }
 
       const referenceSchedule = isGroupedCourse ? originalSchedules[0] : originalSchedule;
+      const instructorRecord = instructorId ? rawPeople.find(p => p.id === instructorId) : null;
+      const fallbackInstructorName = (updatedRow.Instructor || referenceSchedule?.instructorName || '').trim();
+      const instructorDisplayName = instructorRecord
+        ? getInstructorDisplayName(instructorRecord)
+        : (fallbackInstructorName || UNASSIGNED);
+
+      const baseInstructorIds = Array.isArray(referenceSchedule?.instructorIds)
+        ? referenceSchedule.instructorIds
+        : (referenceSchedule?.instructorId ? [referenceSchedule.instructorId] : []);
+      const baseAssignments = Array.isArray(referenceSchedule?.instructorAssignments)
+        ? referenceSchedule.instructorAssignments
+        : [];
+      const isTeamTaught = baseAssignments.length > 1 || baseInstructorIds.length > 1;
+      const assignmentMap = new Map();
+
+      if (isTeamTaught) {
+        baseAssignments.forEach((assignment) => {
+          const resolvedId = assignment?.personId || assignment?.instructorId || assignment?.id;
+          if (!resolvedId) return;
+          assignmentMap.set(resolvedId, { ...assignment, personId: resolvedId });
+        });
+        if (assignmentMap.size === 0 && baseInstructorIds.length > 0) {
+          baseInstructorIds.forEach((id, index) => {
+            assignmentMap.set(id, { personId: id, isPrimary: index === 0, percentage: 100 });
+          });
+        }
+      }
+
+      if (instructorId) {
+        if (!isTeamTaught) assignmentMap.clear();
+        const existing = assignmentMap.get(instructorId);
+        assignmentMap.set(instructorId, {
+          personId: instructorId,
+          isPrimary: true,
+          percentage: existing?.percentage ?? 100,
+          ...existing
+        });
+      }
+
+      const instructorAssignments = Array.from(assignmentMap.values());
+      if (instructorAssignments.length > 0 && !instructorAssignments.some((assignment) => assignment.isPrimary)) {
+        instructorAssignments[0].isPrimary = true;
+      }
+      const primaryAssignment = instructorAssignments.find((assignment) => assignment.isPrimary) || instructorAssignments[0] || null;
+      const primaryInstructorId = primaryAssignment?.personId || instructorId || null;
+      const instructorIds = Array.from(new Set([
+        ...baseInstructorIds,
+        ...(primaryInstructorId ? [primaryInstructorId] : []),
+        ...instructorAssignments.map((assignment) => assignment.personId)
+      ])).filter(Boolean);
 
       // Create meeting patterns
       const meetingPatterns = [];
@@ -121,6 +183,53 @@ const useScheduleOperations = () => {
       const catalogNumber = parsedCourse.catalogNumber || referenceSchedule?.catalogNumber || courseCode.replace(/^[A-Z]{2,4}\s?/, '').toUpperCase();
       const derivedCredits = parsedCourse.error ? null : parsedCourse.credits;
       const computedCredits = derivedCredits ?? referenceSchedule?.credits ?? 0;
+      const normalizedTerm = normalizeTermLabel(
+        updatedRow.Term ||
+        referenceSchedule?.term ||
+        originalSchedules[0]?.term ||
+        selectedSemester ||
+        ''
+      );
+      if (normalizedTerm && isTermLocked?.(normalizedTerm) && !isAdmin) {
+        showNotification('warning', 'Term Locked', `Schedules for ${normalizedTerm} are archived or locked. Editing is disabled.`);
+        return;
+      }
+      const resolvedTermCode = termCodeFromLabel(updatedRow.termCode || referenceSchedule?.termCode || normalizedTerm);
+
+      const scheduleTypeValue = updatedRow['Schedule Type'] || (referenceSchedule?.scheduleType || 'Class Instruction');
+      const roomInput = Array.isArray(updatedRow.Rooms)
+        ? updatedRow.Rooms
+        : (updatedRow.Room || (referenceSchedule?.roomName || ''));
+      const roomNames = Array.isArray(roomInput)
+        ? roomInput.map(name => String(name || '').trim()).filter(Boolean)
+        : String(roomInput || '')
+          .split(';')
+          .map(name => name.trim())
+          .filter(Boolean);
+      const hasRoomlessLabel = roomNames.some((name) => {
+        const upper = name.toUpperCase();
+        return upper === 'NO ROOM NEEDED' || upper.includes('ONLINE');
+      });
+      const treatAsNoRoom = isOnlineFlag || hasRoomlessLabel || /independent/i.test(String(scheduleTypeValue));
+      const filteredRoomNames = treatAsNoRoom
+        ? []
+        : roomNames.filter((name) => {
+          const upper = name.toUpperCase();
+          return upper !== 'NO ROOM NEEDED' && !upper.includes('ONLINE');
+        });
+      const existingRoomNames = Array.isArray(referenceSchedule?.roomNames)
+        ? referenceSchedule.roomNames
+        : (referenceSchedule?.roomName ? [referenceSchedule.roomName] : []);
+      const normalizedExisting = existingRoomNames.map((name) => String(name || '').toLowerCase()).sort();
+      const normalizedNext = filteredRoomNames.map((name) => String(name || '').toLowerCase()).sort();
+      const roomsMatch = normalizedExisting.length > 0
+        && normalizedExisting.length === normalizedNext.length
+        && normalizedExisting.every((value, idx) => value === normalizedNext[idx]);
+      const existingRoomIds = Array.isArray(referenceSchedule?.roomIds)
+        ? referenceSchedule.roomIds
+        : (referenceSchedule?.roomId ? [referenceSchedule.roomId] : []);
+      const roomIds = treatAsNoRoom ? [] : (roomsMatch ? existingRoomIds : []);
+      const roomId = roomIds[0] || null;
 
       const updateData = {
         courseCode: courseCode,
@@ -132,19 +241,30 @@ const useScheduleOperations = () => {
         courseLevel: parsedCourse.level,
         section: updatedRow.Section || (referenceSchedule?.section || ''),
         crn: updatedRow.CRN || (referenceSchedule?.crn || ''),
-        term: updatedRow.Term || (referenceSchedule?.term || ''),
+        term: normalizedTerm || (updatedRow.Term || (referenceSchedule?.term || '')),
+        termCode: resolvedTermCode || '',
         credits: computedCredits,
-        scheduleType: updatedRow['Schedule Type'] || (referenceSchedule?.scheduleType || 'Class Instruction'),
+        scheduleType: scheduleTypeValue,
+        instructionMethod: updatedRow['Instruction Method'] || updatedRow['Inst. Method'] || referenceSchedule?.instructionMethod || '',
         status: updatedRow.Status || (referenceSchedule?.status || 'Active'),
-        instructorId: instructorId,
-        instructorName: updatedRow.Instructor || (referenceSchedule?.instructorName || ''),
-        roomId: isOnlineFlag ? null : null,
-        roomName: isOnlineFlag ? '' : (updatedRow.Room || (referenceSchedule?.roomName || '')),
+        instructorId: primaryInstructorId,
+        instructorIds,
+        instructorAssignments,
+        locationType: treatAsNoRoom ? 'no_room' : 'room',
+        locationLabel: treatAsNoRoom ? 'No Room Needed' : '',
+        roomIds,
+        roomId,
+        roomNames: filteredRoomNames,
+        roomName: treatAsNoRoom ? '' : (filteredRoomNames[0] || ''),
         meetingPatterns: meetingPatterns.length > 0 ? meetingPatterns : (referenceSchedule?.meetingPatterns || []),
         isOnline: isOnlineFlag,
         onlineMode: isOnlineFlag ? (onlineMode || (meetingPatterns.length > 0 ? 'synchronous' : 'asynchronous')) : null,
         updatedAt: new Date().toISOString(),
         ...(isNewCourse && { createdAt: new Date().toISOString() })
+      };
+      const updatePayload = {
+        ...updateData,
+        instructorName: deleteField()
       };
 
       // Validation
@@ -168,7 +288,7 @@ const useScheduleOperations = () => {
       if (isNewCourse) {
         await setDoc(scheduleRef, updateData);
         await logCreate(
-          `Schedule - ${updateData.courseCode} ${updateData.section} (${updateData.instructorName})`,
+          `Schedule - ${updateData.courseCode} ${updateData.section} (${instructorDisplayName})`,
           'schedules',
           scheduleRef.id,
           updateData,
@@ -190,7 +310,7 @@ const useScheduleOperations = () => {
             }]
           };
           const scheduleDocRef = doc(db, 'schedules', originalId);
-          await updateDoc(scheduleDocRef, daySpecificUpdateData);
+          await updateDoc(scheduleDocRef, { ...daySpecificUpdateData, instructorName: deleteField() });
           console.log(`✅ Updated schedule ${originalId} for day ${dayCode}`);
         }
 
@@ -230,9 +350,9 @@ const useScheduleOperations = () => {
           'useScheduleOperations - handleDataUpdate'
         );
       } else {
-        await updateDoc(scheduleRef, updateData);
+        await updateDoc(scheduleRef, updatePayload);
         await logUpdate(
-          `Schedule - ${updateData.courseCode} ${updateData.section} (${updateData.instructorName})`,
+          `Schedule - ${updateData.courseCode} ${updateData.section} (${instructorDisplayName})`,
           'schedules',
           (updatedRow._originalId || updatedRow.id),
           updateData,
@@ -259,7 +379,7 @@ const useScheduleOperations = () => {
       console.error('❌ Error updating schedule:', error);
       showNotification('error', 'Update Failed', `Failed to update schedule: ${error.message}`);
     }
-  }, [rawScheduleData, rawPeople, refreshSchedules, canCreateSchedule, canEditSchedule, showNotification]);
+  }, [rawScheduleData, rawPeople, refreshSchedules, canCreateSchedule, canEditSchedule, showNotification, resolvedPeopleIndex, peopleMap, selectedSemester, isTermLocked, isAdmin]);
 
   // Handle schedule delete
   const handleScheduleDelete = useCallback(async (scheduleId) => {
@@ -276,11 +396,16 @@ const useScheduleOperations = () => {
         showNotification('error', 'Delete Failed', 'Schedule not found.');
         return;
       }
+      const normalizedTerm = normalizeTermLabel(scheduleToDelete.term || selectedSemester || '');
+      if (normalizedTerm && isTermLocked?.(normalizedTerm) && !isAdmin) {
+        showNotification('warning', 'Term Locked', `Schedules for ${normalizedTerm} are archived or locked. Deletion is disabled.`);
+        return;
+      }
 
       await deleteDoc(doc(db, 'schedules', scheduleId));
 
       await logDelete(
-        `Schedule - ${scheduleToDelete.courseCode} ${scheduleToDelete.section} (${scheduleToDelete.instructorName})`,
+        `Schedule - ${scheduleToDelete.courseCode} ${scheduleToDelete.section} (${scheduleToDelete.instructorName || UNASSIGNED})`,
         'schedules',
         scheduleId,
         scheduleToDelete,
@@ -296,7 +421,7 @@ const useScheduleOperations = () => {
       console.error('❌ Error deleting schedule:', error);
       showNotification('error', 'Delete Failed', 'Failed to delete schedule. Please try again.');
     }
-  }, [rawScheduleData, refreshSchedules, canDeleteSchedule, showNotification]);
+  }, [rawScheduleData, refreshSchedules, canDeleteSchedule, showNotification, selectedSemester, isTermLocked, isAdmin]);
 
   return {
     handleDataUpdate,

@@ -193,6 +193,31 @@ const TemperatureMonitoring = () => {
     return pendingMappings.some((item) => !mappingOverrides[item.deviceId] && !item.suggestedRoomId);
   }, [pendingMappings, mappingOverrides]);
 
+  const importSummary = useMemo(() => {
+    const summary = {
+      fileCount: importItems.length,
+      deviceCount: 0,
+      totalRows: 0,
+      parsedRows: 0,
+      duplicateCount: 0,
+      errorCount: 0,
+      readyCount: 0
+    };
+    const deviceIds = new Set();
+    importItems.forEach((item) => {
+      summary.totalRows += item.rowCount ?? 0;
+      summary.parsedRows += item.parsedCount ?? 0;
+      summary.errorCount += item.errorCount ?? 0;
+      if (item.duplicate) summary.duplicateCount += 1;
+      if (item.deviceId) deviceIds.add(item.deviceId);
+      if (!item.duplicate && (item.errorCount ?? 0) === 0 && (item.parsedCount ?? 0) > 0) {
+        summary.readyCount += 1;
+      }
+    });
+    summary.deviceCount = deviceIds.size;
+    return summary;
+  }, [importItems]);
+
   useEffect(() => {
     if (authLoading || !user) return;
     let active = true;
@@ -213,7 +238,7 @@ const TemperatureMonitoring = () => {
     return () => {
       active = false;
     };
-  }, [showNotification, authLoading]);
+  }, [showNotification, authLoading, user]);
 
   useEffect(() => {
     if (!selectedBuilding && buildingList.length > 0) {
@@ -268,7 +293,7 @@ const TemperatureMonitoring = () => {
       }
     };
     loadSettings();
-  }, [selectedBuilding, showNotification, authLoading]);
+  }, [selectedBuilding, showNotification, authLoading, user]);
 
   useEffect(() => {
     if (!selectedDate && buildingSettings?.timezone) {
@@ -309,7 +334,7 @@ const TemperatureMonitoring = () => {
     return () => {
       active = false;
     };
-  }, [selectedBuilding, authLoading]);
+  }, [selectedBuilding, authLoading, user]);
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -337,7 +362,7 @@ const TemperatureMonitoring = () => {
     return () => {
       active = false;
     };
-  }, [selectedBuilding, selectedDate, showNotification, authLoading]);
+  }, [selectedBuilding, selectedDate, showNotification, authLoading, user]);
 
   useEffect(() => {
     if (!selectedBuilding) return;
@@ -627,6 +652,32 @@ const TemperatureMonitoring = () => {
     });
   });
 
+  const buildPendingMappings = (items) => {
+    const seen = new Set();
+    return items
+      .filter((item) => item.deviceId && (!item.suggestedRoomId || item.matchConfidence < AUTO_MATCH_THRESHOLD))
+      .filter((item) => {
+        if (seen.has(item.deviceId)) return false;
+        seen.add(item.deviceId);
+        return true;
+      })
+      .map((item) => ({
+        deviceId: item.deviceId,
+        deviceLabel: item.deviceLabel,
+        suggestedRoomId: item.suggestedRoomId,
+        matchConfidence: item.matchConfidence,
+        matchMethod: item.matchMethod
+      }));
+  };
+
+  const pruneMappingOverrides = (overrides, items) => {
+    const deviceIds = new Set(items.map((item) => item.deviceId).filter(Boolean));
+    return Object.keys(overrides).reduce((acc, deviceId) => {
+      if (deviceIds.has(deviceId)) acc[deviceId] = overrides[deviceId];
+      return acc;
+    }, {});
+  };
+
   const handleCsvSelection = async (event) => {
     if (!isAdmin) return;
     const files = Array.from(event.target.files || []);
@@ -738,16 +789,22 @@ const TemperatureMonitoring = () => {
       }
     }
     setImportItems(nextItems);
-    const pending = nextItems
-      .filter((item) => item.deviceId && (!item.suggestedRoomId || item.matchConfidence < AUTO_MATCH_THRESHOLD))
-      .map((item) => ({
-        deviceId: item.deviceId,
-        deviceLabel: item.deviceLabel,
-        suggestedRoomId: item.suggestedRoomId,
-        matchConfidence: item.matchConfidence,
-        matchMethod: item.matchMethod
-      }));
-    setPendingMappings(pending);
+    setPendingMappings(buildPendingMappings(nextItems));
+  };
+
+  const handleRemoveImportItem = (itemId) => {
+    setImportItems((prevItems) => {
+      const nextItems = prevItems.filter((item) => item.id !== itemId);
+      setPendingMappings(buildPendingMappings(nextItems));
+      setMappingOverrides((prevOverrides) => pruneMappingOverrides(prevOverrides, nextItems));
+      return nextItems;
+    });
+  };
+
+  const handleClearImports = () => {
+    setImportItems([]);
+    setPendingMappings([]);
+    setMappingOverrides({});
   };
 
   const handleImport = async () => {
@@ -1546,30 +1603,105 @@ const TemperatureMonitoring = () => {
   };
 
   const renderImport = () => (
-    <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+    <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Bulk Import</h2>
           <p className="text-sm text-gray-600">Upload Govee CSV exports and map devices to rooms.</p>
         </div>
-        <label className="btn-secondary cursor-pointer">
-          <FileUp className="w-4 h-4 mr-2" /> Upload CSVs
-          <input
-            type="file"
-            accept=".csv"
-            multiple
-            className="hidden"
-            onChange={handleCsvSelection}
-          />
-        </label>
+        {importItems.length > 0 && (
+          <button
+            className="btn-ghost flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handleClearImports}
+            disabled={importing}
+          >
+            <X className="w-4 h-4" /> Clear list
+          </button>
+        )}
+      </div>
+
+      <input
+        id="temperature-import-csvs"
+        type="file"
+        accept=".csv"
+        multiple
+        className="hidden"
+        onChange={handleCsvSelection}
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="border border-dashed border-baylor-green/40 bg-baylor-green/5 rounded-lg p-5">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-full bg-white border border-baylor-green/20 flex items-center justify-center">
+              <FileUp className="w-5 h-5 text-baylor-green" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-gray-900">Select Govee CSV exports</div>
+              <div className="text-xs text-gray-500">
+                Upload one or more CSV files. We'll detect timestamps, temperature, and humidity automatically.
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <label htmlFor="temperature-import-csvs" className="btn-secondary cursor-pointer inline-flex items-center">
+              <FileUp className="w-4 h-4 mr-2" /> Choose CSVs
+            </label>
+            {importItems.length > 0 && (
+              <span className="text-xs text-gray-500">Selecting new files replaces the current list.</span>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-900">Import Summary</h3>
+            <span className={`text-xs font-medium ${importItems.length ? 'text-baylor-green' : 'text-gray-500'}`}>
+              {importItems.length ? 'Ready for review' : 'Awaiting files'}
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+            <div className="rounded-lg bg-white border border-gray-200 p-3">
+              <div className="text-xs text-gray-500">Files</div>
+              <div className="text-lg font-semibold text-gray-900">{importSummary.fileCount}</div>
+            </div>
+            <div className="rounded-lg bg-white border border-gray-200 p-3">
+              <div className="text-xs text-gray-500">Devices</div>
+              <div className="text-lg font-semibold text-gray-900">{importSummary.deviceCount}</div>
+            </div>
+            <div className="rounded-lg bg-white border border-gray-200 p-3">
+              <div className="text-xs text-gray-500">Rows Parsed</div>
+              <div className="text-lg font-semibold text-gray-900">
+                {importSummary.totalRows > 0 ? `${importSummary.parsedRows}/${importSummary.totalRows}` : '0'}
+              </div>
+            </div>
+            <div className="rounded-lg bg-white border border-gray-200 p-3">
+              <div className="text-xs text-gray-500">Duplicates</div>
+              <div className="text-lg font-semibold text-gray-600">{importSummary.duplicateCount}</div>
+            </div>
+            <div className="rounded-lg bg-white border border-gray-200 p-3">
+              <div className="text-xs text-gray-500">Errors</div>
+              <div className="text-lg font-semibold text-amber-700">{importSummary.errorCount}</div>
+            </div>
+            <div className="rounded-lg bg-white border border-gray-200 p-3">
+              <div className="text-xs text-gray-500">Ready</div>
+              <div className="text-lg font-semibold text-baylor-green">{importSummary.readyCount}</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {importItems.length === 0 ? (
-        <div className="border border-dashed border-gray-300 rounded-lg p-10 text-center text-gray-600">
-          Select one or more CSV files to start the import.
+        <div className="border border-dashed border-gray-300 rounded-lg p-8 text-center text-gray-600">
+          <FileUp className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+          <p className="text-sm font-medium text-gray-700">No CSVs selected yet.</p>
+          <p className="text-xs text-gray-500">Use the upload panel above to add Govee exports.</p>
         </div>
       ) : (
         <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-900">Selected Files</h3>
+            <span className="text-xs text-gray-500">{importSummary.fileCount} files</span>
+          </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50">
@@ -1579,43 +1711,62 @@ const TemperatureMonitoring = () => {
                   <th className="text-left px-4 py-2 text-gray-600 font-semibold">Rows</th>
                   <th className="text-left px-4 py-2 text-gray-600 font-semibold">Date Range</th>
                   <th className="text-left px-4 py-2 text-gray-600 font-semibold">Status</th>
+                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {importItems.map((item) => (
-                  <tr key={item.id}>
-                    <td className="px-4 py-2 font-medium text-gray-800">{item.fileName}</td>
-                    <td className="px-4 py-2 text-gray-700">{item.deviceLabel || '-'}</td>
-                    <td className="px-4 py-2 text-gray-700">
-                      {item.parsedCount ?? 0}/{item.rowCount ?? 0}
-                    </td>
-                    <td className="px-4 py-2 text-gray-700">
-                      {item.minTimestamp && item.maxTimestamp ? `${item.minTimestamp} -> ${item.maxTimestamp}` : '-'}
-                    </td>
-                    <td className="px-4 py-2 text-gray-700">
-                      {item.duplicate ? (
-                        <span className="inline-flex items-center text-xs text-gray-500">
-                          <AlertTriangle className="w-3 h-3 mr-1" /> Duplicate
-                        </span>
-                      ) : item.errorCount > 0 ? (
-                        <span className="inline-flex items-center text-xs text-amber-600">
-                          <AlertTriangle className="w-3 h-3 mr-1" /> {item.errorCount} errors
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center text-xs text-emerald-600">
-                          <CheckCircle2 className="w-3 h-3 mr-1" /> Ready
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {importItems.map((item) => {
+                  const rowTotal = item.rowCount ?? 0;
+                  const parsedRows = item.parsedCount ?? 0;
+                  const rowsLabel = rowTotal > 0 ? `${parsedRows}/${rowTotal}` : parsedRows > 0 ? `${parsedRows}` : '-';
+                  return (
+                    <tr key={item.id}>
+                      <td className="px-4 py-2 font-medium text-gray-800">{item.fileName}</td>
+                      <td className="px-4 py-2 text-gray-700">{item.deviceLabel || '-'}</td>
+                      <td className="px-4 py-2 text-gray-700">{rowsLabel}</td>
+                      <td className="px-4 py-2 text-gray-700">
+                        {item.minTimestamp && item.maxTimestamp ? `${item.minTimestamp} -> ${item.maxTimestamp}` : '-'}
+                      </td>
+                      <td className="px-4 py-2 text-gray-700">
+                        {item.duplicate ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-2 py-1 text-xs text-gray-600">
+                            <AlertTriangle className="w-3 h-3" /> Duplicate
+                          </span>
+                        ) : item.errorCount > 0 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
+                            <AlertTriangle className="w-3 h-3" /> {item.errorCount} errors
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-baylor-green/20 bg-baylor-green/10 px-2 py-1 text-xs text-baylor-green">
+                            <CheckCircle2 className="w-3 h-3" /> Ready
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-gray-700">
+                        <button
+                          type="button"
+                          className="btn-ghost flex items-center gap-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                          onClick={() => handleRemoveImportItem(item.id)}
+                          disabled={importing}
+                          aria-label={`Remove ${item.fileName}`}
+                        >
+                          <X className="w-3 h-3" />
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
           {pendingMappings.length > 0 && (
             <div className="bg-baylor-gold/10 border border-baylor-gold/30 rounded-lg p-4 space-y-3">
-              <h3 className="text-sm font-semibold text-gray-900">Device Mapping Review</h3>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Device Mapping Review</h3>
+                <p className="text-xs text-gray-500">Confirm which rooms should receive readings for each device.</p>
+              </div>
               <div className="space-y-2">
                 {pendingMappings.map((item) => (
                   <div key={item.deviceId} className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
@@ -1641,7 +1792,10 @@ const TemperatureMonitoring = () => {
             </div>
           )}
 
-          <div className="flex justify-end">
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="text-sm text-gray-600">
+              Duplicates are skipped automatically. Resolve any mapping prompts before importing.
+            </div>
             <button className="btn-primary" onClick={handleImport} disabled={importing || hasUnresolvedMappings}>
               {importing ? 'Importing...' : 'Import Now'}
             </button>

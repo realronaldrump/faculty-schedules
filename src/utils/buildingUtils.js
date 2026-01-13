@@ -1,54 +1,70 @@
 /**
  * Building Utilities - Single Source of Truth for Building Names
- * 
- * This module provides centralized building name standardization to ensure
- * consistent naming across the entire application.
+ *
+ * Building definitions are loaded from Firestore (settings/buildings).
  */
 
-/**
- * Canonical building definitions
- * Each building has:
- * - code: Short code used in room strings (e.g., "GOEBEL 101")
- * - displayName: Human-readable display name
- * - aliases: Alternative names/codes that should map to this building
- */
-export const BUILDINGS = {
-    GOEBEL: {
-        code: 'GOEBEL',
-        displayName: 'Goebel',
-        aliases: ['goebel', 'GOEBEL', 'Goebel', 'Goebel Building', 'GOEBEL BUILDING']
-    },
-    MARY_GIBBS_JONES: {
-        code: 'MARY',
-        displayName: 'Mary Gibbs Jones',
-        aliases: ['mary', 'MARY', 'Mary', 'Mary Gibbs Jones', 'MARY GIBBS JONES', 'FCS', 'Mary Gibbs Jones (FCS)']
-    },
-    PIPER: {
-        code: 'PIPER',
-        displayName: 'Piper',
-        aliases: ['piper', 'PIPER', 'Piper', 'Piper Building', 'PIPER BUILDING']
-    },
-    GENERAL: {
-        code: 'GENERAL',
-        displayName: 'General',
-        aliases: ['general', 'GENERAL', 'General', 'General Assignment', 'General Assignment Room']
-    }
+export const DEFAULT_BUILDING_CONFIG = {
+    version: 1,
+    buildings: []
 };
 
-// Build a lookup map for quick alias resolution
-const buildAliasMap = () => {
+let cachedConfig = { ...DEFAULT_BUILDING_CONFIG, buildings: [] };
+let aliasMap = new Map();
+
+const normalizeBuilding = (building) => {
+    if (!building || typeof building !== 'object') return null;
+    const code = typeof building.code === 'string' ? building.code.trim() : '';
+    const displayName = typeof building.displayName === 'string' ? building.displayName.trim() : '';
+    const aliases = Array.isArray(building.aliases)
+        ? building.aliases.map((alias) => (alias || '').toString().trim()).filter(Boolean)
+        : [];
+    const isActive = building.isActive !== false;
+    if (!code && !displayName) return null;
+    return {
+        code,
+        displayName: displayName || code,
+        aliases,
+        isActive
+    };
+};
+
+export const normalizeBuildingConfig = (raw = {}) => {
+    const buildings = Array.isArray(raw.buildings) ? raw.buildings : [];
+    const normalized = buildings.map(normalizeBuilding).filter(Boolean);
+    return {
+        version: raw.version || DEFAULT_BUILDING_CONFIG.version,
+        buildings: normalized
+    };
+};
+
+const getActiveBuildings = () => {
+    return cachedConfig.buildings.filter((b) => b.isActive !== false);
+};
+
+const buildAliasMap = (buildings) => {
     const map = new Map();
-    Object.values(BUILDINGS).forEach(building => {
-        building.aliases.forEach(alias => {
-            map.set(alias.toLowerCase(), building.displayName);
+    buildings.forEach((building) => {
+        const canonical = building.displayName || building.code;
+        if (!canonical) return;
+        map.set(canonical.toLowerCase(), canonical);
+        if (building.code) {
+            map.set(building.code.toLowerCase(), canonical);
+        }
+        (building.aliases || []).forEach((alias) => {
+            map.set(alias.toLowerCase(), canonical);
         });
-        // Also map the code
-        map.set(building.code.toLowerCase(), building.displayName);
     });
     return map;
 };
 
-const ALIAS_MAP = buildAliasMap();
+export const setBuildingConfig = (raw) => {
+    cachedConfig = normalizeBuildingConfig(raw);
+    aliasMap = buildAliasMap(getActiveBuildings());
+    return cachedConfig;
+};
+
+export const getBuildingConfig = () => cachedConfig;
 
 /**
  * Normalize a building name to its canonical display name
@@ -61,25 +77,21 @@ export const normalizeBuildingName = (buildingName) => {
     const trimmed = buildingName.trim();
     if (!trimmed) return '';
 
-    // Check alias map first
-    const normalized = ALIAS_MAP.get(trimmed.toLowerCase());
+    const normalized = aliasMap.get(trimmed.toLowerCase());
     if (normalized) return normalized;
 
-    // Check if it starts with a known building code
     const lowered = trimmed.toLowerCase();
-    for (const building of Object.values(BUILDINGS)) {
-        if (lowered.startsWith(building.code.toLowerCase())) {
+    for (const building of getActiveBuildings()) {
+        if (building.code && lowered.startsWith(building.code.toLowerCase())) {
             return building.displayName;
         }
-        // Check if any alias is a prefix
-        for (const alias of building.aliases) {
+        for (const alias of building.aliases || []) {
             if (lowered.startsWith(alias.toLowerCase())) {
                 return building.displayName;
             }
         }
     }
 
-    // Return cleaned version of original if not recognized
     return trimmed;
 };
 
@@ -100,36 +112,29 @@ export const getBuildingFromRoom = (roomString) => {
     const room = roomString.trim();
     if (!room) return '';
 
-    // Handle special cases
     const lowered = room.toLowerCase();
     if (lowered === 'online' || lowered.includes('online')) return 'Online';
     if (lowered === 'tba' || lowered === 'to be announced') return '';
     if (lowered.includes('no room needed')) return '';
     if (lowered.includes('off campus')) return 'Off Campus';
 
-    // Remove room number suffix (everything after last word that contains a digit)
-    // But handle cases like "Mary Gibbs Jones (FCS) 213"
-
-    // First, try to match known building patterns
-    for (const building of Object.values(BUILDINGS)) {
-        for (const alias of building.aliases) {
+    for (const building of getActiveBuildings()) {
+        for (const alias of building.aliases || []) {
             if (lowered.startsWith(alias.toLowerCase())) {
                 return building.displayName;
             }
         }
+        if (building.code && lowered.startsWith(building.code.toLowerCase())) {
+            return building.displayName;
+        }
     }
 
-    // Fallback: extract text before the room number
-    // Pattern: everything before a token that starts with digits or is purely digits
     const withoutParens = room.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
     const parts = withoutParens.split(' ');
 
-    // Find where the room number starts
-    let buildingParts = [];
+    const buildingParts = [];
     for (const part of parts) {
-        // Stop if this part is or starts with a number (room number)
         if (/^\d/.test(part)) break;
-        // Stop if this looks like a room identifier (letter + numbers)
         if (/^[A-Z]-?\d+$/i.test(part)) break;
         buildingParts.push(part);
     }
@@ -139,7 +144,6 @@ export const getBuildingFromRoom = (roomString) => {
         return normalizeBuildingName(extractedBuilding);
     }
 
-    // Last resort: take first word
     return normalizeBuildingName(parts[0] || room);
 };
 
@@ -148,7 +152,10 @@ export const getBuildingFromRoom = (roomString) => {
  * @returns {string[]} Array of building display names
  */
 export const getCanonicalBuildingList = () => {
-    return Object.values(BUILDINGS).map(b => b.displayName).sort();
+    return getActiveBuildings()
+        .map((building) => building.displayName)
+        .filter(Boolean)
+        .sort();
 };
 
 /**
@@ -184,7 +191,10 @@ export const buildingMatches = (buildingName, filterBuilding) => {
 };
 
 export default {
-    BUILDINGS,
+    DEFAULT_BUILDING_CONFIG,
+    normalizeBuildingConfig,
+    setBuildingConfig,
+    getBuildingConfig,
     normalizeBuildingName,
     getBuildingFromRoom,
     getCanonicalBuildingList,

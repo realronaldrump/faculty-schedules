@@ -9,27 +9,12 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
-import { doc, updateDoc, addDoc, deleteDoc, getDoc } from 'firebase/firestore';
-import { fetchSchedulesByTerm, fetchAvailableSemesters } from '../utils/dataImportUtils';
-import { logCreate, logUpdate, logDelete } from '../utils/changeLogger';
-import { parseCourseCode } from '../utils/courseUtils';
+import { doc, getDoc } from 'firebase/firestore';
+import { fetchSchedulesByTerm } from '../utils/dataImportUtils';
+import { fetchTermOptions } from '../utils/termDataUtils';
+import { normalizeTermLabel } from '../utils/termUtils';
 
 const ScheduleContext = createContext(null);
-
-// Helper to derive credits 
-const deriveCreditsFromSchedule = (courseCode, credits) => {
-    if (credits !== undefined && credits !== null && credits !== '') {
-        const numericCredits = Number(credits);
-        if (!Number.isNaN(numericCredits)) {
-            return numericCredits;
-        }
-    }
-    const parsed = parseCourseCode(courseCode || '');
-    if (parsed && !parsed.error && parsed.credits !== undefined && parsed.credits !== null) {
-        return parsed.credits;
-    }
-    return null;
-};
 
 export const ScheduleProvider = ({ children }) => {
     const [rawScheduleData, setRawScheduleData] = useState([]);
@@ -40,54 +25,115 @@ export const ScheduleProvider = ({ children }) => {
     const [selectedSemester, setSelectedSemester] = useState(() => {
         return localStorage.getItem('selectedSemester') || '';
     });
-    const [availableSemesters, setAvailableSemesters] = useState([]);
+    const [adminDefaultTerm, setAdminDefaultTerm] = useState('');
+    const [includeArchived, setIncludeArchived] = useState(false);
+    const [termOptions, setTermOptions] = useState([]);
 
     // Persist selected semester
     useEffect(() => {
-        if (selectedSemester) {
-            localStorage.setItem('selectedSemester', selectedSemester);
+        if (!selectedSemester) return;
+        const normalized = normalizeTermLabel(selectedSemester);
+        localStorage.setItem('selectedSemester', normalized || selectedSemester);
+        if (normalized && normalized !== selectedSemester) {
+            setSelectedSemester(normalized);
         }
     }, [selectedSemester]);
 
-    // Load available semesters on mount
+    // Load admin default term
     useEffect(() => {
-        const initSemesters = async () => {
+        const loadDefault = async () => {
             try {
-                const list = await fetchAvailableSemesters();
-                setAvailableSemesters(list);
-
-                // If no selected semester, or invalid, try to pick default
-                if (list.length > 0 && (!selectedSemester || !list.includes(selectedSemester))) {
-                    // Try to get admin default
-                    try {
-                        const settingsRef = doc(db, 'settings', 'app');
-                        const settingsSnap = await getDoc(settingsRef);
-                        const adminDefault = settingsSnap.exists() ? settingsSnap.data()?.defaultTerm : null;
-
-                        if (adminDefault && list.includes(adminDefault)) {
-                            setSelectedSemester(adminDefault);
-                        } else {
-                            setSelectedSemester(list[0]);
-                        }
-                    } catch (e) {
-                        setSelectedSemester(list[0]);
-                    }
+                const settingsRef = doc(db, 'settings', 'app');
+                const settingsSnap = await getDoc(settingsRef);
+                if (settingsSnap.exists()) {
+                    const defaultTerm = settingsSnap.data()?.defaultTerm || '';
+                    setAdminDefaultTerm(normalizeTermLabel(defaultTerm));
                 }
             } catch (e) {
-                console.error("Failed to load semesters", e);
+                console.error('Failed to load default term', e);
             }
         };
-        initSemesters();
+        loadDefault();
     }, []); // Run once on mount
 
+    const refreshTerms = useCallback(async () => {
+        try {
+            const terms = await fetchTermOptions({ includeArchived: true });
+            setTermOptions(terms);
+            return terms;
+        } catch (e) {
+            console.error('Failed to load terms', e);
+            setTermOptions([]);
+            return [];
+        }
+    }, []);
+
+    // Load terms on mount
+    useEffect(() => {
+        refreshTerms();
+    }, [refreshTerms]);
+
+    const visibleTerms = useMemo(() => {
+        if (includeArchived) return termOptions;
+        return termOptions.filter(term => term.status !== 'archived');
+    }, [includeArchived, termOptions]);
+
+    const availableSemesters = useMemo(() => (
+        visibleTerms.map(term => term.term).filter(Boolean)
+    ), [visibleTerms]);
+
+    const getTermByLabel = useCallback((label) => {
+        if (!label) return null;
+        const normalized = normalizeTermLabel(label) || label;
+        return termOptions.find(term =>
+            term.term === normalized || term.termCode === normalized
+        ) || null;
+    }, [termOptions]);
+
+    const selectedTermMeta = useMemo(() => (
+        getTermByLabel(selectedSemester)
+    ), [getTermByLabel, selectedSemester]);
+
+    const isSelectedTermLocked = useMemo(() => {
+        if (!selectedTermMeta) return false;
+        return selectedTermMeta.locked === true || selectedTermMeta.status === 'archived';
+    }, [selectedTermMeta]);
+
+    const isTermLocked = useCallback((label) => {
+        const meta = getTermByLabel(label);
+        return meta ? (meta.locked === true || meta.status === 'archived') : false;
+    }, [getTermByLabel]);
+
+    // Ensure selection stays valid when terms change
+    useEffect(() => {
+        if (availableSemesters.length === 0) return;
+        const normalizedSelected = normalizeTermLabel(selectedSemester) || selectedSemester;
+        if (normalizedSelected && availableSemesters.includes(normalizedSelected)) {
+            if (normalizedSelected !== selectedSemester) {
+                setSelectedSemester(normalizedSelected);
+            }
+            return;
+        }
+        const normalizedDefault = normalizeTermLabel(adminDefaultTerm);
+        const fallback = normalizedDefault && availableSemesters.includes(normalizedDefault)
+            ? normalizedDefault
+            : availableSemesters[0];
+        if (fallback && fallback !== selectedSemester) {
+            setSelectedSemester(fallback);
+        }
+    }, [availableSemesters, adminDefaultTerm, selectedSemester]);
     // Load schedules when selectedSemester changes
-    const loadSchedules = useCallback(async (term) => {
-        if (!term) return;
+    const loadSchedules = useCallback(async (termLabel) => {
+        if (!termLabel) return;
         setLoading(true);
         setError(null);
         try {
-            console.log(`📅 Loading schedules for ${term}...`);
-            const { schedules } = await fetchSchedulesByTerm(term);
+            const termMeta = getTermByLabel(termLabel);
+            console.log(`📅 Loading schedules for ${termLabel}...`);
+            const { schedules } = await fetchSchedulesByTerm({
+                term: termLabel,
+                termCode: termMeta?.termCode || ''
+            });
             setRawScheduleData(schedules);
             console.log(`✅ Loaded ${schedules.length} schedules.`);
         } catch (err) {
@@ -96,7 +142,7 @@ export const ScheduleProvider = ({ children }) => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [getTermByLabel]);
 
     useEffect(() => {
         if (selectedSemester) {
@@ -105,69 +151,37 @@ export const ScheduleProvider = ({ children }) => {
     }, [selectedSemester, loadSchedules]);
 
 
-    // Computed schedule objects (flattened for UI)
-    const scheduleData = useMemo(() => {
-        if (!rawScheduleData || rawScheduleData.length === 0) return [];
-
-        const flattened = [];
-        rawScheduleData.forEach(schedule => {
-            if (!schedule || !schedule.id) return;
-
-            // Helper to create reliable display strings
-            const getRoomDisplay = (s) => {
-                if (s.isOnline) return 'Online';
-                if (Array.isArray(s.roomNames)) return s.roomNames.join('; ');
-                return s.roomName || '';
-            };
-
-            const commonProps = {
-                Course: schedule.courseCode || '',
-                'Course Title': schedule.courseTitle || '',
-                Instructor: schedule.instructorName || '',
-                // Note: In strict mode we'd resolve ID -> Name via PeopleContext,
-                // but ScheduleContext shouldn't strictly depend on PeopleContext to avoid circularity if possible.
-                // For now, backing on denormalized name or doing lookup at UI layer is safer.
-                Section: schedule.section || '',
-                Credits: deriveCreditsFromSchedule(schedule.courseCode, schedule.credits),
-                Program: schedule.program || '',
-                Term: schedule.term || '',
-                Status: schedule.status || 'Active',
-                ...schedule,
-                _originalId: schedule.id
-            };
-
-            if (schedule.meetingPatterns && schedule.meetingPatterns.length > 0) {
-                schedule.meetingPatterns.forEach((pattern, idx) => {
-                    flattened.push({
-                        ...commonProps,
-                        id: `${schedule.id}-${idx}`,
-                        Day: pattern.day,
-                        'Start Time': pattern.startTime,
-                        'End Time': pattern.endTime,
-                        Room: getRoomDisplay(schedule)
-                    });
-                });
-            } else {
-                flattened.push({
-                    ...commonProps,
-                    id: schedule.id,
-                    Room: getRoomDisplay(schedule)
-                });
-            }
-        });
-        return flattened;
-    }, [rawScheduleData]);
-
     const value = useMemo(() => ({
         rawScheduleData,
-        scheduleData,
         loading,
         error,
         selectedSemester,
         setSelectedSemester,
         availableSemesters,
-        refreshSchedules: () => loadSchedules(selectedSemester)
-    }), [rawScheduleData, scheduleData, loading, error, selectedSemester, availableSemesters, loadSchedules]);
+        termOptions,
+        includeArchived,
+        setIncludeArchived,
+        selectedTermMeta,
+        isSelectedTermLocked,
+        isTermLocked,
+        getTermByLabel,
+        refreshSchedules: () => loadSchedules(selectedSemester),
+        refreshTerms
+    }), [
+        rawScheduleData,
+        loading,
+        error,
+        selectedSemester,
+        availableSemesters,
+        termOptions,
+        includeArchived,
+        selectedTermMeta,
+        isSelectedTermLocked,
+        isTermLocked,
+        getTermByLabel,
+        loadSchedules,
+        refreshTerms
+    ]);
 
     return (
         <ScheduleContext.Provider value={value}>

@@ -107,7 +107,9 @@ const getCurrentUserInfo = () => {
           const parsed = JSON.parse(cached);
           if (parsed && parsed.role) cachedRole = parsed.role;
         }
-      } catch (_) {}
+      } catch (error) {
+        void error;
+      }
 
       return {
         userId: currentUser.uid,
@@ -456,5 +458,4 @@ export const getActivityStats = async (options = {}) => {
     return { total: 0, byType: {}, byUser: {}, byHour: {}, recentActivity: [] };
   }
 };
-
 

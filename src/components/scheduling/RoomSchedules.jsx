@@ -10,11 +10,13 @@ import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
 import { useData } from '../../contexts/DataContext';
 import { usePeople } from '../../contexts/PeopleContext';
 import { useTutorial } from '../../contexts/TutorialContext';
+import { useAppConfig } from '../../contexts/AppConfigContext';
 
 const RoomSchedules = () => {
   const { scheduleData = [], facultyData = [] } = useData();
   const { loadPeople } = usePeople();
   const { startTutorial } = useTutorial();
+  const { buildingConfigVersion } = useAppConfig();
 
   useEffect(() => {
     loadPeople();
@@ -84,7 +86,7 @@ const RoomSchedules = () => {
       if (b && b !== 'Online' && b !== 'Off Campus') buildings.add(b);
     });
     return Array.from(buildings).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  }, [uniqueRooms]);
+  }, [uniqueRooms, buildingConfigVersion]);
 
   // Filter rooms based on search
   const filteredRooms = useMemo(() => {
@@ -233,8 +235,13 @@ const RoomSchedules = () => {
     return { count: visibleRooms.length, sessions: totals.sessions, hours: totals.hours, avgUtilization: avgUtil };
   }, [visibleRooms, roomStats]);
 
-  const handleShowContactCard = (facultyName) => {
-    const faculty = facultyData.find(f => f.name === facultyName);
+  const facultyById = useMemo(() => {
+    return new Map((facultyData || []).map(faculty => [faculty.id, faculty]));
+  }, [facultyData]);
+
+  const handleShowContactCard = (facultyIdOrName, fallbackName = '') => {
+    const faculty = facultyById.get(facultyIdOrName) ||
+      facultyData.find(f => f.name === (fallbackName || facultyIdOrName));
     if (faculty) {
       setSelectedFacultyForCard(faculty);
     }
@@ -383,7 +390,7 @@ const RoomSchedules = () => {
                       <div className="font-bold truncate">{item.Course}</div>
                       <button
                         className="truncate hover:underline w-full text-left"
-                        onClick={(e) => { e.stopPropagation(); handleShowContactCard(item.Instructor); }}
+                        onClick={(e) => { e.stopPropagation(); handleShowContactCard(item.instructorIds?.[0] || item.instructorId || item.Instructor, item.Instructor); }}
                       >
                         {item.Instructor}
                       </button>
@@ -435,7 +442,7 @@ const RoomSchedules = () => {
                       <div className="flex items-center space-x-4 mt-1">
                         <button
                           className="text-sm text-baylor-green hover:underline font-medium"
-                          onClick={(e) => { e.stopPropagation(); handleShowContactCard(session.Instructor); }}
+                        onClick={(e) => { e.stopPropagation(); handleShowContactCard(session.instructorIds?.[0] || session.instructorId || session.Instructor, session.Instructor); }}
                         >
                           {session.Instructor}
                         </button>

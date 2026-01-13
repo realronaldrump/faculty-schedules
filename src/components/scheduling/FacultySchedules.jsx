@@ -38,12 +38,19 @@ const FacultySchedules = () => {
 
   // Get unique instructors (filtered by adjunct preference)
   const uniqueInstructors = useMemo(() => {
-    const instructorNames = [...new Set(scheduleData.map(item => {
-      if (item.instructor) {
-        return `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim();
-      }
-      return item.Instructor || item.instructorName || '';
-    }))].filter(i => i !== '');
+    const names = new Set();
+    scheduleData.forEach(item => {
+      const fallbackName = item.instructor
+        ? `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim()
+        : (item.Instructor || item.instructorName || '');
+      const list = Array.isArray(item.instructorNames) && item.instructorNames.length > 0
+        ? item.instructorNames
+        : [fallbackName].filter(Boolean);
+      list.forEach((name) => {
+        if (name && name !== 'Staff') names.add(name);
+      });
+    });
+    const instructorNames = Array.from(names);
 
     // Filter out adjuncts if showAdjuncts is false
     if (!showAdjuncts) {
@@ -163,22 +170,26 @@ const FacultySchedules = () => {
   // Get schedule data for selected faculty
   const getFacultyScheduleData = (facultyName, day) => {
     const facultySchedule = scheduleData.filter(item => {
-      const instructorName = item.instructor ?
-        `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim() :
-        (item.Instructor || item.instructorName || '');
+      const fallbackName = item.instructor
+        ? `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim()
+        : (item.Instructor || item.instructorName || '');
+      const instructorNames = Array.isArray(item.instructorNames) && item.instructorNames.length > 0
+        ? item.instructorNames
+        : [fallbackName].filter(Boolean);
+      const matchesInstructor = instructorNames.includes(facultyName);
 
       if (item.meetingPatterns) {
-        return instructorName === facultyName &&
+        return matchesInstructor &&
           item.meetingPatterns.some(pattern => pattern.day === day);
       }
 
-      return instructorName === facultyName && item.Day === day;
+      return matchesInstructor && item.Day === day;
     });
 
     const courses = facultySchedule
       .flatMap(item => {
         if (item.meetingPatterns) {
-          return item.meetingPatterns
+              return item.meetingPatterns
             .filter(pattern => pattern.day === day)
             .map(pattern => ({
               id: `${item.id}-${pattern.day}`,
@@ -187,7 +198,9 @@ const FacultySchedules = () => {
               course: item.courseCode || item.Course,
               title: item.courseTitle || item['Course Title'],
               room: (() => {
-                if (item.isOnline) return 'Online';
+                if (item.locationType === 'no_room' || item.isOnline) {
+                  return item.locationLabel || 'No Room Needed';
+                }
                 if (Array.isArray(item.roomNames) && item.roomNames.length > 0) {
                   return item.roomNames.join('; ');
                 }
@@ -207,7 +220,9 @@ const FacultySchedules = () => {
           course: item.Course,
           title: item['Course Title'],
           room: (() => {
-            if (item.isOnline) return 'Online';
+            if (item.locationType === 'no_room' || item.isOnline) {
+              return item.locationLabel || 'No Room Needed';
+            }
             if (Array.isArray(item.roomNames) && item.roomNames.length > 0) {
               return item.roomNames.join('; ');
             }

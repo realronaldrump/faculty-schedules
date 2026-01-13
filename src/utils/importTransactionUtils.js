@@ -1,9 +1,13 @@
-import { collection, getDocs, getDoc, doc, updateDoc, addDoc, deleteDoc, writeBatch, query, orderBy, setDoc } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, updateDoc, addDoc, deleteDoc, writeBatch, query, orderBy, setDoc, where } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { logCreate, logUpdate, logDelete, logBulkUpdate, logImport } from './changeLogger';
-import { findMatchingPerson, parseFullName, parseInstructorField } from './dataImportUtils';
+import { parseInstructorField, parseInstructorFieldList } from './dataImportUtils';
+import { parseFullName } from './nameUtils';
 import { parseCourseCode, deriveCreditsFromCatalogNumber } from './courseUtils';
-import { getBuildingFromRoom } from './buildingUtils';
+import { parseMeetingPatterns } from './meetingPatternUtils';
+import { findPersonMatch, makeNameKey, normalizeBaylorId } from './personMatchUtils';
+import { normalizeTermLabel, termCodeFromLabel, termLabelFromCode } from './termUtils';
+import { getRoomKeyFromRoomRecord, parseRoomLabel, splitRoomLabels } from './roomUtils';
 
 // Import transaction model for tracking changes
 export class ImportTransaction {
@@ -31,6 +35,7 @@ export class ImportTransaction {
         deleted: []
       }
     };
+    this.matchingIssues = [];
     this.originalData = {}; // Store original data for rollback
     this.stats = {
       totalChanges: 0,
@@ -54,13 +59,33 @@ export class ImportTransaction {
       originalData,
       timestamp: new Date().toISOString(),
       applied: false,
-      groupKey: options.groupKey || null
+      groupKey: options.groupKey || null,
+      pendingResolution: options.pendingResolution || false,
+      matchIssueId: options.matchIssueId || null
     };
 
     this.changes[collection][action === 'add' ? 'added' : action === 'modify' ? 'modified' : 'deleted'].push(change);
     this.updateStats();
     this.lastModified = new Date().toISOString();
     return change.id;
+  }
+
+  addMatchIssue(issue) {
+    const matchIssue = {
+      id: `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      type: issue.type || 'person',
+      importType: issue.importType || 'schedule',
+      matchKey: issue.matchKey || '',
+      reason: issue.reason || '',
+      proposedPerson: issue.proposedPerson || {},
+      candidates: Array.isArray(issue.candidates) ? issue.candidates : [],
+      pendingPersonChangeId: issue.pendingPersonChangeId || null,
+      scheduleChangeIds: Array.isArray(issue.scheduleChangeIds) ? issue.scheduleChangeIds : [],
+      createdAt: new Date().toISOString()
+    };
+    this.matchingIssues.push(matchIssue);
+    this.lastModified = new Date().toISOString();
+    return matchIssue;
   }
 
   updateStats() {
@@ -134,6 +159,7 @@ export class ImportTransaction {
       timestamp: this.timestamp,
       status: this.status,
       changes: this.changes,
+      matchingIssues: this.matchingIssues,
       originalData: this.originalData,
       stats: this.stats,
       createdBy: this.createdBy,
@@ -144,31 +170,56 @@ export class ImportTransaction {
   // Create from database format
   static fromFirestore(data) {
     const transaction = Object.assign(new ImportTransaction(), data);
+    if (!Array.isArray(transaction.matchingIssues)) {
+      transaction.matchingIssues = [];
+    }
     return transaction;
   }
 }
 
 // Preview import changes without committing to database
 export const previewImportChanges = async (csvData, importType, selectedSemester, options = {}) => {
-  const { persist = true } = options;
-  const transaction = new ImportTransaction(importType, `${importType} import preview`, selectedSemester);
+  const { persist = true, includeOfficeRooms = true } = options;
+  const normalizedSemester = normalizeTermLabel(selectedSemester || '');
+  const transaction = new ImportTransaction(
+    importType,
+    `${importType} import preview`,
+    normalizedSemester || selectedSemester
+  );
 
   try {
-    // Load existing data for comparison
-    const [existingSchedules, existingPeople, existingRooms] = await Promise.all([
-      getDocs(collection(db, COLLECTIONS.SCHEDULES)),
-      getDocs(collection(db, COLLECTIONS.PEOPLE)),
-      getDocs(collection(db, COLLECTIONS.ROOMS))
-    ]);
+    let existingSchedulesData = [];
+    let existingPeopleData = [];
+    let existingRoomsData = [];
 
-    const existingSchedulesData = existingSchedules.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const existingPeopleData = existingPeople.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const existingRoomsData = existingRooms.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    if (importType === 'schedule') {
+      const termCode = termCodeFromLabel(normalizedSemester || selectedSemester || '');
+      const schedulesQuery = termCode
+        ? query(collection(db, COLLECTIONS.SCHEDULES), where('termCode', '==', termCode))
+        : (normalizedSemester ? query(collection(db, COLLECTIONS.SCHEDULES), where('term', '==', normalizedSemester)) : null);
+
+      const [schedulesSnapshot, peopleSnapshot, roomsSnapshot] = await Promise.all([
+        schedulesQuery ? getDocs(schedulesQuery) : Promise.resolve({ docs: [] }),
+        getDocs(collection(db, COLLECTIONS.PEOPLE)),
+        getDocs(collection(db, COLLECTIONS.ROOMS))
+      ]);
+
+      existingSchedulesData = schedulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      existingPeopleData = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      existingRoomsData = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } else {
+      const [peopleSnapshot, roomsSnapshot] = await Promise.all([
+        getDocs(collection(db, COLLECTIONS.PEOPLE)),
+        getDocs(collection(db, COLLECTIONS.ROOMS))
+      ]);
+      existingPeopleData = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      existingRoomsData = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    }
 
     if (importType === 'schedule') {
       await previewScheduleChanges(csvData, transaction, existingSchedulesData, existingPeopleData, existingRoomsData);
     } else if (importType === 'directory') {
-      await previewDirectoryChanges(csvData, transaction, existingPeopleData);
+      await previewDirectoryChanges(csvData, transaction, existingPeopleData, existingRoomsData, { includeOfficeRooms });
     }
 
     // Store transaction in database for cross-browser access (optional)
@@ -186,14 +237,6 @@ export const previewImportChanges = async (csvData, importType, selectedSemester
     console.error('Error previewing import changes:', error);
     throw error;
   }
-};
-
-const toLowerTrim = (value) => (value || '').toLowerCase().trim();
-
-const makeNameKey = (firstName, lastName) => {
-  const first = toLowerTrim(firstName).split(/\s+/)[0] || '';
-  const last = toLowerTrim(lastName);
-  return [first, last].filter(Boolean).join(' ').trim();
 };
 
 const deriveNameKeyFromDisplayName = (displayName) => {
@@ -263,29 +306,50 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
     : Number.parseFloat(rawCredits);
   const credits = derivedCredits ?? (Number.isNaN(numericFallback) ? null : numericFallback) ?? (parsedCourse?.credits ?? null);
 
-  const term = row.Term || fallbackTerm || '';
-  const termCode = row['Term Code'] || '';
+  const rawTerm = row.Term || fallbackTerm || '';
+  const normalizedTerm = normalizeTermLabel(rawTerm);
+  const term = normalizedTerm || rawTerm;
+  const termCode = termCodeFromLabel(row['Term Code'] || normalizedTerm);
   const academicYear = extractAcademicYear(term);
 
   const instructorField = row.Instructor || '';
-  const parsedInstructor = parseInstructorField(instructorField) || { firstName: '', lastName: '', id: '' };
-  const normalizedInstructorName = (() => {
-    const firstName = (parsedInstructor.firstName || '').trim();
-    const lastName = (parsedInstructor.lastName || '').trim();
+  const parsedInstructors = parseInstructorFieldList(instructorField);
+  const primaryInstructor = parsedInstructors.find((info) => info.isPrimary) || parsedInstructors[0] || null;
+  const formatInstructorName = (info) => {
+    if (!info) return '';
+    const firstName = (info.firstName || '').trim();
+    const lastName = (info.lastName || '').trim();
     if (firstName && lastName) return `${lastName}, ${firstName}`;
-    if (lastName) return lastName;
-    if (firstName) return firstName;
-    return instructorField.trim();
-  })();
-  const instructorBaylorId = (parsedInstructor.id || '').toString().trim();
+    return lastName || firstName;
+  };
+  const normalizedInstructorName = parsedInstructors.length > 1
+    ? parsedInstructors.map(formatInstructorName).filter(Boolean).join('; ')
+    : formatInstructorName(primaryInstructor) || instructorField.trim();
+  const instructorBaylorId = normalizeBaylorId(primaryInstructor?.id);
+  const parsedInstructor = primaryInstructor || parseInstructorField(instructorField) || { firstName: '', lastName: '', id: '' };
 
   const meetingPatternRaw = (row['Meeting Pattern'] || row['Meetings'] || '').toString().trim();
   const meetingPatterns = parseMeetingPatterns(row);
 
+  const instructionMethod = (row['Inst. Method'] || row['Instruction Method'] || '').toString().trim();
+
   const roomRaw = (row.Room || '').toString().trim();
-  const roomNames = roomRaw
-    ? Array.from(new Set(roomRaw.split(/;|\n/).map((s) => s.trim()).filter(Boolean)))
-    : [];
+  const roomNames = roomRaw ? splitRoomLabels(roomRaw) : [];
+  const upperRoomLabel = roomRaw.toUpperCase();
+  const isNoRoomLabel = upperRoomLabel === 'NO ROOM NEEDED';
+  const isOnlineLabel = upperRoomLabel.includes('ONLINE');
+  const inferredIsOnline = isOnlineLabel || instructionMethod.toLowerCase().includes('online');
+  const hasPhysicalRoom = roomRaw && !isNoRoomLabel && !isOnlineLabel;
+  const locationType = hasPhysicalRoom || (!inferredIsOnline && !isNoRoomLabel && !isOnlineLabel)
+    ? 'room'
+    : 'no_room';
+  const locationLabel = locationType === 'no_room' ? 'No Room Needed' : '';
+  const filteredRoomNames = locationType === 'no_room'
+    ? []
+    : roomNames.filter((name) => {
+      const upper = name.toUpperCase();
+      return !(upper === 'NO ROOM NEEDED' || upper.includes('ONLINE'));
+    });
 
   return {
     courseCode,
@@ -299,19 +363,23 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
     academicYear,
     instructorField,
     parsedInstructor,
+    parsedInstructors,
     normalizedInstructorName,
     instructorBaylorId,
     meetingPatternRaw,
     meetingPatterns,
     roomRaw,
-    roomNames,
+    roomNames: filteredRoomNames,
+    locationType,
+    locationLabel,
+    isOnline: inferredIsOnline,
     subjectCode: row['Subject Code'] || '',
     catalogNumber,
     departmentCode: row['Department Code'] || '',
     scheduleType: row['Schedule Type'] || 'Class Instruction',
     status: row.Status || 'Active',
     partOfTerm: row['Part of Term'] || '',
-    instructionMethod: row['Inst. Method'] || row['Instruction Method'] || '',
+    instructionMethod,
     campus: row.Campus || '',
     visibleOnWeb: row['Visible on Web'] || '',
     specialApproval: row['Special Approval'] || ''
@@ -386,19 +454,16 @@ const normalizeInstructorDisplayName = (instructorRecord, parsedInstructor, fall
 
 const previewScheduleChanges = async (csvData, transaction, existingSchedules, existingPeople, existingRooms) => {
   // Create maps for quick lookup
-  const peopleMapByName = new Map();
-  const peopleMapByBaylorId = new Map();
   const roomsMap = new Map();
+  const roomsKeyMap = new Map();
   const scheduleMap = new Map();
-
-  existingPeople.forEach(person => {
-    const nameKey = makeNameKey(person.firstName, person.lastName);
-    if (nameKey) peopleMapByName.set(nameKey, person);
-    const baylorId = (person.baylorId || '').trim();
-    if (baylorId) peopleMapByBaylorId.set(baylorId, person);
-  });
+  const pendingMatchMap = new Map();
 
   existingRooms.forEach(room => {
+    const roomKey = getRoomKeyFromRoomRecord(room);
+    if (roomKey && !roomsKeyMap.has(roomKey)) {
+      roomsKeyMap.set(roomKey, room);
+    }
     const keys = [room.name, room.displayName].map((k) => normalizeRoomName(k)).filter(Boolean);
     keys.forEach((k) => roomsMap.set(k, room));
   });
@@ -417,35 +482,96 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
     const preSection = baseData.section;
     const preTerm = baseData.term;
     const groupKey = `sched_${preCourseCode}_${preSection}_${preTerm}`;
-    // Extract instructor information (use Baylor ID match first)
+    // Extract instructor information (exact match only, flag for review otherwise)
     const instructorField = baseData.instructorField;
-    const parsed = baseData.parsedInstructor || { firstName: '', lastName: '', id: null };
-    const nameKey = makeNameKey(parsed.firstName, parsed.lastName);
-    const baylorId = baseData.instructorBaylorId;
+    const parsedList = Array.isArray(baseData.parsedInstructors) && baseData.parsedInstructors.length > 0
+      ? baseData.parsedInstructors
+      : (baseData.parsedInstructor ? [baseData.parsedInstructor] : []);
 
-    let instructor = null;
     let instructorId = null;
+    const instructorAssignments = [];
+    const instructorIds = new Set();
+    const instructorPeople = new Map();
+    const matchIssuesForSchedule = [];
 
-    if (baylorId && peopleMapByBaylorId.has(baylorId)) {
-      instructor = peopleMapByBaylorId.get(baylorId);
-      instructorId = instructor.id;
-    } else if (nameKey && peopleMapByName.has(nameKey)) {
-      instructor = peopleMapByName.get(nameKey);
-      instructorId = instructor.id;
-    } else if (parsed.firstName && parsed.lastName) {
-      const newInstructor = {
-        firstName: parsed.firstName,
-        lastName: parsed.lastName,
-        email: '',
-        baylorId: baylorId || '',
-        roles: ['faculty'],
-        isActive: true
-      };
-      transaction.addChange('people', 'add', newInstructor, null, { groupKey });
-      instructor = newInstructor;
-      if (nameKey) peopleMapByName.set(nameKey, newInstructor);
-      if (baylorId) peopleMapByBaylorId.set(baylorId, newInstructor);
+    const resolveMatchIssue = (parsed, matchResult) => {
+      const baylorId = normalizeBaylorId(parsed?.id);
+      const matchKey = baylorId ? `baylor:${baylorId}` : makeNameKey(parsed?.firstName, parsed?.lastName);
+      if (!matchKey) return null;
+      let matchIssue = pendingMatchMap.get(matchKey) || null;
+      if (!matchIssue) {
+        const proposedPerson = {
+          firstName: parsed?.firstName || '',
+          lastName: parsed?.lastName || '',
+          email: '',
+          baylorId: baylorId || '',
+          roles: ['faculty'],
+          isActive: true
+        };
+        matchIssue = transaction.addMatchIssue({
+          importType: 'schedule',
+          matchKey,
+          reason: matchResult?.reason || 'No exact match',
+          proposedPerson,
+          candidates: matchResult?.candidates || [],
+          scheduleChangeIds: []
+        });
+        matchIssue.pendingPersonChangeId = transaction.addChange(
+          'people',
+          'add',
+          proposedPerson,
+          null,
+          { groupKey: `person_${matchIssue.id}`, pendingResolution: true, matchIssueId: matchIssue.id }
+        );
+        pendingMatchMap.set(matchKey, matchIssue);
+      }
+      return matchIssue;
+    };
+
+    for (const parsed of parsedList) {
+      const baylorId = normalizeBaylorId(parsed?.id);
+      if (!parsed?.firstName && !parsed?.lastName && !baylorId) continue;
+
+      const matchResult = findPersonMatch({
+        firstName: parsed?.firstName || '',
+        lastName: parsed?.lastName || '',
+        baylorId,
+        clssInstructorId: parsed?.id || null
+      }, existingPeople, { minScore: 0.85, maxCandidates: 5 });
+
+      if (matchResult.status === 'exact' && matchResult.person?.id) {
+        const personId = matchResult.person.id;
+        instructorIds.add(personId);
+        instructorPeople.set(personId, matchResult.person);
+        instructorAssignments.push({
+          personId,
+          isPrimary: parsed?.isPrimary || false,
+          percentage: Number.isFinite(parsed?.percentage) ? parsed.percentage : 100
+        });
+      } else {
+        const matchIssue = resolveMatchIssue(parsed, matchResult);
+        if (matchIssue) {
+          matchIssuesForSchedule.push(matchIssue);
+          instructorAssignments.push({
+            matchIssueId: matchIssue.id,
+            isPrimary: parsed?.isPrimary || false,
+            percentage: Number.isFinite(parsed?.percentage) ? parsed.percentage : 100
+          });
+        }
+      }
     }
+
+    if (instructorAssignments.length > 0 && !instructorAssignments.some((a) => a.isPrimary)) {
+      instructorAssignments[0].isPrimary = true;
+    }
+
+    const primaryAssignment = instructorAssignments.find((a) => a.isPrimary)
+      || [...instructorAssignments].sort((a, b) => (b.percentage || 0) - (a.percentage || 0))[0];
+    instructorId = primaryAssignment?.personId || null;
+
+    const primaryParsed = parsedList.find((info) => info.isPrimary) || parsedList[0] || baseData.parsedInstructor;
+    const primaryBaylorId = normalizeBaylorId(primaryParsed?.id);
+    const primaryInstructor = instructorId ? instructorPeople.get(instructorId) : null;
 
     // Extract room information (support simultaneous multi-rooms)
     const splitRooms = baseData.roomNames;
@@ -453,32 +579,39 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
     let primaryRoomId = null;
     if (splitRooms.length > 0) {
       for (const singleRoom of splitRooms) {
-        const key = normalizeRoomName(singleRoom);
-        if (!key) continue;
-        let room = roomsMap.get(key);
-        const roomNameUpper = singleRoom.toUpperCase();
-        const shouldAttemptCreation =
-          singleRoom &&
-          roomNameUpper !== 'NO ROOM NEEDED' &&
-          !roomNameUpper.includes('ONLINE') &&
-          !roomNameUpper.includes('ZOOM') &&
-          !roomNameUpper.includes('VIRTUAL');
+        const nameKey = normalizeRoomName(singleRoom);
+        if (!nameKey) continue;
 
-        if (!room && shouldAttemptCreation) {
-          const newRoom = {
-            name: singleRoom,
-            displayName: singleRoom,
-            building: getBuildingFromRoom(singleRoom),
-            capacity: null,
-            type: 'Classroom',
-            isActive: true
-          };
-          transaction.addChange('rooms', 'add', newRoom, null, { groupKey });
-          roomsMap.set(key, { ...newRoom });
-          room = roomsMap.get(key);
+        const parsed = parseRoomLabel(singleRoom);
+        const roomKey = parsed?.roomKey || '';
+
+        let room = roomKey ? roomsKeyMap.get(roomKey) : null;
+        if (!room) {
+          room = roomsMap.get(nameKey) || null;
         }
 
-        if (room && room.id) {
+        if (!room && roomKey) {
+          const now = new Date().toISOString();
+          const newRoom = {
+            name: parsed.displayName,
+            displayName: parsed.displayName,
+            building: parsed.building,
+            roomNumber: parsed.roomNumber,
+            roomKey,
+            capacity: null,
+            type: 'Classroom',
+            isActive: true,
+            createdAt: now,
+            updatedAt: now
+          };
+          transaction.addChange('rooms', 'add', newRoom, null, { groupKey });
+          const placeholder = { id: roomKey, ...newRoom };
+          roomsKeyMap.set(roomKey, placeholder);
+          buildRoomNameKeys(placeholder).forEach((key) => roomsMap.set(key, placeholder));
+          room = placeholder;
+        }
+
+        if (room?.id) {
           if (!resolvedRoomIds.includes(room.id)) {
             resolvedRoomIds.push(room.id);
           }
@@ -504,7 +637,12 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
 
     // Create schedule entry
     const finalCrn = baseData.crn;
-    const instructorDisplayName = normalizeInstructorDisplayName(instructor, parsed, instructorField);
+    const instructorDisplayName = parsedList.length > 1
+      ? (baseData.normalizedInstructorName || instructorField)
+      : normalizeInstructorDisplayName(primaryInstructor, primaryParsed, instructorField);
+    const instructorMatchIssueIds = instructorAssignments
+      .map((assignment) => assignment.matchIssueId)
+      .filter(Boolean);
     const uniqueRoomIds = Array.from(new Set(resolvedRoomIds));
 
     const scheduleData = {
@@ -517,36 +655,55 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
       termCode: baseData.termCode,
       academicYear: baseData.academicYear,
       instructorId: instructorId,
+      instructorIds: Array.from(instructorIds),
+      instructorAssignments,
       // Prefer normalized instructor name in "Last, First" format
       instructorName: instructorDisplayName,
-      instructorBaylorId: baylorId,
+      instructorBaylorId: primaryBaylorId,
+      instructorMatchIssueIds,
       // Multi-room fields
       roomIds: uniqueRoomIds,
       roomId: primaryRoomId || uniqueRoomIds[0] || null,
       roomNames: splitRooms,
-      roomName: splitRooms[0] || '',
+      roomName: baseData.locationType === 'no_room' ? '' : (splitRooms[0] || ''),
       meetingPatterns: baseData.meetingPatterns,
       scheduleType: baseData.scheduleType,
+      instructionMethod: baseData.instructionMethod || '',
+      isOnline: baseData.isOnline === true,
+      onlineMode: baseData.isOnline
+        ? (Array.isArray(baseData.meetingPatterns) && baseData.meetingPatterns.length > 0 ? 'synchronous' : 'asynchronous')
+        : null,
+      locationType: baseData.locationType || 'room',
+      locationLabel: baseData.locationLabel || '',
       status: baseData.status,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
-    transaction.addChange('schedules', 'add', scheduleData, null, { groupKey });
+    const scheduleChangeId = transaction.addChange('schedules', 'add', scheduleData, null, { groupKey });
+    matchIssuesForSchedule.forEach((issue) => {
+      if (!issue) return;
+      issue.scheduleChangeIds = Array.isArray(issue.scheduleChangeIds)
+        ? Array.from(new Set([...issue.scheduleChangeIds, scheduleChangeId]))
+        : [scheduleChangeId];
+    });
     // Add to our local map to prevent duplicates within this import
     scheduleMap.set(scheduleKey, scheduleData);
   }
 };
 
-const previewDirectoryChanges = async (csvData, transaction, existingPeople) => {
-  // Create map for quick lookup of existing people
-  const existingPeopleMap = new Map();
-  existingPeople.forEach(person => {
-    const key = `${person.firstName?.toLowerCase()} ${person.lastName?.toLowerCase()}`.trim();
-    existingPeopleMap.set(key, person);
-    if (person.email) {
-      existingPeopleMap.set(person.email.toLowerCase(), person);
+const previewDirectoryChanges = async (csvData, transaction, existingPeople, existingRooms = [], options = {}) => {
+  const pendingMatchMap = new Map();
+  const roomsMap = new Map();
+  const roomsKeyMap = new Map();
+  const { includeOfficeRooms = true } = options;
+
+  existingRooms.forEach((room) => {
+    const roomKey = getRoomKeyFromRoomRecord(room);
+    if (roomKey && !roomsKeyMap.has(roomKey)) {
+      roomsKeyMap.set(roomKey, room);
     }
+    buildRoomNameKeys(room).forEach((key) => roomsMap.set(key, room));
   });
 
   for (const row of csvData) {
@@ -556,17 +713,21 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople) => 
 
     if (!firstName && !lastName && !email) continue;
 
-    const nameKey = `${firstName.toLowerCase()} ${lastName.toLowerCase()}`.trim();
+    const nameKey = makeNameKey(firstName, lastName);
     const emailKey = email.toLowerCase();
 
-    let existingPerson = existingPeopleMap.get(nameKey) || existingPeopleMap.get(emailKey);
-    // Attempt smart matching across existing people
-    if (!existingPerson) {
-      const match = await findMatchingPerson({ firstName, lastName, email }, existingPeople);
-      if (match && match.person) {
-        existingPerson = match.person;
-      }
+    const matchResult = findPersonMatch({ firstName, lastName, email }, existingPeople, { minScore: 0.85, maxCandidates: 5 });
+    const existingPerson = matchResult.status === 'exact' ? matchResult.person : null;
+
+    const officeRaw = row['Office'] || row['Office Location'] || '';
+    const parsedOffice = parseRoomLabel(officeRaw);
+    const officeRoomKey = parsedOffice?.roomKey || '';
+    const officeNameKey = normalizeRoomName(officeRaw);
+    let existingOfficeRoom = officeRoomKey ? roomsKeyMap.get(officeRoomKey) : null;
+    if (!existingOfficeRoom && officeNameKey) {
+      existingOfficeRoom = roomsMap.get(officeNameKey) || null;
     }
+    const officeRoomId = existingOfficeRoom?.id || (includeOfficeRooms ? officeRoomKey : '') || '';
 
     const personData = {
       firstName,
@@ -574,11 +735,34 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople) => 
       email,
       roles: ['faculty'], // default to faculty for directory imports
       phone: row['Phone'] || row['Business Phone'] || row['Home Phone'] || '',
-      office: row['Office'] || row['Office Location'] || '',
+      office: officeRaw,
+      officeRoomId,
       isActive: true
     };
 
     if (existingPerson) {
+      const groupKey = `dir_${existingPerson.id}`;
+
+      if (includeOfficeRooms && officeRoomKey && !existingOfficeRoom) {
+        const now = new Date().toISOString();
+        const newRoom = {
+          name: parsedOffice.displayName,
+          displayName: parsedOffice.displayName,
+          building: parsedOffice.building,
+          roomNumber: parsedOffice.roomNumber,
+          roomKey: officeRoomKey,
+          capacity: null,
+          type: 'Office',
+          isActive: true,
+          createdAt: now,
+          updatedAt: now
+        };
+        transaction.addChange('rooms', 'add', newRoom, null, { groupKey });
+        const placeholder = { id: officeRoomKey, ...newRoom };
+        roomsKeyMap.set(officeRoomKey, placeholder);
+        buildRoomNameKeys(placeholder).forEach((key) => roomsMap.set(key, placeholder));
+      }
+
       // Build minimal updates and diff with from/to pairs
       const updates = {};
       const diff = [];
@@ -596,165 +780,102 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople) => 
         updates.office = personData.office;
         diff.push({ key: 'office', from: existingOffice, to: personData.office });
       }
+      if (officeRoomId && existingPerson.officeRoomId !== officeRoomId) {
+        updates.officeRoomId = officeRoomId;
+        diff.push({ key: 'officeRoomId', from: existingPerson.officeRoomId || '', to: officeRoomId });
+      }
       if (diff.length > 0) {
-        const changeId = transaction.addChange('people', 'modify', updates, existingPerson);
+        const changeId = transaction.addChange('people', 'modify', updates, existingPerson, { groupKey });
         // Attach diff for UI consumption
         const last = transaction.changes.people.modified.find(c => c.id === changeId);
         if (last) last.diff = diff;
       }
     } else {
-      transaction.addChange('people', 'add', personData);
-    }
-  }
-};
-
-// Helper functions
-export const parseMeetingPatterns = (row) => {
-  const meetingPattern = (row['Meeting Pattern'] || row['Meetings'] || '').trim();
-  if (!meetingPattern) return [];
-
-  const segments = meetingPattern
-    .replace(/\r/g, '\n')
-    .split(/;|\n/)
-    .map(segment => segment.trim())
-    .filter(Boolean);
-
-  const patterns = [];
-  const dayMap = { M: 'M', T: 'T', W: 'W', R: 'R', F: 'F', S: 'S', U: 'U' };
-
-  const pushTimedPattern = (daysStr, startToken, endToken, raw) => {
-    const startTime = normalizeTime(startToken);
-    const endTime = normalizeTime(endToken);
-    if (!startTime || !endTime) return false;
-
-    let pushed = false;
-    for (const char of daysStr) {
-      const day = dayMap[char.toUpperCase()];
-      if (day) {
-        patterns.push({
-          day,
-          startTime,
-          endTime,
-          startDate: null,
-          endDate: null,
-          raw
-        });
-        pushed = true;
+      const matchKey = emailKey || nameKey;
+      if (!matchKey) {
+        continue;
       }
-    }
-    return pushed;
-  };
 
-  for (const segment of segments) {
-    if (!segment || /does not meet/i.test(segment)) {
-      continue;
-    }
+      let matchIssue = pendingMatchMap.get(matchKey) || null;
+      if (!matchIssue) {
+        const groupKey = `dir_${matchKey}`;
+        matchIssue = transaction.addMatchIssue({
+          importType: 'directory',
+          matchKey,
+          reason: matchResult?.reason || 'No exact match',
+          proposedPerson: personData,
+          candidates: matchResult?.candidates || []
+        });
 
-    const normalized = segment.replace(/\s+/g, ' ').trim();
-    const dayMatch = normalized.match(/^([MTWRFSU]+)\s+/i);
-    if (dayMatch) {
-      const daysStr = dayMatch[1].toUpperCase();
-      const remainder = normalized.slice(dayMatch[0].length).trim();
-      const timeSplit = remainder.split(/\s*(?:-|to)\s*/i);
-      if (timeSplit.length >= 2) {
-        const startToken = extractTimeToken(timeSplit[0]);
-        const endToken = extractTimeToken(timeSplit[1]);
-        if (pushTimedPattern(daysStr, startToken, endToken, normalized)) {
-          continue;
+        if (includeOfficeRooms && officeRoomKey && !existingOfficeRoom && !roomsKeyMap.has(officeRoomKey)) {
+          const now = new Date().toISOString();
+          const newRoom = {
+            name: parsedOffice.displayName,
+            displayName: parsedOffice.displayName,
+            building: parsedOffice.building,
+            roomNumber: parsedOffice.roomNumber,
+            roomKey: officeRoomKey,
+            capacity: null,
+            type: 'Office',
+            isActive: true,
+            createdAt: now,
+            updatedAt: now
+          };
+          transaction.addChange('rooms', 'add', newRoom, null, { groupKey });
+          const placeholder = { id: officeRoomKey, ...newRoom };
+          roomsKeyMap.set(officeRoomKey, placeholder);
+          buildRoomNameKeys(placeholder).forEach((key) => roomsMap.set(key, placeholder));
+        }
+
+        matchIssue.pendingPersonChangeId = transaction.addChange(
+          'people',
+          'add',
+          personData,
+          null,
+          { groupKey, pendingResolution: true, matchIssueId: matchIssue.id }
+        );
+        pendingMatchMap.set(matchKey, matchIssue);
+      } else {
+        const mergeIfMissing = (target, source) => {
+          const merged = { ...target };
+          Object.entries(source).forEach(([key, value]) => {
+            if (value === undefined || value === null || value === '') return;
+            if (merged[key] === undefined || merged[key] === null || merged[key] === '') {
+              merged[key] = value;
+            }
+          });
+          return merged;
+        };
+        matchIssue.proposedPerson = mergeIfMissing(matchIssue.proposedPerson || {}, personData);
+        const pendingChange = transaction.changes.people.added.find(c => c.id === matchIssue.pendingPersonChangeId);
+        if (pendingChange) {
+          pendingChange.newData = mergeIfMissing(pendingChange.newData || {}, personData);
+        }
+        if (includeOfficeRooms && officeRoomKey && !existingOfficeRoom && !roomsKeyMap.has(officeRoomKey)) {
+          const groupKey = `dir_${matchKey}`;
+          const now = new Date().toISOString();
+          const newRoom = {
+            name: parsedOffice.displayName,
+            displayName: parsedOffice.displayName,
+            building: parsedOffice.building,
+            roomNumber: parsedOffice.roomNumber,
+            roomKey: officeRoomKey,
+            capacity: null,
+            type: 'Office',
+            isActive: true,
+            createdAt: now,
+            updatedAt: now
+          };
+          transaction.addChange('rooms', 'add', newRoom, null, { groupKey });
+          const placeholder = { id: officeRoomKey, ...newRoom };
+          roomsKeyMap.set(officeRoomKey, placeholder);
+          buildRoomNameKeys(placeholder).forEach((key) => roomsMap.set(key, placeholder));
         }
       }
     }
-
-    // Attempt to recover times even if day parsing failed
-    const timeMatches = normalized.match(/(\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{3,4})/gi);
-    if (dayMatch && timeMatches && timeMatches.length >= 2) {
-      const startToken = timeMatches[0];
-      const endToken = timeMatches[1];
-      if (pushTimedPattern(dayMatch[1].toUpperCase(), startToken, endToken, normalized)) {
-        continue;
-      }
-    }
-
-    if (/online/i.test(normalized) || /asynch/i.test(normalized)) {
-      patterns.push({
-        day: null,
-        startTime: '',
-        endTime: '',
-        startDate: null,
-        endDate: null,
-        mode: 'online',
-        raw: normalized
-      });
-      continue;
-    }
-
-    if (/arranged/i.test(normalized) || /tba/i.test(normalized) || /independent/i.test(normalized)) {
-      patterns.push({
-        day: null,
-        startTime: '',
-        endTime: '',
-        startDate: null,
-        endDate: null,
-        mode: 'arranged',
-        raw: normalized
-      });
-      continue;
-    }
-
-    // Preserve unparsed segments for downstream visibility
-    patterns.push({
-      day: null,
-      startTime: '',
-      endTime: '',
-      startDate: null,
-      endDate: null,
-      raw: normalized
-    });
   }
-
-  return patterns;
 };
 
-const extractTimeToken = (value) => {
-  if (!value) return '';
-  const match = String(value).match(/(\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{3,4})/i);
-  return match ? match[0] : String(value).trim();
-};
-
-// Helper function to normalize time format
-const normalizeTime = (timeStr) => {
-  if (!timeStr) return '';
-
-  const cleaned = String(timeStr).toLowerCase().replace(/[^0-9apm:]/g, '').trim();
-  if (!cleaned) return '';
-
-  const match = cleaned.match(/^(\d{1,2})(?::?(\d{2}))?(am|pm)?$/);
-  if (!match) {
-    return String(timeStr).trim();
-  }
-
-  let [, hourStr, minuteStr, ampm] = match;
-  let hour = parseInt(hourStr, 10);
-  if (Number.isNaN(hour)) {
-    return String(timeStr).trim();
-  }
-  let minute = Number.parseInt(minuteStr ?? '0', 10);
-  if (Number.isNaN(minute)) minute = 0;
-
-  if (!ampm) {
-    if (hour > 23) {
-      return String(timeStr).trim();
-    }
-    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-    const suffix = hour >= 12 ? 'PM' : 'AM';
-    return `${displayHour}:${minute.toString().padStart(2, '0')} ${suffix}`;
-  }
-
-  const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-  return `${displayHour}:${minute.toString().padStart(2, '0')} ${ampm.toUpperCase()}`;
-};
-
-// Add this after the imports
 const cleanObject = (obj) => {
   if (typeof obj !== 'object' || obj === null) {
     return obj;
@@ -780,7 +901,7 @@ const getValueByPath = (obj, path) => {
 };
 
 // Commit transaction changes to database
-export const commitTransaction = async (transactionId, selectedChanges = null, selectedFieldMap = null) => {
+export const commitTransaction = async (transactionId, selectedChanges = null, selectedFieldMap = null, matchResolutions = null) => {
   const transactions = await getImportTransactions();
   const transaction = transactions.find(t => t.id === transactionId);
 
@@ -792,15 +913,105 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
     throw new Error('Transaction is not in preview state');
   }
 
+  const matchingIssues = Array.isArray(transaction.matchingIssues) ? transaction.matchingIssues : [];
+  const resolutionMap = matchResolutions || {};
+  const unresolvedIssues = matchingIssues.filter(issue => !resolutionMap[issue.id]);
+  if (unresolvedIssues.length > 0) {
+    throw new Error(`Resolve ${unresolvedIssues.length} person match${unresolvedIssues.length === 1 ? '' : 'es'} before committing.`);
+  }
+
+  const selectedChangeIds = selectedChanges ? new Set(selectedChanges) : null;
+  const resolutionChangeIds = new Set();
+
+  const linkedPersonIds = new Set();
+  matchingIssues.forEach((issue) => {
+    const resolution = resolutionMap[issue.id];
+    if (resolution?.action === 'link' && resolution.personId) {
+      linkedPersonIds.add(resolution.personId);
+    }
+  });
+
+  const linkedPeopleMap = new Map();
+  if (linkedPersonIds.size > 0) {
+    const linkedDocs = await Promise.all(
+      Array.from(linkedPersonIds).map((personId) => getDoc(doc(db, COLLECTIONS.PEOPLE, personId)))
+    );
+    linkedDocs.forEach((snap) => {
+      if (snap.exists()) {
+        linkedPeopleMap.set(snap.id, { id: snap.id, ...snap.data() });
+      }
+    });
+  }
+
+  const buildResolutionUpdates = (existingPerson, proposedPerson, importType) => {
+    const updates = {};
+    const setIfDifferent = (key, value, transform = (val) => val) => {
+      if (value === undefined || value === null || value === '') return;
+      const normalized = transform(value);
+      if (normalized === undefined || normalized === null || normalized === '') return;
+      if (existingPerson[key] !== normalized) {
+        updates[key] = normalized;
+      }
+    };
+
+    if (importType === 'schedule') {
+      const incomingId = normalizeBaylorId(proposedPerson?.baylorId);
+      const existingId = normalizeBaylorId(existingPerson?.baylorId);
+      if (incomingId && !existingId) {
+        updates.baylorId = incomingId;
+      }
+    } else if (importType === 'directory') {
+      setIfDifferent('email', proposedPerson?.email, (val) => String(val).toLowerCase().trim());
+      setIfDifferent('phone', proposedPerson?.phone, (val) => String(val).replace(/\D/g, ''));
+      setIfDifferent('office', proposedPerson?.office, (val) => String(val).trim());
+      setIfDifferent('officeRoomId', proposedPerson?.officeRoomId, (val) => String(val).trim());
+    }
+
+    if (Object.keys(updates).length > 0) {
+      updates.updatedAt = new Date().toISOString();
+    }
+    return updates;
+  };
+
+  matchingIssues.forEach((issue) => {
+    const resolution = resolutionMap[issue.id];
+    if (resolution?.action !== 'link' || !resolution.personId) return;
+    const existingPerson = linkedPeopleMap.get(resolution.personId);
+    if (!existingPerson) {
+      throw new Error(`Linked person not found for match resolution: ${resolution.personId}`);
+    }
+    const updates = buildResolutionUpdates(existingPerson, issue.proposedPerson, issue.importType);
+    if (Object.keys(updates).length > 1) {
+      const changeId = transaction.addChange('people', 'modify', updates, existingPerson, { groupKey: `match_${issue.id}` });
+      resolutionChangeIds.add(changeId);
+    }
+  });
+
   const batch = writeBatch(db);
-  const changesToApply = selectedChanges ?
-    transaction.getAllChanges().filter(change => selectedChanges.includes(change.id)) :
-    transaction.getAllChanges();
+  const forcedChangeIds = new Set(resolutionChangeIds);
+  matchingIssues.forEach((issue) => {
+    const resolution = resolutionMap[issue.id];
+    if (resolution?.action === 'create' && issue.pendingPersonChangeId) {
+      forcedChangeIds.add(issue.pendingPersonChangeId);
+    }
+  });
+  const initialChanges = selectedChangeIds
+    ? transaction.getAllChanges().filter(change => selectedChangeIds.has(change.id) || forcedChangeIds.has(change.id))
+    : transaction.getAllChanges();
+  const changesToApply = initialChanges.filter(change => {
+    if (change.pendingResolution && change.matchIssueId) {
+      const resolution = resolutionMap[change.matchIssueId];
+      return resolution && resolution.action === 'create';
+    }
+    return true;
+  });
 
   // Maps to track newly created IDs
   const newPeopleIdsByName = new Map();
   const newPeopleIdsByBaylorId = new Map();
+  const newPeopleIdsByIssueId = new Map();
   const newRoomIdsByName = new Map();
+  const termDocsToUpsert = new Map();
   let createdPeopleCount = 0;
   let createdRoomsCount = 0;
 
@@ -820,14 +1031,24 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
           console.log(`👤 Created person mapping: ${nameKey} -> ${docRef.id}`);
         }
 
-        const baylorKey = (change.newData.baylorId || '').trim().toLowerCase();
+        const baylorKey = normalizeBaylorId(change.newData.baylorId);
         if (baylorKey) {
           newPeopleIdsByBaylorId.set(baylorKey, docRef.id);
         }
+        if (change.matchIssueId) {
+          newPeopleIdsByIssueId.set(change.matchIssueId, docRef.id);
+        }
 
       } else if (change.collection === 'rooms' && change.action === 'add') {
-        const docRef = doc(collection(db, COLLECTIONS.ROOMS));
-        batch.set(docRef, change.newData);
+        const preferredId = (change.newData?.roomKey || '').toString().trim();
+        const docRef = preferredId
+          ? doc(db, COLLECTIONS.ROOMS, preferredId)
+          : doc(collection(db, COLLECTIONS.ROOMS));
+        if (preferredId) {
+          batch.set(docRef, change.newData, { merge: true });
+        } else {
+          batch.set(docRef, change.newData);
+        }
         change.documentId = docRef.id;
         createdRoomsCount += 1;
 
@@ -845,22 +1066,71 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
       if (change.collection === 'schedules' && change.action === 'add') {
         const scheduleData = { ...change.newData };
 
-        // Update instructor ID if this references a newly created person
-        if (!scheduleData.instructorId && scheduleData.instructorName) {
-          const baylorKey = (scheduleData.instructorBaylorId || '').trim().toLowerCase();
-          if (baylorKey && newPeopleIdsByBaylorId.has(baylorKey)) {
-            scheduleData.instructorId = newPeopleIdsByBaylorId.get(baylorKey);
-            console.log(`🔗 Linked schedule to instructor (Baylor ID): ${baylorKey} -> ${scheduleData.instructorId}`);
-          }
+        const incomingAssignments = Array.isArray(scheduleData.instructorAssignments)
+          ? scheduleData.instructorAssignments
+          : [];
+        const resolvedAssignments = [];
 
-          if (!scheduleData.instructorId) {
-            const nameKey = deriveNameKeyFromDisplayName(scheduleData.instructorName);
-            if (nameKey && newPeopleIdsByName.has(nameKey)) {
-              scheduleData.instructorId = newPeopleIdsByName.get(nameKey);
-              console.log(`🔗 Linked schedule to instructor: ${nameKey} -> ${scheduleData.instructorId}`);
+        incomingAssignments.forEach((assignment) => {
+          if (!assignment) return;
+          const resolved = { ...assignment };
+          if (assignment.matchIssueId) {
+            const resolution = resolutionMap[assignment.matchIssueId];
+            if (resolution?.action === 'link' && resolution.personId) {
+              resolved.personId = resolution.personId;
+              const linkedPerson = linkedPeopleMap.get(resolution.personId);
+              if (linkedPerson?.baylorId) {
+                scheduleData.instructorBaylorId = linkedPerson.baylorId;
+              }
+            } else if (resolution?.action === 'create') {
+              const createdId = newPeopleIdsByIssueId.get(assignment.matchIssueId);
+              if (createdId) {
+                resolved.personId = createdId;
+              }
             }
           }
+          if (resolved.personId) {
+            resolvedAssignments.push({
+              personId: resolved.personId,
+              isPrimary: !!resolved.isPrimary,
+              percentage: Number.isFinite(resolved.percentage) ? resolved.percentage : 100
+            });
+          }
+        });
+
+        // Fallback for legacy single-instructor data
+        if (resolvedAssignments.length === 0 && scheduleData.instructorName) {
+          let resolvedInstructorId = scheduleData.instructorId || null;
+          const baylorKey = normalizeBaylorId(scheduleData.instructorBaylorId);
+          if (!resolvedInstructorId && baylorKey && newPeopleIdsByBaylorId.has(baylorKey)) {
+            resolvedInstructorId = newPeopleIdsByBaylorId.get(baylorKey);
+            console.log(`🔗 Linked schedule to instructor (Baylor ID): ${baylorKey} -> ${resolvedInstructorId}`);
+          }
+          if (!resolvedInstructorId) {
+            const nameKey = deriveNameKeyFromDisplayName(scheduleData.instructorName);
+            if (nameKey && newPeopleIdsByName.has(nameKey)) {
+              resolvedInstructorId = newPeopleIdsByName.get(nameKey);
+              console.log(`🔗 Linked schedule to instructor: ${nameKey} -> ${resolvedInstructorId}`);
+            }
+          }
+          if (resolvedInstructorId) {
+            resolvedAssignments.push({
+              personId: resolvedInstructorId,
+              isPrimary: true,
+              percentage: 100
+            });
+          }
         }
+
+        if (resolvedAssignments.length > 0 && !resolvedAssignments.some((a) => a.isPrimary)) {
+          resolvedAssignments[0].isPrimary = true;
+        }
+
+        const instructorIdSet = new Set(resolvedAssignments.map((a) => a.personId));
+        const primaryAssignment = resolvedAssignments.find((a) => a.isPrimary) || resolvedAssignments[0] || null;
+        scheduleData.instructorId = primaryAssignment?.personId || scheduleData.instructorId || null;
+        scheduleData.instructorIds = Array.from(instructorIdSet);
+        scheduleData.instructorAssignments = resolvedAssignments;
 
         // Update room ID if this references a newly created room
         const roomNames = Array.isArray(scheduleData.roomNames) ? scheduleData.roomNames : [];
@@ -888,13 +1158,38 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
           }
         }
 
+        const normalizedTerm = normalizeTermLabel(scheduleData.term || '');
+        const resolvedTermCode = termCodeFromLabel(scheduleData.termCode || normalizedTerm);
+        if (normalizedTerm) {
+          scheduleData.term = normalizedTerm;
+        }
+        if (resolvedTermCode) {
+          scheduleData.termCode = resolvedTermCode;
+        }
+        if (resolvedTermCode || normalizedTerm) {
+          const termLabel = normalizedTerm || scheduleData.term || termLabelFromCode(resolvedTermCode) || '';
+          const termKey = resolvedTermCode || termLabel;
+          if (termKey) {
+            termDocsToUpsert.set(termKey, { term: termLabel, termCode: resolvedTermCode });
+          }
+        }
+
+        delete scheduleData.instructorMatchIssueId;
+        delete scheduleData.instructorMatchIssueIds;
+
         // Deterministic schedule ID: termCode_crn (fallback term_crn)
         const baseTerm = scheduleData.termCode || scheduleData.term || 'TERM';
         const scheduleDeterministicId = scheduleData.crn
           ? `${baseTerm}_${scheduleData.crn}`
           : `${baseTerm}_${(scheduleData.courseCode || 'COURSE').replace(/[^A-Za-z0-9]+/g, '-')}_${(scheduleData.section || 'SEC').replace(/[^A-Za-z0-9]+/g, '-')}`;
         const schedRef = doc(db, COLLECTIONS.SCHEDULES, scheduleDeterministicId);
-        batch.set(schedRef, scheduleData, { merge: true });
+        const {
+          instructorName: _omitInstructorName,
+          roomName: _omitRoomName,
+          courseTitle: _omitCourseTitle,
+          ...scheduleWrite
+        } = scheduleData;
+        batch.set(schedRef, scheduleWrite, { merge: true });
         change.documentId = schedRef.id;
 
       } else if (change.collection !== 'people' && change.collection !== 'rooms') {
@@ -921,6 +1216,25 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
       }
 
       change.applied = true;
+    }
+
+    for (const termData of termDocsToUpsert.values()) {
+      if (!termData.termCode) continue;
+      const termRef = doc(db, COLLECTIONS.TERMS, termData.termCode);
+      const termSnap = await getDoc(termRef);
+      const now = new Date().toISOString();
+      const termLabel = termData.term || termLabelFromCode(termData.termCode) || '';
+      const termDoc = {
+        term: termLabel,
+        termCode: termData.termCode,
+        updatedAt: now
+      };
+      if (!termSnap.exists()) {
+        termDoc.status = 'active';
+        termDoc.locked = false;
+        termDoc.createdAt = now;
+      }
+      batch.set(termRef, termDoc, { merge: true });
     }
 
     await batch.commit();
@@ -1028,7 +1342,9 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
         'importTransactionUtils.js - commitTransaction',
         { transactionId: transaction.id, semester: transaction.semester, stats: transaction.stats }
       ).catch(() => { });
-    } catch (_) { }
+    } catch (error) {
+      void error;
+    }
 
     return transaction;
   } catch (error) {

@@ -1,22 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, Settings, GraduationCap, Calendar, IdCard, BookOpen, Save } from 'lucide-react';
-import { db } from '../../firebase';
+import { db, COLLECTIONS } from '../../firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { logUpdate, logCreate } from '../../utils/changeLogger';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSchedules } from '../../contexts/ScheduleContext';
 import { useUI } from '../../contexts/UIContext';
+import { useAppConfig } from '../../contexts/AppConfigContext';
+import { backfillTermMetadata } from '../../utils/termDataUtils';
 
 const SystemsPage = () => {
   const navigate = useNavigate();
-  const { availableSemesters = [] } = useSchedules();
+  const { availableSemesters = [], termOptions = [], refreshTerms } = useSchedules();
   const { showNotification } = useUI();
   const { canAccess } = useAuth();
+  const { buildingConfig, termConfig, saveBuildingConfig, saveTermConfig } = useAppConfig();
   const [defaultTerm, setDefaultTerm] = useState('');
   const [selectedTerm, setSelectedTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [termActionLoading, setTermActionLoading] = useState('');
+  const [isBackfilling, setIsBackfilling] = useState(false);
+  const [backfillResult, setBackfillResult] = useState(null);
+  const [buildingConfigDraft, setBuildingConfigDraft] = useState('');
+  const [termConfigDraft, setTermConfigDraft] = useState('');
+  const [savingConfigs, setSavingConfigs] = useState(false);
 
   // Check if user is admin
   const isAdmin = canAccess && canAccess('administration/baylor-systems');
@@ -42,6 +51,14 @@ const SystemsPage = () => {
 
     loadSettings();
   }, []);
+
+  useEffect(() => {
+    setBuildingConfigDraft(JSON.stringify(buildingConfig, null, 2));
+  }, [buildingConfig]);
+
+  useEffect(() => {
+    setTermConfigDraft(JSON.stringify(termConfig, null, 2));
+  }, [termConfig]);
 
   // Save default term setting
   const handleSaveDefaultTerm = async () => {
@@ -143,6 +160,118 @@ const SystemsPage = () => {
       showNotification?.('error', 'Clear Failed', 'Failed to clear default term setting. Please try again.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const updateTermLifecycle = async (term, updates, actionLabel) => {
+    if (!term?.termCode) {
+      showNotification?.('warning', 'Missing Term Code', 'Term code is required to update lifecycle status.');
+      return;
+    }
+    setTermActionLoading(term.termCode);
+    try {
+      const termRef = doc(db, COLLECTIONS.TERMS, term.termCode);
+      const payload = {
+        term: term.term || term.termCode,
+        termCode: term.termCode,
+        ...updates,
+        updatedAt: new Date().toISOString()
+      };
+      await setDoc(termRef, payload, { merge: true });
+      await logUpdate(
+        `Term - ${term.term || term.termCode} (${actionLabel})`,
+        COLLECTIONS.TERMS,
+        term.termCode,
+        payload,
+        term,
+        'SystemsPage.jsx - updateTermLifecycle'
+      );
+      await refreshTerms?.();
+      showNotification?.('success', 'Term Updated', `${term.term || term.termCode} updated successfully.`);
+    } catch (error) {
+      console.error('Error updating term lifecycle:', error);
+      showNotification?.('error', 'Update Failed', 'Failed to update term lifecycle.');
+    } finally {
+      setTermActionLoading('');
+    }
+  };
+
+  const handleArchiveTerm = async (term) => {
+    await updateTermLifecycle(term, {
+      status: 'archived',
+      locked: true,
+      archivedAt: new Date().toISOString()
+    }, 'archived');
+  };
+
+  const handleRestoreTerm = async (term) => {
+    await updateTermLifecycle(term, {
+      status: 'active',
+      locked: false,
+      archivedAt: null
+    }, 'restored');
+  };
+
+  const handleToggleTermLock = async (term) => {
+    if (term?.status === 'archived') return;
+    await updateTermLifecycle(term, {
+      status: term.status || 'active',
+      locked: !term.locked
+    }, term.locked ? 'unlocked' : 'locked');
+  };
+
+  const handleBackfillTerms = async () => {
+    const confirmed = window.confirm('This will scan all schedules to backfill term metadata. Continue?');
+    if (!confirmed) return;
+    setIsBackfilling(true);
+    setBackfillResult(null);
+    try {
+      const result = await backfillTermMetadata();
+      setBackfillResult(result);
+      await refreshTerms?.();
+      showNotification?.('success', 'Backfill Complete', `Updated ${result.schedulesUpdated} schedules and upserted ${result.termsUpserted} terms.`);
+    } catch (error) {
+      console.error('Backfill error:', error);
+      showNotification?.('error', 'Backfill Failed', error.message || 'Unable to backfill terms.');
+    } finally {
+      setIsBackfilling(false);
+    }
+  };
+
+  const handleSaveBuildingConfig = async () => {
+    if (!buildingConfigDraft.trim()) {
+      showNotification?.('warning', 'Missing Config', 'Building configuration cannot be empty.');
+      return;
+    }
+    setSavingConfigs(true);
+    try {
+      const parsed = JSON.parse(buildingConfigDraft);
+      await saveBuildingConfig(parsed);
+      showNotification?.('success', 'Building Settings Saved', 'Building mappings updated successfully.');
+    } catch (error) {
+      console.error('Error saving building config:', error);
+      showNotification?.('error', 'Save Failed', 'Building mappings JSON is invalid or could not be saved.');
+    } finally {
+      setSavingConfigs(false);
+    }
+  };
+
+  const handleSaveTermConfig = async () => {
+    if (!termConfigDraft.trim()) {
+      showNotification?.('warning', 'Missing Config', 'Term configuration cannot be empty.');
+      return;
+    }
+    setSavingConfigs(true);
+    try {
+      const parsed = JSON.parse(termConfigDraft);
+      await saveTermConfig(parsed);
+      await refreshTerms?.();
+      showNotification?.('success', 'Term Settings Saved', 'Term mapping configuration updated.');
+    } catch (error) {
+      console.error('Error saving term config:', error);
+      showNotification?.('error', 'Save Failed', 'Term configuration JSON is invalid or could not be saved.');
+    } finally {
+      setSavingConfigs(false);
     }
   };
   const systems = [
@@ -355,6 +484,194 @@ const SystemsPage = () => {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-baylor-green/10 rounded-lg">
+                <Calendar className="w-5 h-5 text-baylor-green" />
+              </div>
+              <div>
+                <h2 className="text-lg font-serif font-semibold text-baylor-green">
+                  Term Configuration
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Define how term codes map to semester names and recency order.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-xs text-gray-500 mb-3">
+            Update <span className="font-medium">codeToSeason</span> and <span className="font-medium">seasonOrder</span> to match
+            how your institution formats term codes. Season order should be listed from least to most recent.
+          </p>
+
+          <textarea
+            value={termConfigDraft}
+            onChange={(e) => setTermConfigDraft(e.target.value)}
+            className="w-full min-h-[180px] border border-gray-300 rounded-lg p-3 text-sm font-mono focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+            spellCheck={false}
+            disabled={savingConfigs}
+          />
+
+          <div className="flex items-center space-x-3 pt-3">
+            <button
+              onClick={handleSaveTermConfig}
+              disabled={savingConfigs}
+              className="btn-primary flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {savingConfigs ? 'Saving...' : 'Save Term Configuration'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-amber-100 rounded-lg">
+                <Calendar className="w-5 h-5 text-amber-700" />
+              </div>
+              <div>
+                <h2 className="text-lg font-serif font-semibold text-baylor-green">
+                  Term Lifecycle Management
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Archive or lock past terms to keep schedules read-only and improve performance.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <button
+              onClick={handleBackfillTerms}
+              disabled={isBackfilling}
+              className="btn-ghost flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isBackfilling ? 'Backfilling...' : 'Backfill Term Metadata'}
+            </button>
+            {backfillResult && (
+              <span className="text-xs text-gray-600">
+                Updated {backfillResult.schedulesUpdated} schedules · Upserted {backfillResult.termsUpserted} terms
+              </span>
+            )}
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="text-left text-xs uppercase tracking-wide text-gray-500 border-b border-gray-200">
+                <tr>
+                  <th className="py-2 pr-4">Term</th>
+                  <th className="py-2 pr-4">Code</th>
+                  <th className="py-2 pr-4">Status</th>
+                  <th className="py-2 pr-4">Locked</th>
+                  <th className="py-2 pr-4">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {termOptions.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-3 text-gray-500">No terms found. Run backfill to populate.</td>
+                  </tr>
+                )}
+                {termOptions.map((term) => {
+                  const isArchived = term.status === 'archived';
+                  const isLocked = term.locked === true || isArchived;
+                  return (
+                    <tr key={term.termCode || term.term}>
+                      <td className="py-2 pr-4 font-medium text-gray-800">{term.term || term.termCode}</td>
+                      <td className="py-2 pr-4 text-gray-600">{term.termCode || '—'}</td>
+                      <td className="py-2 pr-4">
+                        <span className={`px-2 py-0.5 rounded-full text-xs ${isArchived ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}>
+                          {isArchived ? 'Archived' : 'Active'}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-4 text-gray-700">{isLocked ? 'Yes' : 'No'}</td>
+                      <td className="py-2 pr-4">
+                        <div className="flex flex-wrap gap-2">
+                          {isArchived ? (
+                            <button
+                              onClick={() => handleRestoreTerm(term)}
+                              disabled={termActionLoading === term.termCode}
+                              className="btn-ghost text-xs"
+                            >
+                              Restore
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleArchiveTerm(term)}
+                              disabled={termActionLoading === term.termCode}
+                              className="btn-ghost text-xs"
+                            >
+                              Archive
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleToggleTermLock(term)}
+                            disabled={isArchived || termActionLoading === term.termCode}
+                            className="btn-ghost text-xs"
+                          >
+                            {isLocked ? 'Unlock' : 'Lock'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-baylor-gold/20 rounded-lg">
+                <Settings className="w-5 h-5 text-baylor-green" />
+              </div>
+              <div>
+                <h2 className="text-lg font-serif font-semibold text-baylor-green">
+                  Building Mappings
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Maintain the canonical building list and alias mappings used across the app.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-xs text-gray-500 mb-3">
+            Provide an array of buildings with <span className="font-medium">code</span>, <span className="font-medium">displayName</span>,
+            and <span className="font-medium">aliases</span>. Set <span className="font-medium">isActive</span> to false to hide a building.
+          </p>
+
+          <textarea
+            value={buildingConfigDraft}
+            onChange={(e) => setBuildingConfigDraft(e.target.value)}
+            className="w-full min-h-[220px] border border-gray-300 rounded-lg p-3 text-sm font-mono focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+            spellCheck={false}
+            disabled={savingConfigs}
+          />
+
+          <div className="flex items-center space-x-3 pt-3">
+            <button
+              onClick={handleSaveBuildingConfig}
+              disabled={savingConfigs}
+              className="btn-primary flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {savingConfigs ? 'Saving...' : 'Save Building Mappings'}
+            </button>
+          </div>
         </div>
       )}
 

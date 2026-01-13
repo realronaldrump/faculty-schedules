@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Calendar, Download, MapPin, Plus, Trash2, AlertCircle, FileArchive, CheckCircle2 } from 'lucide-react';
 import JSZip from 'jszip';
-import { parseMeetingPatterns } from '../../utils/dataImportUtils';
+import { parseMeetingPatterns } from '../../utils/meetingPatternUtils';
 import { logExport } from '../../utils/activityLogger';
 import { useData } from '../../contexts/DataContext';
 import { useSchedules } from '../../contexts/ScheduleContext';
 import { useUI } from '../../contexts/UIContext';
+import { useAppConfig } from '../../contexts/AppConfigContext';
+import { normalizeTermLabel, sortTerms } from '../../utils/termUtils';
 
 const STORAGE_KEY = 'tools.outlook-export.term-configs';
 
@@ -228,6 +230,7 @@ const OutlookRoomExport = () => {
   const { rawScheduleData = [] } = useData();
   const { availableSemesters = [] } = useSchedules();
   const { showNotification } = useUI();
+  const { termConfig, termConfigVersion } = useAppConfig();
   const [termConfigs, setTermConfigs] = useState(() => {
     if (typeof window === 'undefined') return {};
     try {
@@ -238,7 +241,9 @@ const OutlookRoomExport = () => {
           return parsed;
         }
       }
-    } catch (_) {}
+    } catch (error) {
+      console.warn(error);
+    }
     return {};
   });
   const [selectedTerm, setSelectedTerm] = useState('');
@@ -251,25 +256,22 @@ const OutlookRoomExport = () => {
     if (typeof window === 'undefined') return;
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(termConfigs));
-    } catch (_) {}
+    } catch (error) {
+      console.warn(error);
+    }
   }, [termConfigs]);
 
   const termOptions = useMemo(() => {
     const termsFromData = rawScheduleData
-      .map((s) => s?.term)
-      .filter((term) => typeof term === 'string' && term.trim().length > 0);
-    const combined = new Set([...(availableSemesters || []), ...termsFromData]);
-    return Array.from(combined)
-      .filter(Boolean)
-      .sort((a, b) => {
-        const [termA, yearA] = a.split(' ');
-        const [termB, yearB] = b.split(' ');
-        const yearDiff = parseInt(yearB, 10) - parseInt(yearA, 10);
-        if (yearDiff !== 0) return yearDiff;
-        const order = { Fall: 3, Summer: 2, Spring: 1, Winter: 0 };
-        return (order[termB] || 0) - (order[termA] || 0);
-      });
-  }, [rawScheduleData, availableSemesters]);
+      .map((s) => normalizeTermLabel(s?.term || '', termConfig))
+      .filter(Boolean);
+    const combined = new Set(
+      [...(availableSemesters || []), ...termsFromData]
+        .map((term) => normalizeTermLabel(term || '', termConfig))
+        .filter(Boolean)
+    );
+    return sortTerms(Array.from(combined).filter(Boolean), termConfig);
+  }, [rawScheduleData, availableSemesters, termConfigVersion]);
 
   useEffect(() => {
     if (!selectedTerm && termOptions.length > 0) {
@@ -578,7 +580,9 @@ const OutlookRoomExport = () => {
         if (totalEvents > 0) {
           try {
             await logExport('ICS', 'Outlook room calendars (zip)', totalEvents);
-          } catch (_) {}
+          } catch (error) {
+            console.warn(error);
+          }
         }
         showNotification?.('success', 'ZIP ready', 'Multi-room Outlook calendar export created successfully.');
       } else {
@@ -601,7 +605,9 @@ const OutlookRoomExport = () => {
         if (totalEvents > 0) {
           try {
             await logExport('ICS', 'Outlook room calendars', totalEvents);
-          } catch (_) {}
+          } catch (error) {
+            console.warn(error);
+          }
         }
         showNotification?.('success', 'Download complete', 'Outlook calendar files generated for the selected rooms.');
       }

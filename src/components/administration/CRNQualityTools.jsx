@@ -2,16 +2,18 @@ import React, { useMemo, useState } from 'react';
 import { usePermissions } from '../../utils/permissions';
 import { Database, AlertCircle, Save, Search, Pencil, X } from 'lucide-react';
 import { analyzeCRNCoverage } from '../../utils/crnMigrationUtils';
-import { fetchSchedulesWithRelationalData } from '../../utils/dataImportUtils';
+import { fetchSchedulesByTerms } from '../../utils/dataImportUtils';
 import { db } from '../../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { logUpdate } from '../../utils/changeLogger';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import { useUI } from '../../contexts/UIContext';
+import { useSchedules } from '../../contexts/ScheduleContext';
 
 const CRNQualityTools = () => {
   const { showNotification } = useUI();
   const { canUpdateCRN } = usePermissions();
+  const { selectedSemester, termOptions, getTermByLabel } = useSchedules();
   const [analysis, setAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [schedules, setSchedules] = useState([]);
@@ -28,12 +30,22 @@ const CRNQualityTools = () => {
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
     try {
-      const a = await analyzeCRNCoverage();
+      const termSelection = filters.terms.length > 0
+        ? filters.terms
+        : (selectedSemester ? [selectedSemester] : []);
+      if (termSelection.length === 0) {
+        showNotification?.('warning', 'Select a Term', 'Choose at least one term to analyze.');
+        return;
+      }
+      const termCodes = termSelection
+        .map((term) => getTermByLabel?.(term)?.termCode)
+        .filter(Boolean);
+      const a = await analyzeCRNCoverage({ terms: termSelection, termCodes });
       setAnalysis(a);
       showNotification?.('info', 'CRN Analysis', `${a.coveragePercentage}% coverage (${a.withCRN}/${a.total})`);
       // Load enriched schedules for detailed listing
       setLoadingSchedules(true);
-      const { schedules: enriched } = await fetchSchedulesWithRelationalData();
+      const { schedules: enriched } = await fetchSchedulesByTerms({ terms: termSelection, termCodes });
       setSchedules(enriched || []);
     } catch (e) {
       console.error(e);
@@ -48,8 +60,11 @@ const CRNQualityTools = () => {
 
   // Derived filter options
   const uniqueTerms = useMemo(() => {
+    if (Array.isArray(termOptions) && termOptions.length > 0) {
+      return termOptions.map(term => term.term).filter(Boolean);
+    }
     return Array.from(new Set((schedules || []).map(s => (s.term || '').trim()).filter(Boolean))).sort();
-  }, [schedules]);
+  }, [termOptions, schedules]);
 
   const uniqueInstructors = useMemo(() => {
     return Array.from(new Set((schedules || []).map(s => (s.instructorName || 'Staff')).filter(Boolean))).sort();
@@ -409,4 +424,3 @@ const CRNQualityTools = () => {
 };
 
 export default CRNQualityTools;
-

@@ -4,6 +4,37 @@ import { X } from 'lucide-react';
 const CourseDetailModal = ({ item, pattern, room, building, onClose, onShowContactCard }) => {
   if (!item) return null;
 
+  const splitInstructorNames = (value) => {
+    if (!value) return [];
+    return String(value)
+      .split(/;|\/|\s+&\s+|\s+and\s+/i)
+      .map((part) => part.replace(/\[[^\]]*\]/g, '').replace(/\([^)]*\)/g, '').trim())
+      .filter(Boolean);
+  };
+
+  const getInstructorNames = (schedule) => {
+    if (Array.isArray(schedule?.instructorNames) && schedule.instructorNames.length > 0) {
+      return schedule.instructorNames;
+    }
+    const fallback = schedule?.Instructor || schedule?.instructorName || '';
+    return splitInstructorNames(fallback);
+  };
+
+  const getInstructorEntries = (schedule) => {
+    const names = getInstructorNames(schedule);
+    if (names.length === 0) return [];
+    const ids = Array.isArray(schedule?.instructorIds) ? schedule.instructorIds.filter(Boolean) : [];
+    if (ids.length === names.length) {
+      return names.map((name, idx) => ({ name, id: ids[idx] }));
+    }
+    if (ids.length === 1 && names.length === 1) {
+      return [{ name: names[0], id: ids[0] }];
+    }
+    return names.map((name) => ({ name }));
+  };
+
+  const instructorEntries = getInstructorEntries(item);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/40"></div>
@@ -39,12 +70,25 @@ const CourseDetailModal = ({ item, pattern, room, building, onClose, onShowConta
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <div className="text-xs text-gray-500">Instructor</div>
-              <button
-                className="text-baylor-green hover:underline"
-                onClick={(e) => { e.stopPropagation(); onShowContactCard(item?.Instructor); }}
-              >
-                {item?.Instructor || '—'}
-              </button>
+              <div className="text-baylor-green">
+                {instructorEntries.length > 0 ? instructorEntries.map((entry, idx) => {
+                  const label = `${entry.name}${idx < instructorEntries.length - 1 ? ' / ' : ''}`;
+                  if (!onShowContactCard) return <span key={`${entry.name}-${idx}`}>{label}</span>;
+                  return (
+                    <button
+                      key={`${entry.name}-${idx}`}
+                      type="button"
+                      className="hover:underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onShowContactCard(entry.id || entry.name, entry.name);
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                }) : '—'}
+              </div>
             </div>
             <div>
               <div className="text-xs text-gray-500">Meeting Pattern</div>
@@ -103,5 +147,4 @@ const CourseDetailModal = ({ item, pattern, room, building, onClose, onShowConta
 };
 
 export default CourseDetailModal;
-
 

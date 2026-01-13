@@ -3,12 +3,45 @@
  * Implements normalized data model with unified 'people' collection and ID-based references
  */
 
-import { collection, addDoc, getDocs, query, where, doc, updateDoc, writeBatch, setDoc } from 'firebase/firestore';
-import { db, COLLECTIONS } from '../firebase';
-import { standardizePerson, standardizeSchedule, validateAndCleanBeforeSave, autoMergeObviousDuplicates } from './dataHygiene';
-import { parseCourseCode, deriveCreditsFromCatalogNumber } from './courseUtils';
-import { logCreate, logUpdate, logImport, logBulkUpdate } from './changeLogger';
-import { getBuildingFromRoom } from './buildingUtils';
+import {
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
+  doc,
+  updateDoc,
+  writeBatch,
+  setDoc,
+} from "firebase/firestore";
+import { db, COLLECTIONS } from "../firebase";
+import {
+  standardizePerson,
+  standardizeSchedule,
+  validateAndCleanBeforeSave,
+  autoMergeObviousDuplicates,
+} from "./dataHygiene";
+import { getInstructorDisplayName, UNASSIGNED } from "./dataAdapter";
+import { buildPeopleIndex } from "./peopleUtils";
+import { parseCourseCode, deriveCreditsFromCatalogNumber } from "./courseUtils";
+import { logCreate, logUpdate, logImport, logBulkUpdate } from "./changeLogger";
+import { getBuildingFromRoom } from "./buildingUtils";
+import { parseFullName } from "./nameUtils";
+import { parseMeetingPatterns, normalizeTime } from "./meetingPatternUtils";
+import { findPersonMatch } from "./personMatchUtils";
+import { fetchTermOptions } from "./termDataUtils";
+import {
+  buildTermLabelRegex,
+  deriveTermInfo,
+  getTermConfig,
+  normalizeTermLabel,
+  termCodeFromLabel,
+} from "./termUtils";
+import {
+  generateSectionId,
+  normalizeSectionNumber,
+  extractCrnFromSection,
+} from "./canonicalSchema";
 
 // ==================== PROGRAM MAPPING ====================
 
@@ -16,10 +49,10 @@ import { getBuildingFromRoom } from './buildingUtils';
  * Program mapping based on course code prefixes
  */
 const PROGRAM_MAPPING = {
-  'ADM': 'apparel',
-  'CFS': 'child-family-studies',
-  'NUTR': 'nutrition',
-  'ID': 'interior-design'
+  ADM: "apparel",
+  CFS: "child-family-studies",
+  NUTR: "nutrition",
+  ID: "interior-design",
 };
 
 /**
@@ -29,8 +62,8 @@ const determineProgramIdFromCourses = (courses) => {
   const prefixes = new Set();
 
   // Extract course code prefixes
-  courses.forEach(course => {
-    const courseCode = course.courseCode || course.Course || '';
+  courses.forEach((course) => {
+    const courseCode = course.courseCode || course.Course || "";
     const parsed = parseCourseCode(courseCode);
     if (parsed && !parsed.error) {
       prefixes.add(parsed.program);
@@ -55,34 +88,38 @@ const determineProgramIdFromCourses = (courses) => {
 export const createPersonModel = (rawData) => {
   // Create basic person model
   const person = {
-    firstName: (rawData.firstName || '').trim(),
-    lastName: (rawData.lastName || '').trim(),
-    title: (rawData.title || '').trim(),
-    email: (rawData.email || '').toLowerCase().trim(),
-    phone: rawData.hasNoPhone ? '' : (rawData.phone || '').replace(/\D/g, ''),
-    jobTitle: (rawData.jobTitle || '').trim(),
-    department: (rawData.department || '').trim(),
-    office: rawData.hasNoOffice ? '' : (rawData.office || '').trim(),
+    firstName: (rawData.firstName || "").trim(),
+    lastName: (rawData.lastName || "").trim(),
+    title: (rawData.title || "").trim(),
+    email: (rawData.email || "").toLowerCase().trim(),
+    phone: rawData.hasNoPhone ? "" : (rawData.phone || "").replace(/\D/g, ""),
+    jobTitle: (rawData.jobTitle || "").trim(),
+    department: (rawData.department || "").trim(),
+    office: rawData.hasNoOffice ? "" : (rawData.office || "").trim(),
     roles: Array.isArray(rawData.roles) ? rawData.roles : [],
     isAdjunct: rawData.isAdjunct || false,
     isFullTime: rawData.isFullTime !== undefined ? rawData.isFullTime : true,
-    isTenured: (Array.isArray(rawData.roles) && rawData.roles.includes('faculty')) ||
-      (typeof rawData.roles === 'object' && rawData.roles?.faculty) ?
-      (rawData.isTenured || false) : false,
-    isUPD: (Array.isArray(rawData.roles) && rawData.roles.includes('faculty')) ||
-      (typeof rawData.roles === 'object' && rawData.roles?.faculty) ?
-      (rawData.isUPD || false) : false,
+    isTenured:
+      (Array.isArray(rawData.roles) && rawData.roles.includes("faculty")) ||
+      (typeof rawData.roles === "object" && rawData.roles?.faculty)
+        ? rawData.isTenured || false
+        : false,
+    isUPD:
+      (Array.isArray(rawData.roles) && rawData.roles.includes("faculty")) ||
+      (typeof rawData.roles === "object" && rawData.roles?.faculty)
+        ? rawData.isUPD || false
+        : false,
     programId: rawData.programId || null, // Reference to programs collection
     externalIds: {
       clssInstructorId: rawData.clssInstructorId || null,
       baylorId: rawData.baylorId || null,
-      emails: rawData.email ? [rawData.email.toLowerCase().trim()] : []
+      emails: rawData.email ? [rawData.email.toLowerCase().trim()] : [],
     },
-    baylorId: rawData.baylorId || '', // 9-digit Baylor ID number
+    baylorId: rawData.baylorId || "", // 9-digit Baylor ID number
     hasNoPhone: rawData.hasNoPhone || false,
     hasNoOffice: rawData.hasNoOffice || false,
     createdAt: rawData.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 
   // Apply data hygiene standardization
@@ -93,44 +130,74 @@ export const createPersonModel = (rawData) => {
  * Schedule Model with ID-based references
  */
 export const createScheduleModel = (rawData) => {
-  const toTrimmedString = (value) => (value === undefined || value === null ? '' : String(value).trim());
+  const toTrimmedString = (value) =>
+    value === undefined || value === null ? "" : String(value).trim();
+  const normalizedTerm = normalizeTermLabel(rawData.term || "");
+  const normalizedTermCode = termCodeFromLabel(
+    rawData.termCode || normalizedTerm,
+  );
+  const instructorAssignments = Array.isArray(rawData.instructorAssignments)
+    ? rawData.instructorAssignments
+    : [];
+  const instructorIds = Array.isArray(rawData.instructorIds)
+    ? rawData.instructorIds
+    : instructorAssignments
+        .map((assignment) => assignment?.personId)
+        .filter(Boolean);
 
   // Create basic schedule model
   const schedule = {
-    instructorId: rawData.instructorId || '',
-    instructorName: (rawData.instructorName || '').trim(),
-    courseId: (rawData.courseId || '').trim(),
-    courseCode: (rawData.courseCode || '').trim(),
+    instructorId: rawData.instructorId || "",
+    instructorIds,
+    instructorAssignments,
+    instructorName: (rawData.instructorName || "").trim(),
+    courseId: (rawData.courseId || "").trim(),
+    courseCode: (rawData.courseCode || "").trim(),
     courseTitle: toTrimmedString(rawData.courseTitle),
     program: toTrimmedString(rawData.program),
     subjectCode: toTrimmedString(rawData.subjectCode),
-    subject: toTrimmedString(rawData.subject || rawData.subjectCode || rawData.program),
+    subject: toTrimmedString(
+      rawData.subject || rawData.subjectCode || rawData.program,
+    ),
     catalogNumber: toTrimmedString(rawData.catalogNumber),
     courseLevel: rawData.courseLevel || 0,
-    section: (rawData.section || '').trim(),
-    crn: rawData.crn || '', // Add CRN field
-    meetingPatterns: Array.isArray(rawData.meetingPatterns) ? rawData.meetingPatterns : [],
+    section: (rawData.section || "").trim(),
+    crn: rawData.crn || "", // Add CRN field
+    meetingPatterns: Array.isArray(rawData.meetingPatterns)
+      ? rawData.meetingPatterns
+      : [],
     // Multi-room support (backwards compatible):
     // - roomIds: array of referenced room document IDs
     // - roomNames: array of display strings for rooms
     // - roomId/roomName retained for legacy consumers (first room)
-    roomIds: Array.isArray(rawData.roomIds) ? rawData.roomIds : (rawData.roomId ? [rawData.roomId] : []),
+    roomIds: Array.isArray(rawData.roomIds)
+      ? rawData.roomIds
+      : rawData.roomId
+        ? [rawData.roomId]
+        : [],
     roomId: rawData.roomId || null,
     roomNames: Array.isArray(rawData.roomNames)
-      ? rawData.roomNames.map((n) => (n || '').toString().trim()).filter(Boolean)
-      : ((rawData.roomName || '').trim() ? [(rawData.roomName || '').trim()] : []),
-    roomName: (rawData.roomName || '').trim(),
-    term: (rawData.term || '').trim(),
-    termCode: (rawData.termCode || '').trim(),
-    academicYear: (rawData.academicYear || '').trim(),
+      ? rawData.roomNames
+          .map((n) => (n || "").toString().trim())
+          .filter(Boolean)
+      : (rawData.roomName || "").trim()
+        ? [(rawData.roomName || "").trim()]
+        : [],
+    roomName: (rawData.roomName || "").trim(),
+    term: normalizedTerm || (rawData.term || "").trim(),
+    termCode: normalizedTermCode || "",
+    academicYear: (rawData.academicYear || "").trim(),
     credits: parseInt(rawData.credits) || 0,
-    scheduleType: (rawData.scheduleType || 'Class Instruction').trim(),
+    scheduleType: (rawData.scheduleType || "Class Instruction").trim(),
+    instructionMethod: (rawData.instructionMethod || "").trim(),
     // Online flags
     isOnline: Boolean(rawData.isOnline) || false,
     onlineMode: rawData.onlineMode || null, // 'synchronous' | 'asynchronous' | null
-    status: (rawData.status || 'Active').trim(),
+    locationType: rawData.locationType || "room",
+    locationLabel: (rawData.locationLabel || "").trim(),
+    status: (rawData.status || "Active").trim(),
     createdAt: rawData.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 
   // Apply data hygiene standardization
@@ -144,9 +211,9 @@ export const createScheduleModel = (rawData) => {
  */
 const isEmptyForMerge = (value) => {
   if (value === null || value === undefined) return true;
-  if (typeof value === 'string') return value.trim() === '';
+  if (typeof value === "string") return value.trim() === "";
   if (Array.isArray(value)) return value.length === 0;
-  if (typeof value === 'object') return Object.keys(value).length === 0;
+  if (typeof value === "object") return Object.keys(value).length === 0;
   return false;
 };
 
@@ -163,7 +230,7 @@ export const buildUpsertUpdates = (existingRecord, incomingRecord) => {
   const deepEqual = (a, b) => {
     if (a === b) return true;
     if (typeof a !== typeof b) return false;
-    if (a && b && typeof a === 'object') {
+    if (a && b && typeof a === "object") {
       try {
         return JSON.stringify(a) === JSON.stringify(b);
       } catch (e) {
@@ -174,7 +241,7 @@ export const buildUpsertUpdates = (existingRecord, incomingRecord) => {
   };
 
   Object.keys(incomingRecord).forEach((key) => {
-    if (key === 'createdAt' || key === 'updatedAt') return; // ignore timestamps for diff
+    if (key === "createdAt" || key === "updatedAt") return; // ignore timestamps for diff
 
     const incoming = incomingRecord[key];
     if (isEmptyForMerge(incoming)) return; // don't overwrite with empty
@@ -199,33 +266,33 @@ export const buildUpsertUpdates = (existingRecord, incomingRecord) => {
  * Meeting Pattern Model
  */
 export const createMeetingPattern = ({
-  day = '',
-  startTime = '',
-  endTime = '',
+  day = "",
+  startTime = "",
+  endTime = "",
   startDate = null,
-  endDate = null
+  endDate = null,
 }) => ({
   day: day.trim(),
   startTime: startTime.trim(),
   endTime: endTime.trim(),
   startDate,
-  endDate
+  endDate,
 });
 
 /**
  * Room Model for relational linking
  */
 export const createRoomModel = ({
-  name = '',
-  displayName = '',
-  building = '',
-  roomNumber = '',
+  name = "",
+  displayName = "",
+  building = "",
+  roomNumber = "",
   capacity = null,
-  type = 'Classroom',
+  type = "Classroom",
   equipment = [],
   isActive = true,
   createdAt = new Date().toISOString(),
-  updatedAt = new Date().toISOString()
+  updatedAt = new Date().toISOString(),
 }) => ({
   name: name.trim(),
   displayName: displayName.trim(),
@@ -236,7 +303,7 @@ export const createRoomModel = ({
   equipment: Array.isArray(equipment) ? equipment : [],
   isActive,
   createdAt,
-  updatedAt
+  updatedAt,
 });
 
 /**
@@ -245,62 +312,16 @@ export const createRoomModel = ({
  * understand simultaneous multi-room assignments.
  */
 const splitRoomNames = (roomValue) => {
-  if (!roomValue || typeof roomValue !== 'string') return [];
+  if (!roomValue || typeof roomValue !== "string") return [];
 
-  return Array.from(new Set(
-    roomValue
-      .split(/;|\n|\s{0,}\/\s{0,}/)
-      .map((part) => part.trim())
-      .filter(Boolean)
-  ));
-};
-
-// ==================== NAME PARSING UTILITIES ====================
-
-/**
- * Parse full name into components
- */
-export const parseFullName = (fullName) => {
-  if (!fullName) return { title: '', firstName: '', lastName: '' };
-
-  const name = fullName.trim();
-  const parts = name.split(/\s+/);
-
-  // Common titles
-  const titles = ['dr', 'dr.', 'mr', 'mr.', 'mrs', 'mrs.', 'ms', 'ms.', 'miss', 'prof', 'professor'];
-
-  let title = '';
-  let firstName = '';
-  let lastName = '';
-
-  let nameStart = 0;
-
-  // Check for title
-  if (parts.length > 1 && titles.includes(parts[0].toLowerCase())) {
-    title = parts[0];
-    nameStart = 1;
-  }
-
-  if (parts.length > nameStart) {
-    if (parts.length === nameStart + 1) {
-      // Only one name part after title
-      lastName = parts[nameStart];
-    } else if (parts.length === nameStart + 2) {
-      // First and last name
-      firstName = parts[nameStart];
-      lastName = parts[nameStart + 1];
-    } else {
-      // Multiple parts - take first as firstName, rest as lastName
-      firstName = parts[nameStart];
-      lastName = parts.slice(nameStart + 1).join(' ');
-    }
-  }
-
-  return {
-    title: title,
-    firstName: firstName,
-    lastName: lastName
-  };
+  return Array.from(
+    new Set(
+      roomValue
+        .split(/;|\n|\s{0,}\/\s{0,}/)
+        .map((part) => part.trim())
+        .filter(Boolean),
+    ),
+  );
 };
 
 /**
@@ -312,29 +333,59 @@ export const parseInstructorField = (instructorField) => {
   const cleanField = instructorField.trim();
 
   // Handle "Staff" case
-  if (cleanField.toLowerCase().includes('staff')) {
+  if (cleanField.toLowerCase().includes("staff")) {
     return {
-      lastName: 'Staff',
-      firstName: '',
-      title: '',
+      lastName: "Staff",
+      firstName: "",
+      title: "",
       id: null,
       percentage: 100,
-      isPrimary: true
+      isPrimary: true,
     };
   }
 
-  // Parse format: "LastName, FirstName (ID) [Primary, 100%]"
-  const match = cleanField.match(/^([^,]+),\s*([^(]+)\s*\(([^)]+)\)\s*\[([^,]+),\s*(\d+)%\]/);
+  // Parse format: "LastName, FirstName (ID) [Primary, 100%]" or "[50%]"
+  const match = cleanField.match(
+    /^([^,]+),\s*([^\(\[]+?)(?:\s*\(([^)]+)\))?(?:\s*\[([^\]]+)\])?$/,
+  );
 
   if (match) {
-    const [, lastName, firstName, id, role, percentage] = match;
+    const [, lastName, firstName, id, bracket] = match;
+    let percentage = 100;
+    let isPrimary = false;
+
+    if (bracket) {
+      const parts = bracket
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      let role = "";
+      let percentRaw = "";
+      if (parts.length === 2) {
+        [role, percentRaw] = parts;
+      } else if (parts.length === 1) {
+        if (parts[0].toLowerCase().includes("primary")) {
+          role = parts[0];
+        } else {
+          percentRaw = parts[0];
+        }
+      }
+      if (role) {
+        isPrimary = role.toLowerCase().includes("primary");
+      }
+      if (percentRaw) {
+        const numeric = percentRaw.replace(/[^0-9]/g, "");
+        if (numeric) percentage = parseInt(numeric, 10);
+      }
+    }
+
     return {
       lastName: lastName.trim(),
       firstName: firstName.trim(),
-      title: '',
-      id: id.trim(),
-      percentage: parseInt(percentage),
-      isPrimary: role.toLowerCase().includes('primary')
+      title: "",
+      id: id ? id.trim() : null,
+      percentage,
+      isPrimary,
     };
   }
 
@@ -345,10 +396,10 @@ export const parseInstructorField = (instructorField) => {
     return {
       lastName: lastName.trim(),
       firstName: firstName.trim(),
-      title: '',
+      title: "",
       id: null,
       percentage: 100,
-      isPrimary: true
+      isPrimary: true,
     };
   }
 
@@ -360,79 +411,19 @@ export const parseInstructorField = (instructorField) => {
     title: parsed.title,
     id: null,
     percentage: 100,
-    isPrimary: true
+    isPrimary: true,
   };
 };
 
-// ==================== MEETING PATTERN PARSING ====================
-
 /**
- * Parse complex meeting patterns from CLSS format
- * Examples: "TR 2pm-3:15pm; T 2pm-4pm", "MW 8:30am-11am", "Does Not Meet"
+ * Parse one or more instructors from CLSS format (semicolon-delimited).
  */
-export const parseMeetingPatterns = (meetingPatternStr, meetingsStr = '') => {
-  if (!meetingPatternStr || meetingPatternStr.toLowerCase().includes('does not meet')) {
-    return [];
-  }
-
-  const patterns = [];
-
-  // Split by semicolon for multiple patterns
-  const segments = meetingPatternStr.split(';').map(s => s.trim());
-
-  for (const segment of segments) {
-    if (!segment) continue;
-
-    // Parse pattern like "TR 2pm-3:15pm" or "MW 8:30am-11am"
-    const match = segment.match(/^([MTWRF]+)\s+(.+)$/);
-    if (!match) continue;
-
-    const [, dayString, timeRange] = match;
-    const days = dayString.split('');
-
-    // Parse time range
-    const timeMatch = timeRange.match(/^(.+?)-(.+)$/);
-    if (!timeMatch) continue;
-
-    const [, startTime, endTime] = timeMatch;
-
-    // Create pattern for each day
-    for (const day of days) {
-      if (['M', 'T', 'W', 'R', 'F'].includes(day)) {
-        patterns.push(createMeetingPattern({
-          day,
-          startTime: normalizeTime(startTime.trim()),
-          endTime: normalizeTime(endTime.trim())
-        }));
-      }
-    }
-  }
-
-  return patterns;
-};
-
-/**
- * Normalize time format to consistent format
- */
-export const normalizeTime = (timeStr) => {
-  if (!timeStr) return '';
-
-  const cleaned = timeStr.toLowerCase().replace(/\s+/g, '');
-
-  // Handle formats like "2pm", "9:30am", "12:15pm"
-  let match = cleaned.match(/^(\d{1,2})(?::(\d{2}))?(am|pm)$/);
-  if (match) {
-    let [, hour, minute = '00', ampm] = match;
-    hour = parseInt(hour);
-
-    // Convert to 12-hour format with consistent spacing
-    const displayHour = hour;
-    const period = ampm.toUpperCase();
-
-    return `${displayHour}:${minute} ${period}`;
-  }
-
-  return timeStr;
+export const parseInstructorFieldList = (instructorField) => {
+  if (!instructorField) return [];
+  const raw = instructorField.toString();
+  const parts = raw.split(";").map((part) => part.trim()).filter(Boolean);
+  const parsed = parts.map((part) => parseInstructorField(part)).filter(Boolean);
+  return parsed;
 };
 
 /**
@@ -441,16 +432,16 @@ export const normalizeTime = (timeStr) => {
  */
 export const parseCrossListCrns = (row) => {
   const fields = [
-    'Cross-listings',
-    'Cross-list Enrollment',
-    'Cross-list Maximum',
-    'Cross-list Wait Total',
-    'Also'
+    "Cross-listings",
+    "Cross-list Enrollment",
+    "Cross-list Maximum",
+    "Cross-list Wait Total",
+    "Also",
   ];
   const crns = new Set();
   for (const f of fields) {
     const val = row && row[f];
-    if (!val || typeof val !== 'string') continue;
+    if (!val || typeof val !== "string") continue;
     const matches = val.match(/\b(\d{5})\b/g);
     if (matches) matches.forEach((m) => crns.add(m));
   }
@@ -463,36 +454,55 @@ export const parseCrossListCrns = (row) => {
  * Determine roles based on job title patterns
  */
 export const determineRoles = (jobTitle) => {
-  if (!jobTitle) return ['staff'];
+  if (!jobTitle) return ["staff"];
 
   const title = jobTitle.toLowerCase();
   const roles = [];
 
   // Faculty indicators
   const facultyKeywords = [
-    'professor', 'lecturer', 'instructor', 'teacher', 'faculty',
-    'chair', 'associate', 'assistant', 'clinical', 'adjunct',
-    'visiting', 'emeritus', 'postdoc'
+    "professor",
+    "lecturer",
+    "instructor",
+    "teacher",
+    "faculty",
+    "chair",
+    "associate",
+    "assistant",
+    "clinical",
+    "adjunct",
+    "visiting",
+    "emeritus",
+    "postdoc",
   ];
 
   // Staff indicators
   const staffKeywords = [
-    'coordinator', 'administrator', 'assistant', 'associate',
-    'director', 'manager', 'specialist', 'analyst', 'clerk',
-    'secretary', 'technician', 'support'
+    "coordinator",
+    "administrator",
+    "assistant",
+    "associate",
+    "director",
+    "manager",
+    "specialist",
+    "analyst",
+    "clerk",
+    "secretary",
+    "technician",
+    "support",
   ];
 
-  if (facultyKeywords.some(keyword => title.includes(keyword))) {
-    roles.push('faculty');
+  if (facultyKeywords.some((keyword) => title.includes(keyword))) {
+    roles.push("faculty");
   }
 
-  if (staffKeywords.some(keyword => title.includes(keyword))) {
-    roles.push('staff');
+  if (staffKeywords.some((keyword) => title.includes(keyword))) {
+    roles.push("staff");
   }
 
   // Default to staff if no matches
   if (roles.length === 0) {
-    roles.push('staff');
+    roles.push("staff");
   }
 
   return roles;
@@ -518,72 +528,32 @@ export const determineRoles = (jobTitle) => {
 export const findMatchingPerson = async (personData, existingPeople = null) => {
   // If existing people not provided, fetch from database
   if (!existingPeople) {
-    const peopleSnapshot = await getDocs(collection(db, 'people'));
-    existingPeople = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const peopleSnapshot = await getDocs(collection(db, "people"));
+    existingPeople = peopleSnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
   }
 
-  const { firstName, lastName, email, baylorId, clssInstructorId } = personData;
-
-  // 1. Baylor ID match (highest priority - unique identifier)
-  if (baylorId) {
-    const baylorIdMatch = existingPeople.find(p =>
-      p.baylorId && p.baylorId === baylorId
+  const match = findPersonMatch(personData, existingPeople, {
+    minScore: 0.85,
+    maxCandidates: 5,
+  });
+  if (match.status === "exact" && match.person) {
+    console.log(
+      `🎯 Exact match: ${match.matchType || "person"} → ${match.person.firstName} ${match.person.lastName}`,
     );
-    if (baylorIdMatch) {
-      console.log(`🎯 Baylor ID match: ${baylorId} → ${baylorIdMatch.firstName} ${baylorIdMatch.lastName}`);
-      return { person: baylorIdMatch, confidence: 'exact', matchType: 'baylorId' };
-    }
-  }
-
-  // 2. Exact email match (high priority - unique identifier)
-  if (email) {
-    const emailMatch = existingPeople.find(p =>
-      p.email && p.email.toLowerCase() === email.toLowerCase()
-    );
-    if (emailMatch) {
-      console.log(`🎯 Email match: ${email} → ${emailMatch.firstName} ${emailMatch.lastName}`);
-      return { person: emailMatch, confidence: 'exact', matchType: 'email' };
-    }
-
-    // Also check externalIds.emails array
-    const extEmailMatch = existingPeople.find(p =>
-      p.externalIds?.emails && Array.isArray(p.externalIds.emails) &&
-      p.externalIds.emails.some(e => e.toLowerCase() === email.toLowerCase())
-    );
-    if (extEmailMatch) {
-      console.log(`🎯 External email match: ${email} → ${extEmailMatch.firstName} ${extEmailMatch.lastName}`);
-      return { person: extEmailMatch, confidence: 'exact', matchType: 'externalEmail' };
-    }
-  }
-
-  // 3. CLSS Instructor ID match (for schedule imports)
-  if (clssInstructorId) {
-    const clssMatch = existingPeople.find(p =>
-      p.externalIds?.clssInstructorId &&
-      String(p.externalIds.clssInstructorId) === String(clssInstructorId)
-    );
-    if (clssMatch) {
-      console.log(`🎯 CLSS ID match: ${clssInstructorId} → ${clssMatch.firstName} ${clssMatch.lastName}`);
-      return { person: clssMatch, confidence: 'exact', matchType: 'clssId' };
-    }
-  }
-
-  // 4. Exact name match (requires BOTH first and last name to match exactly)
-  if (firstName && lastName) {
-    const exactNameMatch = existingPeople.find(p =>
-      p.firstName && p.lastName &&
-      p.firstName.toLowerCase().trim() === firstName.toLowerCase().trim() &&
-      p.lastName.toLowerCase().trim() === lastName.toLowerCase().trim()
-    );
-    if (exactNameMatch) {
-      console.log(`🎯 Exact name match: ${firstName} ${lastName} → ${exactNameMatch.id}`);
-      return { person: exactNameMatch, confidence: 'exact', matchType: 'exactName' };
-    }
+    return {
+      person: match.person,
+      confidence: "exact",
+      matchType: match.matchType || "exact",
+    };
   }
 
   // NO FUZZY MATCHING - If we can't find an exact match, return null
-  // The record should be flagged for manual review
-  console.log(`❓ No exact match found for: ${firstName || ''} ${lastName || ''} (email: ${email || 'none'})`);
+  console.log(
+    `❓ No exact match found for: ${personData?.firstName || ""} ${personData?.lastName || ""} (email: ${personData?.email || "none"})`,
+  );
   return null;
 };
 
@@ -598,7 +568,7 @@ export const flagForManualReview = (record, reason, context = {}) => {
     _reviewReason: reason,
     _reviewContext: context,
     _reviewedAt: null,
-    _reviewedBy: null
+    _reviewedBy: null,
   };
 };
 
@@ -616,51 +586,62 @@ export const cleanDirectoryData = (csvData) => {
     let hasIssues = false;
 
     // Check for job title keywords in unexpected columns
-    const homeCity = (row['Home City'] || '').trim();
-    const jobTitle = (row['Job Title'] || '').trim();
+    const homeCity = (row["Home City"] || "").trim();
+    const jobTitle = (row["Job Title"] || "").trim();
 
     // Common job title keywords that shouldn't be in Home City
     const jobTitleKeywords = [
-      'professor', 'lecturer', 'instructor', 'coordinator',
-      'assistant', 'associate', 'director', 'manager',
-      'clinical', 'adjunct', 'visiting', 'emeritus'
+      "professor",
+      "lecturer",
+      "instructor",
+      "coordinator",
+      "assistant",
+      "associate",
+      "director",
+      "manager",
+      "clinical",
+      "adjunct",
+      "visiting",
+      "emeritus",
     ];
 
-    const suspiciousHomeCity = homeCity && jobTitleKeywords.some(keyword =>
-      homeCity.toLowerCase().includes(keyword)
-    );
+    const suspiciousHomeCity =
+      homeCity &&
+      jobTitleKeywords.some((keyword) =>
+        homeCity.toLowerCase().includes(keyword),
+      );
 
     if (suspiciousHomeCity && !jobTitle) {
       // Likely column shift - move Home City to Job Title
-      row['Job Title'] = homeCity;
-      row['Home City'] = '';
+      row["Job Title"] = homeCity;
+      row["Home City"] = "";
       hasIssues = true;
       issues.push({
         rowIndex: i,
-        person: `${row['First Name']} ${row['Last Name']}`,
+        person: `${row["First Name"]} ${row["Last Name"]}`,
         issue: `Moved "${homeCity}" from Home City to Job Title (likely column misalignment)`,
-        fixed: true
+        fixed: true,
       });
     } else if (suspiciousHomeCity && jobTitle) {
       // Both fields have data, but Home City looks like a job title
       hasIssues = true;
       issues.push({
         rowIndex: i,
-        person: `${row['First Name']} ${row['Last Name']}`,
+        person: `${row["First Name"]} ${row["Last Name"]}`,
         issue: `Home City "${homeCity}" looks like job title, but Job Title already has "${jobTitle}"`,
-        fixed: false
+        fixed: false,
       });
     }
 
     // Check for other potential issues
-    const email = (row['E-mail Address'] || '').trim();
-    if (email && !email.includes('@') && email.includes('.')) {
+    const email = (row["E-mail Address"] || "").trim();
+    if (email && !email.includes("@") && email.includes(".")) {
       // Might be a misplaced website or other data
       issues.push({
         rowIndex: i,
-        person: `${row['First Name']} ${row['Last Name']}`,
+        person: `${row["First Name"]} ${row["Last Name"]}`,
         issue: `Email "${email}" doesn't look like a valid email address`,
-        fixed: false
+        fixed: false,
       });
     }
 
@@ -676,7 +657,7 @@ export const cleanDirectoryData = (csvData) => {
  * Process Directory CSV Import
  */
 export const processDirectoryImport = async (csvData, options = {}) => {
-  const { defaultRole = 'faculty', validateData = true } = options;
+  const { defaultRole = "faculty", validateData = true } = options;
 
   const results = {
     created: 0,
@@ -684,7 +665,7 @@ export const processDirectoryImport = async (csvData, options = {}) => {
     skipped: 0,
     errors: [],
     warnings: [],
-    people: []
+    people: [],
   };
 
   // Clean and validate data first
@@ -694,31 +675,38 @@ export const processDirectoryImport = async (csvData, options = {}) => {
     dataToProcess = cleanedData;
 
     // Add cleaning issues to results
-    issues.forEach(issue => {
+    issues.forEach((issue) => {
       if (issue.fixed) {
-        results.warnings.push(`Row ${issue.rowIndex + 1} (${issue.person}): ${issue.issue}`);
+        results.warnings.push(
+          `Row ${issue.rowIndex + 1} (${issue.person}): ${issue.issue}`,
+        );
       } else {
-        results.errors.push(`Row ${issue.rowIndex + 1} (${issue.person}): ${issue.issue}`);
+        results.errors.push(
+          `Row ${issue.rowIndex + 1} (${issue.person}): ${issue.issue}`,
+        );
       }
     });
   }
 
   // Fetch existing people
-  const peopleSnapshot = await getDocs(collection(db, 'people'));
-  const existingPeople = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const peopleSnapshot = await getDocs(collection(db, "people"));
+  const existingPeople = peopleSnapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  }));
 
   for (let i = 0; i < dataToProcess.length; i++) {
     const row = dataToProcess[i];
     try {
       // Parse name components with better validation
-      const title = (row['Title'] || '').trim();
-      const firstName = (row['First Name'] || '').trim();
-      const lastName = (row['Last Name'] || '').trim();
-      const email = (row['E-mail Address'] || '').trim();
-      const phone = (row['Business Phone'] || row['Home Phone'] || '').trim();
-      const jobTitle = (row['Job Title'] || '').trim();
-      const department = (row['Department'] || '').trim();
-      const office = (row['Office Location'] || '').trim();
+      const title = (row["Title"] || "").trim();
+      const firstName = (row["First Name"] || "").trim();
+      const lastName = (row["Last Name"] || "").trim();
+      const email = (row["E-mail Address"] || "").trim();
+      const phone = (row["Business Phone"] || row["Home Phone"] || "").trim();
+      const jobTitle = (row["Job Title"] || "").trim();
+      const department = (row["Department"] || "").trim();
+      const office = (row["Office Location"] || "").trim();
 
       // Skip rows with no meaningful data
       if (!firstName && !lastName && !email) {
@@ -729,25 +717,29 @@ export const processDirectoryImport = async (csvData, options = {}) => {
       // Data validation for column misalignment
       if (validateData) {
         // Check if job title appears in unexpected fields (like Home City)
-        const homeCity = (row['Home City'] || '').trim();
-        const suspiciousJobTitleInHomeCity = homeCity && (
-          homeCity.toLowerCase().includes('professor') ||
-          homeCity.toLowerCase().includes('lecturer') ||
-          homeCity.toLowerCase().includes('instructor') ||
-          homeCity.toLowerCase().includes('coordinator') ||
-          homeCity.toLowerCase().includes('assistant') ||
-          homeCity.toLowerCase().includes('associate')
-        );
+        const homeCity = (row["Home City"] || "").trim();
+        const suspiciousJobTitleInHomeCity =
+          homeCity &&
+          (homeCity.toLowerCase().includes("professor") ||
+            homeCity.toLowerCase().includes("lecturer") ||
+            homeCity.toLowerCase().includes("instructor") ||
+            homeCity.toLowerCase().includes("coordinator") ||
+            homeCity.toLowerCase().includes("assistant") ||
+            homeCity.toLowerCase().includes("associate"));
 
         if (suspiciousJobTitleInHomeCity && !jobTitle) {
           // Likely column misalignment - use Home City as Job Title
-          results.errors.push(`Row ${i + 1}: Detected possible column misalignment for ${firstName} ${lastName}. Using "${homeCity}" as job title.`);
+          results.errors.push(
+            `Row ${i + 1}: Detected possible column misalignment for ${firstName} ${lastName}. Using "${homeCity}" as job title.`,
+          );
           // We could fix this automatically, but for now just flag it
         }
 
         // Validate email format
-        if (email && !email.includes('@')) {
-          results.errors.push(`Row ${i + 1}: Invalid email format for ${firstName} ${lastName}: ${email}`);
+        if (email && !email.includes("@")) {
+          results.errors.push(
+            `Row ${i + 1}: Invalid email format for ${firstName} ${lastName}: ${email}`,
+          );
         }
       }
 
@@ -757,8 +749,8 @@ export const processDirectoryImport = async (csvData, options = {}) => {
         roles = determineRoles(jobTitle);
       } else {
         // No job title provided - use default role
-        if (defaultRole === 'both') {
-          roles = ['faculty', 'staff'];
+        if (defaultRole === "both") {
+          roles = ["faculty", "staff"];
         } else {
           roles = [defaultRole];
         }
@@ -775,57 +767,65 @@ export const processDirectoryImport = async (csvData, options = {}) => {
         department,
         office,
         roles,
-        isAdjunct: jobTitle.toLowerCase().includes('adjunct'),
-        isFullTime: !jobTitle.toLowerCase().includes('part') && !jobTitle.toLowerCase().includes('adjunct')
+        isAdjunct: jobTitle.toLowerCase().includes("adjunct"),
+        isFullTime:
+          !jobTitle.toLowerCase().includes("part") &&
+          !jobTitle.toLowerCase().includes("adjunct"),
       });
 
       // Match strictly by email for idempotent upsert behavior
       const existingMatch = personData.email
-        ? existingPeople.find(p => (p.email || '').toLowerCase() === personData.email)
+        ? existingPeople.find(
+            (p) => (p.email || "").toLowerCase() === personData.email,
+          )
         : null;
 
       if (existingMatch) {
         // Upsert: only overwrite with non-empty CSV values; skip if identical
-        const { updates, hasChanges } = buildUpsertUpdates(existingMatch, personData);
+        const { updates, hasChanges } = buildUpsertUpdates(
+          existingMatch,
+          personData,
+        );
         if (!hasChanges) {
           results.skipped++;
           continue;
         }
 
-        await updateDoc(doc(db, 'people', existingMatch.id), updates);
+        await updateDoc(doc(db, "people", existingMatch.id), updates);
 
         // Log update (no await to avoid slowing bulk import)
         logUpdate(
           `Directory Import - ${personData.firstName} ${personData.lastName}`,
-          'people',
+          "people",
           existingMatch.id,
           updates,
           existingMatch,
-          'dataImportUtils.js - processDirectoryImport'
-        ).catch(err => console.error('Change logging error:', err));
+          "dataImportUtils.js - processDirectoryImport",
+        ).catch((err) => console.error("Change logging error:", err));
 
         results.updated++;
         results.people.push({ ...existingMatch, ...updates });
       } else {
         // Create new person
-        const docRef = await addDoc(collection(db, 'people'), personData);
+        const docRef = await addDoc(collection(db, "people"), personData);
 
         // Log creation (no await to avoid slowing bulk import)
         logCreate(
           `Directory Import - ${personData.firstName} ${personData.lastName}`,
-          'people',
+          "people",
           docRef.id,
           personData,
-          'dataImportUtils.js - processDirectoryImport'
-        ).catch(err => console.error('Change logging error:', err));
+          "dataImportUtils.js - processDirectoryImport",
+        ).catch((err) => console.error("Change logging error:", err));
 
         results.created++;
         results.people.push({ ...personData, id: docRef.id });
         existingPeople.push({ ...personData, id: docRef.id });
       }
-
     } catch (error) {
-      results.errors.push(`Row ${i + 1}: Error processing ${row['First Name']} ${row['Last Name']}: ${error.message}`);
+      results.errors.push(
+        `Row ${i + 1}: Error processing ${row["First Name"]} ${row["Last Name"]}: ${error.message}`,
+      );
     }
   }
 
@@ -847,93 +847,197 @@ export const processScheduleImport = async (csvData) => {
     schedules: [],
     peopleCreated: 0,
     peopleUpdated: 0,
-    roomsCreated: 0
+    roomsCreated: 0,
   };
 
-  console.log('🔗 Starting enhanced relational schedule import...');
+  console.log("🔗 Starting enhanced relational schedule import...");
+
+  const fetchExistingSchedulesForImport = async () => {
+    const termCodes = new Set();
+    const termLabels = new Set();
+
+    csvData.forEach((row) => {
+      const rawTerm = (row["Term"] || "").toString().trim();
+      const normalized = normalizeTermLabel(rawTerm);
+      const termCode = termCodeFromLabel(
+        row["Term Code"] || normalized || rawTerm,
+      );
+      if (termCode) termCodes.add(termCode);
+      if (rawTerm) termLabels.add(rawTerm);
+      if (normalized) termLabels.add(normalized);
+    });
+
+    if (termCodes.size === 0 && termLabels.size === 0) {
+      return [];
+    }
+
+    const chunkItems = (items) => {
+      const chunks = [];
+      for (let i = 0; i < items.length; i += 10) {
+        chunks.push(items.slice(i, i + 10));
+      }
+      return chunks;
+    };
+
+    const schedules = [];
+    const seenIds = new Set();
+    const queries = [];
+
+    if (termCodes.size > 0) {
+      chunkItems(Array.from(termCodes)).forEach((chunk) => {
+        queries.push(
+          query(
+            collection(db, COLLECTIONS.SCHEDULES),
+            where("termCode", "in", chunk),
+          ),
+        );
+      });
+    }
+
+    if (termLabels.size > 0) {
+      chunkItems(Array.from(termLabels)).forEach((chunk) => {
+        queries.push(
+          query(
+            collection(db, COLLECTIONS.SCHEDULES),
+            where("term", "in", chunk),
+          ),
+        );
+      });
+    }
+
+    for (const q of queries) {
+      const snapshot = await getDocs(q);
+      snapshot.docs.forEach((docSnap) => {
+        if (!seenIds.has(docSnap.id)) {
+          seenIds.add(docSnap.id);
+          schedules.push({ id: docSnap.id, ...docSnap.data() });
+        }
+      });
+    }
+
+    return schedules;
+  };
 
   // Fetch existing data
-  const [peopleSnapshot, schedulesSnapshot, roomsSnapshot, coursesSnapshot, termsSnapshot] = await Promise.all([
+  const [
+    peopleSnapshot,
+    existingSchedulesResult,
+    roomsSnapshot,
+    coursesSnapshot,
+    termsSnapshot,
+  ] = await Promise.all([
     getDocs(collection(db, COLLECTIONS.PEOPLE)),
-    getDocs(collection(db, COLLECTIONS.SCHEDULES)),
+    fetchExistingSchedulesForImport(),
     getDocs(collection(db, COLLECTIONS.ROOMS)),
     getDocs(collection(db, COLLECTIONS.COURSES)),
-    getDocs(collection(db, COLLECTIONS.TERMS))
+    getDocs(collection(db, COLLECTIONS.TERMS)),
   ]);
 
-  const existingPeople = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  const existingSchedules = schedulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  const existingRooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  const existingCourses = coursesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  const existingTerms = termsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const existingPeople = peopleSnapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  }));
+  const existingSchedules = Array.isArray(existingSchedulesResult)
+    ? existingSchedulesResult
+    : [];
+  const existingRooms = roomsSnapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  }));
+  const existingCourses = coursesSnapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  }));
+  const existingTerms = termsSnapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  }));
 
-  console.log(`📊 Found ${existingPeople.length} existing people, ${existingRooms.length} rooms`);
+  console.log(
+    `📊 Found ${existingPeople.length} existing people, ${existingRooms.length} rooms`,
+  );
 
   // Normalize section strings like "01 (33070)" → "01"
   const normalizeSection = (sectionField) => {
-    const raw = (sectionField || '').toString().trim();
-    if (!raw) return '';
-    const cut = raw.split(' ')[0];
-    const idx = cut.indexOf('(');
+    const raw = (sectionField || "").toString().trim();
+    if (!raw) return "";
+    const cut = raw.split(" ")[0];
+    const idx = cut.indexOf("(");
     return idx > -1 ? cut.substring(0, idx).trim() : cut.trim();
   };
 
   // Build a deterministic composite key for schedules when CRN/section are missing
   const toMeetingKey = (patterns) => {
-    if (!Array.isArray(patterns) || patterns.length === 0) return '';
-    const norm = patterns.map(p => ({
-      d: (p?.day || '').toString().trim().toUpperCase(),
-      s: (p?.startTime || '').toString().trim(),
-      e: (p?.endTime || '').toString().trim()
+    if (!Array.isArray(patterns) || patterns.length === 0) return "";
+    const norm = patterns.map((p) => ({
+      d: (p?.day || "").toString().trim().toUpperCase(),
+      s: (p?.startTime || "").toString().trim(),
+      e: (p?.endTime || "").toString().trim(),
     }));
     // Sort by day then start time for stability
-    norm.sort((a, b) => (a.d.localeCompare(b.d) || a.s.localeCompare(b.s) || a.e.localeCompare(b.e)));
-    return norm.map(p => `${p.d}|${p.s}|${p.e}`).join('~');
+    norm.sort(
+      (a, b) =>
+        a.d.localeCompare(b.d) ||
+        a.s.localeCompare(b.s) ||
+        a.e.localeCompare(b.e),
+    );
+    return norm.map((p) => `${p.d}|${p.s}|${p.e}`).join("~");
   };
   const toRoomKey = (schedule) => {
     const names = Array.isArray(schedule?.roomNames)
       ? schedule.roomNames
-      : ((schedule?.roomName ? [schedule.roomName] : []));
-    if (!names || names.length === 0) return '';
-    const cleaned = names.map(n => (n || '').toString().trim().toLowerCase()).filter(Boolean).sort();
-    return cleaned.join('|');
+      : schedule?.roomName
+        ? [schedule.roomName]
+        : [];
+    if (!names || names.length === 0) return "";
+    const cleaned = names
+      .map((n) => (n || "").toString().trim().toLowerCase())
+      .filter(Boolean)
+      .sort();
+    return cleaned.join("|");
   };
   const buildCompositeKey = (s) => {
-    const course = (s.courseCode || '').toString().trim().toUpperCase();
-    const termVal = (s.term || '').toString().trim();
+    const course = (s.courseCode || "").toString().trim().toUpperCase();
+    const termVal = (s.term || "").toString().trim();
     const mp = toMeetingKey(s.meetingPatterns);
     const rm = toRoomKey(s);
-    if (!course || !termVal || !mp || !rm) return '';
+    if (!course || !termVal || !mp || !rm) return "";
     return `${course}__${termVal}__${mp}__${rm}`;
   };
 
   for (const row of csvData) {
     try {
       // Extract key fields
-      const instructorField = row['Instructor'] || '';
-      const courseCode = row['Course'] || '';
-      const courseTitle = row['Course Title'] || row['Long Title'] || '';
-      const section = normalizeSection(row['Section #'] || '');
-      const crn = row['CRN'] || ''; // Extract CRN field
-      const meetingPattern = row['Meeting Pattern'] || '';
-      const meetings = row['Meetings'] || '';
-      const roomName = (row['Room'] || '').trim();
-      const instructionMethod = (row['Inst. Method'] || row['Instruction Method'] || '').trim();
-      const term = row['Term'] || '';
-      const termCode = row['Term Code'] || '';
-      const catalogNumber = (row['Catalog Number'] || '').trim();
-      const creditsFromCsv = row['Credit Hrs'] || row['Credit Hrs Min'];
-      const scheduleType = row['Schedule Type'] || 'Class Instruction';
-      const status = row['Status'] || 'Active';
+      const instructorField = row["Instructor"] || "";
+      const courseCode = row["Course"] || "";
+      const courseTitle = row["Course Title"] || row["Long Title"] || "";
+      const section = normalizeSection(row["Section #"] || "");
+      const crn = row["CRN"] || ""; // Extract CRN field
+      const meetingPattern = row["Meeting Pattern"] || "";
+      const meetings = row["Meetings"] || "";
+      const roomName = (row["Room"] || "").trim();
+      const instructionMethod = (
+        row["Inst. Method"] ||
+        row["Instruction Method"] ||
+        ""
+      ).trim();
+      const rawTerm = row["Term"] || "";
+      const normalizedTerm = normalizeTermLabel(rawTerm);
+      const termCode = termCodeFromLabel(row["Term Code"] || normalizedTerm);
+      const term = normalizedTerm || rawTerm;
+      const catalogNumber = (row["Catalog Number"] || "").trim();
+      const creditsFromCsv = row["Credit Hrs"] || row["Credit Hrs Min"];
+      const scheduleType = row["Schedule Type"] || "Class Instruction";
+      const status = row["Status"] || "Active";
 
       if (!courseCode || !instructorField) {
         results.skipped++;
         continue;
       }
 
-      // Parse instructor information
-      const instructorInfo = parseInstructorField(instructorField);
-      if (!instructorInfo) {
+      // Parse instructor information (supports multiple instructors)
+      const instructorInfos = parseInstructorFieldList(instructorField);
+      if (!instructorInfos || instructorInfos.length === 0) {
         results.errors.push(`Could not parse instructor: ${instructorField}`);
         continue;
       }
@@ -941,98 +1045,187 @@ export const processScheduleImport = async (csvData) => {
       // === ENHANCED INSTRUCTOR LINKING ===
       let instructorId = null;
       let instructorData = null;
+      const instructorAssignments = [];
+      const instructorPeople = new Map();
+      const updatedPeople = new Set();
 
-      if (instructorInfo.lastName !== 'Staff') {
-        // Use sophisticated matching with multiple strategies
-        const match = await findBestInstructorMatch(instructorInfo, existingPeople);
+      const ensureFacultyRole = async (person) => {
+        if (!person || updatedPeople.has(person.id)) return;
+        const hasRoles =
+          person.roles &&
+          ((Array.isArray(person.roles) && person.roles.includes("faculty")) ||
+            (typeof person.roles === "object" && person.roles.faculty === true));
 
-        if (match) {
-          instructorId = match.person.id;
-          instructorData = match.person;
-
-          // Update person's roles if they don't have faculty role
-          const hasRoles = match.person.roles && (
-            (Array.isArray(match.person.roles) && match.person.roles.includes('faculty')) ||
-            (typeof match.person.roles === 'object' && match.person.roles.faculty === true)
-          );
-
-          if (!hasRoles) {
-            const currentRoles = Array.isArray(match.person.roles)
-              ? match.person.roles
-              : Object.keys(match.person.roles || {}).filter(key => match.person.roles[key]);
-            const updatedRoles = [...new Set([...currentRoles, 'faculty'])];
-            await updateDoc(doc(db, 'people', match.person.id), {
-              roles: updatedRoles,
-              updatedAt: new Date().toISOString()
-            });
-
-            // Update our local copy
-            match.person.roles = updatedRoles;
-            results.peopleUpdated++;
-            console.log(`✅ Added faculty role to ${match.person.firstName} ${match.person.lastName}`);
-          }
-
-          // Determine and set program based on course data if not already set
-          if (!match.person.programId) {
-            const programId = determineProgramIdFromCourses([{ courseCode }]);
-            if (programId) {
-              await updateDoc(doc(db, 'people', match.person.id), {
-                programId: programId,
-                updatedAt: new Date().toISOString()
-              });
-
-              // Update our local copy
-              match.person.programId = programId;
-              console.log(`🎯 Assigned ${programId} program to ${match.person.firstName} ${match.person.lastName} based on course ${courseCode}`);
-            }
-          }
-        } else {
-          // Determine program based on course before creating new person
-          const programId = determineProgramIdFromCourses([{ courseCode }]);
-
-          // Create new person for instructor with enhanced data
-          const newPerson = createPersonModel({
-            firstName: instructorInfo.firstName,
-            lastName: instructorInfo.lastName,
-            title: instructorInfo.title,
-            roles: ['faculty'],
-            isAdjunct: true,
-            department: 'Human Sciences & Design', // Default from CLSS context
-            jobTitle: 'Instructor', // Default
-            programId: programId, // Set program based on course
-            clssInstructorId: instructorInfo.id || null
+        if (!hasRoles) {
+          const currentRoles = Array.isArray(person.roles)
+            ? person.roles
+            : Object.keys(person.roles || {}).filter((key) => person.roles[key]);
+          const updatedRoles = [...new Set([...currentRoles, "faculty"])];
+          await updateDoc(doc(db, "people", person.id), {
+            roles: updatedRoles,
+            updatedAt: new Date().toISOString(),
           });
 
-          const docRef = await addDoc(collection(db, COLLECTIONS.PEOPLE), newPerson);
-          instructorId = docRef.id;
-          instructorData = { ...newPerson, id: docRef.id };
-          existingPeople.push(instructorData);
-          results.peopleCreated++;
-          console.log(`➕ Created new instructor: ${instructorInfo.firstName} ${instructorInfo.lastName}${programId ? ` (${programId} program)` : ''}`);
+          person.roles = updatedRoles;
+          results.peopleUpdated++;
+          console.log(
+            `✅ Added faculty role to ${person.firstName} ${person.lastName}`,
+          );
         }
+
+        updatedPeople.add(person.id);
+      };
+
+      const ensureProgramAssignment = async (person) => {
+        if (!person || updatedPeople.has(`${person.id}-program`)) return;
+        if (!person.programId) {
+          const programId = determineProgramIdFromCourses([{ courseCode }]);
+          if (programId) {
+            await updateDoc(doc(db, "people", person.id), {
+              programId: programId,
+              updatedAt: new Date().toISOString(),
+            });
+
+            person.programId = programId;
+            console.log(
+              `🎯 Assigned ${programId} program to ${person.firstName} ${person.lastName} based on course ${courseCode}`,
+            );
+          }
+        }
+        updatedPeople.add(`${person.id}-program`);
+      };
+
+      const resolveInstructor = async (info) => {
+        if (!info || info.lastName === "Staff") return null;
+        const match = await findBestInstructorMatch(info, existingPeople);
+        let person = null;
+
+        if (match) {
+          person = match.person;
+          await ensureFacultyRole(person);
+          await ensureProgramAssignment(person);
+        } else {
+          const programId = determineProgramIdFromCourses([{ courseCode }]);
+          const newPerson = createPersonModel({
+            firstName: info.firstName,
+            lastName: info.lastName,
+            title: info.title,
+            roles: ["faculty"],
+            isAdjunct: true,
+            department: "Human Sciences & Design", // Default from CLSS context
+            jobTitle: "Instructor", // Default
+            programId: programId, // Set program based on course
+            clssInstructorId: info.id || null,
+          });
+
+          const docRef = await addDoc(
+            collection(db, COLLECTIONS.PEOPLE),
+            newPerson,
+          );
+          person = { ...newPerson, id: docRef.id };
+          existingPeople.push(person);
+          results.peopleCreated++;
+          console.log(
+            `➕ Created new instructor: ${info.firstName} ${info.lastName}${programId ? ` (${programId} program)` : ""}`,
+          );
+        }
+
+        if (!person?.id) return null;
+        return {
+          person,
+          assignment: {
+            personId: person.id,
+            isPrimary: info.isPrimary || false,
+            percentage:
+              Number.isFinite(info.percentage) && info.percentage > 0
+                ? info.percentage
+                : 100,
+          },
+        };
+      };
+
+      for (const info of instructorInfos) {
+        const resolved = await resolveInstructor(info);
+        if (!resolved) continue;
+        instructorAssignments.push(resolved.assignment);
+        instructorPeople.set(resolved.assignment.personId, resolved.person);
       }
 
-      // Determine online flags
-      const inferredIsOnline = (
-        (roomName && roomName.toLowerCase() === 'online') ||
-        (roomName && roomName === 'No Room Needed') ||
-        (instructionMethod && instructionMethod.toLowerCase().includes('online'))
-      );
+      if (
+        instructorAssignments.length > 0 &&
+        !instructorAssignments.some((a) => a.isPrimary)
+      ) {
+        instructorAssignments[0].isPrimary = true;
+      }
+
+      const assignmentMap = new Map();
+      instructorAssignments.forEach((assignment) => {
+        if (!assignment?.personId) return;
+        const existing = assignmentMap.get(assignment.personId);
+        if (!existing) {
+          assignmentMap.set(assignment.personId, assignment);
+          return;
+        }
+        assignmentMap.set(assignment.personId, {
+          ...existing,
+          ...assignment,
+          isPrimary: existing.isPrimary || assignment.isPrimary || false,
+          percentage: Math.max(
+            existing.percentage || 0,
+            assignment.percentage || 0,
+          ),
+        });
+      });
+
+      const dedupedAssignments = Array.from(assignmentMap.values());
+      const instructorIds = dedupedAssignments.map((a) => a.personId);
+      const primaryAssignment =
+        dedupedAssignments.find((a) => a.isPrimary) ||
+        dedupedAssignments.sort(
+          (a, b) => (b.percentage || 0) - (a.percentage || 0),
+        )[0];
+      instructorId = primaryAssignment?.personId || null;
+      instructorData = instructorId
+        ? instructorPeople.get(instructorId) ||
+          existingPeople.find((p) => p.id === instructorId)
+        : null;
+
+      const normalizedRoomLabel = (roomName || "").trim();
+      const upperRoomLabel = normalizedRoomLabel.toUpperCase();
+      const isNoRoomLabel = upperRoomLabel === "NO ROOM NEEDED";
+      const isOnlineLabel = upperRoomLabel.includes("ONLINE");
+      const isRoomlessLabel = isNoRoomLabel || isOnlineLabel;
+      const inferredIsOnline =
+        isOnlineLabel ||
+        (instructionMethod &&
+          instructionMethod.toLowerCase().includes("online"));
+      const hasPhysicalRoom = normalizedRoomLabel && !isRoomlessLabel;
+      const locationType =
+        hasPhysicalRoom || (!inferredIsOnline && !isRoomlessLabel)
+          ? "room"
+          : "no_room";
+      const locationLabel = locationType === "no_room" ? "No Room Needed" : "";
 
       // === ENHANCED ROOM LINKING (supports multiple rooms separated by ';', newlines, etc.) ===
       let roomIds = [];
       let roomNames = [];
-      if (!inferredIsOnline && roomName && roomName.toLowerCase() !== 'online' && roomName !== 'No Room Needed') {
-        const splitRooms = splitRoomNames(roomName);
+      if (hasPhysicalRoom) {
+        const splitRooms = splitRoomNames(normalizedRoomLabel);
         for (const singleRoom of splitRooms) {
           roomNames.push(singleRoom);
           // Deterministic room ID: buildingCode_roomNumber (fallback to sanitized name)
           const building = extractBuildingFromRoom(singleRoom);
           const roomNumber = extractRoomNumberFromRoom(singleRoom);
-          const deterministicRoomId = (building && roomNumber)
-            ? `${building.replace(/\s+/g, '_').toLowerCase()}_${roomNumber}`
-            : singleRoom.replace(/\s+/g, '_').toLowerCase();
-          const existingRoom = existingRooms.find(r => r.id === deterministicRoomId || r.name === singleRoom || r.displayName === singleRoom);
+          const deterministicRoomId =
+            building && roomNumber
+              ? `${building.replace(/\s+/g, "_").toLowerCase()}_${roomNumber}`
+              : singleRoom.replace(/\s+/g, "_").toLowerCase();
+          const existingRoom = existingRooms.find(
+            (r) =>
+              r.id === deterministicRoomId ||
+              r.name === singleRoom ||
+              r.displayName === singleRoom,
+          );
           if (existingRoom) {
             roomIds.push(existingRoom.id);
           } else {
@@ -1041,7 +1234,7 @@ export const processScheduleImport = async (csvData) => {
               displayName: singleRoom,
               building,
               roomNumber,
-              type: 'Classroom'
+              type: "Classroom",
             });
             const roomRef = doc(db, COLLECTIONS.ROOMS, deterministicRoomId);
             await setDoc(roomRef, newRoom, { merge: true });
@@ -1050,8 +1243,10 @@ export const processScheduleImport = async (csvData) => {
               COLLECTIONS.ROOMS,
               roomRef.id,
               newRoom,
-              'dataImportUtils.js - processScheduleImport'
-            ).catch(err => console.error('Change logging error (room):', err));
+              "dataImportUtils.js - processScheduleImport",
+            ).catch((err) =>
+              console.error("Change logging error (room):", err),
+            );
             roomIds.push(roomRef.id);
             existingRooms.push({ ...newRoom, id: roomRef.id });
             results.roomsCreated++;
@@ -1069,23 +1264,34 @@ export const processScheduleImport = async (csvData) => {
 
       // Parse course code for additional details
       const parsedCourse = parseCourseCode(courseCode);
-      const parsedProgram = parsedCourse?.error ? '' : (parsedCourse?.program || '');
-      const subjectCode = ((row['Subject Code'] || '').trim().toUpperCase()) || parsedProgram;
+      const parsedProgram = parsedCourse?.error
+        ? ""
+        : parsedCourse?.program || "";
+      const subjectCode =
+        (row["Subject Code"] || "").trim().toUpperCase() || parsedProgram;
       const programCode = parsedProgram || subjectCode;
 
-      const rawCatalogForCredits = catalogNumber || courseCode.replace(/^[A-Z]{2,4}\s?/, '');
-      const derivedCredits = deriveCreditsFromCatalogNumber(rawCatalogForCredits, creditsFromCsv);
-      const finalCredits = (derivedCredits ?? parsedCourse.credits ?? null);
+      const rawCatalogForCredits =
+        catalogNumber || courseCode.replace(/^[A-Z]{2,4}\s?/, "");
+      const derivedCredits = deriveCreditsFromCatalogNumber(
+        rawCatalogForCredits,
+        creditsFromCsv,
+      );
+      const finalCredits = derivedCredits ?? parsedCourse.credits ?? null;
 
       // === COURSE UPSERT WITH DETERMINISTIC ID ===
-      let courseId = '';
+      let courseId = "";
       if (courseCode) {
-        const courseDeterministicId = courseCode.replace(/\s+/g, '_').toUpperCase();
-        const existingCourse = existingCourses.find(c => c.id === courseDeterministicId);
+        const courseDeterministicId = courseCode
+          .replace(/\s+/g, "_")
+          .toUpperCase();
+        const existingCourse = existingCourses.find(
+          (c) => c.id === courseDeterministicId,
+        );
         const courseDoc = {
           courseCode,
           title: courseTitle,
-          departmentCode: (row['Department Code'] || '').trim(),
+          departmentCode: (row["Department Code"] || "").trim(),
           subjectCode: subjectCode || null,
           catalogNumber,
           credits: finalCredits ?? null,
@@ -1093,45 +1299,69 @@ export const processScheduleImport = async (csvData) => {
           updatedAt: new Date().toISOString(),
         };
         if (!existingCourse) {
-          await setDoc(doc(db, COLLECTIONS.COURSES, courseDeterministicId), { ...courseDoc, createdAt: new Date().toISOString() });
+          await setDoc(doc(db, COLLECTIONS.COURSES, courseDeterministicId), {
+            ...courseDoc,
+            createdAt: new Date().toISOString(),
+          });
           // Log course creation
           logCreate(
             `Course - ${courseCode}`,
             COLLECTIONS.COURSES,
             courseDeterministicId,
             courseDoc,
-            'dataImportUtils.js - processScheduleImport'
-          ).catch(err => console.error('Change logging error (course):', err));
+            "dataImportUtils.js - processScheduleImport",
+          ).catch((err) =>
+            console.error("Change logging error (course):", err),
+          );
           existingCourses.push({ id: courseDeterministicId, ...courseDoc });
         } else {
-          await setDoc(doc(db, COLLECTIONS.COURSES, courseDeterministicId), courseDoc, { merge: true });
+          await setDoc(
+            doc(db, COLLECTIONS.COURSES, courseDeterministicId),
+            courseDoc,
+            { merge: true },
+          );
         }
         courseId = courseDeterministicId;
       }
 
       // === TERM UPSERT WITH DETERMINISTIC ID ===
-      let termId = '';
+      let termId = "";
       if (termCode) {
         const termDeterministicId = termCode;
-        const existingTerm = existingTerms.find(t => t.id === termDeterministicId);
+        const existingTerm = existingTerms.find(
+          (t) => t.id === termDeterministicId,
+        );
+        const termInfo = deriveTermInfo({ term, termCode }, getTermConfig());
         const termDoc = {
-          term,
-          termCode,
-          updatedAt: new Date().toISOString()
+          term: termInfo.term || term,
+          termCode: termInfo.termCode || termCode,
+          season: termInfo.season || null,
+          year: termInfo.year ?? null,
+          sortKey: termInfo.sortKey ?? null,
+          updatedAt: new Date().toISOString(),
         };
         if (!existingTerm) {
-          await setDoc(doc(db, COLLECTIONS.TERMS, termDeterministicId), { ...termDoc, createdAt: new Date().toISOString() });
+          await setDoc(doc(db, COLLECTIONS.TERMS, termDeterministicId), {
+            ...termDoc,
+            status: "active",
+            locked: false,
+            createdAt: new Date().toISOString(),
+          });
           // Log term creation
           logCreate(
             `Term - ${term} (${termCode})`,
             COLLECTIONS.TERMS,
             termDeterministicId,
             termDoc,
-            'dataImportUtils.js - processScheduleImport'
-          ).catch(err => console.error('Change logging error (term):', err));
+            "dataImportUtils.js - processScheduleImport",
+          ).catch((err) => console.error("Change logging error (term):", err));
           existingTerms.push({ id: termDeterministicId, ...termDoc });
         } else {
-          await setDoc(doc(db, COLLECTIONS.TERMS, termDeterministicId), termDoc, { merge: true });
+          await setDoc(
+            doc(db, COLLECTIONS.TERMS, termDeterministicId),
+            termDoc,
+            { merge: true },
+          );
         }
         termId = termDeterministicId;
       }
@@ -1139,7 +1369,11 @@ export const processScheduleImport = async (csvData) => {
       // Create schedule data with full relational links
       const scheduleData = createScheduleModel({
         instructorId,
-        instructorName: instructorData ? `${instructorData.firstName} ${instructorData.lastName}`.trim() : 'Staff',
+        instructorIds,
+        instructorAssignments: dedupedAssignments,
+        instructorName: instructorData
+          ? `${instructorData.firstName} ${instructorData.lastName}`.trim()
+          : "Staff",
         courseId,
         courseCode,
         courseTitle,
@@ -1155,22 +1389,34 @@ export const processScheduleImport = async (csvData) => {
         roomIds,
         roomId: roomIds.length > 0 ? roomIds[0] : null,
         roomNames,
-        roomName: inferredIsOnline ? '' : (roomNames[0] || ''),
+        roomName: locationType === "no_room" ? "" : roomNames[0] || "",
         term,
         termCode,
         credits: finalCredits,
         scheduleType,
+        instructionMethod,
         // Online flags
         isOnline: inferredIsOnline,
-        onlineMode: inferredIsOnline ? (meetingPatterns && meetingPatterns.length > 0 ? 'synchronous' : 'asynchronous') : null,
-        status
+        onlineMode: inferredIsOnline
+          ? meetingPatterns && meetingPatterns.length > 0
+            ? "synchronous"
+            : "asynchronous"
+          : null,
+        locationType,
+        locationLabel,
+        status,
       });
 
       // Parse cross-listings from CSV text (store related CRNs if present)
       const crossListCrns = parseCrossListCrns(row);
 
       // Omit redundant display fields from writes; keep on read via joins
-      const { instructorName: _omitInstructorName, roomName: _omitRoomName, courseTitle: _omitCourseTitle, ...scheduleWrite } = scheduleData;
+      const {
+        instructorName: _omitInstructorName,
+        roomName: _omitRoomName,
+        courseTitle: _omitCourseTitle,
+        ...scheduleWrite
+      } = scheduleData;
       if (crossListCrns && crossListCrns.length > 0) {
         scheduleWrite.crossListCrns = Array.from(new Set(crossListCrns));
       }
@@ -1178,54 +1424,84 @@ export const processScheduleImport = async (csvData) => {
       // Prefer CRN + Term matching when available, fallback to Course + Section + Term
       let existingMatch = null;
       if (scheduleData.crn && scheduleData.term) {
-        existingMatch = existingSchedules.find(s => (s.crn || '') === scheduleData.crn && (s.term || '') === scheduleData.term);
+        existingMatch = existingSchedules.find(
+          (s) =>
+            (s.crn || "") === scheduleData.crn &&
+            (s.term || "") === scheduleData.term,
+        );
       }
       if (!existingMatch) {
-        existingMatch = existingSchedules.find(s =>
-          (s.courseCode || '') === (scheduleData.courseCode || '') &&
-          normalizeSection(s.section) === normalizeSection(scheduleData.section) &&
-          (s.term || '') === (scheduleData.term || '')
+        existingMatch = existingSchedules.find(
+          (s) =>
+            (s.courseCode || "") === (scheduleData.courseCode || "") &&
+            normalizeSection(s.section) ===
+              normalizeSection(scheduleData.section) &&
+            (s.term || "") === (scheduleData.term || ""),
         );
       }
       // Final fallback: deterministic composite of course + term + meeting time + room
       if (!existingMatch) {
         const incomingComposite = buildCompositeKey(scheduleData);
         if (incomingComposite) {
-          existingMatch = existingSchedules.find(s => buildCompositeKey(s) === incomingComposite);
+          existingMatch = existingSchedules.find(
+            (s) => buildCompositeKey(s) === incomingComposite,
+          );
         }
       }
 
       if (existingMatch) {
         // Upsert: only overwrite with non-empty CSV values; skip if identical
-        const { updates, hasChanges } = buildUpsertUpdates(existingMatch, scheduleWrite);
+        const { updates, hasChanges } = buildUpsertUpdates(
+          existingMatch,
+          scheduleWrite,
+        );
         if (!hasChanges) {
           results.skipped++;
           continue;
         }
 
-        await updateDoc(doc(db, COLLECTIONS.SCHEDULES, existingMatch.id), updates);
+        await updateDoc(
+          doc(db, COLLECTIONS.SCHEDULES, existingMatch.id),
+          updates,
+        );
 
         logUpdate(
           `Schedule Import - ${courseCode} ${section} (${term})`,
-          'schedules',
+          "schedules",
           existingMatch.id,
           updates,
           existingMatch,
-          'dataImportUtils.js - processScheduleImport'
-        ).catch(err => console.error('Change logging error:', err));
+          "dataImportUtils.js - processScheduleImport",
+        ).catch((err) => console.error("Change logging error:", err));
 
         results.updated++;
         results.schedules.push({ ...existingMatch, ...updates });
       } else {
         // Create new schedule with full relational integrity
-        // Deterministic schedule ID strategy:
-        //   Prefer: termCode_crn when a valid 5–6 digit CRN exists
-        //   Fallback: termCode_course_section (lowercase, underscores)
-        const hasValidCrn = (scheduleData.crn || '').toString().trim().match(/^\d{5,6}$/);
-        const baseTerm = (scheduleData.termCode || scheduleData.term || 'TERM').toString().trim();
-        const fallbackKey = `${baseTerm}_${(scheduleData.courseCode || 'COURSE').replace(/\s+/g, '-').toUpperCase()}_${(scheduleData.section || 'SECTION').replace(/\s+/g, '-')}`;
-        const scheduleDeterministicId = hasValidCrn ? `${baseTerm}_${scheduleData.crn}` : fallbackKey;
-        const schedRef = doc(db, COLLECTIONS.SCHEDULES, scheduleDeterministicId);
+        // Use canonical section ID from generateSectionId() for deterministic, unique IDs
+        // Format: {termCode}_{courseCode}_{sectionNumber}
+        // Example: "202610_ID_4433_01"
+        // This ensures the same logical section always gets the same ID
+        const sectionNumber = normalizeSectionNumber(scheduleData.section);
+        const termCode = (
+          scheduleData.termCode ||
+          termCodeFromLabel(scheduleData.term) ||
+          "TERM"
+        )
+          .toString()
+          .trim();
+        const scheduleDeterministicId =
+          generateSectionId({
+            termCode,
+            courseCode: scheduleData.courseCode,
+            sectionNumber,
+          }) ||
+          `${termCode}_${(scheduleData.courseCode || "COURSE").replace(/\s+/g, "_").toUpperCase()}_${sectionNumber || "SECTION"}`;
+        const schedRef = doc(
+          db,
+          COLLECTIONS.SCHEDULES,
+          scheduleDeterministicId,
+        );
         await setDoc(schedRef, scheduleWrite, { merge: true });
         results.created++;
         results.schedules.push({ ...scheduleWrite, id: schedRef.id });
@@ -1233,23 +1509,24 @@ export const processScheduleImport = async (csvData) => {
 
         logCreate(
           `Schedule Import - ${courseCode} ${section} (${term})`,
-          'schedules',
+          "schedules",
           schedRef.id,
           scheduleData,
-          'dataImportUtils.js - processScheduleImport'
-        ).catch(err => console.error('Change logging error:', err));
+          "dataImportUtils.js - processScheduleImport",
+        ).catch((err) => console.error("Change logging error:", err));
       }
-
     } catch (error) {
       results.errors.push(`Error processing schedule: ${error.message}`);
-      console.error('❌ Schedule import error:', error);
+      console.error("❌ Schedule import error:", error);
     }
   }
 
   // After import, run automatic duplicate cleanup
   await autoMergeObviousDuplicates();
 
-  console.log(`🎉 Schedule import complete: ${results.created} schedules, ${results.peopleCreated} new people, ${results.roomsCreated} new rooms`);
+  console.log(
+    `🎉 Schedule import complete: ${results.created} schedules, ${results.peopleCreated} new people, ${results.roomsCreated} new rooms`,
+  );
   return results;
 };
 
@@ -1270,158 +1547,36 @@ export const processScheduleImport = async (csvData) => {
  * with _needsReview flag for manual verification.
  */
 const findBestInstructorMatch = async (instructorInfo, existingPeople) => {
-  const { firstName, lastName, title, id: clssId, email, baylorId } = instructorInfo;
+  const { firstName, lastName, id: clssId, email, baylorId } = instructorInfo;
 
-  // Strategy 1: CLSS External ID match (highest priority - unique identifier)
-  if (clssId) {
-    const externalMatch = existingPeople.find(p =>
-      p.externalIds?.clssInstructorId &&
-      String(p.externalIds.clssInstructorId) === String(clssId)
+  const match = findPersonMatch(
+    {
+      firstName,
+      lastName,
+      email,
+      baylorId,
+      clssInstructorId: clssId,
+    },
+    existingPeople,
+    { minScore: 0.85, maxCandidates: 5 },
+  );
+
+  if (match.status === "exact" && match.person) {
+    console.log(
+      `🎯 Exact match: ${match.matchType || "person"} → ${match.person.firstName} ${match.person.lastName} (${match.person.id})`,
     );
-    if (externalMatch) {
-      console.log(`🎯 CLSS ID match: ${clssId} → ${externalMatch.firstName} ${externalMatch.lastName} (${externalMatch.id})`);
-      return { person: externalMatch, confidence: 'exact', matchType: 'clssId' };
-    }
-  }
-
-  // Strategy 2: Baylor ID match (unique identifier)
-  if (baylorId) {
-    const baylorMatch = existingPeople.find(p =>
-      p.baylorId && p.baylorId === baylorId
-    );
-    if (baylorMatch) {
-      console.log(`🎯 Baylor ID match: ${baylorId} → ${baylorMatch.firstName} ${baylorMatch.lastName} (${baylorMatch.id})`);
-      return { person: baylorMatch, confidence: 'exact', matchType: 'baylorId' };
-    }
-  }
-
-  // Strategy 3: Email match (unique identifier)
-  if (email) {
-    const emailMatch = existingPeople.find(p =>
-      p.email && p.email.toLowerCase() === email.toLowerCase()
-    );
-    if (emailMatch) {
-      console.log(`🎯 Email match: ${email} → ${emailMatch.firstName} ${emailMatch.lastName} (${emailMatch.id})`);
-      return { person: emailMatch, confidence: 'exact', matchType: 'email' };
-    }
-  }
-
-  // Strategy 4: Exact name match (case-insensitive, trimmed)
-  // IMPORTANT: This requires BOTH first and last name to match exactly
-  if (firstName && lastName) {
-    const normalizedFirst = firstName.toLowerCase().trim();
-    const normalizedLast = lastName.toLowerCase().trim();
-
-    const exactMatch = existingPeople.find(p =>
-      p.firstName && p.lastName &&
-      p.firstName.toLowerCase().trim() === normalizedFirst &&
-      p.lastName.toLowerCase().trim() === normalizedLast
-    );
-
-    if (exactMatch) {
-      console.log(`🎯 Exact name match: "${firstName} ${lastName}" → "${exactMatch.firstName} ${exactMatch.lastName}" (${exactMatch.id})`);
-      return { person: exactMatch, confidence: 'exact', matchType: 'exactName' };
-    }
-
-    // Also try matching with middle initial removed (e.g., "John A." → "John")
-    const firstNameNoInitial = normalizedFirst.replace(/\s+[a-z]\.$/, '').trim();
-    if (firstNameNoInitial !== normalizedFirst) {
-      const matchNoInitial = existingPeople.find(p =>
-        p.firstName && p.lastName &&
-        p.firstName.toLowerCase().trim() === firstNameNoInitial &&
-        p.lastName.toLowerCase().trim() === normalizedLast
-      );
-      if (matchNoInitial) {
-        console.log(`🎯 Name match (middle initial removed): "${firstName} ${lastName}" → "${matchNoInitial.firstName} ${matchNoInitial.lastName}" (${matchNoInitial.id})`);
-        return { person: matchNoInitial, confidence: 'exact', matchType: 'exactNameNoInitial' };
-      }
-    }
+    return {
+      person: match.person,
+      confidence: "exact",
+      matchType: match.matchType || "exact",
+    };
   }
 
   // NO FUZZY MATCHING - Return null if no exact match found
-  // The schedule import will create a new person record flagged for manual review
-  console.log(`❓ No exact match found for instructor: ${firstName} ${lastName} (CLSS ID: ${clssId || 'none'})`);
+  console.log(
+    `❓ No exact match found for instructor: ${firstName} ${lastName} (CLSS ID: ${clssId || "none"})`,
+  );
   return null;
-};
-
-/**
- * Calculate similarity between two name strings
- * Returns a value between 0 and 1 (1 = identical)
- */
-const calculateNameSimilarity = (name1, name2) => {
-  if (!name1 || !name2) return 0;
-
-  const n1 = name1.toLowerCase().trim();
-  const n2 = name2.toLowerCase().trim();
-
-  // Exact match
-  if (n1 === n2) return 1;
-
-  // Check for common nickname mappings
-  const nicknames = {
-    'bob': 'robert',
-    'bobby': 'robert',
-    'rob': 'robert',
-    'robbie': 'robert',
-    'bill': 'william',
-    'billy': 'william',
-    'will': 'william',
-    'willie': 'william',
-    'jim': 'james',
-    'jimmy': 'james',
-    'jamie': 'james',
-    'mike': 'michael',
-    'mickey': 'michael',
-    'mick': 'michael',
-    'dave': 'david',
-    'davey': 'david',
-    'steve': 'steven',
-    'stevie': 'steven',
-    'chris': 'christopher',
-    'matt': 'matthew',
-    'dan': 'daniel',
-    'danny': 'daniel',
-    'tom': 'thomas',
-    'tommy': 'thomas',
-    'joe': 'joseph',
-    'joey': 'joseph',
-    'tony': 'anthony',
-    'liz': 'elizabeth',
-    'beth': 'elizabeth',
-    'betty': 'elizabeth',
-    'sue': 'susan',
-    'susie': 'susan',
-    'katie': 'katherine',
-    'kate': 'katherine',
-    'kathy': 'katherine',
-    'patty': 'patricia',
-    'pat': 'patricia',
-    'trish': 'patricia',
-    'nick': 'nicholas',
-    'andy': 'andrew',
-    'alex': 'alexander'
-  };
-
-  // Check both directions of nickname mapping
-  if (nicknames[n1] === n2 || nicknames[n2] === n1) return 0.9;
-  if (Object.values(nicknames).includes(n1) && nicknames[n2] === n1) return 0.9;
-  if (Object.values(nicknames).includes(n2) && nicknames[n1] === n2) return 0.9;
-
-  // Check if one name starts with the other (e.g., "Ben" vs "Benjamin")
-  if (n1.startsWith(n2) || n2.startsWith(n1)) {
-    const minLength = Math.min(n1.length, n2.length);
-    const maxLength = Math.max(n1.length, n2.length);
-    return minLength / maxLength;
-  }
-
-  // Simple character similarity (Levenshtein-like)
-  const maxLen = Math.max(n1.length, n2.length);
-  let matches = 0;
-  for (let i = 0; i < Math.min(n1.length, n2.length); i++) {
-    if (n1[i] === n2[i]) matches++;
-  }
-
-  return matches / maxLen;
 };
 
 /**
@@ -1430,7 +1585,7 @@ const calculateNameSimilarity = (name1, name2) => {
 const extractBuildingFromRoom = (roomName) => {
   // Use centralized building utility for consistent naming
   const normalized = getBuildingFromRoom(roomName);
-  return normalized || 'Unknown Building';
+  return normalized || "Unknown Building";
 };
 
 /**
@@ -1442,7 +1597,7 @@ const extractRoomNumberFromRoom = (roomName) => {
   if (numberMatch) {
     return numberMatch[1];
   }
-  return '';
+  return "";
 };
 
 // ==================== CLSS CSV PARSING ====================
@@ -1455,67 +1610,82 @@ const extractRoomNumberFromRoom = (roomName) => {
  * - Many empty columns and rows
  */
 export const parseCLSSCSV = (csvText) => {
-  console.log('🔍 Starting CLSS CSV parsing...');
+  console.log("🔍 Starting CLSS CSV parsing...");
 
-  const rows = parseCSVRecords(csvText || '');
+  const rows = parseCSVRecords(csvText || "");
   let headerRowIndex = -1;
   const scheduleData = [];
   let detectedSemester = null;
 
   if (rows.length === 0) {
-    console.log('⚠️ No rows detected in CSV payload.');
+    console.log("⚠️ No rows detected in CSV payload.");
     return scheduleData;
   }
 
   // Extract semester from the very first cell (CLSS exports typically include it)
-  const firstCell = (rows[0]?.[0] || '').replace(/"/g, '').trim();
-  const semesterPattern = /^(Fall|Spring|Summer|Winter)\s+\d{4}$/i;
+  const firstCell = (rows[0]?.[0] || "").replace(/"/g, "").trim();
+  const semesterPattern = buildTermLabelRegex(getTermConfig());
   if (semesterPattern.test(firstCell)) {
-    detectedSemester = firstCell;
-    console.log('🎓 Detected semester from first line:', detectedSemester);
+    detectedSemester = normalizeTermLabel(firstCell);
+    console.log("🎓 Detected semester from first line:", detectedSemester);
   }
 
   // Find the actual header row (contains column definitions)
   for (let i = 0; i < rows.length; i++) {
-    const rowValues = rows[i].map(cell => (cell || '').toLowerCase());
+    const rowValues = rows[i].map((cell) => (cell || "").toLowerCase());
     const includesRequiredHeaders =
-      rowValues.some(cell => cell.includes('clss id')) &&
-      rowValues.some(cell => cell.includes('instructor')) &&
-      rowValues.some(cell => cell.includes('course'));
+      rowValues.some((cell) => cell.includes("clss id")) &&
+      rowValues.some((cell) => cell.includes("instructor")) &&
+      rowValues.some((cell) => cell.includes("course"));
     if (includesRequiredHeaders) {
       headerRowIndex = i;
-      console.log('📋 Found header row at index:', i);
+      console.log("📋 Found header row at index:", i);
       break;
     }
   }
 
   if (headerRowIndex === -1) {
-    throw new Error('Could not find CLSS header row. Expected headers: CLSS ID, Instructor, Course');
+    throw new Error(
+      "Could not find CLSS header row. Expected headers: CLSS ID, Instructor, Course",
+    );
   }
 
   // Parse header row
-  const headers = rows[headerRowIndex].map(h => (h || '').replace(/"/g, '').trim());
-  console.log('📊 CLSS Headers found:', headers.slice(0, 10), '... (showing first 10)');
+  const headers = rows[headerRowIndex].map((h) =>
+    (h || "").replace(/"/g, "").trim(),
+  );
+  console.log(
+    "📊 CLSS Headers found:",
+    headers.slice(0, 10),
+    "... (showing first 10)",
+  );
 
   // Process data rows (skip header and any rows before it)
   for (let i = headerRowIndex + 1; i < rows.length; i++) {
     const values = rows[i];
-    const isCompletelyEmpty = values.every(value => !String(value || '').trim());
+    const isCompletelyEmpty = values.every(
+      (value) => !String(value || "").trim(),
+    );
     if (isCompletelyEmpty) continue;
 
     if (isCourseTitleRow(values)) {
-      console.log('📚 Skipping course title row:', values[0]?.substring(0, 50) || '');
+      console.log(
+        "📚 Skipping course title row:",
+        values[0]?.substring(0, 50) || "",
+      );
       continue;
     }
 
     const rowData = {};
     headers.forEach((header, index) => {
-      const rawValue = values[index] ?? '';
-      rowData[header] = String(rawValue).replace(/\r/g, '').trim();
+      const rawValue = values[index] ?? "";
+      rowData[header] = String(rawValue).replace(/\r/g, "").trim();
     });
 
-    if (detectedSemester && !rowData['Term']) {
-      rowData['Term'] = detectedSemester;
+    if (rowData["Term"]) {
+      rowData["Term"] = normalizeTermLabel(rowData["Term"]);
+    } else if (detectedSemester) {
+      rowData["Term"] = detectedSemester;
     }
 
     if (isValidScheduleRow(rowData)) {
@@ -1523,8 +1693,12 @@ export const parseCLSSCSV = (csvText) => {
     }
   }
 
-  console.log('✅ CLSS CSV parsing complete. Found', scheduleData.length, 'schedule records');
-  console.log('🎓 All records tagged with semester:', detectedSemester);
+  console.log(
+    "✅ CLSS CSV parsing complete. Found",
+    scheduleData.length,
+    "schedule records",
+  );
+  console.log("🎓 All records tagged with semester:", detectedSemester);
   return scheduleData;
 };
 
@@ -1534,14 +1708,14 @@ export const parseCLSSCSV = (csvText) => {
 const parseCSVRecords = (text) => {
   const rows = [];
   let currentRow = [];
-  let currentValue = '';
+  let currentValue = "";
   let inQuotes = false;
   let lastCharWasLineBreak = false;
 
   for (let i = 0; i < text.length; i++) {
     let char = text[i];
 
-    if (i === 0 && char === '\ufeff') {
+    if (i === 0 && char === "\ufeff") {
       // Strip BOM if present
       continue;
     }
@@ -1554,18 +1728,18 @@ const parseCSVRecords = (text) => {
         inQuotes = !inQuotes;
       }
       lastCharWasLineBreak = false;
-    } else if (char === ',' && !inQuotes) {
+    } else if (char === "," && !inQuotes) {
       currentRow.push(currentValue);
-      currentValue = '';
+      currentValue = "";
       lastCharWasLineBreak = false;
-    } else if ((char === '\n' || char === '\r') && !inQuotes) {
-      if (char === '\r' && text[i + 1] === '\n') {
+    } else if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && text[i + 1] === "\n") {
         i++;
       }
       currentRow.push(currentValue);
       rows.push(currentRow);
       currentRow = [];
-      currentValue = '';
+      currentValue = "";
       lastCharWasLineBreak = true;
     } else {
       currentValue += char;
@@ -1587,9 +1761,9 @@ const parseCSVRecords = (text) => {
 const isCourseTitleRow = (values) => {
   if (!Array.isArray(values) || values.length === 0) return false;
 
-  const firstValue = (values[0] || '').trim();
+  const firstValue = (values[0] || "").trim();
   if (firstValue && firstValue.match(/^[A-Z]{2,4}\s+\d{4}\s*-/)) {
-    const nonEmptyCount = values.filter(v => v && String(v).trim()).length;
+    const nonEmptyCount = values.filter((v) => v && String(v).trim()).length;
     return nonEmptyCount < 5;
   }
 
@@ -1601,86 +1775,206 @@ const isCourseTitleRow = (values) => {
  */
 const isValidScheduleRow = (rowData) => {
   // Must have instructor and course information
-  const hasInstructor = rowData['Instructor'] && rowData['Instructor'].trim();
-  const hasCourse = rowData['Course'] && rowData['Course'].trim();
-  const hasValidCRN = rowData['CRN'] && rowData['CRN'].trim() && !isNaN(rowData['CRN']);
+  const hasInstructor = rowData["Instructor"] && rowData["Instructor"].trim();
+  const hasCourse = rowData["Course"] && rowData["Course"].trim();
+  const hasValidCRN =
+    rowData["CRN"] && rowData["CRN"].trim() && !isNaN(rowData["CRN"]);
 
   return hasInstructor && hasCourse && hasValidCRN;
 };
 
 // ==================== RELATIONAL DATA FETCHING ====================
 
+const enrichSchedules = (schedules, people, rooms, programs) => {
+  const { peopleMap, resolvePersonId, canonicalPeople } =
+    buildPeopleIndex(people);
+  const roomsMap = new Map(rooms.map((r) => [r.id, r]));
+  const programsMap = new Map(programs.map((p) => [p.id, p]));
+
+  const enrichedSchedules = schedules.map((schedule) => {
+    const resolvedInstructorId = schedule.instructorId
+      ? resolvePersonId(schedule.instructorId)
+      : null;
+    const instructor = resolvedInstructorId
+      ? peopleMap.get(resolvedInstructorId)
+      : null;
+
+    let instructorWithProgram = instructor;
+    if (instructor && instructor.programId) {
+      const program = programsMap.get(instructor.programId);
+      if (program) {
+        instructorWithProgram = {
+          ...instructor,
+          program: {
+            id: program.id,
+            name: program.name,
+          },
+        };
+      }
+    }
+
+    const resolvedRooms = Array.isArray(schedule.roomIds)
+      ? schedule.roomIds.map((rid) => roomsMap.get(rid)).filter(Boolean)
+      : schedule.roomId
+        ? [roomsMap.get(schedule.roomId)].filter(Boolean)
+        : [];
+
+    const primaryRoom =
+      resolvedRooms[0] ||
+      (schedule.roomId ? roomsMap.get(schedule.roomId) : null);
+    const derivedRoomName =
+      Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0
+        ? schedule.roomNames[0]
+        : primaryRoom
+          ? primaryRoom.displayName || primaryRoom.name
+          : schedule.roomName || "";
+
+    const instructorName = instructorWithProgram
+      ? getInstructorDisplayName(instructorWithProgram)
+      : schedule.instructorId
+        ? UNASSIGNED
+        : schedule.instructorName || UNASSIGNED;
+
+    return {
+      ...schedule,
+      instructorId: resolvedInstructorId || schedule.instructorId,
+      instructor: instructorWithProgram,
+      rooms: resolvedRooms,
+      room: primaryRoom || null,
+      instructorName,
+      roomName: derivedRoomName,
+      roomNames: Array.isArray(schedule.roomNames)
+        ? schedule.roomNames
+        : derivedRoomName
+          ? [derivedRoomName]
+          : [],
+    };
+  });
+
+  return {
+    schedules: enrichedSchedules,
+    people: canonicalPeople,
+    rooms,
+    programs,
+  };
+};
+
+const fetchRelationalCollections = async () => {
+  const [peopleSnapshot, roomsSnapshot, programsSnapshot] = await Promise.all([
+    getDocs(collection(db, "people")),
+    getDocs(collection(db, "rooms")),
+    getDocs(collection(db, COLLECTIONS.PROGRAMS)),
+  ]);
+
+  return {
+    people: peopleSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+    rooms: roomsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+    programs: programsSnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    })),
+  };
+};
+
 /**
  * Fetch schedules with full relational data (people and rooms populated)
  */
 export const fetchSchedulesWithRelationalData = async () => {
   try {
-    const [schedulesSnapshot, peopleSnapshot, roomsSnapshot, programsSnapshot] = await Promise.all([
-      getDocs(collection(db, 'schedules')),
-      getDocs(collection(db, 'people')),
-      getDocs(collection(db, 'rooms')),
-      getDocs(collection(db, COLLECTIONS.PROGRAMS))
+    const [schedulesSnapshot, relational] = await Promise.all([
+      getDocs(collection(db, "schedules")),
+      fetchRelationalCollections(),
     ]);
 
-    const schedules = schedulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const people = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const rooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const programs = programsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-    // Create lookup maps for performance
-    const peopleMap = new Map(people.map(p => [p.id, p]));
-    const roomsMap = new Map(rooms.map(r => [r.id, r]));
-    const programsMap = new Map(programs.map(p => [p.id, p]));
-
-    // Populate relational data
-    const enrichedSchedules = schedules.map(schedule => {
-      const instructor = schedule.instructorId ? peopleMap.get(schedule.instructorId) : null;
-
-      // Populate instructor program information
-      let instructorWithProgram = instructor;
-      if (instructor && instructor.programId) {
-        const program = programsMap.get(instructor.programId);
-        if (program) {
-          instructorWithProgram = {
-            ...instructor,
-            program: {
-              id: program.id,
-              name: program.name
-            }
-          };
-        }
-      }
-
-      // Multi-room relational enrichment
-      const resolvedRooms = Array.isArray(schedule.roomIds)
-        ? schedule.roomIds.map((rid) => roomsMap.get(rid)).filter(Boolean)
-        : (schedule.roomId ? [roomsMap.get(schedule.roomId)].filter(Boolean) : []);
-
-      // Derive legacy single room fields for compatibility
-      const primaryRoom = resolvedRooms[0] || (schedule.roomId ? roomsMap.get(schedule.roomId) : null);
-      const derivedRoomName = Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0
-        ? schedule.roomNames[0]
-        : (primaryRoom ? (primaryRoom.displayName || primaryRoom.name) : (schedule.roomName || ''));
-
-      return {
-        ...schedule,
-        instructor: instructorWithProgram,
-        rooms: resolvedRooms, // new relational array
-        room: primaryRoom || null, // maintain legacy singular field for older UIs
-        instructorName: instructorWithProgram ? `${instructorWithProgram.firstName} ${instructorWithProgram.lastName}`.trim() : schedule.instructorName || 'Staff',
-        roomName: derivedRoomName,
-        roomNames: Array.isArray(schedule.roomNames) ? schedule.roomNames : (derivedRoomName ? [derivedRoomName] : [])
-      };
-    });
-
-    return {
-      schedules: enrichedSchedules,
-      people,
-      rooms,
-      programs
-    };
+    const schedules = schedulesSnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+    return enrichSchedules(
+      schedules,
+      relational.people,
+      relational.rooms,
+      relational.programs,
+    );
   } catch (error) {
-    console.error('Error fetching relational schedule data:', error);
+    console.error("Error fetching relational schedule data:", error);
+    throw error;
+  }
+};
+
+export const fetchSchedulesByTerms = async ({
+  terms = [],
+  termCodes = [],
+  allowAll = false,
+} = {}) => {
+  try {
+    const normalizedTerms = Array.isArray(terms)
+      ? terms.map((t) => normalizeTermLabel(t)).filter(Boolean)
+      : [];
+    const normalizedTermCodes = Array.isArray(termCodes)
+      ? termCodes.map((t) => termCodeFromLabel(t)).filter(Boolean)
+      : [];
+
+    if (
+      !allowAll &&
+      normalizedTerms.length === 0 &&
+      normalizedTermCodes.length === 0
+    ) {
+      return { schedules: [], people: [], rooms: [], programs: [] };
+    }
+    const shouldFetchAll = allowAll;
+    const schedules = [];
+    const seenIds = new Set();
+
+    if (shouldFetchAll) {
+      const schedulesSnapshot = await getDocs(collection(db, "schedules"));
+      schedulesSnapshot.docs.forEach((docSnap) => {
+        if (!seenIds.has(docSnap.id)) {
+          seenIds.add(docSnap.id);
+          schedules.push({ id: docSnap.id, ...docSnap.data() });
+        }
+      });
+    } else {
+      const chunkItems = (items) => {
+        const result = [];
+        for (let i = 0; i < items.length; i += 10) {
+          result.push(items.slice(i, i + 10));
+        }
+        return result;
+      };
+
+      const queries =
+        normalizedTermCodes.length > 0
+          ? chunkItems(normalizedTermCodes).map((chunk) =>
+              query(
+                collection(db, "schedules"),
+                where("termCode", "in", chunk),
+              ),
+            )
+          : chunkItems(normalizedTerms).map((chunk) =>
+              query(collection(db, "schedules"), where("term", "in", chunk)),
+            );
+
+      for (const q of queries) {
+        const schedulesSnapshot = await getDocs(q);
+        schedulesSnapshot.docs.forEach((docSnap) => {
+          if (!seenIds.has(docSnap.id)) {
+            seenIds.add(docSnap.id);
+            schedules.push({ id: docSnap.id, ...docSnap.data() });
+          }
+        });
+      }
+    }
+
+    const relational = await fetchRelationalCollections();
+    return enrichSchedules(
+      schedules,
+      relational.people,
+      relational.rooms,
+      relational.programs,
+    );
+  } catch (error) {
+    console.error("Error fetching schedules by terms:", error);
     throw error;
   }
 };
@@ -1691,84 +1985,60 @@ export const fetchSchedulesWithRelationalData = async () => {
  * @param {string} term - The term to filter by (e.g., "Fall 2025", "Spring 2026")
  * @returns {Promise<{schedules: Array, people: Array, rooms: Array, programs: Array}>}
  */
-export const fetchSchedulesByTerm = async (term) => {
+export const fetchSchedulesByTerm = async (termInput) => {
   try {
-    console.log(`📡 Loading schedules for term: ${term}`);
+    const term =
+      typeof termInput === "string" ? termInput : termInput?.term || "";
+    const termCode =
+      typeof termInput === "string" ? "" : termInput?.termCode || "";
+    const normalizedTerm = normalizeTermLabel(term);
+    const resolvedTermCode = termCodeFromLabel(termCode || normalizedTerm);
 
-    // Server-side filter: only fetch schedules for the specified term
-    const schedulesQuery = query(
-      collection(db, 'schedules'),
-      where('term', '==', term)
+    if (!resolvedTermCode && !normalizedTerm) {
+      return { schedules: [], people: [], rooms: [], programs: [] };
+    }
+
+    console.log(`📡 Loading schedules for term: ${normalizedTerm || term}`);
+
+    let schedulesSnapshot = null;
+    if (resolvedTermCode) {
+      const byCode = query(
+        collection(db, "schedules"),
+        where("termCode", "==", resolvedTermCode),
+      );
+      schedulesSnapshot = await getDocs(byCode);
+      if (schedulesSnapshot.empty && normalizedTerm) {
+        const byTerm = query(
+          collection(db, "schedules"),
+          where("term", "==", normalizedTerm),
+        );
+        schedulesSnapshot = await getDocs(byTerm);
+      }
+    } else {
+      const byTerm = query(
+        collection(db, "schedules"),
+        where("term", "==", normalizedTerm || term),
+      );
+      schedulesSnapshot = await getDocs(byTerm);
+    }
+
+    const schedules = schedulesSnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+    console.log(
+      `✅ Fetched ${schedules.length} schedules for "${normalizedTerm || term}"`,
     );
 
-    const [schedulesSnapshot, peopleSnapshot, roomsSnapshot, programsSnapshot] = await Promise.all([
-      getDocs(schedulesQuery), // Filtered query
-      getDocs(collection(db, 'people')),
-      getDocs(collection(db, 'rooms')),
-      getDocs(collection(db, COLLECTIONS.PROGRAMS))
-    ]);
-
-    const schedules = schedulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const people = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const rooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const programs = programsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-    console.log(`✅ Fetched ${schedules.length} schedules for "${term}"`);
-
-    // Create lookup maps for performance
-    const peopleMap = new Map(people.map(p => [p.id, p]));
-    const roomsMap = new Map(rooms.map(r => [r.id, r]));
-    const programsMap = new Map(programs.map(p => [p.id, p]));
-
-    // Populate relational data (same enrichment logic as fetchSchedulesWithRelationalData)
-    const enrichedSchedules = schedules.map(schedule => {
-      const instructor = schedule.instructorId ? peopleMap.get(schedule.instructorId) : null;
-
-      // Populate instructor program information
-      let instructorWithProgram = instructor;
-      if (instructor && instructor.programId) {
-        const program = programsMap.get(instructor.programId);
-        if (program) {
-          instructorWithProgram = {
-            ...instructor,
-            program: {
-              id: program.id,
-              name: program.name
-            }
-          };
-        }
-      }
-
-      // Multi-room relational enrichment
-      const resolvedRooms = Array.isArray(schedule.roomIds)
-        ? schedule.roomIds.map((rid) => roomsMap.get(rid)).filter(Boolean)
-        : (schedule.roomId ? [roomsMap.get(schedule.roomId)].filter(Boolean) : []);
-
-      // Derive legacy single room fields for compatibility
-      const primaryRoom = resolvedRooms[0] || (schedule.roomId ? roomsMap.get(schedule.roomId) : null);
-      const derivedRoomName = Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0
-        ? schedule.roomNames[0]
-        : (primaryRoom ? (primaryRoom.displayName || primaryRoom.name) : (schedule.roomName || ''));
-
-      return {
-        ...schedule,
-        instructor: instructorWithProgram,
-        rooms: resolvedRooms,
-        room: primaryRoom || null,
-        instructorName: instructorWithProgram ? `${instructorWithProgram.firstName} ${instructorWithProgram.lastName}`.trim() : schedule.instructorName || 'Staff',
-        roomName: derivedRoomName,
-        roomNames: Array.isArray(schedule.roomNames) ? schedule.roomNames : (derivedRoomName ? [derivedRoomName] : [])
-      };
-    });
-
-    return {
-      schedules: enrichedSchedules,
-      people,
-      rooms,
-      programs
-    };
+    const relational = await fetchRelationalCollections();
+    return enrichSchedules(
+      schedules,
+      relational.people,
+      relational.rooms,
+      relational.programs,
+    );
   } catch (error) {
-    console.error(`Error fetching schedules for term "${term}":`, error);
+    console.error(`Error fetching schedules for term "${termInput}":`, error);
     throw error;
   }
 };
@@ -1778,49 +2048,21 @@ export const fetchSchedulesByTerm = async (term) => {
  * Falls back to extracting unique terms from schedules if terms collection is empty.
  * @returns {Promise<string[]>} Array of term strings sorted by recency
  */
-export const fetchAvailableSemesters = async () => {
+export const fetchAvailableSemesters = async ({
+  includeArchived = false,
+} = {}) => {
   try {
-    // First try the dedicated terms collection (faster)
-    const termsSnapshot = await getDocs(collection(db, COLLECTIONS.TERMS));
-    let terms = termsSnapshot.docs.map(doc => doc.data().term).filter(Boolean);
-
-    // Fallback: if terms collection is empty, extract unique terms from schedules
-    if (terms.length === 0) {
-      console.log('⚠️ Terms collection empty, extracting from schedules...');
-      const schedulesSnapshot = await getDocs(collection(db, 'schedules'));
-      const termsSet = new Set();
-      schedulesSnapshot.docs.forEach(doc => {
-        const term = doc.data().term;
-        if (term && term.trim()) {
-          termsSet.add(term.trim());
-        }
-      });
-      terms = Array.from(termsSet);
-    }
-
-    // Sort by recency: newer years first, then Fall > Summer > Spring within year
-    const sortedTerms = terms.sort((a, b) => {
-      const [aTerm, aYear] = a.split(' ');
-      const [bTerm, bYear] = b.split(' ');
-
-      const aYearNum = parseInt(aYear);
-      const bYearNum = parseInt(bYear);
-
-      if (aYearNum !== bYearNum) {
-        return bYearNum - aYearNum; // Newer years first
-      }
-
-      const termOrder = { 'Fall': 3, 'Summer': 2, 'Spring': 1 };
-      return (termOrder[bTerm] || 0) - (termOrder[aTerm] || 0);
-    });
-
-    console.log(`📅 Available semesters: ${sortedTerms.join(', ')}`);
-    return sortedTerms;
+    const terms = await fetchTermOptions({ includeArchived });
+    const labels = terms.map((term) => term.term).filter(Boolean);
+    console.log(`📅 Available semesters: ${labels.join(", ")}`);
+    return labels;
   } catch (error) {
-    console.error('Error fetching available semesters:', error);
+    console.error("Error fetching available semesters:", error);
     throw error;
   }
 };
+
+export { parseFullName };
 
 export default {
   createPersonModel,
@@ -1829,6 +2071,7 @@ export default {
   createRoomModel,
   parseFullName,
   parseInstructorField,
+  parseInstructorFieldList,
   parseMeetingPatterns,
   normalizeTime,
   determineRoles,
@@ -1838,6 +2081,7 @@ export default {
   processScheduleImport,
   parseCLSSCSV,
   fetchSchedulesWithRelationalData,
+  fetchSchedulesByTerms,
   fetchSchedulesByTerm,
-  fetchAvailableSemesters
-}; 
+  fetchAvailableSemesters,
+};

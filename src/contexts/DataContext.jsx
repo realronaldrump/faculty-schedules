@@ -14,10 +14,11 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from '../firebase';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
-import { fetchPrograms } from '../utils/dataAdapter';
+import { fetchPrograms, getInstructorDisplayName, UNASSIGNED } from '../utils/dataAdapter';
 import { autoMigrateIfNeeded } from '../utils/importTransactionMigration';
 import { fetchRecentChanges } from '../utils/recentChanges';
 import { usePermissions } from '../utils/permissions';
+import { parseCourseCode } from '../utils/courseUtils';
 import { adaptPeopleToFaculty, adaptPeopleToStaff } from '../utils/dataAdapter';
 
 // Import new contexts
@@ -30,6 +31,8 @@ export const DataProvider = ({ children }) => {
   // Consumed Contexts
   const {
     people: rawPeople,
+    allPeople,
+    peopleIndex,
     loadPeople,
     addPerson,
     updatePerson,
@@ -39,7 +42,6 @@ export const DataProvider = ({ children }) => {
 
   const {
     rawScheduleData,
-    scheduleData, // Pre-flattened schedule data
     selectedSemester,
     setSelectedSemester,
     availableSemesters,
@@ -69,6 +71,155 @@ export const DataProvider = ({ children }) => {
   // Combined Loading State
   const loading = localLoading || peopleLoading || schedulesLoading;
 
+  // Helper to derive credits
+  const deriveCreditsFromSchedule = (courseCode, credits) => {
+    if (credits !== undefined && credits !== null && credits !== '') {
+      const numericCredits = Number(credits);
+      if (!Number.isNaN(numericCredits)) {
+        return numericCredits;
+      }
+    }
+    const parsed = parseCourseCode(courseCode || '');
+    if (parsed && !parsed.error && parsed.credits !== undefined && parsed.credits !== null) {
+      return parsed.credits;
+    }
+    return null;
+  };
+
+  const peopleById = useMemo(() => {
+    return new Map((rawPeople || []).map(person => [person.id, person]));
+  }, [rawPeople]);
+
+  const splitInstructorNames = (value) => {
+    if (!value) return [];
+    return String(value)
+      .split(/;|\/|\s+&\s+|\s+and\s+/i)
+      .map((part) => part.replace(/\[[^\]]*\]/g, '').replace(/\([^)]*\)/g, '').trim())
+      .filter(Boolean);
+  };
+
+  const buildInstructorInfo = useCallback((schedule) => {
+    if (!schedule) {
+      return {
+        instructorIds: [],
+        instructorNames: [],
+        instructors: [],
+        primaryInstructorId: '',
+        primaryInstructor: null,
+        displayName: UNASSIGNED
+      };
+    }
+
+    const assignments = Array.isArray(schedule.instructorAssignments)
+      ? schedule.instructorAssignments
+      : [];
+    const assignmentIds = assignments
+      .map((assignment) => assignment?.personId || assignment?.instructorId || assignment?.id)
+      .filter(Boolean);
+    const instructorIds = Array.from(new Set([
+      ...(Array.isArray(schedule.instructorIds) ? schedule.instructorIds : []),
+      ...assignmentIds,
+      schedule.instructorId
+    ])).filter(Boolean);
+
+    const instructors = instructorIds
+      .map((id) => peopleById.get(id))
+      .filter(Boolean);
+    const resolvedNames = instructors
+      .map((person) => getInstructorDisplayName(person))
+      .filter((name) => name && name !== UNASSIGNED);
+    const fallbackName = (schedule.instructorName || schedule.Instructor || '').trim();
+    const instructorNames = resolvedNames.length > 0
+      ? resolvedNames
+      : splitInstructorNames(fallbackName);
+
+    const primaryInstructorId = schedule.instructorId
+      || assignments.find((assignment) => assignment?.isPrimary)?.personId
+      || instructorIds[0]
+      || '';
+    const primaryInstructor = primaryInstructorId ? peopleById.get(primaryInstructorId) : null;
+    const displayName = instructorNames.length > 0
+      ? instructorNames.join(' / ')
+      : UNASSIGNED;
+
+    return {
+      instructorIds,
+      instructorNames,
+      instructors,
+      primaryInstructorId,
+      primaryInstructor,
+      displayName
+    };
+  }, [peopleById]);
+
+  // Computed schedule objects (flattened for UI)
+  const scheduleData = useMemo(() => {
+    if (!rawScheduleData || rawScheduleData.length === 0) return [];
+
+    const flattened = [];
+    rawScheduleData.forEach(schedule => {
+      if (!schedule || !schedule.id) return;
+
+      const {
+        instructorIds,
+        instructorNames,
+        instructors,
+        primaryInstructorId,
+        primaryInstructor,
+        displayName
+      } = buildInstructorInfo(schedule);
+
+      // Helper to create reliable display strings
+      const getRoomDisplay = (s) => {
+        if (s.locationType === 'no_room' || s.isOnline) {
+          return s.locationLabel || 'No Room Needed';
+        }
+        if (Array.isArray(s.roomNames)) return s.roomNames.join('; ');
+        return s.roomName || '';
+      };
+
+      const commonProps = {
+        ...schedule,
+        Course: schedule.courseCode || '',
+        'Course Title': schedule.courseTitle || '',
+        Instructor: displayName,
+        instructorName: displayName,
+        InstructorId: primaryInstructorId || '',
+        instructorId: primaryInstructorId || '',
+        instructorIds,
+        instructorNames,
+        instructors,
+        instructor: primaryInstructor,
+        Section: schedule.section || '',
+        Credits: deriveCreditsFromSchedule(schedule.courseCode, schedule.credits),
+        Program: schedule.program || '',
+        Term: schedule.term || '',
+        Status: schedule.status || 'Active',
+        _originalId: schedule.id
+      };
+
+      if (schedule.meetingPatterns && schedule.meetingPatterns.length > 0) {
+        schedule.meetingPatterns.forEach((pattern, idx) => {
+          flattened.push({
+            ...commonProps,
+            id: `${schedule.id}-${idx}`,
+            Day: pattern.day,
+            'Start Time': pattern.startTime,
+            'End Time': pattern.endTime,
+            Room: getRoomDisplay(schedule)
+          });
+        });
+      } else {
+        flattened.push({
+          ...commonProps,
+          id: schedule.id,
+          Room: getRoomDisplay(schedule)
+        });
+      }
+    });
+    return flattened;
+  }, [rawScheduleData, buildInstructorInfo]);
+
   // Analytics calculation (Legacy, keep for now)
   const analytics = useMemo(() => {
     if (!scheduleData || scheduleData.length === 0) return null;
@@ -80,8 +231,17 @@ export const DataProvider = ({ children }) => {
     const daySchedules = { M: 0, T: 0, W: 0, R: 0, F: 0 };
 
     scheduleData.forEach(s => {
-      if (s.Instructor) instructors.add(s.Instructor);
-      if (s.Room && s.Room !== 'Online') rooms.add(s.Room);
+      const names = Array.isArray(s.instructorNames)
+        ? s.instructorNames
+        : (s.Instructor ? [s.Instructor] : []);
+      names.forEach((name) => {
+        if (name) instructors.add(name);
+      });
+      const roomLabel = s.Room || '';
+      const lowerRoom = roomLabel.toLowerCase();
+      if (roomLabel && lowerRoom !== 'online' && !lowerRoom.includes('no room needed')) {
+        rooms.add(roomLabel);
+      }
       if (s.Course) courses.add(s.Course);
       if (s.Day && daySchedules[s.Day] !== undefined) daySchedules[s.Day]++;
     });
@@ -198,6 +358,8 @@ export const DataProvider = ({ children }) => {
     // Passthrough Data
     rawScheduleData,
     rawPeople,
+    allPeople,
+    peopleIndex,
     rawPrograms,
 
     // Transformed/Legacy Data
@@ -235,7 +397,7 @@ export const DataProvider = ({ children }) => {
     // Permissions (Passthrough)
     ...permissions
   }), [
-    rawScheduleData, rawPeople, rawPrograms,
+    rawScheduleData, rawPeople, allPeople, peopleIndex, rawPrograms,
     scheduleData, facultyData, staffData, studentData,
     analytics, editHistory, recentChanges,
     selectedSemester, availableSemesters,

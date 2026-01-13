@@ -18,11 +18,13 @@ import { getBuildingFromRoom, normalizeBuildingName, getCanonicalBuildingList, b
 import { formatMinutesToTime } from '../utils/timeUtils';
 import { useData } from '../contexts/DataContext';
 import { usePeople } from '../contexts/PeopleContext';
+import { useAppConfig } from '../contexts/AppConfigContext';
 
 const LiveView = () => {
   const navigate = useNavigate();
   const { scheduleData = [], studentData = [], facultyData = [], selectedSemester } = useData();
   const { loadPeople } = usePeople();
+  const { buildingConfigVersion } = useAppConfig();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedBuilding, setSelectedBuilding] = useState('');
@@ -104,7 +106,9 @@ const LiveView = () => {
 
   // Helper to get room from schedule
   const getScheduleRoom = (schedule) => {
-    if (schedule.isOnline) return 'Online';
+    if (schedule.locationType === 'no_room' || schedule.isOnline) {
+      return schedule.locationLabel || 'No Room Needed';
+    }
     if (Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0) {
       return schedule.roomNames.join('; ');
     }
@@ -114,6 +118,9 @@ const LiveView = () => {
   const getCourseCode = (schedule) => schedule.Course || schedule.courseCode || '';
 
   const getInstructorName = (schedule) => {
+    if (Array.isArray(schedule.instructorNames) && schedule.instructorNames.length > 0) {
+      return schedule.instructorNames.join(' / ');
+    }
     if (schedule.instructor) {
       return `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim();
     }
@@ -169,7 +176,7 @@ const LiveView = () => {
     });
 
     return Array.from(buildings).sort();
-  }, [todaySchedules, studentData]);
+  }, [todaySchedules, studentData, buildingConfigVersion]);
 
   // Classes currently in session
   const currentClasses = useMemo(() => {

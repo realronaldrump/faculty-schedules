@@ -12,9 +12,11 @@ import {
   getStudentAssignments
 } from '../utils/studentWorkers';
 import { formatPhoneNumber } from '../utils/directoryUtils';
+import { getCanonicalBuildingList } from '../utils/buildingUtils';
 import { useData } from '../contexts/DataContext';
 import { usePeopleOperations } from '../hooks';
 import { useUI } from '../contexts/UIContext';
+import { useAppConfig } from '../contexts/AppConfigContext';
 
 const WEEKDAY_OPTIONS = [
   { value: 'M', label: 'Mon' },
@@ -135,6 +137,7 @@ const StudentDirectory = () => {
   const { studentData } = useData();
   const { handleStudentUpdate, handleStudentDelete } = usePeopleOperations();
   const { showNotification } = useUI();
+  const { buildingConfigVersion } = useAppConfig();
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [filterText, setFilterText] = useState('');
@@ -148,7 +151,7 @@ const StudentDirectory = () => {
   const [assignmentBuildingDrafts, setAssignmentBuildingDrafts] = useState(['']);
 
   const availableBuildings = useMemo(() => {
-    const buildings = new Set();
+    const buildings = new Set(getCanonicalBuildingList());
     (studentData || []).forEach((student) => {
       if (Array.isArray(student.primaryBuildings)) {
         student.primaryBuildings.forEach((b) => {
@@ -169,8 +172,8 @@ const StudentDirectory = () => {
         });
       }
     });
-    return Array.from(buildings).sort();
-  }, [studentData]);
+    return Array.from(buildings).filter(Boolean).sort();
+  }, [studentData, buildingConfigVersion]);
 
   const assignmentBuildingOptions = useMemo(() => {
     const existingSelections = (newStudent.jobs || []).flatMap((job) =>
@@ -1522,31 +1525,34 @@ const StudentDirectory = () => {
                                       </div>
                                       <div>
                                         <label className="block text-xs font-medium text-gray-700 mb-1">Location</label>
-                                        <div className="flex gap-4 items-center text-sm">
-                                          <label className="flex items-center gap-2">
-                                            <input
-                                              type="checkbox"
-                                              checked={(job.location || []).includes('Mary Gibbs Jones')}
-                                              onChange={(e) => setEditFormData(prev => ({
-                                                ...prev,
-                                                jobs: prev.jobs.map((j, i) => i === idx ? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Mary Gibbs Jones'])) : (j.location || []).filter(b => b !== 'Mary Gibbs Jones') } : j)
-                                              }))}
-                                              className="rounded"
-                                            />
-                                            Mary Gibbs Jones
-                                          </label>
-                                          <label className="flex items-center gap-2">
-                                            <input
-                                              type="checkbox"
-                                              checked={(job.location || []).includes('Goebel')}
-                                              onChange={(e) => setEditFormData(prev => ({
-                                                ...prev,
-                                                jobs: prev.jobs.map((j, i) => i === idx ? { ...j, location: e.target.checked ? Array.from(new Set([...(j.location || []), 'Goebel'])) : (j.location || []).filter(b => b !== 'Goebel') } : j)
-                                              }))}
-                                              className="rounded"
-                                            />
-                                            Goebel
-                                          </label>
+                                        <div className="flex flex-wrap gap-4 items-center text-sm">
+                                          {availableBuildings.length === 0 ? (
+                                            <span className="text-xs text-gray-500">No buildings configured.</span>
+                                          ) : (
+                                            availableBuildings.map((building) => {
+                                              const currentLocations = Array.isArray(job.location)
+                                                ? job.location
+                                                : (job.location ? [job.location] : []);
+                                              const isChecked = currentLocations.includes(building);
+                                              const nextLocations = isChecked
+                                                ? currentLocations.filter((b) => b !== building)
+                                                : Array.from(new Set([...currentLocations, building]));
+                                              return (
+                                                <label key={building} className="flex items-center gap-2">
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={isChecked}
+                                                    onChange={() => setEditFormData(prev => ({
+                                                      ...prev,
+                                                      jobs: prev.jobs.map((j, i) => i === idx ? { ...j, location: nextLocations } : j)
+                                                    }))}
+                                                    className="rounded"
+                                                  />
+                                                  {building}
+                                                </label>
+                                              );
+                                            })
+                                          )}
                                         </div>
                                       </div>
                                     </div>
@@ -1637,23 +1643,33 @@ const StudentDirectory = () => {
                             </div>
                           </td>
                           <td className="p-2 align-top">
-                            <div className="flex gap-3 text-xs">
-                              <label className="flex items-center gap-1">
-                                <input type="checkbox" checked={(editFormData.primaryBuildings || []).includes('Mary Gibbs Jones')} onChange={(e) => setEditFormData(prev => ({
-                                  ...prev,
-                                  primaryBuildings: e.target.checked
-                                    ? Array.from(new Set([...(prev.primaryBuildings || []), 'Mary Gibbs Jones']))
-                                    : (prev.primaryBuildings || []).filter(b => b !== 'Mary Gibbs Jones')
-                                }))} /> MGJ
-                              </label>
-                              <label className="flex items-center gap-1">
-                                <input type="checkbox" checked={(editFormData.primaryBuildings || []).includes('Goebel')} onChange={(e) => setEditFormData(prev => ({
-                                  ...prev,
-                                  primaryBuildings: e.target.checked
-                                    ? Array.from(new Set([...(prev.primaryBuildings || []), 'Goebel']))
-                                    : (prev.primaryBuildings || []).filter(b => b !== 'Goebel')
-                                }))} /> Goebel
-                              </label>
+                            <div className="flex flex-wrap gap-3 text-xs">
+                              {availableBuildings.length === 0 ? (
+                                <span className="text-gray-500">No buildings configured.</span>
+                              ) : (
+                                availableBuildings.map((building) => {
+                                  const currentBuildings = Array.isArray(editFormData.primaryBuildings)
+                                    ? editFormData.primaryBuildings
+                                    : [];
+                                  const isChecked = currentBuildings.includes(building);
+                                  const nextBuildings = isChecked
+                                    ? currentBuildings.filter((b) => b !== building)
+                                    : Array.from(new Set([...currentBuildings, building]));
+                                  return (
+                                    <label key={building} className="flex items-center gap-1">
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => setEditFormData(prev => ({
+                                          ...prev,
+                                          primaryBuildings: nextBuildings
+                                        }))}
+                                      />
+                                      {building}
+                                    </label>
+                                  );
+                                })
+                              )}
                             </div>
                           </td>
                           <td className="p-2 align-top text-right">

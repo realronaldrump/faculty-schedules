@@ -1,5 +1,50 @@
 import { db } from '../firebase';
-import { collection, getDocs, doc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, writeBatch, query, where } from 'firebase/firestore';
+import { normalizeTermLabel, termCodeFromLabel } from './termUtils';
+
+const chunkItems = (items, size = 10) => {
+  const chunks = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+};
+
+const fetchSchedulesByTermFilter = async ({ terms = [], termCodes = [] } = {}) => {
+  const normalizedTerms = Array.isArray(terms)
+    ? terms.map((term) => normalizeTermLabel(term)).filter(Boolean)
+    : [];
+  const normalizedTermCodes = Array.isArray(termCodes)
+    ? termCodes.map((code) => termCodeFromLabel(code)).filter(Boolean)
+    : [];
+
+  if (normalizedTerms.length === 0 && normalizedTermCodes.length === 0) {
+    const schedulesSnapshot = await getDocs(collection(db, 'schedules'));
+    return schedulesSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+  }
+
+  const schedules = [];
+  const seenIds = new Set();
+  const queries = normalizedTermCodes.length > 0
+    ? chunkItems(normalizedTermCodes).map((chunk) =>
+      query(collection(db, 'schedules'), where('termCode', 'in', chunk))
+    )
+    : chunkItems(normalizedTerms).map((chunk) =>
+      query(collection(db, 'schedules'), where('term', 'in', chunk))
+    );
+
+  for (const q of queries) {
+    const snapshot = await getDocs(q);
+    snapshot.docs.forEach((docSnap) => {
+      if (!seenIds.has(docSnap.id)) {
+        seenIds.add(docSnap.id);
+        schedules.push({ id: docSnap.id, ...docSnap.data() });
+      }
+    });
+  }
+
+  return schedules;
+};
 
 /**
  * Utility to backfill CRN data for existing schedule records
@@ -21,13 +66,9 @@ const extractPotentialCRN = (courseCode) => {
 /**
  * Analyze existing schedule data for CRN coverage
  */
-export const analyzeCRNCoverage = async () => {
+export const analyzeCRNCoverage = async ({ terms = [], termCodes = [] } = {}) => {
   try {
-    const schedulesSnapshot = await getDocs(collection(db, 'schedules'));
-    const schedules = schedulesSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const schedules = await fetchSchedulesByTermFilter({ terms, termCodes });
 
     const analysis = {
       total: schedules.length,
@@ -96,7 +137,7 @@ export const analyzeCRNCoverage = async () => {
 /**
  * Backfill CRN data for records missing it
  */
-export const backfillCRNData = async (csvData = null, dryRun = false) => {
+export const backfillCRNData = async (csvData = null, dryRun = false, { terms = [], termCodes = [] } = {}) => {
   try {
     const results = {
       processed: 0,
@@ -107,11 +148,7 @@ export const backfillCRNData = async (csvData = null, dryRun = false) => {
     };
 
     // Get existing schedules
-    const schedulesSnapshot = await getDocs(collection(db, 'schedules'));
-    const existingSchedules = schedulesSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const existingSchedules = await fetchSchedulesByTermFilter({ terms, termCodes });
 
     // Create a map of CSV data for CRN lookup if provided
     let csvCRNMap = null;

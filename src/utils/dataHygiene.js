@@ -8,350 +8,142 @@
  * - One source of truth per record
  */
 
-import { collection, getDocs, query, where, doc, getDoc, updateDoc, deleteDoc, writeBatch, addDoc, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc, updateDoc, deleteDoc, writeBatch, addDoc, orderBy, limit, deleteField, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { logUpdate, logStandardization, logMerge } from './changeLogger';
 import { normalizedSchema } from './normalizedSchema';
-import { detectScheduleDuplicates, detectRoomDuplicates, mergeScheduleRecords, mergeRoomRecords } from './comprehensiveDataHygiene';
-import { parseFullName } from './dataImportUtils';
+import { getRoomKeyFromRoomRecord, parseRoomLabel } from './roomUtils';
+import { isStudentWorker } from './peopleUtils';
+import {
+  DEFAULT_PERSON_SCHEMA,
+  standardizePerson,
+  standardizeSchedule,
+  standardizeRoom,
+  detectPeopleDuplicates,
+  detectScheduleDuplicates,
+  detectRoomDuplicates,
+  detectCrossCollectionIssues,
+  mergePeopleData,
+  mergeScheduleData,
+  mergeRoomData
+} from './hygieneCore';
+
+const MAX_BATCH_OPERATIONS = 450;
+
+const createBatchWriter = () => {
+  let batch = writeBatch(db);
+  let opCount = 0;
+
+  const add = async (apply) => {
+    apply(batch);
+    opCount += 1;
+    if (opCount >= MAX_BATCH_OPERATIONS) {
+      await batch.commit();
+      batch = writeBatch(db);
+      opCount = 0;
+    }
+  };
+
+  const flush = async () => {
+    if (opCount === 0) return;
+    await batch.commit();
+    batch = writeBatch(db);
+    opCount = 0;
+  };
+
+  return { add, flush };
+};
+
+// ---------------------------------------------------------------------------
+// DEDUPE DECISIONS
+// ---------------------------------------------------------------------------
+
+const buildDedupePairKey = (idA, idB) => {
+  if (!idA || !idB) return '';
+  const [left, right] = [String(idA), String(idB)].sort();
+  return `${left}__${right}`;
+};
+
+const buildDedupeDecisionId = (entityType, idA, idB) => {
+  const pairKey = buildDedupePairKey(idA, idB);
+  if (!pairKey || !entityType) return '';
+  return `${entityType}__${pairKey}`;
+};
+
+export const fetchDedupeDecisions = async (entityType) => {
+  if (!entityType) return new Set();
+  try {
+    const snapshot = await getDocs(
+      query(
+        collection(db, 'dedupeDecisions'),
+        where('entityType', '==', entityType),
+        where('decision', '==', 'not_duplicate')
+      )
+    );
+    const blockedPairs = new Set();
+    snapshot.docs.forEach((docSnap) => {
+      const data = docSnap.data() || {};
+      if (data.pairKey) {
+        blockedPairs.add(data.pairKey);
+        return;
+      }
+      if (Array.isArray(data.recordIds) && data.recordIds.length === 2) {
+        const key = buildDedupePairKey(data.recordIds[0], data.recordIds[1]);
+        if (key) blockedPairs.add(key);
+      }
+    });
+    return blockedPairs;
+  } catch (error) {
+    if (error?.code === 'permission-denied') {
+      console.warn('Deduplication decisions could not be loaded due to permissions.', error);
+      return new Set();
+    }
+    throw error;
+  }
+};
+
+export const markNotDuplicate = async ({
+  entityType,
+  idA,
+  idB,
+  reason = ''
+} = {}) => {
+  const pairKey = buildDedupePairKey(idA, idB);
+  if (!pairKey || !entityType) {
+    throw new Error('Entity type and two record IDs are required');
+  }
+  const now = new Date().toISOString();
+  const docId = buildDedupeDecisionId(entityType, idA, idB);
+  const payload = {
+    entityType,
+    pairKey,
+    recordIds: [idA, idB],
+    decision: 'not_duplicate',
+    reason: reason ? String(reason).trim() : '',
+    updatedAt: now,
+    createdAt: now
+  };
+  await setDoc(doc(db, 'dedupeDecisions', docId), payload, { merge: true });
+  return payload;
+};
 
 // ---------------------------------------------------------------------------
 // PERSON SCHEMA CONSISTENCY
 // ---------------------------------------------------------------------------
-
-// A canonical list of every field we expect to be present on a person record.
-// NOTE:  If you add or remove a field that should be universal, update this
-// object as well as any Firestore security rules or TypeScript definitions.
-export const DEFAULT_PERSON_SCHEMA = {
-  firstName: '',
-  lastName: '',
-  name: '', // Convenience – concatenated first & last name.
-  title: '',
-  email: '',
-  phone: '',
-  jobTitle: '',
-  department: '',
-  office: '',
-  roles: [],
-  // For student workers with multiple jobs
-  jobs: [],
-  // Employment status flags
-  isAdjunct: false,
-  isFullTime: true,
-  isTenured: false,
-  isUPD: false,
-  // Relational references
-  programId: null,
-  // Data-quality helpers
-  hasNoPhone: false,
-  hasNoOffice: false,
-  // Basic activity flag so we can "disable" a record without deleting it
-  isActive: true,
-  // Employment dates (used primarily for student workers)
-  startDate: '',
-  endDate: '',
-  // Timestamps
-  createdAt: '',
-  updatedAt: ''
-};
-
-/**
- * Count the number of filled fields in a person record
- */
-export const countFilledFields = (person) => {
-  const filledKeys = ['firstName', 'lastName', 'name', 'title', 'email', 'phone', 'jobTitle', 'department', 'office', 'roles', 'programId'];
-  return filledKeys.reduce((count, key) => {
-    const value = person[key];
-    if (key === 'roles') {
-      return (value || []).length > 0 ? count + 1 : count;
-    } else if (key === 'programId') {
-      return value != null ? count + 1 : count;
-    } else {
-      return (value || '').trim() !== '' ? count + 1 : count;
-    }
-  }, 0);
-};
-
-// ==================== DATA STANDARDIZATION ====================
-
-/**
- * Standardize a person record
- */
-export const standardizePerson = (person) => {
-  // Handle name standardization - support both full name and firstName/lastName
-  let firstName = (person.firstName || '').trim();
-  let lastName = (person.lastName || '').trim();
-  let fullName = (person.name || '').trim();
-
-  // If we have a full name but no firstName/lastName, parse it
-  if (fullName && (!firstName && !lastName)) {
-    const parsed = parseFullName(fullName);
-    firstName = parsed.firstName;
-    lastName = parsed.lastName;
-  }
-  // If we have firstName/lastName but no full name, construct it
-  else if ((firstName || lastName) && !fullName) {
-    fullName = `${firstName} ${lastName}`.trim();
-  }
-  // If we have both, prefer the constructed version for consistency
-  else if (firstName || lastName) {
-    fullName = `${firstName} ${lastName}`.trim();
-  }
-
-  const standardized = {
-    ...person,
-    // Name standardization
-    firstName: firstName,
-    lastName: lastName,
-    name: fullName,
-
-    // Contact standardization
-    email: (person.email || '').toLowerCase().trim(),
-    phone: standardizePhone(person.phone),
-
-    // Text field standardization
-    title: (person.title || '').trim(),
-    jobTitle: (person.jobTitle || '').trim(),
-    department: (person.department || '').trim(),
-    office: (person.office || '').trim(),
-
-    // Ensure roles is always an array
-    roles: Array.isArray(person.roles) ? person.roles :
-      (person.roles && typeof person.roles === 'object') ? Object.keys(person.roles).filter(k => person.roles[k]) :
-        [],
-
-    // Update timestamp
-    updatedAt: new Date().toISOString()
-  };
-
-  // Remove empty name if no meaningful name data
-  if (!standardized.firstName && !standardized.lastName && !standardized.name) {
-    delete standardized.name;
-  }
-
-  // ---------------------------------------------------------------------
-  // Ensure schema completeness – add any fields that were missing from
-  // the incoming record so that *every* person document shares the same
-  // structure regardless of role or data source. This is critical for
-  // predictable queries and UI rendering.
-  // ---------------------------------------------------------------------
-
-  Object.entries(DEFAULT_PERSON_SCHEMA).forEach(([key, defaultValue]) => {
-    if (standardized[key] === undefined) {
-      standardized[key] = defaultValue;
-    }
-  });
-
-  // ---------------------------------------------------------------------
-  // Purge legacy / stray attributes now that required ones are present.
-  // ---------------------------------------------------------------------
-
-  Object.keys(standardized).forEach((key) => {
-    if (!Object.prototype.hasOwnProperty.call(DEFAULT_PERSON_SCHEMA, key)) {
-      delete standardized[key];
-    }
-  });
-
-  return standardized;
-};
-
-/**
- * Standardize a schedule record
- */
-export const standardizeSchedule = (schedule) => {
-  return {
-    ...schedule,
-    // Course standardization
-    courseCode: standardizeCourseCode(schedule.courseCode),
-    courseTitle: (schedule.courseTitle || '').trim(),
-    section: (schedule.section || '').trim(),
-    crn: (schedule.crn || '').trim(), // Add CRN standardization
-
-    // Term standardization
-    term: standardizeTerm(schedule.term),
-
-    // Instructor name standardization
-    instructorName: (schedule.instructorName || '').trim(),
-
-    // Room standardization (multi-room aware)
-    roomNames: Array.isArray(schedule.roomNames)
-      ? schedule.roomNames.map(standardizeRoomName).filter(Boolean)
-      : ((schedule.roomName ? [standardizeRoomName(schedule.roomName)] : [])),
-    roomName: standardizeRoomName(schedule.roomName),
-
-    // Status standardization
-    status: (schedule.status || 'Active').trim(),
-    scheduleType: (schedule.scheduleType || 'Class Instruction').trim(),
-
-    // Update timestamp
-    updatedAt: new Date().toISOString()
-  };
-};
-
-/**
- * Standardize phone number to digits only
- */
-export const standardizePhone = (phone) => {
-  if (!phone) return '';
-  return phone.replace(/\D/g, '');
-};
-
-/**
- * Standardize course code (e.g., "ADM 1300" or "adm1300" -> "ADM 1300")
- */
-export const standardizeCourseCode = (courseCode) => {
-  if (!courseCode) return '';
-
-  const clean = courseCode.trim().toUpperCase();
-  // Add space between letters and numbers if missing
-  return clean.replace(/([A-Z]+)(\d+)/, '$1 $2');
-};
-
-/**
- * Standardize term name
- */
-export const standardizeTerm = (term) => {
-  if (!term) return '';
-
-  const clean = term.trim();
-
-  // Handle common variations
-  const termMappings = {
-    'fall2025': 'Fall 2025',
-    'spring2025': 'Spring 2025',
-    'summer2025': 'Summer 2025',
-    'fall25': 'Fall 2025',
-    'spring25': 'Spring 2025',
-    'summer25': 'Summer 2025'
-  };
-
-  const normalized = clean.toLowerCase().replace(/\s+/g, '');
-  return termMappings[normalized] || clean;
-};
-
-/**
- * Standardize room name
- */
-export const standardizeRoomName = (roomName) => {
-  if (!roomName) return '';
-  return roomName.trim();
-};
+// Canonical schema and normalization live in hygieneCore.
 
 // ==================== DUPLICATE DETECTION ====================
+
 
 /**
  * Find potential duplicate people using simple, reliable criteria
  */
-export const findDuplicatePeople = async () => {
+export const findDuplicatePeople = async (options = {}) => {
   const peopleSnapshot = await getDocs(collection(db, 'people'));
-  const people = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-  const duplicates = [];
-  const emailMap = new Map();
-  const phoneMap = new Map();
-  const nameMap = new Map();
-
-  people.forEach(person => {
-    // Email duplicates (most reliable)
-    if (person.email && person.email.trim()) {
-      const email = person.email.toLowerCase().trim();
-      if (emailMap.has(email)) {
-        const existing = emailMap.get(email);
-        const existingCount = countFilledFields(existing);
-        const newCount = countFilledFields(person);
-        let primary = existingCount >= newCount ? existing : person;
-        let duplicateRecord = existingCount >= newCount ? person : existing; // renamed to avoid keyword conflict
-        duplicates.push({
-          type: 'email',
-          reason: 'Same email address',
-          primary,
-          duplicate: duplicateRecord,
-          confidence: 100
-        });
-        if (existingCount < newCount) {
-          emailMap.set(email, person);
-        }
-      } else {
-        emailMap.set(email, person);
-      }
-    }
-
-    // Phone duplicates
-    if (person.phone) {
-      const phone = standardizePhone(person.phone);
-      if (phone.length >= 10 && phoneMap.has(phone)) {
-        const existing = phoneMap.get(phone);
-        const existingCount = countFilledFields(existing);
-        const newCount = countFilledFields(person);
-        let primary = existingCount >= newCount ? existing : person;
-        let duplicateRecord = existingCount >= newCount ? person : existing;
-        duplicates.push({
-          type: 'phone',
-          reason: 'Same phone number',
-          primary,
-          duplicate: duplicateRecord,
-          confidence: 90
-        });
-        if (existingCount < newCount) {
-          phoneMap.set(phone, person);
-        }
-      } else if (phone.length >= 10) {
-        phoneMap.set(phone, person);
-      }
-    }
-
-    // Name-based duplicates (exact and fuzzy)
-    if (person.firstName && person.lastName) {
-      const fullName = `${person.firstName.toLowerCase().trim()} ${person.lastName.toLowerCase().trim()}`;
-
-      // Check for exact matches first
-      if (nameMap.has(fullName)) {
-        const existing = nameMap.get(fullName);
-        const existingCount = countFilledFields(existing);
-        const newCount = countFilledFields(person);
-        let primary = existingCount >= newCount ? existing : person;
-        let duplicateRecord = existingCount >= newCount ? person : existing;
-        duplicates.push({
-          type: 'name',
-          reason: 'Identical first and last name',
-          primary,
-          duplicate: duplicateRecord,
-          confidence: 100
-        });
-        if (existingCount < newCount) {
-          nameMap.set(fullName, person);
-        }
-      } else {
-        nameMap.set(fullName, person);
-
-        // Check for fuzzy matches with existing people
-        for (const [existingFullName, existingPerson] of nameMap.entries()) {
-          if (existingFullName === fullName) continue; // Skip self
-
-          const similarity = calculateFuzzyNameSimilarity(fullName, existingFullName);
-          if (similarity >= 0.85) { // 85% similarity threshold
-            const existingCount = countFilledFields(existingPerson);
-            const newCount = countFilledFields(person);
-            let primary = existingCount >= newCount ? existingPerson : person;
-            let duplicateRecord = existingCount >= newCount ? person : existingPerson;
-            duplicates.push({
-              type: 'fuzzy_name',
-              reason: `Very similar names (${Math.round(similarity * 100)}% match) - likely same person with variations`,
-              primary,
-              duplicate: duplicateRecord,
-              confidence: Math.round(similarity * 100)
-            });
-            if (existingCount < newCount) {
-              nameMap.set(existingFullName, person); // Update map to the better record
-            }
-            break; // Only report the first fuzzy match to avoid spam
-          }
-        }
-      }
-    }
-  });
-
-  return duplicates;
+  const people = peopleSnapshot.docs
+    .map(doc => ({ id: doc.id, ...doc.data() }))
+    .filter(person => !person?.mergedInto);
+  return detectPeopleDuplicates(people, options);
 };
 
 /**
@@ -366,33 +158,295 @@ export const findOrphanedSchedules = async () => {
   const schedules = schedulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   const people = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-  // Create lookup maps
-  const peopleByName = new Map();
   const peopleById = new Map();
 
   people.forEach(person => {
     peopleById.set(person.id, person);
-    if (person.firstName && person.lastName) {
-      const fullName = `${person.firstName} ${person.lastName}`.trim();
-      peopleByName.set(fullName, person);
-    }
   });
 
+  const getScheduleInstructorIds = (schedule) => {
+    const ids = new Set();
+    if (schedule?.instructorId) ids.add(schedule.instructorId);
+    if (Array.isArray(schedule?.instructorIds)) {
+      schedule.instructorIds.forEach((id) => ids.add(id));
+    }
+    if (Array.isArray(schedule?.instructorAssignments)) {
+      schedule.instructorAssignments.forEach((assignment) => {
+        if (assignment?.personId) ids.add(assignment.personId);
+      });
+    }
+    return Array.from(ids).filter(Boolean);
+  };
+
   const orphaned = schedules.filter(schedule => {
-    // Check if instructor ID exists
-    if (schedule.instructorId && peopleById.has(schedule.instructorId)) {
-      return false;
-    }
-
-    // Check if instructor name matches anyone
-    if (schedule.instructorName && peopleByName.has(schedule.instructorName)) {
-      return false;
-    }
-
-    return true;
+    const instructorIds = getScheduleInstructorIds(schedule);
+    if (instructorIds.length === 0) return true;
+    return !instructorIds.some((id) => peopleById.has(id));
   });
 
   return orphaned;
+};
+
+/**
+ * Backfill instructorId for schedules using exact name match (strict, non-fuzzy).
+ */
+export const backfillInstructorIdsFromNames = async () => {
+  const [schedulesSnapshot, peopleSnapshot] = await Promise.all([
+    getDocs(collection(db, 'schedules')),
+    getDocs(collection(db, 'people'))
+  ]);
+
+  const people = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const peopleByName = new Map();
+  const ambiguousNames = new Set();
+  const peopleById = new Map();
+
+  people.forEach(person => {
+    const fullName = `${person.firstName || ''} ${person.lastName || ''}`.trim();
+    if (!fullName) return;
+    if (peopleByName.has(fullName)) {
+      ambiguousNames.add(fullName);
+    } else {
+      peopleByName.set(fullName, person);
+    }
+    peopleById.set(person.id, person);
+  });
+
+  let batch = writeBatch(db);
+  let batchCount = 0;
+  const results = {
+    linked: 0,
+    skippedAmbiguous: 0,
+    skippedMissing: 0
+  };
+
+  const commitBatch = async () => {
+    if (batchCount === 0) return;
+    await batch.commit();
+    batch = writeBatch(db);
+    batchCount = 0;
+  };
+
+  const normalizeInstructorToken = (value) => {
+    if (!value) return '';
+    const cleaned = String(value)
+      .replace(/\[[^\]]*\]/g, '')
+      .replace(/\([^)]*\)/g, '')
+      .trim();
+    if (!cleaned) return '';
+    if (cleaned.includes(',')) {
+      const [lastPart, firstPartRaw] = cleaned.split(',', 2);
+      const lastName = (lastPart || '').trim();
+      const firstName = (firstPartRaw || '').trim();
+      return `${firstName} ${lastName}`.trim();
+    }
+    return cleaned;
+  };
+
+  const splitInstructorNames = (value) => {
+    if (!value) return [];
+    return String(value)
+      .split(/;|\/|\s+&\s+|\s+and\s+/i)
+      .map((part) => normalizeInstructorToken(part))
+      .filter((name) => name && name.toLowerCase() !== 'staff');
+  };
+
+  const getScheduleInstructorIds = (schedule) => {
+    const ids = new Set();
+    if (schedule?.instructorId) ids.add(schedule.instructorId);
+    if (Array.isArray(schedule?.instructorIds)) {
+      schedule.instructorIds.forEach((id) => ids.add(id));
+    }
+    if (Array.isArray(schedule?.instructorAssignments)) {
+      schedule.instructorAssignments.forEach((assignment) => {
+        if (assignment?.personId) ids.add(assignment.personId);
+      });
+    }
+    return Array.from(ids).filter(Boolean);
+  };
+
+  for (const snap of schedulesSnapshot.docs) {
+    const schedule = snap.data();
+    const existingInstructorIds = getScheduleInstructorIds(schedule);
+    if (existingInstructorIds.some((id) => peopleById.has(id))) continue;
+
+    const instructorName = (schedule.instructorName || schedule.Instructor || '').trim();
+    if (!instructorName) continue;
+
+    const candidateNames = splitInstructorNames(instructorName);
+    if (candidateNames.length === 0) continue;
+
+    const resolvedPeople = [];
+    let hasAmbiguous = false;
+    let hasMissing = false;
+
+    candidateNames.forEach((name) => {
+      if (ambiguousNames.has(name)) {
+        hasAmbiguous = true;
+        return;
+      }
+      const person = peopleByName.get(name);
+      if (!person) {
+        hasMissing = true;
+        return;
+      }
+      resolvedPeople.push(person);
+    });
+
+    if (hasAmbiguous) {
+      results.skippedAmbiguous += 1;
+      continue;
+    }
+    if (hasMissing || resolvedPeople.length === 0) {
+      results.skippedMissing += 1;
+      continue;
+    }
+
+    const instructorAssignments = resolvedPeople.map((person, index) => ({
+      personId: person.id,
+      isPrimary: index === 0,
+      percentage: 100
+    }));
+
+    batch.update(snap.ref, {
+      instructorId: resolvedPeople[0].id,
+      instructorIds: resolvedPeople.map((person) => person.id),
+      instructorAssignments,
+      instructorName: deleteField(),
+      updatedAt: new Date().toISOString()
+    });
+    batchCount += 1;
+    results.linked += 1;
+
+    if (batchCount >= 450) {
+      await commitBatch();
+    }
+  }
+
+  await commitBatch();
+
+  return results;
+};
+
+const MERGE_BATCH_LIMIT = 450;
+
+const buildInstructorName = (person) => (
+  `${person?.firstName || ''} ${person?.lastName || ''}`.trim()
+);
+
+const resolveCanonicalPersonRecord = async (personId) => {
+  let currentId = personId;
+  const visited = new Set();
+
+  while (currentId && !visited.has(currentId)) {
+    const snap = await getDoc(doc(db, 'people', currentId));
+    if (!snap.exists()) {
+      return { id: currentId, data: null, exists: false };
+    }
+    const data = { id: snap.id, ...snap.data() };
+    if (!data.mergedInto) {
+      return { id: data.id, data, exists: true };
+    }
+    visited.add(currentId);
+    currentId = data.mergedInto;
+  }
+
+  throw new Error('Merge chain detected for person records');
+};
+
+const commitBatchedUpdates = async (updates, batchLimit = MERGE_BATCH_LIMIT) => {
+  let batch = writeBatch(db);
+  let batchCount = 0;
+  let totalUpdated = 0;
+
+  for (const { ref, data } of updates) {
+    batch.update(ref, data);
+    batchCount += 1;
+    totalUpdated += 1;
+
+    if (batchCount >= batchLimit) {
+      await batch.commit();
+      batch = writeBatch(db);
+      batchCount = 0;
+    }
+  }
+
+  if (batchCount > 0) {
+    await batch.commit();
+  }
+
+  return totalUpdated;
+};
+
+const updateEmailListPresetsForPerson = async (duplicateId, primaryId = null) => {
+  const presetsSnapshot = await getDocs(
+    query(collection(db, 'emailListPresets'), where('personIds', 'array-contains', duplicateId))
+  );
+
+  if (presetsSnapshot.empty) {
+    return 0;
+  }
+
+  const updates = [];
+  const updatedAt = new Date().toISOString();
+
+  presetsSnapshot.docs.forEach((presetDoc) => {
+    const data = presetDoc.data() || {};
+    const currentIds = Array.isArray(data.personIds) ? data.personIds : [];
+    const nextIds = currentIds.filter((id) => id !== duplicateId);
+
+    if (primaryId && !nextIds.includes(primaryId)) {
+      nextIds.push(primaryId);
+    }
+
+    if (nextIds.length !== currentIds.length || (primaryId && !currentIds.includes(primaryId))) {
+      updates.push({
+        ref: presetDoc.ref,
+        data: { personIds: nextIds, updatedAt }
+      });
+    }
+  });
+
+  if (updates.length === 0) {
+    return 0;
+  }
+
+  return commitBatchedUpdates(updates);
+};
+
+const reassignSchedulesToPrimary = async (duplicateId, primaryId, instructorName) => {
+  let updated = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const snapshot = await getDocs(
+      query(
+        collection(db, 'schedules'),
+        where('instructorId', '==', duplicateId),
+        limit(MERGE_BATCH_LIMIT)
+      )
+    );
+
+    if (snapshot.empty) {
+      hasMore = false;
+      continue;
+    }
+
+    const batch = writeBatch(db);
+    const updatedAt = new Date().toISOString();
+    snapshot.docs.forEach((scheduleDoc) => {
+      batch.update(scheduleDoc.ref, {
+        instructorId: primaryId,
+        instructorName: instructorName || deleteField(),
+        updatedAt
+      });
+    });
+
+    await batch.commit();
+    updated += snapshot.size;
+  }
+
+  return updated;
 };
 
 // ==================== SIMPLE FIXES ====================
@@ -401,94 +455,89 @@ export const findOrphanedSchedules = async () => {
  * Merge two people records (keep the primary, delete the duplicate)
  */
 export const mergePeople = async (primaryId, duplicateId, fieldChoices = {}) => {
-  const batch = writeBatch(db);
-
-  // Get both records directly by ID
-  const [primaryDoc, duplicateDoc] = await Promise.all([
-    getDoc(doc(db, 'people', primaryId)),
-    getDoc(doc(db, 'people', duplicateId))
-  ]);
-
-  if (!primaryDoc.exists() || !duplicateDoc.exists()) {
-    throw new Error('One or both records not found');
+  if (!primaryId || !duplicateId) {
+    throw new Error('Both primary and duplicate IDs are required');
   }
 
-  const primary = { id: primaryDoc.id, ...primaryDoc.data() };
+  if (primaryId === duplicateId) {
+    throw new Error('Cannot merge a person into themselves');
+  }
+
+  const duplicateDoc = await getDoc(doc(db, 'people', duplicateId));
+  if (!duplicateDoc.exists()) {
+    throw new Error('Duplicate record not found');
+  }
+
   const duplicate = { id: duplicateDoc.id, ...duplicateDoc.data() };
+  const resolvedPrimary = await resolveCanonicalPersonRecord(primaryId);
+  if (!resolvedPrimary.exists || !resolvedPrimary.data) {
+    throw new Error('Primary record not found');
+  }
 
-  // Base on primary
-  const merged = { ...primary };
+  const primary = resolvedPrimary.data;
 
-  // Fill missing fields from duplicate
-  Object.keys(DEFAULT_PERSON_SCHEMA).forEach(key => {
-    const primaryValue = merged[key];
-    const duplicateValue = duplicate[key];
-    if (
-      (typeof primaryValue === 'string' && primaryValue.trim() === '') ||
-      (Array.isArray(primaryValue) && primaryValue.length === 0) ||
-      primaryValue === null ||
-      primaryValue === undefined
-    ) {
-      merged[key] = duplicateValue;
-    }
+  if (duplicate.mergedInto && duplicate.mergedInto !== primary.id) {
+    throw new Error('Duplicate record already merged into another person');
+  }
+
+  if (duplicate.id === primary.id) {
+    return primary;
+  }
+
+  const merged = mergePeopleData(primary, duplicate, fieldChoices);
+  delete merged.mergedInto;
+  delete merged.mergeStatus;
+  delete merged.mergedAt;
+  delete merged.mergeUpdatedAt;
+  const mergeTimestamp = new Date().toISOString();
+
+  const initialBatch = writeBatch(db);
+  initialBatch.update(doc(db, 'people', primary.id), merged);
+  initialBatch.update(doc(db, 'people', duplicate.id), {
+    mergedInto: primary.id,
+    mergeStatus: 'in_progress',
+    mergedAt: duplicate.mergedAt || mergeTimestamp,
+    mergeUpdatedAt: mergeTimestamp
   });
+  await initialBatch.commit();
 
-  // Always merge roles
-  merged.roles = [...new Set([...(primary.roles || []), ...(duplicate.roles || [])])];
+  const instructorName = buildInstructorName(merged);
+  await reassignSchedulesToPrimary(duplicate.id, primary.id, instructorName);
 
-  // Apply field choices for conflicts
-  Object.entries(fieldChoices).forEach(([field, source]) => {
-    const chosenValue = source === 'primary' ? primary[field] : duplicate[field];
-    merged[field] = chosenValue !== undefined ? chosenValue : null;
-  });
-
-  // Update timestamp
-  merged.updatedAt = new Date().toISOString();
-
-  // Clean merged object: convert undefined to null
-  Object.keys(merged).forEach(key => {
-    if (merged[key] === undefined) {
-      merged[key] = null;
-    }
-  });
-
-  // Update schedules that reference the duplicate
-  const schedulesSnapshot = await getDocs(query(collection(db, 'schedules'), where('instructorId', '==', duplicateId)));
-  schedulesSnapshot.docs.forEach(scheduleDoc => {
-    batch.update(scheduleDoc.ref, { instructorId: primaryId });
-  });
-
-  // Update the primary record
-  batch.update(doc(db, 'people', primaryId), merged);
-
-  // Delete the duplicate
-  batch.delete(doc(db, 'people', duplicateId));
-
-  await batch.commit();
-
-  // Update instructorName on schedules formerly pointing to duplicate to ensure display consistency
   try {
-    const instructorName = `${merged.firstName || ''} ${merged.lastName || ''}`.trim();
-    const reassignedSchedules = await getDocs(query(collection(db, 'schedules'), where('instructorId', '==', primaryId)));
-    const postBatch = writeBatch(db);
-    reassignedSchedules.docs.forEach(snap => {
-      const data = snap.data();
-      if ((data.instructorName || '') !== instructorName) {
-        postBatch.update(snap.ref, { instructorName, updatedAt: new Date().toISOString() });
-      }
+    await updateEmailListPresetsForPerson(duplicate.id, primary.id);
+  } catch (error) {
+    await updateDoc(doc(db, 'people', duplicate.id), {
+      mergeStatus: 'pending_cleanup',
+      mergeUpdatedAt: new Date().toISOString()
     });
-    await postBatch.commit();
-  } catch (e) {
-    console.error('Error standardizing instructorName after merge:', e);
+    throw error;
+  }
+
+  const remainingSchedules = await getDocs(
+    query(
+      collection(db, 'schedules'),
+      where('instructorId', '==', duplicate.id),
+      limit(1)
+    )
+  );
+
+  if (remainingSchedules.empty) {
+    await deleteDoc(doc(db, 'people', duplicate.id));
+  } else {
+    await updateDoc(doc(db, 'people', duplicate.id), {
+      mergeStatus: 'pending_cleanup',
+      mergeUpdatedAt: new Date().toISOString()
+    });
   }
 
   // Log merge
   try {
     await logMerge(
-      `People Merge - ${merged.firstName || ''} ${merged.lastName || ''}`.trim(),
+      `People Merge - ${(merged.firstName || '')} ${(merged.lastName || '')}`.trim(),
       'people',
-      primaryId,
-      [duplicateId],
+      primary.id,
+      [duplicate.id],
       'dataHygiene.js - mergePeople'
     );
   } catch (e) {
@@ -496,6 +545,143 @@ export const mergePeople = async (primaryId, duplicateId, fieldChoices = {}) => 
   }
 
   return merged;
+};
+
+/**
+ * Delete a person only if no schedules still reference them.
+ */
+export const deletePersonSafely = async (personId) => {
+  if (!personId) {
+    throw new Error('Person ID is required');
+  }
+
+  const personDoc = await getDoc(doc(db, 'people', personId));
+  if (!personDoc.exists()) {
+    throw new Error('Person not found');
+  }
+
+  const schedulesSnapshot = await getDocs(
+    query(
+      collection(db, 'schedules'),
+      where('instructorId', '==', personId),
+      limit(1)
+    )
+  );
+
+  if (!schedulesSnapshot.empty) {
+    throw new Error('Cannot delete a person while they are assigned to schedules. Reassign or merge first.');
+  }
+
+  await updateEmailListPresetsForPerson(personId, null);
+  await deleteDoc(doc(db, 'people', personId));
+};
+
+/**
+ * Merge duplicate schedule records
+ */
+export const mergeScheduleRecords = async (duplicateGroup) => {
+  const [primary, secondary] = duplicateGroup.records || [];
+  if (!primary?.id || !secondary?.id) {
+    throw new Error('Invalid schedule duplicate group');
+  }
+
+  const mergedData = mergeScheduleData(primary, secondary);
+
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'schedules', primary.id), mergedData);
+  batch.delete(doc(db, 'schedules', secondary.id));
+  await batch.commit();
+
+  try {
+    await logMerge(
+      `Schedule Merge - ${primary.courseCode || ''} ${primary.section || ''} (${primary.term || ''})`.trim(),
+      'schedules',
+      primary.id,
+      [secondary.id],
+      'dataHygiene.js - mergeScheduleRecords'
+    );
+  } catch (e) {
+    console.error('Change logging error (merge schedules):', e);
+  }
+
+  return {
+    primaryId: primary.id,
+    secondaryId: secondary.id,
+    mergedData
+  };
+};
+
+/**
+ * Merge duplicate room records
+ */
+export const mergeRoomRecords = async (duplicateGroup) => {
+  const [primary, secondary] = duplicateGroup.records || [];
+  if (!primary?.id || !secondary?.id) {
+    throw new Error('Invalid room duplicate group');
+  }
+
+  const mergedData = mergeRoomData(primary, secondary);
+  const batchWriter = createBatchWriter();
+
+  await batchWriter.add((batch) => {
+    batch.update(doc(db, 'rooms', primary.id), mergedData);
+  });
+
+  const schedulesSnapshot = await getDocs(collection(db, 'schedules'));
+  let schedulesUpdated = 0;
+  const primaryName = mergedData.displayName || mergedData.name || '';
+
+  for (const scheduleDoc of schedulesSnapshot.docs) {
+    const s = scheduleDoc.data();
+    const currentIds = Array.isArray(s.roomIds) ? s.roomIds : (s.roomId ? [s.roomId] : []);
+    if (!currentIds.includes(secondary.id)) continue;
+
+    const nextIds = Array.from(new Set(currentIds.map((id) => (id === secondary.id ? primary.id : id))));
+    const currentNames = Array.isArray(s.roomNames) ? s.roomNames : (s.roomName ? [s.roomName] : []);
+    const nextNames = currentNames.map((name, idx) => {
+      const currentId = currentIds[idx];
+      return currentId === secondary.id ? primaryName : name;
+    });
+
+    const roomNameFallback = primaryName || nextNames[0] || s.roomName || '';
+    const normalizedNames = nextNames.length > 0 ? nextNames : (roomNameFallback ? [roomNameFallback] : []);
+
+    await batchWriter.add((batch) => {
+      batch.update(doc(db, 'schedules', scheduleDoc.id), {
+        roomIds: nextIds,
+        roomId: nextIds[0] || null,
+        roomNames: normalizedNames,
+        roomName: normalizedNames[0] || roomNameFallback,
+        updatedAt: new Date().toISOString()
+      });
+    });
+    schedulesUpdated += 1;
+  }
+
+  await batchWriter.add((batch) => {
+    batch.delete(doc(db, 'rooms', secondary.id));
+  });
+
+  await batchWriter.flush();
+
+  try {
+    await logMerge(
+      `Room Merge - ${primaryName || primary.name || ''}`.trim(),
+      'rooms',
+      primary.id,
+      [secondary.id],
+      'dataHygiene.js - mergeRoomRecords'
+    );
+  } catch (e) {
+    console.error('Change logging error (merge rooms):', e);
+  }
+
+  return {
+    primaryId: primary.id,
+    secondaryId: secondary.id,
+    mergedData,
+    schedulesUpdated
+  };
 };
 
 /**
@@ -508,14 +694,51 @@ export const linkScheduleToPerson = async (scheduleId, personId) => {
   }
 
   const person = { id: personDoc.id, ...personDoc.data() };
-  const instructorName = `${person.firstName} ${person.lastName}`.trim();
-
   const scheduleRef = doc(db, 'schedules', scheduleId);
   const beforeSnap = await getDoc(scheduleRef);
   const before = beforeSnap.exists() ? beforeSnap.data() : null;
+  const baseAssignments = Array.isArray(before?.instructorAssignments)
+    ? before.instructorAssignments
+    : [];
+  const assignmentMap = new Map();
+  baseAssignments.forEach((assignment) => {
+    const resolvedId =
+      assignment?.personId || assignment?.instructorId || assignment?.id;
+    if (!resolvedId) return;
+    assignmentMap.set(resolvedId, {
+      ...assignment,
+      personId: resolvedId
+    });
+  });
+  if (!assignmentMap.has(personId)) {
+    assignmentMap.set(personId, {
+      personId,
+      isPrimary: assignmentMap.size === 0,
+      percentage: 100
+    });
+  }
+  const instructorAssignments = Array.from(assignmentMap.values());
+  if (
+    instructorAssignments.length > 0 &&
+    !instructorAssignments.some((assignment) => assignment.isPrimary)
+  ) {
+    instructorAssignments[0].isPrimary = true;
+  }
+  const primaryAssignment =
+    instructorAssignments.find((assignment) => assignment.isPrimary) ||
+    instructorAssignments[0];
+  const instructorIds = Array.from(
+    new Set([
+      ...(Array.isArray(before?.instructorIds) ? before.instructorIds : []),
+      before?.instructorId,
+      ...instructorAssignments.map((assignment) => assignment.personId)
+    ])
+  ).filter(Boolean);
   const updates = {
-    instructorId: personId,
-    instructorName: instructorName,
+    instructorId: primaryAssignment?.personId || personId,
+    instructorIds,
+    instructorAssignments,
+    instructorName: deleteField(),
     updatedAt: new Date().toISOString()
   };
   await updateDoc(scheduleRef, updates);
@@ -538,26 +761,37 @@ export const linkScheduleToPerson = async (scheduleId, personId) => {
  * Standardize all existing data
  */
 export const standardizeAllData = async () => {
-  const batch = writeBatch(db);
+  const batchWriter = createBatchWriter();
   let updateCount = 0;
 
   // Standardize people
   const peopleSnapshot = await getDocs(collection(db, 'people'));
-  peopleSnapshot.docs.forEach(doc => {
-    const standardized = standardizePerson(doc.data());
-    batch.update(doc.ref, standardized);
+  for (const docSnap of peopleSnapshot.docs) {
+    const standardized = standardizePerson(docSnap.data());
+    await batchWriter.add((batch) => batch.update(docSnap.ref, standardized));
     updateCount++;
-  });
+  }
 
   // Standardize schedules
   const schedulesSnapshot = await getDocs(collection(db, 'schedules'));
-  schedulesSnapshot.docs.forEach(doc => {
-    const standardized = standardizeSchedule(doc.data());
-    batch.update(doc.ref, standardized);
+  for (const docSnap of schedulesSnapshot.docs) {
+    const standardized = standardizeSchedule(docSnap.data());
+    if (standardized.instructorId) {
+      standardized.instructorName = deleteField();
+    }
+    await batchWriter.add((batch) => batch.update(docSnap.ref, standardized));
     updateCount++;
-  });
+  }
 
-  await batch.commit();
+  // Standardize rooms
+  const roomsSnapshot = await getDocs(collection(db, 'rooms'));
+  for (const docSnap of roomsSnapshot.docs) {
+    const standardized = standardizeRoom(docSnap.data());
+    await batchWriter.add((batch) => batch.update(docSnap.ref, standardized));
+    updateCount++;
+  }
+
+  await batchWriter.flush();
 
   // Log the standardization operation
   await logStandardization('multiple', updateCount, 'dataHygiene.js - standardizeAllData');
@@ -566,12 +800,406 @@ export const standardizeAllData = async () => {
 };
 
 /**
+ * Backfill `rooms` from people.office and link via `people.officeRoomId`.
+ *
+ * - Creates missing office rooms as `type: "Office"` using deterministic IDs (roomKey).
+ * - Links people to an existing room when a matching roomKey is found.
+ */
+export const backfillOfficeRooms = async () => {
+  const batchWriter = createBatchWriter();
+  const stats = {
+    roomsCreated: 0,
+    roomsUpdated: 0,
+    peopleUpdated: 0,
+    skipped: 0,
+    duplicateRoomKeys: 0,
+    errors: []
+  };
+
+  const [roomsSnapshot, peopleSnapshot] = await Promise.all([
+    getDocs(collection(db, 'rooms')),
+    getDocs(collection(db, 'people'))
+  ]);
+
+  const roomsByKey = new Map();
+  roomsSnapshot.docs.forEach((docSnap) => {
+    const room = { id: docSnap.id, ...docSnap.data() };
+    const key = getRoomKeyFromRoomRecord(room);
+    if (!key) return;
+    if (!roomsByKey.has(key)) {
+      roomsByKey.set(key, room);
+    } else {
+      stats.duplicateRoomKeys += 1;
+    }
+  });
+
+  // First: ensure every room has roomKey/roomNumber when parseable
+  for (const docSnap of roomsSnapshot.docs) {
+    const room = { id: docSnap.id, ...docSnap.data() };
+    const parsed = parseRoomLabel(room.displayName || room.name || '');
+    if (!parsed?.roomKey) continue;
+
+    const updates = {};
+    if (!room.roomKey) updates.roomKey = parsed.roomKey;
+    if (!room.roomNumber && parsed.roomNumber) updates.roomNumber = parsed.roomNumber;
+    if (!room.building && parsed.building) updates.building = parsed.building;
+    if (!room.displayName && parsed.displayName) updates.displayName = parsed.displayName;
+    if (!room.name && parsed.displayName) updates.name = parsed.displayName;
+
+    if (Object.keys(updates).length > 0) {
+      updates.updatedAt = new Date().toISOString();
+      await batchWriter.add((batch) => batch.set(docSnap.ref, updates, { merge: true }));
+      stats.roomsUpdated += 1;
+
+      const merged = { ...room, ...updates };
+      const key = getRoomKeyFromRoomRecord(merged);
+      if (key && !roomsByKey.has(key)) {
+        roomsByKey.set(key, { id: docSnap.id, ...merged });
+      }
+    }
+  }
+
+  // Second: create/link office rooms from people
+  for (const personSnap of peopleSnapshot.docs) {
+    const person = { id: personSnap.id, ...personSnap.data() };
+    const office = (person.office || '').toString().trim();
+    const hasNoOffice = person.hasNoOffice === true || person.isRemote === true || isStudentWorker(person);
+
+    if (hasNoOffice || !office) {
+      if (person.officeRoomId) {
+        await batchWriter.add((batch) => batch.update(personSnap.ref, {
+          officeRoomId: '',
+          updatedAt: new Date().toISOString()
+        }));
+        stats.peopleUpdated += 1;
+      } else {
+        stats.skipped += 1;
+      }
+      continue;
+    }
+
+    const parsed = parseRoomLabel(office);
+    if (!parsed?.roomKey) {
+      stats.skipped += 1;
+      continue;
+    }
+
+    const existingRoom = roomsByKey.get(parsed.roomKey);
+    const officeRoomId = existingRoom?.id || parsed.roomKey;
+
+    if (!existingRoom) {
+      const now = new Date().toISOString();
+      const newRoom = {
+        name: parsed.displayName,
+        displayName: parsed.displayName,
+        building: parsed.building,
+        roomNumber: parsed.roomNumber,
+        roomKey: parsed.roomKey,
+        capacity: null,
+        type: 'Office',
+        isActive: true,
+        createdAt: now,
+        updatedAt: now
+      };
+      try {
+        await batchWriter.add((batch) => batch.set(doc(db, 'rooms', parsed.roomKey), newRoom, { merge: true }));
+        roomsByKey.set(parsed.roomKey, { id: parsed.roomKey, ...newRoom });
+        stats.roomsCreated += 1;
+      } catch (error) {
+        stats.errors.push(`Room create failed (${parsed.displayName}): ${error.message}`);
+        continue;
+      }
+    }
+
+    if ((person.officeRoomId || '') !== officeRoomId) {
+      await batchWriter.add((batch) => batch.update(personSnap.ref, {
+        officeRoomId,
+        updatedAt: new Date().toISOString()
+      }));
+      stats.peopleUpdated += 1;
+    } else {
+      stats.skipped += 1;
+    }
+  }
+
+  await batchWriter.flush();
+  return stats;
+};
+
+/**
+ * Preview changes for backfilling office rooms (no writes).
+ *
+ * Returns a plan consumable by OfficeRoomBackfillPreviewModal.
+ */
+export const previewOfficeRoomBackfill = async () => {
+  const generatedAt = new Date().toISOString();
+
+  const plan = {
+    generatedAt,
+    stats: {
+      roomsCreated: 0,
+      roomsUpdated: 0,
+      peopleUpdated: 0,
+      peopleCleared: 0,
+      skipped: 0,
+      duplicateRoomKeys: 0
+    },
+    changes: []
+  };
+
+  const [roomsSnapshot, peopleSnapshot] = await Promise.all([
+    getDocs(collection(db, 'rooms')),
+    getDocs(collection(db, 'people'))
+  ]);
+
+  const roomsByKey = new Map();
+  roomsSnapshot.docs.forEach((docSnap) => {
+    const room = { id: docSnap.id, ...docSnap.data() };
+    const key = getRoomKeyFromRoomRecord(room);
+    if (!key) return;
+    if (!roomsByKey.has(key)) {
+      roomsByKey.set(key, room);
+    } else {
+      plan.stats.duplicateRoomKeys += 1;
+    }
+  });
+
+  // First: ensure every room has roomKey/roomNumber when parseable
+  for (const docSnap of roomsSnapshot.docs) {
+    const room = { id: docSnap.id, ...docSnap.data() };
+    const parsed = parseRoomLabel(room.displayName || room.name || '');
+    if (!parsed?.roomKey) continue;
+
+    const updates = {};
+    if (!room.roomKey) updates.roomKey = parsed.roomKey;
+    if (!room.roomNumber && parsed.roomNumber) updates.roomNumber = parsed.roomNumber;
+    if (!room.building && parsed.building) updates.building = parsed.building;
+    if (!room.displayName && parsed.displayName) updates.displayName = parsed.displayName;
+    if (!room.name && parsed.displayName) updates.name = parsed.displayName;
+
+    if (Object.keys(updates).length === 0) continue;
+
+    const changeId = `rooms:${docSnap.id}:metadata`;
+    plan.changes.push({
+      id: changeId,
+      collection: 'rooms',
+      action: 'merge',
+      documentId: docSnap.id,
+      label: `Room: backfill metadata · ${parsed.displayName || room.displayName || room.name || docSnap.id}`,
+      before: {
+        roomKey: room.roomKey || '',
+        roomNumber: room.roomNumber || '',
+        building: room.building || '',
+        displayName: room.displayName || '',
+        name: room.name || ''
+      },
+      data: updates
+    });
+    plan.stats.roomsUpdated += 1;
+
+    const merged = { ...room, ...updates };
+    const key = getRoomKeyFromRoomRecord(merged);
+    if (key && !roomsByKey.has(key)) {
+      roomsByKey.set(key, { id: docSnap.id, ...merged });
+    }
+  }
+
+  // Second: create/link office rooms from people
+  const roomCreateChangeIds = new Map();
+
+  for (const personSnap of peopleSnapshot.docs) {
+    const person = { id: personSnap.id, ...personSnap.data() };
+    const office = (person.office || '').toString().trim();
+    const hasNoOffice = person.hasNoOffice === true || person.isRemote === true || isStudentWorker(person);
+
+    if (hasNoOffice || !office) {
+      if (person.officeRoomId) {
+        plan.changes.push({
+          id: `people:${personSnap.id}:officeRoomId:clear`,
+          collection: 'people',
+          action: 'update',
+          documentId: personSnap.id,
+          label: `Person: clear officeRoomId · ${(person.firstName || '')} ${(person.lastName || '')}`.trim(),
+          before: {
+            office: person.office || '',
+            officeRoomId: person.officeRoomId || '',
+            hasNoOffice: person.hasNoOffice === true,
+            isRemote: person.isRemote === true
+          },
+          data: {
+            officeRoomId: ''
+          }
+        });
+        plan.stats.peopleUpdated += 1;
+        plan.stats.peopleCleared += 1;
+      } else {
+        plan.stats.skipped += 1;
+      }
+      continue;
+    }
+
+    const parsed = parseRoomLabel(office);
+    if (!parsed?.roomKey) {
+      plan.stats.skipped += 1;
+      continue;
+    }
+
+    const existingRoom = roomsByKey.get(parsed.roomKey);
+    const officeRoomId = existingRoom?.id || parsed.roomKey;
+
+    const dependsOn = [];
+    if (!existingRoom) {
+      const existingCreateId = roomCreateChangeIds.get(parsed.roomKey);
+      const createId = existingCreateId || `rooms:${parsed.roomKey}:create`;
+
+      if (!existingCreateId) {
+        const newRoom = {
+          name: parsed.displayName,
+          displayName: parsed.displayName,
+          building: parsed.building,
+          roomNumber: parsed.roomNumber,
+          roomKey: parsed.roomKey,
+          capacity: null,
+          type: 'Office',
+          isActive: true
+        };
+
+        plan.changes.push({
+          id: createId,
+          collection: 'rooms',
+          action: 'upsert',
+          documentId: parsed.roomKey,
+          label: `Room: create office · ${parsed.displayName}`,
+          before: null,
+          data: newRoom
+        });
+        plan.stats.roomsCreated += 1;
+        roomCreateChangeIds.set(parsed.roomKey, createId);
+        roomsByKey.set(parsed.roomKey, { id: parsed.roomKey, ...newRoom });
+      }
+
+      dependsOn.push(createId);
+    }
+
+    if ((person.officeRoomId || '') !== officeRoomId) {
+      plan.changes.push({
+        id: `people:${personSnap.id}:officeRoomId:set`,
+        collection: 'people',
+        action: 'update',
+        documentId: personSnap.id,
+        label: `Person: set officeRoomId · ${(person.firstName || '')} ${(person.lastName || '')}`.trim(),
+        before: {
+          office: person.office || '',
+          officeRoomId: person.officeRoomId || '',
+          hasNoOffice: person.hasNoOffice === true,
+          isRemote: person.isRemote === true
+        },
+        data: {
+          officeRoomId
+        },
+        ...(dependsOn.length > 0 ? { dependsOn } : {})
+      });
+      plan.stats.peopleUpdated += 1;
+    } else {
+      plan.stats.skipped += 1;
+    }
+  }
+
+  return plan;
+};
+
+/**
+ * Apply a preview plan returned by previewOfficeRoomBackfill().
+ */
+export const applyOfficeRoomBackfillPlan = async (plan, selectedIds = []) => {
+  const changes = Array.isArray(plan?.changes) ? plan.changes : [];
+  const selectedSet = new Set(Array.isArray(selectedIds) ? selectedIds : []);
+
+  // Ensure dependencies are applied even if caller omitted them.
+  const changeById = new Map(changes.map((change) => [change.id, change]));
+  const queue = Array.from(selectedSet);
+  while (queue.length > 0) {
+    const id = queue.pop();
+    const change = changeById.get(id);
+    const deps = Array.isArray(change?.dependsOn) ? change.dependsOn : [];
+    deps.forEach((depId) => {
+      if (!selectedSet.has(depId)) {
+        selectedSet.add(depId);
+        queue.push(depId);
+      }
+    });
+  }
+
+  const batchWriter = createBatchWriter();
+  const now = new Date().toISOString();
+
+  const stats = {
+    roomsCreated: 0,
+    roomsUpdated: 0,
+    peopleUpdated: 0,
+    skipped: 0,
+    errors: []
+  };
+
+  const selectedChanges = changes
+    .filter((change) => change && selectedSet.has(change.id))
+    .sort((a, b) => {
+      const order = { rooms: 0, people: 1 };
+      const aOrder = order[a.collection] ?? 99;
+      const bOrder = order[b.collection] ?? 99;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return (a.label || '').localeCompare(b.label || '', undefined, { numeric: true });
+    });
+
+  for (const change of selectedChanges) {
+    try {
+      if (change.collection === 'rooms') {
+        const ref = doc(db, 'rooms', change.documentId);
+        const data = { ...(change.data || {}) };
+        if (change.action === 'upsert') {
+          data.createdAt = data.createdAt || now;
+          data.updatedAt = now;
+          await batchWriter.add((batch) => batch.set(ref, data, { merge: true }));
+          stats.roomsCreated += 1;
+        } else {
+          data.updatedAt = now;
+          await batchWriter.add((batch) => batch.set(ref, data, { merge: true }));
+          stats.roomsUpdated += 1;
+        }
+        continue;
+      }
+
+      if (change.collection === 'people') {
+        const ref = doc(db, 'people', change.documentId);
+        const data = { ...(change.data || {}), updatedAt: now };
+        await batchWriter.add((batch) => batch.update(ref, data));
+        stats.peopleUpdated += 1;
+        continue;
+      }
+
+      stats.skipped += 1;
+    } catch (error) {
+      stats.errors.push(`${change.collection}/${change.documentId}: ${error.message}`);
+    }
+  }
+
+  await batchWriter.flush();
+  return stats;
+};
+
+/**
  * Automatically merge obvious duplicates (high confidence only)
  * Returns a report of what was merged
  */
 export const autoMergeObviousDuplicates = async () => {
+  const [peopleDecisions, scheduleDecisions, roomDecisions] = await Promise.all([
+    fetchDedupeDecisions('people'),
+    fetchDedupeDecisions('schedules'),
+    fetchDedupeDecisions('rooms')
+  ]);
+
   // Existing people merging
-  const duplicates = await findDuplicatePeople();
+  const duplicates = await findDuplicatePeople({ blockedPairs: peopleDecisions });
   const results = {
     mergedPeople: 0,
     mergedSchedules: 0,
@@ -583,18 +1211,20 @@ export const autoMergeObviousDuplicates = async () => {
 
   // Merge people
   for (const duplicate of duplicates) {
-    if (duplicate.confidence >= 95) {
+    if (duplicate.confidence >= 0.95) {
       try {
-        await mergePeople(duplicate.primary.id, duplicate.duplicate.id);
+        const [primary, secondary] = duplicate.records;
+        await mergePeople(primary.id, secondary.id);
         results.mergedPeople++;
         results.mergedPairs.push({
           type: 'person',
-          kept: `${duplicate.primary.firstName} ${duplicate.primary.lastName}`,
-          removed: `${duplicate.duplicate.firstName} ${duplicate.duplicate.lastName}`,
+          kept: `${primary.firstName || ''} ${primary.lastName || ''}`.trim(),
+          removed: `${secondary.firstName || ''} ${secondary.lastName || ''}`.trim(),
           reason: duplicate.reason
         });
       } catch (error) {
-        results.errors.push(`Failed to merge person ${duplicate.duplicate.firstName} ${duplicate.duplicate.lastName}: ${error.message}`);
+        const [primary, secondary] = duplicate.records;
+        results.errors.push(`Failed to merge person ${(secondary?.firstName || '').trim()} ${(secondary?.lastName || '').trim()}: ${error.message}`);
       }
     } else {
       results.skipped++;
@@ -608,7 +1238,7 @@ export const autoMergeObviousDuplicates = async () => {
   const rooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
   // Merge schedules
-  const scheduleDuplicates = detectScheduleDuplicates(schedules);
+  const scheduleDuplicates = detectScheduleDuplicates(schedules, { blockedPairs: scheduleDecisions });
   for (const dup of scheduleDuplicates) {
     if (dup.confidence >= 0.98) {
       try {
@@ -629,7 +1259,7 @@ export const autoMergeObviousDuplicates = async () => {
   }
 
   // Merge rooms
-  const roomDuplicates = detectRoomDuplicates(rooms);
+  const roomDuplicates = detectRoomDuplicates(rooms, { blockedPairs: roomDecisions });
   for (const dup of roomDuplicates) {
     if (dup.confidence >= 0.95) {
       try {
@@ -659,15 +1289,19 @@ export const autoMergeObviousDuplicates = async () => {
  */
 export const validateAndCleanBeforeSave = async (data, collection_name) => {
   switch (collection_name) {
-    case 'people':
+    case 'people': {
       const cleanPerson = standardizePerson(data);
 
       // Check for potential duplicates
       const emailDuplicates = await findPeopleByEmail(cleanPerson.email);
+      const baylorDuplicates = await findPeopleByBaylorId(cleanPerson.baylorId);
       const duplicateWarnings = [];
 
       if (emailDuplicates.length > 0 && !emailDuplicates.find(p => p.id === cleanPerson.id)) {
         duplicateWarnings.push(`Email ${cleanPerson.email} already exists`);
+      }
+      if (baylorDuplicates.length > 0 && !baylorDuplicates.find(p => p.id === cleanPerson.id)) {
+        duplicateWarnings.push(`Baylor ID ${cleanPerson.baylorId} already exists`);
       }
 
       // After cleaning
@@ -690,20 +1324,23 @@ export const validateAndCleanBeforeSave = async (data, collection_name) => {
         warnings: duplicateWarnings,
         isValid: duplicateWarnings.length === 0
       };
+    }
 
-    case 'schedules':
+    case 'schedules': {
       return {
         cleanData: standardizeSchedule(data),
         warnings: [],
         isValid: true
       };
+    }
 
-    default:
+    default: {
       return {
         cleanData: data,
         warnings: [],
         isValid: true
       };
+    }
   }
 };
 
@@ -717,28 +1354,60 @@ const findPeopleByEmail = async (email) => {
   return peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
+const findPeopleByBaylorId = async (baylorId) => {
+  if (!baylorId) return [];
+
+  const peopleSnapshot = await getDocs(query(collection(db, 'people'), where('baylorId', '==', baylorId)));
+  return peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+};
+
 // ==================== HEALTH CHECK ====================
 
 /**
  * Get a simple health report of the data
  */
 export const getDataHealthReport = async () => {
-  const [duplicates, orphaned] = await Promise.all([
-    findDuplicatePeople(),
-    findOrphanedSchedules()
+  const [peopleSnapshot, schedulesSnapshot, peopleDecisions] = await Promise.all([
+    getDocs(collection(db, 'people')),
+    getDocs(collection(db, 'schedules')),
+    fetchDedupeDecisions('people')
   ]);
 
-  const peopleSnapshot = await getDocs(collection(db, 'people'));
-  const schedulesSnapshot = await getDocs(collection(db, 'schedules'));
+  const people = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const schedules = schedulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const duplicates = detectPeopleDuplicates(people, { blockedPairs: peopleDecisions });
+
+  const peopleIds = new Set(people.map((person) => person.id));
+  const getScheduleInstructorIds = (schedule) => {
+    const ids = new Set();
+    if (schedule?.instructorId) ids.add(schedule.instructorId);
+    if (Array.isArray(schedule?.instructorIds)) {
+      schedule.instructorIds.forEach((id) => ids.add(id));
+    }
+    if (Array.isArray(schedule?.instructorAssignments)) {
+      schedule.instructorAssignments.forEach((assignment) => {
+        if (assignment?.personId) ids.add(assignment.personId);
+      });
+    }
+    return Array.from(ids).filter(Boolean);
+  };
+  const orphaned = schedules.filter((schedule) => {
+    const instructorIds = getScheduleInstructorIds(schedule);
+    if (instructorIds.length === 0) return true;
+    return !instructorIds.some((id) => peopleIds.has(id));
+  });
 
   const totalPeople = peopleSnapshot.size;
   const totalSchedules = schedulesSnapshot.size;
 
   // Count people missing key info (excluding those intentionally marked as not having them)
-  const people = peopleSnapshot.docs.map(doc => doc.data());
   const missingEmail = people.filter(p => !p.email || p.email.trim() === '').length;
   const missingPhone = people.filter(p => (!p.phone || p.phone.trim() === '') && !p.hasNoPhone).length;
-  const missingOffice = people.filter(p => (!p.office || p.office.trim() === '') && !p.hasNoOffice).length;
+  const missingOffice = people.filter(p =>
+    !isStudentWorker(p) &&
+    (!p.office || p.office.trim() === '') &&
+    !p.hasNoOffice
+  ).length;
   const missingJobTitle = people.filter(p => !p.jobTitle || p.jobTitle.trim() === '').length;
   const missingProgram = people.filter(p => {
     // Only check for missing program if the person is faculty
@@ -767,106 +1436,127 @@ export const getDataHealthReport = async () => {
 };
 
 /**
- * Calculate fuzzy similarity between two full names
- * Handles common variations like middle initials, nicknames, etc.
+ * Generate comprehensive data hygiene report
  */
-const calculateFuzzyNameSimilarity = (fullName1, fullName2) => {
-  if (!fullName1 || !fullName2) return 0;
+export const generateDataHygieneReport = async () => {
+  const [
+    peopleSnapshot,
+    schedulesSnapshot,
+    roomsSnapshot,
+    peopleDecisions,
+    scheduleDecisions,
+    roomDecisions
+  ] = await Promise.all([
+    getDocs(collection(db, 'people')),
+    getDocs(collection(db, 'schedules')),
+    getDocs(collection(db, 'rooms')),
+    fetchDedupeDecisions('people'),
+    fetchDedupeDecisions('schedules'),
+    fetchDedupeDecisions('rooms')
+  ]);
 
-  // Normalize names for comparison
-  const normalize = (name) => {
-    return name.toLowerCase()
-      .replace(/\b[a-z]\.\s*/g, '') // Remove middle initials
-      .replace(/\s+/g, ' ') // Normalize spaces
-      .trim();
+  const people = peopleSnapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+  const canonicalPeople = people.filter(person => !person?.mergedInto);
+  const schedules = schedulesSnapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+  const rooms = roomsSnapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+
+  const peopleDuplicates = detectPeopleDuplicates(canonicalPeople, { blockedPairs: peopleDecisions });
+  const scheduleDuplicates = detectScheduleDuplicates(schedules, { blockedPairs: scheduleDecisions });
+  const roomDuplicates = detectRoomDuplicates(rooms, { blockedPairs: roomDecisions });
+  const crossCollection = detectCrossCollectionIssues(people, schedules, rooms);
+
+  const details = {
+    people: {
+      total: people.length,
+      duplicates: peopleDuplicates,
+      duplicateCount: peopleDuplicates.length,
+      ignoredPairs: peopleDecisions.size
+    },
+    schedules: {
+      total: schedules.length,
+      duplicates: scheduleDuplicates,
+      duplicateCount: scheduleDuplicates.length,
+      ignoredPairs: scheduleDecisions.size
+    },
+    rooms: {
+      total: rooms.length,
+      duplicates: roomDuplicates,
+      duplicateCount: roomDuplicates.length,
+      ignoredPairs: roomDecisions.size
+    },
+    crossCollection
   };
 
-  const n1 = normalize(fullName1);
-  const n2 = normalize(fullName2);
+  const summary = {
+    totalDuplicates: details.people.duplicateCount + details.schedules.duplicateCount + details.rooms.duplicateCount,
+    totalIssues: details.people.duplicateCount + details.schedules.duplicateCount + details.rooms.duplicateCount + crossCollection.length
+  };
 
-  // Exact match after normalization
-  if (n1 === n2) return 1.0;
+  const report = {
+    timestamp: new Date().toISOString(),
+    summary,
+    details,
+    recommendations: generateRecommendations({ ...details, crossCollection }),
+    dataQualityScore: calculateDataQualityScore({ ...details, summary, crossCollection })
+  };
 
-  // Split into parts for more granular comparison
-  const parts1 = n1.split(' ');
-  const parts2 = n2.split(' ');
-
-  // Must have same number of name parts (first + last)
-  if (parts1.length !== parts2.length) {
-    // Allow for cases like "John Smith" vs "John A Smith" (different part counts)
-    // But penalize the score
-    if (Math.abs(parts1.length - parts2.length) === 1) {
-      // One has a middle initial, check if base names match
-      const longer = parts1.length > parts2.length ? parts1 : parts2;
-      const shorter = parts1.length < parts2.length ? parts1 : parts2;
-
-      // Remove middle part from longer name and compare
-      const longerWithoutMiddle = [longer[0], longer[longer.length - 1]];
-      if (longerWithoutMiddle[0] === shorter[0] && longerWithoutMiddle[1] === shorter[1]) {
-        return 0.95; // Very high match - same person with/without middle initial
-      }
-    }
-    return 0; // Too different in structure
-  }
-
-  // Compare each part
-  let totalSimilarity = 0;
-  for (let i = 0; i < parts1.length; i++) {
-    const partSimilarity = calculatePartSimilarity(parts1[i], parts2[i]);
-    totalSimilarity += partSimilarity;
-  }
-
-  return totalSimilarity / parts1.length;
+  return report;
 };
 
-/**
- * Calculate similarity between individual name parts (first names, last names)
- */
-const calculatePartSimilarity = (part1, part2) => {
-  if (!part1 || !part2) return 0;
+const generateRecommendations = (results) => {
+  const recommendations = [];
 
-  const p1 = part1.toLowerCase().trim();
-  const p2 = part2.toLowerCase().trim();
-
-  // Exact match
-  if (p1 === p2) return 1;
-
-  // Common nickname mappings for first names
-  const nicknames = {
-    'bob': 'robert', 'bobby': 'robert', 'rob': 'robert', 'robbie': 'robert',
-    'bill': 'william', 'billy': 'william', 'will': 'william', 'willie': 'william',
-    'jim': 'james', 'jimmy': 'james', 'jamie': 'james',
-    'mike': 'michael', 'mickey': 'michael', 'mick': 'michael',
-    'dave': 'david', 'davey': 'david',
-    'steve': 'steven', 'stevie': 'steven',
-    'chris': 'christopher', 'matt': 'matthew', 'dan': 'daniel', 'danny': 'daniel',
-    'tom': 'thomas', 'tommy': 'thomas', 'joe': 'joseph', 'joey': 'joseph',
-    'tony': 'anthony', 'nick': 'nicholas', 'andy': 'andrew', 'alex': 'alexander',
-    'liz': 'elizabeth', 'beth': 'elizabeth', 'betty': 'elizabeth',
-    'sue': 'susan', 'susie': 'susan', 'katie': 'katherine', 'kate': 'katherine',
-    'kathy': 'katherine', 'patty': 'patricia', 'pat': 'patricia', 'trish': 'patricia'
-  };
-
-  // Check nickname mappings (both directions)
-  if (nicknames[p1] === p2 || nicknames[p2] === p1) return 0.95;
-  if (Object.values(nicknames).includes(p1) && nicknames[p2] === p1) return 0.95;
-  if (Object.values(nicknames).includes(p2) && nicknames[p1] === p2) return 0.95;
-
-  // Check if one name is a substring of the other (e.g., "Ben" vs "Benjamin")
-  if (p1.startsWith(p2) || p2.startsWith(p1)) {
-    const minLength = Math.min(p1.length, p2.length);
-    const maxLength = Math.max(p1.length, p2.length);
-    return minLength / maxLength * 0.9; // High but not perfect match
+  if (results.people.duplicateCount > 0) {
+    recommendations.push({
+      priority: 'high',
+      action: 'Merge duplicate people records',
+      count: results.people.duplicateCount,
+      description: 'You have people listed multiple times. Merging them will create one accurate record for each person.',
+      benefit: 'Eliminates confusion when looking up faculty and staff'
+    });
   }
 
-  // Basic character similarity
-  const maxLen = Math.max(p1.length, p2.length);
-  let matches = 0;
-  for (let i = 0; i < Math.min(p1.length, p2.length); i++) {
-    if (p1[i] === p2[i]) matches++;
+  if (results.schedules.duplicateCount > 0) {
+    recommendations.push({
+      priority: 'medium',
+      action: 'Merge duplicate schedule records',
+      count: results.schedules.duplicateCount,
+      description: 'Some courses appear to be scheduled multiple times. Merging removes the duplicates.',
+      benefit: 'Accurate course schedules without duplicates'
+    });
   }
 
-  return matches / maxLen;
+  if (results.rooms.duplicateCount > 0) {
+    recommendations.push({
+      priority: 'low',
+      action: 'Merge duplicate room records',
+      count: results.rooms.duplicateCount,
+      description: 'Some rooms are listed multiple times with slight variations in name.',
+      benefit: 'Consistent room names across all schedules'
+    });
+  }
+
+  if (results.crossCollection.length > 0) {
+    recommendations.push({
+      priority: 'high',
+      action: 'Fix broken connections',
+      count: results.crossCollection.length,
+      description: 'Some schedules reference people or rooms that no longer exist in the system.',
+      benefit: 'Ensures all schedule data is properly connected'
+    });
+  }
+
+  return recommendations;
+};
+
+const calculateDataQualityScore = (results) => {
+  const totalRecords = results.people.total + results.schedules.total + results.rooms.total;
+  const totalIssues = results.summary.totalIssues;
+
+  if (totalRecords === 0) return 100;
+
+  const qualityScore = Math.max(0, 100 - (totalIssues / totalRecords) * 100);
+  return Math.round(qualityScore);
 };
 
 /**
@@ -979,6 +1669,140 @@ export const previewStandardization = async () => {
 };
 
 /**
+ * Preview standardization changes across people, schedules, and rooms.
+ */
+export const previewStandardizationPlan = async ({ limitPerType = 200 } = {}) => {
+  const limit = Number.isFinite(limitPerType) ? Math.max(1, limitPerType) : 200;
+  const [peopleSnapshot, schedulesSnapshot, roomsSnapshot] = await Promise.all([
+    getDocs(collection(db, 'people')),
+    getDocs(collection(db, 'schedules')),
+    getDocs(collection(db, 'rooms'))
+  ]);
+
+  const diffFields = (before, after, fields) => {
+    const diffs = [];
+    fields.forEach((field) => {
+      const prior = before[field];
+      const next = after[field];
+      const priorString = Array.isArray(prior) || typeof prior === 'object'
+        ? JSON.stringify(prior || null)
+        : String(prior ?? '');
+      const nextString = Array.isArray(next) || typeof next === 'object'
+        ? JSON.stringify(next || null)
+        : String(next ?? '');
+      if (priorString !== nextString) {
+        diffs.push({ field, before: prior, after: next });
+      }
+    });
+    return diffs;
+  };
+
+  const changes = {
+    people: [],
+    schedules: [],
+    rooms: []
+  };
+  const changeCounts = {
+    people: 0,
+    schedules: 0,
+    rooms: 0
+  };
+
+  peopleSnapshot.docs.forEach((docSnap) => {
+    const original = docSnap.data() || {};
+    const standardized = standardizePerson({ ...original, id: docSnap.id }, { updateTimestamp: false });
+    const diffs = diffFields(original, standardized, [
+      'firstName',
+      'lastName',
+      'name',
+      'email',
+      'phone',
+      'roles',
+      'office',
+      'department',
+      'externalIds',
+      'baylorId',
+      'hasNoPhone',
+      'hasNoOffice'
+    ]);
+    if (diffs.length > 0) {
+      changeCounts.people += 1;
+      if (changes.people.length < limit) {
+        changes.people.push({
+          id: docSnap.id,
+          label: standardized.name || `${standardized.firstName || ''} ${standardized.lastName || ''}`.trim() || 'Unknown',
+          diffs
+        });
+      }
+    }
+  });
+
+  schedulesSnapshot.docs.forEach((docSnap) => {
+    const original = docSnap.data() || {};
+    const standardized = standardizeSchedule({ ...original, id: docSnap.id });
+    const diffs = diffFields(original, standardized, [
+      'term',
+      'termCode',
+      'courseCode',
+      'section',
+      'crn',
+      'roomNames',
+      'roomName',
+      'locationType',
+      'locationLabel',
+      'instructorIds',
+      'instructorAssignments',
+      'instructionMethod',
+      'scheduleType',
+      'status'
+    ]);
+    if (diffs.length > 0) {
+      changeCounts.schedules += 1;
+      if (changes.schedules.length < limit) {
+        changes.schedules.push({
+          id: docSnap.id,
+          label: `${standardized.courseCode || ''} ${standardized.section || ''} ${standardized.term || ''}`.trim() || docSnap.id,
+          diffs
+        });
+      }
+    }
+  });
+
+  roomsSnapshot.docs.forEach((docSnap) => {
+    const original = docSnap.data() || {};
+    const standardized = standardizeRoom({ ...original, id: docSnap.id });
+    const diffs = diffFields(original, standardized, [
+      'name',
+      'displayName',
+      'building',
+      'roomNumber',
+      'roomKey',
+      'type'
+    ]);
+    if (diffs.length > 0) {
+      changeCounts.rooms += 1;
+      if (changes.rooms.length < limit) {
+        changes.rooms.push({
+          id: docSnap.id,
+          label: standardized.displayName || standardized.name || docSnap.id,
+          diffs
+        });
+      }
+    }
+  });
+
+  return {
+    counts: {
+      people: peopleSnapshot.size,
+      schedules: schedulesSnapshot.size,
+      rooms: roomsSnapshot.size
+    },
+    changeCounts,
+    samples: changes
+  };
+};
+
+/**
  * Apply targeted standardization changes with logging for undo capability
  */
 export const applyTargetedStandardization = async (changeIds = null) => {
@@ -1080,4 +1904,25 @@ export const getStandardizationHistory = async (limit = 10) => {
     console.error('Error getting standardization history:', error);
     return [];
   }
-}; 
+};
+
+export {
+  DEFAULT_PERSON_SCHEMA,
+  standardizePerson,
+  standardizeSchedule,
+  standardizeRoom,
+  detectPeopleDuplicates,
+  detectScheduleDuplicates,
+  detectRoomDuplicates,
+  detectCrossCollectionIssues,
+  mergePeopleData,
+  mergeScheduleData,
+  mergeRoomData
+};
+
+export {
+  standardizePhone,
+  standardizeCourseCode,
+  standardizeTerm,
+  standardizeRoomName
+} from './hygieneCore';

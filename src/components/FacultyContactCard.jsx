@@ -4,6 +4,8 @@ import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/fire
 import { db, COLLECTIONS } from '../firebase';
 import { logUpdate } from '../utils/changeLogger';
 import StudentWorkerScheduleView from './analytics/StudentWorkerScheduleView';
+import { useAppConfig } from '../contexts/AppConfigContext';
+import { formatTermFromCode, formatTermLabel, sortTerms } from '../utils/termUtils';
 
 // Simple in-memory cache to avoid re-fetching schedules between openings
 const scheduleCache = new Map();
@@ -30,6 +32,7 @@ const FacultyContactCard = ({
 }) => {
     // Use either person or faculty prop (for backwards compatibility)
     const contactPerson = person || faculty;
+    const { termConfig, termConfigVersion } = useAppConfig();
 
     const [externalSchedules, setExternalSchedules] = useState([]);
     const [loadingSchedules, setLoadingSchedules] = useState(false);
@@ -45,35 +48,23 @@ const FacultyContactCard = ({
         setIsEditingBaylorId(false);
     }, [contactPerson?.id]);
 
-    // Parse term code to human-readable format
-    const parseTermCode = (termCode) => {
-        if (!termCode || typeof termCode !== 'string') return '';
-        const code = termCode.trim();
-        if (code.length === 6) {
-            const year = code.substring(0, 4);
-            const termNum = code.substring(4, 6);
-            const termMap = { '30': 'Fall', '40': 'Spring', '50': 'Summer' };
-            return `${termMap[termNum] || 'Unknown'} ${year}`;
-        }
-        return termCode; // Return as-is if not in expected format
-    };
-
-    // Best-effort term display using either explicit term string or termCode
     const getDisplayTerm = (term, termCode) => {
-        const t = (term || '').trim();
-        if (t && /^(Fall|Spring|Summer|Winter)\s+\d{4}$/i.test(t)) return t;
-        const parsed = parseTermCode(termCode || '');
-        return parsed || t;
+        const raw = (term || '').trim();
+        const formatted = formatTermLabel(raw, termConfig);
+        if (formatted) return formatted;
+        const fromCode = formatTermFromCode(termCode || '', termConfig);
+        return fromCode || raw;
     };
 
     // Load schedules directly from Firestore when no courses are embedded
     useEffect(() => {
         let cancelled = false;
-        const shouldFetch = personType !== 'student' && (!Array.isArray(contactPerson.courses) || contactPerson.courses.length === 0);
+        const shouldFetch = personType !== 'student' && contactPerson?.id &&
+            (!Array.isArray(contactPerson.courses) || contactPerson.courses.length === 0);
         const load = async () => {
             try {
                 setLoadingSchedules(true);
-                const cacheKey = contactPerson?.id ? `id:${contactPerson.id}` : (contactPerson?.name ? `name:${contactPerson.name}` : null);
+                const cacheKey = contactPerson?.id ? `id:${contactPerson.id}` : null;
                 if (cacheKey && scheduleCache.has(cacheKey)) {
                     const cached = scheduleCache.get(cacheKey);
                     if (!cancelled) {
@@ -86,15 +77,18 @@ const FacultyContactCard = ({
                 const results = [];
                 // Prefer id-based match when available
                 if (contactPerson?.id) {
-                    const qById = query(schedulesRef, where('instructorId', '==', contactPerson.id));
-                    const snapById = await getDocs(qById);
-                    snapById.forEach(doc => results.push({ id: doc.id, ...doc.data() }));
-                }
-                // Fallback to instructorName text match
-                if (results.length === 0 && contactPerson?.name) {
-                    const qByName = query(schedulesRef, where('instructorName', '==', contactPerson.name));
-                    const snapByName = await getDocs(qByName);
-                    snapByName.forEach(doc => results.push({ id: doc.id, ...doc.data() }));
+                    const [snapByIds, snapById] = await Promise.all([
+                        getDocs(query(schedulesRef, where('instructorIds', 'array-contains', contactPerson.id))),
+                        getDocs(query(schedulesRef, where('instructorId', '==', contactPerson.id)))
+                    ]);
+                    const merged = new Map();
+                    snapByIds.forEach(doc => merged.set(doc.id, { id: doc.id, ...doc.data() }));
+                    snapById.forEach(doc => {
+                        if (!merged.has(doc.id)) {
+                            merged.set(doc.id, { id: doc.id, ...doc.data() });
+                        }
+                    });
+                    merged.forEach((value) => results.push(value));
                 }
                 if (cacheKey) scheduleCache.set(cacheKey, results);
                 if (!cancelled) setExternalSchedules(results);
@@ -125,24 +119,7 @@ const FacultyContactCard = ({
             term: getDisplayTerm(item.term || item.Term || '', item.termCode || item.termCodeAlt || ''),
             credits: item.credits || item.Credits || ''
         }));
-    }, [sourceSchedules]);
-
-    const buildSortedTerms = (courses) => {
-        const termsSet = new Set();
-        courses.forEach(c => { if (c.term) termsSet.add(c.term); });
-        const termOrder = { 'Fall': 3, 'Summer': 2, 'Spring': 1, 'Winter': 0 };
-        const parseTerm = (t) => {
-            const [termType, yearStr] = (t || '').split(' ');
-            const year = parseInt(yearStr, 10);
-            return { termType, year: isNaN(year) ? 0 : year };
-        };
-        return Array.from(termsSet).sort((a, b) => {
-            const A = parseTerm(a);
-            const B = parseTerm(b);
-            if (A.year !== B.year) return B.year - A.year; // newer years first
-            return (termOrder[B.termType] || 0) - (termOrder[A.termType] || 0);
-        });
-    };
+    }, [sourceSchedules, termConfigVersion]);
 
     const coursesByTerm = normalizedCourses.reduce((acc, course) => {
         const termKey = course.term || 'Other';
@@ -150,8 +127,11 @@ const FacultyContactCard = ({
         acc[termKey].push(course);
         return acc;
     }, {});
-
-    const sortedTerms = buildSortedTerms(normalizedCourses);
+    const sortedTerms = useMemo(() => {
+        const termsSet = new Set();
+        normalizedCourses.forEach(course => { if (course.term) termsSet.add(course.term); });
+        return sortTerms(Array.from(termsSet), termConfig);
+    }, [normalizedCourses, termConfigVersion]);
     const hasCourses = normalizedCourses.length > 0;
 
     const getRoleLabel = () => {

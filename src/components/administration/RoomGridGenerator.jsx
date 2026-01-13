@@ -10,12 +10,14 @@ import { logCreate, logDelete } from '../../utils/changeLogger';
 import { ConfirmationDialog } from '../CustomAlert';
 import { usePermissions } from '../../utils/permissions';
 import { registerActionKeys } from '../../utils/actionRegistry';
-import { fetchSchedulesWithRelationalData } from '../../utils/dataImportUtils';
+import { fetchSchedulesByTerm } from '../../utils/dataImportUtils';
 import { getBuildingFromRoom } from '../../utils/buildingUtils';
+import { useSchedules } from '../../contexts/ScheduleContext';
 
 
 const RoomGridGenerator = () => {
     const { canEdit, canAction } = usePermissions();
+    const { availableSemesters = [], selectedSemester, getTermByLabel } = useSchedules();
     // Register actions for this feature so admin UI can see them
     useEffect(() => {
         registerActionKeys(['roomGrids.save', 'roomGrids.delete']);
@@ -36,9 +38,9 @@ const RoomGridGenerator = () => {
 
     // Mode selection: null = wizard, 'auto' = dashboard data, 'csv' = CLSS import
     const [dataMode, setDataMode] = useState(null);
-    const [availableSemesters, setAvailableSemesters] = useState([]);
     const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
     const [dashboardSchedules, setDashboardSchedules] = useState(null);
+    const [loadedTerm, setLoadedTerm] = useState('');
 
     // Dialog states
     const [alertDialog, setAlertDialog] = useState({ isOpen: false, message: '', title: '' });
@@ -85,55 +87,39 @@ const RoomGridGenerator = () => {
         setMessage({ text: '', type: '' });
     };
 
-    // Load all schedules from Firebase for auto-populate mode
-    const loadDashboardData = useCallback(async () => {
+    // Load schedules for a specific term in auto-populate mode
+    const loadDashboardData = useCallback(async (targetSemester = '') => {
         setIsLoadingDashboard(true);
         try {
-            const { schedules } = await fetchSchedulesWithRelationalData();
-            setDashboardSchedules(schedules);
-
-            // Extract unique semesters/terms from schedules
-            const semesters = new Set();
-            schedules.forEach(s => {
-                if (s.term) semesters.add(s.term);
-            });
-            const sortedSemesters = Array.from(semesters).sort((a, b) => {
-                // Sort by year (desc) then semester order (Spring, Summer, Fall)
-                const getYear = (s) => parseInt(s.match(/\d{4}/)?.[0] || '0');
-                const getSemOrder = (s) => {
-                    if (s.toLowerCase().includes('spring')) return 1;
-                    if (s.toLowerCase().includes('summer')) return 2;
-                    if (s.toLowerCase().includes('fall')) return 3;
-                    return 0;
-                };
-                const yearDiff = getYear(b) - getYear(a);
-                if (yearDiff !== 0) return yearDiff;
-                return getSemOrder(b) - getSemOrder(a);
-            });
-            setAvailableSemesters(sortedSemesters);
-
-            // Auto-select the first (most recent) semester if none selected
-            if (sortedSemesters.length > 0 && !semester) {
-                setSemester(sortedSemesters[0]);
+            const termLabel = targetSemester || semester || selectedSemester || availableSemesters[0] || '';
+            if (!termLabel) {
+                showMessage('Select a semester to load dashboard data.');
+                return;
             }
-
-            showMessage(`Loaded ${schedules.length} schedules from dashboard.`, 'success');
+            if (!semester) {
+                setSemester(termLabel);
+            }
+            const termMeta = getTermByLabel?.(termLabel);
+            const { schedules } = await fetchSchedulesByTerm({
+                term: termLabel,
+                termCode: termMeta?.termCode || ''
+            });
+            setDashboardSchedules(schedules);
+            setLoadedTerm(termLabel);
+            showMessage(`Loaded ${schedules.length} schedules for ${termLabel}.`, 'success');
         } catch (error) {
             console.error('Error loading dashboard data:', error);
             showMessage('Failed to load dashboard data. ' + error.message);
         } finally {
             setIsLoadingDashboard(false);
         }
-    }, [semester]);
+    }, [availableSemesters, getTermByLabel, selectedSemester, semester]);
 
     // Transform dashboard schedules to allClassData format (matching CSV processing output)
     const processDashboardData = useCallback((targetSemester) => {
         if (!dashboardSchedules || dashboardSchedules.length === 0) return;
 
-        // Filter schedules by the selected semester
-        const semesterSchedules = dashboardSchedules.filter(s =>
-            s.term && s.term.toLowerCase() === targetSemester.toLowerCase()
-        );
+        const semesterSchedules = Array.isArray(dashboardSchedules) ? dashboardSchedules : [];
 
         // Transform each schedule to the format expected by the grid generator
         const items = semesterSchedules.flatMap(schedule => {
@@ -164,7 +150,7 @@ const RoomGridGenerator = () => {
 
                 // Extract room number (last word that contains digits)
                 let roomNumber = 'N/A';
-                const roomMatch = roomString.match(/([\w\d\-\/]+)\s*$/);
+                const roomMatch = roomString.match(/([\w\d\-/]+)\s*$/);
                 if (roomMatch && /\d/.test(roomMatch[1])) {
                     roomNumber = roomMatch[1].trim();
                 }
@@ -234,19 +220,24 @@ const RoomGridGenerator = () => {
         }
     }, [dashboardSchedules]);
 
-    // When semester changes in auto mode, reprocess data
+    // When semester changes in auto mode, reload and reprocess data
+    useEffect(() => {
+        if (dataMode === 'auto' && semester && semester !== loadedTerm) {
+            loadDashboardData(semester);
+        }
+    }, [dataMode, semester, loadedTerm, loadDashboardData]);
+
     useEffect(() => {
         if (dataMode === 'auto' && dashboardSchedules && semester) {
             processDashboardData(semester);
         }
     }, [dataMode, semester, dashboardSchedules, processDashboardData]);
 
-    // When switching to auto mode, load dashboard data
     useEffect(() => {
-        if (dataMode === 'auto' && !dashboardSchedules) {
-            loadDashboardData();
+        if (dataMode === 'auto' && !semester && availableSemesters.length > 0) {
+            setSemester(selectedSemester || availableSemesters[0]);
         }
-    }, [dataMode, dashboardSchedules, loadDashboardData]);
+    }, [dataMode, semester, availableSemesters, selectedSemester]);
 
     // Reset when changing modes
     const handleModeChange = (mode) => {
@@ -314,7 +305,7 @@ const RoomGridGenerator = () => {
                 return roomsList.map((roomString, i) => {
                     const patternString = patternsList[i] || patternsList[0];
                     let buildingName, roomNumber;
-                    const roomMatch = roomString.match(/(.+?)\s+([\w\d\-\/]+)$/);
+                    const roomMatch = roomString.match(/(.+?)\s+([\w\d\-/]+)$/);
                     if (roomMatch) {
                         buildingName = roomMatch[1].trim();
                         roomNumber = roomMatch[2].trim();
@@ -511,7 +502,9 @@ const RoomGridGenerator = () => {
             const ends = relevant.map(c => parseTimeRange(c.time)[1]);
             if (starts.length) earliest = Math.min(earliest, ...starts);
             if (ends.length) latest = Math.max(latest, ...ends);
-        } catch { }
+        } catch (error) {
+            console.warn(error);
+        }
         const step = 15; // minutes per grid row (visual height scales to fit the sheet)
         const start = roundDownTo(earliest, 60); // snap to hour for cleaner labels
         const end = roundUpTo(latest, 30);

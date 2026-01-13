@@ -68,7 +68,7 @@ const DepartmentInsights = () => {
         const startHour = Math.floor(start / 60);
         const endHour = Math.ceil(end / 60);
         for (let hour = startHour; hour < endHour; hour++) {
-          if (hourCounts.hasOwnProperty(hour)) hourCounts[hour]++;
+          if (Object.prototype.hasOwnProperty.call(hourCounts, hour)) hourCounts[hour]++;
         }
       }
     });

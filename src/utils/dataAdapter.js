@@ -16,6 +16,7 @@
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { parseTime } from './timeUtils';
+import { buildPeopleIndex } from './peopleUtils';
 
 // ==================== CONSTANTS ====================
 
@@ -34,7 +35,9 @@ export const UNKNOWN_PROGRAM = 'Unassigned';
 export const fetchPeople = async () => {
   try {
     const peopleSnapshot = await getDocs(collection(db, COLLECTIONS.PEOPLE));
-    return peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const people = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const { canonicalPeople } = buildPeopleIndex(people);
+    return canonicalPeople;
   } catch (error) {
     console.error('Error fetching people:', error);
     return [];
@@ -66,14 +69,13 @@ export const fetchSchedulesWithInstructors = async () => {
 
     const schedules = schedulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     const people = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-    // Create lookup map for people
-    const peopleMap = new Map(people.map(person => [person.id, person]));
+    const { peopleMap, resolvePersonId } = buildPeopleIndex(people);
 
     // Populate schedules with instructor data
     return schedules.map(schedule => ({
       ...schedule,
-      instructor: peopleMap.get(schedule.instructorId) || null
+      instructorId: schedule.instructorId ? resolvePersonId(schedule.instructorId) : schedule.instructorId,
+      instructor: schedule.instructorId ? peopleMap.get(schedule.instructorId) || null : null
     }));
   } catch (error) {
     console.error('Error fetching schedules:', error);
@@ -89,8 +91,9 @@ export const fetchSchedulesWithInstructors = async () => {
 export const adaptPeopleToFaculty = (people, scheduleData = [], programs = []) => {
   // Create lookup map for programs
   const programsMap = new Map(programs.map(program => [program.id, program]));
+  const normalizedPeople = people.filter(person => !person?.mergedInto);
 
-  return people
+  return normalizedPeople
     .filter(person => {
       // Handle both array and object formats for roles
       if (Array.isArray(person.roles)) {
@@ -153,7 +156,8 @@ export const adaptPeopleToFaculty = (people, scheduleData = [], programs = []) =
  * Convert normalized people data to staff format for components
  */
 export const adaptPeopleToStaff = (people) => {
-  return people
+  const normalizedPeople = people.filter(person => !person?.mergedInto);
+  return normalizedPeople
     .filter(person => {
       // Handle both array and object formats for roles
       if (Array.isArray(person.roles)) {
@@ -249,6 +253,7 @@ export const getDualRolePeople = (people) => {
  * Generate analytics data from normalized schedules
  */
 export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, people) => {
+  const { peopleMap, canonicalPeople } = buildPeopleIndex(people);
   const facultyWorkload = {};
   const roomUtilization = {};
   const dayStats = {};
@@ -264,20 +269,21 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
         processedSessions.add(sessionKey);
 
         // Faculty workload (excluding adjunct faculty for workload tracking)
-        const instructor = people.find(p => p.id === schedule.instructorId);
-        if (schedule.instructorId && !instructor?.isAdjunct) {
-          if (!facultyWorkload[schedule.instructorName]) {
-            facultyWorkload[schedule.instructorName] = {
+        const instructor = schedule.instructorId ? peopleMap.get(schedule.instructorId) : null;
+        const instructorName = getInstructorDisplayName(instructor);
+        if (schedule.instructorId && instructor && !instructor.isAdjunct) {
+          if (!facultyWorkload[instructorName]) {
+            facultyWorkload[instructorName] = {
               courseSet: new Set(),
               totalHours: 0
             };
           }
 
-          facultyWorkload[schedule.instructorName].courseSet.add(schedule.courseCode);
+          facultyWorkload[instructorName].courseSet.add(schedule.courseCode);
 
           // Calculate duration
           const duration = calculateDuration(pattern.startTime, pattern.endTime);
-          facultyWorkload[schedule.instructorName].totalHours += duration;
+          facultyWorkload[instructorName].totalHours += duration;
         }
 
         // Room utilization
@@ -294,7 +300,7 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
             roomUtilization[rn].classes++;
             const duration = calculateDuration(pattern.startTime, pattern.endTime);
             roomUtilization[rn].hours += duration;
-            const instructor = people.find(p => p.id === schedule.instructorId);
+            const instructor = schedule.instructorId ? peopleMap.get(schedule.instructorId) : null;
             if (instructor?.isAdjunct) {
               roomUtilization[rn].adjunctTaughtClasses++;
             }
@@ -317,11 +323,11 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
   );
 
   // Calculate additional metrics
-  const facultyPeople = people.filter(p => hasRole(p, 'faculty'));
+  const facultyPeople = canonicalPeople.filter(p => hasRole(p, 'faculty'));
   const uniqueRooms = Object.keys(roomUtilization);
   const totalSessions = processedSessions.size;
   const adjunctTaughtSessions = schedulesWithInstructors.filter(s => {
-    const instructor = people.find(p => p.id === s.instructorId);
+    const instructor = s.instructorId ? peopleMap.get(s.instructorId) : null;
     return instructor?.isAdjunct;
   }).length;
   const uniqueCourses = [...new Set(schedulesWithInstructors.map(s => s.courseCode))].length;
@@ -341,7 +347,7 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
     facultyWorkload: finalFacultyWorkload,
     roomUtilization,
     uniqueRooms,
-    uniqueInstructors: [...new Set(schedulesWithInstructors.map(s => s.instructorName))].filter(Boolean),
+    uniqueInstructors: [...new Set(schedulesWithInstructors.map(s => getInstructorDisplayName(s.instructor || null)))].filter(Boolean),
   };
 };
 
@@ -414,8 +420,8 @@ export const resolveInstructorName = (schedule, peopleMap) => {
  * @returns {string} The room display name or "TBA"
  */
 export const resolveRoomName = (schedule, roomsMap) => {
-  if (schedule?.isOnline) {
-    return 'Online';
+  if (schedule?.locationType === 'no_room' || schedule?.isOnline) {
+    return schedule?.locationLabel || 'No Room Needed';
   }
 
   // Try roomIds array first (multi-room support)
@@ -484,7 +490,7 @@ export const enrichScheduleForDisplay = (schedule, peopleMap, roomsMap, programs
     instructor,
     // Flag indicating if instructor is properly linked
     _hasValidInstructor: !!instructor,
-    _hasValidRoom: schedule.isOnline || (schedule.roomId && roomsMap.has(schedule.roomId))
+    _hasValidRoom: schedule.locationType === 'no_room' || schedule.isOnline || (schedule.roomId && roomsMap.has(schedule.roomId))
   };
 };
 

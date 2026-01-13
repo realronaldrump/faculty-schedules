@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Plus, Minus, Settings, UserCog, BookOpen, Wifi, Save, Edit2, Trash2, FolderOpen, GraduationCap, HelpCircle, Play } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import FacultyContactCard from '../FacultyContactCard';
-import CustomAlert from '../CustomAlert';
+import { ConfirmationDialog } from '../CustomAlert';
 import { useData } from '../../contexts/DataContext';
 import { usePeople } from '../../contexts/PeopleContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -49,6 +49,8 @@ const EmailLists = () => {
   const [presetName, setPresetName] = useState('');
   const [presetSaving, setPresetSaving] = useState(false);
   const [selectedPresetId, setSelectedPresetId] = useState(''); // tracks which preset is loaded
+  const [deletePresetConfirm, setDeletePresetConfirm] = useState({ isOpen: false, preset: null });
+  const [presetDeleting, setPresetDeleting] = useState(false);
 
   // Student Worker State
   const [activeTab, setActiveTab] = useState('faculty-staff'); // 'faculty-staff' | 'student-workers'
@@ -828,21 +830,32 @@ const EmailLists = () => {
     }
   };
 
-  const handleDeletePreset = async (preset) => {
+  const handleDeletePreset = (preset) => {
     if (!isAdmin) {
       showNotification('Only administrators can delete presets', 'error');
       return;
     }
-    if (!window.confirm(`Are you sure you want to delete the preset "${preset.name}"?`)) {
-      return;
-    }
+    setDeletePresetConfirm({ isOpen: true, preset });
+  };
+
+  const handleConfirmDeletePreset = async () => {
+    if (presetDeleting || !deletePresetConfirm.preset) return;
+    setPresetDeleting(true);
     try {
-      await deletePreset(preset.id);
-      showNotification(`Preset "${preset.name}" deleted`);
+      await deletePreset(deletePresetConfirm.preset.id);
+      showNotification(`Preset "${deletePresetConfirm.preset.name}" deleted`);
     } catch (error) {
       console.error('Error deleting preset:', error);
       showNotification(`Failed to delete preset: ${error.message}`, 'error');
+    } finally {
+      setPresetDeleting(false);
+      setDeletePresetConfirm({ isOpen: false, preset: null });
     }
+  };
+
+  const handleCancelDeletePreset = () => {
+    if (presetDeleting) return;
+    setDeletePresetConfirm({ isOpen: false, preset: null });
   };
 
   const handleLoadPreset = (presetId) => {
@@ -887,6 +900,10 @@ const EmailLists = () => {
       }
     }
   };
+
+  const deletePresetLabel = deletePresetConfirm.preset?.name
+    ? `"${deletePresetConfirm.preset.name}"`
+    : 'this preset';
 
   // Count active filters
   const activeFilterCount = useMemo(() => {
@@ -1939,6 +1956,17 @@ const EmailLists = () => {
           </div>
         )
       }
+
+      <ConfirmationDialog
+        isOpen={deletePresetConfirm.isOpen}
+        title="Delete Preset?"
+        message={`Are you sure you want to delete ${deletePresetLabel}? This action cannot be undone.`}
+        type="danger"
+        confirmText={presetDeleting ? 'Deleting...' : 'Delete Preset'}
+        cancelText="Cancel"
+        onConfirm={handleConfirmDeletePreset}
+        onCancel={handleCancelDeletePreset}
+      />
     </div >
   );
 };

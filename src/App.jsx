@@ -36,6 +36,7 @@ import BaylorIDManager from './components/people/BaylorIDManager';
 import LiveView from './components/LiveView';
 import EmailLists from './components/people/EmailLists';
 import BuildingDirectory from './components/resources/BuildingDirectory';
+import TemperatureMonitoring from './components/temperature/TemperatureMonitoring';
 import Login from './components/Login';
 import ProtectedContent from './components/ProtectedContent.jsx';
 import AccessControl from './components/administration/AccessControl.jsx';
@@ -124,6 +125,7 @@ const navigationItems = [
       { id: 'crn-tools', label: 'CRN Quality Tools', path: 'administration/crn-tools' },
       { id: 'outlook-export', label: 'Outlook Room Export', path: 'administration/outlook-export' },
       { id: 'room-grid-generator', label: 'Room Grid Generator', path: 'resources/room-grid-generator' },
+      { id: 'temperature-monitoring', label: 'Temperature Monitoring', path: 'resources/temperature-monitoring' },
       { id: 'baylor-id-manager', label: 'Baylor ID Manager', path: 'people/baylor-id-manager' },
     ]
   },
@@ -329,6 +331,8 @@ function App() {
         return <ProtectedContent pageId="administration/baylor-acronyms"><BaylorAcronyms /></ProtectedContent>;
       case 'resources/room-grid-generator':
         return <ProtectedContent pageId="resources/room-grid-generator"><RoomGridGenerator /></ProtectedContent>;
+      case 'resources/temperature-monitoring':
+        return <ProtectedContent pageId="resources/temperature-monitoring"><TemperatureMonitoring /></ProtectedContent>;
       case 'administration/access-control':
         return <ProtectedContent pageId="administration/access-control"><AccessControl /></ProtectedContent>;
       case 'administration/user-activity':

@@ -2,6 +2,7 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore, connectFirestoreEmulator, enableNetwork, disableNetwork, enableIndexedDbPersistence, enableMultiTabIndexedDbPersistence } from "firebase/firestore";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
+import { getStorage } from "firebase/storage";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -19,6 +20,9 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize Firestore
 export const db = getFirestore(app);
+
+// Initialize Storage
+export const storage = getStorage(app);
 
 // Initialize Auth
 export const auth = getAuth(app);

@@ -135,6 +135,28 @@ service cloud.firestore {
       allow delete: if isAdmin() || userHasAction('room.delete');
     }
 
+    // Temperature monitoring collections: admin writes, signed-in reads
+    match /temperatureBuildingSettings/{id} {
+      allow read: if isSignedIn();
+      allow write: if canWrite();
+    }
+    match /temperatureDevices/{id} {
+      allow read: if isSignedIn();
+      allow write: if canWrite();
+    }
+    match /temperatureDeviceReadings/{id} {
+      allow read: if isSignedIn();
+      allow write: if canWrite();
+    }
+    match /temperatureRoomSnapshots/{id} {
+      allow read: if isSignedIn();
+      allow write: if canWrite();
+    }
+    match /temperatureImports/{id} {
+      allow read: if isSignedIn();
+      allow write: if canWrite();
+    }
+
     // Acronyms collection: granular permissions
     match /baylorAcronyms/{id} {
       allow read: if isSignedIn();

@@ -268,6 +268,7 @@ export const AuthProvider = ({ children }) => {
       'people/email-lists',
       'resources/building-directory',
       'resources/room-grid-generator',
+      'resources/temperature-monitoring',
       'analytics/department-insights',
       'analytics/course-management',
       'administration/program-management',
@@ -364,5 +365,4 @@ export const AuthProvider = ({ children }) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
-
 

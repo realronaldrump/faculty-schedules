@@ -753,6 +753,19 @@ const DataHygieneManager = () => {
   const [standardizationResult, setStandardizationResult] = useState(null);
   const [showStandardizationConfirm, setShowStandardizationConfirm] =
     useState(false);
+  const [mergePeopleConfirm, setMergePeopleConfirm] = useState({
+    isOpen: false,
+    primaryId: null,
+    duplicateId: null,
+  });
+  const [mergePeopleLoading, setMergePeopleLoading] = useState(false);
+  const [notDuplicateDialog, setNotDuplicateDialog] = useState({
+    isOpen: false,
+    entityType: "",
+    duplicate: null,
+  });
+  const [notDuplicateReason, setNotDuplicateReason] = useState("");
+  const [notDuplicateSaving, setNotDuplicateSaving] = useState(false);
 
   // Wizard state
   const steps = [
@@ -914,20 +927,39 @@ const DataHygieneManager = () => {
   };
 
   // Merge duplicate people
-  const handleMergePeople = async (primaryId, duplicateId) => {
-    const confirmed = window.confirm(
-      "Merge these people records? This will permanently remove the duplicate record.",
-    );
-    if (!confirmed) return;
+  const handleMergePeople = (primaryId, duplicateId) => {
+    setMergePeopleConfirm({
+      isOpen: true,
+      primaryId,
+      duplicateId,
+    });
+  };
 
+  const handleConfirmMergePeople = async () => {
+    if (
+      mergePeopleLoading ||
+      !mergePeopleConfirm.primaryId ||
+      !mergePeopleConfirm.duplicateId
+    ) {
+      return;
+    }
+    setMergePeopleLoading(true);
     try {
-      await mergePeople(primaryId, duplicateId);
+      await mergePeople(
+        mergePeopleConfirm.primaryId,
+        mergePeopleConfirm.duplicateId,
+      );
       showNotification(
         "success",
         "Merge Complete",
         "Records merged successfully",
       );
       loadHealthReport(); // Refresh
+      setMergePeopleConfirm({
+        isOpen: false,
+        primaryId: null,
+        duplicateId: null,
+      });
     } catch (error) {
       console.error("Error merging records:", error);
       showNotification(
@@ -935,7 +967,18 @@ const DataHygieneManager = () => {
         "Merge Failed",
         `Error merging records: ${error.message}`,
       );
+    } finally {
+      setMergePeopleLoading(false);
     }
+  };
+
+  const handleCancelMergePeople = () => {
+    if (mergePeopleLoading) return;
+    setMergePeopleConfirm({
+      isOpen: false,
+      primaryId: null,
+      duplicateId: null,
+    });
   };
 
   // Merge duplicate schedules
@@ -1116,33 +1159,50 @@ const DataHygieneManager = () => {
     return [primary.id, secondary.id].sort().join("__");
   };
 
-  const handleMarkNotDuplicate = async (entityType, duplicate) => {
-    const [primary, secondary] = duplicate.records || [];
-    if (!primary?.id || !secondary?.id) return;
-    const reason = window.prompt(
-      "Optionally tell us why these are not duplicates (optional):",
-    );
+  const handleMarkNotDuplicate = (entityType, duplicate) => {
+    setNotDuplicateReason("");
+    setNotDuplicateDialog({ isOpen: true, entityType, duplicate });
+  };
+
+  const handleConfirmNotDuplicate = async () => {
+    if (notDuplicateSaving) return;
+    const { entityType, duplicate } = notDuplicateDialog;
+    const [primary, secondary] = duplicate?.records || [];
+    if (!primary?.id || !secondary?.id) {
+      setNotDuplicateDialog({ isOpen: false, entityType: "", duplicate: null });
+      setNotDuplicateReason("");
+      return;
+    }
+    setNotDuplicateSaving(true);
     try {
       await markNotDuplicate({
         entityType,
         idA: primary.id,
         idB: secondary.id,
-        reason: reason || "",
+        reason: notDuplicateReason.trim(),
       });
       setSelectedDuplicates((prev) =>
-        prev.filter((item) => getDuplicateKey(item) !== getDuplicateKey(duplicate)),
+        prev.filter(
+          (item) => getDuplicateKey(item) !== getDuplicateKey(duplicate),
+        ),
       );
       if (entityType === "people") {
         setDuplicates((prev) =>
-          prev.filter((item) => getDuplicateKey(item) !== getDuplicateKey(duplicate)),
+          prev.filter(
+            (item) => getDuplicateKey(item) !== getDuplicateKey(duplicate),
+          ),
         );
       } else if (entityType === "schedules") {
         setDuplicateSchedules((prev) =>
-          prev.filter((item) => getDuplicateKey(item) !== getDuplicateKey(duplicate)),
+          prev.filter(
+            (item) => getDuplicateKey(item) !== getDuplicateKey(duplicate),
+          ),
         );
       } else if (entityType === "rooms") {
         setDuplicateRooms((prev) =>
-          prev.filter((item) => getDuplicateKey(item) !== getDuplicateKey(duplicate)),
+          prev.filter(
+            (item) => getDuplicateKey(item) !== getDuplicateKey(duplicate),
+          ),
         );
       }
       showNotification(
@@ -1151,6 +1211,8 @@ const DataHygieneManager = () => {
         "We won't flag this pair again.",
       );
       await loadHealthReport();
+      setNotDuplicateDialog({ isOpen: false, entityType: "", duplicate: null });
+      setNotDuplicateReason("");
     } catch (error) {
       console.error("Error marking not duplicate:", error);
       showNotification(
@@ -1158,7 +1220,15 @@ const DataHygieneManager = () => {
         "Update Failed",
         error.message || "Unable to save not-duplicate decision.",
       );
+    } finally {
+      setNotDuplicateSaving(false);
     }
+  };
+
+  const handleCancelNotDuplicate = () => {
+    if (notDuplicateSaving) return;
+    setNotDuplicateDialog({ isOpen: false, entityType: "", duplicate: null });
+    setNotDuplicateReason("");
   };
 
   const handleAutoLinkInstructors = async () => {

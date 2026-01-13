@@ -9,6 +9,7 @@ import { useSchedules } from '../../contexts/ScheduleContext';
 import { useUI } from '../../contexts/UIContext';
 import { useAppConfig } from '../../contexts/AppConfigContext';
 import { backfillTermMetadata } from '../../utils/termDataUtils';
+import { ConfirmationDialog } from '../CustomAlert';
 
 const SystemsPage = () => {
   const navigate = useNavigate();
@@ -23,6 +24,7 @@ const SystemsPage = () => {
   const [termActionLoading, setTermActionLoading] = useState('');
   const [isBackfilling, setIsBackfilling] = useState(false);
   const [backfillResult, setBackfillResult] = useState(null);
+  const [showBackfillConfirm, setShowBackfillConfirm] = useState(false);
   const [buildingConfigDraft, setBuildingConfigDraft] = useState('');
   const [termConfigDraft, setTermConfigDraft] = useState('');
   const [savingConfigs, setSavingConfigs] = useState(false);
@@ -220,9 +222,13 @@ const SystemsPage = () => {
     }, term.locked ? 'unlocked' : 'locked');
   };
 
-  const handleBackfillTerms = async () => {
-    const confirmed = window.confirm('This will scan all schedules to backfill term metadata. Continue?');
-    if (!confirmed) return;
+  const handleBackfillTerms = () => {
+    setShowBackfillConfirm(true);
+  };
+
+  const handleConfirmBackfillTerms = async () => {
+    if (isBackfilling) return;
+    setShowBackfillConfirm(false);
     setIsBackfilling(true);
     setBackfillResult(null);
     try {
@@ -236,6 +242,11 @@ const SystemsPage = () => {
     } finally {
       setIsBackfilling(false);
     }
+  };
+
+  const handleCancelBackfillTerms = () => {
+    if (isBackfilling) return;
+    setShowBackfillConfirm(false);
   };
 
   const handleSaveBuildingConfig = async () => {
@@ -788,6 +799,17 @@ const SystemsPage = () => {
           </div>
         </div>
       </div>
+
+      <ConfirmationDialog
+        isOpen={showBackfillConfirm}
+        title="Backfill Term Metadata?"
+        message="This will scan all schedules and update term metadata across the system."
+        type="warning"
+        confirmText={isBackfilling ? 'Backfilling...' : 'Backfill Terms'}
+        cancelText="Cancel"
+        onConfirm={handleConfirmBackfillTerms}
+        onCancel={handleCancelBackfillTerms}
+      />
     </div>
   );
 };

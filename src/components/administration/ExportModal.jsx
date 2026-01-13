@@ -1,4 +1,5 @@
-import { X, Image, FileText } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { X, Image, FileText, AlertTriangle } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
 const EXPORT_ROOT_ATTR = 'data-export-root';
@@ -53,6 +54,14 @@ const getElementDimensions = (element) => {
 };
 
 const ExportModal = ({ isOpen, onClose, scheduleTableRef, title, onExport, exportScale }) => {
+    const [exportError, setExportError] = useState('');
+
+    useEffect(() => {
+        if (isOpen) {
+            setExportError('');
+        }
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
     const downloadBlob = (blob, filename) => {
@@ -66,10 +75,11 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title, onExport, expor
     };
 
     const handleExport = async () => {
+        setExportError('');
         const container = resolveExportElement(scheduleTableRef.current);
         if (!container) {
             console.error('Nothing to export.');
-            onClose();
+            setExportError('Nothing to export yet.');
             return;
         }
 
@@ -118,42 +128,57 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title, onExport, expor
 
             const cleanTitle = (title || 'schedule').replace(/[^a-zA-Z0-9-_]/g, '-');
             downloadBlob(blob, `${cleanTitle}.png`);
+            onClose();
         } catch (err) {
             console.error('Export failed:', err);
-            alert('Export failed. Please try again.');
+            setExportError('Export failed. Please try again.');
         } finally {
             container.removeAttribute(EXPORT_ROOT_ATTR);
-            onClose();
         }
     };
 
     const handlePrintExport = async () => {
+        setExportError('');
         const container = resolveExportElement(scheduleTableRef.current);
         if (!container) {
             console.error('Nothing to export.');
-            onClose();
+            setExportError('Nothing to export yet.');
             return;
         }
 
-        await waitForFonts(document);
-        if (onExport) {
-            await onExport('pdf');
-        }
+        try {
+            await waitForFonts(document);
+            if (onExport) {
+                await onExport('pdf');
+            }
 
-        const printWindow = window.open('', '_blank', 'width=1200,height=900');
-        if (!printWindow) {
-            alert('Popup blocked. Please allow popups to print this schedule.');
-            return;
-        }
+            const cleanTitle = (title || 'schedule').replace(/[^a-zA-Z0-9-_]/g, '-');
+            const styleNodes = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'));
+            const styles = styleNodes.map(node => node.outerHTML).join('\n');
+            const exportHtml = container.outerHTML;
+            const baseHref = document.baseURI || window.location.href;
 
-        const cleanTitle = (title || 'schedule').replace(/[^a-zA-Z0-9-_]/g, '-');
-        const styleNodes = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'));
-        const styles = styleNodes.map(node => node.outerHTML).join('\n');
-        const exportHtml = container.outerHTML;
-        const baseHref = document.baseURI || window.location.href;
+            const printFrame = document.createElement('iframe');
+            printFrame.style.position = 'fixed';
+            printFrame.style.right = '0';
+            printFrame.style.bottom = '0';
+            printFrame.style.width = '0';
+            printFrame.style.height = '0';
+            printFrame.style.border = '0';
+            printFrame.style.opacity = '0';
+            printFrame.setAttribute('title', 'Print frame');
+            printFrame.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(printFrame);
 
-        printWindow.document.open();
-        printWindow.document.write(`<!doctype html>
+            const printDoc = printFrame.contentDocument;
+            const printWindow = printFrame.contentWindow;
+            if (!printDoc || !printWindow) {
+                printFrame.remove();
+                throw new Error('Print frame unavailable.');
+            }
+
+            printDoc.open();
+            printDoc.write(`<!doctype html>
 <html>
   <head>
     <title>${cleanTitle}</title>
@@ -169,27 +194,26 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title, onExport, expor
     <div class="export-print-root">${exportHtml}</div>
   </body>
 </html>`);
-        printWindow.document.close();
+            printDoc.close();
 
-        let printTriggered = false;
-        const triggerPrint = async () => {
-            if (printTriggered) return;
-            printTriggered = true;
-            await waitForFonts(printWindow.document);
-            await waitForImages(printWindow.document);
+            const cleanup = () => {
+                if (printFrame.parentNode) {
+                    printFrame.parentNode.removeChild(printFrame);
+                }
+            };
+
+            await waitForFonts(printDoc);
+            await waitForImages(printDoc);
             printWindow.focus();
             printWindow.print();
-        };
+            printWindow.onafterprint = cleanup;
+            setTimeout(cleanup, 1000);
 
-        printWindow.addEventListener('load', () => {
-            triggerPrint();
-        }, { once: true });
-        setTimeout(triggerPrint, 500);
-        printWindow.onafterprint = () => {
-            printWindow.close();
-        };
-
-        onClose();
+            onClose();
+        } catch (err) {
+            console.error('Print export failed:', err);
+            setExportError('Print export failed. Please try again.');
+        }
     };
 
     return (
@@ -205,6 +229,12 @@ const ExportModal = ({ isOpen, onClose, scheduleTableRef, title, onExport, expor
                     <p className="text-sm text-gray-600 mb-4">
                         Export the current schedule as a high-resolution PNG or a print-ready PDF.
                     </p>
+                    {exportError && (
+                        <div className="alert alert-error mb-4 flex items-start gap-2" role="alert">
+                            <AlertTriangle className="w-4 h-4 mt-0.5" />
+                            <span className="text-sm">{exportError}</span>
+                        </div>
+                    )}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <button onClick={handleExport} className="export-option" title="Export as PNG image">
                             <Image className="w-8 h-8 mx-auto mb-2 text-baylor-green" />

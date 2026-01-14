@@ -103,7 +103,6 @@ export const APP_ACTIONS = {
   SYSTEM_USER_MANAGE: 'system.user.manage',
   SYSTEM_USER_DISABLE: 'system.user.disable',
   SYSTEM_USER_DELETE: 'system.user.delete',
-  SYSTEM_ACTIVITY_MONITOR: 'system.activity.monitor',
   SYSTEM_MAINTENANCE: 'system.maintenance',
 
   // ===== CRN OPERATIONS =====
@@ -262,7 +261,6 @@ export function usePermissions() {
   const canManageUsers = () => canDoAction(APP_ACTIONS.SYSTEM_USER_MANAGE);
   const canDisableUsers = () => canDoAction(APP_ACTIONS.SYSTEM_USER_DISABLE);
   const canDeleteUsers = () => canDoAction(APP_ACTIONS.SYSTEM_USER_DELETE);
-  const canMonitorActivity = () => canDoAction(APP_ACTIONS.SYSTEM_ACTIVITY_MONITOR);
   const canPerformMaintenance = () => canDoAction(APP_ACTIONS.SYSTEM_MAINTENANCE);
 
   // ===== CRN PERMISSIONS =====
@@ -396,7 +394,6 @@ export function usePermissions() {
     canManageUsers,
     canDisableUsers,
     canDeleteUsers,
-    canMonitorActivity,
     canPerformMaintenance,
 
     // ===== CRN PERMISSIONS =====
@@ -416,5 +413,4 @@ export function usePermissions() {
     canDeleteFromDirectory
   };
 }
-
 

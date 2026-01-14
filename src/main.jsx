@@ -19,10 +19,16 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <PostHogProvider
       apiKey={import.meta.env.VITE_PUBLIC_POSTHOG_KEY}
       options={{
-        api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST,
+        api_host:
+          import.meta.env.VITE_PUBLIC_POSTHOG_HOST || "https://app.posthog.com",
         defaults: "2025-05-24",
+        capture_pageview: "history_change",
         capture_exceptions: true,
+        persistence: "localStorage+cookie",
         debug: import.meta.env.MODE === "development",
+        loaded: (posthog) => {
+          posthog.register({ environment: import.meta.env.MODE });
+        },
       }}
     >
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>

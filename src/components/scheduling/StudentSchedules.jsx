@@ -3,9 +3,9 @@ import { Download, Calendar, List, ZoomIn, ZoomOut } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import ExportModal from '../administration/ExportModal';
 import FacultyContactCard from '../FacultyContactCard';
-import { logExport } from '../../utils/activityLogger';
 import { useData } from '../../contexts/DataContext';
 import { usePeople } from '../../contexts/PeopleContext';
+import { usePostHog } from 'posthog-js/react';
 
 const DAY_ORDER = ['M', 'T', 'W', 'R', 'F'];
 const DAY_LABELS = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
@@ -59,6 +59,7 @@ const accentForStudentAndJob = (studentId, jobTitle) => {
 const StudentSchedules = () => {
   const { studentData = [] } = useData();
   const { loadPeople } = usePeople();
+  const posthog = usePostHog();
   const [selectedBuildings, setSelectedBuildings] = useState([]);
   const [selectedJobTitles, setSelectedJobTitles] = useState([]);
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
@@ -318,9 +319,15 @@ const StudentSchedules = () => {
   const handleExport = async (format) => {
     const title = `Student Worker Schedules - ${dayView === 'All' ? 'All Days' : DAY_LABELS[dayView]}`;
     try {
-      await logExport(format.toUpperCase(), 'Student worker schedules', filteredStudents.length);
+      posthog?.capture('export', {
+        export_format: format.toUpperCase(),
+        data_type: 'Student worker schedules',
+        record_count: filteredStudents.length,
+        view_mode: viewMode,
+        export_title: title
+      });
     } catch (error) {
-      console.error('Failed to log export:', error);
+      console.error('Failed to capture export event:', error);
     }
     // The actual export is handled by the ExportModal
   };
@@ -655,4 +662,3 @@ const StudentSchedules = () => {
 };
 
 export default StudentSchedules;
-

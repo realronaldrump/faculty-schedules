@@ -177,14 +177,6 @@ service cloud.firestore {
       allow delete: if canWrite();
     }
 
-    // USER ACTIVITY TRACKING
-    // Allow active users to create their own activity records
-    // Keep reads/updates/deletes restricted to admins
-    match /userActivity/{id} {
-      allow create: if canReadAppData() && request.auth.uid == request.resource.data.userId;
-      allow read, update, delete: if canWrite();
-    }
-
     // People collection (faculty, staff, adjunct, students): granular permissions
     match /people/{id} {
       allow read: if canReadAppData();

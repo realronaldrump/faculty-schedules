@@ -142,7 +142,6 @@ const AccessControl = () => {
         pages: [
           "administration/app-settings",
           "administration/access-control",
-          "administration/user-activity",
           "administration/recent-changes",
         ],
       },

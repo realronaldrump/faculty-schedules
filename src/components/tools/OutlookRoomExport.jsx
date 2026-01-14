@@ -2,12 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Calendar, Download, MapPin, Plus, Trash2, AlertCircle, FileArchive, CheckCircle2 } from 'lucide-react';
 import JSZip from 'jszip';
 import { parseMeetingPatterns } from '../../utils/meetingPatternUtils';
-import { logExport } from '../../utils/activityLogger';
 import { useData } from '../../contexts/DataContext';
 import { useSchedules } from '../../contexts/ScheduleContext';
 import { useUI } from '../../contexts/UIContext';
 import { useAppConfig } from '../../contexts/AppConfigContext';
 import { normalizeTermDateValue, normalizeTermLabel, sortTerms } from '../../utils/termUtils';
+import { usePostHog } from 'posthog-js/react';
 
 const EXCEPTIONS_STORAGE_KEY = 'tools.outlook-export.term-exceptions';
 const LEGACY_STORAGE_KEY = 'tools.outlook-export.term-configs';
@@ -232,6 +232,7 @@ const OutlookRoomExport = () => {
   const { availableSemesters = [], termOptions: termMetaOptions = [] } = useSchedules();
   const { showNotification } = useUI();
   const { termConfig, termConfigVersion } = useAppConfig();
+  const posthog = usePostHog();
   const [termExceptions, setTermExceptions] = useState(() => {
     if (typeof window === 'undefined') return {};
     try {
@@ -605,7 +606,13 @@ const OutlookRoomExport = () => {
         window.URL.revokeObjectURL(url);
         if (totalEvents > 0) {
           try {
-            await logExport('ICS', 'Outlook room calendars (zip)', totalEvents);
+            posthog?.capture('export', {
+              export_format: 'ICS',
+              data_type: 'Outlook room calendars (zip)',
+              record_count: totalEvents,
+              export_mode: 'zip',
+              term: selectedTerm
+            });
           } catch (error) {
             console.warn(error);
           }
@@ -630,7 +637,13 @@ const OutlookRoomExport = () => {
         });
         if (totalEvents > 0) {
           try {
-            await logExport('ICS', 'Outlook room calendars', totalEvents);
+            posthog?.capture('export', {
+              export_format: 'ICS',
+              data_type: 'Outlook room calendars',
+              record_count: totalEvents,
+              export_mode: 'ics',
+              term: selectedTerm
+            });
           } catch (error) {
             console.warn(error);
           }

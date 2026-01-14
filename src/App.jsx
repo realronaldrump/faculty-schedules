@@ -32,7 +32,6 @@ import CRNQualityTools from "./components/administration/CRNQualityTools";
 import OutlookRoomExport from "./components/tools/OutlookRoomExport.jsx";
 import RecentChangesPage from "./components/administration/RecentChangesPage";
 import RoomGridGenerator from "./components/administration/RoomGridGenerator";
-import UserActivityDashboard from "./components/administration/UserActivityDashboard";
 import BaylorIDManager from "./components/people/BaylorIDManager";
 import LiveView from "./components/LiveView";
 import EmailLists from "./components/people/EmailLists";
@@ -218,11 +217,6 @@ const navigationItems = [
         id: "access-control",
         label: "Access Control",
         path: "administration/access-control",
-      },
-      {
-        id: "user-activity",
-        label: "User Activity",
-        path: "administration/user-activity",
       },
       {
         id: "recent-changes",
@@ -570,12 +564,6 @@ function App() {
         return (
           <ProtectedContent pageId="administration/access-control">
             <AccessControl />
-          </ProtectedContent>
-        );
-      case "administration/user-activity":
-        return (
-          <ProtectedContent pageId="administration/user-activity">
-            <UserActivityDashboard />
           </ProtectedContent>
         );
       case "help/tutorials":

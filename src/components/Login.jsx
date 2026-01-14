@@ -332,7 +332,7 @@ function Login({ onLogin }) {
                 <Shield className="w-5 h-5 text-baylor-green flex-shrink-0" />
                 <div>
                   <p className="text-sm font-medium text-gray-900">Access Control & Audit</p>
-                  <p className="text-xs text-gray-600">Role-based permissions with comprehensive change logging and activity tracking</p>
+                  <p className="text-xs text-gray-600">Role-based permissions with comprehensive change logging</p>
                 </div>
               </div>
             </div>

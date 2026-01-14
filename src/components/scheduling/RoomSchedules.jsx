@@ -21,7 +21,6 @@ import FacultyContactCard from "../FacultyContactCard";
 import WeekView from "./WeekView";
 import RoomCalendarView from "./RoomCalendarView";
 import CourseDetailModal from "./CourseDetailModal";
-import { logExport } from "../../utils/activityLogger";
 import {
   getBuildingFromRoom,
   getCanonicalBuildingList,

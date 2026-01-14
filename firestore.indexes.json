@@ -15,20 +15,6 @@
       ]
     },
     {
-      "collectionGroup": "userActivity",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "timestamp",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "schedules",
       "queryScope": "COLLECTION",
       "fields": [

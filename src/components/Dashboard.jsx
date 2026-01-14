@@ -72,15 +72,15 @@ const Dashboard = () => {
       }
     ];
 
-    if (hasAccess('administration/import-wizard')) {
+    if (hasAccess('tools/import-wizard')) {
       actions.push({
         title: 'Import Data',
         description: 'Refresh faculty information and schedules',
         icon: FileText,
-        path: 'administration/import-wizard',
+        path: 'tools/import-wizard',
         color: 'bg-baylor-gold',
         textColor: 'text-baylor-green',
-        requiredAccess: 'administration/import-wizard'
+        requiredAccess: 'tools/import-wizard'
       });
     }
 
@@ -132,9 +132,9 @@ const Dashboard = () => {
             <p className="text-gray-600 mb-8 max-w-md mx-auto leading-relaxed">
               Once schedule data is available you&apos;ll see tailored quick links here.
             </p>
-            {hasAccess('administration/import-wizard') ? (
+            {hasAccess('tools/import-wizard') ? (
               <button
-                onClick={() => handleNavigate('administration/import-wizard')}
+                onClick={() => handleNavigate('tools/import-wizard')}
                 className="btn-primary"
               >
                 <FileText className="w-4 h-4 mr-2 inline-block" />

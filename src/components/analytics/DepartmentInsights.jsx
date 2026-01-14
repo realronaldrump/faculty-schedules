@@ -199,7 +199,7 @@ const DepartmentInsights = () => {
               <p className="text-sm mt-1">
                 This data is still being refined and may not reflect the final schedule. Please verify any critical information with the department and official University{' '}
                 <button
-                  onClick={() => handleNavigate('administration/baylor-systems')}
+                  onClick={() => handleNavigate('resources/baylor-systems')}
                   className="text-baylor-gold hover:text-baylor-green underline transition-colors"
                 >
                   systems

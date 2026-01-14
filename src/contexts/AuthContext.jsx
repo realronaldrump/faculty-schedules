@@ -283,6 +283,7 @@ export const AuthProvider = ({ children }) => {
     // Fallback to known pages if registry is empty early in boot
     return [
       'dashboard',
+      'live-view',
       'scheduling/faculty-schedules',
       'scheduling/individual-availability',
       'scheduling/room-schedules',
@@ -290,18 +291,25 @@ export const AuthProvider = ({ children }) => {
       'scheduling/group-meeting-scheduler',
       'people/people-directory',
       'people/email-lists',
+      'people/baylor-id-manager',
       'resources/building-directory',
-      'resources/room-grid-generator',
-      'resources/temperature-monitoring',
+      'resources/baylor-acronyms',
+      'resources/baylor-systems',
+      'tools/import-wizard',
+      'tools/data-hygiene',
+      'tools/crn-tools',
+      'tools/outlook-export',
+      'tools/room-grid-generator',
+      'tools/temperature-monitoring',
       'analytics/department-insights',
+      'analytics/student-worker-analytics',
       'analytics/course-management',
-      'administration/program-management',
-      'administration/import-wizard',
-      'administration/data-hygiene',
+      'analytics/program-management',
+      'administration/app-settings',
+      'administration/access-control',
+      'administration/user-activity',
       'administration/recent-changes',
-      'administration/baylor-systems',
-      'administration/baylor-acronyms',
-      'administration/access-control'
+      'help/tutorials'
     ];
   };
 

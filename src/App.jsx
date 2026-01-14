@@ -24,8 +24,9 @@ import DepartmentInsights from "./components/analytics/DepartmentInsights.jsx";
 import StudentWorkerAnalytics from "./components/analytics/StudentWorkerAnalytics.jsx";
 import CourseManagement from "./components/analytics/CourseManagement";
 import ImportWizard from "./components/administration/ImportWizard";
-import SystemsPage from "./components/administration/SystemsPage";
+import AppSettings from "./components/administration/AppSettings";
 import DataHygieneManager from "./components/administration/DataHygieneManager";
+import BaylorSystems from "./components/resources/BaylorSystems";
 import BaylorAcronyms from "./components/administration/BaylorAcronyms";
 import CRNQualityTools from "./components/administration/CRNQualityTools";
 import OutlookRoomExport from "./components/tools/OutlookRoomExport.jsx";
@@ -63,7 +64,6 @@ import {
   Database,
   Radio,
   BookOpen,
-  HelpCircle,
 } from "lucide-react";
 
 // ==================== NAVIGATION CONFIGURATION ====================
@@ -123,7 +123,16 @@ const navigationItems = [
         label: "People Directory",
         path: "people/people-directory",
       },
-      { id: "email-lists", label: "Email Lists", path: "people/email-lists" },
+      {
+        id: "email-lists",
+        label: "Email Lists",
+        path: "people/email-lists",
+      },
+      {
+        id: "baylor-id-manager",
+        label: "Baylor ID Manager",
+        path: "people/baylor-id-manager",
+      },
       {
         id: "building-directory",
         label: "Building Directory",
@@ -132,7 +141,7 @@ const navigationItems = [
       {
         id: "baylor-acronyms",
         label: "Baylor Acronyms",
-        path: "administration/baylor-acronyms",
+        path: "resources/baylor-acronyms",
       },
     ],
   },
@@ -171,45 +180,45 @@ const navigationItems = [
       {
         id: "smart-import",
         label: "Import Wizard",
-        path: "administration/import-wizard",
+        path: "tools/import-wizard",
       },
       {
         id: "data-hygiene",
         label: "Data Hygiene",
-        path: "administration/data-hygiene",
+        path: "tools/data-hygiene",
       },
       {
         id: "crn-tools",
         label: "CRN Quality Tools",
-        path: "administration/crn-tools",
+        path: "tools/crn-tools",
       },
       {
         id: "outlook-export",
         label: "Outlook Room Export",
-        path: "administration/outlook-export",
+        path: "tools/outlook-export",
       },
       {
         id: "room-grid-generator",
         label: "Room Grid Generator",
-        path: "resources/room-grid-generator",
+        path: "tools/room-grid-generator",
       },
       {
         id: "temperature-monitoring",
         label: "Temperature Monitoring",
-        path: "resources/temperature-monitoring",
-      },
-      {
-        id: "baylor-id-manager",
-        label: "Baylor ID Manager",
-        path: "people/baylor-id-manager",
+        path: "tools/temperature-monitoring",
       },
     ],
   },
   {
-    id: "system",
-    label: "System",
+    id: "administration",
+    label: "Administration",
     icon: Settings,
     children: [
+      {
+        id: "app-settings",
+        label: "App Settings",
+        path: "administration/app-settings",
+      },
       {
         id: "access-control",
         label: "Access Control",
@@ -225,18 +234,24 @@ const navigationItems = [
         label: "Recent Changes",
         path: "administration/recent-changes",
       },
-      {
-        id: "baylor-systems",
-        label: "Baylor Systems",
-        path: "administration/baylor-systems",
-      },
     ],
   },
   {
-    id: "help",
-    label: "Help & Tutorials",
-    icon: HelpCircle,
-    path: "help/tutorials",
+    id: "resources",
+    label: "Resources",
+    icon: BookOpen,
+    children: [
+      {
+        id: "baylor-systems",
+        label: "Baylor Systems",
+        path: "resources/baylor-systems",
+      },
+      {
+        id: "help",
+        label: "Help & Tutorials",
+        path: "help/tutorials",
+      },
+    ],
   },
 ];
 
@@ -497,52 +512,58 @@ function App() {
             <RecentChangesPage />
           </ProtectedContent>
         );
-      case "administration/import-wizard":
+      case "tools/import-wizard":
         return (
-          <ProtectedContent pageId="administration/import-wizard">
+          <ProtectedContent pageId="tools/import-wizard">
             <ImportWizard />
           </ProtectedContent>
         );
-      case "administration/data-hygiene":
+      case "tools/data-hygiene":
         return (
-          <ProtectedContent pageId="administration/data-hygiene">
+          <ProtectedContent pageId="tools/data-hygiene">
             <DataHygieneManager />
           </ProtectedContent>
         );
-      case "administration/crn-tools":
+      case "tools/crn-tools":
         return (
-          <ProtectedContent pageId="administration/crn-tools">
+          <ProtectedContent pageId="tools/crn-tools">
             <CRNQualityTools />
           </ProtectedContent>
         );
-      case "administration/outlook-export":
+      case "tools/outlook-export":
         return (
-          <ProtectedContent pageId="administration/outlook-export">
+          <ProtectedContent pageId="tools/outlook-export">
             <OutlookRoomExport />
           </ProtectedContent>
         );
-      case "administration/baylor-systems":
+      case "tools/room-grid-generator":
         return (
-          <ProtectedContent pageId="administration/baylor-systems">
-            <SystemsPage />
-          </ProtectedContent>
-        );
-      case "administration/baylor-acronyms":
-        return (
-          <ProtectedContent pageId="administration/baylor-acronyms">
-            <BaylorAcronyms />
-          </ProtectedContent>
-        );
-      case "resources/room-grid-generator":
-        return (
-          <ProtectedContent pageId="resources/room-grid-generator">
+          <ProtectedContent pageId="tools/room-grid-generator">
             <RoomGridGenerator />
           </ProtectedContent>
         );
-      case "resources/temperature-monitoring":
+      case "tools/temperature-monitoring":
         return (
-          <ProtectedContent pageId="resources/temperature-monitoring">
+          <ProtectedContent pageId="tools/temperature-monitoring">
             <TemperatureMonitoring />
+          </ProtectedContent>
+        );
+      case "resources/baylor-acronyms":
+        return (
+          <ProtectedContent pageId="resources/baylor-acronyms">
+            <BaylorAcronyms />
+          </ProtectedContent>
+        );
+      case "resources/baylor-systems":
+        return (
+          <ProtectedContent pageId="resources/baylor-systems">
+            <BaylorSystems />
+          </ProtectedContent>
+        );
+      case "administration/app-settings":
+        return (
+          <ProtectedContent pageId="administration/app-settings">
+            <AppSettings />
           </ProtectedContent>
         );
       case "administration/access-control":

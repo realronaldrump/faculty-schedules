@@ -49,12 +49,13 @@ const AccessControl = () => {
 
   const PAGE_GROUPS = useMemo(() => {
     const groups = [
-      { name: 'Dashboard', pages: ['dashboard'] },
+      { name: 'Dashboard', pages: ['dashboard', 'live-view'] },
       { name: 'Scheduling', pages: ['scheduling/faculty-schedules','scheduling/individual-availability','scheduling/room-schedules','scheduling/student-schedules','scheduling/group-meeting-scheduler'] },
-      { name: 'Directory', pages: ['people/people-directory','people/email-lists','resources/building-directory','administration/baylor-acronyms','people/baylor-id-manager'] },
+      { name: 'Directory', pages: ['people/people-directory','people/email-lists','people/baylor-id-manager','resources/building-directory','resources/baylor-acronyms'] },
       { name: 'Analytics', pages: ['analytics/department-insights','analytics/student-worker-analytics','analytics/course-management','analytics/program-management'] },
-      { name: 'Tools', pages: ['administration/import-wizard','administration/data-hygiene','administration/crn-tools','administration/outlook-export','resources/room-grid-generator','resources/temperature-monitoring'] },
-      { name: 'System', pages: ['administration/access-control','administration/user-activity','administration/recent-changes','administration/baylor-systems'] }
+      { name: 'Tools', pages: ['tools/import-wizard','tools/data-hygiene','tools/crn-tools','tools/outlook-export','tools/room-grid-generator','tools/temperature-monitoring'] },
+      { name: 'Administration', pages: ['administration/app-settings','administration/access-control','administration/user-activity','administration/recent-changes'] },
+      { name: 'Resources', pages: ['resources/baylor-systems','help/tutorials'] }
     ];
     const grouped = new Set(groups.flatMap(g => g.pages));
     const others = allPages.filter(p => !grouped.has(p));

@@ -1932,6 +1932,8 @@ export const previewLocationMigration = async () => {
       multiRoom: [],      // Rooms with combined strings that need splitting
       missingSpaceKey: [], // Rooms without spaceKey field
       invalidSpaceKey: [], // Rooms with invalid spaceKey format
+      toSeedFromSchedules: [], // Rooms that will be created from schedule roomNames
+      toSeedFromPeople: [],    // Offices that will be created from people office fields
       total: 0
     },
     schedules: {
@@ -1951,8 +1953,14 @@ export const previewLocationMigration = async () => {
     const roomsSnap = await getDocs(collection(db, 'rooms'));
     preview.rooms.total = roomsSnap.size;
     
+    // Build set of existing spaceKeys
+    const existingSpaceKeys = new Set();
     for (const docSnap of roomsSnap.docs) {
       const room = { id: docSnap.id, ...docSnap.data() };
+      
+      if (room.spaceKey) {
+        existingSpaceKeys.add(room.spaceKey);
+      }
       
       // Check for combined multi-room strings in name/displayName
       const displayName = room.displayName || room.name || '';
@@ -1983,17 +1991,18 @@ export const previewLocationMigration = async () => {
       }
     }
 
-    // 2. Analyze schedules collection
+    // 2. Analyze schedules collection - also identify rooms to seed
     const schedulesSnap = await getDocs(collection(db, 'schedules'));
     preview.schedules.total = schedulesSnap.size;
     
+    const roomsToSeed = new Map(); // spaceKey -> display info
+    
     for (const docSnap of schedulesSnap.docs) {
       const schedule = { id: docSnap.id, ...docSnap.data() };
+      const roomName = schedule.roomName || schedule.room || '';
       
       // Check for missing spaceIds array
       if (!schedule.spaceIds || !Array.isArray(schedule.spaceIds) || schedule.spaceIds.length === 0) {
-        const roomName = schedule.roomName || schedule.room || '';
-        
         // Check if it's a virtual location
         if (isSkippableLocation(roomName).skip) {
           preview.schedules.hasVirtualLocation.push({
@@ -2013,11 +2022,39 @@ export const previewLocationMigration = async () => {
           });
         }
       }
+      
+      // Check if we need to seed rooms from this schedule
+      if (roomName && !isSkippableLocation(roomName).skip) {
+        const parsedResult = parseMultiRoom(roomName);
+        const parsedRooms = parsedResult?.rooms || [];
+        
+        for (const parsed of parsedRooms) {
+          const buildingCode = parsed?.buildingCode || parsed?.building?.code;
+          const spaceNumber = parsed?.spaceNumber;
+          
+          if (buildingCode && spaceNumber) {
+            const spaceKey = buildSpaceKey(buildingCode, spaceNumber);
+            if (!existingSpaceKeys.has(spaceKey) && !roomsToSeed.has(spaceKey)) {
+              const displayName = parsed?.building?.displayName || buildingCode;
+              roomsToSeed.set(spaceKey, {
+                spaceKey,
+                displayName: `${displayName} ${spaceNumber}`,
+                type: 'Classroom',
+                sourceSchedule: schedule.courseCode
+              });
+            }
+          }
+        }
+      }
     }
+    
+    preview.rooms.toSeedFromSchedules = Array.from(roomsToSeed.values());
 
-    // 3. Analyze people collection
+    // 3. Analyze people collection - also identify offices to seed
     const peopleSnap = await getDocs(collection(db, 'people'));
     preview.people.total = peopleSnap.size;
+    
+    const officesToSeed = new Map();
     
     for (const docSnap of peopleSnap.docs) {
       const person = { id: docSnap.id, ...docSnap.data() };
@@ -2037,9 +2074,32 @@ export const previewLocationMigration = async () => {
             name: `${person.firstName || ''} ${person.lastName || ''}`.trim(),
             office: person.office
           });
+          
+          // Check if we need to seed this office
+          if (!isSkippableLocation(person.office).skip) {
+            const parsed = parseRoomLabelFromService(person.office);
+            const buildingCode = parsed?.buildingCode || parsed?.building?.code;
+            const spaceNumber = parsed?.spaceNumber;
+            
+            if (buildingCode && spaceNumber) {
+              const spaceKey = buildSpaceKey(buildingCode, spaceNumber);
+              // Don't seed if already exists, or will be seeded from schedules
+              if (!existingSpaceKeys.has(spaceKey) && !roomsToSeed.has(spaceKey) && !officesToSeed.has(spaceKey)) {
+                const displayName = parsed?.building?.displayName || buildingCode;
+                officesToSeed.set(spaceKey, {
+                  spaceKey,
+                  displayName: `${displayName} ${spaceNumber}`,
+                  type: 'Office',
+                  sourcePerson: `${person.firstName || ''} ${person.lastName || ''}`.trim()
+                });
+              }
+            }
+          }
         }
       }
     }
+    
+    preview.rooms.toSeedFromPeople = Array.from(officesToSeed.values());
 
     return preview;
   } catch (error) {
@@ -2053,6 +2113,8 @@ export const previewLocationMigration = async () => {
  * @param {Object} options - Migration options
  * @param {boolean} options.splitMultiRooms - Split combined room strings into separate docs
  * @param {boolean} options.backfillSpaceKeys - Add spaceKey to rooms missing it
+ * @param {boolean} options.seedRoomsFromSchedules - Create room records from schedule roomName fields
+ * @param {boolean} options.seedRoomsFromPeople - Create room records from people office fields
  * @param {boolean} options.backfillScheduleSpaceIds - Add spaceIds to schedules
  * @param {boolean} options.backfillPeopleOfficeSpaceIds - Add officeSpaceId to people
  */
@@ -2060,6 +2122,8 @@ export const applyLocationMigration = async (options = {}) => {
   const {
     splitMultiRooms = true,
     backfillSpaceKeys = true,
+    seedRoomsFromSchedules = true,
+    seedRoomsFromPeople = true,
     backfillScheduleSpaceIds = true,
     backfillPeopleOfficeSpaceIds = true
   } = options;
@@ -2067,6 +2131,7 @@ export const applyLocationMigration = async (options = {}) => {
   const results = {
     roomsSplit: 0,
     roomsUpdated: 0,
+    roomsSeeded: 0,
     schedulesUpdated: 0,
     peopleUpdated: 0,
     errors: []
@@ -2167,7 +2232,137 @@ export const applyLocationMigration = async (options = {}) => {
       }
     }
 
-    // 3. Backfill spaceIds on schedules
+    // 3. Seed room records from schedules' roomName fields
+    if (seedRoomsFromSchedules) {
+      // Get existing room spaceKeys to avoid duplicates
+      const existingRoomsSnap = await getDocs(collection(db, 'rooms'));
+      const existingSpaceKeys = new Set();
+      existingRoomsSnap.docs.forEach(docSnap => {
+        const room = docSnap.data();
+        if (room.spaceKey) existingSpaceKeys.add(room.spaceKey);
+      });
+      
+      const schedulesSnap = await getDocs(collection(db, 'schedules'));
+      const roomsToCreate = new Map(); // spaceKey -> room data
+      
+      for (const docSnap of schedulesSnap.docs) {
+        const schedule = docSnap.data();
+        const roomName = schedule.roomName || schedule.room || '';
+        
+        if (!roomName || isSkippableLocation(roomName).skip) continue;
+        
+        const parsedResult = parseMultiRoom(roomName);
+        const parsedRooms = parsedResult?.rooms || [];
+        
+        for (const parsed of parsedRooms) {
+          const buildingCode = parsed?.buildingCode || parsed?.building?.code;
+          const spaceNumber = parsed?.spaceNumber;
+          
+          if (!buildingCode || !spaceNumber) continue;
+          
+          const spaceKey = buildSpaceKey(buildingCode, spaceNumber);
+          
+          // Skip if already exists or already queued
+          if (existingSpaceKeys.has(spaceKey) || roomsToCreate.has(spaceKey)) continue;
+          
+          const buildingDisplayName = parsed?.building?.displayName || buildingCode;
+          roomsToCreate.set(spaceKey, {
+            spaceKey,
+            spaceNumber,
+            buildingCode,
+            buildingDisplayName,
+            type: SPACE_TYPE.Classroom,
+            isActive: true,
+            building: buildingDisplayName,
+            roomNumber: spaceNumber,
+            name: `${buildingDisplayName} ${spaceNumber}`,
+            displayName: `${buildingDisplayName} ${spaceNumber}`,
+            createdAt: new Date().toISOString(),
+            createdBy: 'location-migration-seed'
+          });
+        }
+      }
+      
+      // Create the room records
+      for (const [spaceKey, roomData] of roomsToCreate) {
+        try {
+          const docId = generateSpaceId({ buildingCode: roomData.buildingCode, spaceNumber: roomData.spaceNumber });
+          if (docId) {
+            await batchWriter.add((batch) => {
+              batch.set(doc(db, 'rooms', docId), roomData);
+            });
+            results.roomsSeeded++;
+          }
+        } catch (err) {
+          results.errors.push(`Failed to seed room ${spaceKey}: ${err.message}`);
+        }
+      }
+    }
+
+    // 4. Seed room records from people office fields
+    if (seedRoomsFromPeople) {
+      // Get existing room spaceKeys to avoid duplicates
+      const existingRoomsSnap = await getDocs(collection(db, 'rooms'));
+      const existingSpaceKeys = new Set();
+      existingRoomsSnap.docs.forEach(docSnap => {
+        const room = docSnap.data();
+        if (room.spaceKey) existingSpaceKeys.add(room.spaceKey);
+      });
+      
+      const peopleSnap = await getDocs(collection(db, 'people'));
+      const officesToCreate = new Map(); // spaceKey -> room data
+      
+      for (const docSnap of peopleSnap.docs) {
+        const person = docSnap.data();
+        const office = person.office || '';
+        
+        if (!office || isSkippableLocation(office).skip) continue;
+        
+        const parsed = parseRoomLabelFromService(office);
+        const buildingCode = parsed?.buildingCode || parsed?.building?.code;
+        const spaceNumber = parsed?.spaceNumber;
+        
+        if (!buildingCode || !spaceNumber) continue;
+        
+        const spaceKey = buildSpaceKey(buildingCode, spaceNumber);
+        
+        // Skip if already exists or already queued
+        if (existingSpaceKeys.has(spaceKey) || officesToCreate.has(spaceKey)) continue;
+        
+        const buildingDisplayName = parsed?.building?.displayName || buildingCode;
+        officesToCreate.set(spaceKey, {
+          spaceKey,
+          spaceNumber,
+          buildingCode,
+          buildingDisplayName,
+          type: SPACE_TYPE.Office,
+          isActive: true,
+          building: buildingDisplayName,
+          roomNumber: spaceNumber,
+          name: `${buildingDisplayName} ${spaceNumber}`,
+          displayName: `${buildingDisplayName} ${spaceNumber}`,
+          createdAt: new Date().toISOString(),
+          createdBy: 'location-migration-seed'
+        });
+      }
+      
+      // Create the office room records
+      for (const [spaceKey, roomData] of officesToCreate) {
+        try {
+          const docId = generateSpaceId({ buildingCode: roomData.buildingCode, spaceNumber: roomData.spaceNumber });
+          if (docId) {
+            await batchWriter.add((batch) => {
+              batch.set(doc(db, 'rooms', docId), roomData);
+            });
+            results.roomsSeeded++;
+          }
+        } catch (err) {
+          results.errors.push(`Failed to seed office ${spaceKey}: ${err.message}`);
+        }
+      }
+    }
+
+    // 5. Backfill spaceIds on schedules
     if (backfillScheduleSpaceIds) {
       // First build a lookup of spaceKey -> docId
       const roomsSnap = await getDocs(collection(db, 'rooms'));
@@ -2222,7 +2417,7 @@ export const applyLocationMigration = async (options = {}) => {
       }
     }
 
-    // 4. Backfill officeSpaceId on people
+    // 6. Backfill officeSpaceId on people
     if (backfillPeopleOfficeSpaceIds) {
       const roomsSnap = await getDocs(collection(db, 'rooms'));
       const spaceKeyToId = new Map();

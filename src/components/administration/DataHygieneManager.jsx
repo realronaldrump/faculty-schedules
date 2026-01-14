@@ -1765,6 +1765,7 @@ const DataHygieneManager = () => {
                 <ul className="mt-2 text-sm space-y-1">
                   <li>• Rooms split from combined strings: {locationMigrationResult.roomsSplit}</li>
                   <li>• Rooms updated with spaceKey: {locationMigrationResult.roomsUpdated}</li>
+                  <li>• Rooms seeded from schedules/people: {locationMigrationResult.roomsSeeded}</li>
                   <li>• Schedules updated with spaceIds: {locationMigrationResult.schedulesUpdated}</li>
                   <li>• People updated with officeSpaceId: {locationMigrationResult.peopleUpdated}</li>
                 </ul>
@@ -1821,7 +1822,25 @@ const DataHygieneManager = () => {
                         </p>
                       </div>
                     )}
-                    {locationPreview.rooms.multiRoom.length === 0 && locationPreview.rooms.missingSpaceKey.length === 0 && (
+                    {(locationPreview.rooms.toSeedFromSchedules?.length > 0 || locationPreview.rooms.toSeedFromPeople?.length > 0) && (
+                      <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                        <p className="font-medium text-green-800">
+                          {(locationPreview.rooms.toSeedFromSchedules?.length || 0) + (locationPreview.rooms.toSeedFromPeople?.length || 0)} new room records to create
+                        </p>
+                        <ul className="mt-2 text-sm text-green-700 space-y-1">
+                          {locationPreview.rooms.toSeedFromSchedules?.length > 0 && (
+                            <li>• {locationPreview.rooms.toSeedFromSchedules.length} from schedule classrooms</li>
+                          )}
+                          {locationPreview.rooms.toSeedFromPeople?.length > 0 && (
+                            <li>• {locationPreview.rooms.toSeedFromPeople.length} from faculty/staff offices</li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+                    {locationPreview.rooms.multiRoom.length === 0 && 
+                     locationPreview.rooms.missingSpaceKey.length === 0 && 
+                     (locationPreview.rooms.toSeedFromSchedules?.length || 0) === 0 &&
+                     (locationPreview.rooms.toSeedFromPeople?.length || 0) === 0 && (
                       <div className="text-green-700 flex items-center gap-2">
                         <CheckCircle size={16} />
                         All rooms have valid spaceKeys
@@ -1927,11 +1946,13 @@ const DataHygieneManager = () => {
             const result = await applyLocationMigration({
               splitMultiRooms: true,
               backfillSpaceKeys: true,
+              seedRoomsFromSchedules: true,
+              seedRoomsFromPeople: true,
               backfillScheduleSpaceIds: true,
               backfillPeopleOfficeSpaceIds: true
             });
             setLocationMigrationResult(result);
-            showNotification?.("success", "Migration Complete", `Updated ${result.roomsSplit + result.roomsUpdated + result.schedulesUpdated + result.peopleUpdated} records.`);
+            showNotification?.("success", "Migration Complete", `Created ${result.roomsSeeded} rooms, updated ${result.roomsSplit + result.roomsUpdated + result.schedulesUpdated + result.peopleUpdated} records.`);
             // Refresh preview
             const preview = await previewLocationMigration();
             setLocationPreview(preview);

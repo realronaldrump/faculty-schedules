@@ -50,11 +50,13 @@ export const DataProvider = ({ children }) => {
 
   // Local state for other entities
   const [rawPrograms, setRawPrograms] = useState([]);
+  const [roomsData, setRoomsData] = useState({});
   const [editHistory, setEditHistory] = useState([]);
   const [recentChanges, setRecentChanges] = useState([]);
   const [localLoading, setLocalLoading] = useState(false);
   const [dataError, setDataError] = useState(null);
   const [programsLoaded, setProgramsLoaded] = useState(false);
+  const [roomsLoaded, setRoomsLoaded] = useState(false);
   const [editHistoryLoaded, setEditHistoryLoaded] = useState(false);
   const [recentChangesLoaded, setRecentChangesLoaded] = useState(false);
 
@@ -294,6 +296,32 @@ export const DataProvider = ({ children }) => {
     }
   }, [programsLoaded, rawPrograms]);
 
+  // Load rooms from Firestore
+  const loadRooms = useCallback(async ({ force = false } = {}) => {
+    if (roomsLoaded && !force) return roomsData;
+    try {
+      const snap = await getDocs(collection(db, 'rooms'));
+      const rooms = {};
+      snap.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        // Only include active rooms
+        if (data.isActive !== false) {
+          rooms[docSnap.id] = { id: docSnap.id, ...data };
+        }
+      });
+      setRoomsData(rooms);
+      setRoomsLoaded(true);
+      return rooms;
+    } catch (e) {
+      console.error('Rooms load error:', e);
+      setDataError(e.message);
+      return {};
+    }
+  }, [roomsLoaded, roomsData]);
+
+  // Refresh rooms (force reload)
+  const refreshRooms = useCallback(() => loadRooms({ force: true }), [loadRooms]);
+
   const loadEditHistory = useCallback(async ({ force = false } = {}) => {
     if (editHistoryLoaded && !force) return editHistory;
     try {
@@ -374,6 +402,9 @@ export const DataProvider = ({ children }) => {
     editHistory,
     recentChanges,
 
+    // Rooms/Spaces Data
+    roomsData,
+
     // Semester State (Delegated)
     selectedSemester,
     setSelectedSemester,
@@ -385,12 +416,15 @@ export const DataProvider = ({ children }) => {
     // Actions
     loadData,
     loadPrograms,
+    loadRooms,
+    refreshRooms,
     loadEditHistory,
     loadRecentChanges,
     refreshData: (options = {}) => loadData({ silent: true, ...options }),
 
     // Load State
     programsLoaded,
+    roomsLoaded,
     editHistoryLoaded,
     recentChangesLoaded,
 
@@ -399,11 +433,11 @@ export const DataProvider = ({ children }) => {
   }), [
     rawScheduleData, rawPeople, allPeople, peopleIndex, rawPrograms,
     scheduleData, facultyData, staffData, studentData,
-    analytics, editHistory, recentChanges,
+    analytics, editHistory, recentChanges, roomsData,
     selectedSemester, availableSemesters,
     loading, dataError, loadData,
-    loadPrograms, loadEditHistory, loadRecentChanges,
-    programsLoaded, editHistoryLoaded, recentChangesLoaded,
+    loadPrograms, loadRooms, refreshRooms, loadEditHistory, loadRecentChanges,
+    programsLoaded, roomsLoaded, editHistoryLoaded, recentChangesLoaded,
     permissions
   ]);
 

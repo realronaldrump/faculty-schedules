@@ -34,7 +34,7 @@ import { doc, setDoc, deleteDoc, collection, getDocs, writeBatch } from 'firebas
 import { db } from '../../firebase';
 
 const SpaceManagement = () => {
-  const { roomsData, refreshRooms } = useData();
+  const { roomsData, refreshRooms, loadRooms } = useData();
   const { buildingConfig } = useAppConfig();
   const { showNotification } = useUI();
 
@@ -46,6 +46,11 @@ const SpaceManagement = () => {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Load rooms on mount
+  useEffect(() => {
+    loadRooms();
+  }, [loadRooms]);
 
   // Form state
   const [formData, setFormData] = useState({

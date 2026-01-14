@@ -96,16 +96,21 @@ export const ConfirmationDialog = ({
   title, 
   message, 
   type = 'warning',
+  variant,
   confirmText = 'Confirm',
   cancelText = 'Cancel',
+  confirmDisabled = false,
   onConfirm, 
   onCancel,
   children 
 }) => {
   if (!isOpen) return null;
 
+  // Support both 'type' and 'variant' props for flexibility
+  const effectiveType = variant || type;
+
   const getIconAndColors = () => {
-    switch (type) {
+    switch (effectiveType) {
       case 'danger':
         return {
           icon: <XCircle className="w-6 h-6 text-red-600" />,
@@ -150,7 +155,7 @@ export const ConfirmationDialog = ({
           </div>
           <div className="flex-1">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
-            <p className="text-gray-600 mb-4">{message}</p>
+            <div className="text-gray-600 mb-4">{message}</div>
             {children && (
               <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
                 {children}
@@ -173,7 +178,8 @@ export const ConfirmationDialog = ({
           </button>
           <button
             onClick={onConfirm}
-            className={`px-4 py-2 rounded-lg transition-colors ${confirmClass}`}
+            disabled={confirmDisabled}
+            className={`px-4 py-2 rounded-lg transition-colors ${confirmClass} ${confirmDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             {confirmText}
           </button>

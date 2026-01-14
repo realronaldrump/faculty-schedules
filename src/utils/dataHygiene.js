@@ -2186,10 +2186,12 @@ export const applyLocationMigration = async (options = {}) => {
           const roomName = schedule.roomName || schedule.room || '';
           
           if (!isSkippableLocation(roomName).skip && roomName) {
-            const parsedRooms = parseMultiRoom(roomName);
+            const parsedResult = parseMultiRoom(roomName);
             const spaceIds = [];
             const spaceDisplayNames = [];
             
+            // parseMultiRoom returns an object with a 'rooms' array property
+            const parsedRooms = parsedResult?.rooms || [];
             for (const parsed of parsedRooms) {
               if (parsed.buildingCode && parsed.spaceNumber) {
                 const spaceKey = buildSpaceKey(parsed.buildingCode, parsed.spaceNumber);

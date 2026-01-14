@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../../firebase';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { PlusCircle, Edit, Trash2, Save, XCircle, AlertTriangle } from 'lucide-react';
 import { logCreate, logUpdate, logDelete } from '../../utils/changeLogger';
 import { usePermissions } from '../../utils/permissions';
@@ -23,12 +23,17 @@ const BaylorAcronyms = () => {
     const getAcronyms = useCallback(async () => {
         setIsLoading(true);
         try {
-            const q = query(acronymsCollectionRef, orderBy('category'), orderBy('acronym'));
-            const data = await getDocs(q);
+            const data = await getDocs(acronymsCollectionRef);
             const acronymsData = data.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-            setAcronyms(acronymsData);
+            const sortKey = (value) => (value ?? '').toString().toLowerCase();
+            const sortedAcronyms = [...acronymsData].sort((a, b) => {
+                const categoryCompare = sortKey(a.category).localeCompare(sortKey(b.category));
+                if (categoryCompare !== 0) return categoryCompare;
+                return sortKey(a.acronym).localeCompare(sortKey(b.acronym));
+            });
+            setAcronyms(sortedAcronyms);
             
-            const uniqueCategories = [...new Set(acronymsData.map(item => item.category))].filter(Boolean).sort();
+            const uniqueCategories = [...new Set(sortedAcronyms.map(item => item.category))].filter(Boolean).sort();
             setCategories(uniqueCategories);
         } catch (error) {
             console.error("Error fetching acronyms:", error);

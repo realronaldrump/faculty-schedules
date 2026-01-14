@@ -138,11 +138,6 @@ const navigationItems = [
         label: "Building Directory",
         path: "resources/building-directory",
       },
-      {
-        id: "baylor-acronyms",
-        label: "Baylor Acronyms",
-        path: "resources/baylor-acronyms",
-      },
     ],
   },
   {
@@ -245,6 +240,11 @@ const navigationItems = [
         id: "baylor-systems",
         label: "Baylor Systems",
         path: "resources/baylor-systems",
+      },
+      {
+        id: "baylor-acronyms",
+        label: "Baylor Acronyms",
+        path: "resources/baylor-acronyms",
       },
       {
         id: "help",

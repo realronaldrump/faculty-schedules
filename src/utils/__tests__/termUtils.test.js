@@ -25,6 +25,21 @@ describe('termUtils', () => {
     expect(termLabelFromCode('202540')).toBe('Spring 2025');
   });
 
+  it('supports custom term code mappings for CLSS style labels', () => {
+    setTermConfig({
+      ...DEFAULT_TERM_CONFIG,
+      codeToSeason: {
+        '10': 'Spring',
+        '30': 'Summer',
+        '40': 'Fall',
+        '50': 'Winter'
+      },
+      seasonOrder: ['Spring', 'Summer', 'Fall', 'Winter']
+    });
+    expect(termCodeFromLabel('Spring 2026')).toBe('202610');
+    expect(termLabelFromCode('202610')).toBe('Spring 2026');
+  });
+
   it('sorts terms by year then configured season order', () => {
     const sorted = sortTerms(['Spring 2025', 'Fall 2024', 'Fall 2025']);
     expect(sorted).toEqual(['Fall 2025', 'Spring 2025', 'Fall 2024']);

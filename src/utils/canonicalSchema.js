@@ -5,6 +5,18 @@
  * The key principle: Each entity has a clear, deterministic identity that
  * prevents duplicate records while preserving legitimately distinct records.
  *
+ * ENTITY HIERARCHY:
+ * - Building: Physical structure (first-class entity with stable buildingId)
+ * - Space: Room/Office/Lab within a building (unified model, spaceKey uniqueness)
+ * - Section: Course offering in a term (identity: courseCode + sectionNumber + termCode)
+ * - Person: Faculty/Staff/Student (identity: clssId > baylorId > email)
+ *
+ * LOCATION MODEL:
+ * - All physical locations are "Spaces" (classrooms, offices, labs, studios)
+ * - Virtual/Online is a locationType, NOT a space record
+ * - SpaceKey format: "BUILDING_CODE:SPACE_NUMBER" (e.g., "GOEBEL:101")
+ * - Never create combined multi-room space records
+ *
  * SECTION IDENTITY:
  * A section is uniquely identified by: courseCode + sectionNumber + termCode
  *
@@ -19,6 +31,11 @@
 // ============================================================================
 // CANONICAL IDENTIFIERS
 // ============================================================================
+
+import { LOCATION_TYPE, SPACE_TYPE, buildSpaceKey, parseRoomLabel, slugify } from './locationService';
+
+// Re-export location constants for convenience
+export { LOCATION_TYPE, SPACE_TYPE };
 
 /**
  * Generate a deterministic section ID from its canonical identity components.
@@ -72,6 +89,7 @@ export const extractCrnFromSection = (sectionField) => {
 /**
  * Generate a deterministic room ID.
  * Format: {building}_{roomNumber} (normalized, lowercase, underscores)
+ * @deprecated Use generateSpaceId instead
  */
 export const generateRoomId = ({ building, roomNumber, displayName }) => {
   if (building && roomNumber) {
@@ -90,6 +108,39 @@ export const generateRoomId = ({ building, roomNumber, displayName }) => {
   }
 
   return null;
+};
+
+/**
+ * Generate a deterministic space ID from building and space number.
+ * Uses the canonical spaceKey format: "BUILDING_CODE:SPACE_NUMBER"
+ *
+ * @param {Object} params - Space parameters
+ * @param {string} params.buildingCode - Building code (e.g., "GOEBEL")
+ * @param {string} params.spaceNumber - Space number (e.g., "101", "103.06")
+ * @param {string} params.building - Building name (fallback if code not provided)
+ * @param {string} params.roomNumber - Room number (alias for spaceNumber)
+ * @returns {string|null} Space key or null if insufficient data
+ */
+export const generateSpaceId = ({ buildingCode, spaceNumber, building, roomNumber }) => {
+  const code = buildingCode || (building ? slugify(building).toUpperCase() : '');
+  const number = spaceNumber || roomNumber || '';
+
+  if (!code || !number) return null;
+  return buildSpaceKey(code, number);
+};
+
+/**
+ * Generate a deterministic building ID from building code or name.
+ *
+ * @param {Object} params - Building parameters
+ * @param {string} params.code - Building code (preferred)
+ * @param {string} params.displayName - Building display name (fallback)
+ * @returns {string|null} Building ID or null if insufficient data
+ */
+export const generateBuildingId = ({ code, displayName }) => {
+  const value = code || displayName;
+  if (!value) return null;
+  return slugify(value).toLowerCase();
 };
 
 /**
@@ -145,9 +196,13 @@ export const SECTION_SCHEMA = {
   instructorAssignments: [], // Array of { personId, isPrimary, percentage }
   // Note: instructorName is NOT stored - it's derived from instructorId at read time
 
-  // Room assignments (supports multiple rooms)
-  roomIds: [], // References to rooms collection
-  // Note: roomNames are NOT stored - they're derived from roomIds at read time
+  // Room/Space assignments (supports multiple rooms)
+  spaceIds: [], // References to spaces collection (canonical spaceKeys)
+  spaceDisplayNames: [], // Denormalized display names for quick access
+  roomIds: [], // @deprecated - use spaceIds
+  roomNames: [], // @deprecated - use spaceDisplayNames
+  roomId: null, // @deprecated - use spaceIds[0]
+  roomName: "", // @deprecated - use spaceDisplayNames[0]
 
   // Meeting patterns
   meetingPatterns: [], // Array of { day, startTime, endTime, startDate?, endDate? }
@@ -204,8 +259,9 @@ export const PERSON_SCHEMA = {
   // Employment
   jobTitle: "",
   department: "",
-  office: "", // Office location string (for display)
-  officeRoomId: "", // Reference to rooms collection
+  office: "", // Office location string (for display, preserved for auditability)
+  officeSpaceId: "", // Reference to spaces collection (canonical office reference)
+  officeRoomId: "", // @deprecated - use officeSpaceId
 
   // Roles
   roles: [], // ['faculty', 'staff', etc.]
@@ -237,6 +293,7 @@ export const PERSON_SCHEMA = {
 
 /**
  * Canonical Room Schema
+ * @deprecated Use SPACE_SCHEMA instead. Rooms are now unified as "Spaces".
  */
 export const ROOM_SCHEMA = {
   // Identity (building + room number)
@@ -261,6 +318,92 @@ export const ROOM_SCHEMA = {
   // Timestamps
   createdAt: "",
   updatedAt: "",
+};
+
+// ============================================================================
+// NEW CANONICAL SCHEMAS - Buildings and Spaces
+// ============================================================================
+
+/**
+ * Canonical Building Schema
+ *
+ * A building represents a physical structure on campus.
+ * Identity is determined by a stable buildingId and canonical code.
+ */
+export const BUILDING_SCHEMA = {
+  // Identity
+  // Document ID in Firestore = buildingId (e.g., "goebel")
+
+  // Canonical code (uppercase, no spaces) - used in spaceKey
+  code: "",           // e.g., "GOEBEL", "FCS", "PIPER"
+
+  // Display name for UI
+  displayName: "",    // e.g., "Goebel", "Mary Gibbs Jones", "Piper"
+
+  // Alternative names that should resolve to this building
+  aliases: [],        // e.g., ["Goebel Building", "GOEBEL BUILDING", "Goebel Bldg"]
+
+  // Status
+  isActive: true,
+
+  // Optional metadata
+  campus: "",         // e.g., "Main Campus"
+  address: "",        // Physical address
+  mapUrl: "",         // Link to campus map
+  floorPlanUrl: "",   // Link to floor plans
+
+  // Timestamps
+  createdAt: "",
+  updatedAt: ""
+};
+
+/**
+ * Canonical Space Schema
+ *
+ * A space represents a room, office, lab, or other physical location within a building.
+ * This is the UNIFIED model for classrooms, offices, labs, studios, etc.
+ *
+ * Identity: buildingId + spaceNumber (enforced via spaceKey)
+ * SpaceKey format: "BUILDING_CODE:SPACE_NUMBER" (e.g., "GOEBEL:101", "FCS:103.06")
+ */
+export const SPACE_SCHEMA = {
+  // Identity
+  // Document ID in Firestore = spaceKey (e.g., "GOEBEL:101")
+
+  // Building reference (required for physical spaces)
+  buildingId: "",       // Reference to buildings collection (e.g., "goebel")
+  buildingCode: "",     // Denormalized building code for queries (e.g., "GOEBEL")
+  buildingDisplayName: "", // Denormalized for display (e.g., "Goebel")
+
+  // Space number (supports decimals and suffixes)
+  spaceNumber: "",      // e.g., "101", "103.06", "205A", "302-B"
+
+  // Canonical unique key
+  spaceKey: "",         // e.g., "GOEBEL:101" - Document ID should match this
+
+  // Display
+  displayName: "",      // e.g., "Goebel 101" - can be overridden for special names
+
+  // Classification
+  type: "Classroom",    // Classroom, Office, Lab, Studio, Conference, Other
+
+  // Physical properties
+  capacity: null,       // Maximum occupancy
+  equipment: [],        // e.g., ["Projector", "Whiteboard", "Computer Lab"]
+  features: [],         // e.g., ["Windows", "Natural Light", "Accessible"]
+
+  // Status
+  isActive: true,
+
+  // Legacy compatibility fields (will be removed after migration)
+  name: "",             // @deprecated - use displayName
+  roomNumber: "",       // @deprecated - use spaceNumber
+  roomKey: "",          // @deprecated - use spaceKey
+  building: "",         // @deprecated - use buildingDisplayName
+
+  // Timestamps
+  createdAt: "",
+  updatedAt: ""
 };
 
 // ============================================================================
@@ -290,6 +433,19 @@ export const VALIDATION_RULES = {
   room: {
     required: ["building", "roomNumber"],
     formats: {},
+  },
+  building: {
+    required: ["code", "displayName"],
+    formats: {
+      code: /^[A-Z0-9_]+$/, // Uppercase alphanumeric with underscores
+    },
+  },
+  space: {
+    required: ["buildingId", "spaceNumber", "spaceKey"],
+    formats: {
+      spaceKey: /^[A-Z0-9_]+:[A-Z0-9./-]+$/, // BUILDING_CODE:SPACE_NUMBER
+      spaceNumber: /^[\dA-Za-z./-]+$/, // Alphanumeric with decimals, dashes, slashes
+    },
   },
 };
 
@@ -392,6 +548,72 @@ export const validatePerson = (person) => {
   };
 };
 
+/**
+ * Validate a building record
+ */
+export const validateBuilding = (building) => {
+  const errors = [];
+  const warnings = [];
+
+  // Check required fields
+  if (!building.code) errors.push("Building code is required");
+  if (!building.displayName) errors.push("Building display name is required");
+
+  // Check code format
+  if (building.code && !VALIDATION_RULES.building.formats.code.test(building.code)) {
+    errors.push(`Building code "${building.code}" must be uppercase alphanumeric`);
+  }
+
+  // Check aliases
+  if (building.aliases && !Array.isArray(building.aliases)) {
+    errors.push("Building aliases must be an array");
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings,
+  };
+};
+
+/**
+ * Validate a space record
+ */
+export const validateSpace = (space) => {
+  const errors = [];
+  const warnings = [];
+
+  // Check required fields
+  if (!space.buildingId) errors.push("Building ID is required");
+  if (!space.spaceNumber) errors.push("Space number is required");
+  if (!space.spaceKey) errors.push("Space key is required");
+
+  // Check spaceKey format
+  if (space.spaceKey && !VALIDATION_RULES.space.formats.spaceKey.test(space.spaceKey)) {
+    errors.push(`Space key "${space.spaceKey}" must be in format "BUILDING_CODE:SPACE_NUMBER"`);
+  }
+
+  // Check spaceKey consistency
+  if (space.spaceKey && space.buildingCode && space.spaceNumber) {
+    const expectedKey = `${space.buildingCode}:${space.spaceNumber}`;
+    if (space.spaceKey !== expectedKey) {
+      warnings.push(`Space key "${space.spaceKey}" doesn't match expected "${expectedKey}"`);
+    }
+  }
+
+  // Check type
+  const validTypes = Object.values(SPACE_TYPE);
+  if (space.type && !validTypes.includes(space.type)) {
+    warnings.push(`Space type "${space.type}" is not a standard type`);
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings,
+  };
+};
+
 // ============================================================================
 // DEDUPLICATION RULES
 // ============================================================================
@@ -468,12 +690,44 @@ export const areSamePersonIdentity = (person1, person2) => {
 
 /**
  * Determine if two rooms represent the same physical location.
+ * @deprecated Use areSameSpaceIdentity instead
  */
 export const areSameRoomIdentity = (room1, room2) => {
   const id1 = generateRoomId(room1);
   const id2 = generateRoomId(room2);
 
   return id1 && id2 && id1 === id2;
+};
+
+/**
+ * Determine if two spaces represent the same physical location.
+ *
+ * Two spaces are the same if they have the same spaceKey.
+ * Alternatively, if spaceKey is not available, compare buildingCode + spaceNumber.
+ */
+export const areSameSpaceIdentity = (space1, space2) => {
+  // Compare by spaceKey (preferred)
+  if (space1.spaceKey && space2.spaceKey) {
+    return space1.spaceKey === space2.spaceKey;
+  }
+
+  // Fall back to buildingCode + spaceNumber
+  const key1 = generateSpaceId(space1);
+  const key2 = generateSpaceId(space2);
+
+  return key1 && key2 && key1 === key2;
+};
+
+/**
+ * Determine if two buildings represent the same physical structure.
+ *
+ * Two buildings are the same if they have the same code.
+ */
+export const areSameBuildingIdentity = (building1, building2) => {
+  const code1 = (building1.code || '').toUpperCase();
+  const code2 = (building2.code || '').toUpperCase();
+
+  return code1 && code2 && code1 === code2;
 };
 
 // ============================================================================
@@ -653,20 +907,41 @@ export const mergePersons = (primary, secondary) => {
 };
 
 export default {
+  // Identifiers
   generateSectionId,
   normalizeSectionNumber,
   extractCrnFromSection,
   generateRoomId,
+  generateSpaceId,
+  generateBuildingId,
   generatePersonId,
+
+  // Schemas
   SECTION_SCHEMA,
   PERSON_SCHEMA,
   ROOM_SCHEMA,
+  BUILDING_SCHEMA,
+  SPACE_SCHEMA,
+
+  // Validation
   VALIDATION_RULES,
   validateSection,
   validatePerson,
+  validateBuilding,
+  validateSpace,
+
+  // Identity Comparison
   areSameSectionIdentity,
   areSamePersonIdentity,
   areSameRoomIdentity,
+  areSameSpaceIdentity,
+  areSameBuildingIdentity,
+
+  // Merge Strategies
   mergeSections,
   mergePersons,
+
+  // Re-exported from locationService
+  LOCATION_TYPE,
+  SPACE_TYPE,
 };

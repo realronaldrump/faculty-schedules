@@ -37,6 +37,9 @@ import {
   standardizeAllData,
   previewStandardizationPlan,
   markNotDuplicate,
+  previewLocationMigration,
+  applyLocationMigration,
+  getLocationHealthStats,
 } from "../../utils/dataHygiene";
 import {
   collection as fbCollection,
@@ -771,6 +774,7 @@ const DataHygieneManager = () => {
   const steps = [
     "analyze",
     "standardize",
+    "locations",
     "duplicates",
     "links",
     "missing",
@@ -784,6 +788,13 @@ const DataHygieneManager = () => {
   const [cleanupPreviewItems, setCleanupPreviewItems] = useState([]);
   const [cleanupPreviewLoading, setCleanupPreviewLoading] = useState(false);
   const { user, loading: authLoading } = useAuth();
+
+  // Location migration state
+  const [locationPreview, setLocationPreview] = useState(null);
+  const [locationPreviewLoading, setLocationPreviewLoading] = useState(false);
+  const [locationMigrationApplying, setLocationMigrationApplying] = useState(false);
+  const [locationMigrationResult, setLocationMigrationResult] = useState(null);
+  const [showLocationMigrationConfirm, setShowLocationMigrationConfirm] = useState(false);
 
   // Batch merge state
   const [selectedDuplicates, setSelectedDuplicates] = useState([]);
@@ -1706,6 +1717,232 @@ const DataHygieneManager = () => {
           </div>
         </div>
       )}
+
+      {/* Locations Step */}
+      {wizardStep === "locations" && (
+        <div className="bg-white rounded-lg shadow-sm border">
+          <div className="p-6 border-b flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                Location Migration
+              </h3>
+              <p className="text-gray-600">
+                Normalize room/space records, fix combined room strings, and backfill space IDs on schedules and people.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={async () => {
+                  setLocationPreviewLoading(true);
+                  try {
+                    const preview = await previewLocationMigration();
+                    setLocationPreview(preview);
+                  } catch (e) {
+                    showNotification?.("error", "Preview Failed", e.message);
+                  } finally {
+                    setLocationPreviewLoading(false);
+                  }
+                }}
+                disabled={locationPreviewLoading}
+                className="px-3 py-2 bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200 disabled:opacity-50"
+              >
+                {locationPreviewLoading ? "Analyzing…" : "Generate Preview"}
+              </button>
+              <button
+                onClick={() => setShowLocationMigrationConfirm(true)}
+                disabled={locationMigrationApplying || !locationPreview}
+                className="px-3 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50"
+              >
+                {locationMigrationApplying ? "Applying…" : "Apply Migration"}
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-6">
+            {locationMigrationResult && (
+              <div className="p-4 rounded-lg border border-green-200 bg-green-50 text-green-800">
+                <p className="font-medium">Migration Complete</p>
+                <ul className="mt-2 text-sm space-y-1">
+                  <li>• Rooms split from combined strings: {locationMigrationResult.roomsSplit}</li>
+                  <li>• Rooms updated with spaceKey: {locationMigrationResult.roomsUpdated}</li>
+                  <li>• Schedules updated with spaceIds: {locationMigrationResult.schedulesUpdated}</li>
+                  <li>• People updated with officeSpaceId: {locationMigrationResult.peopleUpdated}</li>
+                </ul>
+                {locationMigrationResult.errors?.length > 0 && (
+                  <div className="mt-3 text-red-700">
+                    <p className="font-medium">Errors:</p>
+                    <ul className="text-sm">
+                      {locationMigrationResult.errors.slice(0, 5).map((err, i) => (
+                        <li key={i}>• {err}</li>
+                      ))}
+                      {locationMigrationResult.errors.length > 5 && (
+                        <li>... and {locationMigrationResult.errors.length - 5} more</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {locationPreview ? (
+              <div className="space-y-4">
+                {/* Rooms Issues */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-gray-50 px-4 py-3 border-b">
+                    <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                      <MapPin size={16} />
+                      Rooms ({locationPreview.rooms.total} total)
+                    </h4>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    {locationPreview.rooms.multiRoom.length > 0 && (
+                      <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                        <p className="font-medium text-yellow-800">
+                          {locationPreview.rooms.multiRoom.length} combined multi-room records to split
+                        </p>
+                        <ul className="mt-2 text-sm text-yellow-700 space-y-1 max-h-40 overflow-y-auto">
+                          {locationPreview.rooms.multiRoom.slice(0, 10).map((r, i) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <span className="font-mono text-xs bg-yellow-100 px-1 rounded">{r.currentName}</span>
+                              <ArrowRight size={14} className="mt-0.5 flex-shrink-0" />
+                              <span>{r.parsedParts.join(", ")}</span>
+                            </li>
+                          ))}
+                          {locationPreview.rooms.multiRoom.length > 10 && (
+                            <li className="text-gray-500">... and {locationPreview.rooms.multiRoom.length - 10} more</li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+                    {locationPreview.rooms.missingSpaceKey.length > 0 && (
+                      <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <p className="font-medium text-blue-800">
+                          {locationPreview.rooms.missingSpaceKey.length} rooms missing spaceKey
+                        </p>
+                      </div>
+                    )}
+                    {locationPreview.rooms.multiRoom.length === 0 && locationPreview.rooms.missingSpaceKey.length === 0 && (
+                      <div className="text-green-700 flex items-center gap-2">
+                        <CheckCircle size={16} />
+                        All rooms have valid spaceKeys
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Schedules Issues */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-gray-50 px-4 py-3 border-b">
+                    <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                      <Calendar size={16} />
+                      Schedules ({locationPreview.schedules.total} total)
+                    </h4>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    {locationPreview.schedules.missingSpaceIds.length > 0 && (
+                      <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <p className="font-medium text-blue-800">
+                          {locationPreview.schedules.missingSpaceIds.length} schedules need spaceIds backfill
+                        </p>
+                        <ul className="mt-2 text-sm text-blue-700 space-y-1 max-h-40 overflow-y-auto">
+                          {locationPreview.schedules.missingSpaceIds.slice(0, 5).map((s, i) => (
+                            <li key={i}>
+                              {s.courseCode} - {s.room}
+                            </li>
+                          ))}
+                          {locationPreview.schedules.missingSpaceIds.length > 5 && (
+                            <li className="text-gray-500">... and {locationPreview.schedules.missingSpaceIds.length - 5} more</li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+                    {locationPreview.schedules.hasVirtualLocation.length > 0 && (
+                      <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <p className="text-gray-600">
+                          {locationPreview.schedules.hasVirtualLocation.length} schedules have virtual/TBA locations (no action needed)
+                        </p>
+                      </div>
+                    )}
+                    {locationPreview.schedules.missingSpaceIds.length === 0 && (
+                      <div className="text-green-700 flex items-center gap-2">
+                        <CheckCircle size={16} />
+                        All physical schedules have spaceIds
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* People Issues */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-gray-50 px-4 py-3 border-b">
+                    <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                      <Users size={16} />
+                      People ({locationPreview.people.total} total)
+                    </h4>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    {locationPreview.people.hasOfficeRoom.length > 0 && (
+                      <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <p className="font-medium text-blue-800">
+                          {locationPreview.people.hasOfficeRoom.length} people with officeRoomId need officeSpaceId
+                        </p>
+                      </div>
+                    )}
+                    {locationPreview.people.missingOfficeSpaceId.length > 0 && (
+                      <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                        <p className="font-medium text-yellow-800">
+                          {locationPreview.people.missingOfficeSpaceId.length} people with office string need officeSpaceId
+                        </p>
+                      </div>
+                    )}
+                    {locationPreview.people.hasOfficeRoom.length === 0 && locationPreview.people.missingOfficeSpaceId.length === 0 && (
+                      <div className="text-green-700 flex items-center gap-2">
+                        <CheckCircle size={16} />
+                        All people with offices have officeSpaceId
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 text-center text-gray-600 bg-gray-50 rounded-lg">
+                Click "Generate Preview" to analyze your location data and see what needs to be migrated.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Location Migration Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={showLocationMigrationConfirm}
+        title="Apply Location Migration"
+        message={`This will:\n• Split combined room records into individual spaces\n• Add spaceKey to rooms missing it\n• Backfill spaceIds on schedules\n• Backfill officeSpaceId on people\n\nThis operation cannot be undone. Continue?`}
+        confirmLabel="Apply Migration"
+        confirmVariant="primary"
+        onConfirm={async () => {
+          setShowLocationMigrationConfirm(false);
+          setLocationMigrationApplying(true);
+          try {
+            const result = await applyLocationMigration({
+              splitMultiRooms: true,
+              backfillSpaceKeys: true,
+              backfillScheduleSpaceIds: true,
+              backfillPeopleOfficeSpaceIds: true
+            });
+            setLocationMigrationResult(result);
+            showNotification?.("success", "Migration Complete", `Updated ${result.roomsSplit + result.roomsUpdated + result.schedulesUpdated + result.peopleUpdated} records.`);
+            // Refresh preview
+            const preview = await previewLocationMigration();
+            setLocationPreview(preview);
+          } catch (e) {
+            showNotification?.("error", "Migration Failed", e.message);
+          } finally {
+            setLocationMigrationApplying(false);
+          }
+        }}
+        onCancel={() => setShowLocationMigrationConfirm(false)}
+      />
 
       {/* Duplicates Step */}
       {wizardStep === "duplicates" && (

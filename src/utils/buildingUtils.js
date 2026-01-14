@@ -1,16 +1,30 @@
 /**
- * Building Utilities - Single Source of Truth for Building Names
+ * Building Utilities - Facade for Location Service
  *
- * Building definitions are loaded from Firestore (settings/buildings).
+ * This module provides backward-compatible functions that delegate to locationService.
+ * New code should import directly from locationService instead.
+ *
+ * @deprecated Import from locationService.js instead
  */
+
+import {
+  applyBuildingConfig as _applyBuildingConfig,
+  getBuildingConfig as _getBuildingConfig,
+  getActiveBuildings,
+  getCanonicalBuildingList as _getCanonicalBuildingList,
+  normalizeBuildingName as _normalizeBuildingName,
+  resolveBuilding,
+  parseRoomLabel,
+  getBuildingDisplay
+} from './locationService';
 
 export const DEFAULT_BUILDING_CONFIG = {
     version: 1,
     buildings: []
 };
 
+// Legacy cache variable - now just a proxy to locationService
 let cachedConfig = { ...DEFAULT_BUILDING_CONFIG, buildings: [] };
-let aliasMap = new Map();
 
 const normalizeBuilding = (building) => {
     if (!building || typeof building !== 'object') return null;
@@ -38,33 +52,14 @@ export const normalizeBuildingConfig = (raw = {}) => {
     };
 };
 
-const getActiveBuildings = () => {
-    return cachedConfig.buildings.filter((b) => b.isActive !== false);
-};
-
-const buildAliasMap = (buildings) => {
-    const map = new Map();
-    buildings.forEach((building) => {
-        const canonical = building.displayName || building.code;
-        if (!canonical) return;
-        map.set(canonical.toLowerCase(), canonical);
-        if (building.code) {
-            map.set(building.code.toLowerCase(), canonical);
-        }
-        (building.aliases || []).forEach((alias) => {
-            map.set(alias.toLowerCase(), canonical);
-        });
-    });
-    return map;
-};
-
 export const setBuildingConfig = (raw) => {
     cachedConfig = normalizeBuildingConfig(raw);
-    aliasMap = buildAliasMap(getActiveBuildings());
+    // Delegate to locationService
+    _applyBuildingConfig(cachedConfig);
     return cachedConfig;
 };
 
-export const getBuildingConfig = () => cachedConfig;
+export const getBuildingConfig = () => _getBuildingConfig();
 
 /**
  * Normalize a building name to its canonical display name
@@ -72,27 +67,7 @@ export const getBuildingConfig = () => cachedConfig;
  * @returns {string} Canonical building display name, or original if not recognized
  */
 export const normalizeBuildingName = (buildingName) => {
-    if (!buildingName || typeof buildingName !== 'string') return '';
-
-    const trimmed = buildingName.trim();
-    if (!trimmed) return '';
-
-    const normalized = aliasMap.get(trimmed.toLowerCase());
-    if (normalized) return normalized;
-
-    const lowered = trimmed.toLowerCase();
-    for (const building of getActiveBuildings()) {
-        if (building.code && lowered.startsWith(building.code.toLowerCase())) {
-            return building.displayName;
-        }
-        for (const alias of building.aliases || []) {
-            if (lowered.startsWith(alias.toLowerCase())) {
-                return building.displayName;
-            }
-        }
-    }
-
-    return trimmed;
+    return _normalizeBuildingName(buildingName);
 };
 
 /**
@@ -102,49 +77,12 @@ export const normalizeBuildingName = (buildingName) => {
  * - "Mary Gibbs Jones 213"
  * - "Mary Gibbs Jones (FCS) 213"
  * - "Piper Building 302"
- * 
+ *
  * @param {string} roomString - Full room string
  * @returns {string} Normalized building name
  */
 export const getBuildingFromRoom = (roomString) => {
-    if (!roomString || typeof roomString !== 'string') return '';
-
-    const room = roomString.trim();
-    if (!room) return '';
-
-    const lowered = room.toLowerCase();
-    if (lowered === 'online' || lowered.includes('online')) return 'Online';
-    if (lowered === 'tba' || lowered === 'to be announced') return '';
-    if (lowered.includes('no room needed')) return '';
-    if (lowered.includes('off campus')) return 'Off Campus';
-
-    for (const building of getActiveBuildings()) {
-        for (const alias of building.aliases || []) {
-            if (lowered.startsWith(alias.toLowerCase())) {
-                return building.displayName;
-            }
-        }
-        if (building.code && lowered.startsWith(building.code.toLowerCase())) {
-            return building.displayName;
-        }
-    }
-
-    const withoutParens = room.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
-    const parts = withoutParens.split(' ');
-
-    const buildingParts = [];
-    for (const part of parts) {
-        if (/^\d/.test(part)) break;
-        if (/^[A-Z]-?\d+$/i.test(part)) break;
-        buildingParts.push(part);
-    }
-
-    if (buildingParts.length > 0) {
-        const extractedBuilding = buildingParts.join(' ').trim();
-        return normalizeBuildingName(extractedBuilding);
-    }
-
-    return normalizeBuildingName(parts[0] || room);
+    return getBuildingDisplay(roomString);
 };
 
 /**
@@ -152,10 +90,7 @@ export const getBuildingFromRoom = (roomString) => {
  * @returns {string[]} Array of building display names
  */
 export const getCanonicalBuildingList = () => {
-    return getActiveBuildings()
-        .map((building) => building.displayName)
-        .filter(Boolean)
-        .sort();
+    return _getCanonicalBuildingList();
 };
 
 /**

@@ -17,6 +17,8 @@ import { useSchedules } from '../contexts/ScheduleContext';
 import { useUI } from '../contexts/UIContext';
 import { useAuth } from '../contexts/AuthContext';
 import { normalizeTermLabel, termCodeFromLabel } from '../utils/termUtils';
+import { parseMultiRoom, buildSpaceKey, isSkippableLocation } from '../utils/locationService';
+import { generateSpaceId } from '../utils/canonicalSchema';
 
 const useScheduleOperations = () => {
   const {
@@ -231,6 +233,27 @@ const useScheduleOperations = () => {
       const roomIds = treatAsNoRoom ? [] : (roomsMatch ? existingRoomIds : []);
       const roomId = roomIds[0] || null;
 
+      // Compute spaceIds and spaceDisplayNames from room names using locationService
+      let spaceIds = [];
+      let spaceDisplayNames = [];
+      if (!treatAsNoRoom && filteredRoomNames.length > 0) {
+        const roomString = filteredRoomNames.join('; ');
+        const parsedRooms = parseMultiRoom(roomString);
+        for (const parsed of parsedRooms) {
+          if (parsed.buildingCode && parsed.spaceNumber) {
+            const spaceKey = buildSpaceKey(parsed.buildingCode, parsed.spaceNumber);
+            const spaceId = generateSpaceId(parsed.buildingCode, parsed.spaceNumber);
+            spaceIds.push(spaceId);
+            spaceDisplayNames.push(`${parsed.buildingDisplayName || parsed.buildingCode} ${parsed.spaceNumber}`);
+          }
+        }
+      }
+      // Fall back to existing spaceIds if rooms haven't changed
+      if (roomsMatch && spaceIds.length === 0) {
+        spaceIds = referenceSchedule?.spaceIds || [];
+        spaceDisplayNames = referenceSchedule?.spaceDisplayNames || [];
+      }
+
       const updateData = {
         courseCode: courseCode,
         courseTitle: updatedRow['Course Title'] || (referenceSchedule?.courseTitle || ''),
@@ -256,6 +279,9 @@ const useScheduleOperations = () => {
         roomId,
         roomNames: filteredRoomNames,
         roomName: treatAsNoRoom ? '' : (filteredRoomNames[0] || ''),
+        // New canonical location fields
+        spaceIds,
+        spaceDisplayNames,
         meetingPatterns: meetingPatterns.length > 0 ? meetingPatterns : (referenceSchedule?.meetingPatterns || []),
         isOnline: isOnlineFlag,
         onlineMode: isOnlineFlag ? (onlineMode || (meetingPatterns.length > 0 ? 'synchronous' : 'asynchronous')) : null,

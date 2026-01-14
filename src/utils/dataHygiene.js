@@ -1889,13 +1889,13 @@ export const applyTargetedStandardization = async (changeIds = null) => {
 /**
  * Get recent standardization history for undo capability
  */
-export const getStandardizationHistory = async (limit = 10) => {
+export const getStandardizationHistory = async (limitCount = 10) => {
   try {
     const historySnapshot = await getDocs(
       query(
         collection(db, 'standardizationHistory'),
         orderBy('timestamp', 'desc'),
-        limit(limit)
+        limit(limitCount)
       )
     );
 
@@ -1903,6 +1903,434 @@ export const getStandardizationHistory = async (limit = 10) => {
   } catch (error) {
     console.error('Error getting standardization history:', error);
     return [];
+  }
+};
+
+// ============================================================================
+// LOCATION MIGRATION UTILITIES
+// ============================================================================
+
+import {
+  parseRoomLabel as parseRoomLabelFromService,
+  parseMultiRoom,
+  splitMultiRoom,
+  buildSpaceKey,
+  validateSpaceKey,
+  isSkippableLocation,
+  LOCATION_TYPE,
+  SPACE_TYPE
+} from './locationService';
+import { generateSpaceId, SPACE_SCHEMA } from './canonicalSchema';
+
+/**
+ * Preview location migration - identifies rooms needing split/normalization
+ * and schedules/people needing spaceId backfill
+ */
+export const previewLocationMigration = async () => {
+  const preview = {
+    rooms: {
+      multiRoom: [],      // Rooms with combined strings that need splitting
+      missingSpaceKey: [], // Rooms without spaceKey field
+      invalidSpaceKey: [], // Rooms with invalid spaceKey format
+      total: 0
+    },
+    schedules: {
+      missingSpaceIds: [],  // Schedules without spaceIds array
+      hasVirtualLocation: [], // Schedules with ONLINE/TBA (informational)
+      total: 0
+    },
+    people: {
+      missingOfficeSpaceId: [], // People without officeSpaceId
+      hasOfficeRoom: [],        // People with officeRoomId but no officeSpaceId
+      total: 0
+    }
+  };
+
+  try {
+    // 1. Analyze rooms collection
+    const roomsSnap = await getDocs(collection(db, 'rooms'));
+    preview.rooms.total = roomsSnap.size;
+    
+    for (const docSnap of roomsSnap.docs) {
+      const room = { id: docSnap.id, ...docSnap.data() };
+      
+      // Check for combined multi-room strings in name/displayName
+      const displayName = room.displayName || room.name || '';
+      const parts = splitMultiRoom(displayName);
+      if (parts.length > 1) {
+        preview.rooms.multiRoom.push({
+          id: room.id,
+          currentName: displayName,
+          parsedParts: parts,
+          building: room.building || room.buildingCode
+        });
+      }
+      
+      // Check for missing spaceKey
+      if (!room.spaceKey) {
+        preview.rooms.missingSpaceKey.push({
+          id: room.id,
+          name: displayName,
+          building: room.building || room.buildingCode,
+          roomNumber: room.roomNumber || room.spaceNumber
+        });
+      } else if (!validateSpaceKey(room.spaceKey)) {
+        preview.rooms.invalidSpaceKey.push({
+          id: room.id,
+          currentSpaceKey: room.spaceKey,
+          name: displayName
+        });
+      }
+    }
+
+    // 2. Analyze schedules collection
+    const schedulesSnap = await getDocs(collection(db, 'schedules'));
+    preview.schedules.total = schedulesSnap.size;
+    
+    for (const docSnap of schedulesSnap.docs) {
+      const schedule = { id: docSnap.id, ...docSnap.data() };
+      
+      // Check for missing spaceIds array
+      if (!schedule.spaceIds || !Array.isArray(schedule.spaceIds) || schedule.spaceIds.length === 0) {
+        const roomName = schedule.roomName || schedule.room || '';
+        
+        // Check if it's a virtual location
+        if (isSkippableLocation(roomName).skip) {
+          preview.schedules.hasVirtualLocation.push({
+            id: schedule.id,
+            courseCode: schedule.courseCode,
+            room: roomName,
+            locationType: isSkippableLocation(roomName).type
+          });
+        } else if (roomName) {
+          preview.schedules.missingSpaceIds.push({
+            id: schedule.id,
+            courseCode: schedule.courseCode,
+            courseTitle: schedule.courseTitle,
+            room: roomName,
+            roomIds: schedule.roomIds,
+            term: schedule.term
+          });
+        }
+      }
+    }
+
+    // 3. Analyze people collection
+    const peopleSnap = await getDocs(collection(db, 'people'));
+    preview.people.total = peopleSnap.size;
+    
+    for (const docSnap of peopleSnap.docs) {
+      const person = { id: docSnap.id, ...docSnap.data() };
+      
+      // Check for missing officeSpaceId
+      if (!person.officeSpaceId) {
+        if (person.officeRoomId) {
+          preview.people.hasOfficeRoom.push({
+            id: person.id,
+            name: `${person.firstName || ''} ${person.lastName || ''}`.trim(),
+            officeRoomId: person.officeRoomId,
+            office: person.office
+          });
+        } else if (person.office) {
+          preview.people.missingOfficeSpaceId.push({
+            id: person.id,
+            name: `${person.firstName || ''} ${person.lastName || ''}`.trim(),
+            office: person.office
+          });
+        }
+      }
+    }
+
+    return preview;
+  } catch (error) {
+    console.error('Error previewing location migration:', error);
+    throw error;
+  }
+};
+
+/**
+ * Apply location migration - fixes room records and backfills spaceIds
+ * @param {Object} options - Migration options
+ * @param {boolean} options.splitMultiRooms - Split combined room strings into separate docs
+ * @param {boolean} options.backfillSpaceKeys - Add spaceKey to rooms missing it
+ * @param {boolean} options.backfillScheduleSpaceIds - Add spaceIds to schedules
+ * @param {boolean} options.backfillPeopleOfficeSpaceIds - Add officeSpaceId to people
+ */
+export const applyLocationMigration = async (options = {}) => {
+  const {
+    splitMultiRooms = true,
+    backfillSpaceKeys = true,
+    backfillScheduleSpaceIds = true,
+    backfillPeopleOfficeSpaceIds = true
+  } = options;
+
+  const results = {
+    roomsSplit: 0,
+    roomsUpdated: 0,
+    schedulesUpdated: 0,
+    peopleUpdated: 0,
+    errors: []
+  };
+
+  const batchWriter = createBatchWriter();
+
+  try {
+    // 1. Fix rooms with combined strings
+    if (splitMultiRooms) {
+      const roomsSnap = await getDocs(collection(db, 'rooms'));
+      
+      for (const docSnap of roomsSnap.docs) {
+        const room = docSnap.data();
+        const displayName = room.displayName || room.name || '';
+        const parts = splitMultiRoom(displayName);
+        
+        if (parts.length > 1) {
+          // This is a combined room - create individual records
+          for (const part of parts) {
+            try {
+              const parsed = parseRoomLabelFromService(part);
+              if (parsed.buildingCode && parsed.spaceNumber) {
+                const newSpaceKey = buildSpaceKey(parsed.buildingCode, parsed.spaceNumber);
+                const newDocId = generateSpaceId(parsed.buildingCode, parsed.spaceNumber);
+                
+                // Check if this space already exists
+                const existingDoc = await getDoc(doc(db, 'rooms', newDocId));
+                if (!existingDoc.exists()) {
+                  const newRoom = {
+                    spaceKey: newSpaceKey,
+                    spaceNumber: parsed.spaceNumber,
+                    buildingCode: parsed.buildingCode,
+                    buildingDisplayName: parsed.buildingDisplayName || parsed.buildingCode,
+                    type: room.type || SPACE_TYPE.Classroom,
+                    isActive: true,
+                    // Legacy fields
+                    building: parsed.buildingDisplayName || parsed.buildingCode,
+                    roomNumber: parsed.spaceNumber,
+                    name: `${parsed.buildingDisplayName || parsed.buildingCode} ${parsed.spaceNumber}`,
+                    displayName: `${parsed.buildingDisplayName || parsed.buildingCode} ${parsed.spaceNumber}`,
+                    createdAt: new Date().toISOString(),
+                    createdBy: 'location-migration'
+                  };
+                  
+                  await batchWriter.add((batch) => {
+                    batch.set(doc(db, 'rooms', newDocId), newRoom);
+                  });
+                  results.roomsSplit++;
+                }
+              }
+            } catch (err) {
+              results.errors.push(`Failed to split room part "${part}": ${err.message}`);
+            }
+          }
+          
+          // Mark the original combined record as inactive
+          await batchWriter.add((batch) => {
+            batch.update(docSnap.ref, {
+              isActive: false,
+              migratedAt: new Date().toISOString(),
+              migrationNote: 'Split into individual room records'
+            });
+          });
+        }
+      }
+    }
+
+    // 2. Backfill spaceKey on rooms missing it
+    if (backfillSpaceKeys) {
+      const roomsSnap = await getDocs(collection(db, 'rooms'));
+      
+      for (const docSnap of roomsSnap.docs) {
+        const room = docSnap.data();
+        
+        if (!room.spaceKey && room.isActive !== false) {
+          const displayName = room.displayName || room.name || '';
+          const parsed = parseRoomLabelFromService(displayName);
+          
+          if (parsed.buildingCode && parsed.spaceNumber) {
+            const spaceKey = buildSpaceKey(parsed.buildingCode, parsed.spaceNumber);
+            
+            await batchWriter.add((batch) => {
+              batch.update(docSnap.ref, {
+                spaceKey,
+                spaceNumber: parsed.spaceNumber,
+                buildingCode: parsed.buildingCode,
+                buildingDisplayName: parsed.buildingDisplayName || room.building,
+                updatedAt: new Date().toISOString()
+              });
+            });
+            results.roomsUpdated++;
+          }
+        }
+      }
+    }
+
+    // 3. Backfill spaceIds on schedules
+    if (backfillScheduleSpaceIds) {
+      // First build a lookup of spaceKey -> docId
+      const roomsSnap = await getDocs(collection(db, 'rooms'));
+      const spaceKeyToId = new Map();
+      
+      for (const docSnap of roomsSnap.docs) {
+        const room = docSnap.data();
+        if (room.spaceKey) {
+          spaceKeyToId.set(room.spaceKey, docSnap.id);
+        }
+      }
+      
+      const schedulesSnap = await getDocs(collection(db, 'schedules'));
+      
+      for (const docSnap of schedulesSnap.docs) {
+        const schedule = docSnap.data();
+        
+        if (!schedule.spaceIds || schedule.spaceIds.length === 0) {
+          const roomName = schedule.roomName || schedule.room || '';
+          
+          if (!isSkippableLocation(roomName).skip && roomName) {
+            const parsedRooms = parseMultiRoom(roomName);
+            const spaceIds = [];
+            const spaceDisplayNames = [];
+            
+            for (const parsed of parsedRooms) {
+              if (parsed.buildingCode && parsed.spaceNumber) {
+                const spaceKey = buildSpaceKey(parsed.buildingCode, parsed.spaceNumber);
+                const spaceId = spaceKeyToId.get(spaceKey) || generateSpaceId(parsed.buildingCode, parsed.spaceNumber);
+                spaceIds.push(spaceId);
+                spaceDisplayNames.push(`${parsed.buildingDisplayName || parsed.buildingCode} ${parsed.spaceNumber}`);
+              }
+            }
+            
+            if (spaceIds.length > 0) {
+              await batchWriter.add((batch) => {
+                batch.update(docSnap.ref, {
+                  spaceIds,
+                  spaceDisplayNames,
+                  updatedAt: new Date().toISOString()
+                });
+              });
+              results.schedulesUpdated++;
+            }
+          }
+        }
+      }
+    }
+
+    // 4. Backfill officeSpaceId on people
+    if (backfillPeopleOfficeSpaceIds) {
+      const roomsSnap = await getDocs(collection(db, 'rooms'));
+      const spaceKeyToId = new Map();
+      
+      for (const docSnap of roomsSnap.docs) {
+        const room = docSnap.data();
+        if (room.spaceKey) {
+          spaceKeyToId.set(room.spaceKey, docSnap.id);
+        }
+      }
+      
+      const peopleSnap = await getDocs(collection(db, 'people'));
+      
+      for (const docSnap of peopleSnap.docs) {
+        const person = docSnap.data();
+        
+        if (!person.officeSpaceId && person.office) {
+          const parsed = parseRoomLabelFromService(person.office);
+          
+          if (parsed.buildingCode && parsed.spaceNumber) {
+            const spaceKey = buildSpaceKey(parsed.buildingCode, parsed.spaceNumber);
+            const officeSpaceId = spaceKeyToId.get(spaceKey) || generateSpaceId(parsed.buildingCode, parsed.spaceNumber);
+            
+            await batchWriter.add((batch) => {
+              batch.update(docSnap.ref, {
+                officeSpaceId,
+                updatedAt: new Date().toISOString()
+              });
+            });
+            results.peopleUpdated++;
+          }
+        }
+      }
+    }
+
+    await batchWriter.flush();
+    
+    return results;
+  } catch (error) {
+    console.error('Error applying location migration:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get location health stats - summary of location data quality
+ */
+export const getLocationHealthStats = async () => {
+  const stats = {
+    rooms: {
+      total: 0,
+      withSpaceKey: 0,
+      withoutSpaceKey: 0,
+      multiRoom: 0,
+      inactive: 0
+    },
+    schedules: {
+      total: 0,
+      withSpaceIds: 0,
+      withoutSpaceIds: 0,
+      virtual: 0
+    },
+    people: {
+      total: 0,
+      withOfficeSpaceId: 0,
+      withoutOfficeSpaceId: 0,
+      withOffice: 0
+    }
+  };
+
+  try {
+    // Rooms
+    const roomsSnap = await getDocs(collection(db, 'rooms'));
+    stats.rooms.total = roomsSnap.size;
+    
+    for (const docSnap of roomsSnap.docs) {
+      const room = docSnap.data();
+      if (room.isActive === false) stats.rooms.inactive++;
+      if (room.spaceKey) stats.rooms.withSpaceKey++;
+      else stats.rooms.withoutSpaceKey++;
+      
+      const displayName = room.displayName || room.name || '';
+      if (splitMultiRoom(displayName).length > 1) stats.rooms.multiRoom++;
+    }
+
+    // Schedules
+    const schedulesSnap = await getDocs(collection(db, 'schedules'));
+    stats.schedules.total = schedulesSnap.size;
+    
+    for (const docSnap of schedulesSnap.docs) {
+      const schedule = docSnap.data();
+      if (schedule.spaceIds?.length > 0) stats.schedules.withSpaceIds++;
+      else {
+        const roomName = schedule.roomName || schedule.room || '';
+        if (isSkippableLocation(roomName).skip) stats.schedules.virtual++;
+        else stats.schedules.withoutSpaceIds++;
+      }
+    }
+
+    // People
+    const peopleSnap = await getDocs(collection(db, 'people'));
+    stats.people.total = peopleSnap.size;
+    
+    for (const docSnap of peopleSnap.docs) {
+      const person = docSnap.data();
+      if (person.officeSpaceId) stats.people.withOfficeSpaceId++;
+      else if (person.office) {
+        stats.people.withOffice++;
+        stats.people.withoutOfficeSpaceId++;
+      }
+    }
+
+    return stats;
+  } catch (error) {
+    console.error('Error getting location health stats:', error);
+    throw error;
   }
 };
 

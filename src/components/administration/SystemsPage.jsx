@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ExternalLink, Settings, GraduationCap, Calendar, IdCard, BookOpen, Save } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Settings, GraduationCap, Calendar, IdCard, BookOpen, Save, Building2, DoorOpen } from 'lucide-react';
 import { db, COLLECTIONS } from '../../firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { logUpdate, logCreate } from '../../utils/changeLogger';
@@ -10,6 +10,8 @@ import { useUI } from '../../contexts/UIContext';
 import { useAppConfig } from '../../contexts/AppConfigContext';
 import { backfillTermMetadata } from '../../utils/termDataUtils';
 import { ConfirmationDialog } from '../CustomAlert';
+import BuildingManagement from './BuildingManagement';
+import SpaceManagement from './SpaceManagement';
 
 const SystemsPage = () => {
   const navigate = useNavigate();
@@ -25,9 +27,9 @@ const SystemsPage = () => {
   const [isBackfilling, setIsBackfilling] = useState(false);
   const [backfillResult, setBackfillResult] = useState(null);
   const [showBackfillConfirm, setShowBackfillConfirm] = useState(false);
-  const [buildingConfigDraft, setBuildingConfigDraft] = useState('');
   const [termConfigDraft, setTermConfigDraft] = useState('');
   const [savingConfigs, setSavingConfigs] = useState(false);
+  const [locationTab, setLocationTab] = useState('buildings'); // 'buildings' | 'spaces'
 
   // Check if user is admin
   const isAdmin = canAccess && canAccess('administration/baylor-systems');
@@ -53,10 +55,6 @@ const SystemsPage = () => {
 
     loadSettings();
   }, []);
-
-  useEffect(() => {
-    setBuildingConfigDraft(JSON.stringify(buildingConfig, null, 2));
-  }, [buildingConfig]);
 
   useEffect(() => {
     setTermConfigDraft(JSON.stringify(termConfig, null, 2));
@@ -247,24 +245,6 @@ const SystemsPage = () => {
   const handleCancelBackfillTerms = () => {
     if (isBackfilling) return;
     setShowBackfillConfirm(false);
-  };
-
-  const handleSaveBuildingConfig = async () => {
-    if (!buildingConfigDraft.trim()) {
-      showNotification?.('warning', 'Missing Config', 'Building configuration cannot be empty.');
-      return;
-    }
-    setSavingConfigs(true);
-    try {
-      const parsed = JSON.parse(buildingConfigDraft);
-      await saveBuildingConfig(parsed);
-      showNotification?.('success', 'Building Settings Saved', 'Building mappings updated successfully.');
-    } catch (error) {
-      console.error('Error saving building config:', error);
-      showNotification?.('error', 'Save Failed', 'Building mappings JSON is invalid or could not be saved.');
-    } finally {
-      setSavingConfigs(false);
-    }
   };
 
   const handleSaveTermConfig = async () => {
@@ -644,45 +624,55 @@ const SystemsPage = () => {
 
       {isAdmin && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-start justify-between mb-4">
+          {/* Location Management Header with Tabs */}
+          <div className="flex items-start justify-between mb-6">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-baylor-gold/20 rounded-lg">
-                <Settings className="w-5 h-5 text-baylor-green" />
+                <Building2 className="w-5 h-5 text-baylor-green" />
               </div>
               <div>
                 <h2 className="text-lg font-serif font-semibold text-baylor-green">
-                  Building Mappings
+                  Location Management
                 </h2>
                 <p className="text-sm text-gray-600 mt-1">
-                  Maintain the canonical building list and alias mappings used across the app.
+                  Manage buildings and spaces (classrooms, offices, labs) used across the app.
                 </p>
               </div>
             </div>
           </div>
 
-          <p className="text-xs text-gray-500 mb-3">
-            Provide an array of buildings with <span className="font-medium">code</span>, <span className="font-medium">displayName</span>,
-            and <span className="font-medium">aliases</span>. Set <span className="font-medium">isActive</span> to false to hide a building.
-          </p>
-
-          <textarea
-            value={buildingConfigDraft}
-            onChange={(e) => setBuildingConfigDraft(e.target.value)}
-            className="w-full min-h-[220px] border border-gray-300 rounded-lg p-3 text-sm font-mono focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-            spellCheck={false}
-            disabled={savingConfigs}
-          />
-
-          <div className="flex items-center space-x-3 pt-3">
+          {/* Tab Navigation */}
+          <div className="flex border-b border-gray-200 mb-6">
             <button
-              onClick={handleSaveBuildingConfig}
-              disabled={savingConfigs}
-              className="btn-primary flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => setLocationTab('buildings')}
+              className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${
+                locationTab === 'buildings'
+                  ? 'border-baylor-green text-baylor-green font-medium'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
             >
-              <Save className="w-4 h-4 mr-2" />
-              {savingConfigs ? 'Saving...' : 'Save Building Mappings'}
+              <Building2 size={18} />
+              Buildings
+            </button>
+            <button
+              onClick={() => setLocationTab('spaces')}
+              className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${
+                locationTab === 'spaces'
+                  ? 'border-baylor-green text-baylor-green font-medium'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <DoorOpen size={18} />
+              Spaces
             </button>
           </div>
+
+          {/* Tab Content */}
+          {locationTab === 'buildings' ? (
+            <BuildingManagement />
+          ) : (
+            <SpaceManagement />
+          )}
         </div>
       )}
 

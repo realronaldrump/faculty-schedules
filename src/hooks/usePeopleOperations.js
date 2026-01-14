@@ -14,7 +14,14 @@ import { usePeople } from '../contexts/PeopleContext';
 import { useUI } from '../contexts/UIContext';
 import { getProgramNameKey, isReservedProgramName, normalizeProgramName } from '../utils/programUtils';
 import { deletePersonSafely } from '../utils/dataHygiene';
-import { extractRoomNumberFromLabel, normalizeRoomNumber, parseRoomLabel } from '../utils/roomUtils';
+// Use centralized location service
+import {
+  parseRoomLabel,
+  normalizeSpaceNumber,
+  extractSpaceNumber,
+  buildSpaceKey,
+  SPACE_TYPE
+} from '../utils/locationService';
 
 const usePeopleOperations = () => {
   const {
@@ -42,34 +49,71 @@ const usePeopleOperations = () => {
     const office = (personData?.office || '').toString().trim();
     const hasNoOffice = personData?.hasNoOffice === true || personData?.isRemote === true;
 
-    if (hasNoOffice || !office) return '';
+    if (hasNoOffice || !office) return { officeRoomId: '', officeSpaceId: '' };
 
     const parsed = parseRoomLabel(office);
-    if (!parsed?.roomKey) return '';
+    if (!parsed?.spaceKey) return { officeRoomId: '', officeSpaceId: '' };
 
     const now = new Date().toISOString();
-    const roomKey = parsed.roomKey;
+    const spaceKey = parsed.spaceKey;
+    // Legacy roomKey format for backward compatibility
+    const roomKey = spaceKey.replace(':', '_').toLowerCase();
+    const buildingCode = parsed.buildingCode || parsed.building?.code || '';
+    const buildingDisplayName = parsed.building?.displayName || parsed.displayName?.split(' ')[0] || '';
+    const spaceNumber = parsed.spaceNumber;
 
-    // 1) Deterministic doc id (preferred)
+    // 1) Try to find by spaceKey first (new format)
     try {
-      const directSnap = await getDoc(doc(db, COLLECTIONS.ROOMS, roomKey));
-      if (directSnap.exists()) {
+      const bySpaceKeySnap = await getDocs(query(
+        collection(db, COLLECTIONS.ROOMS),
+        where('spaceKey', '==', spaceKey)
+      ));
+      if (!bySpaceKeySnap.empty) {
+        const docId = bySpaceKeySnap.docs[0].id;
+        // Update with new fields if we have edit permission
         if (typeof canEditRoom === 'function' && canEditRoom()) {
-          setDoc(doc(db, COLLECTIONS.ROOMS, roomKey), {
-            building: parsed.building,
-            roomNumber: parsed.roomNumber,
+          setDoc(doc(db, COLLECTIONS.ROOMS, docId), {
+            building: buildingDisplayName,
+            buildingCode,
+            buildingDisplayName,
+            roomNumber: spaceNumber,
+            spaceNumber,
             roomKey,
+            spaceKey,
             displayName: parsed.displayName,
             updatedAt: now
           }, { merge: true }).catch(() => null);
         }
-        return roomKey;
+        return { officeRoomId: docId, officeSpaceId: spaceKey };
       }
     } catch (error) {
       void error;
     }
 
-    // 2) Legacy rooms with `roomKey` field but non-deterministic document IDs
+    // 2) Deterministic doc id (preferred legacy format)
+    try {
+      const directSnap = await getDoc(doc(db, COLLECTIONS.ROOMS, roomKey));
+      if (directSnap.exists()) {
+        if (typeof canEditRoom === 'function' && canEditRoom()) {
+          setDoc(doc(db, COLLECTIONS.ROOMS, roomKey), {
+            building: buildingDisplayName,
+            buildingCode,
+            buildingDisplayName,
+            roomNumber: spaceNumber,
+            spaceNumber,
+            roomKey,
+            spaceKey,
+            displayName: parsed.displayName,
+            updatedAt: now
+          }, { merge: true }).catch(() => null);
+        }
+        return { officeRoomId: roomKey, officeSpaceId: spaceKey };
+      }
+    } catch (error) {
+      void error;
+    }
+
+    // 3) Legacy rooms with `roomKey` field but non-deterministic document IDs
     try {
       const byKeySnap = await getDocs(query(
         collection(db, COLLECTIONS.ROOMS),
@@ -79,55 +123,72 @@ const usePeopleOperations = () => {
         const docId = byKeySnap.docs[0].id;
         if (typeof canEditRoom === 'function' && canEditRoom()) {
           setDoc(doc(db, COLLECTIONS.ROOMS, docId), {
-            building: parsed.building,
-            roomNumber: parsed.roomNumber,
+            building: buildingDisplayName,
+            buildingCode,
+            buildingDisplayName,
+            roomNumber: spaceNumber,
+            spaceNumber,
             roomKey,
+            spaceKey,
             displayName: parsed.displayName,
             updatedAt: now
           }, { merge: true }).catch(() => null);
         }
-        return docId;
+        return { officeRoomId: docId, officeSpaceId: spaceKey };
       }
     } catch (error) {
       void error;
     }
 
-    // 3) Building-only query (avoids composite index) + local match on room number
+    // 4) Building-only query (avoids composite index) + local match on room number
     try {
       const byBuildingSnap = await getDocs(query(
         collection(db, COLLECTIONS.ROOMS),
-        where('building', '==', parsed.building)
+        where('building', '==', buildingDisplayName)
       ));
 
-      const targetNumber = normalizeRoomNumber(parsed.roomNumber);
+      const targetNumber = normalizeSpaceNumber(spaceNumber);
       const matchDoc = byBuildingSnap.docs.find((docSnap) => {
         const data = docSnap.data() || {};
+        // Check spaceKey first
+        if (data.spaceKey && data.spaceKey === spaceKey) return true;
+        // Check legacy roomKey
         const candidateKey = (data.roomKey || '').toString().trim();
         if (candidateKey && candidateKey === roomKey) return true;
-        const candidateNumber = normalizeRoomNumber(
-          data.roomNumber || extractRoomNumberFromLabel(data.displayName || data.name || '')
+        // Check room number
+        const candidateNumber = normalizeSpaceNumber(
+          data.spaceNumber || data.roomNumber || extractSpaceNumber(data.displayName || data.name || '')
         );
         return candidateNumber && candidateNumber === targetNumber;
       });
 
       if (matchDoc) {
-        return matchDoc.id;
+        return { officeRoomId: matchDoc.id, officeSpaceId: spaceKey };
       }
     } catch (error) {
       void error;
     }
 
     const canCreate = typeof canCreateRoom === 'function' ? canCreateRoom() : false;
-    if (!allowCreate || !canCreate) return '';
+    if (!allowCreate || !canCreate) return { officeRoomId: '', officeSpaceId: '' };
 
+    // Create new room with both legacy and new fields
     const newRoom = {
       name: parsed.displayName,
       displayName: parsed.displayName,
-      building: parsed.building,
-      roomNumber: parsed.roomNumber,
+      // Legacy fields
+      building: buildingDisplayName,
+      roomNumber: spaceNumber,
       roomKey,
+      // New canonical fields
+      spaceKey,
+      spaceNumber,
+      buildingCode,
+      buildingDisplayName,
+      buildingId: buildingCode.toLowerCase(),
+      // Properties
       capacity: null,
-      type: 'Office',
+      type: SPACE_TYPE.OFFICE,
       isActive: true,
       createdAt: now,
       updatedAt: now
@@ -135,10 +196,10 @@ const usePeopleOperations = () => {
 
     try {
       await setDoc(doc(db, COLLECTIONS.ROOMS, roomKey), newRoom, { merge: true });
-      return roomKey;
+      return { officeRoomId: roomKey, officeSpaceId: spaceKey };
     } catch (error) {
       console.warn('Unable to create office room record:', error);
-      return '';
+      return { officeRoomId: '', officeSpaceId: '' };
     }
   }, [canCreateRoom, canEditRoom]);
 
@@ -193,18 +254,22 @@ const usePeopleOperations = () => {
       const nextHasNoOffice = cleanData.hasNoOffice === true || cleanData.isRemote === true;
       const prevOffice = (originalData?.office || '').toString().trim();
       const prevOfficeRoomId = (originalData?.officeRoomId || '').toString().trim();
+      const prevOfficeSpaceId = (originalData?.officeSpaceId || '').toString().trim();
 
       if (nextHasNoOffice || !nextOffice) {
         updateData.officeRoomId = '';
+        updateData.officeSpaceId = '';
       } else {
         const officeChanged = prevOffice !== nextOffice;
         const missingLink = !prevOfficeRoomId && !(cleanData.officeRoomId || '').toString().trim();
         if (officeChanged || missingLink) {
-          const resolvedRoomId = await resolveOfficeRoomId(cleanData);
-          if (resolvedRoomId) {
-            updateData.officeRoomId = resolvedRoomId;
+          const resolved = await resolveOfficeRoomId(cleanData);
+          if (resolved.officeRoomId) {
+            updateData.officeRoomId = resolved.officeRoomId;
+            updateData.officeSpaceId = resolved.officeSpaceId;
           } else if (officeChanged) {
             updateData.officeRoomId = '';
+            updateData.officeSpaceId = '';
           }
         }
       }
@@ -316,15 +381,18 @@ const usePeopleOperations = () => {
 
         if (nextHasNoOffice || !nextOffice) {
           updateData.officeRoomId = '';
+          updateData.officeSpaceId = '';
         } else {
           const officeChanged = prevOffice !== nextOffice;
           const missingLink = !prevOfficeRoomId && !(cleanStaffData.officeRoomId || '').toString().trim();
           if (officeChanged || missingLink) {
-            const resolvedRoomId = await resolveOfficeRoomId(cleanStaffData);
-            if (resolvedRoomId) {
-              updateData.officeRoomId = resolvedRoomId;
+            const resolved = await resolveOfficeRoomId(cleanStaffData);
+            if (resolved.officeRoomId) {
+              updateData.officeRoomId = resolved.officeRoomId;
+              updateData.officeSpaceId = resolved.officeSpaceId;
             } else if (officeChanged) {
               updateData.officeRoomId = '';
+              updateData.officeSpaceId = '';
             }
           }
         }
@@ -350,10 +418,12 @@ const usePeopleOperations = () => {
 
         if (nextHasNoOffice || !nextOffice) {
           createData.officeRoomId = '';
+          createData.officeSpaceId = '';
         } else {
-          const resolvedRoomId = await resolveOfficeRoomId(cleanStaffData);
-          if (resolvedRoomId) {
-            createData.officeRoomId = resolvedRoomId;
+          const resolved = await resolveOfficeRoomId(cleanStaffData);
+          if (resolved.officeRoomId) {
+            createData.officeRoomId = resolved.officeRoomId;
+            createData.officeSpaceId = resolved.officeSpaceId;
           }
         }
 

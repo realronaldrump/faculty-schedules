@@ -25,7 +25,6 @@ import { getInstructorDisplayName, UNASSIGNED } from "./dataAdapter";
 import { buildPeopleIndex } from "./peopleUtils";
 import { parseCourseCode, deriveCreditsFromCatalogNumber } from "./courseUtils";
 import { logCreate, logUpdate, logImport, logBulkUpdate } from "./changeLogger";
-import { getBuildingFromRoom } from "./buildingUtils";
 import { parseFullName } from "./nameUtils";
 import { parseMeetingPatterns, normalizeTime } from "./meetingPatternUtils";
 import { findPersonMatch } from "./personMatchUtils";
@@ -42,6 +41,16 @@ import {
   normalizeSectionNumber,
   extractCrnFromSection,
 } from "./canonicalSchema";
+// Import from centralized location service
+import {
+  splitMultiRoom,
+  parseRoomLabel,
+  parseMultiRoom,
+  isSkippableLocation,
+  LOCATION_TYPE,
+  buildSpaceKey,
+  getBuildingDisplay
+} from "./locationService";
 
 // ==================== PROGRAM MAPPING ====================
 
@@ -167,9 +176,17 @@ export const createScheduleModel = (rawData) => {
       ? rawData.meetingPatterns
       : [],
     // Multi-room support (backwards compatible):
-    // - roomIds: array of referenced room document IDs
-    // - roomNames: array of display strings for rooms
+    // - spaceIds: array of canonical spaceKeys (new format)
+    // - spaceDisplayNames: array of display names (new format)
+    // - roomIds: array of referenced room document IDs (legacy)
+    // - roomNames: array of display strings for rooms (legacy)
     // - roomId/roomName retained for legacy consumers (first room)
+    spaceIds: Array.isArray(rawData.spaceIds)
+      ? rawData.spaceIds.filter(Boolean)
+      : [],
+    spaceDisplayNames: Array.isArray(rawData.spaceDisplayNames)
+      ? rawData.spaceDisplayNames.filter(Boolean)
+      : [],
     roomIds: Array.isArray(rawData.roomIds)
       ? rawData.roomIds
       : rawData.roomId
@@ -310,18 +327,11 @@ export const createRoomModel = ({
  * Normalize a raw room string into an array of individual room names.
  * Mirrors room splitting behaviour used across scheduling tools so imports
  * understand simultaneous multi-room assignments.
+ *
+ * @deprecated Use splitMultiRoom from locationService instead
  */
 const splitRoomNames = (roomValue) => {
-  if (!roomValue || typeof roomValue !== "string") return [];
-
-  return Array.from(
-    new Set(
-      roomValue
-        .split(/;|\n|\s{0,}\/\s{0,}/)
-        .map((part) => part.trim())
-        .filter(Boolean),
-    ),
-  );
+  return splitMultiRoom(roomValue);
 };
 
 /**
@@ -1191,55 +1201,76 @@ export const processScheduleImport = async (csvData) => {
         : null;
 
       const normalizedRoomLabel = (roomName || "").trim();
-      const upperRoomLabel = normalizedRoomLabel.toUpperCase();
-      const isNoRoomLabel = upperRoomLabel === "NO ROOM NEEDED";
-      const isOnlineLabel = upperRoomLabel.includes("ONLINE");
-      const isRoomlessLabel = isNoRoomLabel || isOnlineLabel;
+
+      // Use centralized location service for detection
+      const locationType = isSkippableLocation(normalizedRoomLabel) ? "no_room" : "room";
       const inferredIsOnline =
-        isOnlineLabel ||
+        normalizedRoomLabel.toUpperCase().includes("ONLINE") ||
         (instructionMethod &&
           instructionMethod.toLowerCase().includes("online"));
-      const hasPhysicalRoom = normalizedRoomLabel && !isRoomlessLabel;
-      const locationType =
-        hasPhysicalRoom || (!inferredIsOnline && !isRoomlessLabel)
-          ? "room"
-          : "no_room";
+      const hasPhysicalRoom = locationType === "room" && normalizedRoomLabel;
       const locationLabel = locationType === "no_room" ? "No Room Needed" : "";
 
-      // === ENHANCED ROOM LINKING (supports multiple rooms separated by ';', newlines, etc.) ===
+      // === ENHANCED ROOM LINKING using centralized locationService ===
       let roomIds = [];
       let roomNames = [];
+      let spaceIds = [];
+      let spaceDisplayNames = [];
+
       if (hasPhysicalRoom) {
-        const splitRooms = splitRoomNames(normalizedRoomLabel);
-        for (const singleRoom of splitRooms) {
-          roomNames.push(singleRoom);
-          // Deterministic room ID: buildingCode_roomNumber (fallback to sanitized name)
-          const building = extractBuildingFromRoom(singleRoom);
-          const roomNumber = extractRoomNumberFromRoom(singleRoom);
+        // Use centralized multi-room parsing
+        const parsed = parseMultiRoom(normalizedRoomLabel);
+
+        for (const roomData of parsed.rooms) {
+          // Add to legacy arrays for backward compatibility
+          roomNames.push(roomData.displayName);
+          spaceDisplayNames.push(roomData.displayName);
+
+          // Use spaceKey as the canonical identifier
+          const spaceKey = roomData.spaceKey;
+          if (spaceKey) {
+            spaceIds.push(spaceKey);
+          }
+
+          // Generate room ID for backward compatibility
+          const building = roomData.building?.displayName || extractBuildingFromRoom(roomData.raw);
+          const roomNumber = roomData.spaceNumber || extractRoomNumberFromRoom(roomData.raw);
           const deterministicRoomId =
             building && roomNumber
               ? `${building.replace(/\s+/g, "_").toLowerCase()}_${roomNumber}`
-              : singleRoom.replace(/\s+/g, "_").toLowerCase();
+              : roomData.raw.replace(/\s+/g, "_").toLowerCase();
+
+          // Check if room exists by spaceKey, ID, or name
           const existingRoom = existingRooms.find(
             (r) =>
+              r.spaceKey === spaceKey ||
               r.id === deterministicRoomId ||
-              r.name === singleRoom ||
-              r.displayName === singleRoom,
+              r.id === spaceKey ||
+              r.name === roomData.displayName ||
+              r.displayName === roomData.displayName,
           );
+
           if (existingRoom) {
             roomIds.push(existingRoom.id);
           } else {
+            // Create new room with both legacy and new fields
             const newRoom = createRoomModel({
-              name: singleRoom,
-              displayName: singleRoom,
+              name: roomData.displayName,
+              displayName: roomData.displayName,
               building,
               roomNumber,
               type: "Classroom",
             });
+            // Add new space fields
+            newRoom.spaceKey = spaceKey;
+            newRoom.spaceNumber = roomNumber;
+            newRoom.buildingCode = roomData.buildingCode || '';
+            newRoom.buildingDisplayName = building;
+
             const roomRef = doc(db, COLLECTIONS.ROOMS, deterministicRoomId);
             await setDoc(roomRef, newRoom, { merge: true });
             logCreate(
-              `Room - ${singleRoom}`,
+              `Room - ${roomData.displayName}`,
               COLLECTIONS.ROOMS,
               roomRef.id,
               newRoom,
@@ -1250,14 +1281,21 @@ export const processScheduleImport = async (csvData) => {
             roomIds.push(roomRef.id);
             existingRooms.push({ ...newRoom, id: roomRef.id });
             results.roomsCreated++;
-            console.log(`🏛️ Created new room: ${singleRoom}`);
+            console.log(`🏛️ Created new room: ${roomData.displayName} (spaceKey: ${spaceKey})`);
           }
+        }
+
+        // Log any parse errors
+        if (parsed.errors?.length > 0) {
+          console.warn(`⚠️ Room parsing warnings for "${normalizedRoomLabel}":`, parsed.errors);
         }
       }
 
       // Deduplicate to guard against repeated room references
       roomIds = Array.from(new Set(roomIds));
       roomNames = Array.from(new Set(roomNames));
+      spaceIds = Array.from(new Set(spaceIds));
+      spaceDisplayNames = Array.from(new Set(spaceDisplayNames));
 
       // Parse meeting patterns
       const meetingPatterns = parseMeetingPatterns(meetingPattern, meetings);
@@ -1385,7 +1423,10 @@ export const processScheduleImport = async (csvData) => {
         section,
         crn, // Pass CRN to the model
         meetingPatterns,
-        // Multi-room fields
+        // Multi-room fields (new canonical format)
+        spaceIds,
+        spaceDisplayNames,
+        // Legacy multi-room fields (for backward compatibility)
         roomIds,
         roomId: roomIds.length > 0 ? roomIds[0] : null,
         roomNames,
@@ -1581,19 +1622,29 @@ const findBestInstructorMatch = async (instructorInfo, existingPeople) => {
 
 /**
  * Extract building name from room string
+ * @deprecated Use parseRoomLabel from locationService instead
  */
 const extractBuildingFromRoom = (roomName) => {
-  // Use centralized building utility for consistent naming
-  const normalized = getBuildingFromRoom(roomName);
-  return normalized || "Unknown Building";
+  // Use centralized location service
+  const parsed = parseRoomLabel(roomName);
+  if (parsed?.building?.displayName) {
+    return parsed.building.displayName;
+  }
+  // Fallback for unrecognized buildings
+  return getBuildingDisplay(roomName) || "Unknown Building";
 };
 
 /**
  * Extract room number from room string
+ * @deprecated Use parseRoomLabel from locationService instead
  */
 const extractRoomNumberFromRoom = (roomName) => {
-  // Extract numbers at the end of room name
-  const numberMatch = roomName.match(/(\d+)\s*$/);
+  const parsed = parseRoomLabel(roomName);
+  if (parsed?.spaceNumber) {
+    return parsed.spaceNumber;
+  }
+  // Fallback: Extract numbers at the end of room name
+  const numberMatch = roomName.match(/(\d[\d.A-Za-z-]*)\s*$/);
   if (numberMatch) {
     return numberMatch[1];
   }

@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Clock,
   Users,
@@ -12,27 +12,43 @@ import {
   Building2,
   Radio,
   Filter,
-  X
-} from 'lucide-react';
-import { getBuildingFromRoom, normalizeBuildingName, getCanonicalBuildingList, buildingMatches } from '../utils/buildingUtils';
-import { formatMinutesToTime } from '../utils/timeUtils';
-import { useData } from '../contexts/DataContext';
-import { usePeople } from '../contexts/PeopleContext';
-import { useAppConfig } from '../contexts/AppConfigContext';
+  X,
+} from "lucide-react";
+import {
+  getBuildingFromRoom,
+  normalizeBuildingName,
+  getCanonicalBuildingList,
+  buildingMatches,
+} from "../utils/buildingUtils";
+import { formatMinutesToTime } from "../utils/timeUtils";
+import { useData } from "../contexts/DataContext";
+import { usePeople } from "../contexts/PeopleContext";
+import { useAppConfig } from "../contexts/AppConfigContext";
+import { useSchedules } from "../contexts/ScheduleContext";
+import { parseTermDate } from "../utils/termUtils";
 
 const LiveView = () => {
   const navigate = useNavigate();
-  const { scheduleData = [], studentData = [], facultyData = [], selectedSemester } = useData();
+  const {
+    scheduleData = [],
+    studentData = [],
+    facultyData = [],
+    selectedSemester,
+  } = useData();
   const { loadPeople } = usePeople();
   const { buildingConfigVersion } = useAppConfig();
+  const { selectedTermMeta } = useSchedules();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [selectedBuilding, setSelectedBuilding] = useState('');
+  const [selectedBuilding, setSelectedBuilding] = useState("");
 
-  const handleNavigate = useCallback((path) => {
-    const normalized = path.startsWith('/') ? path : `/${path}`;
-    navigate(normalized);
-  }, [navigate]);
+  const handleNavigate = useCallback(
+    (path) => {
+      const normalized = path.startsWith("/") ? path : `/${path}`;
+      navigate(normalized);
+    },
+    [navigate],
+  );
 
   useEffect(() => {
     loadPeople();
@@ -55,7 +71,7 @@ const LiveView = () => {
 
   // Get current day code (M, T, W, R, F)
   const getCurrentDayCode = () => {
-    const dayMap = { 0: null, 1: 'M', 2: 'T', 3: 'W', 4: 'R', 5: 'F', 6: null };
+    const dayMap = { 0: null, 1: "M", 2: "T", 3: "W", 4: "R", 5: "F", 6: null };
     return dayMap[currentTime.getDay()];
   };
 
@@ -69,8 +85,8 @@ const LiveView = () => {
     const minutes = parseInt(match[2], 10);
     const period = match[3]?.toUpperCase();
 
-    if (period === 'PM' && hours !== 12) hours += 12;
-    if (period === 'AM' && hours === 12) hours = 0;
+    if (period === "PM" && hours !== 12) hours += 12;
+    if (period === "AM" && hours === 12) hours = 0;
 
     return hours * 60 + minutes;
   };
@@ -84,55 +100,73 @@ const LiveView = () => {
   // Helper to check if schedule meets on a given day
   const scheduleMeetsOnDay = (schedule, dayCode) => {
     if (schedule.meetingPatterns && Array.isArray(schedule.meetingPatterns)) {
-      return schedule.meetingPatterns.some(pattern => pattern.day === dayCode);
+      return schedule.meetingPatterns.some(
+        (pattern) => pattern.day === dayCode,
+      );
     }
-    const days = schedule.Day || schedule.days || schedule.meetingDays || '';
+    const days = schedule.Day || schedule.days || schedule.meetingDays || "";
     return days.includes(dayCode);
   };
 
   // Helper to get start/end times for schedule
   const getScheduleTimes = (schedule, dayCode) => {
     if (schedule.meetingPatterns && Array.isArray(schedule.meetingPatterns)) {
-      const pattern = schedule.meetingPatterns.find(p => p.day === dayCode);
+      const pattern = schedule.meetingPatterns.find((p) => p.day === dayCode);
       if (pattern) {
         return { startTime: pattern.startTime, endTime: pattern.endTime };
       }
     }
     return {
-      startTime: schedule['Start Time'] || schedule.startTime,
-      endTime: schedule['End Time'] || schedule.endTime
+      startTime: schedule["Start Time"] || schedule.startTime,
+      endTime: schedule["End Time"] || schedule.endTime,
     };
   };
 
   // Helper to get room from schedule
   const getScheduleRoom = (schedule) => {
-    if (schedule.locationType === 'no_room' || schedule.isOnline) {
-      return schedule.locationLabel || 'No Room Needed';
+    if (schedule.locationType === "no_room" || schedule.isOnline) {
+      return schedule.locationLabel || "No Room Needed";
     }
     if (Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0) {
-      return schedule.roomNames.join('; ');
+      return schedule.roomNames.join("; ");
     }
-    return schedule.Room || schedule.room || schedule.roomName || '';
+    return schedule.Room || schedule.room || schedule.roomName || "";
   };
 
-  const getCourseCode = (schedule) => schedule.Course || schedule.courseCode || '';
+  const getCourseCode = (schedule) =>
+    schedule.Course || schedule.courseCode || "";
 
   const getInstructorName = (schedule) => {
-    if (Array.isArray(schedule.instructorNames) && schedule.instructorNames.length > 0) {
-      return schedule.instructorNames.join(' / ');
+    if (
+      Array.isArray(schedule.instructorNames) &&
+      schedule.instructorNames.length > 0
+    ) {
+      return schedule.instructorNames.join(" / ");
     }
     if (schedule.instructor) {
-      return `${schedule.instructor.firstName || ''} ${schedule.instructor.lastName || ''}`.trim();
+      return `${schedule.instructor.firstName || ""} ${schedule.instructor.lastName || ""}`.trim();
     }
-    return schedule.Instructor || schedule.instructorName || '';
+    return schedule.Instructor || schedule.instructorName || "";
   };
 
   // Filter schedules for today and selected semester
   const todaySchedules = useMemo(() => {
     if (!currentDayCode) return [];
 
-    return scheduleData.filter(schedule => {
-      const term = schedule.Term || schedule.term || '';
+    // Check if current date is within semester dates
+    if (selectedTermMeta?.startDate && selectedTermMeta?.endDate) {
+      const start = parseTermDate(selectedTermMeta.startDate);
+      const end = parseTermDate(selectedTermMeta.endDate);
+      const now = new Date(currentTime);
+      now.setHours(0, 0, 0, 0); // Normalize to date only
+
+      if (start && end && (now < start || now > end)) {
+        return []; // Outside of semester dates
+      }
+    }
+
+    return scheduleData.filter((schedule) => {
+      const term = schedule.Term || schedule.term || "";
       if (selectedSemester && term !== selectedSemester) return false;
       if (!scheduleMeetsOnDay(schedule, currentDayCode)) return false;
 
@@ -140,37 +174,45 @@ const LiveView = () => {
       if (!times.startTime || !times.endTime) return false;
 
       const room = getScheduleRoom(schedule);
-      if (room.toLowerCase() === 'tba') return false;
+      if (room.toLowerCase() === "tba") return false;
 
       return true;
     });
-  }, [scheduleData, selectedSemester, currentDayCode]);
+  }, [
+    scheduleData,
+    selectedSemester,
+    currentDayCode,
+    selectedTermMeta,
+    currentTime,
+  ]);
 
   // Get unique buildings for filter - use canonical list + any found in data
   const availableBuildings = useMemo(() => {
     const buildings = new Set(getCanonicalBuildingList());
 
     // Also add any non-canonical buildings found in schedule data
-    todaySchedules.forEach(s => {
+    todaySchedules.forEach((s) => {
       const room = getScheduleRoom(s);
       const building = getBuildingFromRoom(room);
-      if (building && building !== 'Online' && building !== 'Off Campus') {
+      if (building && building !== "Online" && building !== "Off Campus") {
         buildings.add(building);
       }
     });
 
     // Also add normalized buildings from student workers
-    studentData.forEach(student => {
+    studentData.forEach((student) => {
       const buildings_arr = student.primaryBuildings || [];
-      buildings_arr.forEach(b => {
+      buildings_arr.forEach((b) => {
         const normalized = normalizeBuildingName(b);
-        if (normalized && normalized !== 'Online') buildings.add(normalized);
+        if (normalized && normalized !== "Online") buildings.add(normalized);
       });
-      (student.jobs || []).forEach(job => {
-        const locs = Array.isArray(job.location) ? job.location : [job.location];
-        locs.forEach(loc => {
+      (student.jobs || []).forEach((job) => {
+        const locs = Array.isArray(job.location)
+          ? job.location
+          : [job.location];
+        locs.forEach((loc) => {
           const normalized = normalizeBuildingName(loc);
-          if (normalized && normalized !== 'Online') buildings.add(normalized);
+          if (normalized && normalized !== "Online") buildings.add(normalized);
         });
       });
     });
@@ -180,7 +222,7 @@ const LiveView = () => {
 
   // Classes currently in session
   const currentClasses = useMemo(() => {
-    let classes = todaySchedules.filter(schedule => {
+    let classes = todaySchedules.filter((schedule) => {
       const times = getScheduleTimes(schedule, currentDayCode);
       const start = parseTimeToMinutes(times.startTime);
       const end = parseTimeToMinutes(times.endTime);
@@ -190,7 +232,7 @@ const LiveView = () => {
 
     // Filter by building if selected
     if (selectedBuilding) {
-      classes = classes.filter(s => {
+      classes = classes.filter((s) => {
         const room = getScheduleRoom(s);
         return getBuildingFromRoom(room) === selectedBuilding;
       });
@@ -205,7 +247,7 @@ const LiveView = () => {
 
   // Classes starting in next 90 minutes
   const upcomingClasses = useMemo(() => {
-    let classes = todaySchedules.filter(schedule => {
+    let classes = todaySchedules.filter((schedule) => {
       const times = getScheduleTimes(schedule, currentDayCode);
       const start = parseTimeToMinutes(times.startTime);
       if (start === null) return false;
@@ -214,7 +256,7 @@ const LiveView = () => {
     });
 
     if (selectedBuilding) {
-      classes = classes.filter(s => {
+      classes = classes.filter((s) => {
         const room = getScheduleRoom(s);
         return getBuildingFromRoom(room) === selectedBuilding;
       });
@@ -223,7 +265,10 @@ const LiveView = () => {
     return classes.sort((a, b) => {
       const timesA = getScheduleTimes(a, currentDayCode);
       const timesB = getScheduleTimes(b, currentDayCode);
-      return (parseTimeToMinutes(timesA.startTime) || 0) - (parseTimeToMinutes(timesB.startTime) || 0);
+      return (
+        (parseTimeToMinutes(timesA.startTime) || 0) -
+        (parseTimeToMinutes(timesB.startTime) || 0)
+      );
     });
   }, [todaySchedules, currentMinutes, currentDayCode, selectedBuilding]);
 
@@ -233,7 +278,7 @@ const LiveView = () => {
 
     const results = [];
 
-    studentData.forEach(student => {
+    studentData.forEach((student) => {
       if (!student.isActive) return;
 
       // Check jobs array for current shift
@@ -245,8 +290,15 @@ const LiveView = () => {
 
           const start = parseTimeToMinutes(shift.startTime || shift.start);
           const end = parseTimeToMinutes(shift.endTime || shift.end);
-          if (start !== null && end !== null && currentMinutes >= start && currentMinutes < end) {
-            const location = Array.isArray(job.location) ? job.location[0] : job.location || '';
+          if (
+            start !== null &&
+            end !== null &&
+            currentMinutes >= start &&
+            currentMinutes < end
+          ) {
+            const location = Array.isArray(job.location)
+              ? job.location[0]
+              : job.location || "";
 
             // Filter by building if selected
             if (selectedBuilding && location !== selectedBuilding) continue;
@@ -254,12 +306,12 @@ const LiveView = () => {
             results.push({
               ...student,
               currentJob: {
-                title: job.jobTitle || student.jobTitle || '',
+                title: job.jobTitle || student.jobTitle || "",
                 location,
                 shiftStart: start,
                 shiftEnd: end,
-                shiftTimeStr: `${formatMinutesToTime(start)} - ${formatMinutesToTime(end)}`
-              }
+                shiftTimeStr: `${formatMinutesToTime(start)} - ${formatMinutesToTime(end)}`,
+              },
             });
             return; // Only add student once
           }
@@ -273,20 +325,25 @@ const LiveView = () => {
 
         const start = parseTimeToMinutes(shift.startTime || shift.start);
         const end = parseTimeToMinutes(shift.endTime || shift.end);
-        if (start !== null && end !== null && currentMinutes >= start && currentMinutes < end) {
-          const location = student.primaryBuildings?.[0] || '';
+        if (
+          start !== null &&
+          end !== null &&
+          currentMinutes >= start &&
+          currentMinutes < end
+        ) {
+          const location = student.primaryBuildings?.[0] || "";
 
           if (selectedBuilding && location !== selectedBuilding) continue;
 
           results.push({
             ...student,
             currentJob: {
-              title: student.jobTitle || '',
+              title: student.jobTitle || "",
               location,
               shiftStart: start,
               shiftEnd: end,
-              shiftTimeStr: `${formatMinutesToTime(start)} - ${formatMinutesToTime(end)}`
-            }
+              shiftTimeStr: `${formatMinutesToTime(start)} - ${formatMinutesToTime(end)}`,
+            },
           });
           return;
         }
@@ -299,22 +356,28 @@ const LiveView = () => {
   // Real-time statistics (current, not daily)
   const liveStats = useMemo(() => {
     const uniqueInstructors = new Set(
-      currentClasses.map(s => getInstructorName(s)).filter(Boolean)
+      currentClasses.map((s) => getInstructorName(s)).filter(Boolean),
     );
     const uniqueRooms = new Set(
-      currentClasses.map(s => getScheduleRoom(s)).filter(r => r && r.toLowerCase() !== 'online')
+      currentClasses
+        .map((s) => getScheduleRoom(s))
+        .filter((r) => r && r.toLowerCase() !== "online"),
     );
 
     return {
       classesNow: currentClasses.length,
       facultyNow: uniqueInstructors.size,
       roomsNow: uniqueRooms.size,
-      studentsNow: studentsOnDutyNow.length
+      studentsNow: studentsOnDutyNow.length,
     };
   }, [currentClasses, studentsOnDutyNow]);
 
   const formatTime = (date) => {
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    return date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
   };
 
   const isWeekend = !currentDayCode;
@@ -331,20 +394,26 @@ const LiveView = () => {
             <div>
               <h1 className="text-2xl font-bold text-white">Live View</h1>
               <p className="text-white/80 text-sm mt-1">
-                Real-time overview • {selectedSemester || 'All semesters'}
+                Real-time overview • {selectedSemester || "All semesters"}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
-              <div className="text-2xl font-bold text-white">{formatTime(currentTime)}</div>
+              <div className="text-2xl font-bold text-white">
+                {formatTime(currentTime)}
+              </div>
               <div className="text-sm text-baylor-gold">
-                {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                {currentTime.toLocaleDateString("en-US", {
+                  weekday: "long",
+                  month: "short",
+                  day: "numeric",
+                })}
               </div>
             </div>
             <button
               onClick={handleRefresh}
-              className={`p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-all ${isRefreshing ? 'animate-spin' : ''}`}
+              className={`p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-all ${isRefreshing ? "animate-spin" : ""}`}
               title="Refresh data"
             >
               <RefreshCw className="w-5 h-5 text-white" />
@@ -359,7 +428,9 @@ const LiveView = () => {
             <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <Calendar className="w-10 h-10 text-gray-400" />
             </div>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-3">It's the Weekend!</h2>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-3">
+              It's the Weekend!
+            </h2>
             <p className="text-gray-600 max-w-md mx-auto">
               No regularly scheduled classes today. Enjoy your time off!
             </p>
@@ -379,13 +450,15 @@ const LiveView = () => {
               className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
             >
               <option value="">All Buildings</option>
-              {availableBuildings.map(building => (
-                <option key={building} value={building}>{building}</option>
+              {availableBuildings.map((building) => (
+                <option key={building} value={building}>
+                  {building}
+                </option>
               ))}
             </select>
             {selectedBuilding && (
               <button
-                onClick={() => setSelectedBuilding('')}
+                onClick={() => setSelectedBuilding("")}
                 className="p-1 hover:bg-gray-100 rounded"
                 title="Clear filter"
               >
@@ -403,7 +476,9 @@ const LiveView = () => {
                   <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-gray-900">{liveStats.classesNow}</div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    {liveStats.classesNow}
+                  </div>
                   <div className="text-sm text-gray-500">Classes Now</div>
                 </div>
               </div>
@@ -416,7 +491,9 @@ const LiveView = () => {
                   <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-gray-900">{liveStats.facultyNow}</div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    {liveStats.facultyNow}
+                  </div>
                   <div className="text-sm text-gray-500">Faculty Teaching</div>
                 </div>
               </div>
@@ -429,7 +506,9 @@ const LiveView = () => {
                   <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-gray-900">{liveStats.roomsNow}</div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    {liveStats.roomsNow}
+                  </div>
                   <div className="text-sm text-gray-500">Rooms in Use</div>
                 </div>
               </div>
@@ -442,7 +521,9 @@ const LiveView = () => {
                   <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-gray-900">{liveStats.studentsNow}</div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    {liveStats.studentsNow}
+                  </div>
                   <div className="text-sm text-gray-500">Students On Duty</div>
                 </div>
               </div>
@@ -457,9 +538,13 @@ const LiveView = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <h2 className="text-lg font-semibold text-gray-900">Classes in Session</h2>
+                    <h2 className="text-lg font-semibold text-gray-900">
+                      Classes in Session
+                    </h2>
                   </div>
-                  <span className="text-sm text-gray-500">{currentClasses.length} active</span>
+                  <span className="text-sm text-gray-500">
+                    {currentClasses.length} active
+                  </span>
                 </div>
               </div>
               <div className="university-card-content max-h-80 overflow-y-auto">
@@ -475,12 +560,14 @@ const LiveView = () => {
                             {getCourseCode(cls)} {cls.Section || cls.section}
                           </div>
                           <div className="text-sm text-gray-500 truncate">
-                            {getInstructorName(cls) || 'TBA'}
+                            {getInstructorName(cls) || "TBA"}
                           </div>
                         </div>
                         <div className="flex items-center gap-2 text-sm">
                           <MapPin className="w-4 h-4 text-gray-400" />
-                          <span className="font-medium text-baylor-green">{getScheduleRoom(cls) || 'TBA'}</span>
+                          <span className="font-medium text-baylor-green">
+                            {getScheduleRoom(cls) || "TBA"}
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -493,7 +580,9 @@ const LiveView = () => {
                 ) : (
                   <div className="text-center py-8">
                     <Clock className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500">No classes in session right now</p>
+                    <p className="text-gray-500">
+                      No classes in session right now
+                    </p>
                   </div>
                 )}
               </div>
@@ -505,7 +594,9 @@ const LiveView = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Clock className="w-5 h-5 text-baylor-green" />
-                    <h2 className="text-lg font-semibold text-gray-900">Coming Up</h2>
+                    <h2 className="text-lg font-semibold text-gray-900">
+                      Coming Up
+                    </h2>
                   </div>
                   <span className="text-sm text-gray-500">Next 90 min</span>
                 </div>
@@ -519,18 +610,26 @@ const LiveView = () => {
                       const minsUntil = startMins - currentMinutes;
 
                       return (
-                        <div key={cls.id || idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div
+                          key={cls.id || idx}
+                          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                        >
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-gray-900 truncate">
                               {getCourseCode(cls)} {cls.Section || cls.section}
                             </div>
                             <div className="text-sm text-gray-500 truncate">
-                              {getInstructorName(cls) || 'TBA'} • {getScheduleRoom(cls)}
+                              {getInstructorName(cls) || "TBA"} •{" "}
+                              {getScheduleRoom(cls)}
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="text-sm font-medium text-baylor-green">{times.startTime}</div>
-                            <div className="text-xs text-gray-400">in {minsUntil} min</div>
+                            <div className="text-sm font-medium text-baylor-green">
+                              {times.startTime}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              in {minsUntil} min
+                            </div>
                           </div>
                         </div>
                       );
@@ -539,7 +638,9 @@ const LiveView = () => {
                 ) : (
                   <div className="text-center py-8">
                     <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500">No classes in the next 90 minutes</p>
+                    <p className="text-gray-500">
+                      No classes in the next 90 minutes
+                    </p>
                   </div>
                 )}
               </div>
@@ -551,10 +652,14 @@ const LiveView = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Users className="w-5 h-5 text-amber-500" />
-                    <h2 className="text-lg font-semibold text-gray-900">Student Workers On Duty</h2>
+                    <h2 className="text-lg font-semibold text-gray-900">
+                      Student Workers On Duty
+                    </h2>
                   </div>
                   <button
-                    onClick={() => handleNavigate('scheduling/student-schedules')}
+                    onClick={() =>
+                      handleNavigate("scheduling/student-schedules")
+                    }
                     className="text-sm text-baylor-green hover:text-baylor-gold flex items-center gap-1"
                   >
                     View all
@@ -572,7 +677,11 @@ const LiveView = () => {
                       >
                         <div className="w-10 h-10 bg-amber-200 rounded-full flex items-center justify-center flex-shrink-0">
                           <span className="text-amber-800 font-medium text-sm">
-                            {student.name?.split(' ').map(n => n[0]).join('').slice(0, 2) || '?'}
+                            {student.name
+                              ?.split(" ")
+                              .map((n) => n[0])
+                              .join("")
+                              .slice(0, 2) || "?"}
                           </span>
                         </div>
                         <div className="flex-1 min-w-0">
@@ -605,7 +714,9 @@ const LiveView = () => {
                 ) : (
                   <div className="text-center py-8">
                     <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500">No student workers on shift right now</p>
+                    <p className="text-gray-500">
+                      No student workers on shift right now
+                    </p>
                   </div>
                 )}
               </div>
@@ -614,31 +725,51 @@ const LiveView = () => {
 
           {/* Quick Links */}
           <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-            <button onClick={() => handleNavigate('scheduling/faculty-schedules')} className="university-card group cursor-pointer hover:shadow-md transition-all">
+            <button
+              onClick={() => handleNavigate("scheduling/faculty-schedules")}
+              className="university-card group cursor-pointer hover:shadow-md transition-all"
+            >
               <div className="university-card-content flex items-center gap-3">
                 <Calendar className="w-5 h-5 text-baylor-green group-hover:text-baylor-gold transition-colors" />
-                <span className="text-sm font-medium text-gray-700">Faculty Schedules</span>
+                <span className="text-sm font-medium text-gray-700">
+                  Faculty Schedules
+                </span>
                 <ChevronRight className="w-4 h-4 text-gray-400 ml-auto group-hover:translate-x-1 transition-transform" />
               </div>
             </button>
-            <button onClick={() => handleNavigate('scheduling/room-schedules')} className="university-card group cursor-pointer hover:shadow-md transition-all">
+            <button
+              onClick={() => handleNavigate("scheduling/room-schedules")}
+              className="university-card group cursor-pointer hover:shadow-md transition-all"
+            >
               <div className="university-card-content flex items-center gap-3">
                 <Building2 className="w-5 h-5 text-baylor-green group-hover:text-baylor-gold transition-colors" />
-                <span className="text-sm font-medium text-gray-700">Room Schedules</span>
+                <span className="text-sm font-medium text-gray-700">
+                  Room Schedules
+                </span>
                 <ChevronRight className="w-4 h-4 text-gray-400 ml-auto group-hover:translate-x-1 transition-transform" />
               </div>
             </button>
-            <button onClick={() => handleNavigate('scheduling/student-schedules')} className="university-card group cursor-pointer hover:shadow-md transition-all">
+            <button
+              onClick={() => handleNavigate("scheduling/student-schedules")}
+              className="university-card group cursor-pointer hover:shadow-md transition-all"
+            >
               <div className="university-card-content flex items-center gap-3">
                 <Users className="w-5 h-5 text-baylor-green group-hover:text-baylor-gold transition-colors" />
-                <span className="text-sm font-medium text-gray-700">Student Schedules</span>
+                <span className="text-sm font-medium text-gray-700">
+                  Student Schedules
+                </span>
                 <ChevronRight className="w-4 h-4 text-gray-400 ml-auto group-hover:translate-x-1 transition-transform" />
               </div>
             </button>
-            <button onClick={() => handleNavigate('people/people-directory')} className="university-card group cursor-pointer hover:shadow-md transition-all">
+            <button
+              onClick={() => handleNavigate("people/people-directory")}
+              className="university-card group cursor-pointer hover:shadow-md transition-all"
+            >
               <div className="university-card-content flex items-center gap-3">
                 <GraduationCap className="w-5 h-5 text-baylor-green group-hover:text-baylor-gold transition-colors" />
-                <span className="text-sm font-medium text-gray-700">People Directory</span>
+                <span className="text-sm font-medium text-gray-700">
+                  People Directory
+                </span>
                 <ChevronRight className="w-4 h-4 text-gray-400 ml-auto group-hover:translate-x-1 transition-transform" />
               </div>
             </button>

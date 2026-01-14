@@ -34,7 +34,7 @@ const CRNQualityTools = () => {
         ? filters.terms
         : (selectedSemester ? [selectedSemester] : []);
       if (termSelection.length === 0) {
-        showNotification?.('warning', 'Select a Term', 'Choose at least one term to analyze.');
+        showNotification?.('warning', 'Select a Semester', 'Choose at least one semester to analyze.');
         return;
       }
       const termCodes = termSelection
@@ -208,7 +208,7 @@ const CRNQualityTools = () => {
                 <h4 className="font-semibold text-red-800">Duplicate CRNs Detected</h4>
               </div>
               <div className="text-sm text-red-700">
-                {analysis.duplicateCRNs.length} CRN(s) appear in multiple records within the same term. Review the duplicates below and correct them here.
+                {analysis.duplicateCRNs.length} CRN(s) appear in multiple records within the same semester. Review the duplicates below and correct them here.
               </div>
             </div>
           )}
@@ -222,13 +222,13 @@ const CRNQualityTools = () => {
             {analysis.duplicateCRNs.map(group => (
               <div key={`${group.crn}__${group.term || ''}`} className="border border-red-200 rounded-md">
                 <div className="px-3 py-2 bg-red-50 flex items-center justify-between">
-                  <div className="text-sm text-red-800 font-medium">Term {group.term || 'Unknown'} — CRN {group.crn} — {group.count} records</div>
+                  <div className="text-sm text-red-800 font-medium">Semester {group.term || 'Unknown'} — CRN {group.crn} — {group.count} records</div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Term</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Semester</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Course</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Section</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">CRN</th>
@@ -313,12 +313,12 @@ const CRNQualityTools = () => {
 
           <div className="grid md:grid-cols-4 gap-3 mb-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Terms</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Semesters</label>
               <MultiSelectDropdown
                 options={uniqueTerms}
                 selected={filters.terms}
                 onChange={(selected) => setFilters(prev => ({ ...prev, terms: selected }))}
-                placeholder="Filter by term..."
+                placeholder="Filter by semester..."
               />
             </div>
             <div>
@@ -346,7 +346,7 @@ const CRNQualityTools = () => {
                 <input
                   type="text"
                   className="w-full py-1.5 outline-none text-sm"
-                  placeholder="Search course, section, CRN, term..."
+                  placeholder="Search course, section, CRN, semester..."
                   value={filters.searchTerm}
                   onChange={(e) => setFilters(prev => ({ ...prev, searchTerm: e.target.value }))}
                 />
@@ -368,7 +368,7 @@ const CRNQualityTools = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Term</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Semester</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Course</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Section</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">CRN</th>

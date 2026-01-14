@@ -121,7 +121,7 @@ const AppSettings = () => {
   // Save default term setting
   const handleSaveDefaultTerm = async () => {
     if (!selectedTerm) {
-      showNotification?.('warning', 'No Term Selected', 'Please select a term to set as default.');
+      showNotification?.('warning', 'No Semester Selected', 'Please select a semester to set as default.');
       return;
     }
 
@@ -144,7 +144,7 @@ const AppSettings = () => {
 
       if (originalData) {
         await logUpdate(
-          `App Settings - Default Term changed to ${selectedTerm}`,
+          `App Settings - Default Semester changed to ${selectedTerm}`,
           'settings',
           'app',
           newSettings,
@@ -153,7 +153,7 @@ const AppSettings = () => {
         );
       } else {
         await logCreate(
-          `App Settings - Default Term set to ${selectedTerm}`,
+          `App Settings - Default Semester set to ${selectedTerm}`,
           'settings',
           'app',
           newSettings,
@@ -162,10 +162,10 @@ const AppSettings = () => {
       }
 
       setDefaultTerm(selectedTerm);
-      showNotification?.('success', 'Default Term Updated', `The default term has been set to ${selectedTerm}. This will be the default view for all users.`);
+      showNotification?.('success', 'Default Semester Updated', `The default semester has been set to ${selectedTerm}. This will be the default view for all users.`);
     } catch (error) {
       console.error('Error saving default term:', error);
-      let errorMessage = 'Failed to save default term setting.';
+      let errorMessage = 'Failed to save default semester setting.';
       if (error.code === 'permission-denied') {
         errorMessage = 'Permission denied. Please ensure you have admin privileges.';
       }
@@ -190,7 +190,7 @@ const AppSettings = () => {
       await setDoc(settingsRef, newSettings, { merge: true });
 
       await logUpdate(
-        'App Settings - Default Term cleared (will use most recent)',
+        'App Settings - Default Semester cleared (will use most recent)',
         'settings',
         'app',
         newSettings,
@@ -200,10 +200,10 @@ const AppSettings = () => {
 
       setDefaultTerm('');
       setSelectedTerm('');
-      showNotification?.('success', 'Default Term Cleared', 'The app will now default to the most recent term.');
+      showNotification?.('success', 'Default Semester Cleared', 'The app will now default to the most recent semester.');
     } catch (error) {
       console.error('Error clearing default term:', error);
-      showNotification?.('error', 'Clear Failed', 'Failed to clear default term setting.');
+      showNotification?.('error', 'Clear Failed', 'Failed to clear default semester setting.');
     } finally {
       setSaving(false);
     }
@@ -211,7 +211,7 @@ const AppSettings = () => {
 
   const updateTermLifecycle = async (term, updates, actionLabel) => {
     if (!term?.termCode) {
-      showNotification?.('warning', 'Missing Term Code', 'Term code is required to update lifecycle status.');
+      showNotification?.('warning', 'Missing Semester Code', 'Semester code is required to update lifecycle status.');
       return false;
     }
     setTermActionLoading(term.termCode);
@@ -225,7 +225,7 @@ const AppSettings = () => {
       };
       await setDoc(termRef, payload, { merge: true });
       await logUpdate(
-        `Term - ${term.term || term.termCode} (${actionLabel})`,
+        `Semester - ${term.term || term.termCode} (${actionLabel})`,
         COLLECTIONS.TERMS,
         term.termCode,
         payload,
@@ -233,11 +233,11 @@ const AppSettings = () => {
         'AppSettings.jsx - updateTermLifecycle'
       );
       await refreshTerms?.();
-      showNotification?.('success', 'Term Updated', `${term.term || term.termCode} updated successfully.`);
+      showNotification?.('success', 'Semester Updated', `${term.term || term.termCode} updated successfully.`);
       return true;
     } catch (error) {
       console.error('Error updating term lifecycle:', error);
-      showNotification?.('error', 'Update Failed', 'Failed to update term lifecycle.');
+      showNotification?.('error', 'Update Failed', 'Failed to update semester lifecycle.');
       return false;
     } finally {
       setTermActionLoading('');
@@ -281,10 +281,10 @@ const AppSettings = () => {
       const result = await backfillTermMetadata();
       setBackfillResult(result);
       await refreshTerms?.();
-      showNotification?.('success', 'Backfill Complete', `Updated ${result.schedulesUpdated} schedules and upserted ${result.termsUpserted} terms.`);
+      showNotification?.('success', 'Backfill Complete', `Updated ${result.schedulesUpdated} schedules and upserted ${result.termsUpserted} semesters.`);
     } catch (error) {
       console.error('Backfill error:', error);
-      showNotification?.('error', 'Backfill Failed', error.message || 'Unable to backfill terms.');
+      showNotification?.('error', 'Backfill Failed', error.message || 'Unable to backfill semesters.');
     } finally {
       setIsBackfilling(false);
     }
@@ -314,7 +314,7 @@ const AppSettings = () => {
 
   const handleSaveTermDates = async (term) => {
     if (!term?.termCode) {
-      showNotification?.('warning', 'Missing Term Code', 'Term code is required to save semester dates.');
+      showNotification?.('warning', 'Missing Semester Code', 'Semester code is required to save dates.');
       return;
     }
 
@@ -419,7 +419,7 @@ const AppSettings = () => {
   // Term deletion handler
   const handleDeleteTerm = async (term) => {
     if (!term?.termCode) {
-      showNotification?.('warning', 'Missing Term', 'Cannot delete term without a term code.');
+      showNotification?.('warning', 'Missing Semester', 'Cannot delete semester without a semester code.');
       return;
     }
     
@@ -447,7 +447,7 @@ const AppSettings = () => {
         await batch.commit();
         
         await logBulkUpdate(
-          `Deleted term ${term.term || term.termCode} and ${courseCount} courses`,
+          `Deleted semester ${term.term || term.termCode} and ${courseCount} courses`,
           COLLECTIONS.TERMS,
           courseCount,
           'AppSettings.jsx - handleDeleteTerm',
@@ -459,7 +459,7 @@ const AppSettings = () => {
         await deleteDoc(termRef);
         
         await logDelete(
-          `Deleted empty term ${term.term || term.termCode}`,
+          `Deleted empty semester ${term.term || term.termCode}`,
           COLLECTIONS.TERMS,
           term.termCode,
           term,
@@ -469,10 +469,10 @@ const AppSettings = () => {
       
       await refreshTerms?.();
       await fetchTermCourseCounts();
-      showNotification?.('success', 'Term Deleted', `${term.term || term.termCode} has been permanently deleted.`);
+      showNotification?.('success', 'Semester Deleted', `${term.term || term.termCode} has been permanently deleted.`);
     } catch (error) {
       console.error('Error deleting term:', error);
-      showNotification?.('error', 'Delete Failed', 'Could not delete the term.');
+      showNotification?.('error', 'Delete Failed', 'Could not delete the semester.');
     } finally {
       setTermActionLoading('');
       setShowDeleteConfirm(null);
@@ -482,13 +482,13 @@ const AppSettings = () => {
   // Term merge handler
   const handleMergeTerm = async (sourceTerm) => {
     if (!sourceTerm?.termCode || !mergeTargetTerm) {
-      showNotification?.('warning', 'Missing Selection', 'Please select a target term to merge into.');
+      showNotification?.('warning', 'Missing Selection', 'Please select a target semester to merge into.');
       return;
     }
     
     const targetTermData = termOptions.find(t => t.termCode === mergeTargetTerm);
     if (!targetTermData) {
-      showNotification?.('error', 'Invalid Target', 'Target term not found.');
+      showNotification?.('error', 'Invalid Target', 'Target semester not found.');
       return;
     }
     
@@ -530,10 +530,10 @@ const AppSettings = () => {
       
       await refreshTerms?.();
       await fetchTermCourseCounts();
-      showNotification?.('success', 'Terms Merged', `${updatedCount} courses moved from ${sourceTerm.term || sourceTerm.termCode} to ${targetTermData.term}.`);
+      showNotification?.('success', 'Semesters Merged', `${updatedCount} courses moved from ${sourceTerm.term || sourceTerm.termCode} to ${targetTermData.term}.`);
     } catch (error) {
       console.error('Error merging terms:', error);
-      showNotification?.('error', 'Merge Failed', 'Could not merge the terms.');
+      showNotification?.('error', 'Merge Failed', 'Could not merge the semesters.');
     } finally {
       setTermActionLoading('');
       setShowMergeDialog(null);
@@ -567,8 +567,8 @@ const AppSettings = () => {
       {/* Backfill Confirmation Dialog */}
       <ConfirmationDialog
         isOpen={showBackfillConfirm}
-        title="Backfill Term Metadata"
-        message="This will scan all schedules and ensure each term has metadata in the terms collection. Continue?"
+        title="Backfill Semester Metadata"
+        message="This will scan all schedules and ensure each semester has metadata in the semesters list. Continue?"
         confirmText="Run Backfill"
         cancelText="Cancel"
         onConfirm={handleConfirmBackfillTerms}
@@ -587,7 +587,7 @@ const AppSettings = () => {
       {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 mb-2">App Settings</h1>
-        <p className="text-gray-600">Configure application-wide settings, terms, and locations</p>
+        <p className="text-gray-600">Configure application-wide settings, semesters, and locations</p>
       </div>
 
       {/* Section Navigation */}
@@ -601,7 +601,7 @@ const AppSettings = () => {
           }`}
         >
           <Calendar size={18} />
-          Terms & Semesters
+          Semesters
         </button>
         <button
           onClick={() => setActiveSection('locations')}
@@ -628,10 +628,10 @@ const AppSettings = () => {
                 </div>
                 <div>
                   <h2 className="text-lg font-serif font-semibold text-baylor-green">
-                    Default Term Setting
+                    Default Semester Setting
                   </h2>
                   <p className="text-sm text-gray-600 mt-1">
-                    Control which term is shown by default to all users
+                    Control which semester is shown by default to all users
                   </p>
                 </div>
               </div>
@@ -641,9 +641,9 @@ const AppSettings = () => {
               <div className="flex items-start">
                 <Calendar className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
                 <div className="ml-3">
-                  <h3 className="text-sm font-medium text-blue-800 mb-1">How Default Term Works</h3>
+                  <h3 className="text-sm font-medium text-blue-800 mb-1">How Default Semester Works</h3>
                   <p className="text-sm text-blue-700">
-                    By default, the app shows the most recent term. Override this to highlight a specific semester.
+                    By default, the app shows the most recent semester. Override this to highlight a specific semester.
                   </p>
                 </div>
               </div>
@@ -657,7 +657,7 @@ const AppSettings = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select Default Term
+                    Select Default Semester
                     {defaultTerm && (
                       <span className="ml-2 text-xs text-baylor-green font-normal">
                         (Currently: {defaultTerm})
@@ -670,7 +670,7 @@ const AppSettings = () => {
                     className="w-full md:w-96 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
                     disabled={saving}
                   >
-                    <option value="">Use most recent term (automatic)</option>
+                    <option value="">Use most recent semester (automatic)</option>
                     {availableSemesters && availableSemesters.map((semester) => (
                       <option key={semester} value={semester}>{semester}</option>
                     ))}
@@ -684,7 +684,7 @@ const AppSettings = () => {
                     className="btn-primary flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Save className="w-4 h-4 mr-2" />
-                    {saving ? 'Saving...' : 'Save Default Term'}
+                    {saving ? 'Saving...' : 'Save Default Semester'}
                   </button>
                   {defaultTerm && (
                     <button
@@ -1184,7 +1184,7 @@ const AppSettings = () => {
                             </div>
                             {!termCodeKey && (
                               <div className="text-xs text-amber-700 mt-2">
-                                Term code is required to save dates.
+                                Semester code is required to save dates.
                               </div>
                             )}
                           </div>

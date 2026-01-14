@@ -879,10 +879,10 @@ export const processScheduleImport = async (csvData) => {
     const termLabels = new Set();
 
     csvData.forEach((row) => {
-      const rawTerm = (row["Term"] || "").toString().trim();
+      const rawTerm = (row["Semester"] || row["Term"] || "").toString().trim();
       const normalized = normalizeTermLabel(rawTerm);
       const termCode = termCodeFromLabel(
-        row["Term Code"] || normalized || rawTerm,
+        row["Semester Code"] || row["Term Code"] || normalized || rawTerm,
       );
       if (termCode) termCodes.add(termCode);
       if (rawTerm) termLabels.add(rawTerm);
@@ -1043,9 +1043,11 @@ export const processScheduleImport = async (csvData) => {
         row["Instruction Method"] ||
         ""
       ).trim();
-      const rawTerm = row["Term"] || "";
+      const rawTerm = row["Semester"] || row["Term"] || "";
       const normalizedTerm = normalizeTermLabel(rawTerm);
-      const termCode = termCodeFromLabel(row["Term Code"] || normalizedTerm);
+      const termCode = termCodeFromLabel(
+        row["Semester Code"] || row["Term Code"] || normalizedTerm,
+      );
       const term = normalizedTerm || rawTerm;
       const catalogNumber = (row["Catalog Number"] || "").trim();
       const creditsFromCsv = row["Credit Hrs"] || row["Credit Hrs Min"];
@@ -1404,7 +1406,7 @@ export const processScheduleImport = async (csvData) => {
           });
           // Log term creation
           logCreate(
-            `Term - ${term} (${termCode})`,
+            `Semester - ${term} (${termCode})`,
             COLLECTIONS.TERMS,
             termDeterministicId,
             termDoc,
@@ -1751,10 +1753,18 @@ export const parseCLSSCSV = (csvText) => {
     });
     rowData.__rowIndex = i + 1;
 
-    if (rowData["Term"]) {
-      rowData["Term"] = normalizeTermLabel(rowData["Term"]);
+    const rawSemester = rowData["Semester"] || rowData["Term"] || "";
+    if (rawSemester) {
+      const normalizedSemester = normalizeTermLabel(rawSemester);
+      rowData["Term"] = normalizedSemester;
+      if (rowData["Semester"] !== undefined) {
+        rowData["Semester"] = normalizedSemester;
+      }
     } else if (detectedSemester) {
       rowData["Term"] = detectedSemester;
+      if (rowData["Semester"] !== undefined) {
+        rowData["Semester"] = detectedSemester;
+      }
     }
 
     if (isValidScheduleRow(rowData)) {

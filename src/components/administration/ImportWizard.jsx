@@ -88,7 +88,7 @@ const ImportWizard = () => {
           const clssRows = parseCLSSCSV(text);
           setCsvData(clssRows);
           setImportType('schedule');
-          const term = (clssRows[0]?.Term || '').trim();
+          const term = (clssRows[0]?.Semester || clssRows[0]?.Term || '').trim();
           setDetectedTerm(term);
         } else {
           // Simple CSV parser for directory
@@ -128,8 +128,9 @@ const ImportWizard = () => {
     if (!csvData || csvData.length === 0) return false;
     if (importType === 'schedule') {
       const headers = Object.keys(csvData[0] || {});
-      const required = ['Instructor', 'Course', 'Section #', 'Term', 'CRN'];
-      return required.every(h => headers.includes(h));
+      const required = ['Instructor', 'Course', 'Section #', 'CRN'];
+      const hasSemester = headers.includes('Semester') || headers.includes('Term');
+      return hasSemester && required.every(h => headers.includes(h));
     }
     if (importType === 'directory') {
       const headers = Object.keys(csvData[0] || {});
@@ -179,7 +180,7 @@ const ImportWizard = () => {
     }
     const importTerm = normalizeTermLabel(detectedTerm || selectedSemester || '');
     if (importType === 'schedule' && importTerm && isTermLocked?.(importTerm) && !isAdmin) {
-      showNotification?.('warning', 'Term Locked', `Schedules for ${importTerm} are archived or locked. Import is disabled.`);
+      showNotification?.('warning', 'Semester Locked', `Schedules for ${importTerm} are archived or locked. Import is disabled.`);
       return;
     }
     setIsCommitting(true);
@@ -280,7 +281,7 @@ const ImportWizard = () => {
               </div>
               <div className="text-sm text-gray-600 flex items-center space-x-2">
                 <Calendar className="w-4 h-4" />
-                <span>{detectedTerm || selectedSemester || 'Term not detected'}</span>
+                <span>{detectedTerm || selectedSemester || 'Semester not detected'}</span>
               </div>
             </div>
             <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
@@ -289,7 +290,7 @@ const ImportWizard = () => {
                   <div className="font-semibold mb-1">Column mapping (auto):</div>
                   <div>CRN → CRN (5-digit enforced)</div>
                   <div>Section # → Section (strips redundant CRN e.g., "01 (33038)" → "01")</div>
-                  <div>Instructor, Course, Course Title, Meeting Pattern, Room, Term</div>
+                  <div>Instructor, Course, Course Title, Meeting Pattern, Room, Semester</div>
                 </div>
               ) : (
                 <div className="flex items-center space-x-2">
@@ -355,7 +356,7 @@ const ImportWizard = () => {
       {step === 4 && resultsSummary && (
         <div className="bg-white border border-gray-200 rounded-xl p-6">
           <div className="text-lg font-semibold text-gray-900 mb-2">Import Complete</div>
-          <div className="text-gray-700">Applied {resultsSummary.total} changes to {resultsSummary.semester || 'selected term'}.</div>
+          <div className="text-gray-700">Applied {resultsSummary.total} changes to {resultsSummary.semester || 'selected semester'}.</div>
           <div className="mt-4 flex items-center space-x-3">
             <button onClick={() => setShowHistory(true)} className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center space-x-2">
               <History className="w-4 h-4" />

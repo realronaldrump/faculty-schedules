@@ -1,9 +1,40 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { auth, db } from '../firebase';
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut, updateProfile } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
-import { logCreate, logUpdate } from '../utils/changeLogger';
-import { getAllRegisteredPageIds } from '../utils/pageRegistry';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { auth, db } from "../firebase";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  updateProfile,
+} from "firebase/auth";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  serverTimestamp,
+  onSnapshot,
+} from "firebase/firestore";
+import { logCreate, logUpdate } from "../utils/changeLogger";
+import { getAllRegisteredPageIds } from "../utils/pageRegistry";
+import {
+  USER_STATUS,
+  normalizeRoleList,
+  normalizeRolePermissions,
+  resolveUserStatus,
+  isUserAdmin,
+  isUserActive,
+  isUserPending,
+  isUserDisabled,
+  canAccessPage,
+  canPerformAction,
+} from "../utils/authz";
 
 const AuthContext = createContext(null);
 
@@ -18,53 +49,7 @@ export const AuthProvider = ({ children }) => {
   // Removed insecure .env based admin check. Admin access is now strictly role-based.
   const ADMIN_EMAILS = [];
 
-  const getAccessControlRef = () => doc(db, 'settings', 'accessControl');
-
-  // Normalize role permissions into new schema { [role]: { pages: {}, actions: {} } }
-  const normalizeRolePermissions = (raw) => {
-    const input = raw || {};
-    const roleKeys = new Set([
-      'admin',
-      'staff',
-      'faculty',
-      'viewer',
-      ...Object.keys(input)
-    ]);
-
-    const normalized = {};
-    roleKeys.forEach((role) => {
-      const value = input[role];
-      if (value && typeof value === 'object' && (value.pages || value.actions)) {
-        normalized[role] = {
-          pages: (value.pages && typeof value.pages === 'object') ? { ...value.pages } : {},
-          actions: (value.actions && typeof value.actions === 'object') ? { ...value.actions } : {}
-        };
-      } else if (value && typeof value === 'object') {
-        // Legacy shape treated as page permissions
-        normalized[role] = { pages: { ...value }, actions: {} };
-      } else {
-        normalized[role] = { pages: {}, actions: {} };
-      }
-    });
-
-    // Ensure admin wildcards
-    if (!normalized.admin) normalized.admin = { pages: {}, actions: {} };
-    if (!normalized.admin.pages || Object.keys(normalized.admin.pages).length === 0) {
-      normalized.admin.pages = { '*': true };
-    }
-    if (!normalized.admin.actions || Object.keys(normalized.admin.actions).length === 0) {
-      normalized.admin.actions = { '*': true };
-    }
-
-    // Viewer default: dashboard view if not explicitly set
-    if (!normalized.viewer) normalized.viewer = { pages: {}, actions: {} };
-    if (!normalized.viewer.pages) normalized.viewer.pages = {};
-    if (!Object.prototype.hasOwnProperty.call(normalized.viewer.pages, 'dashboard')) {
-      normalized.viewer.pages['dashboard'] = true;
-    }
-
-    return normalized;
-  };
+  const getAccessControlRef = () => doc(db, "settings", "accessControl");
 
   const bootstrapAccessControl = async () => {
     // Ensure settings/accessControl exists with safe defaults
@@ -74,15 +59,20 @@ export const AuthProvider = ({ children }) => {
       if (!snap.exists()) {
         const defaults = {
           rolePermissions: {
-            admin: { pages: { '*': true }, actions: { '*': true } },
+            admin: { pages: { "*": true }, actions: { "*": true } },
             staff: { pages: {}, actions: {} },
             faculty: { pages: {}, actions: {} },
-            viewer: { pages: { 'dashboard': true }, actions: {} }
           },
           updatedAt: serverTimestamp(),
         };
         await setDoc(ref, defaults);
-        await logCreate('Access Control Defaults', 'settings', 'accessControl', defaults, 'AuthContext.jsx - bootstrapAccessControl');
+        await logCreate(
+          "Access Control Defaults",
+          "settings",
+          "accessControl",
+          defaults,
+          "AuthContext.jsx - bootstrapAccessControl",
+        );
         setRolePermissions(defaults.rolePermissions);
       } else {
         const data = snap.data() || {};
@@ -91,12 +81,11 @@ export const AuthProvider = ({ children }) => {
     } catch (e) {
       // Fallback to in-memory defaults (normalized shape)
       setRolePermissions({
-        admin: { pages: { '*': true }, actions: { '*': true } },
+        admin: { pages: { "*": true }, actions: { "*": true } },
         staff: { pages: {}, actions: {} },
         faculty: { pages: {}, actions: {} },
-        viewer: { pages: { 'dashboard': true }, actions: {} }
       });
-      console.warn('Failed to load access control. Using defaults.', e);
+      console.warn("Failed to load access control. Using defaults.", e);
     }
   };
 
@@ -105,25 +94,40 @@ export const AuthProvider = ({ children }) => {
       setUserProfile(null);
       return;
     }
-    const userRef = doc(db, 'users', firebaseUser.uid);
+    const userRef = doc(db, "users", firebaseUser.uid);
     const snap = await getDoc(userRef);
-    const emailLower = (firebaseUser.email || '').toLowerCase();
+    const emailLower = (firebaseUser.email || "").toLowerCase();
     const isBootstrapAdmin = ADMIN_EMAILS.includes(emailLower);
 
     if (!snap.exists()) {
       const newProfile = {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
-        displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-        roles: isBootstrapAdmin ? ['admin'] : ['viewer'],
+        displayName:
+          firebaseUser.displayName ||
+          firebaseUser.email?.split("@")[0] ||
+          "User",
+        roles: isBootstrapAdmin ? ["admin"] : [],
+        status: isBootstrapAdmin ? USER_STATUS.ACTIVE : USER_STATUS.PENDING,
+        disabled: false,
         permissions: {},
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        lastLoginAt: serverTimestamp()
+        lastLoginAt: serverTimestamp(),
       };
       await setDoc(userRef, newProfile);
-      await logCreate(`User - ${newProfile.email}`, 'users', firebaseUser.uid, newProfile, 'AuthContext.jsx - loadUserProfile:create');
-      setUserProfile({ ...newProfile, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      await logCreate(
+        `User - ${newProfile.email}`,
+        "users",
+        firebaseUser.uid,
+        newProfile,
+        "AuthContext.jsx - loadUserProfile:create",
+      );
+      setUserProfile({
+        ...newProfile,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
     } else {
       const existing = snap.data();
       // Update last login timestamp
@@ -133,7 +137,7 @@ export const AuthProvider = ({ children }) => {
         console.warn(error);
       }
       // Ensure bootstrap admin has admin role
-      // Legacy code removed: We no longer auto-grant admin based on .env emails. 
+      // Legacy code removed: We no longer auto-grant admin based on .env emails.
       // Admins must be manually promoted in Firestore or via the initial seed script.
       setUserProfile(existing);
     }
@@ -144,7 +148,7 @@ export const AuthProvider = ({ children }) => {
     let stopUserProfile = null;
     const unsub = onAuthStateChanged(auth, async (u) => {
       // Clean up any existing profile subscription before handling new user
-      if (typeof stopUserProfile === 'function') {
+      if (typeof stopUserProfile === "function") {
         try {
           stopUserProfile();
         } catch (error) {
@@ -161,12 +165,14 @@ export const AuthProvider = ({ children }) => {
           const persisted = {
             userId: u.uid,
             email: u.email || null,
-            role: (Array.isArray(userProfile?.roles) && userProfile.roles[0]) || 'unknown',
-            displayName: u.displayName || (u.email ? u.email.split('@')[0] : undefined)
+            role: normalizeRoleList(userProfile?.roles)[0] || "unknown",
+            status: resolveUserStatus(userProfile) || "unknown",
+            displayName:
+              u.displayName || (u.email ? u.email.split("@")[0] : undefined),
           };
-          localStorage.setItem('userInfo', JSON.stringify(persisted));
+          localStorage.setItem("userInfo", JSON.stringify(persisted));
         } else {
-          localStorage.removeItem('userInfo');
+          localStorage.removeItem("userInfo");
         }
       } catch (error) {
         console.warn(error);
@@ -186,27 +192,40 @@ export const AuthProvider = ({ children }) => {
       }
       // Subscribe to current user's profile
       if (u) {
-        const userRef = doc(db, 'users', u.uid);
-        stopUserProfile = onSnapshot(userRef, (snap) => {
-          setUserProfile(snap.exists() ? snap.data() : null);
-          // Update cached role/email for activity logs when profile changes
-          try {
-            const existing = JSON.parse(localStorage.getItem('userInfo') || '{}');
-            const updated = {
-              ...existing,
-              userId: u.uid,
-              email: u.email || existing.email || null,
-              role: (snap.exists() && Array.isArray(snap.data().roles) ? snap.data().roles[0] : existing.role || 'unknown')
-            };
-            localStorage.setItem('userInfo', JSON.stringify(updated));
-          } catch (error) {
-            console.warn(error);
-          }
-          setLoadedProfile(true);
-        }, () => {
-          setUserProfile(null);
-          setLoadedProfile(true);
-        });
+        const userRef = doc(db, "users", u.uid);
+        stopUserProfile = onSnapshot(
+          userRef,
+          (snap) => {
+            setUserProfile(snap.exists() ? snap.data() : null);
+            // Update cached role/email for activity logs when profile changes
+            try {
+              const existing = JSON.parse(
+                localStorage.getItem("userInfo") || "{}",
+              );
+              const roles = normalizeRoleList(
+                snap.exists() ? snap.data().roles : existing.roles,
+              );
+              const updated = {
+                ...existing,
+                userId: u.uid,
+                email: u.email || existing.email || null,
+                role: roles[0] || existing.role || "unknown",
+                status:
+                  resolveUserStatus(snap.exists() ? snap.data() : existing) ||
+                  existing.status ||
+                  "unknown",
+              };
+              localStorage.setItem("userInfo", JSON.stringify(updated));
+            } catch (error) {
+              console.warn(error);
+            }
+            setLoadedProfile(true);
+          },
+          () => {
+            setUserProfile(null);
+            setLoadedProfile(true);
+          },
+        );
       } else {
         setUserProfile(null);
         setLoadedProfile(true);
@@ -218,7 +237,7 @@ export const AuthProvider = ({ children }) => {
       } catch (error) {
         console.warn(error);
       }
-      if (typeof stopUserProfile === 'function') {
+      if (typeof stopUserProfile === "function") {
         try {
           stopUserProfile();
         } catch (error) {
@@ -231,23 +250,26 @@ export const AuthProvider = ({ children }) => {
   // Subscribe to Access Control changes
   useEffect(() => {
     const ref = getAccessControlRef();
-    const stop = onSnapshot(ref, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data() || {};
-        setRolePermissions(normalizeRolePermissions(data.rolePermissions));
-      } else {
-        setRolePermissions(normalizeRolePermissions());
-      }
-      setLoadedAccess(true);
-    }, () => {
-      setRolePermissions({
-        admin: { pages: { '*': true }, actions: { '*': true } },
-        staff: { pages: {}, actions: {} },
-        faculty: { pages: {}, actions: {} },
-        viewer: { pages: { 'dashboard': true }, actions: {} }
-      });
-      setLoadedAccess(true);
-    });
+    const stop = onSnapshot(
+      ref,
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() || {};
+          setRolePermissions(normalizeRolePermissions(data.rolePermissions));
+        } else {
+          setRolePermissions(normalizeRolePermissions());
+        }
+        setLoadedAccess(true);
+      },
+      () => {
+        setRolePermissions({
+          admin: { pages: { "*": true }, actions: { "*": true } },
+          staff: { pages: {}, actions: {} },
+          faculty: { pages: {}, actions: {} },
+        });
+        setLoadedAccess(true);
+      },
+    );
     return () => stop();
   }, []);
 
@@ -279,69 +301,46 @@ export const AuthProvider = ({ children }) => {
 
   const getAllPageIds = () => {
     const fromRegistry = getAllRegisteredPageIds();
-    if (Array.isArray(fromRegistry) && fromRegistry.length > 0) return fromRegistry;
+    if (Array.isArray(fromRegistry) && fromRegistry.length > 0)
+      return fromRegistry;
     // Fallback to known pages if registry is empty early in boot
     return [
-      'dashboard',
-      'live-view',
-      'scheduling/faculty-schedules',
-      'scheduling/individual-availability',
-      'scheduling/room-schedules',
-      'scheduling/student-schedules',
-      'scheduling/group-meeting-scheduler',
-      'people/people-directory',
-      'people/email-lists',
-      'people/baylor-id-manager',
-      'resources/building-directory',
-      'resources/baylor-acronyms',
-      'resources/baylor-systems',
-      'tools/import-wizard',
-      'tools/data-hygiene',
-      'tools/crn-tools',
-      'tools/outlook-export',
-      'tools/room-grid-generator',
-      'tools/temperature-monitoring',
-      'analytics/department-insights',
-      'analytics/student-worker-analytics',
-      'analytics/course-management',
-      'analytics/program-management',
-      'administration/app-settings',
-      'administration/access-control',
-      'administration/user-activity',
-      'administration/recent-changes',
-      'help/tutorials'
+      "dashboard",
+      "live-view",
+      "scheduling/faculty-schedules",
+      "scheduling/individual-availability",
+      "scheduling/room-schedules",
+      "scheduling/student-schedules",
+      "scheduling/group-meeting-scheduler",
+      "people/people-directory",
+      "people/email-lists",
+      "people/baylor-id-manager",
+      "resources/building-directory",
+      "resources/baylor-acronyms",
+      "resources/baylor-systems",
+      "tools/import-wizard",
+      "tools/data-hygiene",
+      "tools/crn-tools",
+      "tools/outlook-export",
+      "tools/room-grid-generator",
+      "tools/temperature-monitoring",
+      "analytics/department-insights",
+      "analytics/student-worker-analytics",
+      "analytics/course-management",
+      "analytics/program-management",
+      "administration/app-settings",
+      "administration/access-control",
+      "administration/user-activity",
+      "administration/recent-changes",
+      "help/tutorials",
     ];
   };
 
   const canAccess = (pageId) => {
-    if (!pageId) return false;
-    const emailLower = (user?.email || '').toLowerCase();
+    const emailLower = (user?.email || "").toLowerCase();
     // Env-admin override regardless of Firestore profile state
     if (ADMIN_EMAILS.includes(emailLower)) return true;
-    if (!userProfile) return false;
-    if (userProfile.disabled === true) return false;
-    const roles = Array.isArray(userProfile.roles) ? userProfile.roles : [];
-    // Admin override
-    if (roles.includes('admin')) return true;
-    // User-specific override takes precedence
-    const userPerm = userProfile.permissions && Object.prototype.hasOwnProperty.call(userProfile.permissions, pageId)
-      ? Boolean(userProfile.permissions[pageId])
-      : undefined;
-    // New-style per-user overrides
-    const userOverridePages = (userProfile.overrides && userProfile.overrides.pages) || {};
-    const hasUserOverride = Object.prototype.hasOwnProperty.call(userOverridePages, pageId);
-    if (typeof userPerm === 'boolean') return userPerm;
-    if (hasUserOverride) return Boolean(userOverridePages[pageId]);
-    // Role-based permissions
-    if (!rolePermissions) return false;
-    const normalized = normalizeRolePermissions(rolePermissions);
-    for (const role of roles) {
-      const rp = normalized[role] || { pages: {}, actions: {} };
-      const pages = rp.pages || {};
-      if (pages['*'] === true) return true;
-      if (pages[pageId] === true) return true;
-    }
-    return false;
+    return canAccessPage({ userProfile, rolePermissions, pageId });
   };
 
   const value = {
@@ -354,46 +353,27 @@ export const AuthProvider = ({ children }) => {
     signOut,
     canAccess,
     getAllPageIds,
+    userStatus: resolveUserStatus(userProfile),
+    isPending: isUserPending(userProfile),
+    isActive: isUserActive(userProfile),
+    isDisabled: isUserDisabled(userProfile),
     isAdmin: (() => {
-      const email = (user?.email || '').toLowerCase();
+      const email = (user?.email || "").toLowerCase();
       const isEnvAdmin = ADMIN_EMAILS.includes(email);
-      const hasRoleAdmin = Array.isArray(userProfile?.roles) && userProfile.roles.includes('admin');
+      const hasRoleAdmin = isUserAdmin(userProfile);
       return isEnvAdmin || hasRoleAdmin;
     })(),
     // Action-level permissions: simple extension so admins can grant specific actions by setting
     // userProfile.actions[actionKey] === true. Admins always allowed.
     canAction: (actionKey) => {
       if (!actionKey) return false;
-      const email = (user?.email || '').toLowerCase();
+      const email = (user?.email || "").toLowerCase();
       if (ADMIN_EMAILS.includes(email)) return true;
-      const roles = Array.isArray(userProfile?.roles) ? userProfile.roles : [];
-      if (roles.includes('admin')) return true;
-      // User-specific overrides (legacy and new)
-      if (userProfile) {
-        if (userProfile.actions && typeof userProfile.actions === 'object') {
-          if (userProfile.actions[actionKey] === true) return true;
-        }
-        const userOverrideActions = (userProfile.overrides && userProfile.overrides.actions) || {};
-        if (userOverrideActions[actionKey] === true) return true;
-      }
-      // Role-based action permissions
-      if (!rolePermissions) return false;
-      const normalized = normalizeRolePermissions(rolePermissions);
-      for (const role of roles) {
-        const rp = normalized[role] || { pages: {}, actions: {} };
-        const actions = rp.actions || {};
-        if (actions['*'] === true) return true;
-        if (actions[actionKey] === true) return true;
-      }
-      return false;
-    }
+      return canPerformAction({ userProfile, rolePermissions, actionKey });
+    },
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => useContext(AuthContext);

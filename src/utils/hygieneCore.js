@@ -835,7 +835,7 @@ export const detectScheduleDuplicates = (schedules = [], options = {}) => {
           addDuplicate(existing, schedule, {
             type: "crn",
             confidence: 1.0,
-            reason: "Duplicate CRN within the same term",
+            reason: "Duplicate CRN within the same semester",
           });
         }
       } else {
@@ -862,7 +862,7 @@ export const detectScheduleDuplicates = (schedules = [], options = {}) => {
           addDuplicate(existing, schedule, {
             type: "section_identity",
             confidence: 1.0,
-            reason: "Same section identity (course + section + term)",
+            reason: "Same section identity (course + section + semester)",
           });
         }
       } else {
@@ -880,7 +880,7 @@ export const detectScheduleDuplicates = (schedules = [], options = {}) => {
           addDuplicate(existing, schedule, {
             type: "composite_meeting_room",
             confidence: 0.9,
-            reason: "Identical course, term, meeting time, and room(s)",
+            reason: "Identical course, semester, meeting time, and room(s)",
           });
         }
       } else {

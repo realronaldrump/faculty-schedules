@@ -332,10 +332,10 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
     : Number.parseFloat(rawCredits);
   const credits = derivedCredits ?? (Number.isNaN(numericFallback) ? null : numericFallback) ?? (parsedCourse?.credits ?? null);
 
-  const rawTerm = row.Term || fallbackTerm || '';
+  const rawTerm = row.Semester || row.Term || fallbackTerm || '';
   const normalizedTerm = normalizeTermLabel(rawTerm);
   const term = normalizedTerm || rawTerm;
-  const termCode = termCodeFromLabel(row['Term Code'] || normalizedTerm);
+  const termCode = termCodeFromLabel(row['Semester Code'] || row['Term Code'] || normalizedTerm);
   const academicYear = extractAcademicYear(term);
 
   const instructorField = row.Instructor || '';
@@ -419,7 +419,7 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
     departmentCode: row['Department Code'] || '',
     scheduleType: row['Schedule Type'] || 'Class Instruction',
     status: row.Status || 'Active',
-    partOfTerm: row['Part of Term'] || '',
+    partOfTerm: row['Part of Semester'] || row['Part of Term'] || '',
     instructionMethod,
     campus: row.Campus || '',
     visibleOnWeb: row['Visible on Web'] || '',
@@ -448,8 +448,8 @@ export const projectSchedulePreviewRow = (row, fallbackTerm = '') => {
     'CRN': base.crn,
     'Credits (parsed)': base.credits ?? '',
     'Credits (raw)': base.creditRaw ?? '',
-    'Term': base.term,
-    'Term Code': base.termCode,
+    'Semester': base.term,
+    'Semester Code': base.termCode,
     'Academic Year': base.academicYear ?? '',
     'Department Code': base.departmentCode,
     'Subject Code': base.subjectCode,
@@ -459,7 +459,7 @@ export const projectSchedulePreviewRow = (row, fallbackTerm = '') => {
     'Instructor (raw)': base.instructorField,
     'Schedule Type': base.scheduleType,
     'Status': base.status,
-    'Part of Term': base.partOfTerm,
+    'Part of Semester': base.partOfTerm,
     'Instruction Method': base.instructionMethod,
     'Campus': base.campus,
     'Rooms (raw)': base.roomRaw,
@@ -587,7 +587,7 @@ const previewScheduleChanges = async (
       continue;
     }
     if (!baseData.term && !baseData.termCode) {
-      addValidation('error', `${rowLabel}: Missing Term`);
+      addValidation('error', `${rowLabel}: Missing Semester`);
       summary.rowsSkipped += 1;
       continue;
     }

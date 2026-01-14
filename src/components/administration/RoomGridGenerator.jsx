@@ -259,7 +259,9 @@ const RoomGridGenerator = () => {
             skipEmptyLines: "greedy",
             beforeFirstChunk: (chunk) => {
                 const lines = chunk.split(/\r\n|\n|\r/);
-                const headerIndex = lines.findIndex(line => line.includes('"CLSS ID","CRN","Term"'));
+                const headerIndex = lines.findIndex(line =>
+                    line.includes('"CLSS ID","CRN","Term"') || line.includes('"CLSS ID","CRN","Semester"')
+                );
 
                 if (headerIndex === -1) {
                     console.error("Could not find the header row in the CSV file.");

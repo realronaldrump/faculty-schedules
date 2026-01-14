@@ -33,3 +33,5 @@ firestore-export/
 firebase-service-account.json
 *serviceAccountKey*.json
 *service-account*.json
+
+.env.local

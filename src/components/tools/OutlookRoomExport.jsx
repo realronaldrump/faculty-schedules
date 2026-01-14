@@ -379,17 +379,17 @@ const OutlookRoomExport = () => {
 
   const validateBeforeExport = () => {
     if (!selectedTerm) {
-      showNotification?.('warning', 'Select a term', 'Choose a term to export calendars for.');
+      showNotification?.('warning', 'Select a semester', 'Choose a semester to export calendars for.');
       return false;
     }
     if (!activeTermConfig.startDate || !activeTermConfig.endDate) {
-      showNotification?.('warning', 'Provide term dates', 'Set the start and end dates for this term in App Settings before exporting.');
+      showNotification?.('warning', 'Provide semester dates', 'Set the start and end dates for this semester in App Settings before exporting.');
       return false;
     }
     const start = ensureDate(activeTermConfig.startDate);
     const end = ensureDate(activeTermConfig.endDate);
     if (!start || !end || end < start) {
-      showNotification?.('warning', 'Invalid term dates', 'Ensure the term start and end dates are valid and in chronological order.');
+      showNotification?.('warning', 'Invalid semester dates', 'Ensure the semester start and end dates are valid and in chronological order.');
       return false;
     }
     if (!selectedRooms || selectedRooms.length === 0) {
@@ -506,7 +506,7 @@ const OutlookRoomExport = () => {
     if (schedule?.courseTitle || schedule?.['Course Title']) descriptionLines.push(`Title: ${schedule.courseTitle || schedule['Course Title']}`);
     if (schedule?.instructorName || schedule?.Instructor) descriptionLines.push(`Instructor: ${schedule.instructorName || schedule.Instructor}`);
     if (schedule?.crn || schedule?.CRN) descriptionLines.push(`CRN: ${schedule.crn || schedule.CRN}`);
-    if (schedule?.term) descriptionLines.push(`Term: ${schedule.term}`);
+    if (schedule?.term) descriptionLines.push(`Semester: ${schedule.term}`);
     if (schedule?.notes) descriptionLines.push(schedule.notes);
 
     const icsDaysSorted = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'].filter((d) => group.icsDays.has(d));
@@ -684,13 +684,13 @@ const OutlookRoomExport = () => {
           <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="lg:col-span-1 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Term</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Semester</label>
                 <select
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-baylor-green focus:outline-none focus:ring-1 focus:ring-baylor-green"
                   value={selectedTerm}
                   onChange={(event) => setSelectedTerm(event.target.value)}
                 >
-                  {termLabels.length === 0 && <option value="">No terms available</option>}
+                  {termLabels.length === 0 && <option value="">No semesters available</option>}
                   {termLabels.map((term) => (
                     <option key={term} value={term}>
                       {term}
@@ -701,7 +701,7 @@ const OutlookRoomExport = () => {
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Term start date</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Semester start date</label>
                   <input
                     type="date"
                     value={activeTermConfig.startDate}
@@ -711,7 +711,7 @@ const OutlookRoomExport = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Term end date</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Semester end date</label>
                   <input
                     type="date"
                     value={activeTermConfig.endDate}
@@ -724,7 +724,7 @@ const OutlookRoomExport = () => {
 
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex gap-2">
                 <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                <p>Term dates come from App Settings so they stay consistent across the app. Holiday exceptions are saved locally per browser.</p>
+                <p>Semester dates come from App Settings so they stay consistent across the app. Holiday exceptions are saved locally per browser.</p>
               </div>
             </div>
 
@@ -733,7 +733,7 @@ const OutlookRoomExport = () => {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-baylor-green" /> Rooms for {selectedTerm || 'term'}
+                      <MapPin className="w-4 h-4 text-baylor-green" /> Rooms for {selectedTerm || 'semester'}
                     </h2>
                     <p className="text-sm text-gray-600">
                       {roomsForTerm.length} rooms detected — {selectedRooms.length} selected for export.
@@ -879,7 +879,7 @@ const OutlookRoomExport = () => {
             </h2>
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
               <div className="rounded-lg border border-gray-200 bg-white p-4">
-                <div className="text-xs font-medium uppercase text-gray-500">Selected term</div>
+                <div className="text-xs font-medium uppercase text-gray-500">Selected semester</div>
                 <div className="mt-1 text-base font-semibold text-gray-900">{selectedTerm || '—'}</div>
               </div>
               <div className="rounded-lg border border-gray-200 bg-white p-4">

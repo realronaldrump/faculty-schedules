@@ -620,7 +620,7 @@ const CourseManagement = () => {
     }
 
     if (!data.Term || data.Term.trim() === '') {
-      errors.push('Term is required');
+      errors.push('Semester is required');
     }
 
     if (!data.Section || data.Section.trim() === '') {
@@ -819,15 +819,22 @@ const CourseManagement = () => {
   const [inlineError, setInlineError] = useState(null);
   const [inlineConfirm, setInlineConfirm] = useState({ isOpen: false });
 
+  const exportFieldLabels = {
+    Term: 'Semester',
+    'Term Code': 'Semester Code',
+    'Part of Term': 'Part of Semester'
+  };
+  const getExportFieldLabel = (field) => exportFieldLabels[field] || field;
+
   const handleDownloadCSV = () => {
     if (selectedExportFields.length === 0) {
       setInlineError({ context: 'export', messages: ['Please select at least one field to export.'] });
       return;
     }
-    const headers = selectedExportFields;
+    const headers = selectedExportFields.map(getExportFieldLabel);
     const rows = filteredAndSortedData.map(row =>
-      headers.map(h => {
-        const val = row && row[h] !== undefined && row[h] !== null ? row[h] : '';
+      selectedExportFields.map((field) => {
+        const val = row && row[field] !== undefined && row[field] !== null ? row[field] : '';
         return `"${String(val).replace(/"/g, '""')}"`;
       }).join(',')
     );
@@ -1072,14 +1079,14 @@ const CourseManagement = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Term *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Semester *</label>
                 <select
                   name="Term"
                   value={newCourseData.Term || ''}
                   onChange={handleNewCourseChange}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
                 >
-                  <option value="">Select Term</option>
+                  <option value="">Select Semester</option>
                   {uniqueTerms.map(term => (
                     <option key={term} value={term}>{term}</option>
                   ))}
@@ -1546,7 +1553,7 @@ const CourseManagement = () => {
                 <DataTableHeader columnKey="Course" label="Course" />
                 <DataTableHeader columnKey="Course Title" label="Course Title" />
                 <DataTableHeader columnKey="CRN" label="CRN" />
-                <DataTableHeader columnKey="Term" label="Term" />
+                <DataTableHeader columnKey="Term" label="Semester" />
                 <DataTableHeader columnKey="Section" label="Section" />
                 <DataTableHeader columnKey="Day" label="Day" />
                 <DataTableHeader columnKey="Start Time" label="Start Time" />
@@ -1615,7 +1622,7 @@ const CourseManagement = () => {
                             onChange={handleEditFormChange}
                             className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
                           >
-                            <option value="">Select Term</option>
+                            <option value="">Select Semester</option>
                             {uniqueTerms.map(term => (
                               <option key={term} value={term}>{term}</option>
                             ))}
@@ -1842,7 +1849,7 @@ const CourseManagement = () => {
                     onChange={() => toggleExportField(field)}
                     className="h-4 w-4 text-baylor-green focus:ring-baylor-green border-gray-300 rounded"
                   />
-                  <span className="text-sm">{field}</span>
+                  <span className="text-sm">{getExportFieldLabel(field)}</span>
                 </label>
               ))}
             </div>

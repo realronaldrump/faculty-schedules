@@ -1,4 +1,4 @@
-// Firestore rules - FIXED VIEWER ACCESS
+// Firestore rules - role + status aware access control
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -20,6 +20,31 @@ service cloud.firestore {
     // Check user's Firestore profile for admin role (supports list/map/string formats)
     function userHasAdminRole() {
       return userHasRole('admin');
+    }
+
+    function userHasKnownRole() {
+      return userHasRole('admin') || userHasRole('staff') || userHasRole('faculty');
+    }
+
+    function userStatus() {
+      return hasUserProfile() ? get(userDoc()).data.status : null;
+    }
+
+    function userIsDisabled() {
+      return hasUserProfile() &&
+        (get(userDoc()).data.disabled == true || userStatus() == 'disabled');
+    }
+
+    function userIsActive() {
+      return hasUserProfile() &&
+        !userIsDisabled() &&
+        (userStatus() == 'active' || (userStatus() == null && userHasKnownRole()));
+    }
+
+    function userIsPending() {
+      return hasUserProfile() &&
+        !userIsDisabled() &&
+        (userStatus() == 'pending' || (userStatus() == null && !userHasKnownRole()));
     }
 
     // Direct user action grants (supports wildcard)
@@ -57,29 +82,20 @@ service cloud.firestore {
 
     function userHasRoleAction(actionKey) {
       return hasUserProfile() && (
-        (get(userDoc()).data.roles is list && (
-          (get(userDoc()).data.roles.size() > 0 && roleHasAction(get(userDoc()).data.roles[0], actionKey)) ||
-          (get(userDoc()).data.roles.size() > 1 && roleHasAction(get(userDoc()).data.roles[1], actionKey)) ||
-          (get(userDoc()).data.roles.size() > 2 && roleHasAction(get(userDoc()).data.roles[2], actionKey))
-        )) ||
-        (get(userDoc()).data.roles is map && (
-          (get(userDoc()).data.roles.admin == true && roleHasAction('admin', actionKey)) ||
-          (get(userDoc()).data.roles.staff == true && roleHasAction('staff', actionKey)) ||
-          (get(userDoc()).data.roles.faculty == true && roleHasAction('faculty', actionKey)) ||
-          (get(userDoc()).data.roles.viewer == true && roleHasAction('viewer', actionKey))
-        )) ||
-        (get(userDoc()).data.roles is string && roleHasAction(get(userDoc()).data.roles, actionKey))
+        (userHasRole('admin') && roleHasAction('admin', actionKey)) ||
+        (userHasRole('staff') && roleHasAction('staff', actionKey)) ||
+        (userHasRole('faculty') && roleHasAction('faculty', actionKey))
       );
     }
 
     // Check if user has a specific action permission (direct, override, or role-based)
     function userHasAction(actionKey) {
-      return isSignedIn() && (
-        isAdmin() ||
-        userHasDirectAction(actionKey) ||
-        userHasOverrideAction(actionKey) ||
-        userHasRoleAction(actionKey)
-      );
+      return isAdmin() ||
+        (userIsActive() && (
+          userHasDirectAction(actionKey) ||
+          userHasOverrideAction(actionKey) ||
+          userHasRoleAction(actionKey)
+        ));
     }
 
     // Treat someone as admin if they have a custom claim or admin role
@@ -95,6 +111,10 @@ service cloud.firestore {
     // Admin-only access for sensitive operations
     function canWrite() {
       return isAdmin();
+    }
+
+    function canReadAppData() {
+      return isAdmin() || userIsActive();
     }
 
     function termIsLocked(termCode) {
@@ -113,36 +133,70 @@ service cloud.firestore {
         !termIsLocked(termCode);
     }
 
-    // Settings collection: everyone signed-in can read; only admin writes
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isEmptyOrMissingMap(field) {
+      return !(field in request.resource.data) ||
+        (request.resource.data[field] is map && request.resource.data[field].size() == 0);
+    }
+
+    function isSelfProfileCreateAllowed(userId) {
+      return isSelf(userId) &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.email == request.auth.token.email &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.roles is list &&
+        request.resource.data.roles.size() == 0 &&
+        request.resource.data.disabled != true &&
+        isEmptyOrMissingMap('permissions') &&
+        isEmptyOrMissingMap('actions') &&
+        (!(request.resource.data.overrides is map) ||
+          ((request.resource.data.overrides.pages is map && request.resource.data.overrides.pages.size() == 0) &&
+           (request.resource.data.overrides.actions is map && request.resource.data.overrides.actions.size() == 0)));
+    }
+
+    function isSelfProfileUpdateAllowed(userId) {
+      return isSelf(userId) &&
+        request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly(['displayName', 'photoURL', 'lastLoginAt', 'updatedAt']);
+    }
+
+    // Settings collection: active users can read; only admin writes
     match /settings/{docId} {
-      allow read: if isSignedIn();
+      allow read: if canReadAppData();
       allow write: if canWrite();
     }
 
     // Users profiles: user can read/write own; admin can read/write all
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow write: if canWrite() || (isSignedIn() && request.auth.uid == userId);
+      allow create: if canWrite() || isSelfProfileCreateAllowed(userId);
+      allow update: if canWrite() || isSelfProfileUpdateAllowed(userId);
+      allow delete: if canWrite();
     }
 
     // USER ACTIVITY TRACKING
-    // Allow any signed-in user to create their own activity records
+    // Allow active users to create their own activity records
     // Keep reads/updates/deletes restricted to admins
     match /userActivity/{id} {
-      allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
+      allow create: if canReadAppData() && request.auth.uid == request.resource.data.userId;
       allow read, update, delete: if canWrite();
     }
 
     // People collection (faculty, staff, adjunct, students): granular permissions
     match /people/{id} {
-      allow read: if isSignedIn();
+      allow read: if canReadAppData();
 
       // Create operations - check specific action permissions
       allow create: if isAdmin() ||
         userHasAction('directory.faculty.create') ||
         userHasAction('directory.staff.create') ||
         userHasAction('directory.adjunct.create') ||
-        userHasAction('directory.student.create');
+        userHasAction('directory.student.create') ||
+        userHasAction('data.import') ||
+        userHasAction('schedule.import');
 
       // Update operations - check specific action permissions
       allow update: if isAdmin() ||
@@ -151,7 +205,9 @@ service cloud.firestore {
         userHasAction('directory.adjunct.edit') ||
         userHasAction('directory.student.edit') ||
         userHasAction('crn.update') ||
-        userHasAction('missing.data.update');
+        userHasAction('missing.data.update') ||
+        userHasAction('data.import') ||
+        userHasAction('schedule.import');
 
       // Delete operations - check specific action permissions
       allow delete: if isAdmin() ||
@@ -162,26 +218,32 @@ service cloud.firestore {
     }
     // Schedules collection: granular permissions
     match /schedules/{id} {
-      allow read: if isSignedIn();
+      allow read: if canReadAppData();
       allow create: if isAdmin() ||
-        (userHasAction('schedule.create') && canWriteScheduleTerm(request.resource.data.termCode));
+        ((userHasAction('schedule.create') || userHasAction('schedule.import')) &&
+          canWriteScheduleTerm(request.resource.data.termCode));
       allow update: if isAdmin() ||
-        ((userHasAction('schedule.edit') || userHasAction('schedule.bulk.edit')) && canWriteScheduleTerm(request.resource.data.termCode));
+        ((userHasAction('schedule.edit') ||
+          userHasAction('schedule.bulk.edit') ||
+          userHasAction('schedule.import')) && canWriteScheduleTerm(request.resource.data.termCode));
       allow delete: if isAdmin() ||
         (userHasAction('schedule.delete') && canWriteScheduleTerm(resource.data.termCode));
     }
 
     // Programs collection: granular permissions
     match /programs/{id} {
-      allow read: if isSignedIn();
+      allow read: if canReadAppData();
       allow create: if isAdmin() || userHasAction('program.create');
-      allow update: if isAdmin() || userHasAction('program.edit') || userHasAction('program.upd.assign');
+      allow update: if isAdmin() ||
+        userHasAction('program.edit') ||
+        userHasAction('program.upd.assign') ||
+        userHasAction('program.upd.remove');
       allow delete: if isAdmin() || userHasAction('program.delete');
     }
 
     // Departments collection: granular permissions
     match /departments/{id} {
-      allow read: if isSignedIn();
+      allow read: if canReadAppData();
       allow create: if isAdmin() || userHasAction('department.create');
       allow update: if isAdmin() || userHasAction('department.edit');
       allow delete: if isAdmin() || userHasAction('department.delete');
@@ -189,7 +251,7 @@ service cloud.firestore {
 
     // Courses collection: granular permissions
     match /courses/{id} {
-      allow read: if isSignedIn();
+      allow read: if canReadAppData();
       allow create: if isAdmin() || userHasAction('course.create');
       allow update: if isAdmin() || userHasAction('course.edit');
       allow delete: if isAdmin() || userHasAction('course.delete');
@@ -197,45 +259,51 @@ service cloud.firestore {
 
     // Terms collection: granular permissions
     match /terms/{id} {
-      allow read: if isSignedIn();
-      allow create: if isAdmin() || userHasAction('term.create');
-      allow update: if isAdmin() || userHasAction('term.edit');
+      allow read: if canReadAppData();
+      allow create: if isAdmin() || userHasAction('term.create') || userHasAction('schedule.import');
+      allow update: if isAdmin() || userHasAction('term.edit') || userHasAction('schedule.import');
       allow delete: if isAdmin() || userHasAction('term.delete');
     }
 
     // Rooms collection: granular permissions
     match /rooms/{id} {
-      allow read: if isSignedIn();
-      allow create: if isAdmin() || userHasAction('room.create');
-      allow update: if isAdmin() || userHasAction('room.edit');
+      allow read: if canReadAppData();
+      allow create: if isAdmin() ||
+        userHasAction('room.create') ||
+        userHasAction('data.import') ||
+        userHasAction('schedule.import');
+      allow update: if isAdmin() ||
+        userHasAction('room.edit') ||
+        userHasAction('data.import') ||
+        userHasAction('schedule.import');
       allow delete: if isAdmin() || userHasAction('room.delete');
     }
 
     // Temperature monitoring collections: admin writes, signed-in reads
     match /temperatureBuildingSettings/{id} {
-      allow read: if isSignedIn();
+      allow read: if canReadAppData();
       allow write: if canWrite();
     }
     match /temperatureDevices/{id} {
-      allow read: if isSignedIn();
+      allow read: if canReadAppData();
       allow write: if canWrite();
     }
     match /temperatureDeviceReadings/{id} {
-      allow read: if isSignedIn();
+      allow read: if canReadAppData();
       allow write: if canWrite();
     }
     match /temperatureRoomSnapshots/{id} {
-      allow read: if isSignedIn();
+      allow read: if canReadAppData();
       allow write: if canWrite();
     }
     match /temperatureImports/{id} {
-      allow read: if isSignedIn();
+      allow read: if canReadAppData();
       allow write: if canWrite();
     }
 
     // Acronyms collection: granular permissions
     match /baylorAcronyms/{id} {
-      allow read: if isSignedIn();
+      allow read: if canReadAppData();
       allow create: if isAdmin() || userHasAction('acronym.create');
       allow update: if isAdmin() || userHasAction('acronym.edit');
       allow delete: if isAdmin() || userHasAction('acronym.delete');
@@ -245,43 +313,42 @@ service cloud.firestore {
     // - Allow any signed-in user to READ recent changes (dashboard visibility)
     // - Only admins can WRITE
     match /changeLog/{id} {
-      allow read: if isSignedIn();
+      allow read: if canReadAppData();
       allow write: if canWrite();
     }
     // Legacy edit history
     // - Allow signed-in read to avoid noisy permission warnings in UI
     // - Only admins can write
     match /editHistory/{id} {
-      allow read: if isSignedIn();
+      allow read: if canReadAppData();
       allow write: if canWrite();
     }
 
     // Import transactions (for preview, commit summary, and rollback)
     match /importTransactions/{id} {
-      // Allow admins to read history and details for rollback
-      allow read: if isAdmin();
-      // Only admins can create/update/delete import transactions
-      allow write: if canWrite();
+      allow read: if userHasAction('data.import') || userHasAction('schedule.import');
+      allow write: if userHasAction('data.import') || userHasAction('schedule.import');
     }
 
     // Dedupe decisions: allow hygiene tooling to persist "not a duplicate" choices
     match /dedupeDecisions/{id} {
-      allow read: if isSignedIn();
+      allow read: if canReadAppData();
       allow write: if isAdmin() || userHasAction('data.hygiene') || userHasAction('data.deduplication');
     }
 
     // Room grids: allow non-admin writes if the user has explicit action grants
     match /roomGrids/{id} {
-      allow read: if isSignedIn();
+      allow read: if canReadAppData();
       allow create: if isAdmin() || userHasAction('roomGrids.save');
-      allow update, delete: if isAdmin() || userHasAction('roomGrids.delete');
+      allow update: if isAdmin() || userHasAction('roomGrids.edit') || userHasAction('roomGrids.delete');
+      allow delete: if isAdmin() || userHasAction('roomGrids.delete');
     }
 
     // Email List Presets: shared presets that any signed-in user can create/edit
     // Only admins can delete presets
     match /emailListPresets/{id} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+      allow read: if canReadAppData();
+      allow create, update: if canReadAppData();
       allow delete: if isAdmin();
     }
   }

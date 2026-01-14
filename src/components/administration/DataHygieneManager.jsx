@@ -520,7 +520,7 @@ const DuplicateComparisonCard = ({
         return [
           { key: "courseCode", label: "Course" },
           { key: "section", label: "Section" },
-          { key: "term", label: "Term" },
+          { key: "term", label: "Semester" },
           { key: "crn", label: "CRN" },
           { key: "courseTitle", label: "Title" },
           { key: "instructorId", label: "Instructor ID" },
@@ -1466,7 +1466,7 @@ const DataHygieneManager = () => {
                 <h4 className="font-medium text-gray-900">Standardize & Validate</h4>
               </div>
               <p className="text-sm text-gray-600 mb-3">
-                Normalize names, term codes, and room labels so the app uses one consistent format.
+                Normalize names, semester codes, and room labels so the app uses one consistent format.
               </p>
               <button
                 onClick={() => setWizardStep("standardize")}
@@ -1615,7 +1615,7 @@ const DataHygieneManager = () => {
                 Standardize & Validate
               </h3>
               <p className="text-gray-600">
-                Normalize names, term codes, instructor assignments, and room
+                Normalize names, semester codes, instructor assignments, and room
                 labels so every record matches the canonical model.
               </p>
             </div>
@@ -2247,7 +2247,7 @@ const DataHygieneManager = () => {
                               "Unassigned"}
                           </p>
                           <p className="text-sm text-gray-600">
-                            Term: {schedule.term} | Section: {schedule.section}
+                            Semester: {schedule.term} | Section: {schedule.section}
                           </p>
                         </div>
                         <div className="flex gap-2">
@@ -2289,11 +2289,11 @@ const DataHygieneManager = () => {
               )}
               <div className="mt-8 border-t pt-6">
                 <h4 className="text-md font-semibold text-gray-900 mb-2">
-                  Cleanup Orphaned Imported Data (by term)
+                  Cleanup Orphaned Imported Data (by semester)
                 </h4>
                 <p className="text-sm text-gray-600 mb-3">
                   Remove imported schedules, people, and rooms that are only used
-                  in a selected term and not referenced elsewhere.
+                  in a selected semester and not referenced elsewhere.
                 </p>
                 <button
                   onClick={() => setShowCleanupModal(true)}
@@ -2372,7 +2372,7 @@ const DataHygieneManager = () => {
       <ConfirmationDialog
         isOpen={showStandardizationConfirm}
         title="Apply Standardization?"
-        message="This will normalize names, term codes, instructor assignments, and room labels across people, schedules, and rooms."
+        message="This will normalize names, semester codes, instructor assignments, and room labels across people, schedules, and rooms."
         confirmText={standardizationApplying ? "Applying…" : "Apply Standardization"}
         cancelText="Cancel"
         onConfirm={() => {

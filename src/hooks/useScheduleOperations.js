@@ -193,7 +193,7 @@ const useScheduleOperations = () => {
         ''
       );
       if (normalizedTerm && isTermLocked?.(normalizedTerm) && !isAdmin) {
-        showNotification('warning', 'Term Locked', `Schedules for ${normalizedTerm} are archived or locked. Editing is disabled.`);
+        showNotification('warning', 'Semester Locked', `Schedules for ${normalizedTerm} are archived or locked. Editing is disabled.`);
         return;
       }
       const resolvedTermCode = termCodeFromLabel(updatedRow.termCode || referenceSchedule?.termCode || normalizedTerm);
@@ -296,7 +296,7 @@ const useScheduleOperations = () => {
       // Validation
       const validationErrors = [];
       if (!updateData.courseCode) validationErrors.push('Course code is required');
-      if (!updateData.term) validationErrors.push('Term is required');
+      if (!updateData.term) validationErrors.push('Semester is required');
       if (!updateData.section) validationErrors.push('Section is required');
 
       const requiresMeeting = (!isOnlineFlag) || (isOnlineFlag && ((onlineMode || '').toLowerCase() === 'synchronous'));
@@ -424,7 +424,7 @@ const useScheduleOperations = () => {
       }
       const normalizedTerm = normalizeTermLabel(scheduleToDelete.term || selectedSemester || '');
       if (normalizedTerm && isTermLocked?.(normalizedTerm) && !isAdmin) {
-        showNotification('warning', 'Term Locked', `Schedules for ${normalizedTerm} are archived or locked. Deletion is disabled.`);
+        showNotification('warning', 'Semester Locked', `Schedules for ${normalizedTerm} are archived or locked. Deletion is disabled.`);
         return;
       }
 

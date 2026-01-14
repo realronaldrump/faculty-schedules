@@ -151,7 +151,7 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Orphaned Data Cleanup</h2>
             <p className="text-gray-600 mt-1">
-              Find and remove imported schedules for a specific term. People and rooms are only eligible if not referenced by any other term.
+              Find and remove imported schedules for a specific semester. People and rooms are only eligible if not referenced by any other semester.
             </p>
           </div>
           <button
@@ -294,7 +294,7 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Clean Up Data</h3>
                   <p className="text-sm text-gray-600">
-                    Permanently delete the {orphanedData.total} orphaned records. People and rooms will only be deleted if unreferenced by other terms.
+                    Permanently delete the {orphanedData.total} orphaned records. People and rooms will only be deleted if unreferenced by other semesters.
                   </p>
                   <div className="mt-2">
                     <label className="flex items-center space-x-2 text-sm">
@@ -369,7 +369,7 @@ const OrphanedDataCleanupModal = ({ isOpen, onClose, showNotification }) => {
               <span className="font-medium text-yellow-700">Important Warning</span>
             </div>
             <p className="text-sm text-yellow-600 mt-1">
-              This tool targets schedules in the selected term. People/rooms only show as deletable if they are not used by any schedules in other terms.
+              This tool targets schedules in the selected semester. People/rooms only show as deletable if they are not used by any schedules in other semesters.
               Always review the scan results carefully and consider backing up your data before cleanup.
             </p>
           </div>

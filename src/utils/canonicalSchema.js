@@ -459,7 +459,7 @@ export const validateSection = (section) => {
   // Check required fields
   if (!section.courseCode) errors.push("Course code is required");
   if (!section.sectionNumber) errors.push("Section number is required");
-  if (!section.termCode) errors.push("Term code is required");
+  if (!section.termCode) errors.push("Semester code is required");
 
   // Check formats
   if (
@@ -467,7 +467,7 @@ export const validateSection = (section) => {
     !VALIDATION_RULES.section.formats.termCode.test(section.termCode)
   ) {
     warnings.push(
-      `Term code "${section.termCode}" doesn't match expected format YYYYTT`,
+      `Semester code "${section.termCode}" doesn't match expected format YYYYTT`,
     );
   }
 

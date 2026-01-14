@@ -9,6 +9,7 @@ import { useSchedules } from '../../contexts/ScheduleContext';
 import { useUI } from '../../contexts/UIContext';
 import { useAppConfig } from '../../contexts/AppConfigContext';
 import { backfillTermMetadata } from '../../utils/termDataUtils';
+import { normalizeTermDateValue, parseTermDate } from '../../utils/termUtils';
 import { ConfirmationDialog } from '../CustomAlert';
 import BuildingManagement from './BuildingManagement';
 import SpaceManagement from './SpaceManagement';
@@ -42,6 +43,7 @@ const AppSettings = () => {
   const [termCourseCounts, setTermCourseCounts] = useState({});
   const [loadingCounts, setLoadingCounts] = useState(false);
   const [expandedTermInfo, setExpandedTermInfo] = useState(null);
+  const [termDateDrafts, setTermDateDrafts] = useState({});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [showMergeDialog, setShowMergeDialog] = useState(null);
   const [mergeTargetTerm, setMergeTargetTerm] = useState('');
@@ -210,7 +212,7 @@ const AppSettings = () => {
   const updateTermLifecycle = async (term, updates, actionLabel) => {
     if (!term?.termCode) {
       showNotification?.('warning', 'Missing Term Code', 'Term code is required to update lifecycle status.');
-      return;
+      return false;
     }
     setTermActionLoading(term.termCode);
     try {
@@ -232,9 +234,11 @@ const AppSettings = () => {
       );
       await refreshTerms?.();
       showNotification?.('success', 'Term Updated', `${term.term || term.termCode} updated successfully.`);
+      return true;
     } catch (error) {
       console.error('Error updating term lifecycle:', error);
       showNotification?.('error', 'Update Failed', 'Failed to update term lifecycle.');
+      return false;
     } finally {
       setTermActionLoading('');
     }
@@ -289,6 +293,69 @@ const AppSettings = () => {
   const handleCancelBackfillTerms = () => {
     if (isBackfilling) return;
     setShowBackfillConfirm(false);
+  };
+
+  const formatTermDateLabel = (value) => {
+    const parsed = parseTermDate(value);
+    if (!parsed) return '';
+    return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const updateTermDateDraft = (termCode, field, value) => {
+    if (!termCode) return;
+    setTermDateDrafts((prev) => ({
+      ...prev,
+      [termCode]: {
+        ...(prev[termCode] || {}),
+        [field]: value
+      }
+    }));
+  };
+
+  const handleSaveTermDates = async (term) => {
+    if (!term?.termCode) {
+      showNotification?.('warning', 'Missing Term Code', 'Term code is required to save semester dates.');
+      return;
+    }
+
+    const normalizedStart = normalizeTermDateValue(term.startDate);
+    const normalizedEnd = normalizeTermDateValue(term.endDate);
+    const draft = termDateDrafts[term.termCode] || {};
+    const draftStart = normalizeTermDateValue(draft.startDate ?? normalizedStart);
+    const draftEnd = normalizeTermDateValue(draft.endDate ?? normalizedEnd);
+
+    const hasDraftStart = Boolean(draftStart);
+    const hasDraftEnd = Boolean(draftEnd);
+    if ((hasDraftStart && !hasDraftEnd) || (!hasDraftStart && hasDraftEnd)) {
+      showNotification?.('warning', 'Incomplete Dates', 'Provide both a start and end date, or clear both.');
+      return;
+    }
+
+    if (hasDraftStart && hasDraftEnd) {
+      const start = parseTermDate(draftStart);
+      const end = parseTermDate(draftEnd);
+      if (!start || !end || end < start) {
+        showNotification?.('warning', 'Invalid Dates', 'Ensure the end date is on or after the start date.');
+        return;
+      }
+    }
+
+    if (draftStart === normalizedStart && draftEnd === normalizedEnd) {
+      return;
+    }
+
+    const updated = await updateTermLifecycle(term, {
+      startDate: draftStart || null,
+      endDate: draftEnd || null
+    }, 'dates updated');
+
+    if (updated) {
+      setTermDateDrafts((prev) => {
+        const next = { ...prev };
+        delete next[term.termCode];
+        return next;
+      });
+    }
   };
 
   // Visual term config handlers
@@ -922,6 +989,18 @@ const AppSettings = () => {
                   const courseCount = termCourseCounts[term.termCode] || termCourseCounts[term.term] || 0;
                   const isExpanded = expandedTermInfo === term.termCode;
                   const isLoading = termActionLoading === term.termCode;
+                  const termCodeKey = term.termCode || '';
+                  const normalizedStartDate = normalizeTermDateValue(term.startDate);
+                  const normalizedEndDate = normalizeTermDateValue(term.endDate);
+                  const dateRangeLabel = (normalizedStartDate && normalizedEndDate)
+                    ? `${formatTermDateLabel(normalizedStartDate)} - ${formatTermDateLabel(normalizedEndDate)}`
+                    : 'Not set';
+                  const dateRangeClass = (normalizedStartDate && normalizedEndDate) ? '' : 'text-gray-400';
+                  const dateDraft = termCodeKey ? (termDateDrafts[termCodeKey] || {}) : {};
+                  const draftStartDate = dateDraft.startDate ?? normalizedStartDate;
+                  const draftEndDate = dateDraft.endDate ?? normalizedEndDate;
+                  const isDateDirty = Boolean(termCodeKey)
+                    && (draftStartDate !== normalizedStartDate || draftEndDate !== normalizedEndDate);
                   
                   // Check for potential duplicates (same display name, different codes)
                   const duplicates = termOptions.filter(t => 
@@ -968,10 +1047,15 @@ const AppSettings = () => {
                                   </span>
                                 )}
                               </div>
-                              <div className="text-xs text-gray-500 mt-0.5">
-                                Code: <span className="font-mono">{term.termCode || 'None'}</span>
+                              <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-3 gap-y-1">
+                                <span>
+                                  Code: <span className="font-mono">{term.termCode || 'None'}</span>
+                                </span>
+                                <span className={dateRangeClass}>
+                                  Dates: {dateRangeLabel}
+                                </span>
                                 {hasDuplicates && (
-                                  <span className="ml-2 text-red-600">
+                                  <span className="text-red-600">
                                     (Also exists with code: {duplicates.map(d => d.termCode).join(', ')})
                                   </span>
                                 )}
@@ -1059,6 +1143,52 @@ const AppSettings = () => {
                             </button>
                           </div>
                           
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                              Semester Dates
+                            </div>
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Start date</label>
+                                <input
+                                  type="date"
+                                  value={draftStartDate || ''}
+                                  onChange={(event) => updateTermDateDraft(termCodeKey, 'startDate', event.target.value)}
+                                  disabled={!termCodeKey || isLoading}
+                                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green disabled:bg-gray-100 disabled:text-gray-400"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">End date</label>
+                                <input
+                                  type="date"
+                                  value={draftEndDate || ''}
+                                  onChange={(event) => updateTermDateDraft(termCodeKey, 'endDate', event.target.value)}
+                                  disabled={!termCodeKey || isLoading}
+                                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green disabled:bg-gray-100 disabled:text-gray-400"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3 mt-3">
+                              <button
+                                onClick={() => handleSaveTermDates(term)}
+                                disabled={!isDateDirty || isLoading || !termCodeKey}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                              >
+                                <Save size={14} />
+                                Save Dates
+                              </button>
+                              <span className="text-xs text-gray-500">
+                                Clear both fields and save to remove dates.
+                              </span>
+                            </div>
+                            {!termCodeKey && (
+                              <div className="text-xs text-amber-700 mt-2">
+                                Term code is required to save dates.
+                              </div>
+                            )}
+                          </div>
+
                           {/* Additional Info */}
                           <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-500">
                             {term.createdAt && (

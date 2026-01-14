@@ -12,7 +12,7 @@ import { db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { fetchSchedulesByTerm } from '../utils/dataImportUtils';
 import { fetchTermOptions } from '../utils/termDataUtils';
-import { normalizeTermLabel } from '../utils/termUtils';
+import { normalizeTermLabel, parseTermDate } from '../utils/termUtils';
 
 const ScheduleContext = createContext(null);
 
@@ -78,6 +78,23 @@ export const ScheduleProvider = ({ children }) => {
         return termOptions.filter(term => term.status !== 'archived');
     }, [includeArchived, termOptions]);
 
+    const activeTermByDate = useMemo(() => {
+        if (!visibleTerms || visibleTerms.length === 0) return '';
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const matches = visibleTerms
+            .map((term) => {
+                const start = parseTermDate(term.startDate);
+                const end = parseTermDate(term.endDate);
+                if (!start || !end) return null;
+                if (today < start || today > end) return null;
+                return { term: term.term, start };
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.start - a.start);
+        return matches[0]?.term || '';
+    }, [visibleTerms]);
+
     const availableSemesters = useMemo(() => (
         visibleTerms.map(term => term.term).filter(Boolean)
     ), [visibleTerms]);
@@ -117,11 +134,13 @@ export const ScheduleProvider = ({ children }) => {
         const normalizedDefault = normalizeTermLabel(adminDefaultTerm);
         const fallback = normalizedDefault && availableSemesters.includes(normalizedDefault)
             ? normalizedDefault
-            : availableSemesters[0];
+            : (activeTermByDate && availableSemesters.includes(activeTermByDate)
+                ? activeTermByDate
+                : availableSemesters[0]);
         if (fallback && fallback !== selectedSemester) {
             setSelectedSemester(fallback);
         }
-    }, [availableSemesters, adminDefaultTerm, selectedSemester]);
+    }, [availableSemesters, activeTermByDate, adminDefaultTerm, selectedSemester]);
     // Load schedules when selectedSemester changes
     const loadSchedules = useCallback(async (termLabel) => {
         if (!termLabel) return;

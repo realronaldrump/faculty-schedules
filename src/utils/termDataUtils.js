@@ -2,6 +2,7 @@ import { collection, doc, getDocs, writeBatch } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import {
   loadTermConfig,
+  normalizeTermDateValue,
   normalizeTermLabel,
   normalizeTermRecord,
   sortTermsByRecency,
@@ -16,15 +17,23 @@ const buildTermDocId = (termLabel, termCode) => {
   return derivedCode || '';
 };
 
-const buildTermDoc = ({ term, termCode, includeDefaults = false } = {}) => {
+const buildTermDoc = ({ term, termCode, startDate, endDate, includeDefaults = false } = {}) => {
   const normalizedTerm = normalizeTermLabel(term) || termLabelFromCode(termCode) || term || '';
   const normalizedTermCode = termCodeFromLabel(termCode || normalizedTerm);
+  const normalizedStartDate = normalizeTermDateValue(startDate);
+  const normalizedEndDate = normalizeTermDateValue(endDate);
   const now = new Date().toISOString();
   const docData = {
     term: normalizedTerm,
     termCode: normalizedTermCode,
     updatedAt: now
   };
+  if (normalizedStartDate) {
+    docData.startDate = normalizedStartDate;
+  }
+  if (normalizedEndDate) {
+    docData.endDate = normalizedEndDate;
+  }
 
   if (includeDefaults) {
     docData.status = 'active';

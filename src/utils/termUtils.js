@@ -28,6 +28,45 @@ const normalizeSeasonList = (value) => {
   return Array.from(new Set(value.map((item) => (item || '').trim()).filter(Boolean)));
 };
 
+const pad2 = (value) => String(value).padStart(2, '0');
+
+const formatDateValue = (date) => (
+  `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+);
+
+export const normalizeTermDateValue = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    const match = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) {
+      return formatDateValue(parsed);
+    }
+    return '';
+  }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? '' : formatDateValue(value);
+  }
+  if (typeof value === 'number') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? '' : formatDateValue(parsed);
+  }
+  if (typeof value === 'object' && typeof value.toDate === 'function') {
+    return normalizeTermDateValue(value.toDate());
+  }
+  return '';
+};
+
+export const parseTermDate = (value) => {
+  const normalized = normalizeTermDateValue(value);
+  if (!normalized) return null;
+  const parsed = new Date(`${normalized}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 export const normalizeTermConfig = (raw = {}) => {
   const codeToSeason =
     raw && typeof raw.codeToSeason === 'object' && !Array.isArray(raw.codeToSeason)
@@ -261,6 +300,8 @@ export const normalizeTermRecord = (record = {}, termConfig = getTermConfig()) =
   const seasonIndex = season ? getSeasonIndex(season, termConfig) : null;
   const derivedSortKey =
     year !== null && seasonIndex !== null ? year * 100 + seasonIndex : null;
+  const normalizedStartDate = normalizeTermDateValue(record.startDate);
+  const normalizedEndDate = normalizeTermDateValue(record.endDate);
 
   return {
     ...record,
@@ -268,12 +309,23 @@ export const normalizeTermRecord = (record = {}, termConfig = getTermConfig()) =
     termCode: termCode || record.termCode || '',
     season,
     year,
+    startDate: normalizedStartDate || '',
+    endDate: normalizedEndDate || '',
     sortKey: record.sortKey ?? derivedSortKey
   };
 };
 
 export const sortTermsByRecency = (terms = [], termConfig = getTermConfig()) => {
   return [...terms].sort((a, b) => {
+    const aDate = normalizeTermDateValue(a?.startDate || a?.endDate);
+    const bDate = normalizeTermDateValue(b?.startDate || b?.endDate);
+    if (aDate && bDate) {
+      const aDateKey = Number(aDate.replace(/-/g, ''));
+      const bDateKey = Number(bDate.replace(/-/g, ''));
+      if (aDateKey !== bDateKey) {
+        return bDateKey - aDateKey;
+      }
+    }
     const aKey = a?.sortKey ?? deriveTermInfo({ term: a?.term, termCode: a?.termCode }, termConfig).sortKey;
     const bKey = b?.sortKey ?? deriveTermInfo({ term: b?.term, termCode: b?.termCode }, termConfig).sortKey;
     if (aKey !== null && bKey !== null && aKey !== bKey) {

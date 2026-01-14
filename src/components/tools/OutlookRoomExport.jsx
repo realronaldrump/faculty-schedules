@@ -7,9 +7,10 @@ import { useData } from '../../contexts/DataContext';
 import { useSchedules } from '../../contexts/ScheduleContext';
 import { useUI } from '../../contexts/UIContext';
 import { useAppConfig } from '../../contexts/AppConfigContext';
-import { normalizeTermLabel, sortTerms } from '../../utils/termUtils';
+import { normalizeTermDateValue, normalizeTermLabel, sortTerms } from '../../utils/termUtils';
 
-const STORAGE_KEY = 'tools.outlook-export.term-configs';
+const EXCEPTIONS_STORAGE_KEY = 'tools.outlook-export.term-exceptions';
+const LEGACY_STORAGE_KEY = 'tools.outlook-export.term-configs';
 
 const dayMetadata = {
   SU: { js: 0, ics: 'SU' },
@@ -228,17 +229,32 @@ const buildVTimezone = () => [
 
 const OutlookRoomExport = () => {
   const { rawScheduleData = [] } = useData();
-  const { availableSemesters = [] } = useSchedules();
+  const { availableSemesters = [], termOptions: termMetaOptions = [] } = useSchedules();
   const { showNotification } = useUI();
   const { termConfig, termConfigVersion } = useAppConfig();
-  const [termConfigs, setTermConfigs] = useState(() => {
+  const [termExceptions, setTermExceptions] = useState(() => {
     if (typeof window === 'undefined') return {};
     try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
+      const stored = window.localStorage.getItem(EXCEPTIONS_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed && typeof parsed === 'object') {
           return parsed;
+        }
+      }
+      const legacyStored = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (legacyStored) {
+        const parsedLegacy = JSON.parse(legacyStored);
+        if (parsedLegacy && typeof parsedLegacy === 'object') {
+          const migrated = {};
+          Object.entries(parsedLegacy).forEach(([term, config]) => {
+            if (config && Array.isArray(config.exceptions)) {
+              migrated[term] = config.exceptions;
+            }
+          });
+          if (Object.keys(migrated).length > 0) {
+            return migrated;
+          }
         }
       }
     } catch (error) {
@@ -255,13 +271,13 @@ const OutlookRoomExport = () => {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(termConfigs));
+      window.localStorage.setItem(EXCEPTIONS_STORAGE_KEY, JSON.stringify(termExceptions));
     } catch (error) {
       console.warn(error);
     }
-  }, [termConfigs]);
+  }, [termExceptions]);
 
-  const termOptions = useMemo(() => {
+  const termLabels = useMemo(() => {
     const termsFromData = rawScheduleData
       .map((s) => normalizeTermLabel(s?.term || '', termConfig))
       .filter(Boolean);
@@ -274,12 +290,26 @@ const OutlookRoomExport = () => {
   }, [rawScheduleData, availableSemesters, termConfigVersion]);
 
   useEffect(() => {
-    if (!selectedTerm && termOptions.length > 0) {
-      setSelectedTerm(termOptions[0]);
+    if (!selectedTerm && termLabels.length > 0) {
+      setSelectedTerm(termLabels[0]);
     }
-  }, [selectedTerm, termOptions]);
+  }, [selectedTerm, termLabels]);
 
-  const activeTermConfig = selectedTerm ? { ...defaultTermConfig, ...(termConfigs[selectedTerm] || {}) } : defaultTermConfig;
+  const termMetaByLabel = useMemo(() => {
+    const map = new Map();
+    (termMetaOptions || []).forEach((term) => {
+      if (term?.term) map.set(term.term, term);
+      if (term?.termCode) map.set(term.termCode, term);
+    });
+    return map;
+  }, [termMetaOptions]);
+
+  const activeTermMeta = selectedTerm ? termMetaByLabel.get(selectedTerm) : null;
+  const activeTermConfig = selectedTerm ? {
+    startDate: normalizeTermDateValue(activeTermMeta?.startDate),
+    endDate: normalizeTermDateValue(activeTermMeta?.endDate),
+    exceptions: termExceptions[selectedTerm] || []
+  } : defaultTermConfig;
 
   const schedulesForTerm = useMemo(() => {
     if (!selectedTerm) return [];
@@ -318,21 +348,17 @@ const OutlookRoomExport = () => {
   const setAllRooms = () => setSelectedRooms(roomsForTerm);
   const clearAllRooms = () => setSelectedRooms([]);
 
-  const updateTermConfig = (updates) => {
+  const updateExceptions = (nextExceptions) => {
     if (!selectedTerm) return;
-    setTermConfigs((prev) => ({
+    setTermExceptions((prev) => ({
       ...prev,
-      [selectedTerm]: {
-        ...defaultTermConfig,
-        ...(prev[selectedTerm] || {}),
-        ...updates
-      }
+      [selectedTerm]: nextExceptions
     }));
   };
 
   const removeException = (index) => {
     const next = (activeTermConfig.exceptions || []).filter((_, i) => i !== index);
-    updateTermConfig({ exceptions: next });
+    updateExceptions(next);
   };
 
   const addException = () => {
@@ -347,7 +373,7 @@ const OutlookRoomExport = () => {
       setExceptionDraft({ date: '', label: '' });
       return;
     }
-    updateTermConfig({ exceptions: [...(activeTermConfig.exceptions || []), newException] });
+    updateExceptions([...(activeTermConfig.exceptions || []), newException]);
     setExceptionDraft({ date: '', label: '' });
   };
 
@@ -357,7 +383,7 @@ const OutlookRoomExport = () => {
       return false;
     }
     if (!activeTermConfig.startDate || !activeTermConfig.endDate) {
-      showNotification?.('warning', 'Provide term dates', 'Enter the start and end dates for the selected term.');
+      showNotification?.('warning', 'Provide term dates', 'Set the start and end dates for this term in App Settings before exporting.');
       return false;
     }
     const start = ensureDate(activeTermConfig.startDate);
@@ -664,8 +690,8 @@ const OutlookRoomExport = () => {
                   value={selectedTerm}
                   onChange={(event) => setSelectedTerm(event.target.value)}
                 >
-                  {termOptions.length === 0 && <option value="">No terms available</option>}
-                  {termOptions.map((term) => (
+                  {termLabels.length === 0 && <option value="">No terms available</option>}
+                  {termLabels.map((term) => (
                     <option key={term} value={term}>
                       {term}
                     </option>
@@ -679,8 +705,9 @@ const OutlookRoomExport = () => {
                   <input
                     type="date"
                     value={activeTermConfig.startDate}
-                    onChange={(event) => updateTermConfig({ startDate: event.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-baylor-green focus:outline-none focus:ring-1 focus:ring-baylor-green"
+                    readOnly
+                    disabled
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-baylor-green focus:outline-none focus:ring-1 focus:ring-baylor-green disabled:bg-gray-100 disabled:text-gray-400"
                   />
                 </div>
                 <div>
@@ -688,15 +715,16 @@ const OutlookRoomExport = () => {
                   <input
                     type="date"
                     value={activeTermConfig.endDate}
-                    onChange={(event) => updateTermConfig({ endDate: event.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-baylor-green focus:outline-none focus:ring-1 focus:ring-baylor-green"
+                    readOnly
+                    disabled
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-baylor-green focus:outline-none focus:ring-1 focus:ring-baylor-green disabled:bg-gray-100 disabled:text-gray-400"
                   />
                 </div>
               </div>
 
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex gap-2">
                 <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                <p>Term dates and holiday exceptions are saved locally per browser so you can reuse them the next time you export.</p>
+                <p>Term dates come from App Settings so they stay consistent across the app. Holiday exceptions are saved locally per browser.</p>
               </div>
             </div>
 

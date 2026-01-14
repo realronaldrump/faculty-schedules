@@ -32,6 +32,10 @@ const ImportPreviewModal = ({
   const allChanges = useMemo(() => transaction?.getAllChanges() || [], [transaction]);
   const matchingIssues = useMemo(() => transaction?.matchingIssues || [], [transaction]);
   const people = useMemo(() => Array.isArray(directoryPeople) ? directoryPeople : [], [directoryPeople]);
+  const previewSummary = useMemo(() => transaction?.previewSummary || null, [transaction]);
+  const validation = useMemo(() => transaction?.validation || {}, [transaction]);
+  const validationErrors = Array.isArray(validation.errors) ? validation.errors : [];
+  const validationWarnings = Array.isArray(validation.warnings) ? validation.warnings : [];
 
   const groupedChanges = useMemo(() => {
     const groups = {
@@ -407,7 +411,75 @@ const ImportPreviewModal = ({
               {stats.selected} changes selected for import
             </div>
           </div>
+
+          {previewSummary && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                Preview Summary
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs text-gray-700">
+                <div>
+                  <div className="font-semibold">{previewSummary.rowsProcessed ?? 0}</div>
+                  <div>Rows processed</div>
+                </div>
+                <div>
+                  <div className="font-semibold text-green-700">{previewSummary.schedulesAdded ?? 0}</div>
+                  <div>Schedules added</div>
+                </div>
+                <div>
+                  <div className="font-semibold text-baylor-gold">{previewSummary.schedulesUpdated ?? 0}</div>
+                  <div>Schedules updated</div>
+                </div>
+                <div>
+                  <div className="font-semibold text-gray-600">{previewSummary.schedulesUnchanged ?? 0}</div>
+                  <div>Schedules unchanged</div>
+                </div>
+                <div>
+                  <div className="font-semibold text-red-600">{previewSummary.rowsSkipped ?? 0}</div>
+                  <div>Rows skipped</div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
+
+        {(validationErrors.length > 0 || validationWarnings.length > 0) && (
+          <div className="p-6 border-b border-gray-200 bg-white">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Validation Results</h3>
+                <p className="text-sm text-gray-600">Review warnings or errors detected while parsing rows.</p>
+              </div>
+              {validationErrors.length > 0 && (
+                <div className="text-sm text-red-600 font-semibold">
+                  {validationErrors.length} error{validationErrors.length === 1 ? '' : 's'}
+                </div>
+              )}
+            </div>
+
+            {validationErrors.length > 0 && (
+              <div className="mb-4">
+                <div className="text-sm font-semibold text-red-600 mb-2">Errors (rows skipped)</div>
+                <ul className="list-disc list-inside text-sm text-red-600 space-y-1">
+                  {validationErrors.map((err, idx) => (
+                    <li key={`err-${idx}`}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {validationWarnings.length > 0 && (
+              <div>
+                <div className="text-sm font-semibold text-yellow-700 mb-2">Warnings</div>
+                <ul className="list-disc list-inside text-sm text-yellow-700 space-y-1">
+                  {validationWarnings.map((warn, idx) => (
+                    <li key={`warn-${idx}`}>{warn}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
 
         {matchingIssues.length > 0 && (
           <div className="p-6 border-b border-gray-200 bg-white">

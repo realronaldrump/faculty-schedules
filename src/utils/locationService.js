@@ -77,6 +77,25 @@ const NO_ROOM_PATTERNS = [
  */
 const MULTI_ROOM_SEPARATORS = /\s*[;,\n]\s*|\s*\/\s*(?=\D)|\s+and\s+/i;
 
+const expandSharedRoomNumbers = (label) => {
+  if (!label || typeof label !== 'string' || !label.includes('/')) return [label];
+
+  const firstDigitIndex = label.search(/\d/);
+  if (firstDigitIndex === -1) return [label];
+
+  const prefix = label.slice(0, firstDigitIndex).trim();
+  const suffix = label.slice(firstDigitIndex).trim();
+  if (!suffix.includes('/')) return [label];
+
+  const tokens = suffix.split('/').map((token) => token.trim()).filter(Boolean);
+  if (tokens.length < 2 || !tokens.every((token) => /\d/.test(token))) {
+    return [label];
+  }
+
+  const prefixWithSpace = prefix ? `${prefix} ` : '';
+  return tokens.map((token) => `${prefixWithSpace}${token}`);
+};
+
 // ============================================================================
 // INTERNAL STATE (Building Configuration Cache)
 // ============================================================================
@@ -250,8 +269,10 @@ export const splitMultiRoom = (value) => {
     .map((part) => part.trim())
     .filter(Boolean);
 
+  const expanded = parts.flatMap((part) => expandSharedRoomNumbers(part));
+
   // Deduplicate while preserving order
-  return [...new Set(parts)];
+  return [...new Set(expanded)];
 };
 
 /**

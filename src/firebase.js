@@ -252,7 +252,7 @@ export const performanceMonitor = {
 export { app };
 
 // Development utilities
-if (isDevelopment) {
+if (isDevelopment && typeof window !== 'undefined') {
   // Add global helpers for debugging
   window.firebaseUtils = {
     db,

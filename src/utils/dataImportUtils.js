@@ -240,7 +240,12 @@ const isEmptyForMerge = (value) => {
  * - If CSV value is empty, leave existing field unchanged (omit from updates)
  * - Always refresh updatedAt
  */
-export const buildUpsertUpdates = (existingRecord, incomingRecord) => {
+export const buildUpsertUpdates = (
+  existingRecord,
+  incomingRecord,
+  options = {},
+) => {
+  const allowEmptyFields = new Set(options.allowEmptyFields || []);
   const updates = {};
   let hasChanges = false;
 
@@ -261,7 +266,7 @@ export const buildUpsertUpdates = (existingRecord, incomingRecord) => {
     if (key === "createdAt" || key === "updatedAt") return; // ignore timestamps for diff
 
     const incoming = incomingRecord[key];
-    if (isEmptyForMerge(incoming)) return; // don't overwrite with empty
+    if (isEmptyForMerge(incoming) && !allowEmptyFields.has(key)) return; // don't overwrite with empty
 
     const existing = existingRecord[key];
     const valuesEqual = deepEqual(incoming, existing);
@@ -351,6 +356,7 @@ export const parseInstructorField = (instructorField) => {
       id: null,
       percentage: 100,
       isPrimary: true,
+      isStaff: true,
     };
   }
 
@@ -396,6 +402,7 @@ export const parseInstructorField = (instructorField) => {
       id: id ? id.trim() : null,
       percentage,
       isPrimary,
+      isStaff: false,
     };
   }
 
@@ -410,6 +417,7 @@ export const parseInstructorField = (instructorField) => {
       id: null,
       percentage: 100,
       isPrimary: true,
+      isStaff: false,
     };
   }
 
@@ -422,6 +430,7 @@ export const parseInstructorField = (instructorField) => {
     id: null,
     percentage: 100,
     isPrimary: true,
+    isStaff: false,
   };
 };
 
@@ -431,7 +440,10 @@ export const parseInstructorField = (instructorField) => {
 export const parseInstructorFieldList = (instructorField) => {
   if (!instructorField) return [];
   const raw = instructorField.toString();
-  const parts = raw.split(";").map((part) => part.trim()).filter(Boolean);
+  const parts = raw
+    .split(/\s*(?:;|\n|\s+and\s+|\s+&\s+|\s+\/\s+)\s*/i)
+    .map((part) => part.trim())
+    .filter(Boolean);
   const parsed = parts.map((part) => parseInstructorField(part)).filter(Boolean);
   return parsed;
 };
@@ -1209,7 +1221,12 @@ export const processScheduleImport = async (csvData) => {
         (instructionMethod &&
           instructionMethod.toLowerCase().includes("online"));
       const hasPhysicalRoom = locationType === "room" && normalizedRoomLabel;
-      const locationLabel = locationType === "no_room" ? "No Room Needed" : "";
+      const locationLabel =
+        locationType === "no_room"
+          ? inferredIsOnline
+            ? "Online"
+            : normalizedRoomLabel || "No Room Needed"
+          : "";
 
       // === ENHANCED ROOM LINKING using centralized locationService ===
       let roomIds = [];
@@ -1732,6 +1749,7 @@ export const parseCLSSCSV = (csvText) => {
       const rawValue = values[index] ?? "";
       rowData[header] = String(rawValue).replace(/\r/g, "").trim();
     });
+    rowData.__rowIndex = i + 1;
 
     if (rowData["Term"]) {
       rowData["Term"] = normalizeTermLabel(rowData["Term"]);

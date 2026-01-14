@@ -1,13 +1,19 @@
 import { collection, getDocs, getDoc, doc, updateDoc, addDoc, deleteDoc, writeBatch, query, orderBy, setDoc, where } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { logCreate, logUpdate, logDelete, logBulkUpdate, logImport } from './changeLogger';
-import { parseInstructorField, parseInstructorFieldList } from './dataImportUtils';
+import {
+  buildUpsertUpdates,
+  parseCrossListCrns,
+  parseInstructorField,
+  parseInstructorFieldList
+} from './dataImportUtils';
 import { parseFullName } from './nameUtils';
 import { parseCourseCode, deriveCreditsFromCatalogNumber } from './courseUtils';
 import { parseMeetingPatterns } from './meetingPatternUtils';
 import { findPersonMatch, makeNameKey, normalizeBaylorId } from './personMatchUtils';
 import { normalizeTermLabel, termCodeFromLabel, termLabelFromCode } from './termUtils';
 import { getRoomKeyFromRoomRecord, parseRoomLabel, splitRoomLabels } from './roomUtils';
+import { LOCATION_TYPE, parseMultiRoom } from './locationService';
 
 // Import transaction model for tracking changes
 export class ImportTransaction {
@@ -36,6 +42,8 @@ export class ImportTransaction {
       }
     };
     this.matchingIssues = [];
+    this.validation = { errors: [], warnings: [] };
+    this.previewSummary = null;
     this.originalData = {}; // Store original data for rollback
     this.stats = {
       totalChanges: 0,
@@ -160,6 +168,8 @@ export class ImportTransaction {
       status: this.status,
       changes: this.changes,
       matchingIssues: this.matchingIssues,
+      validation: this.validation,
+      previewSummary: this.previewSummary,
       originalData: this.originalData,
       stats: this.stats,
       createdBy: this.createdBy,
@@ -172,6 +182,15 @@ export class ImportTransaction {
     const transaction = Object.assign(new ImportTransaction(), data);
     if (!Array.isArray(transaction.matchingIssues)) {
       transaction.matchingIssues = [];
+    }
+    if (!transaction.validation || typeof transaction.validation !== 'object') {
+      transaction.validation = { errors: [], warnings: [] };
+    }
+    if (!Array.isArray(transaction.validation.errors)) {
+      transaction.validation.errors = [];
+    }
+    if (!Array.isArray(transaction.validation.warnings)) {
+      transaction.validation.warnings = [];
     }
     return transaction;
   }
@@ -217,7 +236,14 @@ export const previewImportChanges = async (csvData, importType, selectedSemester
     }
 
     if (importType === 'schedule') {
-      await previewScheduleChanges(csvData, transaction, existingSchedulesData, existingPeopleData, existingRoomsData);
+      await previewScheduleChanges(
+        csvData,
+        transaction,
+        existingSchedulesData,
+        existingPeopleData,
+        existingRoomsData,
+        { fallbackTerm: normalizedSemester || selectedSemester }
+      );
     } else if (importType === 'directory') {
       await previewDirectoryChanges(csvData, transaction, existingPeopleData, existingRoomsData, { includeOfficeRooms });
     }
@@ -334,22 +360,35 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
   const instructionMethod = (row['Inst. Method'] || row['Instruction Method'] || '').toString().trim();
 
   const roomRaw = (row.Room || '').toString().trim();
-  const roomNames = roomRaw ? splitRoomLabels(roomRaw) : [];
-  const upperRoomLabel = roomRaw.toUpperCase();
-  const isNoRoomLabel = upperRoomLabel === 'NO ROOM NEEDED';
-  const isOnlineLabel = upperRoomLabel.includes('ONLINE');
-  const inferredIsOnline = isOnlineLabel || instructionMethod.toLowerCase().includes('online');
-  const hasPhysicalRoom = roomRaw && !isNoRoomLabel && !isOnlineLabel;
-  const locationType = hasPhysicalRoom || (!inferredIsOnline && !isNoRoomLabel && !isOnlineLabel)
-    ? 'room'
-    : 'no_room';
-  const locationLabel = locationType === 'no_room' ? 'No Room Needed' : '';
+  const parsedRooms = parseMultiRoom(roomRaw);
+  const parsedRoomNames = Array.isArray(parsedRooms.displayNames)
+    ? parsedRooms.displayNames
+    : [];
+  const roomNames = parsedRoomNames.length > 0
+    ? parsedRoomNames
+    : (roomRaw ? splitRoomLabels(roomRaw) : []);
+  const inferredIsOnline =
+    parsedRooms.locationType === LOCATION_TYPE.VIRTUAL ||
+    roomRaw.toUpperCase().includes('ONLINE') ||
+    instructionMethod.toLowerCase().includes('online');
+  const isPhysical =
+    parsedRooms.locationType === LOCATION_TYPE.PHYSICAL ||
+    (parsedRooms.locationType === LOCATION_TYPE.UNKNOWN && roomNames.length > 0);
+  const locationType = isPhysical ? 'room' : 'no_room';
+  const locationLabel = inferredIsOnline
+    ? 'Online'
+    : (locationType === 'no_room'
+      ? (parsedRooms.locationLabel || (roomRaw || 'No Room Needed'))
+      : '');
   const filteredRoomNames = locationType === 'no_room'
     ? []
-    : roomNames.filter((name) => {
-      const upper = name.toUpperCase();
-      return !(upper === 'NO ROOM NEEDED' || upper.includes('ONLINE'));
-    });
+    : roomNames;
+  const spaceIds = locationType === 'no_room'
+    ? []
+    : Array.from(new Set(parsedRooms.spaceKeys || []));
+  const spaceDisplayNames = locationType === 'no_room'
+    ? []
+    : (parsedRoomNames.length > 0 ? parsedRoomNames : filteredRoomNames);
 
   return {
     courseCode,
@@ -370,6 +409,8 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
     meetingPatterns,
     roomRaw,
     roomNames: filteredRoomNames,
+    spaceIds,
+    spaceDisplayNames,
     locationType,
     locationLabel,
     isOnline: inferredIsOnline,
@@ -452,41 +493,151 @@ const normalizeInstructorDisplayName = (instructorRecord, parsedInstructor, fall
   return fallback || '';
 };
 
-const previewScheduleChanges = async (csvData, transaction, existingSchedules, existingPeople, existingRooms) => {
-  // Create maps for quick lookup
+const previewScheduleChanges = async (
+  csvData,
+  transaction,
+  existingSchedules,
+  existingPeople,
+  existingRooms,
+  options = {}
+) => {
+  const { fallbackTerm = '' } = options;
   const roomsMap = new Map();
   const roomsKeyMap = new Map();
-  const scheduleMap = new Map();
+  const schedulesByCrnTerm = new Map();
+  const schedulesByCourseSectionTerm = new Map();
+  const seenScheduleKeys = new Set();
   const pendingMatchMap = new Map();
 
-  existingRooms.forEach(room => {
+  const ensureValidation = () => {
+    if (!transaction.validation || typeof transaction.validation !== 'object') {
+      transaction.validation = { errors: [], warnings: [] };
+    }
+    if (!Array.isArray(transaction.validation.errors)) {
+      transaction.validation.errors = [];
+    }
+    if (!Array.isArray(transaction.validation.warnings)) {
+      transaction.validation.warnings = [];
+    }
+  };
+
+  const addValidation = (type, message) => {
+    ensureValidation();
+    const bucket = type === 'error' ? 'errors' : 'warnings';
+    transaction.validation[bucket].push(message);
+  };
+
+  const summary = {
+    rowsTotal: Array.isArray(csvData) ? csvData.length : 0,
+    rowsSkipped: 0,
+    schedulesAdded: 0,
+    schedulesUpdated: 0,
+    schedulesUnchanged: 0
+  };
+
+  existingRooms.forEach((room) => {
     const roomKey = getRoomKeyFromRoomRecord(room);
     if (roomKey && !roomsKeyMap.has(roomKey)) {
       roomsKeyMap.set(roomKey, room);
     }
-    const keys = [room.name, room.displayName].map((k) => normalizeRoomName(k)).filter(Boolean);
-    keys.forEach((k) => roomsMap.set(k, room));
+    if (room?.spaceKey && !roomsKeyMap.has(room.spaceKey)) {
+      roomsKeyMap.set(room.spaceKey, room);
+    }
+    if (room?.roomKey && !roomsKeyMap.has(room.roomKey)) {
+      roomsKeyMap.set(room.roomKey, room);
+    }
+    buildRoomNameKeys(room).forEach((key) => roomsMap.set(key, room));
   });
 
-  // Create map of existing schedules to avoid duplicates
-  existingSchedules.forEach(schedule => {
-    const key = `${schedule.courseCode}-${schedule.section}-${schedule.term}`;
-    scheduleMap.set(key, schedule);
+  existingSchedules.forEach((schedule) => {
+    const term = normalizeTermLabel(schedule.term || '');
+    const courseCode = schedule.courseCode || '';
+    const section = normalizeSectionIdentifier(schedule.section || '');
+    const crn = (schedule.crn || '').toString().trim();
+    if (courseCode && section && term) {
+      schedulesByCourseSectionTerm.set(`${courseCode}-${section}-${term}`, schedule);
+    }
+    if (crn && term) {
+      schedulesByCrnTerm.set(`${term}-${crn}`, schedule);
+    }
   });
 
-  // Process each schedule entry
+  const formatDiffValue = (value) => {
+    if (value === undefined || value === null) return '';
+    if (Array.isArray(value) || typeof value === 'object') {
+      try {
+        return JSON.stringify(value);
+      } catch (error) {
+        return String(value);
+      }
+    }
+    return value;
+  };
+
+  let rowCounter = 0;
   for (const row of csvData) {
-    const baseData = extractScheduleRowBaseData(row);
+    rowCounter += 1;
+    const baseData = extractScheduleRowBaseData(row, fallbackTerm);
+    const rowIndex = row.__rowIndex || rowCounter;
+    const rowLabel = `Row ${rowIndex}`;
+
+    if (!baseData.courseCode) {
+      addValidation('error', `${rowLabel}: Missing Course`);
+      summary.rowsSkipped += 1;
+      continue;
+    }
+    if (!baseData.term && !baseData.termCode) {
+      addValidation('error', `${rowLabel}: Missing Term`);
+      summary.rowsSkipped += 1;
+      continue;
+    }
+    if (!baseData.instructorField) {
+      addValidation('error', `${rowLabel}: Missing Instructor`);
+      summary.rowsSkipped += 1;
+      continue;
+    }
+    if (!baseData.crn || !/^\d{5,6}$/.test(baseData.crn)) {
+      addValidation('error', `${rowLabel}: Invalid CRN "${baseData.crn || ''}"`);
+      summary.rowsSkipped += 1;
+      continue;
+    }
+
+    const scheduleKey = `${baseData.courseCode}-${baseData.section}-${baseData.term}`;
+    if (seenScheduleKeys.has(scheduleKey)) {
+      addValidation('warning', `${rowLabel}: Duplicate schedule "${scheduleKey}" skipped`);
+      summary.rowsSkipped += 1;
+      continue;
+    }
+    seenScheduleKeys.add(scheduleKey);
+
     // Precompute key fields and group key for cascading selection
     const preCourseCode = baseData.courseCode;
     const preSection = baseData.section;
     const preTerm = baseData.term;
     const groupKey = `sched_${preCourseCode}_${preSection}_${preTerm}`;
+
     // Extract instructor information (exact match only, flag for review otherwise)
     const instructorField = baseData.instructorField;
     const parsedList = Array.isArray(baseData.parsedInstructors) && baseData.parsedInstructors.length > 0
       ? baseData.parsedInstructors
       : (baseData.parsedInstructor ? [baseData.parsedInstructor] : []);
+    const parsedForMatch = parsedList.filter((parsed) => {
+      if (!parsed) return false;
+      if (parsed.isStaff) return false;
+      const baylorId = normalizeBaylorId(parsed?.id);
+      return Boolean(parsed?.firstName || parsed?.lastName || baylorId);
+    });
+
+    if (parsedForMatch.length === 0) {
+      addValidation('warning', `${rowLabel}: Instructor parsed as staff/unassigned`);
+    }
+
+    parsedForMatch.forEach((parsed) => {
+      const baylorId = normalizeBaylorId(parsed?.id);
+      if (!baylorId) {
+        addValidation('warning', `${rowLabel}: Missing instructor ID for ${parsed?.lastName || parsed?.firstName || 'Unknown'}`);
+      }
+    });
 
     let instructorId = null;
     const instructorAssignments = [];
@@ -528,9 +679,8 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
       return matchIssue;
     };
 
-    for (const parsed of parsedList) {
+    for (const parsed of parsedForMatch) {
       const baylorId = normalizeBaylorId(parsed?.id);
-      if (!parsed?.firstName && !parsed?.lastName && !baylorId) continue;
 
       const matchResult = findPersonMatch({
         firstName: parsed?.firstName || '',
@@ -569,13 +719,17 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
       || [...instructorAssignments].sort((a, b) => (b.percentage || 0) - (a.percentage || 0))[0];
     instructorId = primaryAssignment?.personId || null;
 
-    const primaryParsed = parsedList.find((info) => info.isPrimary) || parsedList[0] || baseData.parsedInstructor;
+    const primaryParsed = parsedForMatch.find((info) => info.isPrimary)
+      || parsedForMatch[0]
+      || parsedList[0]
+      || baseData.parsedInstructor;
     const primaryBaylorId = normalizeBaylorId(primaryParsed?.id);
     const primaryInstructor = instructorId ? instructorPeople.get(instructorId) : null;
 
     // Extract room information (support simultaneous multi-rooms)
-    const splitRooms = baseData.roomNames;
+    const splitRooms = Array.isArray(baseData.roomNames) ? baseData.roomNames : [];
     const resolvedRoomIds = [];
+    const resolvedSpaceKeys = [];
     let primaryRoomId = null;
     if (splitRooms.length > 0) {
       for (const singleRoom of splitRooms) {
@@ -583,7 +737,9 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
         if (!nameKey) continue;
 
         const parsed = parseRoomLabel(singleRoom);
-        const roomKey = parsed?.roomKey || '';
+        const spaceKey = parsed?.spaceKey || '';
+        const roomKey = spaceKey || parsed?.roomKey || '';
+        if (spaceKey) resolvedSpaceKeys.push(spaceKey);
 
         let room = roomKey ? roomsKeyMap.get(roomKey) : null;
         if (!room) {
@@ -592,12 +748,20 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
 
         if (!room && roomKey) {
           const now = new Date().toISOString();
+          const buildingCode = parsed?.buildingCode || (spaceKey ? spaceKey.split(':')[0] : '');
+          const spaceNumber = parsed?.spaceNumber || parsed?.roomNumber || '';
+          const buildingDisplayName = parsed?.building || buildingCode || '';
+          const displayName = parsed?.displayName || singleRoom;
           const newRoom = {
-            name: parsed.displayName,
-            displayName: parsed.displayName,
-            building: parsed.building,
-            roomNumber: parsed.roomNumber,
-            roomKey,
+            spaceKey: spaceKey || '',
+            spaceNumber,
+            buildingCode,
+            buildingDisplayName,
+            name: displayName,
+            displayName,
+            building: buildingDisplayName,
+            roomNumber: spaceNumber,
+            roomKey: parsed?.roomKey || '',
             capacity: null,
             type: 'Classroom',
             isActive: true,
@@ -607,6 +771,7 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
           transaction.addChange('rooms', 'add', newRoom, null, { groupKey });
           const placeholder = { id: roomKey, ...newRoom };
           roomsKeyMap.set(roomKey, placeholder);
+          if (spaceKey) roomsKeyMap.set(spaceKey, placeholder);
           buildRoomNameKeys(placeholder).forEach((key) => roomsMap.set(key, placeholder));
           room = placeholder;
         }
@@ -622,20 +787,16 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
       }
     }
 
-    // Create schedule key for duplicate detection
     const courseCode = preCourseCode;
     const section = preSection;
     const term = preTerm;
-    const scheduleKey = `${courseCode}-${section}-${term}`;
 
-    // Check for duplicate schedules
-    const existingSchedule = scheduleMap.get(scheduleKey);
-    if (existingSchedule) {
-      console.log(`⚠️ Skipping duplicate schedule: ${scheduleKey}`);
-      continue; // Skip duplicate schedule
+    const scheduleLookupKey = `${courseCode}-${section}-${term}`;
+    let existingSchedule = schedulesByCrnTerm.get(`${term}-${baseData.crn}`) || null;
+    if (!existingSchedule) {
+      existingSchedule = schedulesByCourseSectionTerm.get(scheduleLookupKey) || null;
     }
 
-    // Create schedule entry
     const finalCrn = baseData.crn;
     const instructorDisplayName = parsedList.length > 1
       ? (baseData.normalizedInstructorName || instructorField)
@@ -644,6 +805,12 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
       .map((assignment) => assignment.matchIssueId)
       .filter(Boolean);
     const uniqueRoomIds = Array.from(new Set(resolvedRoomIds));
+    const uniqueSpaceIds = baseData.locationType === 'no_room'
+      ? []
+      : Array.from(new Set([...(baseData.spaceIds || []), ...resolvedSpaceKeys]));
+    const spaceDisplayNames = baseData.locationType === 'no_room'
+      ? []
+      : Array.from(new Set(baseData.spaceDisplayNames || splitRooms));
 
     const scheduleData = {
       courseCode,
@@ -662,9 +829,11 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
       instructorBaylorId: primaryBaylorId,
       instructorMatchIssueIds,
       // Multi-room fields
+      spaceIds: uniqueSpaceIds,
+      spaceDisplayNames,
       roomIds: uniqueRoomIds,
       roomId: primaryRoomId || uniqueRoomIds[0] || null,
-      roomNames: splitRooms,
+      roomNames: baseData.locationType === 'no_room' ? [] : splitRooms,
       roomName: baseData.locationType === 'no_room' ? '' : (splitRooms[0] || ''),
       meetingPatterns: baseData.meetingPatterns,
       scheduleType: baseData.scheduleType,
@@ -676,9 +845,46 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
       locationType: baseData.locationType || 'room',
       locationLabel: baseData.locationLabel || '',
       status: baseData.status,
+      partOfTerm: baseData.partOfTerm || '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
+
+    const crossListCrns = parseCrossListCrns(row);
+    if (crossListCrns && crossListCrns.length > 0) {
+      scheduleData.crossListCrns = Array.from(new Set(crossListCrns));
+    }
+
+    const {
+      instructorName: _omitInstructorName,
+      roomName: _omitRoomName,
+      courseTitle: _omitCourseTitle,
+      instructorMatchIssueIds: _omitMatchIssueIds,
+      ...scheduleWrite
+    } = scheduleData;
+
+    if (existingSchedule) {
+      const allowEmptyFields = (scheduleWrite.locationType === 'no_room' || scheduleWrite.isOnline)
+        ? ['roomNames', 'roomName', 'roomIds', 'roomId', 'spaceIds', 'spaceDisplayNames']
+        : [];
+      const { updates, hasChanges } = buildUpsertUpdates(existingSchedule, scheduleWrite, { allowEmptyFields });
+      if (!hasChanges) {
+        summary.schedulesUnchanged += 1;
+        continue;
+      }
+
+      const changeId = transaction.addChange('schedules', 'modify', updates, existingSchedule, { groupKey });
+      const change = transaction.changes.schedules.modified.find((c) => c.id === changeId);
+      if (change) {
+        change.diff = Object.entries(updates).map(([key, value]) => ({
+          key,
+          from: formatDiffValue(existingSchedule[key]),
+          to: formatDiffValue(value)
+        }));
+      }
+      summary.schedulesUpdated += 1;
+      continue;
+    }
 
     const scheduleChangeId = transaction.addChange('schedules', 'add', scheduleData, null, { groupKey });
     matchIssuesForSchedule.forEach((issue) => {
@@ -687,9 +893,14 @@ const previewScheduleChanges = async (csvData, transaction, existingSchedules, e
         ? Array.from(new Set([...issue.scheduleChangeIds, scheduleChangeId]))
         : [scheduleChangeId];
     });
-    // Add to our local map to prevent duplicates within this import
-    scheduleMap.set(scheduleKey, scheduleData);
+    summary.schedulesAdded += 1;
   }
+
+  summary.peopleAdded = transaction.changes.people.added.length;
+  summary.roomsAdded = transaction.changes.rooms.added.length;
+  summary.matchIssues = transaction.matchingIssues.length;
+  summary.rowsProcessed = summary.rowsTotal - summary.rowsSkipped;
+  transaction.previewSummary = summary;
 };
 
 const previewDirectoryChanges = async (csvData, transaction, existingPeople, existingRooms = [], options = {}) => {
@@ -722,6 +933,11 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
     const officeRaw = row['Office'] || row['Office Location'] || '';
     const parsedOffice = parseRoomLabel(officeRaw);
     const officeRoomKey = parsedOffice?.roomKey || '';
+    const officeSpaceKey = parsedOffice?.spaceKey || '';
+    const officeBuildingCode = parsedOffice?.buildingCode || (officeSpaceKey ? officeSpaceKey.split(':')[0] : '');
+    const officeSpaceNumber = parsedOffice?.spaceNumber || parsedOffice?.roomNumber || '';
+    const officeBuildingName = parsedOffice?.building || officeBuildingCode || '';
+    const officeDisplayName = parsedOffice?.displayName || officeRaw;
     const officeNameKey = normalizeRoomName(officeRaw);
     let existingOfficeRoom = officeRoomKey ? roomsKeyMap.get(officeRoomKey) : null;
     if (!existingOfficeRoom && officeNameKey) {
@@ -746,10 +962,14 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
       if (includeOfficeRooms && officeRoomKey && !existingOfficeRoom) {
         const now = new Date().toISOString();
         const newRoom = {
-          name: parsedOffice.displayName,
-          displayName: parsedOffice.displayName,
-          building: parsedOffice.building,
-          roomNumber: parsedOffice.roomNumber,
+          spaceKey: officeSpaceKey,
+          spaceNumber: officeSpaceNumber,
+          buildingCode: officeBuildingCode,
+          buildingDisplayName: officeBuildingName,
+          name: officeDisplayName,
+          displayName: officeDisplayName,
+          building: officeBuildingName,
+          roomNumber: officeSpaceNumber,
           roomKey: officeRoomKey,
           capacity: null,
           type: 'Office',
@@ -810,10 +1030,14 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
         if (includeOfficeRooms && officeRoomKey && !existingOfficeRoom && !roomsKeyMap.has(officeRoomKey)) {
           const now = new Date().toISOString();
           const newRoom = {
-            name: parsedOffice.displayName,
-            displayName: parsedOffice.displayName,
-            building: parsedOffice.building,
-            roomNumber: parsedOffice.roomNumber,
+            spaceKey: officeSpaceKey,
+            spaceNumber: officeSpaceNumber,
+            buildingCode: officeBuildingCode,
+            buildingDisplayName: officeBuildingName,
+            name: officeDisplayName,
+            displayName: officeDisplayName,
+            building: officeBuildingName,
+            roomNumber: officeSpaceNumber,
             roomKey: officeRoomKey,
             capacity: null,
             type: 'Office',
@@ -898,6 +1122,39 @@ const getValueByPath = (obj, path) => {
     if (acc === undefined || acc === null) return undefined;
     return acc[key];
   }, obj);
+};
+
+const MAX_BATCH_OPERATIONS = 450;
+
+const createBatchWriter = ({ onFlush } = {}) => {
+  let batch = writeBatch(db);
+  let opCount = 0;
+  const pendingChanges = new Set();
+
+  const flush = async () => {
+    if (opCount === 0) return;
+    await batch.commit();
+    pendingChanges.forEach((change) => {
+      change.applied = true;
+    });
+    pendingChanges.clear();
+    if (typeof onFlush === 'function') {
+      await onFlush();
+    }
+    batch = writeBatch(db);
+    opCount = 0;
+  };
+
+  const add = async (change, apply) => {
+    apply(batch);
+    opCount += 1;
+    if (change) pendingChanges.add(change);
+    if (opCount >= MAX_BATCH_OPERATIONS) {
+      await flush();
+    }
+  };
+
+  return { add, flush };
 };
 
 // Commit transaction changes to database
@@ -987,7 +1244,15 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
     }
   });
 
-  const batch = writeBatch(db);
+  const batchWriter = createBatchWriter({
+    onFlush: async () => {
+      try {
+        await updateTransactionInStorage(transaction);
+      } catch (error) {
+        console.warn('Skipping transaction persistence during batch flush:', error?.message || error);
+      }
+    }
+  });
   const forcedChangeIds = new Set(resolutionChangeIds);
   matchingIssues.forEach((issue) => {
     const resolution = resolutionMap[issue.id];
@@ -1020,7 +1285,9 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
     for (const change of changesToApply) {
       if (change.collection === 'people' && change.action === 'add') {
         const docRef = doc(collection(db, COLLECTIONS.PEOPLE));
-        batch.set(docRef, change.newData);
+        await batchWriter.add(change, (batch) => {
+          batch.set(docRef, change.newData);
+        });
         change.documentId = docRef.id;
         createdPeopleCount += 1;
 
@@ -1040,15 +1307,17 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
         }
 
       } else if (change.collection === 'rooms' && change.action === 'add') {
-        const preferredId = (change.newData?.roomKey || '').toString().trim();
+        const preferredId = (change.newData?.spaceKey || change.newData?.roomKey || '').toString().trim();
         const docRef = preferredId
           ? doc(db, COLLECTIONS.ROOMS, preferredId)
           : doc(collection(db, COLLECTIONS.ROOMS));
-        if (preferredId) {
-          batch.set(docRef, change.newData, { merge: true });
-        } else {
-          batch.set(docRef, change.newData);
-        }
+        await batchWriter.add(change, (batch) => {
+          if (preferredId) {
+            batch.set(docRef, change.newData, { merge: true });
+          } else {
+            batch.set(docRef, change.newData);
+          }
+        });
         change.documentId = docRef.id;
         createdRoomsCount += 1;
 
@@ -1189,7 +1458,9 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
           courseTitle: _omitCourseTitle,
           ...scheduleWrite
         } = scheduleData;
-        batch.set(schedRef, scheduleWrite, { merge: true });
+        await batchWriter.add(change, (batch) => {
+          batch.set(schedRef, scheduleWrite, { merge: true });
+        });
         change.documentId = schedRef.id;
 
       } else if (change.collection !== 'people' && change.collection !== 'rooms') {
@@ -1207,15 +1478,17 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               }
             });
           }
-          batch.update(doc(db, change.collection, change.originalData.id), updates);
+          await batchWriter.add(change, (batch) => {
+            batch.update(doc(db, change.collection, change.originalData.id), updates);
+          });
           change.documentId = change.originalData.id;
         } else if (change.action === 'delete') {
-          batch.delete(doc(db, change.collection, change.originalData.id));
+          await batchWriter.add(change, (batch) => {
+            batch.delete(doc(db, change.collection, change.originalData.id));
+          });
           change.documentId = change.originalData.id;
         }
       }
-
-      change.applied = true;
     }
 
     for (const termData of termDocsToUpsert.values()) {
@@ -1234,10 +1507,12 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
         termDoc.locked = false;
         termDoc.createdAt = now;
       }
-      batch.set(termRef, termDoc, { merge: true });
+      await batchWriter.add(null, (batch) => {
+        batch.set(termRef, termDoc, { merge: true });
+      });
     }
 
-    await batch.commit();
+    await batchWriter.flush();
 
     transaction.status = 'committed';
     await updateTransactionInStorage(transaction);
@@ -1349,6 +1624,17 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
     return transaction;
   } catch (error) {
     console.error('Error committing transaction:', error);
+    try {
+      const appliedChanges = transaction?.getAllChanges
+        ? transaction.getAllChanges().filter((change) => change.applied)
+        : [];
+      if (appliedChanges.length > 0 && transaction) {
+        transaction.status = 'partial';
+        await updateTransactionInStorage(transaction);
+      }
+    } catch (updateError) {
+      console.error('Error updating transaction after partial commit:', updateError);
+    }
     throw error;
   }
 };
@@ -1370,7 +1656,7 @@ export const rollbackTransaction = async (transactionId) => {
   console.log('📊 Transaction status:', transaction.status);
   console.log('📊 Transaction stats:', transaction.stats);
 
-  if (transaction.status !== 'committed') {
+  if (transaction.status !== 'committed' && transaction.status !== 'partial') {
     throw new Error('Transaction is not committed');
   }
 

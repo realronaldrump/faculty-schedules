@@ -736,7 +736,7 @@ export const detectPeopleDuplicates = (people = [], options = {}) => {
 export const detectScheduleDuplicates = (schedules = [], options = {}) => {
   const blockedPairs =
     options.blockedPairs instanceof Set ? options.blockedPairs : new Set();
-  const duplicates = [];
+  const duplicatesByPair = new Map();
   const seenByCanonicalId = new Map();
   const seenByCrnTerm = new Map();
   const seenByComposite = new Map();
@@ -807,13 +807,18 @@ export const detectScheduleDuplicates = (schedules = [], options = {}) => {
     );
     const pairKey = getPairKey(primary.id, secondary.id);
     if (blockedPairs.has(pairKey)) return;
-    duplicates.push(
-      buildDuplicateRecord({
-        ...metadata,
-        records: [primary, secondary],
-        mergeStrategy: "merge_schedules",
-      }),
-    );
+    const candidate = buildDuplicateRecord({
+      ...metadata,
+      records: [primary, secondary],
+      mergeStrategy: "merge_schedules",
+    });
+    const existingDuplicate = duplicatesByPair.get(pairKey);
+    if (
+      !existingDuplicate ||
+      candidate.confidence > existingDuplicate.confidence
+    ) {
+      duplicatesByPair.set(pairKey, candidate);
+    }
   };
 
   schedules.forEach((schedule) => {
@@ -884,7 +889,7 @@ export const detectScheduleDuplicates = (schedules = [], options = {}) => {
     }
   });
 
-  return duplicates;
+  return Array.from(duplicatesByPair.values());
 };
 
 export const detectRoomDuplicates = (rooms = [], options = {}) => {

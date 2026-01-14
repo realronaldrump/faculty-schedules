@@ -75,7 +75,7 @@ const NO_ROOM_PATTERNS = [
 /**
  * Multi-room separator patterns
  */
-const MULTI_ROOM_SEPARATORS = /\s*[;\n]\s*|\s*\/\s*(?=\D)|\s+and\s+/i;
+const MULTI_ROOM_SEPARATORS = /\s*[;,\n]\s*|\s*\/\s*(?=\D)|\s+and\s+/i;
 
 // ============================================================================
 // INTERNAL STATE (Building Configuration Cache)

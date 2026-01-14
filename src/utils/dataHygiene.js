@@ -2089,25 +2089,28 @@ export const applyLocationMigration = async (options = {}) => {
           for (const part of parts) {
             try {
               const parsed = parseRoomLabelFromService(part);
-              if (parsed.buildingCode && parsed.spaceNumber) {
-                const newSpaceKey = buildSpaceKey(parsed.buildingCode, parsed.spaceNumber);
-                const newDocId = generateSpaceId(parsed.buildingCode, parsed.spaceNumber);
+              const buildingCode = parsed?.buildingCode || parsed?.building?.code;
+              const spaceNumber = parsed?.spaceNumber;
+              if (buildingCode && spaceNumber) {
+                const newSpaceKey = buildSpaceKey(buildingCode, spaceNumber);
+                const newDocId = generateSpaceId({ buildingCode, spaceNumber });
                 
                 // Check if this space already exists
                 const existingDoc = await getDoc(doc(db, 'rooms', newDocId));
                 if (!existingDoc.exists()) {
+                  const buildingDisplayName = parsed?.building?.displayName || buildingCode;
                   const newRoom = {
                     spaceKey: newSpaceKey,
-                    spaceNumber: parsed.spaceNumber,
-                    buildingCode: parsed.buildingCode,
-                    buildingDisplayName: parsed.buildingDisplayName || parsed.buildingCode,
+                    spaceNumber,
+                    buildingCode,
+                    buildingDisplayName,
                     type: room.type || SPACE_TYPE.Classroom,
                     isActive: true,
                     // Legacy fields
-                    building: parsed.buildingDisplayName || parsed.buildingCode,
-                    roomNumber: parsed.spaceNumber,
-                    name: `${parsed.buildingDisplayName || parsed.buildingCode} ${parsed.spaceNumber}`,
-                    displayName: `${parsed.buildingDisplayName || parsed.buildingCode} ${parsed.spaceNumber}`,
+                    building: buildingDisplayName,
+                    roomNumber: spaceNumber,
+                    name: `${buildingDisplayName} ${spaceNumber}`,
+                    displayName: `${buildingDisplayName} ${spaceNumber}`,
                     createdAt: new Date().toISOString(),
                     createdBy: 'location-migration'
                   };
@@ -2193,11 +2196,14 @@ export const applyLocationMigration = async (options = {}) => {
             // parseMultiRoom returns an object with a 'rooms' array property
             const parsedRooms = parsedResult?.rooms || [];
             for (const parsed of parsedRooms) {
-              if (parsed.buildingCode && parsed.spaceNumber) {
-                const spaceKey = buildSpaceKey(parsed.buildingCode, parsed.spaceNumber);
-                const spaceId = spaceKeyToId.get(spaceKey) || generateSpaceId(parsed.buildingCode, parsed.spaceNumber);
+              const buildingCode = parsed?.buildingCode || parsed?.building?.code;
+              const spaceNumber = parsed?.spaceNumber;
+              if (buildingCode && spaceNumber) {
+                const spaceKey = buildSpaceKey(buildingCode, spaceNumber);
+                const spaceId = spaceKeyToId.get(spaceKey) || generateSpaceId({ buildingCode, spaceNumber });
+                const displayName = parsed?.building?.displayName || buildingCode;
                 spaceIds.push(spaceId);
-                spaceDisplayNames.push(`${parsed.buildingDisplayName || parsed.buildingCode} ${parsed.spaceNumber}`);
+                spaceDisplayNames.push(`${displayName} ${spaceNumber}`);
               }
             }
             
@@ -2235,10 +2241,12 @@ export const applyLocationMigration = async (options = {}) => {
         
         if (!person.officeSpaceId && person.office) {
           const parsed = parseRoomLabelFromService(person.office);
+          const buildingCode = parsed?.buildingCode || parsed?.building?.code;
+          const spaceNumber = parsed?.spaceNumber;
           
-          if (parsed.buildingCode && parsed.spaceNumber) {
-            const spaceKey = buildSpaceKey(parsed.buildingCode, parsed.spaceNumber);
-            const officeSpaceId = spaceKeyToId.get(spaceKey) || generateSpaceId(parsed.buildingCode, parsed.spaceNumber);
+          if (buildingCode && spaceNumber) {
+            const spaceKey = buildSpaceKey(buildingCode, spaceNumber);
+            const officeSpaceId = spaceKeyToId.get(spaceKey) || generateSpaceId({ buildingCode, spaceNumber });
             
             await batchWriter.add((batch) => {
               batch.update(docSnap.ref, {

@@ -58,6 +58,7 @@ import {
   toSnapshotDocId,
   zonedTimeToUtc
 } from '../../utils/temperatureUtils';
+import ConfirmDialog from '../shared/ConfirmDialog';
 
 const DEFAULT_TIMEZONE = 'America/Chicago';
 const AUTO_MATCH_THRESHOLD = 0.85;
@@ -158,6 +159,8 @@ const TemperatureMonitoring = () => {
   const [recomputeStart, setRecomputeStart] = useState('');
   const [recomputeEnd, setRecomputeEnd] = useState('');
   const [recomputing, setRecomputing] = useState(false);
+
+  const [showDeleteFloorplanConfirm, setShowDeleteFloorplanConfirm] = useState(false);
 
   const formatSnapshotTemp = (snapshot) => {
     if (!snapshot || snapshot.status === 'missing') return 'No data';
@@ -651,12 +654,13 @@ const TemperatureMonitoring = () => {
     }
   };
 
-  const handleDeleteFloorplan = async () => {
+  const handleDeleteFloorplan = () => {
     if (!selectedBuilding || !isAdmin) return;
+    setShowDeleteFloorplanConfirm(true);
+  };
 
-    const confirmed = window.confirm('Are you sure you want to delete the floorplan? This action cannot be undone.');
-    if (!confirmed) return;
-
+  const confirmDeleteFloorplan = async () => {
+    setShowDeleteFloorplanConfirm(false);
     try {
       const buildingKey = toBuildingKey(selectedBuilding);
       await setDoc(doc(db, 'temperatureBuildingSettings', buildingKey), {
@@ -2349,6 +2353,16 @@ const TemperatureMonitoring = () => {
       {viewMode === 'import' && renderImport()}
       {viewMode === 'export' && renderExport()}
       {viewMode === 'settings' && renderSettings()}
+
+      <ConfirmDialog
+        isOpen={showDeleteFloorplanConfirm}
+        title="Delete Floorplan"
+        message="Are you sure you want to delete the floorplan? This action cannot be undone."
+        onConfirm={confirmDeleteFloorplan}
+        onCancel={() => setShowDeleteFloorplanConfirm(false)}
+        confirmText="Delete"
+        variant="danger"
+      />
     </div>
   );
 };

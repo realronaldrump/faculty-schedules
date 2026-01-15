@@ -2096,7 +2096,7 @@ const TemperatureMonitoring = () => {
               <thead className="bg-gray-100">
                 <tr>
                   <th className="text-left px-3 py-2 text-gray-600 font-semibold">Date</th>
-                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">Files</th>
+                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">File</th>
                   <th className="text-left px-3 py-2 text-gray-600 font-semibold">Rows</th>
                   <th className="text-left px-3 py-2 text-gray-600 font-semibold">Action</th>
                 </tr>
@@ -2109,7 +2109,7 @@ const TemperatureMonitoring = () => {
                   return (
                     <tr key={item.id}>
                       <td className="px-3 py-2 text-gray-700">{importDate}</td>
-                      <td className="px-3 py-2 text-gray-700">{item.fileCount ?? '-'}</td>
+                      <td className="px-3 py-2 text-gray-700 truncate max-w-[200px]" title={item.fileName}>{item.fileName || '-'}</td>
                       <td className="px-3 py-2 text-gray-700">{item.rowCount ?? '-'}</td>
                       <td className="px-3 py-2">
                         <button

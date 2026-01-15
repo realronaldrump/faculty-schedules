@@ -848,7 +848,7 @@ const TemperatureMonitoring = () => {
   const buildPendingMappings = (items) => {
     const seen = new Set();
     return items
-      .filter((item) => item.deviceId && (!item.suggestedRoomId || item.matchConfidence < AUTO_MATCH_THRESHOLD))
+      .filter((item) => item.deviceId)
       .filter((item) => {
         if (seen.has(item.deviceId)) return false;
         seen.add(item.deviceId);
@@ -2047,8 +2047,8 @@ const TemperatureMonitoring = () => {
           {pendingMappings.length > 0 && (
             <div className="bg-baylor-gold/10 border border-baylor-gold/30 rounded-lg p-4 space-y-3">
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">Device Mapping Review</h3>
-                <p className="text-xs text-gray-500">Confirm which rooms should receive readings for each device.</p>
+                <h3 className="text-sm font-semibold text-gray-900">Device → Room Mapping</h3>
+                <p className="text-xs text-gray-500">Review and correct room assignments before importing. Changes will be saved for future imports.</p>
               </div>
               <div className="space-y-2">
                 {pendingMappings.map((item) => (

@@ -148,13 +148,13 @@ export const ScheduleProvider = ({ children }) => {
         setError(null);
         try {
             const termMeta = getTermByLabel(termLabel);
-            console.log(`📅 Loading schedules for ${termLabel}...`);
+            // console.log(`📅 Loading schedules for ${termLabel}...`);
             const { schedules } = await fetchSchedulesByTerm({
                 term: termLabel,
                 termCode: termMeta?.termCode || ''
             });
             setRawScheduleData(schedules);
-            console.log(`✅ Loaded ${schedules.length} schedules.`);
+            // console.log(`✅ Loaded ${schedules.length} schedules.`);
         } catch (err) {
             console.error('❌ Error loading schedules:', err);
             setError(err.message);

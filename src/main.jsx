@@ -25,12 +25,14 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         capture_pageview: "history_change",
         capture_exceptions: true,
         persistence: "localStorage+cookie",
-        debug: import.meta.env.MODE === "development",
+        debug: false,
+        disable_compression: true, // Helps with some adblockers
         // Suppress errors when blocked by adblockers
         on_request_error: () => { }, // Silently handle failed requests
         request_batching: {
           max_retry_attempts: 0, // Don't retry failed requests
         },
+        advanced_disable_decide: true, // Don't poll for feature flags if not essential
         loaded: (posthog) => {
           posthog.register({ environment: import.meta.env.MODE });
         },

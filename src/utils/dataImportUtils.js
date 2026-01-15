@@ -2094,7 +2094,7 @@ export const fetchSchedulesByTerm = async (termInput) => {
       return { schedules: [], people: [], rooms: [], programs: [] };
     }
 
-    console.log(`📡 Loading schedules for term: ${normalizedTerm || term}`);
+    // console.log(`📡 Loading schedules for term: ${normalizedTerm || term}`);
 
     let schedulesSnapshot = null;
     if (resolvedTermCode) {
@@ -2122,9 +2122,9 @@ export const fetchSchedulesByTerm = async (termInput) => {
       id: doc.id,
       ...doc.data(),
     }));
-    console.log(
-      `✅ Fetched ${schedules.length} schedules for "${normalizedTerm || term}"`,
-    );
+    // console.log(
+    //   `✅ Fetched ${schedules.length} schedules for "${normalizedTerm || term}"`,
+    // );
 
     const relational = await fetchRelationalCollections();
     return enrichSchedules(

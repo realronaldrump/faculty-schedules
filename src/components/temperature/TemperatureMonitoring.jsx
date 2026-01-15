@@ -378,11 +378,10 @@ const TemperatureMonitoring = () => {
 
     const loadImportHistory = async () => {
       try {
-        const buildingKey = toBuildingKey(selectedBuilding);
         const q = query(
           collection(db, 'temperatureImports'),
-          where('_id', '>=', buildingKey),
-          where('_id', '<=', buildingKey + '\uf8ff'),
+          where('buildingCode', '==', selectedBuilding),
+          orderBy('createdAt', 'desc'),
           limit(20)
         );
         const snap = await getDocs(q);

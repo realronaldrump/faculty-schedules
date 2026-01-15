@@ -309,6 +309,7 @@ const TemperatureMonitoring = () => {
     if (authLoading || !user) return;
     if (!selectedBuilding) return;
     let active = true;
+
     const loadSettings = async () => {
       setSettingsLoading(true);
       try {
@@ -360,31 +361,36 @@ const TemperatureMonitoring = () => {
         setBuildingSettings(buildDefaultSettings({ buildingCode: selectedBuilding, buildingName }));
         setBuildingIsHidden(false);
         setSettingsExists(false);
-      };
-      loadSettings();
-
-      const loadImportHistory = async () => {
-        try {
-          const buildingKey = toBuildingKey(selectedBuilding);
-          const q = query(
-            collection(db, 'temperatureImports'),
-            where('_id', '>=', buildingKey),
-            where('_id', '<=', buildingKey + '\uf8ff'),
-            limit(20)
-          );
-          const snap = await getDocs(q);
-          const items = snap.docs
-            .map(d => ({ id: d.id, ...d.data() }))
-            .sort((a, b) => new Date(b.createdAt?.seconds * 1000) - new Date(a.createdAt?.seconds * 1000));
-          setImportHistory(items);
-        } catch (err) {
-          console.error('Failed to load history', err);
-        }
-      };
-
-      if (isAdmin) loadImportHistory();
+      } finally {
+        if (active) setSettingsLoading(false);
+      }
     };
+
+    const loadImportHistory = async () => {
+      try {
+        const buildingKey = toBuildingKey(selectedBuilding);
+        const q = query(
+          collection(db, 'temperatureImports'),
+          where('_id', '>=', buildingKey),
+          where('_id', '<=', buildingKey + '\uf8ff'),
+          limit(20)
+        );
+        const snap = await getDocs(q);
+        const items = snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => new Date(b.createdAt?.seconds * 1000) - new Date(a.createdAt?.seconds * 1000));
+        setImportHistory(items);
+      } catch (err) {
+        console.error('Failed to load history', err);
+      }
+    };
+
+    loadSettings();
     if (isAdmin) loadImportHistory();
+
+    return () => {
+      active = false;
+    };
   }, [selectedBuilding, showNotification, authLoading, user, isAdmin]);
 
   useEffect(() => {
@@ -642,6 +648,30 @@ const TemperatureMonitoring = () => {
     } catch (error) {
       console.error('Error saving floorplan:', error);
       showNotification('error', 'Save Failed', 'Unable to save floorplan to database.');
+    }
+  };
+
+  const handleDeleteFloorplan = async () => {
+    if (!selectedBuilding || !isAdmin) return;
+
+    const confirmed = window.confirm('Are you sure you want to delete the floorplan? This action cannot be undone.');
+    if (!confirmed) return;
+
+    try {
+      const buildingKey = toBuildingKey(selectedBuilding);
+      await setDoc(doc(db, 'temperatureBuildingSettings', buildingKey), {
+        floorplan: null,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      setBuildingSettings((prev) => ({
+        ...prev,
+        floorplan: null
+      }));
+      showNotification('success', 'Floorplan Deleted', 'Floorplan has been removed.');
+    } catch (error) {
+      console.error('Error deleting floorplan:', error);
+      showNotification('error', 'Delete Failed', 'Unable to delete floorplan.');
     }
   };
 
@@ -944,6 +974,85 @@ const TemperatureMonitoring = () => {
     setMappingOverrides({});
   };
 
+  const recomputeSnapshotsForDay = async ({
+    buildingCode,
+    buildingName,
+    roomId,
+    spaceKey,
+    dateLocal,
+    samples,
+    timezone,
+    deviceId,
+    deviceLabel
+  }) => {
+    for (const snapshot of snapshotTimes) {
+      const targetMinutes = snapshot.minutes;
+      const tolerance = snapshot.toleranceMinutes ?? 15;
+      let bestSample = null;
+      let bestDelta = null;
+      for (let delta = 0; delta <= tolerance; delta += 1) {
+        const candidates = delta === 0 ? [targetMinutes] : [targetMinutes - delta, targetMinutes + delta];
+        for (const minute of candidates) {
+          if (minute < 0 || minute > 1439) continue;
+          const sample = samples[String(minute)];
+          if (!sample) continue;
+          bestSample = sample;
+          bestDelta = Math.abs(minute - targetMinutes);
+          break;
+        }
+        if (bestSample) break;
+      }
+      const stableBuilding = buildingCode || buildingName || '';
+      const stableRoom = spaceKey || roomId;
+      const snapshotId = toSnapshotDocId(stableBuilding, stableRoom, dateLocal, snapshot.id);
+      const snapshotRef = doc(db, 'temperatureRoomSnapshots', snapshotId);
+      const existingSnap = await getDoc(snapshotRef);
+      const status = bestSample ? 'ok' : 'missing';
+      const recomputedUtc = bestSample?.rawLocal
+        ? (() => {
+          const parsed = parseLocalTimestamp(bestSample.rawLocal);
+          const utcDate = parsed ? zonedTimeToUtc(parsed, timezone) : null;
+          return utcDate ? Timestamp.fromDate(utcDate) : bestSample.utc;
+        })()
+        : null;
+      const payload = {
+        buildingCode: buildingCode || '',
+        buildingName: buildingName || buildingCode || '',
+        roomId: stableRoom,
+        spaceKey: stableRoom,
+        roomName: getRoomLabel(roomLookup[stableRoom] || { id: stableRoom }, spacesByKey),
+        dateLocal,
+        snapshotTimeId: snapshot.id,
+        snapshotLabel: snapshot.label || formatMinutesToTime(snapshot.minutes),
+        targetMinutes,
+        toleranceMinutes: tolerance,
+        timezone,
+        status,
+        temperatureF: bestSample ? bestSample.temperatureF : null,
+        temperatureC: bestSample ? bestSample.temperatureC : null,
+        humidity: bestSample ? bestSample.humidity : null,
+        deltaMinutes: bestSample ? bestDelta : null,
+        sourceDeviceId: bestSample ? deviceId : null,
+        sourceDeviceLabel: bestSample ? deviceLabel : null,
+        sourceReadingLocal: bestSample ? bestSample.rawLocal : null,
+        sourceReadingUtc: bestSample ? recomputedUtc : null,
+        updatedAt: serverTimestamp()
+      };
+      if (!existingSnap.exists()) payload.createdAt = serverTimestamp();
+      if (existingSnap.exists()) {
+        const existing = existingSnap.data();
+        const same = existing.status === payload.status
+          && existing.temperatureF === payload.temperatureF
+          && existing.temperatureC === payload.temperatureC
+          && existing.humidity === payload.humidity
+          && existing.deltaMinutes === payload.deltaMinutes
+          && existing.sourceReadingLocal === payload.sourceReadingLocal;
+        if (same) continue;
+      }
+      await setDoc(snapshotRef, payload, { merge: true });
+    }
+  };
+
   const handleImport = async () => {
     if (!isAdmin || !selectedBuilding || !buildingSettings) return;
     if (importItems.length === 0) return;
@@ -1168,613 +1277,825 @@ const TemperatureMonitoring = () => {
     } finally {
       setImporting(false);
     }
-    setImporting(false);
-  }
-};
+  };
 
-// Add the newly created import to the history list immediately (simplistic update)
-useEffect(() => {
-  if (!importing && importItems.length === 0 && isAdmin && selectedBuilding) {
-    // A cheap way to refresh history after an import is just to re-fetch or let the user refresh.
-    // For better UX, we could call loadImportHistory() again here, but it's defined inside useEffect.
-    // We'll leave it as manual refresh or reliance on next mount for now.
-  }
-}, [importing, importItems, isAdmin, selectedBuilding]);
-
-const recomputeSnapshotsForDay = async ({
-  buildingCode,
-  buildingName,
-  roomId,
-  spaceKey,
-  dateLocal,
-  samples,
-  timezone,
-  deviceId,
-  deviceLabel
-}) => {
-  for (const snapshot of snapshotTimes) {
-    const targetMinutes = snapshot.minutes;
-    const tolerance = snapshot.toleranceMinutes ?? 15;
-    let bestSample = null;
-    let bestDelta = null;
-    for (let delta = 0; delta <= tolerance; delta += 1) {
-      const candidates = delta === 0 ? [targetMinutes] : [targetMinutes - delta, targetMinutes + delta];
-      for (const minute of candidates) {
-        if (minute < 0 || minute > 1439) continue;
-        const sample = samples[String(minute)];
-        if (!sample) continue;
-        bestSample = sample;
-        bestDelta = Math.abs(minute - targetMinutes);
-        break;
-      }
-      if (bestSample) break;
+  const handleRecomputeSnapshots = async () => {
+    if (!isAdmin || !selectedBuilding || !recomputeStart || !recomputeEnd) return;
+    if (!isValidTimeZone(buildingSettings?.timezone || DEFAULT_TIMEZONE)) {
+      showNotification('error', 'Invalid Timezone', 'Update the building timezone before recomputing.');
+      return;
     }
-    const stableBuilding = buildingCode || buildingName || '';
-    const stableRoom = spaceKey || roomId;
-    const snapshotId = toSnapshotDocId(stableBuilding, stableRoom, dateLocal, snapshot.id);
-    const snapshotRef = doc(db, 'temperatureRoomSnapshots', snapshotId);
-    const existingSnap = await getDoc(snapshotRef);
-    const status = bestSample ? 'ok' : 'missing';
-    const recomputedUtc = bestSample?.rawLocal
-      ? (() => {
-        const parsed = parseLocalTimestamp(bestSample.rawLocal);
-        const utcDate = parsed ? zonedTimeToUtc(parsed, timezone) : null;
-        return utcDate ? Timestamp.fromDate(utcDate) : bestSample.utc;
-      })()
-      : null;
-    const payload = {
-      buildingCode: buildingCode || '',
-      buildingName: buildingName || buildingCode || '',
-      roomId: stableRoom,
-      spaceKey: stableRoom,
-      roomName: getRoomLabel(roomLookup[stableRoom] || { id: stableRoom }, spacesByKey),
-      dateLocal,
-      snapshotTimeId: snapshot.id,
-      snapshotLabel: snapshot.label || formatMinutesToTime(snapshot.minutes),
-      targetMinutes,
-      toleranceMinutes: tolerance,
-      timezone,
-      status,
-      temperatureF: bestSample ? bestSample.temperatureF : null,
-      temperatureC: bestSample ? bestSample.temperatureC : null,
-      humidity: bestSample ? bestSample.humidity : null,
-      deltaMinutes: bestSample ? bestDelta : null,
-      sourceDeviceId: bestSample ? deviceId : null,
-      sourceDeviceLabel: bestSample ? deviceLabel : null,
-      sourceReadingLocal: bestSample ? bestSample.rawLocal : null,
-      sourceReadingUtc: bestSample ? recomputedUtc : null,
-      updatedAt: serverTimestamp()
-    };
-    if (!existingSnap.exists()) payload.createdAt = serverTimestamp();
-    if (existingSnap.exists()) {
-      const existing = existingSnap.data();
-      const same = existing.status === payload.status
-        && existing.temperatureF === payload.temperatureF
-        && existing.temperatureC === payload.temperatureC
-        && existing.humidity === payload.humidity
-        && existing.deltaMinutes === payload.deltaMinutes
-        && existing.sourceReadingLocal === payload.sourceReadingLocal;
-      if (same) continue;
+    if (recomputeStart > recomputeEnd) {
+      showNotification('error', 'Invalid Range', 'Start date must be before end date.');
+      return;
     }
-    await setDoc(snapshotRef, payload, { merge: true });
-  }
-};
-
-const handleRecomputeSnapshots = async () => {
-  if (!isAdmin || !selectedBuilding || !recomputeStart || !recomputeEnd) return;
-  if (!isValidTimeZone(buildingSettings?.timezone || DEFAULT_TIMEZONE)) {
-    showNotification('error', 'Invalid Timezone', 'Update the building timezone before recomputing.');
-    return;
-  }
-  if (recomputeStart > recomputeEnd) {
-    showNotification('error', 'Invalid Range', 'Start date must be before end date.');
-    return;
-  }
-  setRecomputing(true);
-  try {
-    const buildingName = selectedBuildingName || selectedBuilding;
-    let snap = await getDocs(query(
-      collection(db, 'temperatureDeviceReadings'),
-      where('buildingCode', '==', selectedBuilding),
-      where('dateLocal', '>=', recomputeStart),
-      where('dateLocal', '<=', recomputeEnd)
-    ));
-    if (snap.empty && buildingName) {
-      snap = await getDocs(query(
+    setRecomputing(true);
+    try {
+      const buildingName = selectedBuildingName || selectedBuilding;
+      let snap = await getDocs(query(
         collection(db, 'temperatureDeviceReadings'),
-        where('buildingName', '==', buildingName),
+        where('buildingCode', '==', selectedBuilding),
         where('dateLocal', '>=', recomputeStart),
         where('dateLocal', '<=', recomputeEnd)
       ));
+      if (snap.empty && buildingName) {
+        snap = await getDocs(query(
+          collection(db, 'temperatureDeviceReadings'),
+          where('buildingName', '==', buildingName),
+          where('dateLocal', '>=', recomputeStart),
+          where('dateLocal', '<=', recomputeEnd)
+        ));
+      }
+      for (const docSnap of snap.docs) {
+        const data = docSnap.data();
+        const device = deviceDocs[data.deviceId];
+        const roomId = device?.mapping?.spaceKey || device?.mapping?.roomId;
+        if (!roomId) continue;
+        const samples = data.samples || {};
+        await recomputeSnapshotsForDay({
+          buildingCode: selectedBuilding,
+          buildingName: selectedBuildingName || selectedBuilding,
+          roomId,
+          spaceKey: roomId,
+          dateLocal: data.dateLocal,
+          samples,
+          timezone: buildingSettings?.timezone || DEFAULT_TIMEZONE,
+          deviceId: data.deviceId,
+          deviceLabel: device?.label || data.deviceId
+        });
+      }
+      showNotification('success', 'Snapshots Recomputed', 'Snapshot results updated for the selected range.');
+    } catch (error) {
+      console.error('Recompute error:', error);
+      showNotification('error', 'Recompute Failed', 'Unable to recompute snapshots.');
+    } finally {
+      setRecomputing(false);
     }
-    for (const docSnap of snap.docs) {
-      const data = docSnap.data();
-      const device = deviceDocs[data.deviceId];
-      const roomId = device?.mapping?.spaceKey || device?.mapping?.roomId;
-      if (!roomId) continue;
-      const samples = data.samples || {};
-      await recomputeSnapshotsForDay({
-        buildingCode: selectedBuilding,
-        buildingName: selectedBuildingName || selectedBuilding,
-        roomId,
-        spaceKey: roomId,
-        dateLocal: data.dateLocal,
-        samples,
-        timezone: buildingSettings?.timezone || DEFAULT_TIMEZONE,
-        deviceId: data.deviceId,
-        deviceLabel: device?.label || data.deviceId
-      });
-    }
-    showNotification('success', 'Snapshots Recomputed', 'Snapshot results updated for the selected range.');
-  } catch (error) {
-    console.error('Recompute error:', error);
-    showNotification('error', 'Recompute Failed', 'Unable to recompute snapshots.');
-  } finally {
-    setRecomputing(false);
-  }
-};
+  };
 
-const loadHistorical = async () => {
-  if (!selectedBuilding || !historicalStart || !historicalEnd) return;
-  if (historicalStart > historicalEnd) {
-    showNotification('error', 'Invalid Range', 'Start date must be before end date.');
-    return;
-  }
-  setHistoricalLoading(true);
-  try {
-    const buildingName = selectedBuildingName || selectedBuilding;
-    let snap = await getDocs(query(
-      collection(db, 'temperatureRoomSnapshots'),
-      where('buildingCode', '==', selectedBuilding),
-      where('dateLocal', '>=', historicalStart),
-      where('dateLocal', '<=', historicalEnd)
-    ));
-    if (snap.empty && buildingName) {
-      snap = await getDocs(query(
+  const loadHistorical = async () => {
+    if (!selectedBuilding || !historicalStart || !historicalEnd) return;
+    if (historicalStart > historicalEnd) {
+      showNotification('error', 'Invalid Range', 'Start date must be before end date.');
+      return;
+    }
+    setHistoricalLoading(true);
+    try {
+      const buildingName = selectedBuildingName || selectedBuilding;
+      let snap = await getDocs(query(
         collection(db, 'temperatureRoomSnapshots'),
-        where('buildingName', '==', buildingName),
+        where('buildingCode', '==', selectedBuilding),
         where('dateLocal', '>=', historicalStart),
         where('dateLocal', '<=', historicalEnd)
       ));
+      if (snap.empty && buildingName) {
+        snap = await getDocs(query(
+          collection(db, 'temperatureRoomSnapshots'),
+          where('buildingName', '==', buildingName),
+          where('dateLocal', '>=', historicalStart),
+          where('dateLocal', '<=', historicalEnd)
+        ));
+      }
+      const docs = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+      setHistoricalDocs(docs);
+    } catch (error) {
+      console.error('Historical load error:', error);
+      showNotification('error', 'Historical Load Failed', 'Unable to load historical snapshot data.');
+    } finally {
+      setHistoricalLoading(false);
     }
-    const docs = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-    setHistoricalDocs(docs);
-  } catch (error) {
-    console.error('Historical load error:', error);
-    showNotification('error', 'Historical Load Failed', 'Unable to load historical snapshot data.');
-  } finally {
-    setHistoricalLoading(false);
-  }
-};
+  };
 
-const handleSnapshotExport = async () => {
-  if (!selectedBuilding || !exportStart || !exportEnd) return;
-  if (exportStart > exportEnd) {
-    showNotification('error', 'Invalid Range', 'Start date must be before end date.');
-    return;
-  }
-  setExporting(true);
-  try {
-    const buildingName = selectedBuildingName || selectedBuilding;
-    let snap = await getDocs(query(
-      collection(db, 'temperatureRoomSnapshots'),
-      where('buildingCode', '==', selectedBuilding),
-      where('dateLocal', '>=', exportStart),
-      where('dateLocal', '<=', exportEnd)
-    ));
-    if (snap.empty && buildingName) {
-      snap = await getDocs(query(
+  const handleSnapshotExport = async () => {
+    if (!selectedBuilding || !exportStart || !exportEnd) return;
+    if (exportStart > exportEnd) {
+      showNotification('error', 'Invalid Range', 'Start date must be before end date.');
+      return;
+    }
+    setExporting(true);
+    try {
+      const buildingName = selectedBuildingName || selectedBuilding;
+      let snap = await getDocs(query(
         collection(db, 'temperatureRoomSnapshots'),
-        where('buildingName', '==', buildingName),
+        where('buildingCode', '==', selectedBuilding),
         where('dateLocal', '>=', exportStart),
         where('dateLocal', '<=', exportEnd)
       ));
-    }
-    const docs = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-    const filtered = docs.filter((docData) => {
-      const roomKey = docData.spaceKey || docData.roomId;
-      if (exportRoomIds.length > 0 && !exportRoomIds.includes(roomKey)) return false;
-      if (exportSnapshotIds.length > 0 && !exportSnapshotIds.includes(docData.snapshotTimeId)) return false;
-      return true;
-    });
-    const headers = [
-      'Building',
-      'Room',
-      'Date',
-      'Snapshot Time',
-      'Temperature F',
-      'Temperature C',
-      'Humidity',
-      'Status',
-      'Timezone',
-      'Delta Minutes',
-      'Source Local Timestamp',
-      'Source UTC Timestamp',
-      'Device Label'
-    ];
-    const rows = filtered.map((docData) => {
-      const roomKey = docData.spaceKey || docData.roomId;
-      return ([
-        docData.buildingName || selectedBuildingName || selectedBuilding,
-        docData.roomName || getRoomLabel(roomLookup[roomKey] || { id: roomKey }, spacesByKey),
-        docData.dateLocal || '',
-        docData.snapshotLabel || '',
-        docData.temperatureF ?? '',
-        docData.temperatureC ?? '',
-        docData.humidity ?? '',
-        docData.status || '',
-        docData.timezone || buildingSettings?.timezone || DEFAULT_TIMEZONE,
-        docData.deltaMinutes ?? '',
-        docData.sourceReadingLocal || '',
-        docData.sourceReadingUtc?.toDate ? docData.sourceReadingUtc.toDate().toISOString() : '',
-        docData.sourceDeviceLabel || ''
-      ]);
-    });
-    const csvContent = [
-      headers.map(toCsvSafe).join(','),
-      ...rows.map((row) => row.map(toCsvSafe).join(','))
-    ].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `temperature-snapshots-${selectedBuilding}-${exportStart}-to-${exportEnd}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    showNotification('success', 'Export Ready', `Exported ${rows.length} snapshot rows.`);
-  } catch (error) {
-    console.error('Export error:', error);
-    showNotification('error', 'Export Failed', 'Unable to export snapshot data.');
-  } finally {
-    setExporting(false);
-  }
-};
-
-const handleRawExport = async () => {
-  if (!selectedBuilding || !exportStart || !exportEnd) return;
-  if (exportStart > exportEnd) {
-    showNotification('error', 'Invalid Range', 'Start date must be before end date.');
-    return;
-  }
-  setExporting(true);
-  try {
-    const buildingName = selectedBuildingName || selectedBuilding;
-    let snap = await getDocs(query(
-      collection(db, 'temperatureDeviceReadings'),
-      where('buildingCode', '==', selectedBuilding),
-      where('dateLocal', '>=', exportStart),
-      where('dateLocal', '<=', exportEnd)
-    ));
-    if (snap.empty && buildingName) {
-      snap = await getDocs(query(
-        collection(db, 'temperatureDeviceReadings'),
-        where('buildingName', '==', buildingName),
-        where('dateLocal', '>=', exportStart),
-        where('dateLocal', '<=', exportEnd)
-      ));
-    }
-    const rows = [];
-    snap.docs.forEach((docSnap) => {
-      const data = docSnap.data();
-      const device = deviceDocs[data.deviceId] || {};
-      const roomId = device?.mapping?.spaceKey || device?.mapping?.roomId || '';
-      if (exportRoomIds.length > 0 && roomId && !exportRoomIds.includes(roomId)) return;
-      const roomName = roomId ? getRoomLabel(roomLookup[roomId] || { id: roomId }, spacesByKey) : '';
-      const samples = data.samples || {};
-      Object.values(samples).forEach((sample) => {
-        rows.push([
-          buildingName || selectedBuilding,
-          roomName,
-          device.label || data.deviceId,
-          sample.rawLocal || '',
-          buildingSettings?.timezone || DEFAULT_TIMEZONE,
-          sample.temperatureF ?? '',
-          sample.temperatureC ?? '',
-          sample.humidity ?? ''
+      if (snap.empty && buildingName) {
+        snap = await getDocs(query(
+          collection(db, 'temperatureRoomSnapshots'),
+          where('buildingName', '==', buildingName),
+          where('dateLocal', '>=', exportStart),
+          where('dateLocal', '<=', exportEnd)
+        ));
+      }
+      const docs = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+      const filtered = docs.filter((docData) => {
+        const roomKey = docData.spaceKey || docData.roomId;
+        if (exportRoomIds.length > 0 && !exportRoomIds.includes(roomKey)) return false;
+        if (exportSnapshotIds.length > 0 && !exportSnapshotIds.includes(docData.snapshotTimeId)) return false;
+        return true;
+      });
+      const headers = [
+        'Building',
+        'Room',
+        'Date',
+        'Snapshot Time',
+        'Temperature F',
+        'Temperature C',
+        'Humidity',
+        'Status',
+        'Timezone',
+        'Delta Minutes',
+        'Source Local Timestamp',
+        'Source UTC Timestamp',
+        'Device Label'
+      ];
+      const rows = filtered.map((docData) => {
+        const roomKey = docData.spaceKey || docData.roomId;
+        return ([
+          docData.buildingName || selectedBuildingName || selectedBuilding,
+          docData.roomName || getRoomLabel(roomLookup[roomKey] || { id: roomKey }, spacesByKey),
+          docData.dateLocal || '',
+          docData.snapshotLabel || '',
+          docData.temperatureF ?? '',
+          docData.temperatureC ?? '',
+          docData.humidity ?? '',
+          docData.status || '',
+          docData.timezone || buildingSettings?.timezone || DEFAULT_TIMEZONE,
+          docData.deltaMinutes ?? '',
+          docData.sourceReadingLocal || '',
+          docData.sourceReadingUtc?.toDate ? docData.sourceReadingUtc.toDate().toISOString() : '',
+          docData.sourceDeviceLabel || ''
         ]);
       });
-    });
-    const headers = [
-      'Building',
-      'Room',
-      'Device Label',
-      'Local Timestamp',
-      'Timezone',
-      'Temperature F',
-      'Temperature C',
-      'Humidity'
-    ];
-    const csvContent = [
-      headers.map(toCsvSafe).join(','),
-      ...rows.map((row) => row.map(toCsvSafe).join(','))
-    ].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `temperature-raw-${selectedBuilding}-${exportStart}-to-${exportEnd}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    showNotification('success', 'Export Ready', `Exported ${rows.length} raw readings.`);
-  } catch (error) {
-    console.error('Raw export error:', error);
-    showNotification('error', 'Export Failed', 'Unable to export raw readings.');
-  } finally {
-    setExporting(false);
-  }
-};
+      const csvContent = [
+        headers.map(toCsvSafe).join(','),
+        ...rows.map((row) => row.map(toCsvSafe).join(','))
+      ].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `temperature-snapshots-${selectedBuilding}-${exportStart}-to-${exportEnd}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      showNotification('success', 'Export Ready', `Exported ${rows.length} snapshot rows.`);
+    } catch (error) {
+      console.error('Export error:', error);
+      showNotification('error', 'Export Failed', 'Unable to export snapshot data.');
+    } finally {
+      setExporting(false);
+    }
+  };
 
-const markerMap = editingPositions ? markerDrafts : (buildingSettings?.markers || {});
-const missingMarkers = roomsForBuilding.filter((room) => {
-  const roomKey = room.spaceKey || room.id;
-  if (!roomKey) return false;
-  return !markerMap[roomKey];
-});
+  const handleRawExport = async () => {
+    if (!selectedBuilding || !exportStart || !exportEnd) return;
+    if (exportStart > exportEnd) {
+      showNotification('error', 'Invalid Range', 'Start date must be before end date.');
+      return;
+    }
+    setExporting(true);
+    try {
+      const buildingName = selectedBuildingName || selectedBuilding;
+      let snap = await getDocs(query(
+        collection(db, 'temperatureDeviceReadings'),
+        where('buildingCode', '==', selectedBuilding),
+        where('dateLocal', '>=', exportStart),
+        where('dateLocal', '<=', exportEnd)
+      ));
+      if (snap.empty && buildingName) {
+        snap = await getDocs(query(
+          collection(db, 'temperatureDeviceReadings'),
+          where('buildingName', '==', buildingName),
+          where('dateLocal', '>=', exportStart),
+          where('dateLocal', '<=', exportEnd)
+        ));
+      }
+      const rows = [];
+      snap.docs.forEach((docSnap) => {
+        const data = docSnap.data();
+        const device = deviceDocs[data.deviceId] || {};
+        const roomId = device?.mapping?.spaceKey || device?.mapping?.roomId || '';
+        if (exportRoomIds.length > 0 && roomId && !exportRoomIds.includes(roomId)) return;
+        const roomName = roomId ? getRoomLabel(roomLookup[roomId] || { id: roomId }, spacesByKey) : '';
+        const samples = data.samples || {};
+        Object.values(samples).forEach((sample) => {
+          rows.push([
+            buildingName || selectedBuilding,
+            roomName,
+            device.label || data.deviceId,
+            sample.rawLocal || '',
+            buildingSettings?.timezone || DEFAULT_TIMEZONE,
+            sample.temperatureF ?? '',
+            sample.temperatureC ?? '',
+            sample.humidity ?? ''
+          ]);
+        });
+      });
+      const headers = [
+        'Building',
+        'Room',
+        'Device Label',
+        'Local Timestamp',
+        'Timezone',
+        'Temperature F',
+        'Temperature C',
+        'Humidity'
+      ];
+      const csvContent = [
+        headers.map(toCsvSafe).join(','),
+        ...rows.map((row) => row.map(toCsvSafe).join(','))
+      ].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `temperature-raw-${selectedBuilding}-${exportStart}-to-${exportEnd}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      showNotification('success', 'Export Ready', `Exported ${rows.length} raw readings.`);
+    } catch (error) {
+      console.error('Raw export error:', error);
+      showNotification('error', 'Export Failed', 'Unable to export raw readings.');
+    } finally {
+      setExporting(false);
+    }
+  };
 
-const currentSnapshotLabel = snapshotTimes.find((slot) => slot.id === selectedSnapshotId)?.label || '';
+  const markerMap = editingPositions ? markerDrafts : (buildingSettings?.markers || {});
+  const missingMarkers = roomsForBuilding.filter((room) => {
+    const roomKey = room.spaceKey || room.id;
+    if (!roomKey) return false;
+    return !markerMap[roomKey];
+  });
 
-const floorplanData = buildingSettings?.floorplan;
+  const currentSnapshotLabel = snapshotTimes.find((slot) => slot.id === selectedSnapshotId)?.label || '';
 
-const renderFloorplan = () => {
-  if (roomsLoading || settingsLoading) {
-    return (
-      <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-600">
-        Loading floorplan data...
-      </div>
-    );
-  }
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">Floorplan View</h2>
-          <p className="text-sm text-gray-600">
-            {selectedDate || 'Select a date'} - {currentSnapshotLabel || 'Select a snapshot time'}
-          </p>
+  const floorplanData = buildingSettings?.floorplan;
+
+  const renderFloorplan = () => {
+    if (roomsLoading || settingsLoading) {
+      return (
+        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-600">
+          Loading floorplan data...
         </div>
-        {isAdmin && (
-          <div className="flex items-center gap-2">
-            {!editingPositions ? (
-              <button className="btn-secondary" onClick={startEditingPositions}>
-                <Pencil className="w-4 h-4 mr-2" /> Edit Positions
-              </button>
-            ) : (
-              <>
-                <button className="btn-primary" onClick={saveMarkerPositions}>
-                  <Save className="w-4 h-4 mr-2" /> Save Positions
+      );
+    }
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Floorplan View</h2>
+            <p className="text-sm text-gray-600">
+              {selectedDate || 'Select a date'} - {currentSnapshotLabel || 'Select a snapshot time'}
+            </p>
+          </div>
+          {isAdmin && (
+            <div className="flex items-center gap-2">
+              {!editingPositions ? (
+                <button className="btn-secondary" onClick={startEditingPositions}>
+                  <Pencil className="w-4 h-4 mr-2" /> Edit Positions
                 </button>
-                <button className="btn-ghost" onClick={cancelEditingPositions}>
-                  <X className="w-4 h-4 mr-2" /> Cancel
-                </button>
-              </>
-            )}
-            <label className="btn-secondary cursor-pointer">
-              <ImageIcon className="w-4 h-4 mr-2" /> Upload PNG
-              <input
-                type="file"
-                accept="image/png"
-                className="hidden"
-                onChange={(event) => handleFloorplanUpload(event.target.files?.[0])}
-              />
-            </label>
+              ) : (
+                <>
+                  <button className="btn-primary" onClick={saveMarkerPositions}>
+                    <Save className="w-4 h-4 mr-2" /> Save Positions
+                  </button>
+                  <button className="btn-ghost" onClick={cancelEditingPositions}>
+                    <X className="w-4 h-4 mr-2" /> Cancel
+                  </button>
+                </>
+              )}
+              <label className="btn-secondary cursor-pointer">
+                <ImageIcon className="w-4 h-4 mr-2" /> Upload PNG
+                <input
+                  type="file"
+                  accept="image/png"
+                  className="hidden"
+                  onChange={(event) => handleFloorplanUpload(event.target.files?.[0])}
+                />
+              </label>
+            </div>
+          )}
+        </div>
+
+        {floorplanData?.downloadUrl && isAdmin && !editingPositions && (
+          <div className="flex justify-end mb-4">
+            <button
+              className="btn-ghost text-red-600 hover:text-red-700 hover:bg-red-50"
+              onClick={handleDeleteFloorplan}
+            >
+              <Trash2 className="w-4 h-4 mr-2" /> Delete Floorplan
+            </button>
+          </div>
+        )}
+
+        {!floorplanData?.downloadUrl ? (
+          <div className="border border-dashed border-gray-300 rounded-lg p-10 text-center">
+            <MapIcon className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+            <p className="text-gray-700 font-medium">No floorplan uploaded yet.</p>
+            <p className="text-sm text-gray-500">Upload a PNG floorplan to begin placing temperature markers.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
+            <div className="relative border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+              <div
+                ref={mapRef}
+                className={`relative ${editingPositions ? 'cursor-crosshair' : ''}`}
+                onClick={handleMapClick}
+              >
+                <img src={floorplanData.downloadUrl} alt={`${selectedBuilding} floorplan`} className="w-full h-auto block" />
+                {roomsForBuilding.map((room) => {
+                  const roomKey = room.spaceKey || room.id;
+                  if (!roomKey) return null;
+                  const marker = markerMap[roomKey];
+                  if (!marker) return null;
+                  const snapshot = snapshotLookup[roomKey]?.[selectedSnapshotId];
+                  const isMissing = !snapshot || snapshot.status === 'missing';
+                  const tempLabel = formatSnapshotTemp(snapshot);
+                  return (
+                    <button
+                      key={roomKey}
+                      type="button"
+                      onPointerDown={(event) => handleMarkerPointerDown(roomKey, event)}
+                      className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full px-2 py-1 text-xs font-semibold shadow-sm ${isMissing ? 'bg-gray-300 text-gray-700' : 'bg-baylor-green text-white'}`}
+                      style={{ left: `${marker.xPct}%`, top: `${marker.yPct}%` }}
+                      title={`${getRoomLabel(room, spacesByKey)} - ${tempLabel}`}
+                    >
+                      <div className="flex flex-col items-center leading-tight">
+                        <span>{room.spaceNumber || room.roomNumber || room.name}</span>
+                        <span>{tempLabel}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {editingPositions && (
+                <div className="bg-baylor-green/5 border border-baylor-green/20 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-baylor-green mb-2">Edit Mode</h3>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Drag existing markers or choose a room below, then click the map to place it.
+                  </p>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {missingMarkers.length === 0 ? (
+                      <div className="text-xs text-gray-600">All rooms have markers placed.</div>
+                    ) : (
+                      missingMarkers.map((room) => {
+                        const roomKey = room.spaceKey || room.id;
+                        if (!roomKey) return null;
+                        return (
+                          <button
+                            key={roomKey}
+                            className={`w-full text-left px-3 py-2 rounded-md border text-xs ${activePlacementRoomId === roomKey ? 'border-baylor-green bg-baylor-green/10' : 'border-gray-200 hover:border-baylor-green/50'}`}
+                            onClick={() => setActivePlacementRoomId(roomKey)}
+                          >
+                            {getRoomLabel(room, spacesByKey)}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">Snapshot Summary</h3>
+                <div className="text-sm text-gray-600 space-y-1">
+                  <div>{roomsForBuilding.length} rooms in building</div>
+                  <div>{Object.keys(snapshotLookup).length} rooms with data</div>
+                  <div>Timezone: {buildingSettings?.timezone || DEFAULT_TIMEZONE}</div>
+                </div>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">Missing Data</h3>
+                <div className="text-xs text-gray-600 max-h-40 overflow-y-auto space-y-1">
+                  {roomsForBuilding.filter((room) => {
+                    const roomKey = room.spaceKey || room.id;
+                    const snapshot = roomKey ? snapshotLookup[roomKey]?.[selectedSnapshotId] : null;
+                    return !snapshot || snapshot.status === 'missing';
+                  }).map((room) => (
+                    <div key={room.spaceKey || room.id}>{getRoomLabel(room, spacesByKey)}</div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
+    );
+  };
 
-      {floorplanData?.downloadUrl && isAdmin && !editingPositions && (
-        <div className="flex justify-end mb-4">
-          <button
-            className="btn-ghost text-red-600 hover:text-red-700 hover:bg-red-50"
-            onClick={handleDeleteFloorplan}
-          >
-            <Trash2 className="w-4 h-4 mr-2" /> Delete Floorplan
-          </button>
+  const renderDailyTable = () => (
+    <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Daily Snapshot Table</h2>
+          <p className="text-sm text-gray-600">Date: {selectedDate || 'Select a date'}</p>
         </div>
-      )}
+        <div className="text-sm text-gray-600">
+          {snapshotTimes.length} snapshot times
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="text-left px-4 py-2 text-gray-600 font-semibold">Room</th>
+              {snapshotTimes.map((slot) => (
+                <th key={slot.id} className="text-left px-4 py-2 text-gray-600 font-semibold">
+                  {slot.label || formatMinutesToLabel(slot.minutes)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {roomsForBuilding.map((room) => {
+              const roomKey = room.spaceKey || room.id;
+              if (!roomKey) return null;
+              return (
+                <tr key={roomKey}>
+                  <td className="px-4 py-2 font-medium text-gray-800">{getRoomLabel(room, spacesByKey)}</td>
+                  {snapshotTimes.map((slot) => {
+                    const snapshot = snapshotLookup[roomKey]?.[slot.id];
+                    const isMissing = !snapshot || snapshot.status === 'missing';
+                    return (
+                      <td key={slot.id} className="px-4 py-2">
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${isMissing ? 'bg-gray-200 text-gray-600' : 'bg-baylor-green/10 text-baylor-green'}`}>
+                          {formatSnapshotTemp(snapshot)}
+                        </span>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 
-      {!floorplanData?.downloadUrl ? (
-        <div className="border border-dashed border-gray-300 rounded-lg p-10 text-center">
-          <MapIcon className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-          <p className="text-gray-700 font-medium">No floorplan uploaded yet.</p>
-          <p className="text-sm text-gray-500">Upload a PNG floorplan to begin placing temperature markers.</p>
+  const missingCounts = useMemo(() => {
+    const counts = {};
+    historicalDocs.forEach((docData) => {
+      if (docData.status !== 'missing') return;
+      const roomKey = docData.spaceKey || docData.roomId;
+      if (!roomKey) return;
+      counts[roomKey] = (counts[roomKey] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([roomId, count]) => ({ roomId, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [historicalDocs]);
+
+  const renderHistorical = () => {
+    const roomSnapshots = historicalRoomId
+      ? historicalDocs.filter((docData) => (docData.spaceKey || docData.roomId) === historicalRoomId)
+      : [];
+
+    const dates = Array.from(new Set(roomSnapshots.map((docData) => docData.dateLocal))).sort();
+
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Historical View</h2>
+            <p className="text-sm text-gray-600">Track snapshot history across dates.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              className="form-input"
+              value={historicalStart}
+              onChange={(e) => setHistoricalStart(e.target.value)}
+            />
+            <span className="text-gray-500">to</span>
+            <input
+              type="date"
+              className="form-input"
+              value={historicalEnd}
+              onChange={(e) => setHistoricalEnd(e.target.value)}
+            />
+            <button className="btn-secondary" onClick={loadHistorical} disabled={historicalLoading}>
+              {historicalLoading ? 'Loading...' : 'Load'}
+            </button>
+          </div>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
-          <div className="relative border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
-            <div
-              ref={mapRef}
-              className={`relative ${editingPositions ? 'cursor-crosshair' : ''}`}
-              onClick={handleMapClick}
+
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+          <div>
+            <label className="form-label">Room</label>
+            <select
+              className="form-input"
+              value={historicalRoomId}
+              onChange={(e) => setHistoricalRoomId(e.target.value)}
             >
-              <img src={floorplanData.downloadUrl} alt={`${selectedBuilding} floorplan`} className="w-full h-auto block" />
+              <option value="">Select a room...</option>
               {roomsForBuilding.map((room) => {
                 const roomKey = room.spaceKey || room.id;
                 if (!roomKey) return null;
-                const marker = markerMap[roomKey];
-                if (!marker) return null;
-                const snapshot = snapshotLookup[roomKey]?.[selectedSnapshotId];
-                const isMissing = !snapshot || snapshot.status === 'missing';
-                const tempLabel = formatSnapshotTemp(snapshot);
                 return (
-                  <button
-                    key={roomKey}
-                    type="button"
-                    onPointerDown={(event) => handleMarkerPointerDown(roomKey, event)}
-                    className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full px-2 py-1 text-xs font-semibold shadow-sm ${isMissing ? 'bg-gray-300 text-gray-700' : 'bg-baylor-green text-white'}`}
-                    style={{ left: `${marker.xPct}%`, top: `${marker.yPct}%` }}
-                    title={`${getRoomLabel(room, spacesByKey)} - ${tempLabel}`}
-                  >
-                    <div className="flex flex-col items-center leading-tight">
-                      <span>{room.spaceNumber || room.roomNumber || room.name}</span>
-                      <span>{tempLabel}</span>
-                    </div>
-                  </button>
+                  <option key={roomKey} value={roomKey}>{getRoomLabel(room, spacesByKey)}</option>
                 );
               })}
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            {editingPositions && (
-              <div className="bg-baylor-green/5 border border-baylor-green/20 rounded-lg p-4">
-                <h3 className="text-sm font-semibold text-baylor-green mb-2">Edit Mode</h3>
-                <p className="text-xs text-gray-600 mb-3">
-                  Drag existing markers or choose a room below, then click the map to place it.
-                </p>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {missingMarkers.length === 0 ? (
-                    <div className="text-xs text-gray-600">All rooms have markers placed.</div>
-                  ) : (
-                    missingMarkers.map((room) => {
-                      const roomKey = room.spaceKey || room.id;
-                      if (!roomKey) return null;
-                      return (
-                        <button
-                          key={roomKey}
-                          className={`w-full text-left px-3 py-2 rounded-md border text-xs ${activePlacementRoomId === roomKey ? 'border-baylor-green bg-baylor-green/10' : 'border-gray-200 hover:border-baylor-green/50'}`}
-                          onClick={() => setActivePlacementRoomId(roomKey)}
-                        >
-                          {getRoomLabel(room, spacesByKey)}
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
+            </select>
+            {historicalRoomId && (
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left px-4 py-2 text-gray-600 font-semibold">Date</th>
+                      {snapshotTimes.map((slot) => (
+                        <th key={slot.id} className="text-left px-4 py-2 text-gray-600 font-semibold">
+                          {slot.label || formatMinutesToLabel(slot.minutes)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {dates.map((dateKey) => (
+                      <tr key={dateKey}>
+                        <td className="px-4 py-2 font-medium text-gray-800">{dateKey}</td>
+                        {snapshotTimes.map((slot) => {
+                          const snapshot = roomSnapshots.find((docData) => docData.dateLocal === dateKey && docData.snapshotTimeId === slot.id);
+                          const isMissing = !snapshot || snapshot.status === 'missing';
+                          return (
+                            <td key={slot.id} className="px-4 py-2">
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${isMissing ? 'bg-gray-200 text-gray-600' : 'bg-baylor-green/10 text-baylor-green'}`}>
+                                {formatSnapshotTemp(snapshot)}
+                              </span>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <h3 className="text-sm font-semibold text-gray-900 mb-2">Snapshot Summary</h3>
-              <div className="text-sm text-gray-600 space-y-1">
-                <div>{roomsForBuilding.length} rooms in building</div>
-                <div>{Object.keys(snapshotLookup).length} rooms with data</div>
-                <div>Timezone: {buildingSettings?.timezone || DEFAULT_TIMEZONE}</div>
+          </div>
+
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Problem Rooms</h3>
+            {missingCounts.length === 0 ? (
+              <div className="text-xs text-gray-600">No missing data in this range.</div>
+            ) : (
+              <div className="space-y-2 text-xs text-gray-600">
+                {missingCounts.slice(0, 8).map((item) => (
+                  <div key={item.roomId} className="flex items-center justify-between">
+                    <span>{getRoomLabel(roomLookup[item.roomId] || { id: item.roomId }, spacesByKey)}</span>
+                    <span className="text-gray-500">{item.count} missing</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderImport = () => (
+    <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Bulk Import</h2>
+          <p className="text-sm text-gray-600">Upload Govee CSV exports and map devices to rooms.</p>
+        </div>
+        {importItems.length > 0 && (
+          <button
+            className="btn-ghost flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handleClearImports}
+            disabled={importing}
+          >
+            <X className="w-4 h-4" /> Clear list
+          </button>
+        )}
+      </div>
+
+      <input
+        id="temperature-import-csvs"
+        type="file"
+        accept=".csv"
+        multiple
+        className="hidden"
+        onChange={handleCsvSelection}
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="border border-dashed border-baylor-green/40 bg-baylor-green/5 rounded-lg p-5">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-full bg-white border border-baylor-green/20 flex items-center justify-center">
+              <FileUp className="w-5 h-5 text-baylor-green" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-gray-900">Select Govee CSV exports</div>
+              <div className="text-xs text-gray-500">
+                Upload one or more CSV files. We'll detect timestamps, temperature, and humidity automatically.
               </div>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <h3 className="text-sm font-semibold text-gray-900 mb-2">Missing Data</h3>
-              <div className="text-xs text-gray-600 max-h-40 overflow-y-auto space-y-1">
-                {roomsForBuilding.filter((room) => {
-                  const roomKey = room.spaceKey || room.id;
-                  const snapshot = roomKey ? snapshotLookup[roomKey]?.[selectedSnapshotId] : null;
-                  return !snapshot || snapshot.status === 'missing';
-                }).map((room) => (
-                  <div key={room.spaceKey || room.id}>{getRoomLabel(room, spacesByKey)}</div>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <label htmlFor="temperature-import-csvs" className="btn-secondary cursor-pointer inline-flex items-center">
+              <FileUp className="w-4 h-4 mr-2" /> Choose CSVs
+            </label>
+            {importItems.length > 0 && (
+              <span className="text-xs text-gray-500">Selecting new files replaces the current list.</span>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-900">Import Summary</h3>
+            <span className={`text-xs font-medium ${importItems.length ? 'text-baylor-green' : 'text-gray-500'}`}>
+              {importItems.length ? 'Ready for review' : 'Awaiting files'}
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+            <div className="rounded-lg bg-white border border-gray-200 p-3">
+              <div className="text-xs text-gray-500">Files</div>
+              <div className="text-lg font-semibold text-gray-900">{importSummary.fileCount}</div>
+            </div>
+            <div className="rounded-lg bg-white border border-gray-200 p-3">
+              <div className="text-xs text-gray-500">Devices</div>
+              <div className="text-lg font-semibold text-gray-900">{importSummary.deviceCount}</div>
+            </div>
+            <div className="rounded-lg bg-white border border-gray-200 p-3">
+              <div className="text-xs text-gray-500">Rows Parsed</div>
+              <div className="text-lg font-semibold text-gray-900">
+                {importSummary.totalRows > 0 ? `${importSummary.parsedRows}/${importSummary.totalRows}` : '0'}
+              </div>
+            </div>
+            <div className="rounded-lg bg-white border border-gray-200 p-3">
+              <div className="text-xs text-gray-500">Duplicates</div>
+              <div className="text-lg font-semibold text-gray-600">{importSummary.duplicateCount}</div>
+            </div>
+            <div className="rounded-lg bg-white border border-gray-200 p-3">
+              <div className="text-xs text-gray-500">Errors</div>
+              <div className="text-lg font-semibold text-amber-700">{importSummary.errorCount}</div>
+            </div>
+            <div className="rounded-lg bg-white border border-gray-200 p-3">
+              <div className="text-xs text-gray-500">Ready</div>
+              <div className="text-lg font-semibold text-baylor-green">{importSummary.readyCount}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {importItems.length === 0 ? (
+        <div className="border border-dashed border-gray-300 rounded-lg p-8 text-center text-gray-600">
+          <FileUp className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+          <p className="text-sm font-medium text-gray-700">No CSVs selected yet.</p>
+          <p className="text-xs text-gray-500">Use the upload panel above to add Govee exports.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-900">Selected Files</h3>
+            <span className="text-xs text-gray-500">{importSummary.fileCount} files</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">File</th>
+                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">Device</th>
+                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">Rows</th>
+                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">Date Range</th>
+                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">Status</th>
+                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {importItems.map((item) => {
+                  const rowTotal = item.rowCount ?? 0;
+                  const parsedRows = item.parsedCount ?? 0;
+                  const rowsLabel = rowTotal > 0 ? `${parsedRows}/${rowTotal}` : parsedRows > 0 ? `${parsedRows}` : '-';
+                  return (
+                    <tr key={item.id}>
+                      <td className="px-4 py-2 font-medium text-gray-800">{item.fileName}</td>
+                      <td className="px-4 py-2 text-gray-700">{item.deviceLabel || '-'}</td>
+                      <td className="px-4 py-2 text-gray-700">{rowsLabel}</td>
+                      <td className="px-4 py-2 text-gray-700">
+                        {item.minTimestamp && item.maxTimestamp ? `${item.minTimestamp} -> ${item.maxTimestamp}` : '-'}
+                      </td>
+                      <td className="px-4 py-2 text-gray-700">
+                        {item.duplicate ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-2 py-1 text-xs text-gray-600">
+                            <AlertTriangle className="w-3 h-3" /> Duplicate
+                          </span>
+                        ) : item.errorCount > 0 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
+                            <AlertTriangle className="w-3 h-3" /> {item.errorCount} errors
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-baylor-green/20 bg-baylor-green/10 px-2 py-1 text-xs text-baylor-green">
+                            <CheckCircle2 className="w-3 h-3" /> Ready
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-gray-700">
+                        <button
+                          type="button"
+                          className="btn-ghost flex items-center gap-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                          onClick={() => handleRemoveImportItem(item.id)}
+                          disabled={importing}
+                          aria-label={`Remove ${item.fileName}`}
+                        >
+                          <X className="w-3 h-3" />
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {pendingMappings.length > 0 && (
+            <div className="bg-baylor-gold/10 border border-baylor-gold/30 rounded-lg p-4 space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Device Mapping Review</h3>
+                <p className="text-xs text-gray-500">Confirm which rooms should receive readings for each device.</p>
+              </div>
+              <div className="space-y-2">
+                {pendingMappings.map((item) => (
+                  <div key={item.deviceId} className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-medium text-gray-800">{item.deviceLabel}</div>
+                      <div className="text-xs text-gray-500">
+                        Suggested: {item.suggestedRoomId ? getRoomLabel(roomLookup[item.suggestedRoomId] || { id: item.suggestedRoomId }, spacesByKey) : 'None'} | Confidence {Math.round((item.matchConfidence || 0) * 100)}%
+                      </div>
+                    </div>
+                    <select
+                      className="form-input md:max-w-xs"
+                      value={mappingOverrides[item.deviceId] || item.suggestedRoomId || ''}
+                      onChange={(e) => setMappingOverrides((prev) => ({ ...prev, [item.deviceId]: e.target.value }))}
+                    >
+                      <option value="">Select room...</option>
+                      {roomsForBuilding.map((room) => {
+                        const roomKey = room.spaceKey || room.id;
+                        if (!roomKey) return null;
+                        return (
+                          <option key={roomKey} value={roomKey}>{getRoomLabel(room, spacesByKey)}</option>
+                        );
+                      })}
+                    </select>
+                  </div>
                 ))}
               </div>
             </div>
+          )}
+
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="text-sm text-gray-600">
+              Duplicates are skipped automatically. Resolve any mapping prompts before importing.
+            </div>
+            <button className="btn-primary" onClick={handleImport} disabled={importing || hasUnresolvedMappings}>
+              {importing ? 'Importing...' : 'Import Now'}
+            </button>
           </div>
         </div>
       )}
     </div>
   );
-};
 
-const renderDailyTable = () => (
-  <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
-    <div className="flex items-center justify-between">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900">Daily Snapshot Table</h2>
-        <p className="text-sm text-gray-600">Date: {selectedDate || 'Select a date'}</p>
-      </div>
-      <div className="text-sm text-gray-600">
-        {snapshotTimes.length} snapshot times
-      </div>
-    </div>
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm">
-        <thead className="bg-gray-50">
-          <tr>
-            <th className="text-left px-4 py-2 text-gray-600 font-semibold">Room</th>
-            {snapshotTimes.map((slot) => (
-              <th key={slot.id} className="text-left px-4 py-2 text-gray-600 font-semibold">
-                {slot.label || formatMinutesToLabel(slot.minutes)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-200">
-          {roomsForBuilding.map((room) => {
-            const roomKey = room.spaceKey || room.id;
-            if (!roomKey) return null;
-            return (
-              <tr key={roomKey}>
-                <td className="px-4 py-2 font-medium text-gray-800">{getRoomLabel(room, spacesByKey)}</td>
-                {snapshotTimes.map((slot) => {
-                  const snapshot = snapshotLookup[roomKey]?.[slot.id];
-                  const isMissing = !snapshot || snapshot.status === 'missing';
-                  return (
-                    <td key={slot.id} className="px-4 py-2">
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${isMissing ? 'bg-gray-200 text-gray-600' : 'bg-baylor-green/10 text-baylor-green'}`}>
-                        {formatSnapshotTemp(snapshot)}
-                      </span>
-                    </td>
-                  );
-                })}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  </div>
-);
-
-const missingCounts = useMemo(() => {
-  const counts = {};
-  historicalDocs.forEach((docData) => {
-    if (docData.status !== 'missing') return;
-    const roomKey = docData.spaceKey || docData.roomId;
-    if (!roomKey) return;
-    counts[roomKey] = (counts[roomKey] || 0) + 1;
-  });
-  return Object.entries(counts)
-    .map(([roomId, count]) => ({ roomId, count }))
-    .sort((a, b) => b.count - a.count);
-}, [historicalDocs]);
-
-const renderHistorical = () => {
-  const roomSnapshots = historicalRoomId
-    ? historicalDocs.filter((docData) => (docData.spaceKey || docData.roomId) === historicalRoomId)
-    : [];
-
-  const dates = Array.from(new Set(roomSnapshots.map((docData) => docData.dateLocal))).sort();
-
-  return (
+  const renderExport = () => (
     <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">Historical View</h2>
-          <p className="text-sm text-gray-600">Track snapshot history across dates.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="date"
-            className="form-input"
-            value={historicalStart}
-            onChange={(e) => setHistoricalStart(e.target.value)}
-          />
-          <span className="text-gray-500">to</span>
-          <input
-            type="date"
-            className="form-input"
-            value={historicalEnd}
-            onChange={(e) => setHistoricalEnd(e.target.value)}
-          />
-          <button className="btn-secondary" onClick={loadHistorical} disabled={historicalLoading}>
-            {historicalLoading ? 'Loading...' : 'Load'}
-          </button>
-        </div>
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900">Export Data</h2>
+        <p className="text-sm text-gray-600">Download snapshot or raw readings using current filters.</p>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-        <div>
-          <label className="form-label">Room</label>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-3">
+          <label className="form-label">Date range</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              className="form-input"
+              value={exportStart}
+              onChange={(e) => setExportStart(e.target.value)}
+            />
+            <span className="text-gray-500">to</span>
+            <input
+              type="date"
+              className="form-input"
+              value={exportEnd}
+              onChange={(e) => setExportEnd(e.target.value)}
+            />
+          </div>
+          <label className="form-label">Rooms (optional)</label>
           <select
             className="form-input"
-            value={historicalRoomId}
-            onChange={(e) => setHistoricalRoomId(e.target.value)}
+            multiple
+            value={exportRoomIds}
+            onChange={(e) => setExportRoomIds(Array.from(e.target.selectedOptions).map((opt) => opt.value))}
           >
-            <option value="">Select a room...</option>
             {roomsForBuilding.map((room) => {
               const roomKey = room.spaceKey || room.id;
               if (!roomKey) return null;
@@ -1783,555 +2104,253 @@ const renderHistorical = () => {
               );
             })}
           </select>
-          {historicalRoomId && (
-            <div className="mt-4 overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-left px-4 py-2 text-gray-600 font-semibold">Date</th>
-                    {snapshotTimes.map((slot) => (
-                      <th key={slot.id} className="text-left px-4 py-2 text-gray-600 font-semibold">
-                        {slot.label || formatMinutesToLabel(slot.minutes)}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {dates.map((dateKey) => (
-                    <tr key={dateKey}>
-                      <td className="px-4 py-2 font-medium text-gray-800">{dateKey}</td>
-                      {snapshotTimes.map((slot) => {
-                        const snapshot = roomSnapshots.find((docData) => docData.dateLocal === dateKey && docData.snapshotTimeId === slot.id);
-                        const isMissing = !snapshot || snapshot.status === 'missing';
-                        return (
-                          <td key={slot.id} className="px-4 py-2">
-                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${isMissing ? 'bg-gray-200 text-gray-600' : 'bg-baylor-green/10 text-baylor-green'}`}>
-                              {formatSnapshotTemp(snapshot)}
-                            </span>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <label className="form-label">Snapshot times (optional)</label>
+          <select
+            className="form-input"
+            multiple
+            value={exportSnapshotIds}
+            onChange={(e) => setExportSnapshotIds(Array.from(e.target.selectedOptions).map((opt) => opt.value))}
+          >
+            {snapshotTimes.map((slot) => (
+              <option key={slot.id} value={slot.id}>{slot.label || formatMinutesToLabel(slot.minutes)}</option>
+            ))}
+          </select>
         </div>
-
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Problem Rooms</h3>
-          {missingCounts.length === 0 ? (
-            <div className="text-xs text-gray-600">No missing data in this range.</div>
-          ) : (
-            <div className="space-y-2 text-xs text-gray-600">
-              {missingCounts.slice(0, 8).map((item) => (
-                <div key={item.roomId} className="flex items-center justify-between">
-                  <span>{getRoomLabel(roomLookup[item.roomId] || { id: item.roomId }, spacesByKey)}</span>
-                  <span className="text-gray-500">{item.count} missing</span>
-                </div>
-              ))}
+        <div className="space-y-3">
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+            <div className="flex items-start gap-2 text-sm text-gray-600">
+              <Download className="w-4 h-4 mt-0.5 text-gray-400" />
+              <div>
+                <div className="font-medium text-gray-800">Snapshot Export</div>
+                <div>Includes temperature, humidity, snapshot time, and delta to target.</div>
+              </div>
             </div>
-          )}
+            <button className="btn-primary w-full" onClick={handleSnapshotExport} disabled={exporting}>
+              {exporting ? 'Exporting...' : 'Export Snapshots CSV'}
+            </button>
+          </div>
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+            <div className="flex items-start gap-2 text-sm text-gray-600">
+              <Download className="w-4 h-4 mt-0.5 text-gray-400" />
+              <div>
+                <div className="font-medium text-gray-800">Raw Readings Export</div>
+                <div>Full daily readings with local timestamps.</div>
+              </div>
+            </div>
+            <button className="btn-secondary w-full" onClick={handleRawExport} disabled={exporting}>
+              {exporting ? 'Exporting...' : 'Export Raw Readings CSV'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
-};
 
-const renderImport = () => (
-  <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
-    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+  const renderSettings = () => (
+    <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-gray-900">Bulk Import</h2>
-        <p className="text-sm text-gray-600">Upload Govee CSV exports and map devices to rooms.</p>
+        <h2 className="text-lg font-semibold text-gray-900">Temperature Settings</h2>
+        <p className="text-sm text-gray-600">Manage timezone and snapshot intervals for this building.</p>
       </div>
-      {importItems.length > 0 && (
-        <button
-          className="btn-ghost flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          onClick={handleClearImports}
-          disabled={importing}
-        >
-          <X className="w-4 h-4" /> Clear list
-        </button>
-      )}
-    </div>
-
-    <input
-      id="temperature-import-csvs"
-      type="file"
-      accept=".csv"
-      multiple
-      className="hidden"
-      onChange={handleCsvSelection}
-    />
-
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div className="border border-dashed border-baylor-green/40 bg-baylor-green/5 rounded-lg p-5">
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-full bg-white border border-baylor-green/20 flex items-center justify-center">
-            <FileUp className="w-5 h-5 text-baylor-green" />
-          </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-4">
           <div>
-            <div className="text-sm font-semibold text-gray-900">Select Govee CSV exports</div>
-            <div className="text-xs text-gray-500">
-              Upload one or more CSV files. We'll detect timestamps, temperature, and humidity automatically.
-            </div>
-          </div>
-        </div>
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <label htmlFor="temperature-import-csvs" className="btn-secondary cursor-pointer inline-flex items-center">
-            <FileUp className="w-4 h-4 mr-2" /> Choose CSVs
-          </label>
-          {importItems.length > 0 && (
-            <span className="text-xs text-gray-500">Selecting new files replaces the current list.</span>
-          )}
-        </div>
-      </div>
-
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-900">Import Summary</h3>
-          <span className={`text-xs font-medium ${importItems.length ? 'text-baylor-green' : 'text-gray-500'}`}>
-            {importItems.length ? 'Ready for review' : 'Awaiting files'}
-          </span>
-        </div>
-        <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-          <div className="rounded-lg bg-white border border-gray-200 p-3">
-            <div className="text-xs text-gray-500">Files</div>
-            <div className="text-lg font-semibold text-gray-900">{importSummary.fileCount}</div>
-          </div>
-          <div className="rounded-lg bg-white border border-gray-200 p-3">
-            <div className="text-xs text-gray-500">Devices</div>
-            <div className="text-lg font-semibold text-gray-900">{importSummary.deviceCount}</div>
-          </div>
-          <div className="rounded-lg bg-white border border-gray-200 p-3">
-            <div className="text-xs text-gray-500">Rows Parsed</div>
-            <div className="text-lg font-semibold text-gray-900">
-              {importSummary.totalRows > 0 ? `${importSummary.parsedRows}/${importSummary.totalRows}` : '0'}
-            </div>
-          </div>
-          <div className="rounded-lg bg-white border border-gray-200 p-3">
-            <div className="text-xs text-gray-500">Duplicates</div>
-            <div className="text-lg font-semibold text-gray-600">{importSummary.duplicateCount}</div>
-          </div>
-          <div className="rounded-lg bg-white border border-gray-200 p-3">
-            <div className="text-xs text-gray-500">Errors</div>
-            <div className="text-lg font-semibold text-amber-700">{importSummary.errorCount}</div>
-          </div>
-          <div className="rounded-lg bg-white border border-gray-200 p-3">
-            <div className="text-xs text-gray-500">Ready</div>
-            <div className="text-lg font-semibold text-baylor-green">{importSummary.readyCount}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {importItems.length === 0 ? (
-      <div className="border border-dashed border-gray-300 rounded-lg p-8 text-center text-gray-600">
-        <FileUp className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-        <p className="text-sm font-medium text-gray-700">No CSVs selected yet.</p>
-        <p className="text-xs text-gray-500">Use the upload panel above to add Govee exports.</p>
-      </div>
-    ) : (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-900">Selected Files</h3>
-          <span className="text-xs text-gray-500">{importSummary.fileCount} files</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="text-left px-4 py-2 text-gray-600 font-semibold">File</th>
-                <th className="text-left px-4 py-2 text-gray-600 font-semibold">Device</th>
-                <th className="text-left px-4 py-2 text-gray-600 font-semibold">Rows</th>
-                <th className="text-left px-4 py-2 text-gray-600 font-semibold">Date Range</th>
-                <th className="text-left px-4 py-2 text-gray-600 font-semibold">Status</th>
-                <th className="text-left px-4 py-2 text-gray-600 font-semibold">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {importItems.map((item) => {
-                const rowTotal = item.rowCount ?? 0;
-                const parsedRows = item.parsedCount ?? 0;
-                const rowsLabel = rowTotal > 0 ? `${parsedRows}/${rowTotal}` : parsedRows > 0 ? `${parsedRows}` : '-';
-                return (
-                  <tr key={item.id}>
-                    <td className="px-4 py-2 font-medium text-gray-800">{item.fileName}</td>
-                    <td className="px-4 py-2 text-gray-700">{item.deviceLabel || '-'}</td>
-                    <td className="px-4 py-2 text-gray-700">{rowsLabel}</td>
-                    <td className="px-4 py-2 text-gray-700">
-                      {item.minTimestamp && item.maxTimestamp ? `${item.minTimestamp} -> ${item.maxTimestamp}` : '-'}
-                    </td>
-                    <td className="px-4 py-2 text-gray-700">
-                      {item.duplicate ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-2 py-1 text-xs text-gray-600">
-                          <AlertTriangle className="w-3 h-3" /> Duplicate
-                        </span>
-                      ) : item.errorCount > 0 ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
-                          <AlertTriangle className="w-3 h-3" /> {item.errorCount} errors
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-baylor-green/20 bg-baylor-green/10 px-2 py-1 text-xs text-baylor-green">
-                          <CheckCircle2 className="w-3 h-3" /> Ready
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-gray-700">
-                      <button
-                        type="button"
-                        className="btn-ghost flex items-center gap-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                        onClick={() => handleRemoveImportItem(item.id)}
-                        disabled={importing}
-                        aria-label={`Remove ${item.fileName}`}
-                      >
-                        <X className="w-3 h-3" />
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {pendingMappings.length > 0 && (
-          <div className="bg-baylor-gold/10 border border-baylor-gold/30 rounded-lg p-4 space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900">Device Mapping Review</h3>
-              <p className="text-xs text-gray-500">Confirm which rooms should receive readings for each device.</p>
-            </div>
-            <div className="space-y-2">
-              {pendingMappings.map((item) => (
-                <div key={item.deviceId} className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-medium text-gray-800">{item.deviceLabel}</div>
-                    <div className="text-xs text-gray-500">
-                      Suggested: {item.suggestedRoomId ? getRoomLabel(roomLookup[item.suggestedRoomId] || { id: item.suggestedRoomId }, spacesByKey) : 'None'} | Confidence {Math.round((item.matchConfidence || 0) * 100)}%
-                    </div>
-                  </div>
-                  <select
-                    className="form-input md:max-w-xs"
-                    value={mappingOverrides[item.deviceId] || item.suggestedRoomId || ''}
-                    onChange={(e) => setMappingOverrides((prev) => ({ ...prev, [item.deviceId]: e.target.value }))}
-                  >
-                    <option value="">Select room...</option>
-                    {roomsForBuilding.map((room) => {
-                      const roomKey = room.spaceKey || room.id;
-                      if (!roomKey) return null;
-                      return (
-                        <option key={roomKey} value={roomKey}>{getRoomLabel(room, spacesByKey)}</option>
-                      );
-                    })}
-                  </select>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div className="text-sm text-gray-600">
-            Duplicates are skipped automatically. Resolve any mapping prompts before importing.
-          </div>
-          <button className="btn-primary" onClick={handleImport} disabled={importing || hasUnresolvedMappings}>
-            {importing ? 'Importing...' : 'Import Now'}
-          </button>
-        </div>
-      </div>
-    )}
-  </div>
-);
-
-const renderExport = () => (
-  <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
-    <div>
-      <h2 className="text-lg font-semibold text-gray-900">Export Data</h2>
-      <p className="text-sm text-gray-600">Download snapshot or raw readings using current filters.</p>
-    </div>
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="space-y-3">
-        <label className="form-label">Date range</label>
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            className="form-input"
-            value={exportStart}
-            onChange={(e) => setExportStart(e.target.value)}
-          />
-          <span className="text-gray-500">to</span>
-          <input
-            type="date"
-            className="form-input"
-            value={exportEnd}
-            onChange={(e) => setExportEnd(e.target.value)}
-          />
-        </div>
-        <label className="form-label">Rooms (optional)</label>
-        <select
-          className="form-input"
-          multiple
-          value={exportRoomIds}
-          onChange={(e) => setExportRoomIds(Array.from(e.target.selectedOptions).map((opt) => opt.value))}
-        >
-          {roomsForBuilding.map((room) => {
-            const roomKey = room.spaceKey || room.id;
-            if (!roomKey) return null;
-            return (
-              <option key={roomKey} value={roomKey}>{getRoomLabel(room, spacesByKey)}</option>
-            );
-          })}
-        </select>
-        <label className="form-label">Snapshot times (optional)</label>
-        <select
-          className="form-input"
-          multiple
-          value={exportSnapshotIds}
-          onChange={(e) => setExportSnapshotIds(Array.from(e.target.selectedOptions).map((opt) => opt.value))}
-        >
-          {snapshotTimes.map((slot) => (
-            <option key={slot.id} value={slot.id}>{slot.label || formatMinutesToLabel(slot.minutes)}</option>
-          ))}
-        </select>
-      </div>
-      <div className="space-y-3">
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
-          <div className="flex items-start gap-2 text-sm text-gray-600">
-            <Download className="w-4 h-4 mt-0.5 text-gray-400" />
-            <div>
-              <div className="font-medium text-gray-800">Snapshot Export</div>
-              <div>Includes temperature, humidity, snapshot time, and delta to target.</div>
-            </div>
-          </div>
-          <button className="btn-primary w-full" onClick={handleSnapshotExport} disabled={exporting}>
-            {exporting ? 'Exporting...' : 'Export Snapshots CSV'}
-          </button>
-        </div>
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
-          <div className="flex items-start gap-2 text-sm text-gray-600">
-            <Download className="w-4 h-4 mt-0.5 text-gray-400" />
-            <div>
-              <div className="font-medium text-gray-800">Raw Readings Export</div>
-              <div>Full daily readings with local timestamps.</div>
-            </div>
-          </div>
-          <button className="btn-secondary w-full" onClick={handleRawExport} disabled={exporting}>
-            {exporting ? 'Exporting...' : 'Export Raw Readings CSV'}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
-const renderSettings = () => (
-  <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
-    <div>
-      <h2 className="text-lg font-semibold text-gray-900">Temperature Settings</h2>
-      <p className="text-sm text-gray-600">Manage timezone and snapshot intervals for this building.</p>
-    </div>
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="space-y-4">
-        <div>
-          <label className="form-label">Building Timezone</label>
-          <input
-            type="text"
-            className="form-input"
-            value={buildingSettings?.timezone || DEFAULT_TIMEZONE}
-            onChange={(e) => setBuildingSettings((prev) => ({ ...prev, timezone: e.target.value }))}
-          />
-          <p className="text-xs text-gray-500 mt-1">Default: {DEFAULT_TIMEZONE}</p>
-        </div>
-
-        <div>
-          <label className="form-label">Snapshot Times</label>
-          <div className="space-y-2">
-            {snapshotTimes.map((slot) => (
-              <div key={slot.id} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  className="form-input"
-                  value={slot.label || formatMinutesToTime(slot.minutes)}
-                  onChange={(e) => {
-                    const nextLabel = e.target.value;
-                    const parsedMinutes = parseTime(nextLabel);
-                    if (parsedMinutes == null) {
-                      handleUpdateSnapshotTime(slot.id, { label: nextLabel });
-                    } else {
-                      handleUpdateSnapshotTime(slot.id, {
-                        minutes: parsedMinutes,
-                        label: formatMinutesToTime(parsedMinutes)
-                      });
-                    }
-                  }}
-                />
-                <input
-                  type="number"
-                  min="0"
-                  className="form-input w-24"
-                  value={slot.toleranceMinutes ?? 15}
-                  onChange={(e) => handleUpdateSnapshotTime(slot.id, { toleranceMinutes: Number(e.target.value) })}
-                />
-                <button className="btn-ghost" onClick={() => handleRemoveSnapshotTime(slot.id)}>
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-          <div className="mt-3 flex items-center gap-2">
+            <label className="form-label">Building Timezone</label>
             <input
               type="text"
               className="form-input"
-              placeholder="Add time (e.g., 12:00 PM)"
-              value={newSnapshotTime}
-              onChange={(e) => setNewSnapshotTime(e.target.value)}
+              value={buildingSettings?.timezone || DEFAULT_TIMEZONE}
+              onChange={(e) => setBuildingSettings((prev) => ({ ...prev, timezone: e.target.value }))}
             />
-            <input
-              type="number"
-              min="0"
-              className="form-input w-24"
-              value={newSnapshotTolerance}
-              onChange={(e) => setNewSnapshotTolerance(Number(e.target.value))}
-            />
-            <button className="btn-secondary" onClick={handleAddSnapshotTime}>Add</button>
+            <p className="text-xs text-gray-500 mt-1">Default: {DEFAULT_TIMEZONE}</p>
           </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <button className="btn-primary" onClick={saveBuildingSettings}>Save Settings</button>
-          <button className="btn-ghost" onClick={() => setBuildingSettings(buildDefaultSettings(selectedBuilding))}>Reset Defaults</button>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-2">
-          <h3 className="text-sm font-semibold text-gray-900">Recompute Snapshots</h3>
-          <p className="text-xs text-gray-600">
-            If timezone or mappings change, recompute snapshots for the selected range.
-          </p>
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              className="form-input"
-              value={recomputeStart}
-              onChange={(e) => setRecomputeStart(e.target.value)}
-            />
-            <span className="text-gray-500">to</span>
-            <input
-              type="date"
-              className="form-input"
-              value={recomputeEnd}
-              onChange={(e) => setRecomputeEnd(e.target.value)}
-            />
-          </div>
-          <button className="btn-secondary w-full" onClick={handleRecomputeSnapshots} disabled={recomputing}>
-            {recomputing ? 'Recomputing...' : 'Recompute Snapshots'}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
-const viewTabs = [
-  { id: 'floorplan', label: 'Floorplan', icon: MapIcon },
-  { id: 'daily', label: 'Daily', icon: LayoutGrid },
-  { id: 'historical', label: 'Historical', icon: History },
-  ...(isAdmin ? [{ id: 'import', label: 'Import', icon: FileUp }] : []),
-  { id: 'export', label: 'Export', icon: Download },
-  ...(isAdmin ? [{ id: 'settings', label: 'Settings', icon: Thermometer }] : [])
-];
-
-return (
-  <div className="space-y-6 p-6">
-    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Temperature Monitoring</h1>
-        <p className="text-gray-600">Bulk import Govee exports, map rooms, and visualize daily snapshots.</p>
-      </div>
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <Thermometer className="w-4 h-4 text-baylor-green" />
-        {selectedBuilding ? `Building: ${selectedBuildingName || selectedBuilding}` : 'Select a building'}
-      </div>
-    </div>
-
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <MapIcon className="w-4 h-4 text-gray-400" />
-            <select
-              className="form-input"
-              value={selectedBuilding}
-              onChange={(e) => setSelectedBuilding(e.target.value)}
-            >
-              <option value="">Select building...</option>
-              {buildingOptions.map((building) => (
-                <option key={building.code} value={building.code}>{building.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-gray-400" />
-            <input
-              type="date"
-              className="form-input"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Thermometer className="w-4 h-4 text-gray-400" />
-            <select
-              className="form-input"
-              value={selectedSnapshotId}
-              onChange={(e) => setSelectedSnapshotId(e.target.value)}
-            >
+          <div>
+            <label className="form-label">Snapshot Times</label>
+            <div className="space-y-2">
               {snapshotTimes.map((slot) => (
-                <option key={slot.id} value={slot.id}>
-                  {slot.label || formatMinutesToLabel(slot.minutes)}
-                </option>
+                <div key={slot.id} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={slot.label || formatMinutesToTime(slot.minutes)}
+                    onChange={(e) => {
+                      const nextLabel = e.target.value;
+                      const parsedMinutes = parseTime(nextLabel);
+                      if (parsedMinutes == null) {
+                        handleUpdateSnapshotTime(slot.id, { label: nextLabel });
+                      } else {
+                        handleUpdateSnapshotTime(slot.id, {
+                          minutes: parsedMinutes,
+                          label: formatMinutesToTime(parsedMinutes)
+                        });
+                      }
+                    }}
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    className="form-input w-24"
+                    value={slot.toleranceMinutes ?? 15}
+                    onChange={(e) => handleUpdateSnapshotTime(slot.id, { toleranceMinutes: Number(e.target.value) })}
+                  />
+                  <button className="btn-ghost" onClick={() => handleRemoveSnapshotTime(slot.id)}>
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               ))}
-            </select>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Add time (e.g., 12:00 PM)"
+                value={newSnapshotTime}
+                onChange={(e) => setNewSnapshotTime(e.target.value)}
+              />
+              <input
+                type="number"
+                min="0"
+                className="form-input w-24"
+                value={newSnapshotTolerance}
+                onChange={(e) => setNewSnapshotTolerance(Number(e.target.value))}
+              />
+              <button className="btn-secondary" onClick={handleAddSnapshotTime}>Add</button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button className="btn-primary" onClick={saveBuildingSettings}>Save Settings</button>
+            <button className="btn-ghost" onClick={() => setBuildingSettings(buildDefaultSettings({ buildingCode: selectedBuilding, buildingName: selectedBuildingName }))}>Reset Defaults</button>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {viewTabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = viewMode === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setViewMode(tab.id)}
-                className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition ${isActive ? 'bg-baylor-green text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-              >
-                <Icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            );
-          })}
+        <div className="space-y-4">
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-2">
+            <h3 className="text-sm font-semibold text-gray-900">Recompute Snapshots</h3>
+            <p className="text-xs text-gray-600">
+              If timezone or mappings change, recompute snapshots for the selected range.
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                className="form-input"
+                value={recomputeStart}
+                onChange={(e) => setRecomputeStart(e.target.value)}
+              />
+              <span className="text-gray-500">to</span>
+              <input
+                type="date"
+                className="form-input"
+                value={recomputeEnd}
+                onChange={(e) => setRecomputeEnd(e.target.value)}
+              />
+            </div>
+            <button className="btn-secondary w-full" onClick={handleRecomputeSnapshots} disabled={recomputing}>
+              {recomputing ? 'Recomputing...' : 'Recompute Snapshots'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
+  );
 
-    {snapshotLoading && (
-      <div className="bg-white rounded-lg border border-gray-200 p-6 text-gray-600">
-        Loading snapshot data...
+  const viewTabs = [
+    { id: 'floorplan', label: 'Floorplan', icon: MapIcon },
+    { id: 'daily', label: 'Daily', icon: LayoutGrid },
+    { id: 'historical', label: 'Historical', icon: History },
+    ...(isAdmin ? [{ id: 'import', label: 'Import', icon: FileUp }] : []),
+    { id: 'export', label: 'Export', icon: Download },
+    ...(isAdmin ? [{ id: 'settings', label: 'Settings', icon: Thermometer }] : [])
+  ];
+
+  return (
+    <div className="space-y-6 p-6">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Temperature Monitoring</h1>
+          <p className="text-gray-600">Bulk import Govee exports, map rooms, and visualize daily snapshots.</p>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <Thermometer className="w-4 h-4 text-baylor-green" />
+          {selectedBuilding ? `Building: ${selectedBuildingName || selectedBuilding}` : 'Select a building'}
+        </div>
       </div>
-    )}
 
-    {!snapshotLoading && viewMode === 'floorplan' && renderFloorplan()}
-    {!snapshotLoading && viewMode === 'daily' && renderDailyTable()}
-    {!snapshotLoading && viewMode === 'historical' && renderHistorical()}
-    {viewMode === 'import' && renderImport()}
-    {viewMode === 'export' && renderExport()}
-    {viewMode === 'settings' && renderSettings()}
-  </div>
-);
+      <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <MapIcon className="w-4 h-4 text-gray-400" />
+              <select
+                className="form-input"
+                value={selectedBuilding}
+                onChange={(e) => setSelectedBuilding(e.target.value)}
+              >
+                <option value="">Select building...</option>
+                {buildingOptions.map((building) => (
+                  <option key={building.code} value={building.code}>{building.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-gray-400" />
+              <input
+                type="date"
+                className="form-input"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Thermometer className="w-4 h-4 text-gray-400" />
+              <select
+                className="form-input"
+                value={selectedSnapshotId}
+                onChange={(e) => setSelectedSnapshotId(e.target.value)}
+              >
+                {snapshotTimes.map((slot) => (
+                  <option key={slot.id} value={slot.id}>
+                    {slot.label || formatMinutesToLabel(slot.minutes)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
+          <div className="flex flex-wrap items-center gap-2">
+            {viewTabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = viewMode === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setViewMode(tab.id)}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition ${isActive ? 'bg-baylor-green text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {snapshotLoading && (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 text-gray-600">
+          Loading snapshot data...
+        </div>
+      )}
+
+      {!snapshotLoading && viewMode === 'floorplan' && renderFloorplan()}
+      {!snapshotLoading && viewMode === 'daily' && renderDailyTable()}
+      {!snapshotLoading && viewMode === 'historical' && renderHistorical()}
+      {viewMode === 'import' && renderImport()}
+      {viewMode === 'export' && renderExport()}
+      {viewMode === 'settings' && renderSettings()}
+    </div>
+  );
+};
 
 export default TemperatureMonitoring;

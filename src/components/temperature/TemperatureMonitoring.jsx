@@ -2237,7 +2237,7 @@ const renderSettings = () => (
 );
 
 const viewTabs = [
-  { id: 'floorplan', label: 'Floorplan', icon: Map },
+  { id: 'floorplan', label: 'Floorplan', icon: MapIcon },
   { id: 'daily', label: 'Daily', icon: LayoutGrid },
   { id: 'historical', label: 'Historical', icon: History },
   ...(isAdmin ? [{ id: 'import', label: 'Import', icon: FileUp }] : []),

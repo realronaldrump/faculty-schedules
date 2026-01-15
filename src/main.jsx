@@ -23,7 +23,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           import.meta.env.VITE_PUBLIC_POSTHOG_HOST || "https://app.posthog.com",
         defaults: "2025-05-24",
         capture_pageview: "history_change",
-        capture_exceptions: true,
+        capture_exceptions: false, // Disabled to prevent 500 errors on script load
+        disable_session_recording: true, // Disabled to prevent 500 errors on script load
         persistence: "localStorage+cookie",
         debug: false,
         disable_compression: true, // Helps with some adblockers

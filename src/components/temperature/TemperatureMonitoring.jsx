@@ -161,6 +161,8 @@ const TemperatureMonitoring = () => {
   const [recomputing, setRecomputing] = useState(false);
 
   const [showDeleteFloorplanConfirm, setShowDeleteFloorplanConfirm] = useState(false);
+  const [deleteImportId, setDeleteImportId] = useState(null);
+  const [deletingImport, setDeletingImport] = useState(false);
 
   const formatSnapshotTemp = (snapshot) => {
     if (!snapshot || snapshot.status === 'missing') return 'No data';
@@ -681,6 +683,22 @@ const TemperatureMonitoring = () => {
     } catch (error) {
       console.error('Error deleting floorplan:', error);
       showNotification('error', 'Delete Failed', 'Unable to delete floorplan.');
+    }
+  };
+
+  const handleDeleteImport = async () => {
+    if (!deleteImportId || !isAdmin) return;
+    setDeletingImport(true);
+    try {
+      await deleteDoc(doc(db, 'temperatureImports', deleteImportId));
+      setImportHistory((prev) => prev.filter((item) => item.id !== deleteImportId));
+      showNotification('success', 'Import Deleted', 'The import record has been removed.');
+    } catch (error) {
+      console.error('Error deleting import:', error);
+      showNotification('error', 'Delete Failed', 'Unable to delete import record.');
+    } finally {
+      setDeleteImportId(null);
+      setDeletingImport(false);
     }
   };
 
@@ -2071,6 +2089,48 @@ const TemperatureMonitoring = () => {
           </div>
         </div>
       )}
+
+      {/* Import History Section */}
+      {importHistory.length > 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-gray-900">Past Imports</h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">Date</th>
+                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">Files</th>
+                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">Rows</th>
+                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {importHistory.map((item) => {
+                  const importDate = item.createdAt?.seconds
+                    ? new Date(item.createdAt.seconds * 1000).toLocaleString()
+                    : 'Unknown';
+                  return (
+                    <tr key={item.id}>
+                      <td className="px-3 py-2 text-gray-700">{importDate}</td>
+                      <td className="px-3 py-2 text-gray-700">{item.fileCount ?? '-'}</td>
+                      <td className="px-3 py-2 text-gray-700">{item.rowCount ?? '-'}</td>
+                      <td className="px-3 py-2">
+                        <button
+                          className="text-red-600 hover:text-red-800 text-xs font-medium flex items-center gap-1"
+                          onClick={() => setDeleteImportId(item.id)}
+                          disabled={deletingImport}
+                        >
+                          <Trash2 className="w-3 h-3" /> Delete
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -2398,6 +2458,16 @@ const TemperatureMonitoring = () => {
         message="Are you sure you want to delete the floorplan? This action cannot be undone."
         onConfirm={confirmDeleteFloorplan}
         onCancel={() => setShowDeleteFloorplanConfirm(false)}
+        confirmText="Delete"
+        variant="danger"
+      />
+
+      <ConfirmDialog
+        isOpen={!!deleteImportId}
+        title="Delete Import"
+        message="Are you sure you want to delete this import record? This removes the import log but does not delete any temperature data that was imported."
+        onConfirm={handleDeleteImport}
+        onCancel={() => setDeleteImportId(null)}
         confirmText="Delete"
         variant="danger"
       />

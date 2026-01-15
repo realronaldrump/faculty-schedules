@@ -385,9 +385,7 @@ const TemperatureMonitoring = () => {
           limit(20)
         );
         const snap = await getDocs(q);
-        const items = snap.docs
-          .map(d => ({ id: d.id, ...d.data() }))
-          .sort((a, b) => new Date(b.createdAt?.seconds * 1000) - new Date(a.createdAt?.seconds * 1000));
+        const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setImportHistory(items);
       } catch (err) {
         console.error('Failed to load history', err);

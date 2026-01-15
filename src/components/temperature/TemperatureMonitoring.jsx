@@ -4,6 +4,8 @@ import {
   Calendar,
   CheckCircle2,
   Download,
+  Eye,
+  EyeOff,
   FileUp,
   History,
   Image as ImageIcon,
@@ -122,6 +124,8 @@ const TemperatureMonitoring = () => {
   const [selectedSnapshotId, setSelectedSnapshotId] = useState('');
   const [viewMode, setViewMode] = useState('floorplan');
   const [snapshotDocs, setSnapshotDocs] = useState([]);
+  const [hiddenBuildingCodes, setHiddenBuildingCodes] = useState(new Set());
+  const [showHidden, setShowHidden] = useState(false);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [deviceDocs, setDeviceDocs] = useState({});
   const [importHistory, setImportHistory] = useState([]);
@@ -143,6 +147,7 @@ const TemperatureMonitoring = () => {
   const [historicalRoomId, setHistoricalRoomId] = useState('');
   const [historicalDocs, setHistoricalDocs] = useState([]);
   const [historicalLoading, setHistoricalLoading] = useState(false);
+  const [buildingIsHidden, setBuildingIsHidden] = useState(false);
 
   const [exportStart, setExportStart] = useState('');
   const [exportEnd, setExportEnd] = useState('');
@@ -199,12 +204,13 @@ const TemperatureMonitoring = () => {
 
   const buildingOptions = useMemo(() => {
     return Object.keys(roomsByBuilding)
+      .filter(code => showHidden || !hiddenBuildingCodes.has(code) || code === selectedBuilding)
       .map((code) => ({
         code,
         name: resolveBuildingDisplayName(code) || code
       }))
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  }, [roomsByBuilding]);
+  }, [roomsByBuilding, hiddenBuildingCodes, showHidden, selectedBuilding]);
 
   const buildingList = useMemo(() => buildingOptions.map((item) => item.code), [buildingOptions]);
 
@@ -274,6 +280,21 @@ const TemperatureMonitoring = () => {
   }, [buildingList, selectedBuilding]);
 
   useEffect(() => {
+    if (!isAdmin) return;
+    const fetchHidden = async () => {
+      try {
+        const q = query(collection(db, 'temperatureBuildingSettings'), where('hidden', '==', true));
+        const snap = await getDocs(q);
+        const codes = new Set(snap.docs.map(d => d.data().buildingCode));
+        setHiddenBuildingCodes(codes);
+      } catch (err) {
+        console.error('Error fetching hidden buildings:', err);
+      }
+    };
+    fetchHidden();
+  }, [isAdmin]);
+
+  useEffect(() => {
     if (!selectedBuilding) return;
     setImportItems([]);
     setPendingMappings([]);
@@ -318,6 +339,7 @@ const TemperatureMonitoring = () => {
             markers: normalizeMarkerMap(data.markers || {})
           };
           setBuildingSettings(nextSettings);
+          setBuildingIsHidden(data.hidden === true);
           setSettingsExists(true);
           if (usedLegacy && isAdmin) {
             await setDoc(doc(db, 'temperatureBuildingSettings', buildingKey), {
@@ -328,6 +350,7 @@ const TemperatureMonitoring = () => {
           }
         } else {
           setBuildingSettings(buildDefaultSettings({ buildingCode: selectedBuilding, buildingName }));
+          setBuildingIsHidden(false);
           setSettingsExists(false);
         }
       } catch (error) {
@@ -335,6 +358,7 @@ const TemperatureMonitoring = () => {
         showNotification('error', 'Settings Load Failed', 'Unable to load temperature settings for this building.');
         const buildingName = resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
         setBuildingSettings(buildDefaultSettings({ buildingCode: selectedBuilding, buildingName }));
+        setBuildingIsHidden(false);
         setSettingsExists(false);
       };
       loadSettings();
@@ -673,10 +697,19 @@ const TemperatureMonitoring = () => {
         snapshotTimes: sortedTimes,
         markers: buildingSettings.markers || {},
         floorplan: buildingSettings.floorplan || null,
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        hidden: buildingIsHidden
       };
       if (!settingsExists) payload.createdAt = serverTimestamp();
       await setDoc(doc(db, 'temperatureBuildingSettings', buildingKey), payload, { merge: true });
+
+      setHiddenBuildingCodes(prev => {
+        const next = new Set(prev);
+        if (buildingIsHidden) next.add(selectedBuilding);
+        else next.delete(selectedBuilding);
+        return next;
+      });
+
       setSettingsExists(true);
       showNotification('success', 'Settings Saved', 'Temperature settings updated for this building.');
     } catch (error) {

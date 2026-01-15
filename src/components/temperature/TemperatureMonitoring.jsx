@@ -278,7 +278,12 @@ const TemperatureMonitoring = () => {
 
   useEffect(() => {
     if (!selectedBuilding && buildingList.length > 0) {
-      setSelectedBuilding(buildingList[0]);
+      const defaultBuilding = localStorage.getItem('temperatureDefaultBuilding');
+      if (defaultBuilding && buildingList.includes(defaultBuilding)) {
+        setSelectedBuilding(defaultBuilding);
+      } else {
+        setSelectedBuilding(buildingList[0]);
+      }
     }
   }, [buildingList, selectedBuilding]);
 
@@ -2223,9 +2228,30 @@ const TemperatureMonitoring = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button className="btn-primary" onClick={saveBuildingSettings}>Save Settings</button>
-            <button className="btn-ghost" onClick={() => setBuildingSettings(buildDefaultSettings({ buildingCode: selectedBuilding, buildingName: selectedBuildingName }))}>Reset Defaults</button>
+          <div className="space-y-4">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={buildingIsHidden}
+                onChange={(e) => setBuildingIsHidden(e.target.checked)}
+                className="w-4 h-4 text-baylor-green border-gray-300 rounded focus:ring-baylor-green"
+              />
+              <span className="text-sm text-gray-700">Hide this building from the selector</span>
+            </label>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button className="btn-primary" onClick={saveBuildingSettings}>Save Settings</button>
+              <button className="btn-ghost" onClick={() => setBuildingSettings(buildDefaultSettings({ buildingCode: selectedBuilding, buildingName: selectedBuildingName }))}>Reset Defaults</button>
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  localStorage.setItem('temperatureDefaultBuilding', selectedBuilding);
+                  showNotification('success', 'Default Set', `${selectedBuildingName || selectedBuilding} is now your default building.`);
+                }}
+              >
+                Set as Default
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2293,9 +2319,21 @@ const TemperatureMonitoring = () => {
               >
                 <option value="">Select building...</option>
                 {buildingOptions.map((building) => (
-                  <option key={building.code} value={building.code}>{building.name}</option>
+                  <option key={building.code} value={building.code}>
+                    {building.name}{hiddenBuildingCodes.has(building.code) ? ' (hidden)' : ''}
+                  </option>
                 ))}
               </select>
+              {isAdmin && hiddenBuildingCodes.size > 0 && (
+                <button
+                  onClick={() => setShowHidden(!showHidden)}
+                  className="p-2 rounded-lg text-sm font-medium flex items-center gap-1 transition bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  title={showHidden ? 'Hide hidden buildings' : 'Show hidden buildings'}
+                >
+                  {showHidden ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                  <span className="text-xs">{hiddenBuildingCodes.size}</span>
+                </button>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-gray-400" />

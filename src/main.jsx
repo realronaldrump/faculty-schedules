@@ -26,6 +26,11 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         capture_exceptions: true,
         persistence: "localStorage+cookie",
         debug: import.meta.env.MODE === "development",
+        // Suppress errors when blocked by adblockers
+        on_request_error: () => { }, // Silently handle failed requests
+        request_batching: {
+          max_retry_attempts: 0, // Don't retry failed requests
+        },
         loaded: (posthog) => {
           posthog.register({ environment: import.meta.env.MODE });
         },

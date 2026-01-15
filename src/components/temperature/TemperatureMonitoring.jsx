@@ -8,7 +8,7 @@ import {
   History,
   Image as ImageIcon,
   LayoutGrid,
-  Map,
+  Map as MapIcon,
   Pencil,
   Save,
   Thermometer,
@@ -1326,20 +1326,20 @@ const TemperatureMonitoring = () => {
       const rows = filtered.map((docData) => {
         const roomKey = docData.spaceKey || docData.roomId;
         return ([
-        docData.buildingName || selectedBuildingName || selectedBuilding,
-        docData.roomName || getRoomLabel(roomLookup[roomKey] || { id: roomKey }, spacesByKey),
-        docData.dateLocal || '',
-        docData.snapshotLabel || '',
-        docData.temperatureF ?? '',
-        docData.temperatureC ?? '',
-        docData.humidity ?? '',
-        docData.status || '',
-        docData.timezone || buildingSettings?.timezone || DEFAULT_TIMEZONE,
-        docData.deltaMinutes ?? '',
-        docData.sourceReadingLocal || '',
-        docData.sourceReadingUtc?.toDate ? docData.sourceReadingUtc.toDate().toISOString() : '',
-        docData.sourceDeviceLabel || ''
-      ]);
+          docData.buildingName || selectedBuildingName || selectedBuilding,
+          docData.roomName || getRoomLabel(roomLookup[roomKey] || { id: roomKey }, spacesByKey),
+          docData.dateLocal || '',
+          docData.snapshotLabel || '',
+          docData.temperatureF ?? '',
+          docData.temperatureC ?? '',
+          docData.humidity ?? '',
+          docData.status || '',
+          docData.timezone || buildingSettings?.timezone || DEFAULT_TIMEZONE,
+          docData.deltaMinutes ?? '',
+          docData.sourceReadingLocal || '',
+          docData.sourceReadingUtc?.toDate ? docData.sourceReadingUtc.toDate().toISOString() : '',
+          docData.sourceDeviceLabel || ''
+        ]);
       });
       const csvContent = [
         headers.map(toCsvSafe).join(','),
@@ -1494,7 +1494,7 @@ const TemperatureMonitoring = () => {
 
         {!floorplanData?.downloadUrl ? (
           <div className="border border-dashed border-gray-300 rounded-lg p-10 text-center">
-            <Map className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+            <MapIcon className="w-12 h-12 text-gray-400 mx-auto mb-3" />
             <p className="text-gray-700 font-medium">No floorplan uploaded yet.</p>
             <p className="text-sm text-gray-500">Upload a PNG floorplan to begin placing temperature markers.</p>
           </div>
@@ -1617,21 +1617,21 @@ const TemperatureMonitoring = () => {
               const roomKey = room.spaceKey || room.id;
               if (!roomKey) return null;
               return (
-              <tr key={roomKey}>
-                <td className="px-4 py-2 font-medium text-gray-800">{getRoomLabel(room, spacesByKey)}</td>
-                {snapshotTimes.map((slot) => {
-                  const snapshot = snapshotLookup[roomKey]?.[slot.id];
-                  const isMissing = !snapshot || snapshot.status === 'missing';
-                  return (
-                    <td key={slot.id} className="px-4 py-2">
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${isMissing ? 'bg-gray-200 text-gray-600' : 'bg-baylor-green/10 text-baylor-green'}`}>
-                        {formatSnapshotTemp(snapshot)}
-                      </span>
-                    </td>
-                  );
-                })}
-              </tr>
-            );
+                <tr key={roomKey}>
+                  <td className="px-4 py-2 font-medium text-gray-800">{getRoomLabel(room, spacesByKey)}</td>
+                  {snapshotTimes.map((slot) => {
+                    const snapshot = snapshotLookup[roomKey]?.[slot.id];
+                    const isMissing = !snapshot || snapshot.status === 'missing';
+                    return (
+                      <td key={slot.id} className="px-4 py-2">
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${isMissing ? 'bg-gray-200 text-gray-600' : 'bg-baylor-green/10 text-baylor-green'}`}>
+                          {formatSnapshotTemp(snapshot)}
+                        </span>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
             })}
           </tbody>
         </table>
@@ -2182,7 +2182,7 @@ const TemperatureMonitoring = () => {
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
-              <Map className="w-4 h-4 text-gray-400" />
+              <MapIcon className="w-4 h-4 text-gray-400" />
               <select
                 className="form-input"
                 value={selectedBuilding}

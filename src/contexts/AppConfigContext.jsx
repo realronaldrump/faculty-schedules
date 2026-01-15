@@ -42,12 +42,15 @@ export const AppConfigProvider = ({ children }) => {
         const roomsSnapshot = await getDocs(collection(db, COLLECTIONS.ROOMS));
         const buildingMap = new Map();
         roomsSnapshot.docs.forEach((docSnap) => {
-          const name = (docSnap.data()?.building || '').toString().trim();
-          if (!name) return;
-          if (!buildingMap.has(name)) {
-            buildingMap.set(name, {
-              code: name.toUpperCase(),
-              displayName: name,
+          const data = docSnap.data() || {};
+          const code = (data.buildingCode || '').toString().trim().toUpperCase();
+          const displayName = (data.buildingDisplayName || data.building || '').toString().trim();
+          const key = code || displayName;
+          if (!key) return;
+          if (!buildingMap.has(key)) {
+            buildingMap.set(key, {
+              code: code || displayName.toUpperCase(),
+              displayName: displayName || code,
               aliases: []
             });
           }

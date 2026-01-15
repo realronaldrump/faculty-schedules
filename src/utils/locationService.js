@@ -637,6 +637,30 @@ export const normalizeBuildingName = (input) => {
   return building?.displayName || input?.trim() || '';
 };
 
+/**
+ * Resolve a building display name from a code/alias
+ * @param {string} input - Building code, name, or alias
+ * @returns {string} Display name or trimmed input
+ */
+export const resolveBuildingDisplayName = (input) => {
+  const building = resolveBuilding(input);
+  return building?.displayName || input?.trim() || '';
+};
+
+/**
+ * Build a display name for a space using building config
+ * @param {Object} params
+ * @param {string} params.buildingCode
+ * @param {string} params.buildingDisplayName
+ * @param {string} params.spaceNumber
+ * @returns {string}
+ */
+export const formatSpaceDisplayName = ({ buildingCode, buildingDisplayName, spaceNumber } = {}) => {
+  const resolvedBuilding = buildingDisplayName || resolveBuildingDisplayName(buildingCode) || buildingCode || '';
+  const normalizedNumber = normalizeSpaceNumber(spaceNumber || '');
+  return [resolvedBuilding, normalizedNumber].filter(Boolean).join(' ').trim();
+};
+
 // ============================================================================
 // DISPLAY UTILITIES
 // ============================================================================
@@ -799,10 +823,12 @@ export default {
   // Building Resolution
   resolveBuilding,
   normalizeBuildingName,
+  resolveBuildingDisplayName,
 
   // Display
   getLocationDisplay,
   getBuildingDisplay,
+  formatSpaceDisplayName,
 
   // Validation
   validateScheduleLocation,

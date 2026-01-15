@@ -49,8 +49,10 @@ import {
   isSkippableLocation,
   LOCATION_TYPE,
   buildSpaceKey,
-  getBuildingDisplay
+  getBuildingDisplay,
+  normalizeSpaceNumber
 } from "./locationService";
+import { resolveScheduleSpaces } from "./spaceUtils";
 
 // ==================== PROGRAM MAPPING ====================
 
@@ -1258,6 +1260,7 @@ export const processScheduleImport = async (csvData) => {
             building && roomNumber
               ? `${building.replace(/\s+/g, "_").toLowerCase()}_${roomNumber}`
               : roomData.raw.replace(/\s+/g, "_").toLowerCase();
+          const spaceDocId = spaceKey || deterministicRoomId;
 
           // Check if room exists by spaceKey, ID, or name
           const existingRoom = existingRooms.find(
@@ -1282,11 +1285,11 @@ export const processScheduleImport = async (csvData) => {
             });
             // Add new space fields
             newRoom.spaceKey = spaceKey;
-            newRoom.spaceNumber = roomNumber;
-            newRoom.buildingCode = roomData.buildingCode || '';
+            newRoom.spaceNumber = normalizeSpaceNumber(roomNumber || '');
+            newRoom.buildingCode = (roomData.buildingCode || '').toString().trim().toUpperCase();
             newRoom.buildingDisplayName = building;
 
-            const roomRef = doc(db, COLLECTIONS.ROOMS, deterministicRoomId);
+            const roomRef = doc(db, COLLECTIONS.ROOMS, spaceDocId);
             await setDoc(roomRef, newRoom, { merge: true });
             logCreate(
               `Room - ${roomData.displayName}`,
@@ -1868,6 +1871,12 @@ const enrichSchedules = (schedules, people, rooms, programs) => {
   const { peopleMap, resolvePersonId, canonicalPeople } =
     buildPeopleIndex(people);
   const roomsMap = new Map(rooms.map((r) => [r.id, r]));
+  const spacesByKey = new Map();
+  rooms.forEach((room) => {
+    if (room?.spaceKey && !spacesByKey.has(room.spaceKey)) {
+      spacesByKey.set(room.spaceKey, room);
+    }
+  });
   const programsMap = new Map(programs.map((p) => [p.id, p]));
 
   const enrichedSchedules = schedules.map((schedule) => {
@@ -1892,21 +1901,27 @@ const enrichSchedules = (schedules, people, rooms, programs) => {
       }
     }
 
-    const resolvedRooms = Array.isArray(schedule.roomIds)
-      ? schedule.roomIds.map((rid) => roomsMap.get(rid)).filter(Boolean)
-      : schedule.roomId
-        ? [roomsMap.get(schedule.roomId)].filter(Boolean)
-        : [];
+    const resolvedRooms = Array.isArray(schedule.spaceIds) && schedule.spaceIds.length > 0
+      ? schedule.spaceIds.map((sid) => spacesByKey.get(sid)).filter(Boolean)
+      : (Array.isArray(schedule.roomIds)
+        ? schedule.roomIds.map((rid) => roomsMap.get(rid)).filter(Boolean)
+        : schedule.roomId
+          ? [roomsMap.get(schedule.roomId)].filter(Boolean)
+          : []);
 
     const primaryRoom =
       resolvedRooms[0] ||
       (schedule.roomId ? roomsMap.get(schedule.roomId) : null);
+    const resolvedLocation = resolveScheduleSpaces(schedule, spacesByKey);
     const derivedRoomName =
-      Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0
+      (resolvedLocation.displayNames && resolvedLocation.displayNames.length > 0
+        ? resolvedLocation.displayNames[0]
+        : null)
+      || (Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0
         ? schedule.roomNames[0]
         : primaryRoom
           ? primaryRoom.displayName || primaryRoom.name
-          : schedule.roomName || "";
+          : schedule.roomName || "");
 
     const instructorName = instructorWithProgram
       ? getInstructorDisplayName(instructorWithProgram)
@@ -1922,11 +1937,13 @@ const enrichSchedules = (schedules, people, rooms, programs) => {
       room: primaryRoom || null,
       instructorName,
       roomName: derivedRoomName,
-      roomNames: Array.isArray(schedule.roomNames)
-        ? schedule.roomNames
-        : derivedRoomName
-          ? [derivedRoomName]
-          : [],
+      roomNames: Array.isArray(resolvedLocation.displayNames) && resolvedLocation.displayNames.length > 0
+        ? resolvedLocation.displayNames
+        : (Array.isArray(schedule.roomNames)
+          ? schedule.roomNames
+          : derivedRoomName
+            ? [derivedRoomName]
+            : []),
     };
   });
 

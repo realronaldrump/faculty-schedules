@@ -1,12 +1,13 @@
 import React, { useCallback, useMemo } from 'react';
 import { Edit, Save, X, Trash2, Phone, PhoneOff, Building, BuildingIcon } from 'lucide-react';
 import { useDirectoryState, useDirectoryHandlers } from '../hooks';
+import { useData } from '../contexts/DataContext';
 import { DeleteConfirmDialog, UniversalDirectory } from './shared';
 import {
   buildDirectoryFilterOptions,
   dedupeDirectoryRecords,
-  extractBuildingName,
-  formatPhoneNumber
+  formatPhoneNumber,
+  resolveOfficeDetails
 } from '../utils/directoryUtils';
 
 const getNameSortValue = (person, nameSort) => {
@@ -321,6 +322,7 @@ const getPermissionValue = (permission, record) => {
 
 const ConfiguredPersonDirectory = (props) => {
   const { config } = props;
+  const { spacesByKey } = useData();
 
   const {
     config: _config,
@@ -460,8 +462,8 @@ const ConfiguredPersonDirectory = (props) => {
     if (typeof getFilterOptions === 'function') {
       return getFilterOptions(uniqueDirectoryData);
     }
-    return buildDirectoryFilterOptions(uniqueDirectoryData, { includePrograms });
-  }, [uniqueDirectoryData, getFilterOptions, includePrograms]);
+    return buildDirectoryFilterOptions(uniqueDirectoryData, { includePrograms, spacesByKey });
+  }, [uniqueDirectoryData, getFilterOptions, includePrograms, spacesByKey]);
 
   const filteredData = useMemo(() => {
     let result = [...uniqueDirectoryData];
@@ -483,8 +485,8 @@ const ConfiguredPersonDirectory = (props) => {
 
     if (Array.isArray(filters.buildings) && filters.buildings.length > 0) {
       result = result.filter((person) => {
-        const buildingName = person.office ? extractBuildingName(person.office) : 'No Building';
-        return filters.buildings.includes(buildingName);
+        const { buildingName } = resolveOfficeDetails(person, spacesByKey);
+        return filters.buildings.includes(buildingName || 'No Building');
       });
     }
 
@@ -493,7 +495,7 @@ const ConfiguredPersonDirectory = (props) => {
     }
 
     return result;
-  }, [uniqueDirectoryData, filterText, filters, searchFields, applyFilters, extraState]);
+  }, [uniqueDirectoryData, filterText, filters, searchFields, applyFilters, extraState, spacesByKey]);
 
   const sortedData = useMemo(() => {
     const sorted = [...filteredData];

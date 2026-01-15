@@ -9,10 +9,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useEmailListPresets } from '../../hooks/useEmailListPresets';
 import { useTutorial } from '../../contexts/TutorialContext';
 import { HelpTooltip, HintBanner } from '../help/Tooltip';
-import { extractBuildingName } from '../../utils/directoryUtils';
+import { resolveOfficeDetails } from '../../utils/directoryUtils';
 
 const EmailLists = () => {
-  const { facultyData = [], staffData = [], studentData = [], scheduleData = [] } = useData();
+  const { facultyData = [], staffData = [], studentData = [], scheduleData = [], spacesByKey } = useData();
   const { loadPeople } = usePeople();
   const { isAdmin, user } = useAuth();
   const { presets, loading: presetsLoading, createPreset, updatePreset, deletePreset } = useEmailListPresets();
@@ -382,12 +382,8 @@ const EmailLists = () => {
       }
 
       // Extract building name from office location
-      if (person.office) {
-        const buildingName = extractBuildingName(person.office);
-        buildings.add(buildingName);
-      } else {
-        buildings.add('No Building');
-      }
+      const { buildingName } = resolveOfficeDetails(person, spacesByKey);
+      buildings.add(buildingName || 'No Building');
     });
 
     return {
@@ -395,7 +391,7 @@ const EmailLists = () => {
       jobTitles: Array.from(jobTitles).sort(),
       buildings: Array.from(buildings).sort()
     };
-  }, [combinedDirectoryData]);
+  }, [combinedDirectoryData, spacesByKey]);
 
   // Sorting helper
   const sortedData = useMemo(() => {
@@ -504,12 +500,13 @@ const EmailLists = () => {
     // Building filter (include/exclude)
     if (filters.buildings.include.length > 0 || filters.buildings.exclude.length > 0) {
       filtered = filtered.filter(person => {
-        const buildingName = person.office ? extractBuildingName(person.office) : 'No Building';
+        const { buildingName } = resolveOfficeDetails(person, spacesByKey);
+        const resolvedBuilding = buildingName || 'No Building';
 
         // Apply include filter
-        const includeMatch = filters.buildings.include.length === 0 || filters.buildings.include.includes(buildingName);
+        const includeMatch = filters.buildings.include.length === 0 || filters.buildings.include.includes(resolvedBuilding);
         // Apply exclude filter
-        const excludeMatch = filters.buildings.exclude.length === 0 || !filters.buildings.exclude.includes(buildingName);
+        const excludeMatch = filters.buildings.exclude.length === 0 || !filters.buildings.exclude.includes(resolvedBuilding);
 
         return includeMatch && excludeMatch;
       });
@@ -595,7 +592,7 @@ const EmailLists = () => {
     }
 
     return filtered;
-  }, [sortedData, searchTerm, filters, showOnlyWithCourses]);
+  }, [sortedData, searchTerm, filters, showOnlyWithCourses, spacesByKey]);
 
   const handleSort = (key) => {
     setSortConfig(prev => ({
@@ -736,7 +733,7 @@ const EmailLists = () => {
       'Job Title': p.jobTitle || '',
       'Program': p.program?.name || '',
       'Office': p.office || '',
-      'Building': extractBuildingName(p.office || ''),
+      'Building': resolveOfficeDetails(p, spacesByKey).buildingName || 'No Building',
       'Is Adjunct': p.isAdjunct ? 'Yes' : 'No',
       'Is Tenured': p.isTenured ? 'Yes' : 'No',
       'Is UPD': p.isUPD ? 'Yes' : 'No',

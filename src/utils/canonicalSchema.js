@@ -363,7 +363,7 @@ export const BUILDING_SCHEMA = {
  * A space represents a room, office, lab, or other physical location within a building.
  * This is the UNIFIED model for classrooms, offices, labs, studios, etc.
  *
- * Identity: buildingId + spaceNumber (enforced via spaceKey)
+ * Identity: buildingCode + spaceNumber (enforced via spaceKey)
  * SpaceKey format: "BUILDING_CODE:SPACE_NUMBER" (e.g., "GOEBEL:101", "FCS:103.06")
  */
 export const SPACE_SCHEMA = {
@@ -371,8 +371,8 @@ export const SPACE_SCHEMA = {
   // Document ID in Firestore = spaceKey (e.g., "GOEBEL:101")
 
   // Building reference (required for physical spaces)
-  buildingId: "",       // Reference to buildings collection (e.g., "goebel")
-  buildingCode: "",     // Denormalized building code for queries (e.g., "GOEBEL")
+  buildingId: "",       // Optional slug identifier (e.g., "goebel")
+  buildingCode: "",     // Canonical building code for queries (e.g., "GOEBEL")
   buildingDisplayName: "", // Denormalized for display (e.g., "Goebel")
 
   // Space number (supports decimals and suffixes)
@@ -441,7 +441,7 @@ export const VALIDATION_RULES = {
     },
   },
   space: {
-    required: ["buildingId", "spaceNumber", "spaceKey"],
+    required: ["buildingCode", "spaceNumber", "spaceKey"],
     formats: {
       spaceKey: /^[A-Z0-9_]+:[A-Z0-9./-]+$/, // BUILDING_CODE:SPACE_NUMBER
       spaceNumber: /^[\dA-Za-z./-]+$/, // Alphanumeric with decimals, dashes, slashes
@@ -584,7 +584,7 @@ export const validateSpace = (space) => {
   const warnings = [];
 
   // Check required fields
-  if (!space.buildingId) errors.push("Building ID is required");
+  if (!space.buildingCode) errors.push("Building code is required");
   if (!space.spaceNumber) errors.push("Space number is required");
   if (!space.spaceKey) errors.push("Space key is required");
 
@@ -599,6 +599,10 @@ export const validateSpace = (space) => {
     if (space.spaceKey !== expectedKey) {
       warnings.push(`Space key "${space.spaceKey}" doesn't match expected "${expectedKey}"`);
     }
+  }
+
+  if (!space.buildingId && space.buildingCode) {
+    warnings.push("Space is missing buildingId (optional but recommended)");
   }
 
   // Check type

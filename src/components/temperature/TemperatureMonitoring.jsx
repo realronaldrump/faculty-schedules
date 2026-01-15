@@ -31,7 +31,10 @@ import {
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { db, storage } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import { useData } from '../../contexts/DataContext.jsx';
 import { useUI } from '../../contexts/UIContext.jsx';
+import { resolveBuildingDisplayName } from '../../utils/locationService';
+import { resolveSpaceDisplayName } from '../../utils/spaceUtils';
 import { formatMinutesToLabel, formatMinutesToTime, parseTime } from '../../utils/timeUtils';
 import {
   detectGoveeCsvColumns,
@@ -57,7 +60,8 @@ const DEFAULT_SNAPSHOT_TIMES = [
   { label: '4:30 PM', minutes: 16 * 60 + 30, toleranceMinutes: 15 }
 ];
 
-const buildDefaultSettings = (buildingName) => ({
+const buildDefaultSettings = ({ buildingCode, buildingName }) => ({
+  buildingCode,
   buildingName,
   timezone: DEFAULT_TIMEZONE,
   snapshotTimes: DEFAULT_SNAPSHOT_TIMES.map((slot) => ({
@@ -69,15 +73,20 @@ const buildDefaultSettings = (buildingName) => ({
 });
 
 const sortRooms = (a, b) => {
-  const aNum = parseInt(a.roomNumber || '', 10);
-  const bNum = parseInt(b.roomNumber || '', 10);
+  const aNum = parseInt(a.spaceNumber || a.roomNumber || '', 10);
+  const bNum = parseInt(b.spaceNumber || b.roomNumber || '', 10);
   if (!Number.isNaN(aNum) && !Number.isNaN(bNum) && aNum !== bNum) {
     return aNum - bNum;
   }
   return (a.displayName || a.name || '').localeCompare(b.displayName || b.name || '', undefined, { numeric: true });
 };
 
-const getRoomLabel = (room) => room.displayName || room.name || room.roomNumber || room.id || 'Unknown';
+const getRoomLabel = (room, spacesByKey) => {
+  if (!room) return 'Unknown';
+  const key = room.spaceKey || room.id || '';
+  const resolved = key ? resolveSpaceDisplayName(key, spacesByKey) : '';
+  return resolved || room.displayName || room.name || room.roomNumber || room.id || 'Unknown';
+};
 
 const toCsvSafe = (value) => {
   const str = value == null ? '' : String(value);
@@ -96,12 +105,11 @@ const isValidTimeZone = (timeZone) => {
 
 const TemperatureMonitoring = () => {
   const { isAdmin, loading: authLoading, user } = useAuth();
+  const { spacesList = [], spacesByKey, roomsLoading } = useData();
   const { showNotification } = useUI();
   const mapRef = useRef(null);
   const dragStateRef = useRef(null);
 
-  const [rooms, setRooms] = useState([]);
-  const [roomsLoading, setRoomsLoading] = useState(true);
   const [selectedBuilding, setSelectedBuilding] = useState('');
   const [buildingSettings, setBuildingSettings] = useState(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
@@ -148,23 +156,56 @@ const TemperatureMonitoring = () => {
     return 'No data';
   };
 
+  const normalizeMarkerMap = (markers = {}) => {
+    if (!markers || typeof markers !== 'object') return {};
+    const next = {};
+    Object.entries(markers).forEach(([key, value]) => {
+      if (!key) return;
+      const direct = roomLookup[key] || (spacesByKey instanceof Map ? spacesByKey.get(key) : null);
+      if (direct) {
+        next[key] = value;
+        return;
+      }
+      const byId = spacesList.find((room) => room.id === key);
+      if (byId?.spaceKey) {
+        next[byId.spaceKey] = value;
+        return;
+      }
+      next[key] = value;
+    });
+    return next;
+  };
+
   const roomsByBuilding = useMemo(() => {
     const grouped = {};
-    rooms.forEach((room) => {
-      const building = (room.building || '').trim();
-      if (!building || building.toLowerCase() === 'online' || building.toLowerCase() === 'off campus') return;
-      if (!grouped[building]) grouped[building] = [];
-      grouped[building].push(room);
+    (spacesList || []).forEach((room) => {
+      if (room?.isActive === false) return;
+      const buildingCode = (room.buildingCode || room.building || '').toString().trim().toUpperCase();
+      if (!buildingCode) return;
+      if (buildingCode.toLowerCase() === 'online' || buildingCode.toLowerCase() === 'off campus') return;
+      if (!grouped[buildingCode]) grouped[buildingCode] = [];
+      grouped[buildingCode].push(room);
     });
     Object.keys(grouped).forEach((key) => {
       grouped[key].sort(sortRooms);
     });
     return grouped;
-  }, [rooms]);
+  }, [spacesList]);
 
-  const buildingList = useMemo(() => {
-    return Object.keys(roomsByBuilding).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const buildingOptions = useMemo(() => {
+    return Object.keys(roomsByBuilding)
+      .map((code) => ({
+        code,
+        name: resolveBuildingDisplayName(code) || code
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
   }, [roomsByBuilding]);
+
+  const buildingList = useMemo(() => buildingOptions.map((item) => item.code), [buildingOptions]);
+
+  const selectedBuildingName = useMemo(() => (
+    selectedBuilding ? (resolveBuildingDisplayName(selectedBuilding) || selectedBuilding) : ''
+  ), [selectedBuilding]);
 
   const roomsForBuilding = useMemo(() => {
     return roomsByBuilding[selectedBuilding] || [];
@@ -173,7 +214,8 @@ const TemperatureMonitoring = () => {
   const roomLookup = useMemo(() => {
     const lookup = {};
     roomsForBuilding.forEach((room) => {
-      lookup[room.id] = room;
+      const key = room.spaceKey || room.id;
+      if (key) lookup[key] = room;
     });
     return lookup;
   }, [roomsForBuilding]);
@@ -183,8 +225,10 @@ const TemperatureMonitoring = () => {
   const snapshotLookup = useMemo(() => {
     const map = {};
     snapshotDocs.forEach((docData) => {
-      if (!map[docData.roomId]) map[docData.roomId] = {};
-      map[docData.roomId][docData.snapshotTimeId] = docData;
+      const roomId = docData.spaceKey || docData.roomId;
+      if (!roomId) return;
+      if (!map[roomId]) map[roomId] = {};
+      map[roomId][docData.snapshotTimeId] = docData;
     });
     return map;
   }, [snapshotDocs]);
@@ -219,28 +263,6 @@ const TemperatureMonitoring = () => {
   }, [importItems]);
 
   useEffect(() => {
-    if (authLoading || !user) return;
-    let active = true;
-    const loadRooms = async () => {
-      setRoomsLoading(true);
-      try {
-        const snap = await getDocs(collection(db, 'rooms'));
-        const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        if (active) setRooms(items);
-      } catch (error) {
-        console.error('Error loading rooms:', error);
-        showNotification('error', 'Room Load Failed', 'Unable to load room data for temperature monitoring.');
-      } finally {
-        if (active) setRoomsLoading(false);
-      }
-    };
-    loadRooms();
-    return () => {
-      active = false;
-    };
-  }, [showNotification, authLoading, user]);
-
-  useEffect(() => {
     if (!selectedBuilding && buildingList.length > 0) {
       setSelectedBuilding(buildingList[0]);
     }
@@ -264,36 +286,57 @@ const TemperatureMonitoring = () => {
     const loadSettings = async () => {
       setSettingsLoading(true);
       try {
+        const buildingName = resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
         const buildingKey = toBuildingKey(selectedBuilding);
-        const refDoc = doc(db, 'temperatureBuildingSettings', buildingKey);
-        const snap = await getDoc(refDoc);
+        const legacyKey = toBuildingKey(buildingName);
+        let snap = await getDoc(doc(db, 'temperatureBuildingSettings', buildingKey));
+        let usedLegacy = false;
+        if (!snap.exists() && legacyKey !== buildingKey) {
+          const legacySnap = await getDoc(doc(db, 'temperatureBuildingSettings', legacyKey));
+          if (legacySnap.exists()) {
+            snap = legacySnap;
+            usedLegacy = true;
+          }
+        }
         if (!active) return;
         if (snap.exists()) {
           const data = snap.data();
-          const defaultTimes = buildDefaultSettings(selectedBuilding).snapshotTimes;
+          const defaultTimes = buildDefaultSettings({ buildingCode: selectedBuilding, buildingName }).snapshotTimes;
           const nextTimes = Array.isArray(data.snapshotTimes) && data.snapshotTimes.length > 0
             ? data.snapshotTimes
             : defaultTimes;
-          setBuildingSettings({
+          const nextSettings = {
             ...data,
-            snapshotTimes: [...nextTimes].sort((a, b) => (a.minutes || 0) - (b.minutes || 0))
-          });
+            buildingCode: selectedBuilding,
+            buildingName,
+            snapshotTimes: [...nextTimes].sort((a, b) => (a.minutes || 0) - (b.minutes || 0)),
+            markers: normalizeMarkerMap(data.markers || {})
+          };
+          setBuildingSettings(nextSettings);
           setSettingsExists(true);
+          if (usedLegacy && isAdmin) {
+            await setDoc(doc(db, 'temperatureBuildingSettings', buildingKey), {
+              ...nextSettings,
+              migratedFrom: legacyKey,
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+          }
         } else {
-          setBuildingSettings(buildDefaultSettings(selectedBuilding));
+          setBuildingSettings(buildDefaultSettings({ buildingCode: selectedBuilding, buildingName }));
           setSettingsExists(false);
         }
       } catch (error) {
         console.error('Error loading temperature settings:', error);
         showNotification('error', 'Settings Load Failed', 'Unable to load temperature settings for this building.');
-        setBuildingSettings(buildDefaultSettings(selectedBuilding));
+        const buildingName = resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
+        setBuildingSettings(buildDefaultSettings({ buildingCode: selectedBuilding, buildingName }));
         setSettingsExists(false);
       } finally {
         if (active) setSettingsLoading(false);
       }
     };
     loadSettings();
-  }, [selectedBuilding, showNotification, authLoading, user]);
+  }, [selectedBuilding, showNotification, authLoading, user, isAdmin]);
 
   useEffect(() => {
     if (!selectedDate && buildingSettings?.timezone) {
@@ -315,15 +358,29 @@ const TemperatureMonitoring = () => {
     let active = true;
     const loadDevices = async () => {
       try {
-        const deviceQuery = query(
+        const buildingName = resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
+        let snap = await getDocs(query(
           collection(db, 'temperatureDevices'),
-          where('buildingName', '==', selectedBuilding)
-        );
-        const snap = await getDocs(deviceQuery);
+          where('buildingCode', '==', selectedBuilding)
+        ));
+        const usedLegacy = snap.empty && buildingName;
+        if (usedLegacy) {
+          snap = await getDocs(query(
+            collection(db, 'temperatureDevices'),
+            where('buildingName', '==', buildingName)
+          ));
+        }
         if (!active) return;
         const map = {};
         snap.docs.forEach((docSnap) => {
-          map[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
+          const data = docSnap.data();
+          map[docSnap.id] = { id: docSnap.id, ...data };
+          if (usedLegacy && isAdmin) {
+            setDoc(docSnap.ref, {
+              buildingCode: selectedBuilding,
+              buildingName
+            }, { merge: true }).catch(() => null);
+          }
         });
         setDeviceDocs(map);
       } catch (error) {
@@ -334,7 +391,7 @@ const TemperatureMonitoring = () => {
     return () => {
       active = false;
     };
-  }, [selectedBuilding, authLoading, user]);
+  }, [selectedBuilding, authLoading, user, isAdmin]);
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -343,14 +400,32 @@ const TemperatureMonitoring = () => {
     const loadSnapshots = async () => {
       setSnapshotLoading(true);
       try {
-        const snapQuery = query(
+        const buildingName = resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
+        let snap = await getDocs(query(
           collection(db, 'temperatureRoomSnapshots'),
-          where('buildingName', '==', selectedBuilding),
+          where('buildingCode', '==', selectedBuilding),
           where('dateLocal', '==', selectedDate)
-        );
-        const snap = await getDocs(snapQuery);
+        ));
+        const usedLegacy = snap.empty && buildingName;
+        if (usedLegacy) {
+          snap = await getDocs(query(
+            collection(db, 'temperatureRoomSnapshots'),
+            where('buildingName', '==', buildingName),
+            where('dateLocal', '==', selectedDate)
+          ));
+        }
         if (!active) return;
-        setSnapshotDocs(snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+        const items = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+        if (usedLegacy && isAdmin) {
+          items.forEach((docData) => {
+            if (!docData?.id) return;
+            setDoc(doc(db, 'temperatureRoomSnapshots', docData.id), {
+              buildingCode: selectedBuilding,
+              buildingName
+            }, { merge: true }).catch(() => null);
+          });
+        }
+        setSnapshotDocs(items);
       } catch (error) {
         console.error('Error loading snapshots:', error);
         showNotification('error', 'Snapshot Load Failed', 'Unable to load temperature snapshots for this date.');
@@ -362,7 +437,7 @@ const TemperatureMonitoring = () => {
     return () => {
       active = false;
     };
-  }, [selectedBuilding, selectedDate, showNotification, authLoading, user]);
+  }, [selectedBuilding, selectedDate, showNotification, authLoading, user, isAdmin]);
 
   useEffect(() => {
     if (!selectedBuilding) return;
@@ -447,7 +522,8 @@ const TemperatureMonitoring = () => {
     try {
       const buildingKey = toBuildingKey(selectedBuilding);
       await setDoc(doc(db, 'temperatureBuildingSettings', buildingKey), {
-        buildingName: selectedBuilding,
+        buildingCode: selectedBuilding,
+        buildingName: selectedBuildingName || selectedBuilding,
         markers: markerDrafts,
         updatedAt: serverTimestamp()
       }, { merge: true });
@@ -503,7 +579,8 @@ const TemperatureMonitoring = () => {
       };
 
       await setDoc(doc(db, 'temperatureBuildingSettings', buildingKey), {
-        buildingName: selectedBuilding,
+        buildingCode: selectedBuilding,
+        buildingName: selectedBuildingName || selectedBuilding,
         floorplan,
         updatedAt: serverTimestamp()
       }, { merge: true });
@@ -565,7 +642,8 @@ const TemperatureMonitoring = () => {
       const buildingKey = toBuildingKey(selectedBuilding);
       const sortedTimes = [...(buildingSettings.snapshotTimes || [])].sort((a, b) => (a.minutes || 0) - (b.minutes || 0));
       const payload = {
-        buildingName: selectedBuilding,
+        buildingCode: selectedBuilding,
+        buildingName: selectedBuildingName || selectedBuilding,
         timezone: buildingSettings.timezone || DEFAULT_TIMEZONE,
         snapshotTimes: sortedTimes,
         markers: buildingSettings.markers || {},
@@ -591,8 +669,8 @@ const TemperatureMonitoring = () => {
     const labelTokens = extractRoomTokens(label).map(normalizeRoomNumber);
     let best = null;
     roomsList.forEach((room) => {
-      const roomNumber = normalizeRoomNumber(room.roomNumber || '');
-      const roomLabel = normalizeMatchText(getRoomLabel(room));
+      const roomNumber = normalizeRoomNumber(room.spaceNumber || room.roomNumber || '');
+      const roomLabel = normalizeMatchText(getRoomLabel(room, spacesByKey));
       let score = 0;
       let method = '';
       if (roomNumber && labelTokens.includes(roomNumber)) {
@@ -624,7 +702,7 @@ const TemperatureMonitoring = () => {
     let confidence = best.score;
     if (best.tied) confidence = Math.min(confidence, 0.65);
     return {
-      roomId: best.room.id,
+      roomId: best.room.spaceKey || best.room.id,
       confidence,
       method: best.method
     };
@@ -750,9 +828,10 @@ const TemperatureMonitoring = () => {
         const deviceLabel = parseDeviceLabelFromFilename(file.name);
         const deviceId = toDeviceId(selectedBuilding, deviceLabel);
         const existingDevice = deviceDocs[deviceId];
-        const suggestion = existingDevice?.mapping?.roomId
+        const existingRoomKey = existingDevice?.mapping?.spaceKey || existingDevice?.mapping?.roomId || '';
+        const suggestion = existingRoomKey
           ? {
-            roomId: existingDevice.mapping.roomId,
+            roomId: existingRoomKey,
             confidence: existingDevice.mapping.confidence ?? 1,
             method: existingDevice.mapping.method || existingDevice.mapping.matchMethod || 'existing'
           }
@@ -834,8 +913,13 @@ const TemperatureMonitoring = () => {
         const deviceLabel = item.deviceLabel || deviceId;
         const existingDevice = deviceCache[deviceId];
         const latestLocal = existingDevice?.latestLocalTimestamp || '';
-        const roomId = mappingOverrides[deviceId] || item.suggestedRoomId || existingDevice?.mapping?.roomId || '';
-        if (!roomId) continue;
+        const roomId = mappingOverrides[deviceId]
+          || item.suggestedRoomId
+          || existingDevice?.mapping?.spaceKey
+          || existingDevice?.mapping?.roomId
+          || '';
+        const spaceKey = roomId;
+        if (!spaceKey) continue;
         const timezone = buildingSettings.timezone || DEFAULT_TIMEZONE;
 
         const samplesByDate = {};
@@ -896,7 +980,8 @@ const TemperatureMonitoring = () => {
             continue;
           }
           const metadata = {
-            buildingName: selectedBuilding,
+            buildingCode: selectedBuilding,
+            buildingName: selectedBuildingName || selectedBuilding,
             deviceId,
             deviceLabel,
             dateLocal: dateKey,
@@ -929,7 +1014,8 @@ const TemperatureMonitoring = () => {
           totalConflicts += deviceConflicts;
           const importDocId = `${toBuildingKey(selectedBuilding)}__${item.fileHash}`;
           await setDoc(doc(db, 'temperatureImports', importDocId), {
-            buildingName: selectedBuilding,
+            buildingCode: selectedBuilding,
+            buildingName: selectedBuildingName || selectedBuilding,
             deviceId,
             deviceLabel,
             fileName: item.fileName,
@@ -948,7 +1034,8 @@ const TemperatureMonitoring = () => {
 
         const manualOverride = Boolean(mappingOverrides[deviceId]);
         const mappingPayload = {
-          roomId,
+          roomId: spaceKey,
+          spaceKey,
           method: manualOverride
             ? 'manual'
             : (item.matchMethod || existingDevice?.mapping?.method || existingDevice?.mapping?.matchMethod || 'auto'),
@@ -959,14 +1046,16 @@ const TemperatureMonitoring = () => {
           manual: manualOverride
         };
         const existingMapping = existingDevice?.mapping || {};
-        const mappingChanged = existingMapping.roomId !== mappingPayload.roomId
+        const existingRoomKey = existingMapping.spaceKey || existingMapping.roomId || '';
+        const mappingChanged = existingRoomKey !== mappingPayload.spaceKey
           || Boolean(existingMapping.manual) !== Boolean(mappingPayload.manual)
           || (existingMapping.method || existingMapping.matchMethod || 'auto') !== mappingPayload.method;
         const latestLocalChanged = newLatestLocal && newLatestLocal !== latestLocal;
         const shouldUpdateDevice = deviceNewReadings > 0 || mappingChanged || latestLocalChanged;
         if (shouldUpdateDevice) {
           await setDoc(doc(db, 'temperatureDevices', deviceId), {
-            buildingName: selectedBuilding,
+            buildingCode: selectedBuilding,
+            buildingName: selectedBuildingName || selectedBuilding,
             label: deviceLabel,
             labelNormalized: normalizeMatchText(deviceLabel),
             mapping: mappingPayload,
@@ -978,7 +1067,8 @@ const TemperatureMonitoring = () => {
           }, { merge: true });
           deviceCache[deviceId] = {
             ...(deviceCache[deviceId] || {}),
-            buildingName: selectedBuilding,
+            buildingCode: selectedBuilding,
+            buildingName: selectedBuildingName || selectedBuilding,
             label: deviceLabel,
             labelNormalized: normalizeMatchText(deviceLabel),
             mapping: mappingPayload,
@@ -991,8 +1081,10 @@ const TemperatureMonitoring = () => {
           for (const dateKey of updatedDates) {
             const samples = daySamplesCache[dateKey] || {};
             await recomputeSnapshotsForDay({
-              buildingName: selectedBuilding,
-              roomId,
+              buildingCode: selectedBuilding,
+              buildingName: selectedBuildingName || selectedBuilding,
+              roomId: spaceKey,
+              spaceKey,
               dateLocal: dateKey,
               samples,
               timezone,
@@ -1021,8 +1113,10 @@ const TemperatureMonitoring = () => {
   };
 
   const recomputeSnapshotsForDay = async ({
+    buildingCode,
     buildingName,
     roomId,
+    spaceKey,
     dateLocal,
     samples,
     timezone,
@@ -1046,7 +1140,9 @@ const TemperatureMonitoring = () => {
         }
         if (bestSample) break;
       }
-      const snapshotId = toSnapshotDocId(buildingName, roomId, dateLocal, snapshot.id);
+      const stableBuilding = buildingCode || buildingName || '';
+      const stableRoom = spaceKey || roomId;
+      const snapshotId = toSnapshotDocId(stableBuilding, stableRoom, dateLocal, snapshot.id);
       const snapshotRef = doc(db, 'temperatureRoomSnapshots', snapshotId);
       const existingSnap = await getDoc(snapshotRef);
       const status = bestSample ? 'ok' : 'missing';
@@ -1058,9 +1154,11 @@ const TemperatureMonitoring = () => {
         })()
         : null;
       const payload = {
-        buildingName,
-        roomId,
-        roomName: getRoomLabel(roomLookup[roomId] || { id: roomId }),
+        buildingCode: buildingCode || '',
+        buildingName: buildingName || buildingCode || '',
+        roomId: stableRoom,
+        spaceKey: stableRoom,
+        roomName: getRoomLabel(roomLookup[stableRoom] || { id: stableRoom }, spacesByKey),
         dateLocal,
         snapshotTimeId: snapshot.id,
         snapshotLabel: snapshot.label || formatMinutesToTime(snapshot.minutes),
@@ -1105,22 +1203,32 @@ const TemperatureMonitoring = () => {
     }
     setRecomputing(true);
     try {
-      const readingQuery = query(
+      const buildingName = selectedBuildingName || selectedBuilding;
+      let snap = await getDocs(query(
         collection(db, 'temperatureDeviceReadings'),
-        where('buildingName', '==', selectedBuilding),
+        where('buildingCode', '==', selectedBuilding),
         where('dateLocal', '>=', recomputeStart),
         where('dateLocal', '<=', recomputeEnd)
-      );
-      const snap = await getDocs(readingQuery);
+      ));
+      if (snap.empty && buildingName) {
+        snap = await getDocs(query(
+          collection(db, 'temperatureDeviceReadings'),
+          where('buildingName', '==', buildingName),
+          where('dateLocal', '>=', recomputeStart),
+          where('dateLocal', '<=', recomputeEnd)
+        ));
+      }
       for (const docSnap of snap.docs) {
         const data = docSnap.data();
         const device = deviceDocs[data.deviceId];
-        const roomId = device?.mapping?.roomId;
+        const roomId = device?.mapping?.spaceKey || device?.mapping?.roomId;
         if (!roomId) continue;
         const samples = data.samples || {};
         await recomputeSnapshotsForDay({
-          buildingName: selectedBuilding,
+          buildingCode: selectedBuilding,
+          buildingName: selectedBuildingName || selectedBuilding,
           roomId,
+          spaceKey: roomId,
           dateLocal: data.dateLocal,
           samples,
           timezone: buildingSettings?.timezone || DEFAULT_TIMEZONE,
@@ -1145,13 +1253,21 @@ const TemperatureMonitoring = () => {
     }
     setHistoricalLoading(true);
     try {
-      const historyQuery = query(
+      const buildingName = selectedBuildingName || selectedBuilding;
+      let snap = await getDocs(query(
         collection(db, 'temperatureRoomSnapshots'),
-        where('buildingName', '==', selectedBuilding),
+        where('buildingCode', '==', selectedBuilding),
         where('dateLocal', '>=', historicalStart),
         where('dateLocal', '<=', historicalEnd)
-      );
-      const snap = await getDocs(historyQuery);
+      ));
+      if (snap.empty && buildingName) {
+        snap = await getDocs(query(
+          collection(db, 'temperatureRoomSnapshots'),
+          where('buildingName', '==', buildingName),
+          where('dateLocal', '>=', historicalStart),
+          where('dateLocal', '<=', historicalEnd)
+        ));
+      }
       const docs = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
       setHistoricalDocs(docs);
     } catch (error) {
@@ -1170,16 +1286,25 @@ const TemperatureMonitoring = () => {
     }
     setExporting(true);
     try {
-      const exportQuery = query(
+      const buildingName = selectedBuildingName || selectedBuilding;
+      let snap = await getDocs(query(
         collection(db, 'temperatureRoomSnapshots'),
-        where('buildingName', '==', selectedBuilding),
+        where('buildingCode', '==', selectedBuilding),
         where('dateLocal', '>=', exportStart),
         where('dateLocal', '<=', exportEnd)
-      );
-      const snap = await getDocs(exportQuery);
+      ));
+      if (snap.empty && buildingName) {
+        snap = await getDocs(query(
+          collection(db, 'temperatureRoomSnapshots'),
+          where('buildingName', '==', buildingName),
+          where('dateLocal', '>=', exportStart),
+          where('dateLocal', '<=', exportEnd)
+        ));
+      }
       const docs = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
       const filtered = docs.filter((docData) => {
-        if (exportRoomIds.length > 0 && !exportRoomIds.includes(docData.roomId)) return false;
+        const roomKey = docData.spaceKey || docData.roomId;
+        if (exportRoomIds.length > 0 && !exportRoomIds.includes(roomKey)) return false;
         if (exportSnapshotIds.length > 0 && !exportSnapshotIds.includes(docData.snapshotTimeId)) return false;
         return true;
       });
@@ -1198,9 +1323,11 @@ const TemperatureMonitoring = () => {
         'Source UTC Timestamp',
         'Device Label'
       ];
-      const rows = filtered.map((docData) => ([
-        docData.buildingName || selectedBuilding,
-        docData.roomName || getRoomLabel(roomLookup[docData.roomId] || {}),
+      const rows = filtered.map((docData) => {
+        const roomKey = docData.spaceKey || docData.roomId;
+        return ([
+        docData.buildingName || selectedBuildingName || selectedBuilding,
+        docData.roomName || getRoomLabel(roomLookup[roomKey] || { id: roomKey }, spacesByKey),
         docData.dateLocal || '',
         docData.snapshotLabel || '',
         docData.temperatureF ?? '',
@@ -1212,7 +1339,8 @@ const TemperatureMonitoring = () => {
         docData.sourceReadingLocal || '',
         docData.sourceReadingUtc?.toDate ? docData.sourceReadingUtc.toDate().toISOString() : '',
         docData.sourceDeviceLabel || ''
-      ]));
+      ]);
+      });
       const csvContent = [
         headers.map(toCsvSafe).join(','),
         ...rows.map((row) => row.map(toCsvSafe).join(','))
@@ -1241,24 +1369,32 @@ const TemperatureMonitoring = () => {
     }
     setExporting(true);
     try {
-      const exportQuery = query(
+      const buildingName = selectedBuildingName || selectedBuilding;
+      let snap = await getDocs(query(
         collection(db, 'temperatureDeviceReadings'),
-        where('buildingName', '==', selectedBuilding),
+        where('buildingCode', '==', selectedBuilding),
         where('dateLocal', '>=', exportStart),
         where('dateLocal', '<=', exportEnd)
-      );
-      const snap = await getDocs(exportQuery);
+      ));
+      if (snap.empty && buildingName) {
+        snap = await getDocs(query(
+          collection(db, 'temperatureDeviceReadings'),
+          where('buildingName', '==', buildingName),
+          where('dateLocal', '>=', exportStart),
+          where('dateLocal', '<=', exportEnd)
+        ));
+      }
       const rows = [];
       snap.docs.forEach((docSnap) => {
         const data = docSnap.data();
         const device = deviceDocs[data.deviceId] || {};
-        const roomId = device?.mapping?.roomId || '';
+        const roomId = device?.mapping?.spaceKey || device?.mapping?.roomId || '';
         if (exportRoomIds.length > 0 && roomId && !exportRoomIds.includes(roomId)) return;
-        const roomName = roomId ? getRoomLabel(roomLookup[roomId] || {}) : '';
+        const roomName = roomId ? getRoomLabel(roomLookup[roomId] || { id: roomId }, spacesByKey) : '';
         const samples = data.samples || {};
         Object.values(samples).forEach((sample) => {
           rows.push([
-            selectedBuilding,
+            buildingName || selectedBuilding,
             roomName,
             device.label || data.deviceId,
             sample.rawLocal || '',
@@ -1300,7 +1436,11 @@ const TemperatureMonitoring = () => {
   };
 
   const markerMap = editingPositions ? markerDrafts : (buildingSettings?.markers || {});
-  const missingMarkers = roomsForBuilding.filter((room) => !markerMap[room.id]);
+  const missingMarkers = roomsForBuilding.filter((room) => {
+    const roomKey = room.spaceKey || room.id;
+    if (!roomKey) return false;
+    return !markerMap[roomKey];
+  });
 
   const currentSnapshotLabel = snapshotTimes.find((slot) => slot.id === selectedSnapshotId)?.label || '';
 
@@ -1368,22 +1508,24 @@ const TemperatureMonitoring = () => {
               >
                 <img src={floorplanData.downloadUrl} alt={`${selectedBuilding} floorplan`} className="w-full h-auto block" />
                 {roomsForBuilding.map((room) => {
-                  const marker = markerMap[room.id];
+                  const roomKey = room.spaceKey || room.id;
+                  if (!roomKey) return null;
+                  const marker = markerMap[roomKey];
                   if (!marker) return null;
-                  const snapshot = snapshotLookup[room.id]?.[selectedSnapshotId];
+                  const snapshot = snapshotLookup[roomKey]?.[selectedSnapshotId];
                   const isMissing = !snapshot || snapshot.status === 'missing';
                   const tempLabel = formatSnapshotTemp(snapshot);
                   return (
                     <button
-                      key={room.id}
+                      key={roomKey}
                       type="button"
-                      onPointerDown={(event) => handleMarkerPointerDown(room.id, event)}
+                      onPointerDown={(event) => handleMarkerPointerDown(roomKey, event)}
                       className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full px-2 py-1 text-xs font-semibold shadow-sm ${isMissing ? 'bg-gray-300 text-gray-700' : 'bg-baylor-green text-white'}`}
                       style={{ left: `${marker.xPct}%`, top: `${marker.yPct}%` }}
-                      title={`${getRoomLabel(room)} - ${tempLabel}`}
+                      title={`${getRoomLabel(room, spacesByKey)} - ${tempLabel}`}
                     >
                       <div className="flex flex-col items-center leading-tight">
-                        <span>{room.roomNumber || room.name}</span>
+                        <span>{room.spaceNumber || room.roomNumber || room.name}</span>
                         <span>{tempLabel}</span>
                       </div>
                     </button>
@@ -1403,15 +1545,19 @@ const TemperatureMonitoring = () => {
                     {missingMarkers.length === 0 ? (
                       <div className="text-xs text-gray-600">All rooms have markers placed.</div>
                     ) : (
-                      missingMarkers.map((room) => (
-                        <button
-                          key={room.id}
-                          className={`w-full text-left px-3 py-2 rounded-md border text-xs ${activePlacementRoomId === room.id ? 'border-baylor-green bg-baylor-green/10' : 'border-gray-200 hover:border-baylor-green/50'}`}
-                          onClick={() => setActivePlacementRoomId(room.id)}
-                        >
-                          {getRoomLabel(room)}
-                        </button>
-                      ))
+                      missingMarkers.map((room) => {
+                        const roomKey = room.spaceKey || room.id;
+                        if (!roomKey) return null;
+                        return (
+                          <button
+                            key={roomKey}
+                            className={`w-full text-left px-3 py-2 rounded-md border text-xs ${activePlacementRoomId === roomKey ? 'border-baylor-green bg-baylor-green/10' : 'border-gray-200 hover:border-baylor-green/50'}`}
+                            onClick={() => setActivePlacementRoomId(roomKey)}
+                          >
+                            {getRoomLabel(room, spacesByKey)}
+                          </button>
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -1428,10 +1574,11 @@ const TemperatureMonitoring = () => {
                 <h3 className="text-sm font-semibold text-gray-900 mb-2">Missing Data</h3>
                 <div className="text-xs text-gray-600 max-h-40 overflow-y-auto space-y-1">
                   {roomsForBuilding.filter((room) => {
-                    const snapshot = snapshotLookup[room.id]?.[selectedSnapshotId];
+                    const roomKey = room.spaceKey || room.id;
+                    const snapshot = roomKey ? snapshotLookup[roomKey]?.[selectedSnapshotId] : null;
                     return !snapshot || snapshot.status === 'missing';
                   }).map((room) => (
-                    <div key={room.id}>{getRoomLabel(room)}</div>
+                    <div key={room.spaceKey || room.id}>{getRoomLabel(room, spacesByKey)}</div>
                   ))}
                 </div>
               </div>
@@ -1466,11 +1613,14 @@ const TemperatureMonitoring = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {roomsForBuilding.map((room) => (
-              <tr key={room.id}>
-                <td className="px-4 py-2 font-medium text-gray-800">{getRoomLabel(room)}</td>
+            {roomsForBuilding.map((room) => {
+              const roomKey = room.spaceKey || room.id;
+              if (!roomKey) return null;
+              return (
+              <tr key={roomKey}>
+                <td className="px-4 py-2 font-medium text-gray-800">{getRoomLabel(room, spacesByKey)}</td>
                 {snapshotTimes.map((slot) => {
-                  const snapshot = snapshotLookup[room.id]?.[slot.id];
+                  const snapshot = snapshotLookup[roomKey]?.[slot.id];
                   const isMissing = !snapshot || snapshot.status === 'missing';
                   return (
                     <td key={slot.id} className="px-4 py-2">
@@ -1481,7 +1631,8 @@ const TemperatureMonitoring = () => {
                   );
                 })}
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
       </div>
@@ -1492,7 +1643,9 @@ const TemperatureMonitoring = () => {
     const counts = {};
     historicalDocs.forEach((docData) => {
       if (docData.status !== 'missing') return;
-      counts[docData.roomId] = (counts[docData.roomId] || 0) + 1;
+      const roomKey = docData.spaceKey || docData.roomId;
+      if (!roomKey) return;
+      counts[roomKey] = (counts[roomKey] || 0) + 1;
     });
     return Object.entries(counts)
       .map(([roomId, count]) => ({ roomId, count }))
@@ -1501,7 +1654,7 @@ const TemperatureMonitoring = () => {
 
   const renderHistorical = () => {
     const roomSnapshots = historicalRoomId
-      ? historicalDocs.filter((docData) => docData.roomId === historicalRoomId)
+      ? historicalDocs.filter((docData) => (docData.spaceKey || docData.roomId) === historicalRoomId)
       : [];
 
     const dates = Array.from(new Set(roomSnapshots.map((docData) => docData.dateLocal))).sort();
@@ -1542,9 +1695,13 @@ const TemperatureMonitoring = () => {
               onChange={(e) => setHistoricalRoomId(e.target.value)}
             >
               <option value="">Select a room...</option>
-              {roomsForBuilding.map((room) => (
-                <option key={room.id} value={room.id}>{getRoomLabel(room)}</option>
-              ))}
+              {roomsForBuilding.map((room) => {
+                const roomKey = room.spaceKey || room.id;
+                if (!roomKey) return null;
+                return (
+                  <option key={roomKey} value={roomKey}>{getRoomLabel(room, spacesByKey)}</option>
+                );
+              })}
             </select>
             {historicalRoomId && (
               <div className="mt-4 overflow-x-auto">
@@ -1590,7 +1747,7 @@ const TemperatureMonitoring = () => {
               <div className="space-y-2 text-xs text-gray-600">
                 {missingCounts.slice(0, 8).map((item) => (
                   <div key={item.roomId} className="flex items-center justify-between">
-                    <span>{getRoomLabel(roomLookup[item.roomId] || {})}</span>
+                    <span>{getRoomLabel(roomLookup[item.roomId] || { id: item.roomId }, spacesByKey)}</span>
                     <span className="text-gray-500">{item.count} missing</span>
                   </div>
                 ))}
@@ -1773,7 +1930,7 @@ const TemperatureMonitoring = () => {
                     <div>
                       <div className="text-sm font-medium text-gray-800">{item.deviceLabel}</div>
                       <div className="text-xs text-gray-500">
-                        Suggested: {item.suggestedRoomId ? getRoomLabel(roomLookup[item.suggestedRoomId] || {}) : 'None'} | Confidence {Math.round((item.matchConfidence || 0) * 100)}%
+                        Suggested: {item.suggestedRoomId ? getRoomLabel(roomLookup[item.suggestedRoomId] || { id: item.suggestedRoomId }, spacesByKey) : 'None'} | Confidence {Math.round((item.matchConfidence || 0) * 100)}%
                       </div>
                     </div>
                     <select
@@ -1782,9 +1939,13 @@ const TemperatureMonitoring = () => {
                       onChange={(e) => setMappingOverrides((prev) => ({ ...prev, [item.deviceId]: e.target.value }))}
                     >
                       <option value="">Select room...</option>
-                      {roomsForBuilding.map((room) => (
-                        <option key={room.id} value={room.id}>{getRoomLabel(room)}</option>
-                      ))}
+                      {roomsForBuilding.map((room) => {
+                        const roomKey = room.spaceKey || room.id;
+                        if (!roomKey) return null;
+                        return (
+                          <option key={roomKey} value={roomKey}>{getRoomLabel(room, spacesByKey)}</option>
+                        );
+                      })}
                     </select>
                   </div>
                 ))}
@@ -1836,9 +1997,13 @@ const TemperatureMonitoring = () => {
             value={exportRoomIds}
             onChange={(e) => setExportRoomIds(Array.from(e.target.selectedOptions).map((opt) => opt.value))}
           >
-            {roomsForBuilding.map((room) => (
-              <option key={room.id} value={room.id}>{getRoomLabel(room)}</option>
-            ))}
+            {roomsForBuilding.map((room) => {
+              const roomKey = room.spaceKey || room.id;
+              if (!roomKey) return null;
+              return (
+                <option key={roomKey} value={roomKey}>{getRoomLabel(room, spacesByKey)}</option>
+              );
+            })}
           </select>
           <label className="form-label">Snapshot times (optional)</label>
           <select
@@ -2009,7 +2174,7 @@ const TemperatureMonitoring = () => {
         </div>
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <Thermometer className="w-4 h-4 text-baylor-green" />
-          {selectedBuilding ? `Building: ${selectedBuilding}` : 'Select a building'}
+          {selectedBuilding ? `Building: ${selectedBuildingName || selectedBuilding}` : 'Select a building'}
         </div>
       </div>
 
@@ -2024,8 +2189,8 @@ const TemperatureMonitoring = () => {
                 onChange={(e) => setSelectedBuilding(e.target.value)}
               >
                 <option value="">Select building...</option>
-                {buildingList.map((building) => (
-                  <option key={building} value={building}>{building}</option>
+                {buildingOptions.map((building) => (
+                  <option key={building.code} value={building.code}>{building.name}</option>
                 ))}
               </select>
             </div>

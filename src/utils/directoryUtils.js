@@ -9,6 +9,7 @@
  */
 
 import { getBuildingFromRoom } from './buildingUtils';
+import { resolveOfficeLocation } from './spaceUtils';
 
 /**
  * Format a 10-digit phone number as (XXX) XXX - XXXX
@@ -40,6 +41,53 @@ export const extractBuildingName = (officeLocation) => {
     const building = getBuildingFromRoom(officeLocation);
     if (!building || !building.trim()) return 'No Building';
     return building;
+};
+
+/**
+ * Extract room number from an office location string
+ * @param {string} officeLocation
+ * @returns {string}
+ */
+export const extractRoomNumberFromOffice = (officeLocation) => {
+    if (!officeLocation || officeLocation.trim() === '') {
+        return '';
+    }
+
+    const office = officeLocation.trim();
+
+    const roomMatch = office.match(/(\d+[A-Za-z]?)$/);
+    if (roomMatch) {
+        return roomMatch[1];
+    }
+
+    const complexMatch = office.match(/\s+(\d{2,4}[A-Za-z]?)\s*$/);
+    if (complexMatch) {
+        return complexMatch[1];
+    }
+
+    return '';
+};
+
+/**
+ * Resolve office building + room using canonical space references when available.
+ * @param {Object} person
+ * @param {Map|Object} spacesByKey
+ * @returns {{ buildingName: string, roomNumber: string }}
+ */
+export const resolveOfficeDetails = (person, spacesByKey) => {
+    const resolved = resolveOfficeLocation(person, spacesByKey);
+    if (resolved?.buildingDisplayName || resolved?.spaceNumber) {
+        return {
+            buildingName: resolved.buildingDisplayName || 'No Building',
+            roomNumber: resolved.spaceNumber || ''
+        };
+    }
+
+    const office = person?.office || '';
+    return {
+        buildingName: extractBuildingName(office),
+        roomNumber: extractRoomNumberFromOffice(office)
+    };
 };
 
 /**
@@ -120,7 +168,7 @@ export const dedupeDirectoryRecords = (records = []) => {
  * @param {boolean} options.includePrograms
  * @returns {Object}
  */
-export const buildDirectoryFilterOptions = (records = [], { includePrograms = false } = {}) => {
+export const buildDirectoryFilterOptions = (records = [], { includePrograms = false, spacesByKey } = {}) => {
     const programsSet = new Set();
     const jobTitles = new Set();
     const buildings = new Set();
@@ -136,11 +184,8 @@ export const buildDirectoryFilterOptions = (records = [], { includePrograms = fa
         if (person.jobTitle) {
             jobTitles.add(person.jobTitle);
         }
-        if (person.office) {
-            buildings.add(extractBuildingName(person.office));
-        } else {
-            buildings.add('No Building');
-        }
+        const resolved = resolveOfficeDetails(person, spacesByKey);
+        buildings.add(resolved.buildingName || 'No Building');
     });
 
     return {

@@ -17,8 +17,7 @@ import { useSchedules } from '../contexts/ScheduleContext';
 import { useUI } from '../contexts/UIContext';
 import { useAuth } from '../contexts/AuthContext';
 import { normalizeTermLabel, termCodeFromLabel } from '../utils/termUtils';
-import { parseMultiRoom, buildSpaceKey, isSkippableLocation } from '../utils/locationService';
-import { generateSpaceId } from '../utils/canonicalSchema';
+import { parseMultiRoom, buildSpaceKey } from '../utils/locationService';
 
 const useScheduleOperations = () => {
   const {
@@ -239,15 +238,22 @@ const useScheduleOperations = () => {
       if (!treatAsNoRoom && filteredRoomNames.length > 0) {
         const roomString = filteredRoomNames.join('; ');
         const parsedRooms = parseMultiRoom(roomString);
-        for (const parsed of parsedRooms) {
-          if (parsed.buildingCode && parsed.spaceNumber) {
-            const spaceKey = buildSpaceKey(parsed.buildingCode, parsed.spaceNumber);
-            const spaceId = generateSpaceId(parsed.buildingCode, parsed.spaceNumber);
-            spaceIds.push(spaceId);
-            spaceDisplayNames.push(`${parsed.buildingDisplayName || parsed.buildingCode} ${parsed.spaceNumber}`);
+        const parsedList = Array.isArray(parsedRooms?.rooms) ? parsedRooms.rooms : [];
+        parsedList.forEach((parsed) => {
+          const spaceKey = parsed.spaceKey || (parsed.buildingCode && parsed.spaceNumber
+            ? buildSpaceKey(parsed.buildingCode, parsed.spaceNumber)
+            : '');
+          if (spaceKey) {
+            spaceIds.push(spaceKey);
+            if (parsed.displayName) {
+              spaceDisplayNames.push(parsed.displayName);
+            }
           }
-        }
+        });
       }
+      spaceIds = Array.from(new Set(spaceIds));
+      spaceDisplayNames = Array.from(new Set(spaceDisplayNames));
+
       // Fall back to existing spaceIds if rooms haven't changed
       if (roomsMatch && spaceIds.length === 0) {
         spaceIds = referenceSchedule?.spaceIds || [];
@@ -277,8 +283,8 @@ const useScheduleOperations = () => {
         locationLabel: treatAsNoRoom ? 'No Room Needed' : '',
         roomIds,
         roomId,
-        roomNames: filteredRoomNames,
-        roomName: treatAsNoRoom ? '' : (filteredRoomNames[0] || ''),
+        roomNames: spaceDisplayNames.length > 0 ? spaceDisplayNames : filteredRoomNames,
+        roomName: treatAsNoRoom ? '' : (spaceDisplayNames[0] || filteredRoomNames[0] || ''),
         // New canonical location fields
         spaceIds,
         spaceDisplayNames,

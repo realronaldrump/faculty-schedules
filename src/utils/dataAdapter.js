@@ -419,9 +419,27 @@ export const resolveInstructorName = (schedule, peopleMap) => {
  * @param {Map|Object} roomsMap - Map of room ID to room object
  * @returns {string} The room display name or "TBA"
  */
-export const resolveRoomName = (schedule, roomsMap) => {
+export const resolveRoomName = (schedule, roomsMap, spacesByKey = null) => {
   if (schedule?.locationType === 'no_room' || schedule?.isOnline) {
     return schedule?.locationLabel || 'No Room Needed';
+  }
+
+  // Prefer canonical spaceIds
+  if (Array.isArray(schedule?.spaceIds) && schedule.spaceIds.length > 0) {
+    const map = spacesByKey instanceof Map ? spacesByKey : null;
+    const names = schedule.spaceIds
+      .map((key) => {
+        const room = map ? map.get(key) : spacesByKey?.[key];
+        return room ? (room.displayName || room.name) : null;
+      })
+      .filter(Boolean);
+    if (names.length > 0) {
+      return names.join('; ');
+    }
+  }
+
+  if (Array.isArray(schedule?.spaceDisplayNames) && schedule.spaceDisplayNames.length > 0) {
+    return schedule.spaceDisplayNames.join('; ');
   }
 
   // Try roomIds array first (multi-room support)
@@ -469,7 +487,22 @@ export const enrichScheduleForDisplay = (schedule, peopleMap, roomsMap, programs
 
   const instructor = schedule.instructorId ? peopleMap.get(schedule.instructorId) : null;
   const instructorName = getInstructorDisplayName(instructor);
-  const roomName = resolveRoomName(schedule, roomsMap);
+  const spaceMap = new Map();
+  if (roomsMap instanceof Map) {
+    roomsMap.forEach((room) => {
+      if (room?.spaceKey && !spaceMap.has(room.spaceKey)) {
+        spaceMap.set(room.spaceKey, room);
+      }
+    });
+  } else if (roomsMap && typeof roomsMap === 'object') {
+    Object.values(roomsMap).forEach((room) => {
+      if (room?.spaceKey && !spaceMap.has(room.spaceKey)) {
+        spaceMap.set(room.spaceKey, room);
+      }
+    });
+  }
+
+  const roomName = resolveRoomName(schedule, roomsMap, spaceMap);
 
   // Resolve program from instructor if available
   let programName = UNKNOWN_PROGRAM;
@@ -490,7 +523,10 @@ export const enrichScheduleForDisplay = (schedule, peopleMap, roomsMap, programs
     instructor,
     // Flag indicating if instructor is properly linked
     _hasValidInstructor: !!instructor,
-    _hasValidRoom: schedule.locationType === 'no_room' || schedule.isOnline || (schedule.roomId && roomsMap.has(schedule.roomId))
+    _hasValidRoom: schedule.locationType === 'no_room' ||
+      schedule.isOnline ||
+      (Array.isArray(schedule.spaceIds) && schedule.spaceIds.length > 0) ||
+      (schedule.roomId && roomsMap.has(schedule.roomId))
   };
 };
 

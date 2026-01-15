@@ -28,13 +28,13 @@ import { useData } from '../../contexts/DataContext';
 import { useAppConfig } from '../../contexts/AppConfigContext';
 import { useUI } from '../../contexts/UIContext';
 import { ConfirmationDialog } from '../CustomAlert';
-import { SPACE_TYPE, buildSpaceKey } from '../../utils/locationService';
-import { generateSpaceId, SPACE_SCHEMA } from '../../utils/canonicalSchema';
-import { doc, setDoc, deleteDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
+import { SPACE_TYPE, buildSpaceKey, formatSpaceDisplayName, normalizeSpaceNumber } from '../../utils/locationService';
+import { generateSpaceId, validateSpace } from '../../utils/canonicalSchema';
+import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 
 const SpaceManagement = () => {
-  const { roomsData, refreshRooms, loadRooms } = useData();
+  const { roomsData, spacesByKey, spacesList, refreshRooms, loadRooms } = useData();
   const { buildingConfig } = useAppConfig();
   const { showNotification } = useUI();
 
@@ -72,10 +72,13 @@ const SpaceManagement = () => {
 
   // Filter and search spaces
   const filteredSpaces = useMemo(() => {
-    let spaces = Object.entries(roomsData || {}).map(([id, data]) => ({
+    let spaces = Array.isArray(spacesList) ? [...spacesList] : Object.entries(roomsData || {}).map(([id, data]) => ({
       id,
       ...data
     }));
+
+    // Only show active spaces in management list
+    spaces = spaces.filter(s => s.isActive !== false);
 
     // Apply building filter
     if (buildingFilter !== 'all') {
@@ -106,17 +109,18 @@ const SpaceManagement = () => {
       if (buildingCompare !== 0) return buildingCompare;
       return (a.spaceNumber || a.roomNumber || '').localeCompare(b.spaceNumber || b.roomNumber || '', undefined, { numeric: true });
     });
-  }, [roomsData, buildingFilter, typeFilter, searchQuery]);
+  }, [roomsData, spacesList, buildingFilter, typeFilter, searchQuery]);
 
   // Get unique building codes from actual data
   const dataBuildings = useMemo(() => {
     const codes = new Set();
-    Object.values(roomsData || {}).forEach(room => {
+    const source = Array.isArray(spacesList) && spacesList.length > 0 ? spacesList : Object.values(roomsData || {});
+    source.forEach(room => {
       const code = room.buildingCode || room.building;
       if (code) codes.add(code.toUpperCase());
     });
     return Array.from(codes).sort();
-  }, [roomsData]);
+  }, [roomsData, spacesList]);
 
   const resetForm = useCallback(() => {
     setFormData({
@@ -189,9 +193,26 @@ const SpaceManagement = () => {
     setSaving(true);
     try {
       const buildingCode = formData.buildingCode.toUpperCase();
-      const spaceNumber = formData.spaceNumber.trim();
+      const spaceNumber = normalizeSpaceNumber(formData.spaceNumber.trim());
       const spaceKey = buildSpaceKey(buildingCode, spaceNumber);
+      if (!spaceKey) {
+        showNotification('warning', 'Invalid Space', 'Please provide a valid building and space number.');
+        return;
+      }
       const buildingRecord = buildings.find(b => b.code === buildingCode);
+      const buildingDisplayName = buildingRecord?.displayName || buildingCode;
+      const buildingId = buildingRecord?.id || buildingCode.toLowerCase();
+      const displayName = formatSpaceDisplayName({ buildingCode, buildingDisplayName, spaceNumber });
+
+      if (isAddingNew) {
+        const existing = spacesByKey instanceof Map
+          ? spacesByKey.get(spaceKey)
+          : spacesByKey?.[spaceKey];
+        if (existing) {
+          showNotification('warning', 'Duplicate Space', `${spaceKey} already exists.`);
+          return;
+        }
+      }
 
       // Build new space document
       const spaceDoc = {
@@ -199,7 +220,8 @@ const SpaceManagement = () => {
         spaceKey,
         spaceNumber,
         buildingCode,
-        buildingDisplayName: buildingRecord?.displayName || buildingCode,
+        buildingDisplayName,
+        buildingId,
         type: formData.type,
         capacity: formData.capacity ? parseInt(formData.capacity, 10) : null,
         equipment: formData.equipment,
@@ -207,18 +229,24 @@ const SpaceManagement = () => {
         isActive: true,
 
         // Legacy fields for backward compatibility
-        building: buildingRecord?.displayName || buildingCode,
+        building: buildingDisplayName,
         roomNumber: spaceNumber,
-        name: `${buildingRecord?.displayName || buildingCode} ${spaceNumber}`,
-        displayName: `${buildingRecord?.displayName || buildingCode} ${spaceNumber}`,
+        name: displayName,
+        displayName: displayName,
 
         // Timestamps
         updatedAt: new Date().toISOString()
       };
 
+      const validation = validateSpace(spaceDoc);
+      if (!validation.isValid) {
+        showNotification('warning', 'Validation Failed', validation.errors.join(' '));
+        return;
+      }
+
       let docId;
       if (isAddingNew) {
-        docId = generateSpaceId(buildingCode, spaceNumber);
+        docId = generateSpaceId({ buildingCode, spaceNumber }) || spaceKey;
         spaceDoc.createdAt = new Date().toISOString();
       } else {
         docId = editingSpace.id;
@@ -244,8 +272,12 @@ const SpaceManagement = () => {
   const handleDelete = useCallback(async (space) => {
     setSaving(true);
     try {
-      await deleteDoc(doc(db, 'rooms', space.id));
-      showNotification('success', 'Space Deleted', `${space.spaceKey || space.name} has been deleted.`);
+      await setDoc(doc(db, 'rooms', space.id), {
+        isActive: false,
+        updatedAt: new Date().toISOString(),
+        deletedAt: new Date().toISOString()
+      }, { merge: true });
+      showNotification('success', 'Space Deactivated', `${space.spaceKey || space.name} has been deactivated.`);
       setDeleteConfirm(null);
 
       // Refresh rooms data
@@ -254,7 +286,7 @@ const SpaceManagement = () => {
       }
     } catch (error) {
       console.error('Error deleting space:', error);
-      showNotification('error', 'Delete Failed', 'Failed to delete space. Please try again.');
+      showNotification('error', 'Deactivate Failed', 'Failed to deactivate space. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -592,8 +624,8 @@ const SpaceManagement = () => {
       <ConfirmationDialog
         isOpen={!!deleteConfirm}
         title="Delete Space"
-        message={`Are you sure you want to delete "${deleteConfirm?.spaceKey || deleteConfirm?.name}"? Schedules referencing this space may need to be updated.`}
-        confirmLabel="Delete"
+        message={`Deactivate "${deleteConfirm?.spaceKey || deleteConfirm?.name}"? References will be preserved, but the space will be hidden from active lists.`}
+        confirmLabel="Deactivate"
         confirmVariant="danger"
         onConfirm={() => handleDelete(deleteConfirm)}
         onCancel={() => setDeleteConfirm(null)}

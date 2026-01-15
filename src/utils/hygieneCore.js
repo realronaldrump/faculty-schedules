@@ -1007,8 +1007,31 @@ export const detectCrossCollectionIssues = (
   });
 
   const roomIds = new Set(rooms.map((r) => r.id));
+  const spaceKeys = new Set(
+    rooms
+      .map((r) => r.spaceKey)
+      .filter((key) => typeof key === "string" && key.trim().length > 0),
+  );
   schedules.forEach((schedule) => {
     if (schedule?.locationType === "no_room") return;
+    const spaceIds = Array.isArray(schedule.spaceIds)
+      ? schedule.spaceIds.filter(Boolean)
+      : [];
+    if (spaceIds.length > 0) {
+      spaceIds.forEach((spaceKey) => {
+        if (spaceKey && !spaceKeys.has(spaceKey)) {
+          issues.push({
+            type: "orphaned_space",
+            severity: "medium",
+            record: schedule,
+            reason: "Schedule references non-existent space",
+            fix: "link_to_existing_room",
+          });
+        }
+      });
+      return;
+    }
+
     const ids = Array.isArray(schedule.roomIds)
       ? schedule.roomIds
       : schedule.roomId

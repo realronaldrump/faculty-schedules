@@ -11,15 +11,16 @@
  * - Data transformation and adaptation
  */
 
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { db } from '../firebase';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { fetchPrograms, getInstructorDisplayName, UNASSIGNED } from '../utils/dataAdapter';
 import { autoMigrateIfNeeded } from '../utils/importTransactionMigration';
 import { fetchRecentChanges } from '../utils/recentChanges';
 import { usePermissions } from '../utils/permissions';
 import { parseCourseCode } from '../utils/courseUtils';
 import { adaptPeopleToFaculty, adaptPeopleToStaff } from '../utils/dataAdapter';
+import { normalizeSpaceRecord, resolveScheduleSpaces } from '../utils/spaceUtils';
 
 // Import new contexts
 import { usePeople } from './PeopleContext';
@@ -51,12 +52,16 @@ export const DataProvider = ({ children }) => {
   // Local state for other entities
   const [rawPrograms, setRawPrograms] = useState([]);
   const [roomsData, setRoomsData] = useState({});
+  const [spacesByKey, setSpacesByKey] = useState(new Map());
+  const [spacesList, setSpacesList] = useState([]);
   const [editHistory, setEditHistory] = useState([]);
   const [recentChanges, setRecentChanges] = useState([]);
   const [localLoading, setLocalLoading] = useState(false);
   const [dataError, setDataError] = useState(null);
   const [programsLoaded, setProgramsLoaded] = useState(false);
   const [roomsLoaded, setRoomsLoaded] = useState(false);
+  const [roomsLoading, setRoomsLoading] = useState(false);
+  const roomsUnsubscribeRef = useRef(null);
   const [editHistoryLoaded, setEditHistoryLoaded] = useState(false);
   const [recentChangesLoaded, setRecentChangesLoaded] = useState(false);
 
@@ -173,9 +178,8 @@ export const DataProvider = ({ children }) => {
 
       // Helper to create reliable display strings
       const getRoomDisplay = (s) => {
-        if (s.locationType === 'no_room' || s.isOnline) {
-          return s.locationLabel || 'No Room Needed';
-        }
+        const resolved = resolveScheduleSpaces(s, spacesByKey);
+        if (resolved.display) return resolved.display;
         if (Array.isArray(s.roomNames)) return s.roomNames.join('; ');
         return s.roomName || '';
       };
@@ -220,7 +224,7 @@ export const DataProvider = ({ children }) => {
       }
     });
     return flattened;
-  }, [rawScheduleData, buildInstructorInfo]);
+  }, [rawScheduleData, buildInstructorInfo, spacesByKey]);
 
   // Analytics calculation (Legacy, keep for now)
   const analytics = useMemo(() => {
@@ -297,27 +301,66 @@ export const DataProvider = ({ children }) => {
   }, [programsLoaded, rawPrograms]);
 
   // Load rooms from Firestore
-  const loadRooms = useCallback(async ({ force = false } = {}) => {
-    if (roomsLoaded && !force) return roomsData;
-    try {
-      const snap = await getDocs(collection(db, 'rooms'));
-      const rooms = {};
-      snap.docs.forEach(docSnap => {
-        const data = docSnap.data();
-        // Only include active rooms
-        if (data.isActive !== false) {
-          rooms[docSnap.id] = { id: docSnap.id, ...data };
+  const normalizeRoomsSnapshot = useCallback((snapshot) => {
+    const rooms = {};
+    const list = [];
+    const byKey = new Map();
+
+    snapshot.docs.forEach((docSnap) => {
+      const normalized = normalizeSpaceRecord(docSnap.data(), docSnap.id);
+      rooms[docSnap.id] = normalized;
+      list.push(normalized);
+      if (normalized.spaceKey) {
+        const existing = byKey.get(normalized.spaceKey);
+        if (!existing || existing.isActive === false) {
+          byKey.set(normalized.spaceKey, normalized);
         }
-      });
-      setRoomsData(rooms);
-      setRoomsLoaded(true);
-      return rooms;
-    } catch (e) {
-      console.error('Rooms load error:', e);
-      setDataError(e.message);
-      return {};
+      }
+    });
+
+    setRoomsData(rooms);
+    setSpacesList(list);
+    setSpacesByKey(byKey);
+    setRoomsLoaded(true);
+  }, []);
+
+  const startRoomsSubscription = useCallback(() => {
+    if (roomsUnsubscribeRef.current) return;
+    setRoomsLoading(true);
+    roomsUnsubscribeRef.current = onSnapshot(
+      collection(db, 'rooms'),
+      (snapshot) => {
+        normalizeRoomsSnapshot(snapshot);
+        setRoomsLoading(false);
+      },
+      (error) => {
+        console.error('Rooms subscription error:', error);
+        setDataError(error.message);
+        setRoomsLoading(false);
+      }
+    );
+  }, [normalizeRoomsSnapshot]);
+
+  useEffect(() => {
+    startRoomsSubscription();
+    return () => {
+      if (roomsUnsubscribeRef.current) {
+        roomsUnsubscribeRef.current();
+        roomsUnsubscribeRef.current = null;
+      }
+    };
+  }, [startRoomsSubscription]);
+
+  const loadRooms = useCallback(async ({ force = false } = {}) => {
+    if (!roomsUnsubscribeRef.current || force) {
+      if (roomsUnsubscribeRef.current && force) {
+        roomsUnsubscribeRef.current();
+        roomsUnsubscribeRef.current = null;
+      }
+      startRoomsSubscription();
     }
-  }, [roomsLoaded, roomsData]);
+    return roomsData;
+  }, [roomsData, startRoomsSubscription]);
 
   // Refresh rooms (force reload)
   const refreshRooms = useCallback(() => loadRooms({ force: true }), [loadRooms]);
@@ -404,6 +447,8 @@ export const DataProvider = ({ children }) => {
 
     // Rooms/Spaces Data
     roomsData,
+    spacesByKey,
+    spacesList,
 
     // Semester State (Delegated)
     selectedSemester,
@@ -425,6 +470,7 @@ export const DataProvider = ({ children }) => {
     // Load State
     programsLoaded,
     roomsLoaded,
+    roomsLoading,
     editHistoryLoaded,
     recentChangesLoaded,
 
@@ -433,11 +479,11 @@ export const DataProvider = ({ children }) => {
   }), [
     rawScheduleData, rawPeople, allPeople, peopleIndex, rawPrograms,
     scheduleData, facultyData, staffData, studentData,
-    analytics, editHistory, recentChanges, roomsData,
+    analytics, editHistory, recentChanges, roomsData, spacesByKey, spacesList,
     selectedSemester, availableSemesters,
     loading, dataError, loadData,
     loadPrograms, loadRooms, refreshRooms, loadEditHistory, loadRecentChanges,
-    programsLoaded, roomsLoaded, editHistoryLoaded, recentChangesLoaded,
+    programsLoaded, roomsLoaded, roomsLoading, editHistoryLoaded, recentChangesLoaded,
     permissions
   ]);
 

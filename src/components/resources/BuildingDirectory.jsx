@@ -19,10 +19,10 @@ import {
 import FacultyContactCard from '../FacultyContactCard';
 import { useData } from '../../contexts/DataContext';
 import { usePeople } from '../../contexts/PeopleContext';
-import { extractBuildingName } from '../../utils/directoryUtils';
+import { resolveOfficeDetails } from '../../utils/directoryUtils';
 
 const BuildingDirectory = () => {
-  const { facultyData = [], staffData = [] } = useData();
+  const { facultyData = [], staffData = [], spacesByKey } = useData();
   const { loadPeople } = usePeople();
   const [selectedPersonForCard, setSelectedPersonForCard] = useState(null);
   const [searchText, setSearchText] = useState('');
@@ -36,29 +36,6 @@ const BuildingDirectory = () => {
     loadPeople();
   }, [loadPeople]);
 
-  // Helper function to extract room number from office location
-  const extractRoomNumber = (officeLocation) => {
-    if (!officeLocation || officeLocation.trim() === '') {
-      return '';
-    }
-
-    const office = officeLocation.trim();
-
-    // Try to extract room number - look for numbers at the end
-    const roomMatch = office.match(/(\d+[A-Za-z]?)$/);
-    if (roomMatch) {
-      return roomMatch[1];
-    }
-
-    // For complex patterns, try to find room-like patterns
-    const complexMatch = office.match(/\s+(\d{2,4}[A-Za-z]?)\s*$/);
-    if (complexMatch) {
-      return complexMatch[1];
-    }
-
-    return '';
-  };
-
   // Combine and organize all people by building
   const buildingData = useMemo(() => {
     const buildings = {};
@@ -70,12 +47,14 @@ const BuildingDirectory = () => {
       facultyToProcess.forEach(person => {
         // Route remote people to "Remote" section, otherwise use building
         let buildingName;
+        let roomNumber = '';
         if (person.isRemote) {
           buildingName = 'Remote';
         } else {
-          buildingName = person.office ? extractBuildingName(person.office) : 'No Building';
+          const resolved = resolveOfficeDetails(person, spacesByKey);
+          buildingName = resolved.buildingName || 'No Building';
+          roomNumber = resolved.roomNumber || '';
         }
-        const roomNumber = person.office ? extractRoomNumber(person.office) : '';
 
         if (!buildings[buildingName]) {
           buildings[buildingName] = {
@@ -103,12 +82,14 @@ const BuildingDirectory = () => {
       staffData.forEach(person => {
         // Route remote people to "Remote" section, otherwise use building
         let buildingName;
+        let roomNumber = '';
         if (person.isRemote) {
           buildingName = 'Remote';
         } else {
-          buildingName = person.office ? extractBuildingName(person.office) : 'No Building';
+          const resolved = resolveOfficeDetails(person, spacesByKey);
+          buildingName = resolved.buildingName || 'No Building';
+          roomNumber = resolved.roomNumber || '';
         }
-        const roomNumber = person.office ? extractRoomNumber(person.office) : '';
 
         if (!buildings[buildingName]) {
           buildings[buildingName] = {
@@ -147,7 +128,7 @@ const BuildingDirectory = () => {
     });
 
     return buildings;
-  }, [facultyData, staffData, showFaculty, showStaff, showAdjuncts]);
+  }, [facultyData, staffData, showFaculty, showStaff, showAdjuncts, spacesByKey]);
 
   const buildingList = Object.keys(buildingData).sort();
 

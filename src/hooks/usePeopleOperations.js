@@ -19,7 +19,7 @@ import {
   parseRoomLabel,
   normalizeSpaceNumber,
   extractSpaceNumber,
-  buildSpaceKey,
+  formatSpaceDisplayName,
   SPACE_TYPE
 } from '../utils/locationService';
 
@@ -28,6 +28,7 @@ const usePeopleOperations = () => {
     rawPeople,
     rawPrograms,
     loadPrograms,
+    spacesByKey,
     canEdit,
     canEditFaculty,
     canCreateFaculty,
@@ -56,11 +57,21 @@ const usePeopleOperations = () => {
 
     const now = new Date().toISOString();
     const spaceKey = parsed.spaceKey;
-    // Legacy roomKey format for backward compatibility
-    const roomKey = spaceKey.replace(':', '_').toLowerCase();
-    const buildingCode = parsed.buildingCode || parsed.building?.code || '';
-    const buildingDisplayName = parsed.building?.displayName || parsed.displayName?.split(' ')[0] || '';
-    const spaceNumber = parsed.spaceNumber;
+    const buildingCode = (parsed.buildingCode || parsed.building?.code || '').toUpperCase();
+    const spaceNumber = normalizeSpaceNumber(parsed.spaceNumber || '');
+    const buildingDisplayName = parsed.building?.displayName || '';
+    const displayName = formatSpaceDisplayName({
+      buildingCode,
+      buildingDisplayName,
+      spaceNumber
+    }) || parsed.displayName || office;
+
+    if (spacesByKey instanceof Map) {
+      const existing = spacesByKey.get(spaceKey);
+      if (existing) {
+        return { officeRoomId: existing.id || spaceKey, officeSpaceId: spaceKey };
+      }
+    }
 
     // 1) Try to find by spaceKey first (new format)
     try {
@@ -73,14 +84,14 @@ const usePeopleOperations = () => {
         // Update with new fields if we have edit permission
         if (typeof canEditRoom === 'function' && canEditRoom()) {
           setDoc(doc(db, COLLECTIONS.ROOMS, docId), {
-            building: buildingDisplayName,
+            building: buildingDisplayName || buildingCode,
             buildingCode,
-            buildingDisplayName,
+            buildingDisplayName: buildingDisplayName || buildingCode,
             roomNumber: spaceNumber,
             spaceNumber,
-            roomKey,
             spaceKey,
-            displayName: parsed.displayName,
+            displayName,
+            name: displayName,
             updatedAt: now
           }, { merge: true }).catch(() => null);
         }
@@ -90,47 +101,25 @@ const usePeopleOperations = () => {
       void error;
     }
 
-    // 2) Deterministic doc id (preferred legacy format)
+    // 2) Legacy rooms with `roomKey` field but non-deterministic document IDs
     try {
-      const directSnap = await getDoc(doc(db, COLLECTIONS.ROOMS, roomKey));
-      if (directSnap.exists()) {
-        if (typeof canEditRoom === 'function' && canEditRoom()) {
-          setDoc(doc(db, COLLECTIONS.ROOMS, roomKey), {
-            building: buildingDisplayName,
-            buildingCode,
-            buildingDisplayName,
-            roomNumber: spaceNumber,
-            spaceNumber,
-            roomKey,
-            spaceKey,
-            displayName: parsed.displayName,
-            updatedAt: now
-          }, { merge: true }).catch(() => null);
-        }
-        return { officeRoomId: roomKey, officeSpaceId: spaceKey };
-      }
-    } catch (error) {
-      void error;
-    }
-
-    // 3) Legacy rooms with `roomKey` field but non-deterministic document IDs
-    try {
+      const legacyKey = spaceKey.replace(':', '_').toLowerCase();
       const byKeySnap = await getDocs(query(
         collection(db, COLLECTIONS.ROOMS),
-        where('roomKey', '==', roomKey)
+        where('roomKey', '==', legacyKey)
       ));
       if (!byKeySnap.empty) {
         const docId = byKeySnap.docs[0].id;
         if (typeof canEditRoom === 'function' && canEditRoom()) {
           setDoc(doc(db, COLLECTIONS.ROOMS, docId), {
-            building: buildingDisplayName,
+            building: buildingDisplayName || buildingCode,
             buildingCode,
-            buildingDisplayName,
+            buildingDisplayName: buildingDisplayName || buildingCode,
             roomNumber: spaceNumber,
             spaceNumber,
-            roomKey,
             spaceKey,
-            displayName: parsed.displayName,
+            displayName,
+            name: displayName,
             updatedAt: now
           }, { merge: true }).catch(() => null);
         }
@@ -140,22 +129,17 @@ const usePeopleOperations = () => {
       void error;
     }
 
-    // 4) Building-only query (avoids composite index) + local match on room number
+    // 3) Building-only query (avoids composite index) + local match on room number
     try {
       const byBuildingSnap = await getDocs(query(
         collection(db, COLLECTIONS.ROOMS),
-        where('building', '==', buildingDisplayName)
+        where('buildingCode', '==', buildingCode)
       ));
 
       const targetNumber = normalizeSpaceNumber(spaceNumber);
       const matchDoc = byBuildingSnap.docs.find((docSnap) => {
         const data = docSnap.data() || {};
-        // Check spaceKey first
         if (data.spaceKey && data.spaceKey === spaceKey) return true;
-        // Check legacy roomKey
-        const candidateKey = (data.roomKey || '').toString().trim();
-        if (candidateKey && candidateKey === roomKey) return true;
-        // Check room number
         const candidateNumber = normalizeSpaceNumber(
           data.spaceNumber || data.roomNumber || extractSpaceNumber(data.displayName || data.name || '')
         );
@@ -174,17 +158,16 @@ const usePeopleOperations = () => {
 
     // Create new room with both legacy and new fields
     const newRoom = {
-      name: parsed.displayName,
-      displayName: parsed.displayName,
+      name: displayName,
+      displayName: displayName,
       // Legacy fields
-      building: buildingDisplayName,
+      building: buildingDisplayName || buildingCode,
       roomNumber: spaceNumber,
-      roomKey,
       // New canonical fields
       spaceKey,
       spaceNumber,
       buildingCode,
-      buildingDisplayName,
+      buildingDisplayName: buildingDisplayName || buildingCode,
       buildingId: buildingCode.toLowerCase(),
       // Properties
       capacity: null,
@@ -195,8 +178,8 @@ const usePeopleOperations = () => {
     };
 
     try {
-      await setDoc(doc(db, COLLECTIONS.ROOMS, roomKey), newRoom, { merge: true });
-      return { officeRoomId: roomKey, officeSpaceId: spaceKey };
+      await setDoc(doc(db, COLLECTIONS.ROOMS, spaceKey), newRoom, { merge: true });
+      return { officeRoomId: spaceKey, officeSpaceId: spaceKey };
     } catch (error) {
       console.warn('Unable to create office room record:', error);
       return { officeRoomId: '', officeSpaceId: '' };

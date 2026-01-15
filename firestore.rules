@@ -163,6 +163,31 @@ service cloud.firestore {
           .hasOnly(['displayName', 'photoURL', 'lastLoginAt', 'updatedAt']);
     }
 
+    function isNonEmptyString(value) {
+      return value is string && value.size() > 0;
+    }
+
+    function isValidSpaceKey(value) {
+      return value is string && value.matches('^[A-Z0-9_]+:[A-Z0-9./-]+$');
+    }
+
+    function isValidSpaceRecord(data) {
+      return isValidSpaceKey(data.spaceKey) &&
+        isNonEmptyString(data.buildingCode) &&
+        data.buildingCode.matches('^[A-Z0-9_]+$') &&
+        isNonEmptyString(data.spaceNumber) &&
+        data.spaceNumber.matches('^[A-Za-z0-9./-]+$');
+    }
+
+    function isLegacySpaceRecord(data) {
+      return !(data.spaceKey is string) || data.spaceKey.size() == 0;
+    }
+
+    function onlyUpdatesSpaceStatus() {
+      return request.resource.data.diff(resource.data).changedKeys()
+        .hasOnly(['isActive', 'deletedAt', 'updatedAt']);
+    }
+
     // Settings collection: active users can read; only admin writes
     match /settings/{docId} {
       allow read: if canReadAppData();
@@ -260,14 +285,18 @@ service cloud.firestore {
     // Rooms collection: granular permissions
     match /rooms/{id} {
       allow read: if canReadAppData();
-      allow create: if isAdmin() ||
+      allow create: if (isAdmin() ||
         userHasAction('room.create') ||
         userHasAction('data.import') ||
-        userHasAction('schedule.import');
-      allow update: if isAdmin() ||
+        userHasAction('schedule.import')) &&
+        isValidSpaceRecord(request.resource.data) &&
+        id == request.resource.data.spaceKey;
+      allow update: if (isAdmin() ||
         userHasAction('room.edit') ||
         userHasAction('data.import') ||
-        userHasAction('schedule.import');
+        userHasAction('schedule.import')) &&
+        (isValidSpaceRecord(request.resource.data) ||
+          (isLegacySpaceRecord(resource.data) && onlyUpdatesSpaceStatus()));
       allow delete: if isAdmin() || userHasAction('room.delete');
     }
 

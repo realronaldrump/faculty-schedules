@@ -41,6 +41,7 @@ import {
   applyLocationMigration,
   getLocationHealthStats,
 } from "../../utils/dataHygiene";
+import { normalizeSpaceRecord } from "../../utils/spaceUtils";
 import {
   collection as fbCollection,
   getDocs as fbGetDocs,
@@ -1073,12 +1074,18 @@ const DataHygieneManager = () => {
     if (!scheduleToLinkRoom) return;
     try {
       const scheduleRef = doc(db, "schedules", scheduleToLinkRoom.id);
-      const displayName = roomObj?.displayName || roomObj?.name || "";
+      const normalizedRoom = normalizeSpaceRecord(roomObj || {}, roomId);
+      const displayName = normalizedRoom.displayName || roomObj?.displayName || roomObj?.name || "";
+      const spaceKey = normalizedRoom.spaceKey || "";
       await updateDoc(scheduleRef, {
         roomId: roomId,
         roomIds: [roomId],
         roomName: displayName,
         roomNames: [displayName],
+        ...(spaceKey ? {
+          spaceIds: [spaceKey],
+          spaceDisplayNames: [displayName]
+        } : {}),
         updatedAt: new Date().toISOString(),
       });
 
@@ -1091,6 +1098,10 @@ const DataHygieneManager = () => {
           roomIds: [roomId],
           roomName: displayName,
           roomNames: [displayName],
+          ...(spaceKey ? {
+            spaceIds: [spaceKey],
+            spaceDisplayNames: [displayName]
+          } : {})
         },
         scheduleToLinkRoom,
         "DataHygieneManager.jsx - handleLinkRoom",
@@ -2308,10 +2319,10 @@ const DataHygieneManager = () => {
           <div className="bg-white rounded-lg shadow-sm border">
             <div className="p-6 border-b">
               <h3 className="text-lg font-semibold text-gray-900">
-                Broken Room Links
+                Broken Space Links
               </h3>
               <p className="text-gray-600">
-                Schedules referencing rooms that no longer exist
+                Schedules referencing spaces that no longer exist
               </p>
             </div>
             <RelationshipIssues
@@ -2330,7 +2341,7 @@ const DataHygieneManager = () => {
               </h3>
               <p className="text-gray-600">
                 Create canonical room records for office locations and link
-                people via officeRoomId.
+                people via officeSpaceId.
               </p>
             </div>
             <div className="p-6">
@@ -2757,12 +2768,12 @@ const RelationshipIssues = ({ issues, onLinkPerson, onLinkRoom }) => {
                     Link Person
                   </button>
                 )}
-                {issue.type === "orphaned_room" && (
+                {(issue.type === "orphaned_room" || issue.type === "orphaned_space") && (
                   <button
                     onClick={() => onLinkRoom(issue.record)}
                     className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs"
                   >
-                    Link Room
+                    Link Space
                   </button>
                 )}
               </div>

@@ -939,11 +939,15 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
     const officeBuildingName = parsedOffice?.building || officeBuildingCode || '';
     const officeDisplayName = parsedOffice?.displayName || officeRaw;
     const officeNameKey = normalizeRoomName(officeRaw);
-    let existingOfficeRoom = officeRoomKey ? roomsKeyMap.get(officeRoomKey) : null;
+    let existingOfficeRoom = officeSpaceKey ? roomsKeyMap.get(officeSpaceKey) : null;
+    if (!existingOfficeRoom && officeRoomKey) {
+      existingOfficeRoom = roomsKeyMap.get(officeRoomKey) || null;
+    }
     if (!existingOfficeRoom && officeNameKey) {
       existingOfficeRoom = roomsMap.get(officeNameKey) || null;
     }
-    const officeRoomId = existingOfficeRoom?.id || (includeOfficeRooms ? officeRoomKey : '') || '';
+    const officeRoomId = existingOfficeRoom?.id || (includeOfficeRooms ? officeSpaceKey : '') || '';
+    const officeSpaceId = officeSpaceKey || '';
 
     const personData = {
       firstName,
@@ -952,6 +956,7 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
       roles: ['faculty'], // default to faculty for directory imports
       phone: row['Phone'] || row['Business Phone'] || row['Home Phone'] || '',
       office: officeRaw,
+      officeSpaceId,
       officeRoomId,
       isActive: true
     };
@@ -959,7 +964,7 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
     if (existingPerson) {
       const groupKey = `dir_${existingPerson.id}`;
 
-      if (includeOfficeRooms && officeRoomKey && !existingOfficeRoom) {
+      if (includeOfficeRooms && officeSpaceKey && !existingOfficeRoom) {
         const now = new Date().toISOString();
         const newRoom = {
           spaceKey: officeSpaceKey,
@@ -978,8 +983,8 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
           updatedAt: now
         };
         transaction.addChange('rooms', 'add', newRoom, null, { groupKey });
-        const placeholder = { id: officeRoomKey, ...newRoom };
-        roomsKeyMap.set(officeRoomKey, placeholder);
+        const placeholder = { id: officeSpaceKey, ...newRoom };
+        roomsKeyMap.set(officeSpaceKey, placeholder);
         buildRoomNameKeys(placeholder).forEach((key) => roomsMap.set(key, placeholder));
       }
 
@@ -999,6 +1004,10 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
       if ((personData.office || '') && existingOffice !== personData.office) {
         updates.office = personData.office;
         diff.push({ key: 'office', from: existingOffice, to: personData.office });
+      }
+      if (officeSpaceId && existingPerson.officeSpaceId !== officeSpaceId) {
+        updates.officeSpaceId = officeSpaceId;
+        diff.push({ key: 'officeSpaceId', from: existingPerson.officeSpaceId || '', to: officeSpaceId });
       }
       if (officeRoomId && existingPerson.officeRoomId !== officeRoomId) {
         updates.officeRoomId = officeRoomId;
@@ -1075,7 +1084,7 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
         if (pendingChange) {
           pendingChange.newData = mergeIfMissing(pendingChange.newData || {}, personData);
         }
-        if (includeOfficeRooms && officeRoomKey && !existingOfficeRoom && !roomsKeyMap.has(officeRoomKey)) {
+        if (includeOfficeRooms && officeSpaceKey && !existingOfficeRoom && !roomsKeyMap.has(officeSpaceKey)) {
           const groupKey = `dir_${matchKey}`;
           const now = new Date().toISOString();
           const newRoom = {
@@ -1084,6 +1093,10 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
             building: parsedOffice.building,
             roomNumber: parsedOffice.roomNumber,
             roomKey: officeRoomKey,
+            spaceKey: officeSpaceKey,
+            spaceNumber: officeSpaceNumber,
+            buildingCode: officeBuildingCode,
+            buildingDisplayName: officeBuildingName,
             capacity: null,
             type: 'Office',
             isActive: true,
@@ -1091,8 +1104,8 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
             updatedAt: now
           };
           transaction.addChange('rooms', 'add', newRoom, null, { groupKey });
-          const placeholder = { id: officeRoomKey, ...newRoom };
-          roomsKeyMap.set(officeRoomKey, placeholder);
+          const placeholder = { id: officeSpaceKey, ...newRoom };
+          roomsKeyMap.set(officeSpaceKey, placeholder);
           buildRoomNameKeys(placeholder).forEach((key) => roomsMap.set(key, placeholder));
         }
       }
@@ -1221,6 +1234,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
       setIfDifferent('email', proposedPerson?.email, (val) => String(val).toLowerCase().trim());
       setIfDifferent('phone', proposedPerson?.phone, (val) => String(val).replace(/\D/g, ''));
       setIfDifferent('office', proposedPerson?.office, (val) => String(val).trim());
+      setIfDifferent('officeSpaceId', proposedPerson?.officeSpaceId, (val) => String(val).trim());
       setIfDifferent('officeRoomId', proposedPerson?.officeRoomId, (val) => String(val).trim());
     }
 

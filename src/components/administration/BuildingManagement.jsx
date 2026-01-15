@@ -21,9 +21,12 @@ import {
   Tag,
   MapPin
 } from 'lucide-react';
+import { collection, getDocs, query, where, writeBatch } from 'firebase/firestore';
+import { db } from '../../firebase';
 import { useAppConfig } from '../../contexts/AppConfigContext';
 import { useUI } from '../../contexts/UIContext';
 import { ConfirmationDialog } from '../CustomAlert';
+import { extractSpaceNumber, formatSpaceDisplayName, normalizeSpaceNumber } from '../../utils/locationService';
 
 const BuildingManagement = () => {
   const { buildingConfig, saveBuildingConfig } = useAppConfig();
@@ -143,6 +146,16 @@ const BuildingManagement = () => {
         address: formData.address.trim()
       };
 
+      const previous = buildings.find(b => b.code === editingBuilding);
+      const displayNameChanged = !isAddingNew && previous && previous.displayName !== updatedBuilding.displayName;
+      if (displayNameChanged) {
+        const normalizedAliases = new Set(updatedBuilding.aliases.map(alias => alias.toLowerCase()));
+        const previousName = previous.displayName?.trim();
+        if (previousName && !normalizedAliases.has(previousName.toLowerCase())) {
+          updatedBuilding.aliases = [...updatedBuilding.aliases, previousName];
+        }
+      }
+
       let updatedBuildings;
       if (isAddingNew) {
         updatedBuildings = [...buildings, updatedBuilding];
@@ -157,6 +170,39 @@ const BuildingManagement = () => {
         buildings: updatedBuildings
       });
 
+      if (displayNameChanged) {
+        const roomsSnap = await getDocs(query(
+          collection(db, 'rooms'),
+          where('buildingCode', '==', updatedBuilding.code)
+        ));
+        if (!roomsSnap.empty) {
+          const batch = writeBatch(db);
+          roomsSnap.docs.forEach((docSnap) => {
+            const room = docSnap.data() || {};
+            const rawNumber = room.spaceNumber || room.roomNumber || extractSpaceNumber(room.displayName || room.name || '');
+            const spaceNumber = normalizeSpaceNumber(rawNumber);
+            const displayName = spaceNumber
+              ? formatSpaceDisplayName({
+                buildingCode: updatedBuilding.code,
+                buildingDisplayName: updatedBuilding.displayName,
+                spaceNumber
+              })
+              : (room.displayName || room.name || '');
+            batch.set(docSnap.ref, {
+              buildingCode: updatedBuilding.code,
+              buildingDisplayName: updatedBuilding.displayName,
+              building: updatedBuilding.displayName,
+              spaceNumber: spaceNumber || room.spaceNumber || '',
+              roomNumber: spaceNumber || room.roomNumber || '',
+              displayName,
+              name: displayName,
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+          });
+          await batch.commit();
+        }
+      }
+
       showNotification('success', 'Building Saved', `${updatedBuilding.displayName} has been saved.`);
       resetForm();
     } catch (error) {
@@ -170,16 +216,20 @@ const BuildingManagement = () => {
   const handleDelete = useCallback(async (building) => {
     setSaving(true);
     try {
-      const updatedBuildings = buildings.filter(b => b.code !== building.code);
+      const updatedBuildings = buildings.map(b => (
+        b.code === building.code
+          ? { ...b, isActive: false }
+          : b
+      ));
       await saveBuildingConfig({
         ...buildingConfig,
         buildings: updatedBuildings
       });
-      showNotification('success', 'Building Deleted', `${building.displayName} has been deleted.`);
+      showNotification('success', 'Building Deactivated', `${building.displayName} has been deactivated.`);
       setDeleteConfirm(null);
     } catch (error) {
       console.error('Error deleting building:', error);
-      showNotification('error', 'Delete Failed', 'Failed to delete building. Please try again.');
+      showNotification('error', 'Deactivate Failed', 'Failed to deactivate building. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -447,12 +497,12 @@ const BuildingManagement = () => {
         )}
       </div>
 
-      {/* Delete Confirmation */}
+      {/* Deactivate Confirmation */}
       <ConfirmationDialog
         isOpen={!!deleteConfirm}
-        title="Delete Building"
-        message={`Are you sure you want to delete "${deleteConfirm?.displayName}"? This will not delete spaces in this building, but they may become orphaned.`}
-        confirmLabel="Delete"
+        title="Deactivate Building"
+        message={`Deactivate "${deleteConfirm?.displayName}"? Spaces remain intact, but the building will be hidden from active lists.`}
+        confirmLabel="Deactivate"
         confirmVariant="danger"
         onConfirm={() => handleDelete(deleteConfirm)}
         onCancel={() => setDeleteConfirm(null)}

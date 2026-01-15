@@ -194,8 +194,8 @@ const LinkPersonModal = ({ isOpen, onClose, onConfirm, schedule }) => {
                 <div
                   key={person.id}
                   className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${selectedPerson?.id === person.id
-                      ? "bg-blue-50 border-l-4 border-blue-500"
-                      : ""
+                    ? "bg-blue-50 border-l-4 border-blue-500"
+                    : ""
                     }`}
                   onClick={() => setSelectedPerson(person)}
                 >
@@ -389,8 +389,8 @@ const LinkRoomModal = ({ isOpen, onClose, onConfirm, schedule }) => {
                 <div
                   key={room.id}
                   className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${selectedRoom?.id === room.id
-                      ? "bg-blue-50 border-l-4 border-blue-500"
-                      : ""
+                    ? "bg-blue-50 border-l-4 border-blue-500"
+                    : ""
                     }`}
                   onClick={() => setSelectedRoom(room)}
                 >
@@ -1366,6 +1366,7 @@ const DataHygieneManager = () => {
             const labels = {
               analyze: "Analyze",
               standardize: "Standardize",
+              locations: "Locations",
               duplicates: "Duplicates",
               links: "Links",
               missing: "Missing Data",
@@ -1848,15 +1849,15 @@ const DataHygieneManager = () => {
                         </ul>
                       </div>
                     )}
-                    {locationPreview.rooms.multiRoom.length === 0 && 
-                     locationPreview.rooms.missingSpaceKey.length === 0 && 
-                     (locationPreview.rooms.toSeedFromSchedules?.length || 0) === 0 &&
-                     (locationPreview.rooms.toSeedFromPeople?.length || 0) === 0 && (
-                      <div className="text-green-700 flex items-center gap-2">
-                        <CheckCircle size={16} />
-                        All rooms have valid spaceKeys
-                      </div>
-                    )}
+                    {locationPreview.rooms.multiRoom.length === 0 &&
+                      locationPreview.rooms.missingSpaceKey.length === 0 &&
+                      (locationPreview.rooms.toSeedFromSchedules?.length || 0) === 0 &&
+                      (locationPreview.rooms.toSeedFromPeople?.length || 0) === 0 && (
+                        <div className="text-green-700 flex items-center gap-2">
+                          <CheckCircle size={16} />
+                          All rooms have valid spaceKeys
+                        </div>
+                      )}
                   </div>
                 </div>
 
@@ -2811,10 +2812,10 @@ const Recommendations = ({ recommendations }) => {
               <div className="flex items-center space-x-2">
                 <span
                   className={`px-2 py-1 rounded-full text-xs font-medium ${rec.priority === "high"
-                      ? "bg-red-100 text-red-800"
-                      : rec.priority === "medium"
-                        ? "bg-yellow-100 text-yellow-800"
-                        : "bg-blue-100 text-blue-800"
+                    ? "bg-red-100 text-red-800"
+                    : rec.priority === "medium"
+                      ? "bg-yellow-100 text-yellow-800"
+                      : "bg-blue-100 text-blue-800"
                     }`}
                 >
                   {rec.priority === "high"

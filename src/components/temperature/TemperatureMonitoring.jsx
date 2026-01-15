@@ -2332,6 +2332,6 @@ return (
     {viewMode === 'settings' && renderSettings()}
   </div>
 );
-};
+
 
 export default TemperatureMonitoring;

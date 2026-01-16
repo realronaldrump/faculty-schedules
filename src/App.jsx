@@ -53,6 +53,7 @@ import {
   Radio,
   BookOpen,
   Shield,
+  BarChart3,
 } from "lucide-react";
 
 // ==================== NAVIGATION CONFIGURATION ====================
@@ -75,6 +76,66 @@ const navigationItems = [
         path: "live-view",
         canonicalId: "live-view",
       },
+    ],
+  },
+  {
+    id: "people",
+    label: "People",
+    icon: Users,
+    children: [
+      {
+        id: "people-directory",
+        label: "Directory",
+        path: "people/directory",
+        canonicalId: "people/directory",
+      },
+      {
+        id: "email-lists",
+        label: "Email Lists",
+        path: "people/email-lists",
+        canonicalId: "people/email-lists",
+      },
+      {
+        id: "office-directory",
+        label: "Offices",
+        path: "people/offices",
+        canonicalId: "people/offices",
+      },
+    ],
+  },
+  {
+    id: "scheduling",
+    label: "Scheduling",
+    icon: Calendar,
+    children: [
+      {
+        id: "faculty-schedules",
+        label: "Faculty",
+        path: "scheduling/faculty",
+        canonicalId: "scheduling/faculty",
+      },
+      {
+        id: "room-schedules",
+        label: "Rooms",
+        path: "scheduling/rooms",
+        canonicalId: "scheduling/rooms",
+      },
+      {
+        id: "student-schedules",
+        label: "Student Workers",
+        path: "scheduling/student-workers",
+        canonicalId: "scheduling/student-workers",
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
+      },
+    ],
+  },
+  {
+    id: "analytics",
+    label: "Analytics",
+    icon: BarChart3,
+    children: [
       {
         id: "department-insights",
         label: "Department Insights",
@@ -87,150 +148,15 @@ const navigationItems = [
     ],
   },
   {
-    id: "people",
-    label: "People",
-    icon: Users,
-    children: [
-      {
-        id: "people-directory",
-        label: "Directory",
-        path: "people/people-directory",
-        canonicalId: "people/people-directory",
-      },
-      {
-        id: "email-lists",
-        label: "Email Lists",
-        path: "people/email-lists",
-        canonicalId: "people/email-lists",
-      },
-      {
-        id: "office-directory",
-        label: "Offices",
-        path: "resources/building-directory",
-        canonicalId: "resources/building-directory",
-      },
-      {
-        id: "program-management",
-        label: "Programs & UPDs",
-        path: "analytics/program-management",
-        canonicalId: "analytics/program-management",
-        hidden: true,
-        permissions: {
-          hideFromRoles: ["faculty"],
-        },
-      },
-      {
-        id: "baylor-id-manager",
-        label: "Baylor IDs",
-        path: "people/baylor-id-manager",
-        canonicalId: "people/baylor-id-manager",
-        hidden: true,
-        permissions: {
-          hideFromRoles: ["faculty"],
-        },
-      },
-    ],
-  },
-  {
-    id: "scheduling",
-    label: "Scheduling",
-    icon: Calendar,
-    children: [
-      {
-        id: "faculty-schedules",
-        label: "Faculty",
-        path: "scheduling/faculty-schedules",
-        canonicalId: "scheduling/faculty-schedules",
-      },
-      {
-        id: "individual-availability",
-        label: "Faculty Availability",
-        path: "scheduling/individual-availability",
-        canonicalId: "scheduling/faculty-schedules",
-        hidden: true,
-      },
-      {
-        id: "group-meeting-scheduler",
-        label: "Group Meetings",
-        path: "scheduling/group-meeting-scheduler",
-        canonicalId: "scheduling/faculty-schedules",
-        hidden: true,
-      },
-      {
-        id: "room-schedules",
-        label: "Rooms",
-        path: "scheduling/room-schedules",
-        canonicalId: "scheduling/room-schedules",
-      },
-      {
-        id: "outlook-export",
-        label: "Room Calendar Export",
-        path: "tools/outlook-export",
-        canonicalId: "scheduling/room-schedules",
-        hidden: true,
-        permissions: {
-          hideFromRoles: ["faculty"],
-        },
-      },
-      {
-        id: "room-grid-generator",
-        label: "Room Grid Generator",
-        path: "tools/room-grid-generator",
-        canonicalId: "scheduling/room-schedules",
-        hidden: true,
-        permissions: {
-          hideFromRoles: ["faculty"],
-        },
-      },
-      {
-        id: "student-schedules",
-        label: "Student Workers",
-        path: "scheduling/student-schedules",
-        canonicalId: "scheduling/student-schedules",
-        permissions: {
-          hideFromRoles: ["faculty"],
-        },
-      },
-      {
-        id: "student-worker-analytics",
-        label: "Student Worker Payroll",
-        path: "analytics/student-worker-analytics",
-        canonicalId: "scheduling/student-schedules",
-        hidden: true,
-        permissions: {
-          hideFromRoles: ["faculty"],
-        },
-      },
-    ],
-  },
-  {
-    id: "tools-settings",
-    label: "Tools & Settings",
+    id: "data-tools",
+    label: "Data Tools",
     icon: Database,
     children: [
       {
-        id: "app-settings",
-        label: "App Settings",
-        path: "administration/app-settings",
-        canonicalId: "administration/app-settings",
-        permissions: {
-          hideFromRoles: ["faculty"],
-        },
-      },
-      {
         id: "smart-import",
         label: "Import Wizard",
-        path: "tools/import-wizard",
-        canonicalId: "tools/import-wizard",
-        permissions: {
-          hideFromRoles: ["faculty"],
-        },
-      },
-      {
-        id: "crn-tools",
-        label: "CRN Quality Tools",
-        path: "tools/crn-tools",
-        canonicalId: "tools/crn-tools",
+        path: "data/import-wizard",
+        canonicalId: "data/import-wizard",
         permissions: {
           hideFromRoles: ["faculty"],
         },
@@ -238,17 +164,17 @@ const navigationItems = [
       {
         id: "course-management",
         label: "Schedule Data",
-        path: "analytics/course-management",
-        canonicalId: "analytics/course-management",
+        path: "data/schedule-data",
+        canonicalId: "data/schedule-data",
         permissions: {
           hideFromRoles: ["faculty"],
         },
       },
       {
-        id: "temperature-monitoring",
-        label: "Temperature Monitoring",
-        path: "tools/temperature-monitoring",
-        canonicalId: "tools/temperature-monitoring",
+        id: "crn-tools",
+        label: "CRN Quality Tools",
+        path: "data/crn-tools",
+        canonicalId: "data/crn-tools",
         permissions: {
           hideFromRoles: ["faculty"],
         },
@@ -269,14 +195,14 @@ const navigationItems = [
       {
         id: "baylor-systems",
         label: "Baylor Systems",
-        path: "resources/baylor-systems",
-        canonicalId: "resources/baylor-systems",
+        path: "help/baylor-systems",
+        canonicalId: "help/baylor-systems",
       },
       {
         id: "baylor-acronyms",
         label: "Acronyms",
-        path: "resources/baylor-acronyms",
-        canonicalId: "resources/baylor-acronyms",
+        path: "help/acronyms",
+        canonicalId: "help/acronyms",
       },
     ],
   },
@@ -289,20 +215,32 @@ const navigationItems = [
       {
         id: "access-control",
         label: "Access Control",
-        path: "administration/access-control",
-        canonicalId: "administration/access-control",
+        path: "admin/access-control",
+        canonicalId: "admin/access-control",
+      },
+      {
+        id: "app-settings",
+        label: "App Settings",
+        path: "admin/settings",
+        canonicalId: "admin/settings",
       },
       {
         id: "recent-changes",
         label: "Recent Changes",
-        path: "administration/recent-changes",
-        canonicalId: "administration/recent-changes",
+        path: "admin/recent-changes",
+        canonicalId: "admin/recent-changes",
       },
       {
         id: "data-hygiene",
         label: "Data Hygiene",
-        path: "tools/data-hygiene",
-        canonicalId: "tools/data-hygiene",
+        path: "admin/data-hygiene",
+        canonicalId: "admin/data-hygiene",
+      },
+      {
+        id: "temperature-monitoring",
+        label: "Temperature Monitoring",
+        path: "admin/temperature",
+        canonicalId: "admin/temperature",
       },
     ],
   },
@@ -513,131 +451,108 @@ function App() {
             <LiveView />
           </ProtectedContent>
         );
-      case "scheduling/faculty-schedules":
-      case "scheduling/individual-availability":
-      case "scheduling/group-meeting-scheduler":
+      // Scheduling Hubs
+      case "scheduling/faculty":
         return (
-          <ProtectedContent pageId={currentPage}>
-            <FacultyHub
-              initialTab={
-                currentPage === "scheduling/individual-availability"
-                  ? "availability"
-                  : currentPage === "scheduling/group-meeting-scheduler"
-                    ? "meetings"
-                    : "compare"
-              }
-            />
+          <ProtectedContent pageId="scheduling/faculty">
+            <FacultyHub />
           </ProtectedContent>
         );
-      case "scheduling/room-schedules":
-      case "tools/outlook-export":
-      case "tools/room-grid-generator":
+      case "scheduling/rooms":
         return (
-          <ProtectedContent pageId={currentPage}>
-            <RoomsHub
-              initialTab={
-                currentPage === "tools/outlook-export"
-                  ? "calendar"
-                  : currentPage === "tools/room-grid-generator"
-                    ? "grids"
-                    : "browse"
-              }
-            />
+          <ProtectedContent pageId="scheduling/rooms">
+            <RoomsHub />
           </ProtectedContent>
         );
-      case "scheduling/student-schedules":
-      case "analytics/student-worker-analytics":
+      case "scheduling/student-workers":
         return (
-          <ProtectedContent pageId={currentPage}>
-            <StudentWorkersHub
-              initialTab={
-                currentPage === "analytics/student-worker-analytics"
-                  ? "payroll"
-                  : "schedule"
-              }
-            />
+          <ProtectedContent pageId="scheduling/student-workers">
+            <StudentWorkersHub />
           </ProtectedContent>
         );
-      case "people/people-directory":
+      // People Hub
+      case "people/directory":
       case "people/email-lists":
-      case "resources/building-directory":
-      case "analytics/program-management":
-      case "people/baylor-id-manager":
+      case "people/offices":
         return (
           <ProtectedContent pageId={currentPage}>
             <PeopleHub />
           </ProtectedContent>
         );
+      // Analytics
       case "analytics/department-insights":
         return (
           <ProtectedContent pageId="analytics/department-insights">
             <DepartmentInsights />
           </ProtectedContent>
         );
-      case "analytics/course-management":
+      // Data Tools
+      case "data/schedule-data":
         return (
-          <ProtectedContent pageId="analytics/course-management">
+          <ProtectedContent pageId="data/schedule-data">
             <CourseManagement />
           </ProtectedContent>
         );
-      case "administration/recent-changes":
+      case "data/import-wizard":
         return (
-          <ProtectedContent pageId="administration/recent-changes">
-            <RecentChangesPage />
-          </ProtectedContent>
-        );
-      case "tools/import-wizard":
-        return (
-          <ProtectedContent pageId="tools/import-wizard">
+          <ProtectedContent pageId="data/import-wizard">
             <ImportWizard />
           </ProtectedContent>
         );
-      case "tools/data-hygiene":
+      case "data/crn-tools":
         return (
-          <ProtectedContent pageId="tools/data-hygiene">
-            <DataHygieneManager />
-          </ProtectedContent>
-        );
-      case "tools/crn-tools":
-        return (
-          <ProtectedContent pageId="tools/crn-tools">
+          <ProtectedContent pageId="data/crn-tools">
             <CRNQualityTools />
           </ProtectedContent>
         );
-      case "tools/temperature-monitoring":
-        return (
-          <ProtectedContent pageId="tools/temperature-monitoring">
-            <TemperatureMonitoring />
-          </ProtectedContent>
-        );
-      case "resources/baylor-acronyms":
-        return (
-          <ProtectedContent pageId="resources/baylor-acronyms">
-            <BaylorAcronyms />
-          </ProtectedContent>
-        );
-      case "resources/baylor-systems":
-        return (
-          <ProtectedContent pageId="resources/baylor-systems">
-            <BaylorSystems />
-          </ProtectedContent>
-        );
-      case "administration/app-settings":
-        return (
-          <ProtectedContent pageId="administration/app-settings">
-            <AppSettings />
-          </ProtectedContent>
-        );
-      case "administration/access-control":
-        return (
-          <ProtectedContent pageId="administration/access-control">
-            <AccessControl />
-          </ProtectedContent>
-        );
+      // Help & Resources
       case "help/tutorials":
         return (
           <ProtectedContent pageId="help/tutorials">
             <TutorialPage />
+          </ProtectedContent>
+        );
+      case "help/baylor-systems":
+        return (
+          <ProtectedContent pageId="help/baylor-systems">
+            <BaylorSystems />
+          </ProtectedContent>
+        );
+      case "help/acronyms":
+        return (
+          <ProtectedContent pageId="help/acronyms">
+            <BaylorAcronyms />
+          </ProtectedContent>
+        );
+      // Administration
+      case "admin/access-control":
+        return (
+          <ProtectedContent pageId="admin/access-control">
+            <AccessControl />
+          </ProtectedContent>
+        );
+      case "admin/settings":
+        return (
+          <ProtectedContent pageId="admin/settings">
+            <AppSettings />
+          </ProtectedContent>
+        );
+      case "admin/recent-changes":
+        return (
+          <ProtectedContent pageId="admin/recent-changes">
+            <RecentChangesPage />
+          </ProtectedContent>
+        );
+      case "admin/data-hygiene":
+        return (
+          <ProtectedContent pageId="admin/data-hygiene">
+            <DataHygieneManager />
+          </ProtectedContent>
+        );
+      case "admin/temperature":
+        return (
+          <ProtectedContent pageId="admin/temperature">
+            <TemperatureMonitoring />
           </ProtectedContent>
         );
       default:
@@ -694,17 +609,6 @@ function App() {
             onClick={() => setMobileSidebarOpen(false)}
           ></div>
           <div className="absolute inset-y-0 left-0 w-72 max-w-[80%] bg-white shadow-xl">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-              <div className="text-sm font-semibold text-baylor-green">
-                Navigation
-              </div>
-              <button
-                onClick={() => setMobileSidebarOpen(false)}
-                className="p-2 rounded-md hover:bg-gray-100"
-              >
-                <X className="w-5 h-5 text-gray-600" />
-              </button>
-            </div>
             <Sidebar
               navigationItems={navigationItems}
               currentPage={currentPage}

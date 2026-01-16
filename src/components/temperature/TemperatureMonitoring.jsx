@@ -278,17 +278,7 @@ const TemperatureMonitoring = () => {
     return summary;
   }, [importItems]);
 
-  useEffect(() => {
-    if (!selectedBuilding && buildingList.length > 0) {
-      const defaultBuilding = localStorage.getItem('temperatureDefaultBuilding');
-      if (defaultBuilding && buildingList.includes(defaultBuilding)) {
-        setSelectedBuilding(defaultBuilding);
-      } else {
-        setSelectedBuilding(buildingList[0]);
-      }
-    }
-  }, [buildingList, selectedBuilding]);
-
+  // Load hidden buildings first (for admins)
   useEffect(() => {
     if (!isAdmin) return;
     const fetchHidden = async () => {
@@ -303,6 +293,21 @@ const TemperatureMonitoring = () => {
     };
     fetchHidden();
   }, [isAdmin]);
+
+  // Set default building - skip hidden buildings unless explicitly saved as default
+  useEffect(() => {
+    if (!selectedBuilding && buildingList.length > 0) {
+      const defaultBuilding = localStorage.getItem('temperatureDefaultBuilding');
+      // If user had explicitly set a default building, use it even if hidden
+      if (defaultBuilding && buildingList.includes(defaultBuilding)) {
+        setSelectedBuilding(defaultBuilding);
+      } else {
+        // Find the first non-hidden building
+        const firstNonHidden = buildingList.find(code => !hiddenBuildingCodes.has(code));
+        setSelectedBuilding(firstNonHidden || buildingList[0]);
+      }
+    }
+  }, [buildingList, selectedBuilding, hiddenBuildingCodes]);
 
   useEffect(() => {
     if (!selectedBuilding) return;
@@ -1616,10 +1621,31 @@ const TemperatureMonitoring = () => {
         )}
 
         {!floorplanData?.downloadUrl ? (
-          <div className="border border-dashed border-gray-300 rounded-lg p-10 text-center">
-            <MapIcon className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-            <p className="text-gray-700 font-medium">No floorplan uploaded yet.</p>
-            <p className="text-sm text-gray-500">Upload a PNG floorplan to begin placing temperature markers.</p>
+          <div className="border-2 border-dashed border-gray-200 rounded-xl p-12 text-center bg-gray-50/50">
+            <div className="max-w-sm mx-auto">
+              <div className="w-16 h-16 rounded-full bg-baylor-green/10 flex items-center justify-center mx-auto mb-4">
+                <MapIcon className="w-8 h-8 text-baylor-green" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Floorplan Uploaded</h3>
+              <p className="text-sm text-gray-600 mb-6">
+                Upload a PNG image of the building floorplan to visualize temperature data with room markers.
+              </p>
+              {isAdmin && (
+                <label className="btn-primary cursor-pointer inline-flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4" />
+                  Upload Floorplan
+                  <input
+                    type="file"
+                    accept="image/png"
+                    className="hidden"
+                    onChange={(event) => handleFloorplanUpload(event.target.files?.[0])}
+                  />
+                </label>
+              )}
+              {!isAdmin && (
+                <p className="text-xs text-gray-500">Contact an administrator to upload a floorplan.</p>
+              )}
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
@@ -1971,10 +1997,16 @@ const TemperatureMonitoring = () => {
       </div>
 
       {importItems.length === 0 ? (
-        <div className="border border-dashed border-gray-300 rounded-lg p-8 text-center text-gray-600">
-          <FileUp className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-          <p className="text-sm font-medium text-gray-700">No CSVs selected yet.</p>
-          <p className="text-xs text-gray-500">Use the upload panel above to add Govee exports.</p>
+        <div className="border-2 border-dashed border-gray-200 rounded-xl p-10 text-center bg-gray-50/50">
+          <div className="w-14 h-14 rounded-full bg-baylor-green/10 flex items-center justify-center mx-auto mb-4">
+            <FileUp className="w-7 h-7 text-baylor-green" />
+          </div>
+          <p className="text-base font-medium text-gray-900 mb-1">No CSV files selected</p>
+          <p className="text-sm text-gray-500 mb-4">Choose one or more Govee CSV exports to import temperature data.</p>
+          <label htmlFor="temperature-import-csvs" className="btn-primary cursor-pointer inline-flex items-center gap-2">
+            <FileUp className="w-4 h-4" />
+            Select CSV Files
+          </label>
         </div>
       ) : (
         <div className="space-y-4">
@@ -2342,90 +2374,121 @@ const TemperatureMonitoring = () => {
     </div>
   );
 
-  const viewTabs = [
+  // Data view tabs (always visible)
+  const dataViewTabs = [
     { id: 'floorplan', label: 'Floorplan', icon: MapIcon },
     { id: 'daily', label: 'Daily', icon: LayoutGrid },
-    { id: 'historical', label: 'Historical', icon: History },
-    ...(isAdmin ? [{ id: 'import', label: 'Import', icon: FileUp }] : []),
-    { id: 'export', label: 'Export', icon: Download },
-    ...(isAdmin ? [{ id: 'settings', label: 'Settings', icon: Thermometer }] : [])
+    { id: 'historical', label: 'Historical', icon: History }
   ];
+
+  // Admin action tabs (only for admins)
+  const adminActionTabs = [
+    { id: 'import', label: 'Import', icon: FileUp },
+    { id: 'export', label: 'Export', icon: Download },
+    { id: 'settings', label: 'Settings', icon: Thermometer }
+  ];
+
+  // Calculate quick stats
+  const roomCount = roomsForBuilding.length;
+  const roomsWithData = Object.keys(snapshotLookup).length;
+  const coveragePercent = roomCount > 0 ? Math.round((roomsWithData / roomCount) * 100) : 0;
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Temperature Monitoring</h1>
-          <p className="text-gray-600">Bulk import Govee exports, map rooms, and visualize daily snapshots.</p>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <Thermometer className="w-4 h-4 text-baylor-green" />
-          {selectedBuilding ? `Building: ${selectedBuildingName || selectedBuilding}` : 'Select a building'}
-        </div>
+      {/* Page Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Temperature Monitoring</h1>
+        <p className="text-gray-600">Track room temperatures, import sensor data, and visualize daily snapshots.</p>
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <MapIcon className="w-4 h-4 text-gray-400" />
-              <select
-                className="form-input"
-                value={selectedBuilding}
-                onChange={(e) => setSelectedBuilding(e.target.value)}
-              >
-                <option value="">Select building...</option>
-                {buildingOptions.map((building) => (
-                  <option key={building.code} value={building.code}>
-                    {building.name}{hiddenBuildingCodes.has(building.code) ? ' (hidden)' : ''}
-                  </option>
-                ))}
-              </select>
-              {isAdmin && hiddenBuildingCodes.size > 0 && (
-                <button
-                  onClick={() => setShowHidden(!showHidden)}
-                  className="p-2 rounded-lg text-sm font-medium flex items-center gap-1 transition bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  title={showHidden ? 'Hide hidden buildings' : 'Show hidden buildings'}
+      {/* Filter Bar - Sticky */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm sticky top-0 z-10">
+        <div className="p-4 border-b border-gray-100">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+            {/* Building Selector - More Prominent */}
+            <div className="flex-1 min-w-0">
+              <label className="block text-xs font-medium text-gray-500 mb-1">Building</label>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <MapIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <select
+                    className="form-input pl-9 w-full font-medium"
+                    value={selectedBuilding}
+                    onChange={(e) => setSelectedBuilding(e.target.value)}
+                  >
+                    <option value="">Select building...</option>
+                    {buildingOptions.map((building) => (
+                      <option key={building.code} value={building.code}>
+                        {building.name}{hiddenBuildingCodes.has(building.code) ? ' (hidden)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {isAdmin && hiddenBuildingCodes.size > 0 && (
+                  <button
+                    onClick={() => setShowHidden(!showHidden)}
+                    className="p-2 rounded-lg text-sm font-medium flex items-center gap-1 transition bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    title={showHidden ? 'Hide hidden buildings' : 'Show hidden buildings'}
+                  >
+                    {showHidden ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="hidden lg:block w-px h-10 bg-gray-200" />
+
+            {/* Date Selector */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Date</label>
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-gray-400" />
+                <input
+                  type="date"
+                  className="form-input"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Time Selector */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Snapshot Time</label>
+              <div className="flex items-center gap-2">
+                <Thermometer className="w-4 h-4 text-gray-400" />
+                <select
+                  className="form-select"
+                  value={selectedSnapshotId}
+                  onChange={(e) => setSelectedSnapshotId(e.target.value)}
                 >
-                  {showHidden ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                  <span className="text-xs">{hiddenBuildingCodes.size}</span>
-                </button>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-gray-400" />
-              <input
-                type="date"
-                className="form-input"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Thermometer className="w-4 h-4 text-gray-400" />
-              <select
-                className="form-input"
-                value={selectedSnapshotId}
-                onChange={(e) => setSelectedSnapshotId(e.target.value)}
-              >
-                {snapshotTimes.map((slot) => (
-                  <option key={slot.id} value={slot.id}>
-                    {slot.label || formatMinutesToLabel(slot.minutes)}
-                  </option>
-                ))}
-              </select>
+                  {snapshotTimes.map((slot) => (
+                    <option key={slot.id} value={slot.id}>
+                      {slot.label || formatMinutesToLabel(slot.minutes)}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {viewTabs.map((tab) => {
+        {/* Tab Navigation - Split into Data Views and Admin Actions */}
+        <div className="p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          {/* Data View Tabs */}
+          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+            {dataViewTabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = viewMode === tab.id;
               return (
                 <button
                   key={tab.id}
                   onClick={() => setViewMode(tab.id)}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition ${isActive ? 'bg-baylor-green text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                  className={`px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${isActive
+                    ? 'bg-white text-baylor-green shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                    }`}
                 >
                   <Icon className="w-4 h-4" />
                   {tab.label}
@@ -2433,8 +2496,95 @@ const TemperatureMonitoring = () => {
               );
             })}
           </div>
+
+          {/* Admin Actions - Styled differently */}
+          {isAdmin && (
+            <div className="flex items-center gap-2">
+              {adminActionTabs.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = viewMode === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setViewMode(tab.id)}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition border ${isActive
+                      ? 'bg-baylor-green text-white border-baylor-green'
+                      : 'bg-white text-gray-700 border-gray-200 hover:border-baylor-green/50 hover:text-baylor-green'
+                      }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span className="hidden sm:inline">{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Export button for non-admins */}
+          {!isAdmin && (
+            <button
+              onClick={() => setViewMode('export')}
+              className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition border ${viewMode === 'export'
+                ? 'bg-baylor-green text-white border-baylor-green'
+                : 'bg-white text-gray-700 border-gray-200 hover:border-baylor-green/50 hover:text-baylor-green'
+                }`}
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Quick Stats Card */}
+      {selectedBuilding && !snapshotLoading && (viewMode === 'floorplan' || viewMode === 'daily' || viewMode === 'historical') && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-baylor-green/10 flex items-center justify-center">
+                <MapIcon className="w-5 h-5 text-baylor-green" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-gray-900">{roomCount}</div>
+                <div className="text-xs text-gray-500">Total Rooms</div>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-baylor-green/10 flex items-center justify-center">
+                <Thermometer className="w-5 h-5 text-baylor-green" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-gray-900">{roomsWithData}</div>
+                <div className="text-xs text-gray-500">With Data</div>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${coveragePercent >= 80 ? 'bg-green-100' : coveragePercent >= 50 ? 'bg-yellow-100' : 'bg-red-100'}`}>
+                <CheckCircle2 className={`w-5 h-5 ${coveragePercent >= 80 ? 'text-green-600' : coveragePercent >= 50 ? 'text-yellow-600' : 'text-red-600'}`} />
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-gray-900">{coveragePercent}%</div>
+                <div className="text-xs text-gray-500">Coverage</div>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+                <Calendar className="w-5 h-5 text-gray-600" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-gray-900">{buildingSettings?.timezone?.replace('America/', '') || 'Chicago'}</div>
+                <div className="text-xs text-gray-500">Timezone</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {snapshotLoading && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 text-gray-600">

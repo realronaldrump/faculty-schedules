@@ -38,49 +38,49 @@ const Dashboard = () => {
         title: 'People Directory',
         description: 'Faculty, staff, and student worker contacts',
         icon: GraduationCap,
-        path: 'people/people-directory',
+        path: 'people/directory',
         color: 'bg-baylor-green',
         textColor: 'text-baylor-green',
-        requiredAccess: 'people/people-directory'
+        requiredAccess: 'people/directory'
       },
       {
         title: 'Student Worker Schedules',
         description: 'See student assignments and availability',
         icon: Users,
-        path: 'scheduling/student-schedules',
+        path: 'scheduling/student-workers',
         color: 'bg-amber-500',
         textColor: 'text-amber-600',
-        requiredAccess: 'scheduling/student-schedules'
+        requiredAccess: 'scheduling/student-workers'
       },
       {
         title: 'Schedule Group Meeting',
         description: 'Find overlapping availability across faculty',
         icon: Calendar,
-        path: 'scheduling/group-meeting-scheduler',
+        path: 'scheduling/faculty?tab=meetings',
         color: 'bg-baylor-gold',
         textColor: 'text-baylor-gold',
-        requiredAccess: 'scheduling/group-meeting-scheduler'
+        requiredAccess: 'scheduling/faculty'
       },
       {
         title: 'Check Room Availability',
         description: 'View classroom schedules in real time',
         icon: Building,
-        path: 'scheduling/room-schedules',
+        path: 'scheduling/rooms',
         color: 'bg-green-600',
         textColor: 'text-green-600',
-        requiredAccess: 'scheduling/room-schedules'
+        requiredAccess: 'scheduling/rooms'
       }
     ];
 
-    if (hasAccess('tools/import-wizard')) {
+    if (hasAccess('data/import-wizard')) {
       actions.push({
         title: 'Import Data',
         description: 'Refresh faculty information and schedules',
         icon: FileText,
-        path: 'tools/import-wizard',
+        path: 'data/import-wizard',
         color: 'bg-baylor-gold',
         textColor: 'text-baylor-green',
-        requiredAccess: 'tools/import-wizard'
+        requiredAccess: 'data/import-wizard'
       });
     }
 

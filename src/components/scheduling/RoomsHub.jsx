@@ -9,24 +9,24 @@ const TAB_DEFINITIONS = [
   {
     id: "browse",
     label: "Browse",
-    accessId: "scheduling/room-schedules",
+    accessId: "scheduling/rooms",
     component: RoomSchedules,
   },
   {
     id: "calendar",
     label: "Room Calendar Export",
-    accessId: "tools/outlook-export",
+    accessId: "scheduling/rooms",
     component: OutlookRoomExport,
   },
   {
     id: "grids",
     label: "Room Grids",
-    accessId: "tools/room-grid-generator",
+    accessId: "scheduling/rooms",
     component: RoomGridGenerator,
   },
 ];
 
-const CANONICAL_PATH = "/scheduling/room-schedules";
+const CANONICAL_PATH = "/scheduling/rooms";
 
 const RoomsHub = ({ initialTab }) => {
   const location = useLocation();
@@ -95,8 +95,8 @@ const RoomsHub = ({ initialTab }) => {
             key={tab.id}
             onClick={() => handleTabChange(tab.id)}
             className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${activeTab === tab.id
-                ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
-                : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+              ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
+              : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
               }`}
           >
             {tab.label}

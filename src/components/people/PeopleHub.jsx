@@ -11,8 +11,8 @@ const TAB_DEFINITIONS = [
   {
     id: "directory",
     label: "Directory",
-    path: "people/people-directory",
-    accessId: "people/people-directory",
+    path: "people/directory",
+    accessId: "people/directory",
     component: PeopleDirectory,
   },
   {
@@ -25,22 +25,22 @@ const TAB_DEFINITIONS = [
   {
     id: "offices",
     label: "Offices",
-    path: "resources/building-directory",
-    accessId: "resources/building-directory",
+    path: "people/offices",
+    accessId: "people/offices",
     component: BuildingDirectory,
   },
   {
     id: "programs",
     label: "Programs & UPDs",
-    path: "analytics/program-management",
-    accessId: "analytics/program-management",
+    path: "people/programs",
+    accessId: "people/programs",
     component: ProgramManagement,
   },
   {
     id: "baylor-ids",
     label: "Baylor IDs",
-    path: "people/baylor-id-manager",
-    accessId: "people/baylor-id-manager",
+    path: "people/baylor-ids",
+    accessId: "people/baylor-ids",
     component: BaylorIDManager,
   },
 ];
@@ -112,8 +112,8 @@ const PeopleHub = ({ initialTab }) => {
             key={tab.id}
             onClick={() => handleTabChange(tab.id)}
             className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${activeTab === tab.id
-                ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
-                : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+              ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
+              : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
               }`}
           >
             {tab.label}

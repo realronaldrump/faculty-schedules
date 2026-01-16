@@ -9,24 +9,24 @@ const TAB_DEFINITIONS = [
   {
     id: "compare",
     label: "Compare Schedules",
-    accessId: "scheduling/faculty-schedules",
+    accessId: "scheduling/faculty",
     component: FacultySchedules,
   },
   {
     id: "availability",
     label: "Availability",
-    accessId: "scheduling/individual-availability",
+    accessId: "scheduling/faculty",
     component: IndividualAvailability,
   },
   {
     id: "meetings",
     label: "Group Meetings",
-    accessId: "scheduling/group-meeting-scheduler",
+    accessId: "scheduling/faculty",
     component: GroupMeetings,
   },
 ];
 
-const CANONICAL_PATH = "/scheduling/faculty-schedules";
+const CANONICAL_PATH = "/scheduling/faculty";
 
 const FacultyHub = ({ initialTab }) => {
   const location = useLocation();
@@ -95,8 +95,8 @@ const FacultyHub = ({ initialTab }) => {
             key={tab.id}
             onClick={() => handleTabChange(tab.id)}
             className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${activeTab === tab.id
-                ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
-                : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+              ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
+              : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
               }`}
           >
             {tab.label}

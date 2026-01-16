@@ -8,18 +8,18 @@ const TAB_DEFINITIONS = [
   {
     id: "schedule",
     label: "Schedules",
-    accessId: "scheduling/student-schedules",
+    accessId: "scheduling/student-workers",
     component: StudentSchedules,
   },
   {
     id: "payroll",
     label: "Payroll",
-    accessId: "analytics/student-worker-analytics",
+    accessId: "scheduling/student-workers",
     component: StudentWorkerAnalytics,
   },
 ];
 
-const CANONICAL_PATH = "/scheduling/student-schedules";
+const CANONICAL_PATH = "/scheduling/student-workers";
 
 const StudentWorkersHub = ({ initialTab }) => {
   const location = useLocation();
@@ -90,8 +90,8 @@ const StudentWorkersHub = ({ initialTab }) => {
             key={tab.id}
             onClick={() => handleTabChange(tab.id)}
             className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${activeTab === tab.id
-                ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
-                : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+              ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
+              : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
               }`}
           >
             {tab.label}

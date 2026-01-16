@@ -12,7 +12,9 @@ export const normalizeRoleList = (roles) => {
     return roles.filter((role) => role && ALLOWED_ROLES.has(role));
   }
   if (roles && typeof roles === "object") {
-    return Object.keys(roles).filter((key) => roles[key] && ALLOWED_ROLES.has(key));
+    return Object.keys(roles).filter(
+      (key) => roles[key] && ALLOWED_ROLES.has(key),
+    );
   }
   if (typeof roles === "string" && roles.trim()) {
     const trimmed = roles.trim();
@@ -52,37 +54,24 @@ export const normalizeRolePermissions = (raw) => {
 
   roleKeys.forEach((role) => {
     const value = input[role];
-    if (value && typeof value === "object" && (value.pages || value.actions)) {
+    if (value && typeof value === "object") {
       normalized[role] = {
         pages:
           value.pages && typeof value.pages === "object"
             ? { ...value.pages }
             : {},
-        actions:
-          value.actions && typeof value.actions === "object"
-            ? { ...value.actions }
-            : {},
       };
-    } else if (value && typeof value === "object") {
-      // Legacy shape treated as page permissions
-      normalized[role] = { pages: { ...value }, actions: {} };
     } else {
-      normalized[role] = { pages: {}, actions: {} };
+      normalized[role] = { pages: {} };
     }
   });
 
-  if (!normalized.admin) normalized.admin = { pages: {}, actions: {} };
+  if (!normalized.admin) normalized.admin = { pages: {} };
   if (
     !normalized.admin.pages ||
     Object.keys(normalized.admin.pages).length === 0
   ) {
     normalized.admin.pages = { "*": true };
-  }
-  if (
-    !normalized.admin.actions ||
-    Object.keys(normalized.admin.actions).length === 0
-  ) {
-    normalized.admin.actions = { "*": true };
   }
 
   return normalized;
@@ -99,53 +88,16 @@ export const canAccessPage = ({ userProfile, rolePermissions, pageId }) => {
     Object.prototype.hasOwnProperty.call(userProfile.permissions, pageId)
       ? Boolean(userProfile.permissions[pageId])
       : undefined;
-  const userOverridePages =
-    (userProfile.overrides && userProfile.overrides.pages) || {};
-  const hasUserOverride = Object.prototype.hasOwnProperty.call(
-    userOverridePages,
-    pageId,
-  );
   if (typeof userPerm === "boolean") return userPerm;
-  if (hasUserOverride) return Boolean(userOverridePages[pageId]);
 
   if (!rolePermissions) return false;
   const normalized = normalizeRolePermissions(rolePermissions);
   const roles = normalizeRoleList(userProfile.roles);
   for (const role of roles) {
-    const rp = normalized[role] || { pages: {}, actions: {} };
+    const rp = normalized[role] || { pages: {} };
     const pages = rp.pages || {};
     if (pages["*"] === true) return true;
     if (pages[pageId] === true) return true;
-  }
-  return false;
-};
-
-export const canPerformAction = ({
-  userProfile,
-  rolePermissions,
-  actionKey,
-}) => {
-  if (!actionKey || !userProfile) return false;
-  if (isUserAdmin(userProfile)) return true;
-  if (!isUserActive(userProfile)) return false;
-
-  if (userProfile.actions && typeof userProfile.actions === "object") {
-    if (userProfile.actions["*"] === true) return true;
-    if (userProfile.actions[actionKey] === true) return true;
-  }
-  const userOverrideActions =
-    (userProfile.overrides && userProfile.overrides.actions) || {};
-  if (userOverrideActions["*"] === true) return true;
-  if (userOverrideActions[actionKey] === true) return true;
-
-  if (!rolePermissions) return false;
-  const normalized = normalizeRolePermissions(rolePermissions);
-  const roles = normalizeRoleList(userProfile.roles);
-  for (const role of roles) {
-    const rp = normalized[role] || { pages: {}, actions: {} };
-    const actions = rp.actions || {};
-    if (actions["*"] === true) return true;
-    if (actions[actionKey] === true) return true;
   }
   return false;
 };

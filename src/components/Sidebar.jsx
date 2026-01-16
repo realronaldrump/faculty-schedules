@@ -24,7 +24,7 @@ const Sidebar = ({
   togglePinPage,
 }) => {
   const [expandedSections, setExpandedSections] = useState([]); // Default expanded sections
-  const { canAccess, userProfile } = useAuth();
+  const { canAccess, userProfile, isAdmin } = useAuth();
 
   const toggleSection = (sectionId) => {
     setExpandedSections((prev) =>
@@ -71,6 +71,8 @@ const Sidebar = ({
 
   const userRoles = normalizeRoles(userProfile?.roles);
   const shouldHideForRole = (item) => {
+    // Hide adminOnly items from non-admins
+    if (item?.adminOnly && !isAdmin) return true;
     if (item?.hidden) return true;
     const hiddenRoles = item?.permissions?.hideFromRoles;
     if (!hiddenRoles || hiddenRoles.length === 0) return false;
@@ -171,8 +173,8 @@ const Sidebar = ({
             const itemIsActive = isActive(item.path || item.id);
             const visibleChildren = hasChildren
               ? (item.children || []).filter(
-                  (child) => canAccess(child.path) && !shouldHideForRole(child),
-                )
+                (child) => canAccess(child.path) && !shouldHideForRole(child),
+              )
               : [];
             const sectionAllowed = hasChildren
               ? visibleChildren.length > 0
@@ -195,19 +197,17 @@ const Sidebar = ({
                       onNavigate(item.path || item.id);
                     }
                   }}
-                  className={`nav-item w-full ${
-                    itemIsActive ? "nav-item-active" : "nav-item-inactive"
-                  }`}
+                  className={`nav-item w-full ${itemIsActive ? "nav-item-active" : "nav-item-inactive"
+                    }`}
                   title={collapsed ? item.label : undefined}
                 >
                   <div className="flex items-center space-x-3 flex-1">
                     <Icon
                       size={20}
-                      className={`flex-shrink-0 ${
-                        itemIsActive
+                      className={`flex-shrink-0 ${itemIsActive
                           ? "text-white"
                           : "text-gray-500 group-hover:text-baylor-green"
-                      }`}
+                        }`}
                     />
                     {!collapsed && (
                       <span className="font-medium text-sm font-['DM_Sans']">
@@ -240,11 +240,10 @@ const Sidebar = ({
                             onClick={() => {
                               onNavigate(child.path);
                             }}
-                            className={`nav-sub-item w-full text-left ${
-                              isCurrentPage(child.path)
+                            className={`nav-sub-item w-full text-left ${isCurrentPage(child.path)
                                 ? "nav-sub-item-active"
                                 : "nav-sub-item-inactive"
-                            }`}
+                              }`}
                           >
                             <span className="text-sm font-['DM_Sans']">
                               {child.label}

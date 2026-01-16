@@ -19,14 +19,12 @@ import {
   Users,
   Lock,
   Eye,
-  Key,
   AlertCircle,
   CheckCircle,
   XCircle,
   Trash2,
   Search,
 } from "lucide-react";
-import { getAllRegisteredActionKeys } from "../../utils/actionRegistry";
 import {
   USER_STATUS,
   normalizeRoleList,
@@ -39,113 +37,36 @@ const AccessControl = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("roles"); // 'roles' | 'users'
-  const [activeRoleTab, setActiveRoleTab] = useState("pages"); // 'pages' | 'actions'
   const [rolePermissions, setRolePermissions] = useState(
     normalizeRolePermissions(),
   );
   const [users, setUsers] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [userOverrides, setUserOverrides] = useState({});
-  const [userActions, setUserActions] = useState({});
   const [userRoles, setUserRoles] = useState([]);
   const [userStatus, setUserStatus] = useState(USER_STATUS.ACTIVE);
+  const [pendingPages, setPendingPages] = useState([]);
   const [search, setSearch] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [actionKeys, setActionKeys] = useState([]);
 
   const allPages = useMemo(() => getAllPageIds(), [getAllPageIds]);
 
-  const ACTION_GROUPS = useMemo(() => {
-    const groups = [
-      {
-        name: "Directory",
-        actions: actionKeys.filter((a) => a.startsWith("directory.")),
-      },
-      {
-        name: "Schedule",
-        actions: actionKeys.filter((a) => a.startsWith("schedule.")),
-      },
-      { name: "Room", actions: actionKeys.filter((a) => a.startsWith("room")) },
-      {
-        name: "Program",
-        actions: actionKeys.filter((a) => a.startsWith("program.")),
-      },
-      {
-        name: "Course",
-        actions: actionKeys.filter((a) => a.startsWith("course.")),
-      },
-      {
-        name: "Data Management",
-        actions: actionKeys.filter((a) => a.startsWith("data.")),
-      },
-      {
-        name: "Analytics",
-        actions: actionKeys.filter((a) => a.startsWith("analytics.")),
-      },
-      {
-        name: "System",
-        actions: actionKeys.filter((a) => a.startsWith("system.")),
-      },
-      { name: "CRN", actions: actionKeys.filter((a) => a.startsWith("crn.")) },
-    ];
-    const grouped = new Set(groups.flatMap((g) => g.actions));
-    const others = actionKeys.filter((a) => !grouped.has(a));
-    if (others.length > 0) groups.push({ name: "Other", actions: others });
-    return groups.filter((g) => g.actions.length > 0);
-  }, [actionKeys]);
+  useEffect(() => {
+    const staffPages = rolePermissions?.staff?.pages || {};
+    const facultyPages = rolePermissions?.faculty?.pages || {};
+    const unconfigured = allPages.filter(
+      (page) =>
+        staffPages[page] !== true &&
+        staffPages[page] !== false &&
+        facultyPages[page] !== true &&
+        facultyPages[page] !== false,
+    );
+    setPendingPages(unconfigured);
+  }, [allPages, rolePermissions]);
 
   const PAGE_GROUPS = useMemo(() => {
-    const groups = [
-      {
-        name: "Home",
-        pages: ["dashboard", "live-view", "analytics/department-insights"],
-      },
-      {
-        name: "People",
-        pages: [
-          "people/people-directory",
-          "people/email-lists",
-          "resources/building-directory",
-          "analytics/program-management",
-          "people/baylor-id-manager",
-          "resources/baylor-acronyms",
-        ],
-      },
-      {
-        name: "Scheduling",
-        pages: [
-          "scheduling/faculty-schedules",
-          "scheduling/individual-availability",
-          "scheduling/room-schedules",
-          "scheduling/student-schedules",
-          "scheduling/group-meeting-scheduler",
-          "tools/outlook-export",
-          "tools/room-grid-generator",
-          "analytics/student-worker-analytics",
-        ],
-      },
-      {
-        name: "Tools & Settings",
-        pages: [
-          "administration/app-settings",
-          "tools/import-wizard",
-          "tools/data-hygiene",
-          "tools/crn-tools",
-          "analytics/course-management",
-          "tools/temperature-monitoring",
-          "administration/access-control",
-          "administration/recent-changes",
-        ],
-      },
-      {
-        name: "Help & Resources",
-        pages: ["help/tutorials", "resources/baylor-systems"],
-      },
-    ];
-    const grouped = new Set(groups.flatMap((g) => g.pages));
-    const others = allPages.filter((p) => !grouped.has(p));
-    if (others.length > 0) groups.push({ name: "Other", pages: others });
-    return groups;
+    const sorted = [...allPages].sort((a, b) => a.localeCompare(b));
+    return [{ name: "All Pages", pages: sorted }];
   }, [allPages]);
 
   const loadData = async () => {
@@ -155,7 +76,23 @@ const AccessControl = () => {
       const acSnap = await getDoc(acRef);
       if (acSnap.exists()) {
         const data = acSnap.data() || {};
-        setRolePermissions(normalizeRolePermissions(data.rolePermissions));
+        const normalized = normalizeRolePermissions(data.rolePermissions);
+        const allPageList = allPages || [];
+        if (normalized?.staff?.pages) {
+          allPageList.forEach((page) => {
+            if (normalized.staff.pages[page] !== true) {
+              normalized.staff.pages[page] = false;
+            }
+          });
+        }
+        if (normalized?.faculty?.pages) {
+          allPageList.forEach((page) => {
+            if (normalized.faculty.pages[page] !== true) {
+              normalized.faculty.pages[page] = false;
+            }
+          });
+        }
+        setRolePermissions(normalized);
       }
 
       const usersSnap = await getDocs(
@@ -172,14 +109,9 @@ const AccessControl = () => {
     loadData();
   }, []);
 
-  useEffect(() => {
-    const keys = getAllRegisteredActionKeys();
-    setActionKeys(Array.from(new Set(keys)));
-  }, []);
-
   const toggleRolePage = (role, pageId) => {
     setRolePermissions((prev) => {
-      const current = prev[role] || { pages: {}, actions: {} };
+      const current = prev[role] || { pages: {} };
       const pages = current.pages || {};
       const nextVal = !(pages[pageId] === true);
       return {
@@ -191,7 +123,7 @@ const AccessControl = () => {
 
   const setGroupForRole = (role, pages, value) => {
     setRolePermissions((prev) => {
-      const current = { ...(prev[role] || { pages: {}, actions: {} }) };
+      const current = { ...(prev[role] || { pages: {} }) };
       const pagesMap = { ...(current.pages || {}) };
       pages.forEach((pid) => {
         pagesMap[pid] = value;
@@ -200,34 +132,10 @@ const AccessControl = () => {
     });
   };
 
-  const toggleRoleAction = (role, actionKey) => {
-    setRolePermissions((prev) => {
-      const current = prev[role] || { pages: {}, actions: {} };
-      const actions = current.actions || {};
-      const nextVal = !(actions[actionKey] === true);
-      return {
-        ...prev,
-        [role]: { ...current, actions: { ...actions, [actionKey]: nextVal } },
-      };
-    });
-  };
-
-  const setActionsForRole = (role, keys, value) => {
-    setRolePermissions((prev) => {
-      const current = { ...(prev[role] || { pages: {}, actions: {} }) };
-      const actionsMap = { ...(current.actions || {}) };
-      keys.forEach((k) => {
-        actionsMap[k] = value;
-      });
-      return { ...prev, [role]: { ...current, actions: actionsMap } };
-    });
-  };
-
   const selectUser = async (uid) => {
     setSelectedUserId(uid);
     if (!uid) {
       setUserOverrides({});
-      setUserActions({});
       setUserRoles([]);
       setUserStatus(USER_STATUS.ACTIVE);
       return;
@@ -238,9 +146,6 @@ const AccessControl = () => {
     setUserOverrides(data.permissions || {});
     setUserRoles(normalizeRoleList(data.roles));
     setUserStatus(resolveUserStatus(data) || USER_STATUS.ACTIVE);
-    const existingActions =
-      data.actions && typeof data.actions === "object" ? data.actions : {};
-    setUserActions(existingActions);
   };
 
   const toggleUserPage = (pageId) => {
@@ -248,10 +153,6 @@ const AccessControl = () => {
       ...prev,
       [pageId]: !(prev[pageId] === true),
     }));
-  };
-
-  const toggleUserAction = (key) => {
-    setUserActions((prev) => ({ ...prev, [key]: !(prev[key] === true) }));
   };
 
   const buildStatusPayload = (nextStatus, { approvedBy } = {}) => {
@@ -341,6 +242,22 @@ const AccessControl = () => {
         rolePermissions: normalizeRolePermissions(rolePermissions),
         updatedAt: serverTimestamp(),
       };
+      const updatedRoles = { ...payload.rolePermissions };
+      if (updatedRoles.staff?.pages) {
+        allPages.forEach((page) => {
+          if (updatedRoles.staff.pages[page] !== true) {
+            updatedRoles.staff.pages[page] = false;
+          }
+        });
+      }
+      if (updatedRoles.faculty?.pages) {
+        allPages.forEach((page) => {
+          if (updatedRoles.faculty.pages[page] !== true) {
+            updatedRoles.faculty.pages[page] = false;
+          }
+        });
+      }
+      payload.rolePermissions = updatedRoles;
       await setDoc(acRef, payload, { merge: true });
       await logUpdate(
         "Access Control - Roles",
@@ -364,7 +281,6 @@ const AccessControl = () => {
       const original = (await getDoc(uRef)).data() || {};
       const payload = {
         permissions: userOverrides,
-        actions: userActions,
         updatedAt: serverTimestamp(),
       };
       await updateDoc(uRef, payload);
@@ -515,7 +431,6 @@ const AccessControl = () => {
         setSelectedUserId("");
         setUserOverrides({});
         setUserRoles([]);
-        setUserActions({});
       }
     } catch (e) {
       // noop
@@ -574,22 +489,20 @@ const AccessControl = () => {
           <nav className="flex">
             <button
               onClick={() => setActiveTab("roles")}
-              className={`flex items-center gap-2 px-6 py-4 font-medium border-b-2 transition-colors ${
-                activeTab === "roles"
-                  ? "border-baylor-green text-baylor-green"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
+              className={`flex items-center gap-2 px-6 py-4 font-medium border-b-2 transition-colors ${activeTab === "roles"
+                ? "border-baylor-green text-baylor-green"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
             >
               <Lock className="w-4 h-4" />
               Role Permissions
             </button>
             <button
               onClick={() => setActiveTab("users")}
-              className={`flex items-center gap-2 px-6 py-4 font-medium border-b-2 transition-colors ${
-                activeTab === "users"
-                  ? "border-baylor-green text-baylor-green"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
+              className={`flex items-center gap-2 px-6 py-4 font-medium border-b-2 transition-colors ${activeTab === "users"
+                ? "border-baylor-green text-baylor-green"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
             >
               <Users className="w-4 h-4" />
               User Management
@@ -601,279 +514,60 @@ const AccessControl = () => {
           {/* ROLE PERMISSIONS TAB */}
           {activeTab === "roles" && (
             <div className="space-y-6">
-              {/* Role Sub-tabs */}
-              <div className="flex items-center gap-2 border-b border-gray-200">
-                <button
-                  onClick={() => setActiveRoleTab("pages")}
-                  className={`flex items-center gap-2 px-4 py-2 font-medium border-b-2 -mb-px transition-colors ${
-                    activeRoleTab === "pages"
-                      ? "border-baylor-green text-baylor-green"
-                      : "border-transparent text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  <Eye className="w-4 h-4" />
-                  Page Access
-                </button>
-                <button
-                  onClick={() => setActiveRoleTab("actions")}
-                  className={`flex items-center gap-2 px-4 py-2 font-medium border-b-2 -mb-px transition-colors ${
-                    activeRoleTab === "actions"
-                      ? "border-baylor-green text-baylor-green"
-                      : "border-transparent text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  <Key className="w-4 h-4" />
-                  Database Actions
-                </button>
-              </div>
-
               {/* Page Access */}
-              {activeRoleTab === "pages" && (
-                <div className="space-y-4">
-                  <p className="text-sm text-gray-600">
-                    Control which pages each role can view. Admin role has
-                    access to all pages automatically.
-                  </p>
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  Control which pages each role can view. Admin role has access to
+                  all pages automatically.
+                </p>
 
-                  {["staff", "faculty"].map((role) => (
-                    <div
-                      key={`role-pages-${role}`}
-                      className="border border-gray-200 rounded-lg overflow-hidden"
-                    >
-                      <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-b border-gray-200">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={`w-3 h-3 rounded-full ${
-                              role === "staff"
-                                ? "bg-blue-500"
-                                : role === "faculty"
-                                  ? "bg-purple-500"
-                                  : "bg-gray-500"
-                            }`}
-                          ></div>
-                          <h3 className="font-semibold text-gray-900 capitalize">
-                            {role}
-                          </h3>
-                          <span className="text-xs text-gray-500">
-                            (
-                            {
-                              Object.values(
-                                (rolePermissions[role] || {}).pages || {},
-                              ).filter((v) => v === true).length
-                            }{" "}
-                            pages granted)
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            className="text-xs px-3 py-1 bg-baylor-green text-white rounded hover:bg-baylor-green/90"
-                            onClick={() =>
-                              setGroupForRole(role, allPages, true)
-                            }
-                          >
-                            Select All
-                          </button>
-                          <button
-                            className="text-xs px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-                            onClick={() =>
-                              setGroupForRole(role, allPages, false)
-                            }
-                          >
-                            Clear All
-                          </button>
-                        </div>
+                {pendingPages.length > 0 && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    <strong>{pendingPages.length} new pages</strong> need staff/faculty access decisions.
+                  </div>
+                )}
+
+                {['staff', 'faculty'].map((role) => (
+                  <div key={`role-pages-${role}`} className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-b border-gray-200">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-3 h-3 rounded-full ${role === 'staff' ? 'bg-blue-500' : role === 'faculty' ? 'bg-purple-500' : 'bg-gray-500'}`}></div>
+                        <h3 className="font-semibold text-gray-900 capitalize">{role}</h3>
+                        <span className="text-xs text-gray-500">({Object.values((rolePermissions[role] || {}).pages || {}).filter((v) => v === true).length} pages granted)</span>
                       </div>
-
-                      <div className="p-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {PAGE_GROUPS.map((group) => (
-                            <div
-                              key={`${role}-${group.name}`}
-                              className="bg-gray-50 rounded-lg p-3"
-                            >
-                              <div className="flex items-center justify-between mb-2">
-                                <h4 className="text-sm font-semibold text-gray-700">
-                                  {group.name}
-                                </h4>
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    className="text-xs text-baylor-green hover:underline"
-                                    onClick={() =>
-                                      setGroupForRole(role, group.pages, true)
-                                    }
-                                  >
-                                    All
-                                  </button>
-                                  <span className="text-xs text-gray-400">
-                                    |
-                                  </span>
-                                  <button
-                                    className="text-xs text-gray-500 hover:underline"
-                                    onClick={() =>
-                                      setGroupForRole(role, group.pages, false)
-                                    }
-                                  >
-                                    None
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="space-y-1.5">
-                                {group.pages.map((pid) => (
-                                  <label
-                                    key={`${role}-${pid}`}
-                                    className="flex items-center gap-2 text-xs cursor-pointer hover:bg-white/50 rounded px-2 py-1"
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={Boolean(
-                                        ((rolePermissions[role] || {}).pages ||
-                                          {})[pid],
-                                      )}
-                                      onChange={() => toggleRolePage(role, pid)}
-                                      className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                                    />
-                                    <span className="text-gray-700">{pid}</span>
-                                  </label>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <button className="text-xs px-3 py-1 bg-baylor-green text-white rounded hover:bg-baylor-green/90" onClick={() => setGroupForRole(role, allPages, true)}>Select All</button>
+                        <button className="text-xs px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300" onClick={() => setGroupForRole(role, allPages, false)}>Clear All</button>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
 
-              {/* Database Actions */}
-              {activeRoleTab === "actions" && (
-                <div className="space-y-4">
-                  <p className="text-sm text-gray-600">
-                    Control which database operations each role can perform.
-                    Admin role has all actions automatically.
-                  </p>
-
-                  {["staff", "faculty"].map((role) => (
-                    <div
-                      key={`role-actions-${role}`}
-                      className="border border-gray-200 rounded-lg overflow-hidden"
-                    >
-                      <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-b border-gray-200">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={`w-3 h-3 rounded-full ${
-                              role === "staff"
-                                ? "bg-blue-500"
-                                : role === "faculty"
-                                  ? "bg-purple-500"
-                                  : "bg-gray-500"
-                            }`}
-                          ></div>
-                          <h3 className="font-semibold text-gray-900 capitalize">
-                            {role}
-                          </h3>
-                          <span className="text-xs text-gray-500">
-                            (
-                            {
-                              Object.values(
-                                (rolePermissions[role] || {}).actions || {},
-                              ).filter((v) => v === true).length
-                            }{" "}
-                            actions granted)
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            className="text-xs px-3 py-1 bg-baylor-green text-white rounded hover:bg-baylor-green/90"
-                            onClick={() =>
-                              setActionsForRole(role, actionKeys, true)
-                            }
-                          >
-                            Select All
-                          </button>
-                          <button
-                            className="text-xs px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-                            onClick={() =>
-                              setActionsForRole(role, actionKeys, false)
-                            }
-                          >
-                            Clear All
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="p-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {ACTION_GROUPS.map((group) => (
-                            <div
-                              key={`${role}-act-${group.name}`}
-                              className="bg-gray-50 rounded-lg p-3"
-                            >
-                              <div className="flex items-center justify-between mb-2">
-                                <h4 className="text-sm font-semibold text-gray-700">
-                                  {group.name}
-                                </h4>
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    className="text-xs text-baylor-green hover:underline"
-                                    onClick={() =>
-                                      setActionsForRole(
-                                        role,
-                                        group.actions,
-                                        true,
-                                      )
-                                    }
-                                  >
-                                    All
-                                  </button>
-                                  <span className="text-xs text-gray-400">
-                                    |
-                                  </span>
-                                  <button
-                                    className="text-xs text-gray-500 hover:underline"
-                                    onClick={() =>
-                                      setActionsForRole(
-                                        role,
-                                        group.actions,
-                                        false,
-                                      )
-                                    }
-                                  >
-                                    None
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="space-y-1.5">
-                                {group.actions.map((key) => (
-                                  <label
-                                    key={`${role}-${key}`}
-                                    className="flex items-center gap-2 text-xs cursor-pointer hover:bg-white/50 rounded px-2 py-1"
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={Boolean(
-                                        ((rolePermissions[role] || {})
-                                          .actions || {})[key],
-                                      )}
-                                      onChange={() =>
-                                        toggleRoleAction(role, key)
-                                      }
-                                      className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                                    />
-                                    <span className="text-gray-700 font-mono text-xs">
-                                      {key}
-                                    </span>
-                                  </label>
-                                ))}
+                    <div className="p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {PAGE_GROUPS.map((group) => (
+                          <div key={`${role}-${group.name}`} className="bg-gray-50 rounded-lg p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="text-sm font-semibold text-gray-700">{group.name}</h4>
+                              <div className="flex items-center gap-1">
+                                <button className="text-xs text-baylor-green hover:underline" onClick={() => setGroupForRole(role, group.pages, true)}>All</button>
+                                <span className="text-xs text-gray-400">|</span>
+                                <button className="text-xs text-gray-500 hover:underline" onClick={() => setGroupForRole(role, group.pages, false)}>None</button>
                               </div>
                             </div>
-                          ))}
-                        </div>
+                            <div className="space-y-1.5">
+                              {group.pages.map((pid) => (
+                                <label key={`${role}-${pid}`} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-white/50 rounded px-2 py-1">
+                                  <input type="checkbox" checked={Boolean(((rolePermissions[role] || {}).pages || {})[pid])} onChange={() => toggleRolePage(role, pid)} className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+                                  <span className="text-gray-700">{pid}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                ))}
+              </div>
 
               {/* Save Button */}
               <div className="flex items-center justify-end pt-4 border-t border-gray-200">
@@ -998,19 +692,19 @@ const AccessControl = () => {
                             <td className="px-4 py-3 text-sm text-gray-600">
                               {u.lastLoginAt
                                 ? new Date(
-                                    u.lastLoginAt.seconds
-                                      ? u.lastLoginAt.seconds * 1000
-                                      : u.lastLoginAt,
-                                  ).toLocaleString()
+                                  u.lastLoginAt.seconds
+                                    ? u.lastLoginAt.seconds * 1000
+                                    : u.lastLoginAt,
+                                ).toLocaleString()
                                 : "-"}
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-600">
                               {u.createdAt
                                 ? new Date(
-                                    u.createdAt.seconds
-                                      ? u.createdAt.seconds * 1000
-                                      : u.createdAt,
-                                  ).toLocaleString()
+                                  u.createdAt.seconds
+                                    ? u.createdAt.seconds * 1000
+                                    : u.createdAt,
+                                ).toLocaleString()
                                 : "-"}
                             </td>
                             <td className="px-4 py-3">
@@ -1213,28 +907,6 @@ const AccessControl = () => {
                                   });
                                   return grantedPages.size;
                                 })()}{" "}
-                                granted via role • Actions:{" "}
-                                {(() => {
-                                  const grantedActions = new Set();
-                                  selectedUserRoles.forEach((role) => {
-                                    const roleActions =
-                                      (rolePermissions[role] || {}).actions ||
-                                      {};
-                                    if (roleActions["*"]) {
-                                      actionKeys.forEach((a) =>
-                                        grantedActions.add(a),
-                                      );
-                                    } else {
-                                      Object.entries(roleActions).forEach(
-                                        ([action, val]) => {
-                                          if (val === true)
-                                            grantedActions.add(action);
-                                        },
-                                      );
-                                    }
-                                  });
-                                  return grantedActions.size;
-                                })()}{" "}
                                 granted via role
                               </p>
                               <p className="text-xs text-blue-700 mt-1">
@@ -1245,98 +917,6 @@ const AccessControl = () => {
                           </div>
                         </div>
                       )}
-
-                    {/* User Actions */}
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Key className="w-4 h-4 text-baylor-green" />
-                        <h4 className="font-medium text-gray-900">
-                          Action Overrides
-                        </h4>
-                        <span className="text-xs text-gray-500">
-                          (
-                          {
-                            Object.values(userActions).filter((v) => v === true)
-                              .length
-                          }{" "}
-                          additional granted)
-                        </span>
-                        {selectedUserRoles.includes("admin") && (
-                          <span className="text-xs text-amber-600 font-medium">
-                            ⚠️ Disabled (Admin role)
-                          </span>
-                        )}
-                      </div>
-                      <div
-                        className={`bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto baylor-scrollbar ${
-                          selectedUserRoles.includes("admin")
-                            ? "opacity-50 pointer-events-none"
-                            : ""
-                        }`}
-                      >
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                          {actionKeys.map((key) => {
-                            // Check if user already has this action via their role
-                            const hasViaRole = (() => {
-                              if (
-                                !selectedUserRoles ||
-                                selectedUserRoles.length === 0
-                              )
-                                return false;
-                              for (const role of selectedUserRoles) {
-                                const roleActions =
-                                  (rolePermissions[role] || {}).actions || {};
-                                if (
-                                  roleActions["*"] === true ||
-                                  roleActions[key] === true
-                                )
-                                  return true;
-                              }
-                              return false;
-                            })();
-
-                            return (
-                              <label
-                                key={`user-act-${key}`}
-                                className={`inline-flex items-center gap-2 text-xs rounded px-2 py-1 ${
-                                  hasViaRole
-                                    ? "bg-green-50 cursor-not-allowed"
-                                    : "cursor-pointer hover:bg-white"
-                                }`}
-                                title={
-                                  hasViaRole
-                                    ? `Already granted via ${selectedUserRoles[0]} role`
-                                    : ""
-                                }
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={
-                                    hasViaRole || Boolean(userActions[key])
-                                  }
-                                  onChange={() => toggleUserAction(key)}
-                                  disabled={
-                                    hasViaRole ||
-                                    selectedUserRoles.includes("admin")
-                                  }
-                                  className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green disabled:opacity-50 disabled:cursor-not-allowed"
-                                />
-                                <span
-                                  className={`font-mono ${hasViaRole ? "text-green-700" : "text-gray-700"}`}
-                                >
-                                  {key}
-                                  {hasViaRole && (
-                                    <span className="ml-1 text-green-600">
-                                      ✓
-                                    </span>
-                                  )}
-                                </span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
 
                     {/* User Page Access */}
                     <div>
@@ -1361,11 +941,10 @@ const AccessControl = () => {
                         )}
                       </div>
                       <div
-                        className={`bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto baylor-scrollbar ${
-                          selectedUserRoles.includes("admin")
-                            ? "opacity-50 pointer-events-none"
-                            : ""
-                        }`}
+                        className={`bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto baylor-scrollbar ${selectedUserRoles.includes("admin")
+                          ? "opacity-50 pointer-events-none"
+                          : ""
+                          }`}
                       >
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                           {allPages.map((pid) => {
@@ -1391,11 +970,10 @@ const AccessControl = () => {
                             return (
                               <label
                                 key={`user-page-${pid}`}
-                                className={`inline-flex items-center gap-2 text-xs rounded px-2 py-1 ${
-                                  hasViaRole
-                                    ? "bg-green-50 cursor-not-allowed"
-                                    : "cursor-pointer hover:bg-white"
-                                }`}
+                                className={`inline-flex items-center gap-2 text-xs rounded px-2 py-1 ${hasViaRole
+                                  ? "bg-green-50 cursor-not-allowed"
+                                  : "cursor-pointer hover:bg-white"
+                                  }`}
                                 title={
                                   hasViaRole
                                     ? `Already granted via ${selectedUserRoles[0]} role`
@@ -1447,50 +1025,53 @@ const AccessControl = () => {
                 </div>
               )}
             </div>
-          )}
-        </div>
-      </div>
+          )
+          }
+        </div >
+      </div >
 
       {/* Delete Confirmation Modal */}
-      {deleteTarget && (
-        <div className="modal-overlay">
-          <div className="modal-content max-w-md">
-            <div className="modal-header">
-              <div className="flex items-center gap-2">
-                <Trash2 className="w-5 h-5 text-red-600" />
-                <h3 className="modal-title">Delete User Profile</h3>
+      {
+        deleteTarget && (
+          <div className="modal-overlay">
+            <div className="modal-content max-w-md">
+              <div className="modal-header">
+                <div className="flex items-center gap-2">
+                  <Trash2 className="w-5 h-5 text-red-600" />
+                  <h3 className="modal-title">Delete User Profile</h3>
+                </div>
               </div>
-            </div>
-            <div className="modal-body">
-              <p className="text-gray-700 mb-2">
-                This will remove the user's profile document from Firestore:
-              </p>
-              <p className="text-gray-900 font-medium bg-gray-100 rounded px-3 py-2">
-                {deleteTarget.email || deleteTarget.id}
-              </p>
-              <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <p className="text-sm text-amber-900">
-                  <strong>Note:</strong> This does not delete the Firebase
-                  Authentication account. If the user signs in again, a new
-                  profile may be created. To block access, use Disable instead.
+              <div className="modal-body">
+                <p className="text-gray-700 mb-2">
+                  This will remove the user's profile document from Firestore:
                 </p>
+                <p className="text-gray-900 font-medium bg-gray-100 rounded px-3 py-2">
+                  {deleteTarget.email || deleteTarget.id}
+                </p>
+                <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-sm text-amber-900">
+                    <strong>Note:</strong> This does not delete the Firebase
+                    Authentication account. If the user signs in again, a new
+                    profile may be created. To block access, use Disable instead.
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="modal-footer">
-              <button
-                className="btn-ghost"
-                onClick={() => setDeleteTarget(null)}
-              >
-                Cancel
-              </button>
-              <button className="btn-danger" onClick={confirmDeleteUser}>
-                Delete Profile
-              </button>
+              <div className="modal-footer">
+                <button
+                  className="btn-ghost"
+                  onClick={() => setDeleteTarget(null)}
+                >
+                  Cancel
+                </button>
+                <button className="btn-danger" onClick={confirmDeleteUser}>
+                  Delete Profile
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 };
 

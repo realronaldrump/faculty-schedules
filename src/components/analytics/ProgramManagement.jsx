@@ -37,8 +37,8 @@ const ProgramManagement = ({ embedded = false }) => {
   const { loadPeople } = usePeople();
   const { handleProgramCreate, handleFacultyUpdate } = usePeopleOperations();
   const { showNotification } = useUI();
-  const { canAssignProgramUPD, canEditProgram, canCreateProgram } =
-    usePermissions();
+  const { canEdit } = usePermissions();
+  const canEditHere = canEdit("analytics/program-management");
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [editingUPD, setEditingUPD] = useState(null);
   const [selectedProgram, setSelectedProgram] = useState("all");
@@ -50,7 +50,7 @@ const ProgramManagement = ({ embedded = false }) => {
   const [dragOverProgram, setDragOverProgram] = useState(null);
   const [showAdjuncts, setShowAdjuncts] = useState(false);
   const [expandedPrograms, setExpandedPrograms] = useState(new Set());
-  const allowCreateProgram = canCreateProgram();
+  const allowCreateProgram = canEditHere;
   const activePrograms = Array.isArray(programs) ? programs : [];
 
   useEffect(() => {
@@ -174,7 +174,7 @@ const ProgramManagement = ({ embedded = false }) => {
 
   // Handle UPD designation - now updates the programs collection (supports up to two UPDs)
   const handleSetUPD = async (programName, faculty) => {
-    if (!canAssignProgramUPD()) {
+    if (!canEditHere) {
       showNotification(
         "warning",
         "Permission Denied",
@@ -466,30 +466,41 @@ const ProgramManagement = ({ embedded = false }) => {
       <div className="flex justify-between items-center">
         <div>
           {embedded ? (
-            <h2 className="text-xl font-semibold text-gray-900">Programs & UPDs</h2>
+            <h2 className="text-xl font-semibold text-gray-900">
+              Programs & UPDs
+            </h2>
           ) : (
-            <h1 className="text-2xl font-bold text-gray-900">Programs & UPDs</h1>
+            <h1 className="text-2xl font-bold text-gray-900">
+              Programs & UPDs
+            </h1>
           )}
-          <p className="text-gray-600">Organize faculty by program and manage UPD designations</p>
+          <p className="text-gray-600">
+            Organize faculty by program and manage UPD designations
+          </p>
         </div>
         <button
           onClick={() => {
             if (!allowCreateProgram) {
               showNotification(
-                'warning',
-                'Permission Denied',
-                'You do not have permission to create programs.'
+                "warning",
+                "Permission Denied",
+                "You do not have permission to create programs.",
               );
               return;
             }
             setShowCreateProgram(true);
           }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${allowCreateProgram
-            ? 'bg-baylor-green text-white hover:bg-baylor-green/90'
-            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-            }`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+            allowCreateProgram
+              ? "bg-baylor-green text-white hover:bg-baylor-green/90"
+              : "bg-gray-200 text-gray-400 cursor-not-allowed"
+          }`}
           disabled={!allowCreateProgram}
-          title={allowCreateProgram ? 'Add a new program' : 'You do not have permission to add programs'}
+          title={
+            allowCreateProgram
+              ? "Add a new program"
+              : "You do not have permission to add programs"
+          }
         >
           <Plus size={16} />
           Add Program
@@ -505,10 +516,11 @@ const ProgramManagement = ({ embedded = false }) => {
           return (
             <div
               key={programName}
-              className={`bg-white rounded-lg border-2 p-4 transition-all ${isDragOver
+              className={`bg-white rounded-lg border-2 p-4 transition-all ${
+                isDragOver
                   ? "border-baylor-green bg-baylor-green/5 shadow-lg"
                   : "border-gray-200 hover:border-baylor-green/50"
-                }`}
+              }`}
               onDragOver={(e) => handleDragOver(e, programName)}
               onDrop={(e) => handleDrop(e, programName)}
             >

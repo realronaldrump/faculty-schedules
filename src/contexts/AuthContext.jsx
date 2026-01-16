@@ -35,7 +35,6 @@ import {
   isUserPending,
   isUserDisabled,
   canAccessPage,
-  canPerformAction,
 } from "../utils/authz";
 
 const AuthContext = createContext(null);
@@ -51,7 +50,6 @@ export const AuthProvider = ({ children }) => {
   const lastIdentifiedRef = useRef(null);
 
   // Removed insecure .env based admin check. Admin access is now strictly role-based.
-  const ADMIN_EMAILS = [];
 
   const getAccessControlRef = () => doc(db, "settings", "accessControl");
 
@@ -63,9 +61,9 @@ export const AuthProvider = ({ children }) => {
       if (!snap.exists()) {
         const defaults = {
           rolePermissions: {
-            admin: { pages: { "*": true }, actions: { "*": true } },
-            staff: { pages: {}, actions: {} },
-            faculty: { pages: {}, actions: {} },
+            admin: { pages: { "*": true } },
+            staff: { pages: {} },
+            faculty: { pages: {} },
           },
           updatedAt: serverTimestamp(),
         };
@@ -85,9 +83,9 @@ export const AuthProvider = ({ children }) => {
     } catch (e) {
       // Fallback to in-memory defaults (normalized shape)
       setRolePermissions({
-        admin: { pages: { "*": true }, actions: { "*": true } },
-        staff: { pages: {}, actions: {} },
-        faculty: { pages: {}, actions: {} },
+        admin: { pages: { "*": true } },
+        staff: { pages: {} },
+        faculty: { pages: {} },
       });
       console.warn("Failed to load access control. Using defaults.", e);
     }
@@ -100,9 +98,6 @@ export const AuthProvider = ({ children }) => {
     }
     const userRef = doc(db, "users", firebaseUser.uid);
     const snap = await getDoc(userRef);
-    const emailLower = (firebaseUser.email || "").toLowerCase();
-    const isBootstrapAdmin = ADMIN_EMAILS.includes(emailLower);
-
     if (!snap.exists()) {
       const newProfile = {
         uid: firebaseUser.uid,
@@ -111,8 +106,8 @@ export const AuthProvider = ({ children }) => {
           firebaseUser.displayName ||
           firebaseUser.email?.split("@")[0] ||
           "User",
-        roles: isBootstrapAdmin ? ["admin"] : [],
-        status: isBootstrapAdmin ? USER_STATUS.ACTIVE : USER_STATUS.PENDING,
+        roles: [],
+        status: USER_STATUS.PENDING,
         disabled: false,
         permissions: {},
         createdAt: serverTimestamp(),
@@ -227,9 +222,9 @@ export const AuthProvider = ({ children }) => {
       },
       () => {
         setRolePermissions({
-          admin: { pages: { "*": true }, actions: { "*": true } },
-          staff: { pages: {}, actions: {} },
-          faculty: { pages: {}, actions: {} },
+          admin: { pages: { "*": true } },
+          staff: { pages: {} },
+          faculty: { pages: {} },
         });
         setLoadedAccess(true);
       },
@@ -293,46 +288,11 @@ export const AuthProvider = ({ children }) => {
 
   const getAllPageIds = () => {
     const fromRegistry = getAllRegisteredPageIds();
-    if (Array.isArray(fromRegistry) && fromRegistry.length > 0)
-      return fromRegistry;
-    // Fallback to known pages if registry is empty early in boot
-    return [
-      "dashboard",
-      "live-view",
-      "scheduling/faculty-schedules",
-      "scheduling/individual-availability",
-      "scheduling/room-schedules",
-      "scheduling/student-schedules",
-      "scheduling/group-meeting-scheduler",
-      "people/people-directory",
-      "people/email-lists",
-      "people/baylor-id-manager",
-      "resources/building-directory",
-      "resources/baylor-acronyms",
-      "resources/baylor-systems",
-      "tools/import-wizard",
-      "tools/data-hygiene",
-      "tools/crn-tools",
-      "tools/outlook-export",
-      "tools/room-grid-generator",
-      "tools/temperature-monitoring",
-      "analytics/department-insights",
-      "analytics/student-worker-analytics",
-      "analytics/course-management",
-      "analytics/program-management",
-      "administration/app-settings",
-      "administration/access-control",
-      "administration/recent-changes",
-      "help/tutorials",
-    ];
+    return Array.isArray(fromRegistry) ? fromRegistry : [];
   };
 
-  const canAccess = (pageId) => {
-    const emailLower = (user?.email || "").toLowerCase();
-    // Env-admin override regardless of Firestore profile state
-    if (ADMIN_EMAILS.includes(emailLower)) return true;
-    return canAccessPage({ userProfile, rolePermissions, pageId });
-  };
+  const canAccess = (pageId) =>
+    canAccessPage({ userProfile, rolePermissions, pageId });
 
   const value = {
     user,
@@ -348,20 +308,7 @@ export const AuthProvider = ({ children }) => {
     isPending: isUserPending(userProfile),
     isActive: isUserActive(userProfile),
     isDisabled: isUserDisabled(userProfile),
-    isAdmin: (() => {
-      const email = (user?.email || "").toLowerCase();
-      const isEnvAdmin = ADMIN_EMAILS.includes(email);
-      const hasRoleAdmin = isUserAdmin(userProfile);
-      return isEnvAdmin || hasRoleAdmin;
-    })(),
-    // Action-level permissions: simple extension so admins can grant specific actions by setting
-    // userProfile.actions[actionKey] === true. Admins always allowed.
-    canAction: (actionKey) => {
-      if (!actionKey) return false;
-      const email = (user?.email || "").toLowerCase();
-      if (ADMIN_EMAILS.includes(email)) return true;
-      return canPerformAction({ userProfile, rolePermissions, actionKey });
-    },
+    isAdmin: isUserAdmin(userProfile),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

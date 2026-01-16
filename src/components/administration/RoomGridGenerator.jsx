@@ -28,22 +28,18 @@ import {
 import { logCreate, logDelete } from "../../utils/changeLogger";
 import { ConfirmationDialog } from "../CustomAlert";
 import { usePermissions } from "../../utils/permissions";
-import { registerActionKeys } from "../../utils/actionRegistry";
 import { fetchSchedulesByTerm } from "../../utils/dataImportUtils";
 import { getBuildingFromRoom } from "../../utils/buildingUtils";
 import { useSchedules } from "../../contexts/ScheduleContext";
 
 const RoomGridGenerator = () => {
-  const { canEdit, canAction } = usePermissions();
+  const { canEdit } = usePermissions();
+  const canEditHere = canEdit("tools/room-grid-generator");
   const {
     availableSemesters = [],
     selectedSemester,
     getTermByLabel,
   } = useSchedules();
-  // Register actions for this feature so admin UI can see them
-  useEffect(() => {
-    registerActionKeys(["roomGrids.save", "roomGrids.delete"]);
-  }, []);
   const [allClassData, setAllClassData] = useState([]);
   const [buildings, setBuildings] = useState({});
   const [selectedBuilding, setSelectedBuilding] = useState("");
@@ -991,12 +987,8 @@ const RoomGridGenerator = () => {
   }, [fetchSavedGrids]);
 
   const saveGrid = async () => {
-    const allowed = canAction("roomGrids.save");
-    if (!allowed) {
-      showMessage(
-        "You do not have permission to save grids. An admin can grant “Room Grids: Save” to your account.",
-        "error",
-      );
+    if (!canEditHere) {
+      showMessage("You do not have permission to save grids.", "error");
       return;
     }
     if (!scheduleHtml || !selectedBuilding || !selectedRoom) {
@@ -1053,12 +1045,8 @@ const RoomGridGenerator = () => {
   };
 
   const deleteSavedGrid = async (grid) => {
-    const allowed = canEdit() || canAction("roomGrids.delete");
-    if (!allowed) {
-      showMessage(
-        "You do not have permission to delete grids. An admin can grant “Room Grids: Delete” to your account.",
-        "error",
-      );
+    if (!canEditHere) {
+      showMessage("You do not have permission to delete grids.", "error");
       return;
     }
     if (!grid) return;
@@ -1067,11 +1055,8 @@ const RoomGridGenerator = () => {
 
   const handleConfirmDelete = async () => {
     if (!deleteConfirmDialog.grid) return;
-    if (!canAction("roomGrids.delete")) {
-      showMessage(
-        "You do not have permission to delete grids. An admin can grant “Room Grids: Delete”.",
-        "error",
-      );
+    if (!canEditHere) {
+      showMessage("You do not have permission to delete grids.", "error");
       return;
     }
     try {
@@ -1083,15 +1068,13 @@ const RoomGridGenerator = () => {
         "roomGrids",
         deleteConfirmDialog.grid.id,
         deleteConfirmDialog.grid,
-        "RoomGridGenerator.jsx - deleteSavedGrid",
+        "RoomGridGenerator.jsx - deleteGrid",
       ).catch(() => {});
-      showMessage("Deleted saved grid.", "success");
-      setSavedGrids((prev) =>
-        prev.filter((g) => g.id !== deleteConfirmDialog.grid.id),
-      );
+      showMessage("Grid deleted.", "success");
+      fetchSavedGrids();
     } catch (err) {
-      console.error("Delete failed:", err);
-      showMessage("Failed to delete saved grid.");
+      console.error("Error deleting grid:", err);
+      showMessage("Failed to delete grid.", "error");
     } finally {
       setDeleteConfirmDialog({ isOpen: false, grid: null });
     }
@@ -1377,13 +1360,13 @@ const RoomGridGenerator = () => {
                     <FileText className="w-4 h-4 mr-2" />
                     Generate Schedule
                   </button>
-                  {canAction("roomGrids.save") && (
+                  {canEditHere && (
                     <button
                       onClick={saveGrid}
-                      className="btn-secondary"
-                      disabled={!scheduleHtml || isSaving}
+                      disabled={isSaving}
+                      className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
                     >
-                      <SaveIcon className="w-4 h-4 mr-2" />
+                      <SaveIcon className="w-4 h-4" />
                       {isSaving ? "Saving..." : "Save Grid"}
                     </button>
                   )}

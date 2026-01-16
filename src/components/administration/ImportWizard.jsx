@@ -19,7 +19,6 @@ import {
 import ImportPreviewModal from "./ImportPreviewModal";
 import ImportHistoryModal from "./ImportHistoryModal";
 import { useSchedules } from "../../contexts/ScheduleContext";
-import { useAuth } from "../../contexts/AuthContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { useUI } from "../../contexts/UIContext";
 import { normalizeTermLabel } from "../../utils/termUtils";
@@ -27,10 +26,11 @@ import { normalizeTermLabel } from "../../utils/termUtils";
 const ImportWizard = ({ embedded = false }) => {
   const { selectedSemester, refreshSchedules, refreshTerms, isTermLocked } =
     useSchedules();
-  const { isAdmin } = useAuth();
   const { loadPeople } = usePeople();
   const { showNotification } = useUI();
-  const { canImportData, canImportSchedule, canCreateRoom } = usePermissions();
+  const { canImport, canEdit } = usePermissions();
+  const canImportHere = canImport("tools/import-wizard");
+  const canEditHere = canEdit("tools/import-wizard");
   const [step, setStep] = useState(1);
   const [fileName, setFileName] = useState("");
   const [rawText, setRawText] = useState("");
@@ -209,8 +209,7 @@ const ImportWizard = ({ embedded = false }) => {
           semester || "",
           {
             persist: true,
-            includeOfficeRooms:
-              typeof canCreateRoom === "function" ? canCreateRoom() : isAdmin,
+            includeOfficeRooms: canEditHere,
           },
         );
         setPreviewTransaction(tx);
@@ -235,15 +234,7 @@ const ImportWizard = ({ embedded = false }) => {
     selectedFieldMap = null,
     matchResolutions = null,
   ) => {
-    if (importType === "schedule" && !canImportSchedule()) {
-      showNotification?.(
-        "warning",
-        "Permission Denied",
-        "You do not have permission to import schedules.",
-      );
-      return;
-    }
-    if (importType !== "schedule" && !canImportData()) {
+    if (!canImportHere || !canEditHere) {
       showNotification?.(
         "warning",
         "Permission Denied",
@@ -254,12 +245,7 @@ const ImportWizard = ({ embedded = false }) => {
     const importTerm = normalizeTermLabel(
       detectedTerm || selectedSemester || "",
     );
-    if (
-      importType === "schedule" &&
-      importTerm &&
-      isTermLocked?.(importTerm) &&
-      !isAdmin
-    ) {
+    if (importType === "schedule" && importTerm && isTermLocked?.(importTerm)) {
       showNotification?.(
         "warning",
         "Semester Locked",

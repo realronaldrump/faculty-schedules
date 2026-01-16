@@ -52,6 +52,7 @@ import {
   Database,
   Radio,
   BookOpen,
+  Shield,
 } from "lucide-react";
 
 // ==================== NAVIGATION CONFIGURATION ====================
@@ -252,36 +253,6 @@ const navigationItems = [
           hideFromRoles: ["faculty"],
         },
       },
-      {
-        id: "data-hygiene",
-        label: "Data Hygiene",
-        path: "tools/data-hygiene",
-        canonicalId: "tools/data-hygiene",
-        hidden: true,
-        permissions: {
-          hideFromRoles: ["faculty", "staff"],
-        },
-      },
-      {
-        id: "access-control",
-        label: "Access Control",
-        path: "administration/access-control",
-        canonicalId: "administration/access-control",
-        hidden: true,
-        permissions: {
-          hideFromRoles: ["faculty", "staff"],
-        },
-      },
-      {
-        id: "recent-changes",
-        label: "Recent Changes",
-        path: "administration/recent-changes",
-        canonicalId: "administration/recent-changes",
-        hidden: true,
-        permissions: {
-          hideFromRoles: ["faculty", "staff"],
-        },
-      }
     ],
   },
   {
@@ -306,6 +277,32 @@ const navigationItems = [
         label: "Acronyms",
         path: "resources/baylor-acronyms",
         canonicalId: "resources/baylor-acronyms",
+      },
+    ],
+  },
+  {
+    id: "administration",
+    label: "Administration",
+    icon: Shield,
+    adminOnly: true,
+    children: [
+      {
+        id: "access-control",
+        label: "Access Control",
+        path: "administration/access-control",
+        canonicalId: "administration/access-control",
+      },
+      {
+        id: "recent-changes",
+        label: "Recent Changes",
+        path: "administration/recent-changes",
+        canonicalId: "administration/recent-changes",
+      },
+      {
+        id: "data-hygiene",
+        label: "Data Hygiene",
+        path: "tools/data-hygiene",
+        canonicalId: "tools/data-hygiene",
       },
     ],
   },
@@ -520,7 +517,7 @@ function App() {
       case "scheduling/individual-availability":
       case "scheduling/group-meeting-scheduler":
         return (
-          <ProtectedContent pageId="scheduling/faculty-schedules">
+          <ProtectedContent pageId={currentPage}>
             <FacultyHub
               initialTab={
                 currentPage === "scheduling/individual-availability"
@@ -536,7 +533,7 @@ function App() {
       case "tools/outlook-export":
       case "tools/room-grid-generator":
         return (
-          <ProtectedContent pageId="scheduling/room-schedules">
+          <ProtectedContent pageId={currentPage}>
             <RoomsHub
               initialTab={
                 currentPage === "tools/outlook-export"
@@ -551,7 +548,7 @@ function App() {
       case "scheduling/student-schedules":
       case "analytics/student-worker-analytics":
         return (
-          <ProtectedContent pageId="scheduling/student-schedules">
+          <ProtectedContent pageId={currentPage}>
             <StudentWorkersHub
               initialTab={
                 currentPage === "analytics/student-worker-analytics"
@@ -567,7 +564,7 @@ function App() {
       case "analytics/program-management":
       case "people/baylor-id-manager":
         return (
-          <ProtectedContent pageId="people/people-directory">
+          <ProtectedContent pageId={currentPage}>
             <PeopleHub />
           </ProtectedContent>
         );
@@ -829,8 +826,8 @@ function App() {
                               setShowSemesterDropdown(false);
                             }}
                             className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${semester === selectedSemester
-                                ? "bg-baylor-green/5 text-baylor-green font-medium"
-                                : "text-gray-900"
+                              ? "bg-baylor-green/5 text-baylor-green font-medium"
+                              : "text-gray-900"
                               }`}
                           >
                             <span className="flex items-center justify-between">
@@ -871,8 +868,8 @@ function App() {
                       key={child.id}
                       onClick={() => handleNavigate(child.path)}
                       className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${currentPage === child.path
-                          ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
-                          : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                        ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
+                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
                         }`}
                     >
                       {child.label}

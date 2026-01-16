@@ -45,6 +45,7 @@ const BaylorIDManager = ({ embedded = false }) => {
     usePeopleOperations();
   const { showNotification } = useUI();
   const { canEdit } = usePermissions();
+  const canEditIds = canEdit("people/baylor-id-manager");
   const [filterText, setFilterText] = useState("");
   const [roleChecks, setRoleChecks] = useState({
     faculty: true,
@@ -140,11 +141,11 @@ const BaylorIDManager = ({ embedded = false }) => {
       setError(validation);
       return;
     }
-    if (!canEdit()) {
+    if (!canEditIds) {
       showNotification?.(
         "warning",
         "Permission Denied",
-        "Only admins can modify Baylor IDs.",
+        "You do not have permission to modify Baylor IDs.",
       );
       return;
     }

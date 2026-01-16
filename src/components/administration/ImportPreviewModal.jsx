@@ -371,374 +371,376 @@ const ImportPreviewModal = ({
           </button>
         </div>
 
-        {/* Stats Summary */}
-        <div className="p-6 bg-gray-50 border-b border-gray-200">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-              <div className="text-sm text-gray-600">Total Changes</div>
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {/* Stats Summary */}
+          <div className="p-6 bg-gray-50 border-b border-gray-200">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
+                <div className="text-sm text-gray-600">Total Changes</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">{stats.schedules}</div>
+                <div className="text-sm text-gray-600">Schedule Entries</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-baylor-green">{stats.people}</div>
+                <div className="text-sm text-gray-600">People</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-baylor-gold">{stats.rooms}</div>
+                <div className="text-sm text-gray-600">Rooms</div>
+              </div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{stats.schedules}</div>
-              <div className="text-sm text-gray-600">Schedule Entries</div>
+
+            {/* Selection Controls */}
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
+              <div className="flex items-center space-x-4">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectAll}
+                    onChange={toggleSelectAll}
+                    className="form-checkbox h-4 w-4 text-baylor-green"
+                  />
+                  <span className="text-sm font-medium text-gray-700">
+                    Select All ({stats.selected}/{stats.total})
+                  </span>
+                </label>
+              </div>
+              <div className="text-sm text-gray-600">
+                {stats.selected} changes selected for import
+              </div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-baylor-green">{stats.people}</div>
-              <div className="text-sm text-gray-600">People</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-baylor-gold">{stats.rooms}</div>
-              <div className="text-sm text-gray-600">Rooms</div>
-            </div>
+
+            {previewSummary && (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Preview Summary
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs text-gray-700">
+                  <div>
+                    <div className="font-semibold">{previewSummary.rowsProcessed ?? 0}</div>
+                    <div>Rows processed</div>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-green-700">{previewSummary.schedulesAdded ?? 0}</div>
+                    <div>Schedules added</div>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-baylor-gold">{previewSummary.schedulesUpdated ?? 0}</div>
+                    <div>Schedules updated</div>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-gray-600">{previewSummary.schedulesUnchanged ?? 0}</div>
+                    <div>Schedules unchanged</div>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-red-600">{previewSummary.rowsSkipped ?? 0}</div>
+                    <div>Rows skipped</div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Selection Controls */}
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
-            <div className="flex items-center space-x-4">
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectAll}
-                  onChange={toggleSelectAll}
-                  className="form-checkbox h-4 w-4 text-baylor-green"
-                />
-                <span className="text-sm font-medium text-gray-700">
-                  Select All ({stats.selected}/{stats.total})
-                </span>
-              </label>
-            </div>
-            <div className="text-sm text-gray-600">
-              {stats.selected} changes selected for import
-            </div>
-          </div>
+          {(validationErrors.length > 0 || validationWarnings.length > 0) && (
+            <div className="p-6 border-b border-gray-200 bg-white">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Validation Results</h3>
+                  <p className="text-sm text-gray-600">Review warnings or errors detected while parsing rows.</p>
+                </div>
+                {validationErrors.length > 0 && (
+                  <div className="text-sm text-red-600 font-semibold">
+                    {validationErrors.length} error{validationErrors.length === 1 ? '' : 's'}
+                  </div>
+                )}
+              </div>
 
-          {previewSummary && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                Preview Summary
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs text-gray-700">
-                <div>
-                  <div className="font-semibold">{previewSummary.rowsProcessed ?? 0}</div>
-                  <div>Rows processed</div>
+              {validationErrors.length > 0 && (
+                <div className="mb-4">
+                  <div className="text-sm font-semibold text-red-600 mb-2">Errors (rows skipped)</div>
+                  <ul className="list-disc list-inside text-sm text-red-600 space-y-1">
+                    {validationErrors.map((err, idx) => (
+                      <li key={`err-${idx}`}>{err}</li>
+                    ))}
+                  </ul>
                 </div>
+              )}
+
+              {validationWarnings.length > 0 && (
                 <div>
-                  <div className="font-semibold text-green-700">{previewSummary.schedulesAdded ?? 0}</div>
-                  <div>Schedules added</div>
+                  <div className="text-sm font-semibold text-yellow-700 mb-2">Warnings</div>
+                  <ul className="list-disc list-inside text-sm text-yellow-700 space-y-1">
+                    {validationWarnings.map((warn, idx) => (
+                      <li key={`warn-${idx}`}>{warn}</li>
+                    ))}
+                  </ul>
                 </div>
-                <div>
-                  <div className="font-semibold text-baylor-gold">{previewSummary.schedulesUpdated ?? 0}</div>
-                  <div>Schedules updated</div>
-                </div>
-                <div>
-                  <div className="font-semibold text-gray-600">{previewSummary.schedulesUnchanged ?? 0}</div>
-                  <div>Schedules unchanged</div>
-                </div>
-                <div>
-                  <div className="font-semibold text-red-600">{previewSummary.rowsSkipped ?? 0}</div>
-                  <div>Rows skipped</div>
-                </div>
-              </div>
+              )}
             </div>
           )}
-        </div>
 
-        {(validationErrors.length > 0 || validationWarnings.length > 0) && (
-          <div className="p-6 border-b border-gray-200 bg-white">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Validation Results</h3>
-                <p className="text-sm text-gray-600">Review warnings or errors detected while parsing rows.</p>
-              </div>
-              {validationErrors.length > 0 && (
-                <div className="text-sm text-red-600 font-semibold">
-                  {validationErrors.length} error{validationErrors.length === 1 ? '' : 's'}
+          {matchingIssues.length > 0 && (
+            <div className="p-6 border-b border-gray-200 bg-white">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Resolve People Matches</h3>
+                  <p className="text-sm text-gray-600">
+                    Link imported instructors to existing people or explicitly create new records.
+                  </p>
                 </div>
-              )}
-            </div>
-
-            {validationErrors.length > 0 && (
-              <div className="mb-4">
-                <div className="text-sm font-semibold text-red-600 mb-2">Errors (rows skipped)</div>
-                <ul className="list-disc list-inside text-sm text-red-600 space-y-1">
-                  {validationErrors.map((err, idx) => (
-                    <li key={`err-${idx}`}>{err}</li>
-                  ))}
-                </ul>
+                {unresolvedMatchCount > 0 && (
+                  <div className="flex items-center space-x-2 text-sm text-red-600">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>{unresolvedMatchCount} unresolved</span>
+                  </div>
+                )}
               </div>
-            )}
 
-            {validationWarnings.length > 0 && (
-              <div>
-                <div className="text-sm font-semibold text-yellow-700 mb-2">Warnings</div>
-                <ul className="list-disc list-inside text-sm text-yellow-700 space-y-1">
-                  {validationWarnings.map((warn, idx) => (
-                    <li key={`warn-${idx}`}>{warn}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
+              <div className="space-y-4">
+                {matchingIssues.map((issue) => {
+                  const proposed = issue.proposedPerson || {};
+                  const proposedName = `${proposed.firstName || ''} ${proposed.lastName || ''}`.trim() || 'Unnamed';
+                  const resolution = matchResolutions[issue.id];
+                  const searchTerm = matchSearchTerms[issue.id] || '';
+                  const normalizedSearch = searchTerm.trim().toLowerCase();
+                  const searchResults = normalizedSearch.length >= 2
+                    ? people
+                      .filter((person) => {
+                        const name = `${person.firstName || ''} ${person.lastName || ''}`.toLowerCase();
+                        const email = (person.email || '').toLowerCase();
+                        const id = (person.baylorId || '').toLowerCase();
+                        return name.includes(normalizedSearch) || email.includes(normalizedSearch) || id.includes(normalizedSearch);
+                      })
+                      .slice(0, 6)
+                    : [];
 
-        {matchingIssues.length > 0 && (
-          <div className="p-6 border-b border-gray-200 bg-white">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Resolve People Matches</h3>
-                <p className="text-sm text-gray-600">
-                  Link imported instructors to existing people or explicitly create new records.
-                </p>
-              </div>
-              {unresolvedMatchCount > 0 && (
-                <div className="flex items-center space-x-2 text-sm text-red-600">
-                  <AlertTriangle className="w-4 h-4" />
-                  <span>{unresolvedMatchCount} unresolved</span>
-                </div>
-              )}
-            </div>
+                  const resolvedPerson = resolution?.action === 'link'
+                    ? people.find((person) => person.id === resolution.personId) ||
+                      issue.candidates?.find((candidate) => candidate.id === resolution.personId)
+                    : null;
 
-            <div className="space-y-4">
-              {matchingIssues.map((issue) => {
-                const proposed = issue.proposedPerson || {};
-                const proposedName = `${proposed.firstName || ''} ${proposed.lastName || ''}`.trim() || 'Unnamed';
-                const resolution = matchResolutions[issue.id];
-                const searchTerm = matchSearchTerms[issue.id] || '';
-                const normalizedSearch = searchTerm.trim().toLowerCase();
-                const searchResults = normalizedSearch.length >= 2
-                  ? people
-                    .filter((person) => {
-                      const name = `${person.firstName || ''} ${person.lastName || ''}`.toLowerCase();
-                      const email = (person.email || '').toLowerCase();
-                      const id = (person.baylorId || '').toLowerCase();
-                      return name.includes(normalizedSearch) || email.includes(normalizedSearch) || id.includes(normalizedSearch);
-                    })
-                    .slice(0, 6)
-                  : [];
-
-                const resolvedPerson = resolution?.action === 'link'
-                  ? people.find((person) => person.id === resolution.personId) ||
-                    issue.candidates?.find((candidate) => candidate.id === resolution.personId)
-                  : null;
-
-                return (
-                  <div key={issue.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="text-sm font-semibold text-gray-900">{proposedName}</div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {proposed.baylorId ? `Baylor ID ${proposed.baylorId}` : 'No Baylor ID'}{' '}
-                          {proposed.email ? `• ${proposed.email}` : ''}
-                        </div>
-                        {issue.importType === 'schedule' && Array.isArray(issue.scheduleChangeIds) && (
+                  return (
+                    <div key={issue.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900">{proposedName}</div>
                           <div className="text-xs text-gray-500 mt-1">
-                            {issue.scheduleChangeIds.length} schedule{issue.scheduleChangeIds.length === 1 ? '' : 's'} affected
+                            {proposed.baylorId ? `Baylor ID ${proposed.baylorId}` : 'No Baylor ID'}{' '}
+                            {proposed.email ? `• ${proposed.email}` : ''}
                           </div>
-                        )}
-                        {issue.reason && (
-                          <div className="text-xs text-gray-500 mt-1">{issue.reason}</div>
-                        )}
-                      </div>
-                      <div className="text-xs">
-                        {resolution ? (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-800">
-                            {resolution.action === 'create' ? 'Create new' : 'Linked'}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full bg-yellow-100 text-yellow-800">
-                            Needs resolution
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {resolution?.action === 'link' && resolvedPerson && (
-                      <div className="mt-2 text-xs text-gray-600">
-                        Linked to {resolvedPerson.firstName} {resolvedPerson.lastName}
-                        {resolvedPerson.baylorId ? ` • ${resolvedPerson.baylorId}` : ''}
-                      </div>
-                    )}
-
-                    {issue.candidates?.length > 0 && (
-                      <div className="mt-3">
-                        <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
-                          Suggested matches
-                        </div>
-                        <div className="space-y-2">
-                          {issue.candidates.map((candidate) => (
-                            <div key={candidate.id} className="flex items-center justify-between border border-gray-200 rounded-md px-3 py-2">
-                              <div>
-                                <div className="text-sm font-medium text-gray-900">
-                                  {candidate.firstName} {candidate.lastName}
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                  {candidate.email || 'No email'}{candidate.baylorId ? ` • ${candidate.baylorId}` : ''}
-                                </div>
-                              </div>
-                              <button
-                                onClick={() => applyResolution(issue, { action: 'link', personId: candidate.id })}
-                                className="text-sm px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50"
-                              >
-                                Link
-                              </button>
+                          {issue.importType === 'schedule' && Array.isArray(issue.scheduleChangeIds) && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              {issue.scheduleChangeIds.length} schedule{issue.scheduleChangeIds.length === 1 ? '' : 's'} affected
                             </div>
-                          ))}
+                          )}
+                          {issue.reason && (
+                            <div className="text-xs text-gray-500 mt-1">{issue.reason}</div>
+                          )}
+                        </div>
+                        <div className="text-xs">
+                          {resolution ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-800">
+                              {resolution.action === 'create' ? 'Create new' : 'Linked'}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full bg-yellow-100 text-yellow-800">
+                              Needs resolution
+                            </span>
+                          )}
                         </div>
                       </div>
-                    )}
 
-                    <div className="mt-3">
-                      <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
-                        Search people
-                      </div>
-                      <input
-                        type="text"
-                        value={searchTerm}
-                        onChange={(e) => setMatchSearchTerms(prev => ({ ...prev, [issue.id]: e.target.value }))}
-                        placeholder="Search by name, email, or Baylor ID..."
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                      />
-                      {normalizedSearch.length >= 2 && (
-                        <div className="mt-2 space-y-2">
-                          {searchResults.length === 0 ? (
-                            <div className="text-xs text-gray-500">No people found.</div>
-                          ) : (
-                            searchResults.map((person) => (
-                              <div key={person.id} className="flex items-center justify-between border border-gray-200 rounded-md px-3 py-2">
+                      {resolution?.action === 'link' && resolvedPerson && (
+                        <div className="mt-2 text-xs text-gray-600">
+                          Linked to {resolvedPerson.firstName} {resolvedPerson.lastName}
+                          {resolvedPerson.baylorId ? ` • ${resolvedPerson.baylorId}` : ''}
+                        </div>
+                      )}
+
+                      {issue.candidates?.length > 0 && (
+                        <div className="mt-3">
+                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                            Suggested matches
+                          </div>
+                          <div className="space-y-2">
+                            {issue.candidates.map((candidate) => (
+                              <div key={candidate.id} className="flex items-center justify-between border border-gray-200 rounded-md px-3 py-2">
                                 <div>
                                   <div className="text-sm font-medium text-gray-900">
-                                    {person.firstName} {person.lastName}
+                                    {candidate.firstName} {candidate.lastName}
                                   </div>
                                   <div className="text-xs text-gray-500">
-                                    {person.email || 'No email'}{person.baylorId ? ` • ${person.baylorId}` : ''}
+                                    {candidate.email || 'No email'}{candidate.baylorId ? ` • ${candidate.baylorId}` : ''}
                                   </div>
                                 </div>
                                 <button
-                                  onClick={() => applyResolution(issue, { action: 'link', personId: person.id })}
+                                  onClick={() => applyResolution(issue, { action: 'link', personId: candidate.id })}
                                   className="text-sm px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50"
                                 >
                                   Link
                                 </button>
                               </div>
-                            ))
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-between">
-                      <button
-                        onClick={() => applyResolution(issue, { action: 'create' })}
-                        className="text-sm px-3 py-2 bg-baylor-green text-white rounded-md hover:bg-baylor-green/90"
-                      >
-                        Create new person
-                      </button>
-                      {resolution && (
-                        <button
-                          onClick={() => clearResolution(issue)}
-                          className="text-sm text-gray-600 hover:text-gray-900"
-                        >
-                          Clear selection
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Changes List */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {Object.entries(groupedChanges).map(([collection, actions]) => {
-            const CollectionIcon = getCollectionIcon(collection);
-            const hasChanges = Object.values(actions).some(arr => arr.length > 0);
-
-            if (!hasChanges) return null;
-
-            return (
-              <div key={collection} className="mb-6">
-                <button
-                  onClick={() => toggleSection(collection)}
-                  className="flex items-center space-x-3 w-full text-left p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  <CollectionIcon className="w-5 h-5 text-gray-600" />
-                  <span className="font-semibold text-gray-900 capitalize">
-                    {collection}
-                  </span>
-                  <span className="text-sm text-gray-500">
-                    ({Object.values(actions).reduce((sum, arr) => sum + arr.length, 0)} changes)
-                  </span>
-                </button>
-
-                {expandedSections.has(collection) && (
-                  <div className="mt-3 space-y-2">
-                    {Object.entries(actions).map(([action, changes]) => {
-                      if (changes.length === 0) return null;
-
-                      return (
-                        <div key={action}>
-                          <h4 className="text-sm font-medium text-gray-700 mb-2 capitalize">
-                            {getActionLabel(action)} ({changes.length})
-                          </h4>
-                          <div className="space-y-2">
-                            {changes.map((change) => (
-                              <div
-                                key={change.id}
-                                className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors"
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center space-x-3">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedChanges.has(change.id)}
-                                      onChange={() => toggleChange(change.id)}
-                                      className="form-checkbox h-4 w-4 text-baylor-green"
-                                    />
-                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getActionColor(change.action)}`}>
-                                      {getActionLabel(change.action)}
-                                    </span>
-                                    <span className="font-medium text-gray-900">
-                                      {formatChangeTitle(change)}
-                                    </span>
-                                  </div>
-                                  <button
-                                    onClick={() => toggleDetails(change.id)}
-                                    className="p-1 hover:bg-gray-100 rounded transition-colors"
-                                  >
-                                    {showDetails[change.id] ?
-                                      <EyeOff className="w-4 h-4 text-gray-500" /> :
-                                      <Eye className="w-4 h-4 text-gray-500" />
-                                    }
-                                  </button>
-                                </div>
-
-                                {showDetails[change.id] && (
-                                  <div className="mt-3 pt-3 border-t border-gray-100">
-                                    <div className="grid grid-cols-2 gap-3 text-sm">
-                                      {Object.entries(formatChangeDetails(change)).map(([key, value]) => (
-                                        <div key={key}>
-                                          <span className="font-medium text-gray-600">{key}:</span>
-                                          <span className="ml-2 text-gray-900">{value}</span>
-                                        </div>
-                                      ))}
-                                    </div>
-
-                                    {change.action === 'modify' && renderFieldDiffs(change)}
-                                  </div>
-                                )}
-                              </div>
                             ))}
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                      )}
+
+                      <div className="mt-3">
+                        <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                          Search people
+                        </div>
+                        <input
+                          type="text"
+                          value={searchTerm}
+                          onChange={(e) => setMatchSearchTerms(prev => ({ ...prev, [issue.id]: e.target.value }))}
+                          placeholder="Search by name, email, or Baylor ID..."
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                        {normalizedSearch.length >= 2 && (
+                          <div className="mt-2 space-y-2">
+                            {searchResults.length === 0 ? (
+                              <div className="text-xs text-gray-500">No people found.</div>
+                            ) : (
+                              searchResults.map((person) => (
+                                <div key={person.id} className="flex items-center justify-between border border-gray-200 rounded-md px-3 py-2">
+                                  <div>
+                                    <div className="text-sm font-medium text-gray-900">
+                                      {person.firstName} {person.lastName}
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                      {person.email || 'No email'}{person.baylorId ? ` • ${person.baylorId}` : ''}
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => applyResolution(issue, { action: 'link', personId: person.id })}
+                                    className="text-sm px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50"
+                                  >
+                                    Link
+                                  </button>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between">
+                        <button
+                          onClick={() => applyResolution(issue, { action: 'create' })}
+                          className="text-sm px-3 py-2 bg-baylor-green text-white rounded-md hover:bg-baylor-green/90"
+                        >
+                          Create new person
+                        </button>
+                        {resolution && (
+                          <button
+                            onClick={() => clearResolution(issue)}
+                            className="text-sm text-gray-600 hover:text-gray-900"
+                          >
+                            Clear selection
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          )}
+
+          {/* Changes List */}
+          <div className="p-6">
+            {Object.entries(groupedChanges).map(([collection, actions]) => {
+              const CollectionIcon = getCollectionIcon(collection);
+              const hasChanges = Object.values(actions).some(arr => arr.length > 0);
+
+              if (!hasChanges) return null;
+
+              return (
+                <div key={collection} className="mb-6">
+                  <button
+                    onClick={() => toggleSection(collection)}
+                    className="flex items-center space-x-3 w-full text-left p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    <CollectionIcon className="w-5 h-5 text-gray-600" />
+                    <span className="font-semibold text-gray-900 capitalize">
+                      {collection}
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      ({Object.values(actions).reduce((sum, arr) => sum + arr.length, 0)} changes)
+                    </span>
+                  </button>
+
+                  {expandedSections.has(collection) && (
+                    <div className="mt-3 space-y-2">
+                      {Object.entries(actions).map(([action, changes]) => {
+                        if (changes.length === 0) return null;
+
+                        return (
+                          <div key={action}>
+                            <h4 className="text-sm font-medium text-gray-700 mb-2 capitalize">
+                              {getActionLabel(action)} ({changes.length})
+                            </h4>
+                            <div className="space-y-2">
+                              {changes.map((change) => (
+                                <div
+                                  key={change.id}
+                                  className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-3">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedChanges.has(change.id)}
+                                        onChange={() => toggleChange(change.id)}
+                                        className="form-checkbox h-4 w-4 text-baylor-green"
+                                      />
+                                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getActionColor(change.action)}`}>
+                                        {getActionLabel(change.action)}
+                                      </span>
+                                      <span className="font-medium text-gray-900">
+                                        {formatChangeTitle(change)}
+                                      </span>
+                                    </div>
+                                    <button
+                                      onClick={() => toggleDetails(change.id)}
+                                      className="p-1 hover:bg-gray-100 rounded transition-colors"
+                                    >
+                                      {showDetails[change.id] ?
+                                        <EyeOff className="w-4 h-4 text-gray-500" /> :
+                                        <Eye className="w-4 h-4 text-gray-500" />
+                                      }
+                                    </button>
+                                  </div>
+
+                                  {showDetails[change.id] && (
+                                    <div className="mt-3 pt-3 border-t border-gray-100">
+                                      <div className="grid grid-cols-2 gap-3 text-sm">
+                                        {Object.entries(formatChangeDetails(change)).map(([key, value]) => (
+                                          <div key={key}>
+                                            <span className="font-medium text-gray-600">{key}:</span>
+                                            <span className="ml-2 text-gray-900">{value}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+
+                                      {change.action === 'modify' && renderFieldDiffs(change)}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Footer */}

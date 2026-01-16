@@ -69,7 +69,7 @@ const useAdjunctExtras = () => {
   return { showOnlyWithCourses, setShowOnlyWithCourses };
 };
 
-const useNoExtras = () => ({ });
+const useNoExtras = () => ({});
 
 const exportFacultyCSV = (records = []) => {
   const headers = ['Name', 'Program', 'Job Title', 'Email', 'Phone', 'Office', 'Baylor ID', 'Courses', 'Remote'];
@@ -804,7 +804,12 @@ const adjunctDirectoryConfig = {
 
     return filtered;
   },
-  enableCreate: false,
+  permissions: {
+    canEdit: () => !canUseWindow || window?.appPermissions?.canEditAdjunct !== false,
+    canDelete: () => !canUseWindow || window?.appPermissions?.canDeleteAdjunct !== false,
+    canCreate: () => !canUseWindow || window?.appPermissions?.canCreateAdjunct !== false
+  },
+  enableCreate: true,
   emptyMessage: 'No adjunct faculty found.',
   getColumns: ({ baseColumns, renderStatusToggles, editFormData, newRecord, handleChange, handleCreateChange, setEditFormData, setNewRecord }) => {
     const statusToggles = [
@@ -900,7 +905,7 @@ const adjunctDirectoryConfig = {
       Only show adjunct with at least 1 course
     </label>
   ),
-  trailingActions: ({ state }) => (
+  trailingActions: ({ handlers, state }) => (
     <>
       {state.changeHistory.length > 0 && (
         <button
@@ -911,6 +916,14 @@ const adjunctDirectoryConfig = {
           Changes ({state.changeHistory.length})
         </button>
       )}
+      <button
+        onClick={handlers.handleCreate}
+        className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+        disabled={canUseWindow && window?.appPermissions?.canCreateAdjunct === false}
+      >
+        <Plus size={18} />
+        Add Adjunct
+      </button>
     </>
   ),
   filterContent: ({ state, filterOptions }) => (

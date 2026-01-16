@@ -1673,19 +1673,21 @@ const TemperatureMonitoring = () => {
                   const snapshot = snapshotLookup[roomKey]?.[selectedSnapshotId];
                   const isMissing = !snapshot || snapshot.status === 'missing';
                   const tempLabel = formatSnapshotTemp(snapshot);
+                  const roomNum = room.spaceNumber || room.roomNumber || room.name || '';
+                  // Compact display: just room number, temp in smaller text below
                   return (
                     <button
                       key={roomKey}
                       type="button"
                       onPointerDown={(event) => handleMarkerPointerDown(roomKey, event)}
-                      className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full px-2 py-1 text-xs font-semibold shadow-sm ${isMissing ? 'bg-gray-300 text-gray-700' : 'bg-baylor-green text-white'}`}
+                      className={`absolute -translate-x-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-[10px] font-medium shadow-sm whitespace-nowrap ${isMissing ? 'bg-gray-400/90 text-white' : 'bg-baylor-green/90 text-white'}`}
                       style={{ left: `${marker.xPct}%`, top: `${marker.yPct}%` }}
                       title={`${getRoomLabel(room, spacesByKey)} - ${tempLabel}`}
                     >
-                      <div className="flex flex-col items-center leading-tight">
-                        <span>{room.spaceNumber || room.roomNumber || room.name}</span>
-                        <span>{tempLabel}</span>
-                      </div>
+                      <span>{roomNum}</span>
+                      {!isMissing && snapshot?.temperatureF != null && (
+                        <span className="ml-1 opacity-90">{Math.round(snapshot.temperatureF)}°</span>
+                      )}
                     </button>
                   );
                 })}

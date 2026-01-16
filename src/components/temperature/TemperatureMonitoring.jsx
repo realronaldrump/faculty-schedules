@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Calendar,
@@ -15,10 +15,10 @@ import {
   Save,
   Thermometer,
   Trash2,
-  X
-} from 'lucide-react';
-import Papa from 'papaparse';
-import { v4 as uuidv4 } from 'uuid';
+  X,
+} from "lucide-react";
+import Papa from "papaparse";
+import { v4 as uuidv4 } from "uuid";
 import {
   Timestamp,
   collection,
@@ -32,16 +32,20 @@ import {
   serverTimestamp,
   deleteDoc,
   orderBy,
-  limit
-} from 'firebase/firestore';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import { db, storage } from '../../firebase';
-import { useAuth } from '../../contexts/AuthContext.jsx';
-import { useData } from '../../contexts/DataContext.jsx';
-import { useUI } from '../../contexts/UIContext.jsx';
-import { resolveBuildingDisplayName } from '../../utils/locationService';
-import { resolveSpaceDisplayName } from '../../utils/spaceUtils';
-import { formatMinutesToLabel, formatMinutesToTime, parseTime } from '../../utils/timeUtils';
+  limit,
+} from "firebase/firestore";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { db, storage } from "../../firebase";
+import { useAuth } from "../../contexts/AuthContext.jsx";
+import { useData } from "../../contexts/DataContext.jsx";
+import { useUI } from "../../contexts/UIContext.jsx";
+import { resolveBuildingDisplayName } from "../../utils/locationService";
+import { resolveSpaceDisplayName } from "../../utils/spaceUtils";
+import {
+  formatMinutesToLabel,
+  formatMinutesToTime,
+  parseTime,
+} from "../../utils/timeUtils";
 import {
   detectGoveeCsvColumns,
   extractRoomTokens,
@@ -56,15 +60,15 @@ import {
   toDeviceDayId,
   toDeviceId,
   toSnapshotDocId,
-  zonedTimeToUtc
-} from '../../utils/temperatureUtils';
-import ConfirmDialog from '../shared/ConfirmDialog';
+  zonedTimeToUtc,
+} from "../../utils/temperatureUtils";
+import ConfirmDialog from "../shared/ConfirmDialog";
 
-const DEFAULT_TIMEZONE = 'America/Chicago';
+const DEFAULT_TIMEZONE = "America/Chicago";
 const AUTO_MATCH_THRESHOLD = 0.85;
 const DEFAULT_SNAPSHOT_TIMES = [
-  { label: '8:30 AM', minutes: 8 * 60 + 30, toleranceMinutes: 15 },
-  { label: '4:30 PM', minutes: 16 * 60 + 30, toleranceMinutes: 15 }
+  { label: "8:30 AM", minutes: 8 * 60 + 30, toleranceMinutes: 15 },
+  { label: "4:30 PM", minutes: 16 * 60 + 30, toleranceMinutes: 15 },
 ];
 
 const buildDefaultSettings = ({ buildingCode, buildingName }) => ({
@@ -73,37 +77,48 @@ const buildDefaultSettings = ({ buildingCode, buildingName }) => ({
   timezone: DEFAULT_TIMEZONE,
   snapshotTimes: DEFAULT_SNAPSHOT_TIMES.map((slot) => ({
     id: uuidv4(),
-    ...slot
+    ...slot,
   })),
   floorplan: null,
-  markers: {}
+  markers: {},
 });
 
 const sortRooms = (a, b) => {
-  const aNum = parseInt(a.spaceNumber || a.roomNumber || '', 10);
-  const bNum = parseInt(b.spaceNumber || b.roomNumber || '', 10);
+  const aNum = parseInt(a.spaceNumber || a.roomNumber || "", 10);
+  const bNum = parseInt(b.spaceNumber || b.roomNumber || "", 10);
   if (!Number.isNaN(aNum) && !Number.isNaN(bNum) && aNum !== bNum) {
     return aNum - bNum;
   }
-  return (a.displayName || a.name || '').localeCompare(b.displayName || b.name || '', undefined, { numeric: true });
+  return (a.displayName || a.name || "").localeCompare(
+    b.displayName || b.name || "",
+    undefined,
+    { numeric: true },
+  );
 };
 
 const getRoomLabel = (room, spacesByKey) => {
-  if (!room) return 'Unknown';
-  const key = room.spaceKey || room.id || '';
-  const resolved = key ? resolveSpaceDisplayName(key, spacesByKey) : '';
-  return resolved || room.displayName || room.name || room.roomNumber || room.id || 'Unknown';
+  if (!room) return "Unknown";
+  const key = room.spaceKey || room.id || "";
+  const resolved = key ? resolveSpaceDisplayName(key, spacesByKey) : "";
+  return (
+    resolved ||
+    room.displayName ||
+    room.name ||
+    room.roomNumber ||
+    room.id ||
+    "Unknown"
+  );
 };
 
 const toCsvSafe = (value) => {
-  const str = value == null ? '' : String(value);
+  const str = value == null ? "" : String(value);
   return `"${str.replace(/"/g, '""')}"`;
 };
 
 const isValidTimeZone = (timeZone) => {
   if (!timeZone) return false;
   try {
-    Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
+    Intl.DateTimeFormat("en-US", { timeZone }).format(new Date());
     return true;
   } catch (_) {
     return false;
@@ -111,19 +126,19 @@ const isValidTimeZone = (timeZone) => {
 };
 
 const TemperatureMonitoring = () => {
-  const { isAdmin, loading: authLoading, user } = useAuth();
+  const { loading: authLoading, user } = useAuth();
   const { spacesList = [], spacesByKey, roomsLoading } = useData();
   const { showNotification } = useUI();
   const mapRef = useRef(null);
   const dragStateRef = useRef(null);
 
-  const [selectedBuilding, setSelectedBuilding] = useState('');
+  const [selectedBuilding, setSelectedBuilding] = useState("");
   const [buildingSettings, setBuildingSettings] = useState(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsExists, setSettingsExists] = useState(false);
-  const [selectedDate, setSelectedDate] = useState('');
-  const [selectedSnapshotId, setSelectedSnapshotId] = useState('');
-  const [viewMode, setViewMode] = useState('floorplan');
+  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
+  const [viewMode, setViewMode] = useState("floorplan");
   const [snapshotDocs, setSnapshotDocs] = useState([]);
   const [hiddenBuildingCodes, setHiddenBuildingCodes] = useState(new Set());
   const [hiddenLoaded, setHiddenLoaded] = useState(false);
@@ -139,45 +154,50 @@ const TemperatureMonitoring = () => {
 
   const [editingPositions, setEditingPositions] = useState(false);
   const [markerDrafts, setMarkerDrafts] = useState({});
-  const [activePlacementRoomId, setActivePlacementRoomId] = useState('');
+  const [activePlacementRoomId, setActivePlacementRoomId] = useState("");
 
-  const [newSnapshotTime, setNewSnapshotTime] = useState('');
+  const [newSnapshotTime, setNewSnapshotTime] = useState("");
   const [newSnapshotTolerance, setNewSnapshotTolerance] = useState(15);
 
-  const [historicalStart, setHistoricalStart] = useState('');
-  const [historicalEnd, setHistoricalEnd] = useState('');
-  const [historicalRoomId, setHistoricalRoomId] = useState('');
+  const [historicalStart, setHistoricalStart] = useState("");
+  const [historicalEnd, setHistoricalEnd] = useState("");
+  const [historicalRoomId, setHistoricalRoomId] = useState("");
   const [historicalDocs, setHistoricalDocs] = useState([]);
   const [historicalLoading, setHistoricalLoading] = useState(false);
   const [buildingIsHidden, setBuildingIsHidden] = useState(false);
 
-  const [exportStart, setExportStart] = useState('');
-  const [exportEnd, setExportEnd] = useState('');
+  const [exportStart, setExportStart] = useState("");
+  const [exportEnd, setExportEnd] = useState("");
   const [exportRoomIds, setExportRoomIds] = useState([]);
   const [exportSnapshotIds, setExportSnapshotIds] = useState([]);
   const [exporting, setExporting] = useState(false);
 
-  const [recomputeStart, setRecomputeStart] = useState('');
-  const [recomputeEnd, setRecomputeEnd] = useState('');
+  const [recomputeStart, setRecomputeStart] = useState("");
+  const [recomputeEnd, setRecomputeEnd] = useState("");
   const [recomputing, setRecomputing] = useState(false);
 
-  const [showDeleteFloorplanConfirm, setShowDeleteFloorplanConfirm] = useState(false);
+  const [showDeleteFloorplanConfirm, setShowDeleteFloorplanConfirm] =
+    useState(false);
   const [deleteImportId, setDeleteImportId] = useState(null);
   const [deletingImport, setDeletingImport] = useState(false);
 
   const formatSnapshotTemp = (snapshot) => {
-    if (!snapshot || snapshot.status === 'missing') return 'No data';
-    if (snapshot.temperatureF != null) return `${Math.round(snapshot.temperatureF)} F`;
-    if (snapshot.temperatureC != null) return `${Math.round(snapshot.temperatureC)} C`;
-    return 'No data';
+    if (!snapshot || snapshot.status === "missing") return "No data";
+    if (snapshot.temperatureF != null)
+      return `${Math.round(snapshot.temperatureF)} F`;
+    if (snapshot.temperatureC != null)
+      return `${Math.round(snapshot.temperatureC)} C`;
+    return "No data";
   };
 
   const normalizeMarkerMap = (markers = {}) => {
-    if (!markers || typeof markers !== 'object') return {};
+    if (!markers || typeof markers !== "object") return {};
     const next = {};
     Object.entries(markers).forEach(([key, value]) => {
       if (!key) return;
-      const direct = roomLookup[key] || (spacesByKey instanceof Map ? spacesByKey.get(key) : null);
+      const direct =
+        roomLookup[key] ||
+        (spacesByKey instanceof Map ? spacesByKey.get(key) : null);
       if (direct) {
         next[key] = value;
         return;
@@ -196,9 +216,16 @@ const TemperatureMonitoring = () => {
     const grouped = {};
     (spacesList || []).forEach((room) => {
       if (room?.isActive === false) return;
-      const buildingCode = (room.buildingCode || room.building || '').toString().trim().toUpperCase();
+      const buildingCode = (room.buildingCode || room.building || "")
+        .toString()
+        .trim()
+        .toUpperCase();
       if (!buildingCode) return;
-      if (buildingCode.toLowerCase() === 'online' || buildingCode.toLowerCase() === 'off campus') return;
+      if (
+        buildingCode.toLowerCase() === "online" ||
+        buildingCode.toLowerCase() === "off campus"
+      )
+        return;
       if (!grouped[buildingCode]) grouped[buildingCode] = [];
       grouped[buildingCode].push(room);
     });
@@ -210,19 +237,33 @@ const TemperatureMonitoring = () => {
 
   const buildingOptions = useMemo(() => {
     return Object.keys(roomsByBuilding)
-      .filter(code => showHidden || !hiddenBuildingCodes.has(code) || code === selectedBuilding)
+      .filter(
+        (code) =>
+          showHidden ||
+          !hiddenBuildingCodes.has(code) ||
+          code === selectedBuilding,
+      )
       .map((code) => ({
         code,
-        name: resolveBuildingDisplayName(code) || code
+        name: resolveBuildingDisplayName(code) || code,
       }))
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+      .sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { numeric: true }),
+      );
   }, [roomsByBuilding, hiddenBuildingCodes, showHidden, selectedBuilding]);
 
-  const buildingList = useMemo(() => buildingOptions.map((item) => item.code), [buildingOptions]);
+  const buildingList = useMemo(
+    () => buildingOptions.map((item) => item.code),
+    [buildingOptions],
+  );
 
-  const selectedBuildingName = useMemo(() => (
-    selectedBuilding ? (resolveBuildingDisplayName(selectedBuilding) || selectedBuilding) : ''
-  ), [selectedBuilding]);
+  const selectedBuildingName = useMemo(
+    () =>
+      selectedBuilding
+        ? resolveBuildingDisplayName(selectedBuilding) || selectedBuilding
+        : "",
+    [selectedBuilding],
+  );
 
   const roomsForBuilding = useMemo(() => {
     return roomsByBuilding[selectedBuilding] || [];
@@ -251,7 +292,9 @@ const TemperatureMonitoring = () => {
   }, [snapshotDocs]);
 
   const hasUnresolvedMappings = useMemo(() => {
-    return pendingMappings.some((item) => !mappingOverrides[item.deviceId] && !item.suggestedRoomId);
+    return pendingMappings.some(
+      (item) => !mappingOverrides[item.deviceId] && !item.suggestedRoomId,
+    );
   }, [pendingMappings, mappingOverrides]);
 
   const importSummary = useMemo(() => {
@@ -262,7 +305,7 @@ const TemperatureMonitoring = () => {
       parsedRows: 0,
       duplicateCount: 0,
       errorCount: 0,
-      readyCount: 0
+      readyCount: 0,
     };
     const deviceIds = new Set();
     importItems.forEach((item) => {
@@ -271,7 +314,11 @@ const TemperatureMonitoring = () => {
       summary.errorCount += item.errorCount ?? 0;
       if (item.duplicate) summary.duplicateCount += 1;
       if (item.deviceId) deviceIds.add(item.deviceId);
-      if (!item.duplicate && (item.errorCount ?? 0) === 0 && (item.parsedCount ?? 0) > 0) {
+      if (
+        !item.duplicate &&
+        (item.errorCount ?? 0) === 0 &&
+        (item.parsedCount ?? 0) > 0
+      ) {
         summary.readyCount += 1;
       }
     });
@@ -279,40 +326,46 @@ const TemperatureMonitoring = () => {
     return summary;
   }, [importItems]);
 
-  // Load hidden buildings first (for admins)
+  // Load hidden buildings
   useEffect(() => {
-    if (!isAdmin) {
-      // Non-admins don't see hidden buildings, mark as loaded immediately
-      setHiddenLoaded(true);
-      return;
-    }
     const fetchHidden = async () => {
       try {
-        const q = query(collection(db, 'temperatureBuildingSettings'), where('hidden', '==', true));
+        const q = query(
+          collection(db, "temperatureBuildingSettings"),
+          where("hidden", "==", true),
+        );
         const snap = await getDocs(q);
-        const codes = new Set(snap.docs.map(d => d.data().buildingCode));
+        const codes = new Set(snap.docs.map((d) => d.data().buildingCode));
         setHiddenBuildingCodes(codes);
       } catch (err) {
-        console.error('Error fetching hidden buildings:', err);
+        console.error("Error fetching hidden buildings:", err);
       } finally {
         setHiddenLoaded(true);
       }
     };
     fetchHidden();
-  }, [isAdmin]);
+  }, []);
 
   // Set default building - skip hidden buildings unless explicitly saved as default
   useEffect(() => {
     // Wait for hidden buildings to load before selecting default
     if (!hiddenLoaded) return;
     if (!selectedBuilding && buildingList.length > 0) {
-      const defaultBuilding = localStorage.getItem('temperatureDefaultBuilding');
+      const defaultBuilding = localStorage.getItem(
+        "temperatureDefaultBuilding",
+      );
       // If user had explicitly set a default building, use it even if hidden
-      if (defaultBuilding && buildingList.includes(defaultBuilding) && !hiddenBuildingCodes.has(defaultBuilding)) {
+      if (
+        defaultBuilding &&
+        buildingList.includes(defaultBuilding) &&
+        !hiddenBuildingCodes.has(defaultBuilding)
+      ) {
         setSelectedBuilding(defaultBuilding);
       } else {
         // Find the first non-hidden building
-        const firstNonHidden = buildingList.find(code => !hiddenBuildingCodes.has(code));
+        const firstNonHidden = buildingList.find(
+          (code) => !hiddenBuildingCodes.has(code),
+        );
         setSelectedBuilding(firstNonHidden || buildingList[0]);
       }
     }
@@ -325,7 +378,7 @@ const TemperatureMonitoring = () => {
     setMappingOverrides({});
     setExportRoomIds([]);
     setExportSnapshotIds([]);
-    setHistoricalRoomId('');
+    setHistoricalRoomId("");
     setHistoricalDocs([]);
   }, [selectedBuilding]);
 
@@ -337,52 +390,60 @@ const TemperatureMonitoring = () => {
     const loadSettings = async () => {
       setSettingsLoading(true);
       try {
-        const buildingName = resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
+        const buildingName =
+          resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
         const buildingKey = toBuildingKey(selectedBuilding);
-        const legacyKey = toBuildingKey(buildingName);
-        let snap = await getDoc(doc(db, 'temperatureBuildingSettings', buildingKey));
-        let usedLegacy = false;
-        if (!snap.exists() && legacyKey !== buildingKey) {
-          const legacySnap = await getDoc(doc(db, 'temperatureBuildingSettings', legacyKey));
-          if (legacySnap.exists()) {
-            snap = legacySnap;
-            usedLegacy = true;
-          }
-        }
+        const snap = await getDoc(
+          doc(db, "temperatureBuildingSettings", buildingKey),
+        );
         if (!active) return;
         if (snap.exists()) {
           const data = snap.data();
-          const defaultTimes = buildDefaultSettings({ buildingCode: selectedBuilding, buildingName }).snapshotTimes;
-          const nextTimes = Array.isArray(data.snapshotTimes) && data.snapshotTimes.length > 0
-            ? data.snapshotTimes
-            : defaultTimes;
+          const defaultTimes = buildDefaultSettings({
+            buildingCode: selectedBuilding,
+            buildingName,
+          }).snapshotTimes;
+          const nextTimes =
+            Array.isArray(data.snapshotTimes) && data.snapshotTimes.length > 0
+              ? data.snapshotTimes
+              : defaultTimes;
           const nextSettings = {
             ...data,
             buildingCode: selectedBuilding,
             buildingName,
-            snapshotTimes: [...nextTimes].sort((a, b) => (a.minutes || 0) - (b.minutes || 0)),
-            markers: normalizeMarkerMap(data.markers || {})
+            snapshotTimes: [...nextTimes].sort(
+              (a, b) => (a.minutes || 0) - (b.minutes || 0),
+            ),
+            markers: normalizeMarkerMap(data.markers || {}),
           };
           setBuildingSettings(nextSettings);
           setBuildingIsHidden(data.hidden === true);
           setSettingsExists(true);
-          if (usedLegacy && isAdmin) {
-            await setDoc(doc(db, 'temperatureBuildingSettings', buildingKey), {
-              ...nextSettings,
-              migratedFrom: legacyKey,
-              updatedAt: new Date().toISOString()
-            }, { merge: true });
-          }
         } else {
-          setBuildingSettings(buildDefaultSettings({ buildingCode: selectedBuilding, buildingName }));
+          setBuildingSettings(
+            buildDefaultSettings({
+              buildingCode: selectedBuilding,
+              buildingName,
+            }),
+          );
           setBuildingIsHidden(false);
           setSettingsExists(false);
         }
       } catch (error) {
-        console.error('Error loading temperature settings:', error);
-        showNotification('error', 'Settings Load Failed', 'Unable to load temperature settings for this building.');
-        const buildingName = resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
-        setBuildingSettings(buildDefaultSettings({ buildingCode: selectedBuilding, buildingName }));
+        console.error("Error loading temperature settings:", error);
+        showNotification(
+          "error",
+          "Settings Load Failed",
+          "Unable to load temperature settings for this building.",
+        );
+        const buildingName =
+          resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
+        setBuildingSettings(
+          buildDefaultSettings({
+            buildingCode: selectedBuilding,
+            buildingName,
+          }),
+        );
         setBuildingIsHidden(false);
         setSettingsExists(false);
       } finally {
@@ -393,30 +454,32 @@ const TemperatureMonitoring = () => {
     const loadImportHistory = async () => {
       try {
         const q = query(
-          collection(db, 'temperatureImports'),
-          where('buildingCode', '==', selectedBuilding),
-          orderBy('createdAt', 'desc'),
-          limit(20)
+          collection(db, "temperatureImports"),
+          where("buildingCode", "==", selectedBuilding),
+          orderBy("createdAt", "desc"),
+          limit(20),
         );
         const snap = await getDocs(q);
-        const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         setImportHistory(items);
       } catch (err) {
-        console.error('Failed to load history', err);
+        console.error("Failed to load history", err);
       }
     };
 
     loadSettings();
-    if (isAdmin) loadImportHistory();
+    loadImportHistory();
 
     return () => {
       active = false;
     };
-  }, [selectedBuilding, showNotification, authLoading, user, isAdmin]);
+  }, [selectedBuilding, showNotification, authLoading, user]);
 
   useEffect(() => {
     if (!selectedDate && buildingSettings?.timezone) {
-      setSelectedDate(formatDateInTimeZone(new Date(), buildingSettings.timezone));
+      setSelectedDate(
+        formatDateInTimeZone(new Date(), buildingSettings.timezone),
+      );
     }
   }, [buildingSettings?.timezone, selectedDate]);
 
@@ -434,40 +497,30 @@ const TemperatureMonitoring = () => {
     let active = true;
     const loadDevices = async () => {
       try {
-        const buildingName = resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
-        let snap = await getDocs(query(
-          collection(db, 'temperatureDevices'),
-          where('buildingCode', '==', selectedBuilding)
-        ));
-        const usedLegacy = snap.empty && buildingName;
-        if (usedLegacy) {
-          snap = await getDocs(query(
-            collection(db, 'temperatureDevices'),
-            where('buildingName', '==', buildingName)
-          ));
-        }
+        const buildingName =
+          resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
+        const snap = await getDocs(
+          query(
+            collection(db, "temperatureDevices"),
+            where("buildingCode", "==", selectedBuilding),
+          ),
+        );
         if (!active) return;
         const map = {};
         snap.docs.forEach((docSnap) => {
           const data = docSnap.data();
           map[docSnap.id] = { id: docSnap.id, ...data };
-          if (usedLegacy && isAdmin) {
-            setDoc(docSnap.ref, {
-              buildingCode: selectedBuilding,
-              buildingName
-            }, { merge: true }).catch(() => null);
-          }
         });
         setDeviceDocs(map);
       } catch (error) {
-        console.error('Error loading devices:', error);
+        console.error("Error loading devices:", error);
       }
     };
     loadDevices();
     return () => {
       active = false;
     };
-  }, [selectedBuilding, authLoading, user, isAdmin]);
+  }, [selectedBuilding, authLoading, user]);
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -476,35 +529,28 @@ const TemperatureMonitoring = () => {
     const loadSnapshots = async () => {
       setSnapshotLoading(true);
       try {
-        const buildingName = resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
-        let snap = await getDocs(query(
-          collection(db, 'temperatureRoomSnapshots'),
-          where('buildingCode', '==', selectedBuilding),
-          where('dateLocal', '==', selectedDate)
-        ));
-        const usedLegacy = snap.empty && buildingName;
-        if (usedLegacy) {
-          snap = await getDocs(query(
-            collection(db, 'temperatureRoomSnapshots'),
-            where('buildingName', '==', buildingName),
-            where('dateLocal', '==', selectedDate)
-          ));
-        }
+        const buildingName =
+          resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
+        const snap = await getDocs(
+          query(
+            collection(db, "temperatureRoomSnapshots"),
+            where("buildingCode", "==", selectedBuilding),
+            where("dateLocal", "==", selectedDate),
+          ),
+        );
         if (!active) return;
-        const items = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-        if (usedLegacy && isAdmin) {
-          items.forEach((docData) => {
-            if (!docData?.id) return;
-            setDoc(doc(db, 'temperatureRoomSnapshots', docData.id), {
-              buildingCode: selectedBuilding,
-              buildingName
-            }, { merge: true }).catch(() => null);
-          });
-        }
+        const items = snap.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+        }));
         setSnapshotDocs(items);
       } catch (error) {
-        console.error('Error loading snapshots:', error);
-        showNotification('error', 'Snapshot Load Failed', 'Unable to load temperature snapshots for this date.');
+        console.error("Error loading snapshots:", error);
+        showNotification(
+          "error",
+          "Snapshot Load Failed",
+          "Unable to load temperature snapshots for this date.",
+        );
       } finally {
         if (active) setSnapshotLoading(false);
       }
@@ -513,11 +559,14 @@ const TemperatureMonitoring = () => {
     return () => {
       active = false;
     };
-  }, [selectedBuilding, selectedDate, showNotification, authLoading, user, isAdmin]);
+  }, [selectedBuilding, selectedDate, showNotification, authLoading, user]);
 
   useEffect(() => {
     if (!selectedBuilding) return;
-    const today = formatDateInTimeZone(new Date(), buildingSettings?.timezone || DEFAULT_TIMEZONE);
+    const today = formatDateInTimeZone(
+      new Date(),
+      buildingSettings?.timezone || DEFAULT_TIMEZONE,
+    );
     if (!historicalStart) setHistoricalStart(today);
     if (!historicalEnd) setHistoricalEnd(today);
     if (!exportStart) setExportStart(today);
@@ -532,7 +581,7 @@ const TemperatureMonitoring = () => {
     exportStart,
     exportEnd,
     recomputeStart,
-    recomputeEnd
+    recomputeEnd,
   ]);
 
   const updateMarkerDraft = (roomId, xPct, yPct) => {
@@ -540,8 +589,8 @@ const TemperatureMonitoring = () => {
       ...prev,
       [roomId]: {
         xPct: Math.max(0, Math.min(100, xPct)),
-        yPct: Math.max(0, Math.min(100, yPct))
-      }
+        yPct: Math.max(0, Math.min(100, yPct)),
+      },
     }));
   };
 
@@ -551,10 +600,10 @@ const TemperatureMonitoring = () => {
     const rect = mapRef.current.getBoundingClientRect();
     dragStateRef.current = {
       roomId,
-      rect
+      rect,
     };
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
   };
 
   const handlePointerMove = (event) => {
@@ -568,8 +617,8 @@ const TemperatureMonitoring = () => {
 
   const handlePointerUp = () => {
     dragStateRef.current = null;
-    window.removeEventListener('pointermove', handlePointerMove);
-    window.removeEventListener('pointerup', handlePointerUp);
+    window.removeEventListener("pointermove", handlePointerMove);
+    window.removeEventListener("pointerup", handlePointerUp);
   };
 
   const handleMapClick = (event) => {
@@ -578,49 +627,65 @@ const TemperatureMonitoring = () => {
     const xPct = ((event.clientX - rect.left) / rect.width) * 100;
     const yPct = ((event.clientY - rect.top) / rect.height) * 100;
     updateMarkerDraft(activePlacementRoomId, xPct, yPct);
-    setActivePlacementRoomId('');
+    setActivePlacementRoomId("");
   };
 
   const startEditingPositions = () => {
     setEditingPositions(true);
     setMarkerDrafts(buildingSettings?.markers || {});
-    setActivePlacementRoomId('');
+    setActivePlacementRoomId("");
   };
 
   const cancelEditingPositions = () => {
     setEditingPositions(false);
     setMarkerDrafts({});
-    setActivePlacementRoomId('');
+    setActivePlacementRoomId("");
   };
 
   const saveMarkerPositions = async () => {
-    if (!selectedBuilding || !isAdmin) return;
+    if (!selectedBuilding) return;
     try {
       const buildingKey = toBuildingKey(selectedBuilding);
-      await setDoc(doc(db, 'temperatureBuildingSettings', buildingKey), {
-        buildingCode: selectedBuilding,
-        buildingName: selectedBuildingName || selectedBuilding,
-        markers: markerDrafts,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      await setDoc(
+        doc(db, "temperatureBuildingSettings", buildingKey),
+        {
+          buildingCode: selectedBuilding,
+          buildingName: selectedBuildingName || selectedBuilding,
+          markers: markerDrafts,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
       setBuildingSettings((prev) => ({
         ...prev,
-        markers: markerDrafts
+        markers: markerDrafts,
       }));
       setEditingPositions(false);
-      showNotification('success', 'Marker Positions Saved', 'Floorplan markers updated successfully.');
+      showNotification(
+        "success",
+        "Marker Positions Saved",
+        "Floorplan markers updated successfully.",
+      );
     } catch (error) {
-      console.error('Error saving marker positions:', error);
-      showNotification('error', 'Save Failed', 'Unable to save floorplan markers.');
+      console.error("Error saving marker positions:", error);
+      showNotification(
+        "error",
+        "Save Failed",
+        "Unable to save floorplan markers.",
+      );
     }
   };
 
   const handleFloorplanUpload = async (file) => {
-    if (!file || !selectedBuilding || !isAdmin) return;
+    if (!file || !selectedBuilding) return;
 
     // specific check for Firestore document size limit (approx 1MB minus metadata)
     if (file.size > 900 * 1024) {
-      showNotification('error', 'File Too Large', 'For database storage, image must be under 900KB. Please compress the PNG.');
+      showNotification(
+        "error",
+        "File Too Large",
+        "For database storage, image must be under 900KB. Please compress the PNG.",
+      );
       return;
     }
 
@@ -633,10 +698,10 @@ const TemperatureMonitoring = () => {
             resolve({
               base64: e.target.result,
               width: img.width,
-              height: img.height
+              height: img.height,
             });
           };
-          img.onerror = () => reject(new Error('Invalid image file.'));
+          img.onerror = () => reject(new Error("Invalid image file."));
           img.src = e.target.result;
         };
         reader.onerror = (err) => reject(err);
@@ -651,29 +716,41 @@ const TemperatureMonitoring = () => {
         downloadUrl: base64, // Data URL serves as the source
         width,
         height,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
-      await setDoc(doc(db, 'temperatureBuildingSettings', buildingKey), {
-        buildingCode: selectedBuilding,
-        buildingName: selectedBuildingName || selectedBuilding,
-        floorplan,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      await setDoc(
+        doc(db, "temperatureBuildingSettings", buildingKey),
+        {
+          buildingCode: selectedBuilding,
+          buildingName: selectedBuildingName || selectedBuilding,
+          floorplan,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
 
       setBuildingSettings((prev) => ({
         ...prev,
-        floorplan
+        floorplan,
       }));
-      showNotification('success', 'Floorplan Saved', 'Floorplan saved directly to database.');
+      showNotification(
+        "success",
+        "Floorplan Saved",
+        "Floorplan saved directly to database.",
+      );
     } catch (error) {
-      console.error('Error saving floorplan:', error);
-      showNotification('error', 'Save Failed', 'Unable to save floorplan to database.');
+      console.error("Error saving floorplan:", error);
+      showNotification(
+        "error",
+        "Save Failed",
+        "Unable to save floorplan to database.",
+      );
     }
   };
 
   const handleDeleteFloorplan = () => {
-    if (!selectedBuilding || !isAdmin) return;
+    if (!selectedBuilding) return;
     setShowDeleteFloorplanConfirm(true);
   };
 
@@ -681,32 +758,50 @@ const TemperatureMonitoring = () => {
     setShowDeleteFloorplanConfirm(false);
     try {
       const buildingKey = toBuildingKey(selectedBuilding);
-      await setDoc(doc(db, 'temperatureBuildingSettings', buildingKey), {
-        floorplan: null,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      await setDoc(
+        doc(db, "temperatureBuildingSettings", buildingKey),
+        {
+          floorplan: null,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
 
       setBuildingSettings((prev) => ({
         ...prev,
-        floorplan: null
+        floorplan: null,
       }));
-      showNotification('success', 'Floorplan Deleted', 'Floorplan has been removed.');
+      showNotification(
+        "success",
+        "Floorplan Deleted",
+        "Floorplan has been removed.",
+      );
     } catch (error) {
-      console.error('Error deleting floorplan:', error);
-      showNotification('error', 'Delete Failed', 'Unable to delete floorplan.');
+      console.error("Error deleting floorplan:", error);
+      showNotification("error", "Delete Failed", "Unable to delete floorplan.");
     }
   };
 
   const handleDeleteImport = async () => {
-    if (!deleteImportId || !isAdmin) return;
+    if (!deleteImportId) return;
     setDeletingImport(true);
     try {
-      await deleteDoc(doc(db, 'temperatureImports', deleteImportId));
-      setImportHistory((prev) => prev.filter((item) => item.id !== deleteImportId));
-      showNotification('success', 'Import Deleted', 'The import record has been removed.');
+      await deleteDoc(doc(db, "temperatureImports", deleteImportId));
+      setImportHistory((prev) =>
+        prev.filter((item) => item.id !== deleteImportId),
+      );
+      showNotification(
+        "success",
+        "Import Deleted",
+        "The import record has been removed.",
+      );
     } catch (error) {
-      console.error('Error deleting import:', error);
-      showNotification('error', 'Delete Failed', 'Unable to delete import record.');
+      console.error("Error deleting import:", error);
+      showNotification(
+        "error",
+        "Delete Failed",
+        "Unable to delete import record.",
+      );
     } finally {
       setDeleteImportId(null);
       setDeletingImport(false);
@@ -716,7 +811,7 @@ const TemperatureMonitoring = () => {
   const handleAddSnapshotTime = () => {
     const minutes = parseTime(newSnapshotTime);
     if (minutes == null) {
-      showNotification('error', 'Invalid Time', 'Use a format like "8:30 AM".');
+      showNotification("error", "Invalid Time", 'Use a format like "8:30 AM".');
       return;
     }
     const tolerance = Number(newSnapshotTolerance) || 0;
@@ -726,23 +821,25 @@ const TemperatureMonitoring = () => {
         id: uuidv4(),
         label: formatMinutesToTime(minutes),
         minutes,
-        toleranceMinutes: tolerance
-      }
+        toleranceMinutes: tolerance,
+      },
     ].sort((a, b) => a.minutes - b.minutes);
     setBuildingSettings((prev) => ({ ...prev, snapshotTimes: nextTimes }));
-    setNewSnapshotTime('');
+    setNewSnapshotTime("");
     setNewSnapshotTolerance(15);
   };
 
   const handleUpdateSnapshotTime = (id, updates) => {
-    const nextTimes = (buildingSettings?.snapshotTimes || []).map((slot) =>
-      slot.id === id ? { ...slot, ...updates } : slot
-    ).sort((a, b) => a.minutes - b.minutes);
+    const nextTimes = (buildingSettings?.snapshotTimes || [])
+      .map((slot) => (slot.id === id ? { ...slot, ...updates } : slot))
+      .sort((a, b) => a.minutes - b.minutes);
     setBuildingSettings((prev) => ({ ...prev, snapshotTimes: nextTimes }));
   };
 
   const handleRemoveSnapshotTime = (id) => {
-    const nextTimes = (buildingSettings?.snapshotTimes || []).filter((slot) => slot.id !== id);
+    const nextTimes = (buildingSettings?.snapshotTimes || []).filter(
+      (slot) => slot.id !== id,
+    );
     setBuildingSettings((prev) => ({ ...prev, snapshotTimes: nextTimes }));
     if (selectedSnapshotId === id && nextTimes.length > 0) {
       setSelectedSnapshotId(nextTimes[0].id);
@@ -750,14 +847,20 @@ const TemperatureMonitoring = () => {
   };
 
   const saveBuildingSettings = async () => {
-    if (!selectedBuilding || !buildingSettings || !isAdmin) return;
+    if (!selectedBuilding || !buildingSettings) return;
     if (!isValidTimeZone(buildingSettings.timezone || DEFAULT_TIMEZONE)) {
-      showNotification('error', 'Invalid Timezone', 'Please enter a valid IANA timezone (e.g., America/Chicago).');
+      showNotification(
+        "error",
+        "Invalid Timezone",
+        "Please enter a valid IANA timezone (e.g., America/Chicago).",
+      );
       return;
     }
     try {
       const buildingKey = toBuildingKey(selectedBuilding);
-      const sortedTimes = [...(buildingSettings.snapshotTimes || [])].sort((a, b) => (a.minutes || 0) - (b.minutes || 0));
+      const sortedTimes = [...(buildingSettings.snapshotTimes || [])].sort(
+        (a, b) => (a.minutes || 0) - (b.minutes || 0),
+      );
       const payload = {
         buildingCode: selectedBuilding,
         buildingName: selectedBuildingName || selectedBuilding,
@@ -766,12 +869,16 @@ const TemperatureMonitoring = () => {
         markers: buildingSettings.markers || {},
         floorplan: buildingSettings.floorplan || null,
         updatedAt: serverTimestamp(),
-        hidden: buildingIsHidden
+        hidden: buildingIsHidden,
       };
       if (!settingsExists) payload.createdAt = serverTimestamp();
-      await setDoc(doc(db, 'temperatureBuildingSettings', buildingKey), payload, { merge: true });
+      await setDoc(
+        doc(db, "temperatureBuildingSettings", buildingKey),
+        payload,
+        { merge: true },
+      );
 
-      setHiddenBuildingCodes(prev => {
+      setHiddenBuildingCodes((prev) => {
         const next = new Set(prev);
         if (buildingIsHidden) next.add(selectedBuilding);
         else next.delete(selectedBuilding);
@@ -779,43 +886,56 @@ const TemperatureMonitoring = () => {
       });
 
       setSettingsExists(true);
-      showNotification('success', 'Settings Saved', 'Temperature settings updated for this building.');
+      showNotification(
+        "success",
+        "Settings Saved",
+        "Temperature settings updated for this building.",
+      );
     } catch (error) {
-      console.error('Error saving settings:', error);
-      showNotification('error', 'Save Failed', 'Unable to save temperature settings.');
+      console.error("Error saving settings:", error);
+      showNotification(
+        "error",
+        "Save Failed",
+        "Unable to save temperature settings.",
+      );
     }
   };
 
   const suggestRoomMatch = (label) => {
     const roomsList = roomsForBuilding;
     if (!label || roomsList.length === 0) {
-      return { roomId: '', confidence: 0, method: 'none' };
+      return { roomId: "", confidence: 0, method: "none" };
     }
     const labelNormalized = normalizeMatchText(label);
     const labelTokens = extractRoomTokens(label).map(normalizeRoomNumber);
     let best = null;
     roomsList.forEach((room) => {
-      const roomNumber = normalizeRoomNumber(room.spaceNumber || room.roomNumber || '');
+      const roomNumber = normalizeRoomNumber(
+        room.spaceNumber || room.roomNumber || "",
+      );
       const roomLabel = normalizeMatchText(getRoomLabel(room, spacesByKey));
       let score = 0;
-      let method = '';
+      let method = "";
       if (roomNumber && labelTokens.includes(roomNumber)) {
         score = 0.95;
-        method = 'exact_room_number';
+        method = "exact_room_number";
       } else if (roomNumber) {
-        const digits = roomNumber.replace(/\D/g, '');
-        if (digits && labelTokens.some((token) => token.replace(/\D/g, '') === digits)) {
+        const digits = roomNumber.replace(/\D/g, "");
+        if (
+          digits &&
+          labelTokens.some((token) => token.replace(/\D/g, "") === digits)
+        ) {
           score = 0.85;
-          method = 'room_number';
+          method = "room_number";
         }
         if (labelNormalized.includes(roomNumber.toLowerCase())) {
           score = Math.max(score, 0.75);
-          method = method || 'room_number_text';
+          method = method || "room_number_text";
         }
       }
       if (!score && roomLabel && labelNormalized.includes(roomLabel)) {
         score = 0.8;
-        method = 'label_match';
+        method = "label_match";
       }
       if (!score) return;
       if (!best || score > best.score) {
@@ -824,37 +944,38 @@ const TemperatureMonitoring = () => {
         best.tied = true;
       }
     });
-    if (!best) return { roomId: '', confidence: 0, method: 'none' };
+    if (!best) return { roomId: "", confidence: 0, method: "none" };
     let confidence = best.score;
     if (best.tied) confidence = Math.min(confidence, 0.65);
     return {
       roomId: best.room.spaceKey || best.room.id,
       confidence,
-      method: best.method
+      method: best.method,
     };
   };
 
   const hashFile = async (file) => {
     const buffer = await file.arrayBuffer();
-    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
   };
 
-  const parseCsvFile = (file) => new Promise((resolve, reject) => {
-    Papa.parse(file, {
-      skipEmptyLines: true,
-      complete: (results) => {
-        if (!results.data || results.data.length === 0) {
-          reject(new Error('CSV is empty.'));
-          return;
-        }
-        const [headerRow, ...rows] = results.data;
-        resolve({ headerRow, rows });
-      },
-      error: (error) => reject(error)
+  const parseCsvFile = (file) =>
+    new Promise((resolve, reject) => {
+      Papa.parse(file, {
+        skipEmptyLines: true,
+        complete: (results) => {
+          if (!results.data || results.data.length === 0) {
+            reject(new Error("CSV is empty."));
+            return;
+          }
+          const [headerRow, ...rows] = results.data;
+          resolve({ headerRow, rows });
+        },
+        error: (error) => reject(error),
+      });
     });
-  });
 
   const buildPendingMappings = (items) => {
     const seen = new Set();
@@ -870,12 +991,14 @@ const TemperatureMonitoring = () => {
         deviceLabel: item.deviceLabel,
         suggestedRoomId: item.suggestedRoomId,
         matchConfidence: item.matchConfidence,
-        matchMethod: item.matchMethod
+        matchMethod: item.matchMethod,
       }));
   };
 
   const pruneMappingOverrides = (overrides, items) => {
-    const deviceIds = new Set(items.map((item) => item.deviceId).filter(Boolean));
+    const deviceIds = new Set(
+      items.map((item) => item.deviceId).filter(Boolean),
+    );
     return Object.keys(overrides).reduce((acc, deviceId) => {
       if (deviceIds.has(deviceId)) acc[deviceId] = overrides[deviceId];
       return acc;
@@ -883,10 +1006,9 @@ const TemperatureMonitoring = () => {
   };
 
   const handleCsvSelection = async (event) => {
-    if (!isAdmin) return;
     const files = Array.from(event.target.files || []);
     if (!selectedBuilding || files.length === 0) return;
-    event.target.value = '';
+    event.target.value = "";
     setImportItems([]);
     setPendingMappings([]);
     setMappingOverrides({});
@@ -895,10 +1017,17 @@ const TemperatureMonitoring = () => {
       try {
         const fileHash = await hashFile(file);
         const importDocId = `${toBuildingKey(selectedBuilding)}__${fileHash}`;
-        const importDoc = await getDoc(doc(db, 'temperatureImports', importDocId));
+        const importDoc = await getDoc(
+          doc(db, "temperatureImports", importDocId),
+        );
         const duplicate = importDoc.exists();
         const parsed = await parseCsvFile(file);
-        const { timestampIndex, temperatureIndex, humidityIndex, temperatureUnit } = detectGoveeCsvColumns(parsed.headerRow || []);
+        const {
+          timestampIndex,
+          temperatureIndex,
+          humidityIndex,
+          temperatureUnit,
+        } = detectGoveeCsvColumns(parsed.headerRow || []);
         if (timestampIndex === -1 || temperatureIndex === -1) {
           nextItems.push({
             id: uuidv4(),
@@ -906,15 +1035,15 @@ const TemperatureMonitoring = () => {
             fileName: file.name,
             fileHash,
             duplicate,
-            errors: ['Missing required timestamp or temperature columns.'],
+            errors: ["Missing required timestamp or temperature columns."],
             errorCount: 1,
-            samples: []
+            samples: [],
           });
           continue;
         }
         const samples = [];
-        let minTimestamp = '';
-        let maxTimestamp = '';
+        let minTimestamp = "";
+        let maxTimestamp = "";
         let parsedCount = 0;
         let errorCount = 0;
         parsed.rows.forEach((row) => {
@@ -931,36 +1060,43 @@ const TemperatureMonitoring = () => {
             errorCount += 1;
             return;
           }
-          const humidityVal = rawHumidity == null || rawHumidity === ''
-            ? null
-            : Number.parseFloat(rawHumidity);
-          const tempF = temperatureUnit === 'C'
-            ? (tempVal * 9 / 5) + 32
-            : tempVal;
-          const tempC = temperatureUnit === 'C'
-            ? tempVal
-            : ((tempVal - 32) * 5 / 9);
+          const humidityVal =
+            rawHumidity == null || rawHumidity === ""
+              ? null
+              : Number.parseFloat(rawHumidity);
+          const tempF =
+            temperatureUnit === "C" ? (tempVal * 9) / 5 + 32 : tempVal;
+          const tempC =
+            temperatureUnit === "C" ? tempVal : ((tempVal - 32) * 5) / 9;
           samples.push({
             localTimestamp: parts.raw,
             parts,
             temperatureF: Number.isFinite(tempF) ? Number(tempF) : null,
             temperatureC: Number.isFinite(tempC) ? Number(tempC) : null,
-            humidity: Number.isFinite(humidityVal) ? Number(humidityVal) : null
+            humidity: Number.isFinite(humidityVal) ? Number(humidityVal) : null,
           });
           parsedCount += 1;
-          if (!minTimestamp || parts.raw < minTimestamp) minTimestamp = parts.raw;
-          if (!maxTimestamp || parts.raw > maxTimestamp) maxTimestamp = parts.raw;
+          if (!minTimestamp || parts.raw < minTimestamp)
+            minTimestamp = parts.raw;
+          if (!maxTimestamp || parts.raw > maxTimestamp)
+            maxTimestamp = parts.raw;
         });
         const deviceLabel = parseDeviceLabelFromFilename(file.name);
         const deviceId = toDeviceId(selectedBuilding, deviceLabel);
         const existingDevice = deviceDocs[deviceId];
-        const existingRoomKey = existingDevice?.mapping?.spaceKey || existingDevice?.mapping?.roomId || '';
+        const existingRoomKey =
+          existingDevice?.mapping?.spaceKey ||
+          existingDevice?.mapping?.roomId ||
+          "";
         const suggestion = existingRoomKey
           ? {
-            roomId: existingRoomKey,
-            confidence: existingDevice.mapping.confidence ?? 1,
-            method: existingDevice.mapping.method || existingDevice.mapping.matchMethod || 'existing'
-          }
+              roomId: existingRoomKey,
+              confidence: existingDevice.mapping.confidence ?? 1,
+              method:
+                existingDevice.mapping.method ||
+                existingDevice.mapping.matchMethod ||
+                "existing",
+            }
           : suggestRoomMatch(deviceLabel);
         nextItems.push({
           id: uuidv4(),
@@ -970,7 +1106,7 @@ const TemperatureMonitoring = () => {
           duplicate,
           deviceLabel,
           deviceId,
-          temperatureUnit: temperatureUnit || 'F',
+          temperatureUnit: temperatureUnit || "F",
           rowCount: parsed.rows.length,
           parsedCount,
           errorCount,
@@ -979,17 +1115,17 @@ const TemperatureMonitoring = () => {
           samples,
           suggestedRoomId: suggestion.roomId,
           matchConfidence: suggestion.confidence,
-          matchMethod: suggestion.method
+          matchMethod: suggestion.method,
         });
       } catch (error) {
-        console.error('CSV parse error:', error);
+        console.error("CSV parse error:", error);
         nextItems.push({
           id: uuidv4(),
           file,
           fileName: file.name,
-          errors: ['Unable to parse this CSV file.'],
+          errors: ["Unable to parse this CSV file."],
           errorCount: 1,
-          samples: []
+          samples: [],
         });
       }
     }
@@ -1001,7 +1137,9 @@ const TemperatureMonitoring = () => {
     setImportItems((prevItems) => {
       const nextItems = prevItems.filter((item) => item.id !== itemId);
       setPendingMappings(buildPendingMappings(nextItems));
-      setMappingOverrides((prevOverrides) => pruneMappingOverrides(prevOverrides, nextItems));
+      setMappingOverrides((prevOverrides) =>
+        pruneMappingOverrides(prevOverrides, nextItems),
+      );
       return nextItems;
     });
   };
@@ -1021,7 +1159,7 @@ const TemperatureMonitoring = () => {
     samples,
     timezone,
     deviceId,
-    deviceLabel
+    deviceLabel,
   }) => {
     for (const snapshot of snapshotTimes) {
       const targetMinutes = snapshot.minutes;
@@ -1029,7 +1167,10 @@ const TemperatureMonitoring = () => {
       let bestSample = null;
       let bestDelta = null;
       for (let delta = 0; delta <= tolerance; delta += 1) {
-        const candidates = delta === 0 ? [targetMinutes] : [targetMinutes - delta, targetMinutes + delta];
+        const candidates =
+          delta === 0
+            ? [targetMinutes]
+            : [targetMinutes - delta, targetMinutes + delta];
         for (const minute of candidates) {
           if (minute < 0 || minute > 1439) continue;
           const sample = samples[String(minute)];
@@ -1040,25 +1181,33 @@ const TemperatureMonitoring = () => {
         }
         if (bestSample) break;
       }
-      const stableBuilding = buildingCode || buildingName || '';
+      const stableBuilding = buildingCode || buildingName || "";
       const stableRoom = spaceKey || roomId;
-      const snapshotId = toSnapshotDocId(stableBuilding, stableRoom, dateLocal, snapshot.id);
-      const snapshotRef = doc(db, 'temperatureRoomSnapshots', snapshotId);
+      const snapshotId = toSnapshotDocId(
+        stableBuilding,
+        stableRoom,
+        dateLocal,
+        snapshot.id,
+      );
+      const snapshotRef = doc(db, "temperatureRoomSnapshots", snapshotId);
       const existingSnap = await getDoc(snapshotRef);
-      const status = bestSample ? 'ok' : 'missing';
+      const status = bestSample ? "ok" : "missing";
       const recomputedUtc = bestSample?.rawLocal
         ? (() => {
-          const parsed = parseLocalTimestamp(bestSample.rawLocal);
-          const utcDate = parsed ? zonedTimeToUtc(parsed, timezone) : null;
-          return utcDate ? Timestamp.fromDate(utcDate) : bestSample.utc;
-        })()
+            const parsed = parseLocalTimestamp(bestSample.rawLocal);
+            const utcDate = parsed ? zonedTimeToUtc(parsed, timezone) : null;
+            return utcDate ? Timestamp.fromDate(utcDate) : bestSample.utc;
+          })()
         : null;
       const payload = {
-        buildingCode: buildingCode || '',
-        buildingName: buildingName || buildingCode || '',
+        buildingCode: buildingCode || "",
+        buildingName: buildingName || buildingCode || "",
         roomId: stableRoom,
         spaceKey: stableRoom,
-        roomName: getRoomLabel(roomLookup[stableRoom] || { id: stableRoom }, spacesByKey),
+        roomName: getRoomLabel(
+          roomLookup[stableRoom] || { id: stableRoom },
+          spacesByKey,
+        ),
         dateLocal,
         snapshotTimeId: snapshot.id,
         snapshotLabel: snapshot.label || formatMinutesToTime(snapshot.minutes),
@@ -1074,17 +1223,18 @@ const TemperatureMonitoring = () => {
         sourceDeviceLabel: bestSample ? deviceLabel : null,
         sourceReadingLocal: bestSample ? bestSample.rawLocal : null,
         sourceReadingUtc: bestSample ? recomputedUtc : null,
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       };
       if (!existingSnap.exists()) payload.createdAt = serverTimestamp();
       if (existingSnap.exists()) {
         const existing = existingSnap.data();
-        const same = existing.status === payload.status
-          && existing.temperatureF === payload.temperatureF
-          && existing.temperatureC === payload.temperatureC
-          && existing.humidity === payload.humidity
-          && existing.deltaMinutes === payload.deltaMinutes
-          && existing.sourceReadingLocal === payload.sourceReadingLocal;
+        const same =
+          existing.status === payload.status &&
+          existing.temperatureF === payload.temperatureF &&
+          existing.temperatureC === payload.temperatureC &&
+          existing.humidity === payload.humidity &&
+          existing.deltaMinutes === payload.deltaMinutes &&
+          existing.sourceReadingLocal === payload.sourceReadingLocal;
         if (same) continue;
       }
       await setDoc(snapshotRef, payload, { merge: true });
@@ -1092,10 +1242,14 @@ const TemperatureMonitoring = () => {
   };
 
   const handleImport = async () => {
-    if (!isAdmin || !selectedBuilding || !buildingSettings) return;
+    if (!selectedBuilding || !buildingSettings) return;
     if (importItems.length === 0) return;
     if (!isValidTimeZone(buildingSettings.timezone || DEFAULT_TIMEZONE)) {
-      showNotification('error', 'Invalid Timezone', 'Update the building timezone before importing.');
+      showNotification(
+        "error",
+        "Invalid Timezone",
+        "Update the building timezone before importing.",
+      );
       return;
     }
     const unresolved = pendingMappings.filter((item) => {
@@ -1103,7 +1257,11 @@ const TemperatureMonitoring = () => {
       return !override && !item.suggestedRoomId;
     });
     if (unresolved.length > 0) {
-      showNotification('error', 'Mapping Required', 'Please resolve device-to-room mappings before importing.');
+      showNotification(
+        "error",
+        "Mapping Required",
+        "Please resolve device-to-room mappings before importing.",
+      );
       return;
     }
     setImporting(true);
@@ -1113,16 +1271,18 @@ const TemperatureMonitoring = () => {
     try {
       for (const item of importItems) {
         if (item.duplicate) continue;
-        if (!item.deviceId || !item.samples || item.samples.length === 0) continue;
+        if (!item.deviceId || !item.samples || item.samples.length === 0)
+          continue;
         const deviceId = item.deviceId;
         const deviceLabel = item.deviceLabel || deviceId;
         const existingDevice = deviceCache[deviceId];
-        const latestLocal = existingDevice?.latestLocalTimestamp || '';
-        const roomId = mappingOverrides[deviceId]
-          || item.suggestedRoomId
-          || existingDevice?.mapping?.spaceKey
-          || existingDevice?.mapping?.roomId
-          || '';
+        const latestLocal = existingDevice?.latestLocalTimestamp || "";
+        const roomId =
+          mappingOverrides[deviceId] ||
+          item.suggestedRoomId ||
+          existingDevice?.mapping?.spaceKey ||
+          existingDevice?.mapping?.roomId ||
+          "";
         const spaceKey = roomId;
         if (!spaceKey) continue;
         const timezone = buildingSettings.timezone || DEFAULT_TIMEZONE;
@@ -1132,10 +1292,13 @@ const TemperatureMonitoring = () => {
         let newLatestUtc = existingDevice?.latestUtc || null;
         let newLatestUtcDate = newLatestUtc?.toDate
           ? newLatestUtc.toDate()
-          : (newLatestUtc instanceof Date ? newLatestUtc : null);
+          : newLatestUtc instanceof Date
+            ? newLatestUtc
+            : null;
         item.samples.forEach((sample) => {
           if (latestLocal && sample.localTimestamp <= latestLocal) return;
-          if (sample.localTimestamp > newLatestLocal) newLatestLocal = sample.localTimestamp;
+          if (sample.localTimestamp > newLatestLocal)
+            newLatestLocal = sample.localTimestamp;
           const utcDate = zonedTimeToUtc(sample.parts, timezone);
           if (utcDate && (!newLatestUtcDate || utcDate > newLatestUtcDate)) {
             newLatestUtcDate = utcDate;
@@ -1149,7 +1312,7 @@ const TemperatureMonitoring = () => {
             temperatureC: sample.temperatureC,
             humidity: sample.humidity,
             rawLocal: sample.localTimestamp,
-            utc: utcDate ? Timestamp.fromDate(utcDate) : null
+            utc: utcDate ? Timestamp.fromDate(utcDate) : null,
           };
         });
 
@@ -1160,7 +1323,7 @@ const TemperatureMonitoring = () => {
 
         for (const [dateKey, entries] of Object.entries(samplesByDate)) {
           const docId = toDeviceDayId(deviceId, dateKey);
-          const dayRef = doc(db, 'temperatureDeviceReadings', docId);
+          const dayRef = doc(db, "temperatureDeviceReadings", docId);
           const daySnap = await getDoc(dayRef);
           const existingData = daySnap.exists() ? daySnap.data() : null;
           const existingSamples = existingData?.samples || {};
@@ -1169,10 +1332,11 @@ const TemperatureMonitoring = () => {
           Object.entries(entries).forEach(([minuteKey, sample]) => {
             const existing = existingSamples[minuteKey];
             if (existing) {
-              const same = existing.temperatureF === sample.temperatureF
-                && existing.temperatureC === sample.temperatureC
-                && existing.humidity === sample.humidity
-                && existing.rawLocal === sample.rawLocal;
+              const same =
+                existing.temperatureF === sample.temperatureF &&
+                existing.temperatureC === sample.temperatureC &&
+                existing.humidity === sample.humidity &&
+                existing.rawLocal === sample.rawLocal;
               if (!same) conflicts += 1;
               return;
             }
@@ -1191,7 +1355,7 @@ const TemperatureMonitoring = () => {
             deviceLabel,
             dateLocal: dateKey,
             timezone,
-            updatedAt: serverTimestamp()
+            updatedAt: serverTimestamp(),
           };
           if (!daySnap.exists()) metadata.createdAt = serverTimestamp();
           const updatePayload = { ...metadata };
@@ -1199,14 +1363,20 @@ const TemperatureMonitoring = () => {
             Object.entries(newEntries).forEach(([minuteKey, sample]) => {
               updatePayload[`samples.${minuteKey}`] = sample;
             });
-            updatePayload.sampleCount = (existingData?.sampleCount || Object.keys(existingSamples).length) + newCount;
+            updatePayload.sampleCount =
+              (existingData?.sampleCount ||
+                Object.keys(existingSamples).length) + newCount;
             await updateDoc(dayRef, updatePayload);
           } else {
-            await setDoc(dayRef, {
-              ...metadata,
-              sampleCount: newCount,
-              samples: newEntries
-            }, { merge: true });
+            await setDoc(
+              dayRef,
+              {
+                ...metadata,
+                sampleCount: newCount,
+                samples: newEntries,
+              },
+              { merge: true },
+            );
           }
           deviceNewReadings += newCount;
           deviceConflicts += conflicts;
@@ -1218,23 +1388,27 @@ const TemperatureMonitoring = () => {
           totalNewReadings += deviceNewReadings;
           totalConflicts += deviceConflicts;
           const importDocId = `${toBuildingKey(selectedBuilding)}__${item.fileHash}`;
-          await setDoc(doc(db, 'temperatureImports', importDocId), {
-            buildingCode: selectedBuilding,
-            buildingName: selectedBuildingName || selectedBuilding,
-            deviceId,
-            deviceLabel,
-            fileName: item.fileName,
-            fileHash: item.fileHash,
-            rowCount: item.rowCount || 0,
-            parsedCount: item.parsedCount || 0,
-            newReadings: deviceNewReadings,
-            dateRange: {
-              start: item.minTimestamp,
-              end: item.maxTimestamp
+          await setDoc(
+            doc(db, "temperatureImports", importDocId),
+            {
+              buildingCode: selectedBuilding,
+              buildingName: selectedBuildingName || selectedBuilding,
+              deviceId,
+              deviceLabel,
+              fileName: item.fileName,
+              fileHash: item.fileHash,
+              rowCount: item.rowCount || 0,
+              parsedCount: item.parsedCount || 0,
+              newReadings: deviceNewReadings,
+              dateRange: {
+                start: item.minTimestamp,
+                end: item.maxTimestamp,
+              },
+              temperatureUnit: item.temperatureUnit || "F",
+              createdAt: serverTimestamp(),
             },
-            temperatureUnit: item.temperatureUnit || 'F',
-            createdAt: serverTimestamp()
-          }, { merge: true });
+            { merge: true },
+          );
         }
 
         const manualOverride = Boolean(mappingOverrides[deviceId]);
@@ -1242,34 +1416,53 @@ const TemperatureMonitoring = () => {
           roomId: spaceKey,
           spaceKey,
           method: manualOverride
-            ? 'manual'
-            : (item.matchMethod || existingDevice?.mapping?.method || existingDevice?.mapping?.matchMethod || 'auto'),
+            ? "manual"
+            : item.matchMethod ||
+              existingDevice?.mapping?.method ||
+              existingDevice?.mapping?.matchMethod ||
+              "auto",
           confidence: manualOverride
             ? 1
-            : (item.matchConfidence ?? existingDevice?.mapping?.confidence ?? 1),
+            : (item.matchConfidence ??
+              existingDevice?.mapping?.confidence ??
+              1),
           updatedAt: serverTimestamp(),
-          manual: manualOverride
+          manual: manualOverride,
         };
         const existingMapping = existingDevice?.mapping || {};
-        const existingRoomKey = existingMapping.spaceKey || existingMapping.roomId || '';
-        const mappingChanged = existingRoomKey !== mappingPayload.spaceKey
-          || Boolean(existingMapping.manual) !== Boolean(mappingPayload.manual)
-          || (existingMapping.method || existingMapping.matchMethod || 'auto') !== mappingPayload.method;
-        const latestLocalChanged = newLatestLocal && newLatestLocal !== latestLocal;
-        const shouldUpdateDevice = deviceNewReadings > 0 || mappingChanged || latestLocalChanged;
+        const existingRoomKey =
+          existingMapping.spaceKey || existingMapping.roomId || "";
+        const mappingChanged =
+          existingRoomKey !== mappingPayload.spaceKey ||
+          Boolean(existingMapping.manual) !== Boolean(mappingPayload.manual) ||
+          (existingMapping.method || existingMapping.matchMethod || "auto") !==
+            mappingPayload.method;
+        const latestLocalChanged =
+          newLatestLocal && newLatestLocal !== latestLocal;
+        const shouldUpdateDevice =
+          deviceNewReadings > 0 || mappingChanged || latestLocalChanged;
         if (shouldUpdateDevice) {
-          await setDoc(doc(db, 'temperatureDevices', deviceId), {
-            buildingCode: selectedBuilding,
-            buildingName: selectedBuildingName || selectedBuilding,
-            label: deviceLabel,
-            labelNormalized: normalizeMatchText(deviceLabel),
-            mapping: mappingPayload,
-            latestLocalTimestamp: newLatestLocal || latestLocal || null,
-            latestUtc: newLatestUtc || existingDevice?.latestUtc || null,
-            lastImportedAt: deviceNewReadings > 0 ? serverTimestamp() : existingDevice?.lastImportedAt || null,
-            updatedAt: serverTimestamp(),
-            createdAt: existingDevice ? existingDevice.createdAt || serverTimestamp() : serverTimestamp()
-          }, { merge: true });
+          await setDoc(
+            doc(db, "temperatureDevices", deviceId),
+            {
+              buildingCode: selectedBuilding,
+              buildingName: selectedBuildingName || selectedBuilding,
+              label: deviceLabel,
+              labelNormalized: normalizeMatchText(deviceLabel),
+              mapping: mappingPayload,
+              latestLocalTimestamp: newLatestLocal || latestLocal || null,
+              latestUtc: newLatestUtc || existingDevice?.latestUtc || null,
+              lastImportedAt:
+                deviceNewReadings > 0
+                  ? serverTimestamp()
+                  : existingDevice?.lastImportedAt || null,
+              updatedAt: serverTimestamp(),
+              createdAt: existingDevice
+                ? existingDevice.createdAt || serverTimestamp()
+                : serverTimestamp(),
+            },
+            { merge: true },
+          );
           deviceCache[deviceId] = {
             ...(deviceCache[deviceId] || {}),
             buildingCode: selectedBuilding,
@@ -1278,7 +1471,7 @@ const TemperatureMonitoring = () => {
             labelNormalized: normalizeMatchText(deviceLabel),
             mapping: mappingPayload,
             latestLocalTimestamp: newLatestLocal || latestLocal || null,
-            latestUtc: newLatestUtc || existingDevice?.latestUtc || null
+            latestUtc: newLatestUtc || existingDevice?.latestUtc || null,
           };
         }
 
@@ -1294,55 +1487,80 @@ const TemperatureMonitoring = () => {
               samples,
               timezone,
               deviceId,
-              deviceLabel
+              deviceLabel,
             });
           }
         }
       }
       setDeviceDocs(deviceCache);
       if (totalNewReadings === 0) {
-        showNotification('success', 'No New Readings', 'All selected files were already imported.');
+        showNotification(
+          "success",
+          "No New Readings",
+          "All selected files were already imported.",
+        );
       } else {
-        const conflictNote = totalConflicts > 0 ? ` (${totalConflicts} conflicts skipped)` : '';
-        showNotification('success', 'Import Complete', `${totalNewReadings} new readings added${conflictNote}.`);
+        const conflictNote =
+          totalConflicts > 0 ? ` (${totalConflicts} conflicts skipped)` : "";
+        showNotification(
+          "success",
+          "Import Complete",
+          `${totalNewReadings} new readings added${conflictNote}.`,
+        );
       }
       setImportItems([]);
       setPendingMappings([]);
       setMappingOverrides({});
     } catch (error) {
-      console.error('Import error:', error);
-      showNotification('error', 'Import Failed', 'Unable to import temperature CSVs.');
+      console.error("Import error:", error);
+      showNotification(
+        "error",
+        "Import Failed",
+        "Unable to import temperature CSVs.",
+      );
     } finally {
       setImporting(false);
     }
   };
 
   const handleRecomputeSnapshots = async () => {
-    if (!isAdmin || !selectedBuilding || !recomputeStart || !recomputeEnd) return;
+    if (!selectedBuilding || !recomputeStart || !recomputeEnd) return;
     if (!isValidTimeZone(buildingSettings?.timezone || DEFAULT_TIMEZONE)) {
-      showNotification('error', 'Invalid Timezone', 'Update the building timezone before recomputing.');
+      showNotification(
+        "error",
+        "Invalid Timezone",
+        "Update the building timezone before recomputing.",
+      );
       return;
     }
     if (recomputeStart > recomputeEnd) {
-      showNotification('error', 'Invalid Range', 'Start date must be before end date.');
+      showNotification(
+        "error",
+        "Invalid Range",
+        "Start date must be before end date.",
+      );
       return;
     }
     setRecomputing(true);
     try {
       const buildingName = selectedBuildingName || selectedBuilding;
-      let snap = await getDocs(query(
-        collection(db, 'temperatureDeviceReadings'),
-        where('buildingCode', '==', selectedBuilding),
-        where('dateLocal', '>=', recomputeStart),
-        where('dateLocal', '<=', recomputeEnd)
-      ));
+      let snap = await getDocs(
+        query(
+          collection(db, "temperatureDeviceReadings"),
+          where("buildingCode", "==", selectedBuilding),
+          where("dateLocal", ">=", recomputeStart),
+          where("dateLocal", "<=", recomputeEnd),
+        ),
+      );
       if (snap.empty && buildingName) {
-        snap = await getDocs(query(
-          collection(db, 'temperatureDeviceReadings'),
-          where('buildingName', '==', buildingName),
-          where('dateLocal', '>=', recomputeStart),
-          where('dateLocal', '<=', recomputeEnd)
-        ));
+        snap = await getDocs(
+          query(
+            collection(db, "temperatureDeviceReadings"),
+            where("buildingName", "==", buildingName),
+            where("dateLocal", ">=", recomputeStart),
+            where("dateLocal", "<=", recomputeEnd),
+          ),
+        );
       }
       for (const docSnap of snap.docs) {
         const data = docSnap.data();
@@ -1359,13 +1577,21 @@ const TemperatureMonitoring = () => {
           samples,
           timezone: buildingSettings?.timezone || DEFAULT_TIMEZONE,
           deviceId: data.deviceId,
-          deviceLabel: device?.label || data.deviceId
+          deviceLabel: device?.label || data.deviceId,
         });
       }
-      showNotification('success', 'Snapshots Recomputed', 'Snapshot results updated for the selected range.');
+      showNotification(
+        "success",
+        "Snapshots Recomputed",
+        "Snapshot results updated for the selected range.",
+      );
     } catch (error) {
-      console.error('Recompute error:', error);
-      showNotification('error', 'Recompute Failed', 'Unable to recompute snapshots.');
+      console.error("Recompute error:", error);
+      showNotification(
+        "error",
+        "Recompute Failed",
+        "Unable to recompute snapshots.",
+      );
     } finally {
       setRecomputing(false);
     }
@@ -1374,31 +1600,46 @@ const TemperatureMonitoring = () => {
   const loadHistorical = async () => {
     if (!selectedBuilding || !historicalStart || !historicalEnd) return;
     if (historicalStart > historicalEnd) {
-      showNotification('error', 'Invalid Range', 'Start date must be before end date.');
+      showNotification(
+        "error",
+        "Invalid Range",
+        "Start date must be before end date.",
+      );
       return;
     }
     setHistoricalLoading(true);
     try {
       const buildingName = selectedBuildingName || selectedBuilding;
-      let snap = await getDocs(query(
-        collection(db, 'temperatureRoomSnapshots'),
-        where('buildingCode', '==', selectedBuilding),
-        where('dateLocal', '>=', historicalStart),
-        where('dateLocal', '<=', historicalEnd)
-      ));
+      let snap = await getDocs(
+        query(
+          collection(db, "temperatureRoomSnapshots"),
+          where("buildingCode", "==", selectedBuilding),
+          where("dateLocal", ">=", historicalStart),
+          where("dateLocal", "<=", historicalEnd),
+        ),
+      );
       if (snap.empty && buildingName) {
-        snap = await getDocs(query(
-          collection(db, 'temperatureRoomSnapshots'),
-          where('buildingName', '==', buildingName),
-          where('dateLocal', '>=', historicalStart),
-          where('dateLocal', '<=', historicalEnd)
-        ));
+        snap = await getDocs(
+          query(
+            collection(db, "temperatureRoomSnapshots"),
+            where("buildingName", "==", buildingName),
+            where("dateLocal", ">=", historicalStart),
+            where("dateLocal", "<=", historicalEnd),
+          ),
+        );
       }
-      const docs = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+      const docs = snap.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      }));
       setHistoricalDocs(docs);
     } catch (error) {
-      console.error('Historical load error:', error);
-      showNotification('error', 'Historical Load Failed', 'Unable to load historical snapshot data.');
+      console.error("Historical load error:", error);
+      showNotification(
+        "error",
+        "Historical Load Failed",
+        "Unable to load historical snapshot data.",
+      );
     } finally {
       setHistoricalLoading(false);
     }
@@ -1407,81 +1648,108 @@ const TemperatureMonitoring = () => {
   const handleSnapshotExport = async () => {
     if (!selectedBuilding || !exportStart || !exportEnd) return;
     if (exportStart > exportEnd) {
-      showNotification('error', 'Invalid Range', 'Start date must be before end date.');
+      showNotification(
+        "error",
+        "Invalid Range",
+        "Start date must be before end date.",
+      );
       return;
     }
     setExporting(true);
     try {
       const buildingName = selectedBuildingName || selectedBuilding;
-      let snap = await getDocs(query(
-        collection(db, 'temperatureRoomSnapshots'),
-        where('buildingCode', '==', selectedBuilding),
-        where('dateLocal', '>=', exportStart),
-        where('dateLocal', '<=', exportEnd)
-      ));
+      let snap = await getDocs(
+        query(
+          collection(db, "temperatureRoomSnapshots"),
+          where("buildingCode", "==", selectedBuilding),
+          where("dateLocal", ">=", exportStart),
+          where("dateLocal", "<=", exportEnd),
+        ),
+      );
       if (snap.empty && buildingName) {
-        snap = await getDocs(query(
-          collection(db, 'temperatureRoomSnapshots'),
-          where('buildingName', '==', buildingName),
-          where('dateLocal', '>=', exportStart),
-          where('dateLocal', '<=', exportEnd)
-        ));
+        snap = await getDocs(
+          query(
+            collection(db, "temperatureRoomSnapshots"),
+            where("buildingName", "==", buildingName),
+            where("dateLocal", ">=", exportStart),
+            where("dateLocal", "<=", exportEnd),
+          ),
+        );
       }
-      const docs = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+      const docs = snap.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      }));
       const filtered = docs.filter((docData) => {
         const roomKey = docData.spaceKey || docData.roomId;
-        if (exportRoomIds.length > 0 && !exportRoomIds.includes(roomKey)) return false;
-        if (exportSnapshotIds.length > 0 && !exportSnapshotIds.includes(docData.snapshotTimeId)) return false;
+        if (exportRoomIds.length > 0 && !exportRoomIds.includes(roomKey))
+          return false;
+        if (
+          exportSnapshotIds.length > 0 &&
+          !exportSnapshotIds.includes(docData.snapshotTimeId)
+        )
+          return false;
         return true;
       });
       const headers = [
-        'Building',
-        'Room',
-        'Date',
-        'Snapshot Time',
-        'Temperature F',
-        'Temperature C',
-        'Humidity',
-        'Status',
-        'Timezone',
-        'Delta Minutes',
-        'Source Local Timestamp',
-        'Source UTC Timestamp',
-        'Device Label'
+        "Building",
+        "Room",
+        "Date",
+        "Snapshot Time",
+        "Temperature F",
+        "Temperature C",
+        "Humidity",
+        "Status",
+        "Timezone",
+        "Delta Minutes",
+        "Source Local Timestamp",
+        "Source UTC Timestamp",
+        "Device Label",
       ];
       const rows = filtered.map((docData) => {
         const roomKey = docData.spaceKey || docData.roomId;
-        return ([
+        return [
           docData.buildingName || selectedBuildingName || selectedBuilding,
-          docData.roomName || getRoomLabel(roomLookup[roomKey] || { id: roomKey }, spacesByKey),
-          docData.dateLocal || '',
-          docData.snapshotLabel || '',
-          docData.temperatureF ?? '',
-          docData.temperatureC ?? '',
-          docData.humidity ?? '',
-          docData.status || '',
+          docData.roomName ||
+            getRoomLabel(roomLookup[roomKey] || { id: roomKey }, spacesByKey),
+          docData.dateLocal || "",
+          docData.snapshotLabel || "",
+          docData.temperatureF ?? "",
+          docData.temperatureC ?? "",
+          docData.humidity ?? "",
+          docData.status || "",
           docData.timezone || buildingSettings?.timezone || DEFAULT_TIMEZONE,
-          docData.deltaMinutes ?? '',
-          docData.sourceReadingLocal || '',
-          docData.sourceReadingUtc?.toDate ? docData.sourceReadingUtc.toDate().toISOString() : '',
-          docData.sourceDeviceLabel || ''
-        ]);
+          docData.deltaMinutes ?? "",
+          docData.sourceReadingLocal || "",
+          docData.sourceReadingUtc?.toDate
+            ? docData.sourceReadingUtc.toDate().toISOString()
+            : "",
+          docData.sourceDeviceLabel || "",
+        ];
       });
       const csvContent = [
-        headers.map(toCsvSafe).join(','),
-        ...rows.map((row) => row.map(toCsvSafe).join(','))
-      ].join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        headers.map(toCsvSafe).join(","),
+        ...rows.map((row) => row.map(toCsvSafe).join(",")),
+      ].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
       link.download = `temperature-snapshots-${selectedBuilding}-${exportStart}-to-${exportEnd}.csv`;
       link.click();
       URL.revokeObjectURL(url);
-      showNotification('success', 'Export Ready', `Exported ${rows.length} snapshot rows.`);
+      showNotification(
+        "success",
+        "Export Ready",
+        `Exported ${rows.length} snapshot rows.`,
+      );
     } catch (error) {
-      console.error('Export error:', error);
-      showNotification('error', 'Export Failed', 'Unable to export snapshot data.');
+      console.error("Export error:", error);
+      showNotification(
+        "error",
+        "Export Failed",
+        "Unable to export snapshot data.",
+      );
     } finally {
       setExporting(false);
     }
@@ -1490,85 +1758,112 @@ const TemperatureMonitoring = () => {
   const handleRawExport = async () => {
     if (!selectedBuilding || !exportStart || !exportEnd) return;
     if (exportStart > exportEnd) {
-      showNotification('error', 'Invalid Range', 'Start date must be before end date.');
+      showNotification(
+        "error",
+        "Invalid Range",
+        "Start date must be before end date.",
+      );
       return;
     }
     setExporting(true);
     try {
       const buildingName = selectedBuildingName || selectedBuilding;
-      let snap = await getDocs(query(
-        collection(db, 'temperatureDeviceReadings'),
-        where('buildingCode', '==', selectedBuilding),
-        where('dateLocal', '>=', exportStart),
-        where('dateLocal', '<=', exportEnd)
-      ));
+      let snap = await getDocs(
+        query(
+          collection(db, "temperatureDeviceReadings"),
+          where("buildingCode", "==", selectedBuilding),
+          where("dateLocal", ">=", exportStart),
+          where("dateLocal", "<=", exportEnd),
+        ),
+      );
       if (snap.empty && buildingName) {
-        snap = await getDocs(query(
-          collection(db, 'temperatureDeviceReadings'),
-          where('buildingName', '==', buildingName),
-          where('dateLocal', '>=', exportStart),
-          where('dateLocal', '<=', exportEnd)
-        ));
+        snap = await getDocs(
+          query(
+            collection(db, "temperatureDeviceReadings"),
+            where("buildingName", "==", buildingName),
+            where("dateLocal", ">=", exportStart),
+            where("dateLocal", "<=", exportEnd),
+          ),
+        );
       }
       const rows = [];
       snap.docs.forEach((docSnap) => {
         const data = docSnap.data();
         const device = deviceDocs[data.deviceId] || {};
-        const roomId = device?.mapping?.spaceKey || device?.mapping?.roomId || '';
-        if (exportRoomIds.length > 0 && roomId && !exportRoomIds.includes(roomId)) return;
-        const roomName = roomId ? getRoomLabel(roomLookup[roomId] || { id: roomId }, spacesByKey) : '';
+        const roomId =
+          device?.mapping?.spaceKey || device?.mapping?.roomId || "";
+        if (
+          exportRoomIds.length > 0 &&
+          roomId &&
+          !exportRoomIds.includes(roomId)
+        )
+          return;
+        const roomName = roomId
+          ? getRoomLabel(roomLookup[roomId] || { id: roomId }, spacesByKey)
+          : "";
         const samples = data.samples || {};
         Object.values(samples).forEach((sample) => {
           rows.push([
             buildingName || selectedBuilding,
             roomName,
             device.label || data.deviceId,
-            sample.rawLocal || '',
+            sample.rawLocal || "",
             buildingSettings?.timezone || DEFAULT_TIMEZONE,
-            sample.temperatureF ?? '',
-            sample.temperatureC ?? '',
-            sample.humidity ?? ''
+            sample.temperatureF ?? "",
+            sample.temperatureC ?? "",
+            sample.humidity ?? "",
           ]);
         });
       });
       const headers = [
-        'Building',
-        'Room',
-        'Device Label',
-        'Local Timestamp',
-        'Timezone',
-        'Temperature F',
-        'Temperature C',
-        'Humidity'
+        "Building",
+        "Room",
+        "Device Label",
+        "Local Timestamp",
+        "Timezone",
+        "Temperature F",
+        "Temperature C",
+        "Humidity",
       ];
       const csvContent = [
-        headers.map(toCsvSafe).join(','),
-        ...rows.map((row) => row.map(toCsvSafe).join(','))
-      ].join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        headers.map(toCsvSafe).join(","),
+        ...rows.map((row) => row.map(toCsvSafe).join(",")),
+      ].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
       link.download = `temperature-raw-${selectedBuilding}-${exportStart}-to-${exportEnd}.csv`;
       link.click();
       URL.revokeObjectURL(url);
-      showNotification('success', 'Export Ready', `Exported ${rows.length} raw readings.`);
+      showNotification(
+        "success",
+        "Export Ready",
+        `Exported ${rows.length} raw readings.`,
+      );
     } catch (error) {
-      console.error('Raw export error:', error);
-      showNotification('error', 'Export Failed', 'Unable to export raw readings.');
+      console.error("Raw export error:", error);
+      showNotification(
+        "error",
+        "Export Failed",
+        "Unable to export raw readings.",
+      );
     } finally {
       setExporting(false);
     }
   };
 
-  const markerMap = editingPositions ? markerDrafts : (buildingSettings?.markers || {});
+  const markerMap = editingPositions
+    ? markerDrafts
+    : buildingSettings?.markers || {};
   const missingMarkers = roomsForBuilding.filter((room) => {
     const roomKey = room.spaceKey || room.id;
     if (!roomKey) return false;
     return !markerMap[roomKey];
   });
 
-  const currentSnapshotLabel = snapshotTimes.find((slot) => slot.id === selectedSnapshotId)?.label || '';
+  const currentSnapshotLabel =
+    snapshotTimes.find((slot) => slot.id === selectedSnapshotId)?.label || "";
 
   const floorplanData = buildingSettings?.floorplan;
 
@@ -1584,41 +1879,44 @@ const TemperatureMonitoring = () => {
       <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Floorplan View</h2>
+            <h2 className="text-lg font-semibold text-gray-900">
+              Floorplan View
+            </h2>
             <p className="text-sm text-gray-600">
-              {selectedDate || 'Select a date'} - {currentSnapshotLabel || 'Select a snapshot time'}
+              {selectedDate || "Select a date"} -{" "}
+              {currentSnapshotLabel || "Select a snapshot time"}
             </p>
           </div>
-          {isAdmin && (
-            <div className="flex items-center gap-2">
-              {!editingPositions ? (
-                <button className="btn-secondary" onClick={startEditingPositions}>
-                  <Pencil className="w-4 h-4 mr-2" /> Edit Positions
+          <div className="flex items-center gap-2">
+            {!editingPositions ? (
+              <button className="btn-secondary" onClick={startEditingPositions}>
+                <Pencil className="w-4 h-4 mr-2" /> Edit Positions
+              </button>
+            ) : (
+              <>
+                <button className="btn-primary" onClick={saveMarkerPositions}>
+                  <Save className="w-4 h-4 mr-2" /> Save Positions
                 </button>
-              ) : (
-                <>
-                  <button className="btn-primary" onClick={saveMarkerPositions}>
-                    <Save className="w-4 h-4 mr-2" /> Save Positions
-                  </button>
-                  <button className="btn-ghost" onClick={cancelEditingPositions}>
-                    <X className="w-4 h-4 mr-2" /> Cancel
-                  </button>
-                </>
-              )}
-              <label className="btn-secondary cursor-pointer">
-                <ImageIcon className="w-4 h-4 mr-2" /> Upload PNG
-                <input
-                  type="file"
-                  accept="image/png"
-                  className="hidden"
-                  onChange={(event) => handleFloorplanUpload(event.target.files?.[0])}
-                />
-              </label>
-            </div>
-          )}
+                <button className="btn-ghost" onClick={cancelEditingPositions}>
+                  <X className="w-4 h-4 mr-2" /> Cancel
+                </button>
+              </>
+            )}
+            <label className="btn-secondary cursor-pointer">
+              <ImageIcon className="w-4 h-4 mr-2" /> Upload PNG
+              <input
+                type="file"
+                accept="image/png"
+                className="hidden"
+                onChange={(event) =>
+                  handleFloorplanUpload(event.target.files?.[0])
+                }
+              />
+            </label>
+          </div>
         </div>
 
-        {floorplanData?.downloadUrl && isAdmin && !editingPositions && (
+        {floorplanData?.downloadUrl && !editingPositions && (
           <div className="flex justify-end mb-4">
             <button
               className="btn-ghost text-red-600 hover:text-red-700 hover:bg-red-50"
@@ -1635,25 +1933,25 @@ const TemperatureMonitoring = () => {
               <div className="w-16 h-16 rounded-full bg-baylor-green/10 flex items-center justify-center mx-auto mb-4">
                 <MapIcon className="w-8 h-8 text-baylor-green" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Floorplan Uploaded</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                No Floorplan Uploaded
+              </h3>
               <p className="text-sm text-gray-600 mb-6">
-                Upload a PNG image of the building floorplan to visualize temperature data with room markers.
+                Upload a PNG image of the building floorplan to visualize
+                temperature data with room markers.
               </p>
-              {isAdmin && (
-                <label className="btn-primary cursor-pointer inline-flex items-center gap-2">
-                  <ImageIcon className="w-4 h-4" />
-                  Upload Floorplan
-                  <input
-                    type="file"
-                    accept="image/png"
-                    className="hidden"
-                    onChange={(event) => handleFloorplanUpload(event.target.files?.[0])}
-                  />
-                </label>
-              )}
-              {!isAdmin && (
-                <p className="text-xs text-gray-500">Contact an administrator to upload a floorplan.</p>
-              )}
+              <label className="btn-primary cursor-pointer inline-flex items-center gap-2">
+                <ImageIcon className="w-4 h-4" />
+                Upload Floorplan
+                <input
+                  type="file"
+                  accept="image/png"
+                  className="hidden"
+                  onChange={(event) =>
+                    handleFloorplanUpload(event.target.files?.[0])
+                  }
+                />
+              </label>
             </div>
           </div>
         ) : (
@@ -1661,32 +1959,45 @@ const TemperatureMonitoring = () => {
             <div className="relative border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
               <div
                 ref={mapRef}
-                className={`relative ${editingPositions ? 'cursor-crosshair' : ''}`}
+                className={`relative ${editingPositions ? "cursor-crosshair" : ""}`}
                 onClick={handleMapClick}
               >
-                <img src={floorplanData.downloadUrl} alt={`${selectedBuilding} floorplan`} className="w-full h-auto block" />
+                <img
+                  src={floorplanData.downloadUrl}
+                  alt={`${selectedBuilding} floorplan`}
+                  className="w-full h-auto block"
+                />
                 {roomsForBuilding.map((room) => {
                   const roomKey = room.spaceKey || room.id;
                   if (!roomKey) return null;
                   const marker = markerMap[roomKey];
                   if (!marker) return null;
-                  const snapshot = snapshotLookup[roomKey]?.[selectedSnapshotId];
-                  const isMissing = !snapshot || snapshot.status === 'missing';
+                  const snapshot =
+                    snapshotLookup[roomKey]?.[selectedSnapshotId];
+                  const isMissing = !snapshot || snapshot.status === "missing";
                   const tempLabel = formatSnapshotTemp(snapshot);
-                  const roomNum = room.spaceNumber || room.roomNumber || room.name || '';
+                  const roomNum =
+                    room.spaceNumber || room.roomNumber || room.name || "";
                   // Compact display: just room number, temp in smaller text below
                   return (
                     <button
                       key={roomKey}
                       type="button"
-                      onPointerDown={(event) => handleMarkerPointerDown(roomKey, event)}
-                      className={`absolute -translate-x-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-[10px] font-medium shadow-sm whitespace-nowrap ${isMissing ? 'bg-gray-400/90 text-white' : 'bg-baylor-green/90 text-white'}`}
-                      style={{ left: `${marker.xPct}%`, top: `${marker.yPct}%` }}
+                      onPointerDown={(event) =>
+                        handleMarkerPointerDown(roomKey, event)
+                      }
+                      className={`absolute -translate-x-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-[10px] font-medium shadow-sm whitespace-nowrap ${isMissing ? "bg-gray-400/90 text-white" : "bg-baylor-green/90 text-white"}`}
+                      style={{
+                        left: `${marker.xPct}%`,
+                        top: `${marker.yPct}%`,
+                      }}
                       title={`${getRoomLabel(room, spacesByKey)} - ${tempLabel}`}
                     >
                       <span>{roomNum}</span>
                       {!isMissing && snapshot?.temperatureF != null && (
-                        <span className="ml-1 opacity-90">{Math.round(snapshot.temperatureF)}°</span>
+                        <span className="ml-1 opacity-90">
+                          {Math.round(snapshot.temperatureF)}°
+                        </span>
                       )}
                     </button>
                   );
@@ -1697,13 +2008,18 @@ const TemperatureMonitoring = () => {
             <div className="space-y-4">
               {editingPositions && (
                 <div className="bg-baylor-green/5 border border-baylor-green/20 rounded-lg p-4">
-                  <h3 className="text-sm font-semibold text-baylor-green mb-2">Edit Mode</h3>
+                  <h3 className="text-sm font-semibold text-baylor-green mb-2">
+                    Edit Mode
+                  </h3>
                   <p className="text-xs text-gray-600 mb-3">
-                    Drag existing markers or choose a room below, then click the map to place it.
+                    Drag existing markers or choose a room below, then click the
+                    map to place it.
                   </p>
                   <div className="space-y-2 max-h-48 overflow-y-auto">
                     {missingMarkers.length === 0 ? (
-                      <div className="text-xs text-gray-600">All rooms have markers placed.</div>
+                      <div className="text-xs text-gray-600">
+                        All rooms have markers placed.
+                      </div>
                     ) : (
                       missingMarkers.map((room) => {
                         const roomKey = room.spaceKey || room.id;
@@ -1711,7 +2027,7 @@ const TemperatureMonitoring = () => {
                         return (
                           <button
                             key={roomKey}
-                            className={`w-full text-left px-3 py-2 rounded-md border text-xs ${activePlacementRoomId === roomKey ? 'border-baylor-green bg-baylor-green/10' : 'border-gray-200 hover:border-baylor-green/50'}`}
+                            className={`w-full text-left px-3 py-2 rounded-md border text-xs ${activePlacementRoomId === roomKey ? "border-baylor-green bg-baylor-green/10" : "border-gray-200 hover:border-baylor-green/50"}`}
                             onClick={() => setActivePlacementRoomId(roomKey)}
                           >
                             {getRoomLabel(room, spacesByKey)}
@@ -1723,23 +2039,37 @@ const TemperatureMonitoring = () => {
                 </div>
               )}
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">Snapshot Summary</h3>
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                  Snapshot Summary
+                </h3>
                 <div className="text-sm text-gray-600 space-y-1">
                   <div>{roomsForBuilding.length} rooms in building</div>
-                  <div>{Object.keys(snapshotLookup).length} rooms with data</div>
-                  <div>Timezone: {buildingSettings?.timezone || DEFAULT_TIMEZONE}</div>
+                  <div>
+                    {Object.keys(snapshotLookup).length} rooms with data
+                  </div>
+                  <div>
+                    Timezone: {buildingSettings?.timezone || DEFAULT_TIMEZONE}
+                  </div>
                 </div>
               </div>
               <div className="bg-white border border-gray-200 rounded-lg p-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">Missing Data</h3>
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                  Missing Data
+                </h3>
                 <div className="text-xs text-gray-600 max-h-40 overflow-y-auto space-y-1">
-                  {roomsForBuilding.filter((room) => {
-                    const roomKey = room.spaceKey || room.id;
-                    const snapshot = roomKey ? snapshotLookup[roomKey]?.[selectedSnapshotId] : null;
-                    return !snapshot || snapshot.status === 'missing';
-                  }).map((room) => (
-                    <div key={room.spaceKey || room.id}>{getRoomLabel(room, spacesByKey)}</div>
-                  ))}
+                  {roomsForBuilding
+                    .filter((room) => {
+                      const roomKey = room.spaceKey || room.id;
+                      const snapshot = roomKey
+                        ? snapshotLookup[roomKey]?.[selectedSnapshotId]
+                        : null;
+                      return !snapshot || snapshot.status === "missing";
+                    })
+                    .map((room) => (
+                      <div key={room.spaceKey || room.id}>
+                        {getRoomLabel(room, spacesByKey)}
+                      </div>
+                    ))}
                 </div>
               </div>
             </div>
@@ -1753,8 +2083,12 @@ const TemperatureMonitoring = () => {
     <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Daily Snapshot Table</h2>
-          <p className="text-sm text-gray-600">Date: {selectedDate || 'Select a date'}</p>
+          <h2 className="text-lg font-semibold text-gray-900">
+            Daily Snapshot Table
+          </h2>
+          <p className="text-sm text-gray-600">
+            Date: {selectedDate || "Select a date"}
+          </p>
         </div>
         <div className="text-sm text-gray-600">
           {snapshotTimes.length} snapshot times
@@ -1764,9 +2098,14 @@ const TemperatureMonitoring = () => {
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th className="text-left px-4 py-2 text-gray-600 font-semibold">Room</th>
+              <th className="text-left px-4 py-2 text-gray-600 font-semibold">
+                Room
+              </th>
               {snapshotTimes.map((slot) => (
-                <th key={slot.id} className="text-left px-4 py-2 text-gray-600 font-semibold">
+                <th
+                  key={slot.id}
+                  className="text-left px-4 py-2 text-gray-600 font-semibold"
+                >
                   {slot.label || formatMinutesToLabel(slot.minutes)}
                 </th>
               ))}
@@ -1778,13 +2117,18 @@ const TemperatureMonitoring = () => {
               if (!roomKey) return null;
               return (
                 <tr key={roomKey}>
-                  <td className="px-4 py-2 font-medium text-gray-800">{getRoomLabel(room, spacesByKey)}</td>
+                  <td className="px-4 py-2 font-medium text-gray-800">
+                    {getRoomLabel(room, spacesByKey)}
+                  </td>
                   {snapshotTimes.map((slot) => {
                     const snapshot = snapshotLookup[roomKey]?.[slot.id];
-                    const isMissing = !snapshot || snapshot.status === 'missing';
+                    const isMissing =
+                      !snapshot || snapshot.status === "missing";
                     return (
                       <td key={slot.id} className="px-4 py-2">
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${isMissing ? 'bg-gray-200 text-gray-600' : 'bg-baylor-green/10 text-baylor-green'}`}>
+                        <span
+                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${isMissing ? "bg-gray-200 text-gray-600" : "bg-baylor-green/10 text-baylor-green"}`}
+                        >
                           {formatSnapshotTemp(snapshot)}
                         </span>
                       </td>
@@ -1802,7 +2146,7 @@ const TemperatureMonitoring = () => {
   const missingCounts = useMemo(() => {
     const counts = {};
     historicalDocs.forEach((docData) => {
-      if (docData.status !== 'missing') return;
+      if (docData.status !== "missing") return;
       const roomKey = docData.spaceKey || docData.roomId;
       if (!roomKey) return;
       counts[roomKey] = (counts[roomKey] || 0) + 1;
@@ -1814,17 +2158,26 @@ const TemperatureMonitoring = () => {
 
   const renderHistorical = () => {
     const roomSnapshots = historicalRoomId
-      ? historicalDocs.filter((docData) => (docData.spaceKey || docData.roomId) === historicalRoomId)
+      ? historicalDocs.filter(
+          (docData) =>
+            (docData.spaceKey || docData.roomId) === historicalRoomId,
+        )
       : [];
 
-    const dates = Array.from(new Set(roomSnapshots.map((docData) => docData.dateLocal))).sort();
+    const dates = Array.from(
+      new Set(roomSnapshots.map((docData) => docData.dateLocal)),
+    ).sort();
 
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Historical View</h2>
-            <p className="text-sm text-gray-600">Track snapshot history across dates.</p>
+            <h2 className="text-lg font-semibold text-gray-900">
+              Historical View
+            </h2>
+            <p className="text-sm text-gray-600">
+              Track snapshot history across dates.
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <input
@@ -1840,8 +2193,12 @@ const TemperatureMonitoring = () => {
               value={historicalEnd}
               onChange={(e) => setHistoricalEnd(e.target.value)}
             />
-            <button className="btn-secondary" onClick={loadHistorical} disabled={historicalLoading}>
-              {historicalLoading ? 'Loading...' : 'Load'}
+            <button
+              className="btn-secondary"
+              onClick={loadHistorical}
+              disabled={historicalLoading}
+            >
+              {historicalLoading ? "Loading..." : "Load"}
             </button>
           </div>
         </div>
@@ -1859,7 +2216,9 @@ const TemperatureMonitoring = () => {
                 const roomKey = room.spaceKey || room.id;
                 if (!roomKey) return null;
                 return (
-                  <option key={roomKey} value={roomKey}>{getRoomLabel(room, spacesByKey)}</option>
+                  <option key={roomKey} value={roomKey}>
+                    {getRoomLabel(room, spacesByKey)}
+                  </option>
                 );
               })}
             </select>
@@ -1868,9 +2227,14 @@ const TemperatureMonitoring = () => {
                 <table className="min-w-full text-sm">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="text-left px-4 py-2 text-gray-600 font-semibold">Date</th>
+                      <th className="text-left px-4 py-2 text-gray-600 font-semibold">
+                        Date
+                      </th>
                       {snapshotTimes.map((slot) => (
-                        <th key={slot.id} className="text-left px-4 py-2 text-gray-600 font-semibold">
+                        <th
+                          key={slot.id}
+                          className="text-left px-4 py-2 text-gray-600 font-semibold"
+                        >
                           {slot.label || formatMinutesToLabel(slot.minutes)}
                         </th>
                       ))}
@@ -1879,13 +2243,22 @@ const TemperatureMonitoring = () => {
                   <tbody className="divide-y divide-gray-200">
                     {dates.map((dateKey) => (
                       <tr key={dateKey}>
-                        <td className="px-4 py-2 font-medium text-gray-800">{dateKey}</td>
+                        <td className="px-4 py-2 font-medium text-gray-800">
+                          {dateKey}
+                        </td>
                         {snapshotTimes.map((slot) => {
-                          const snapshot = roomSnapshots.find((docData) => docData.dateLocal === dateKey && docData.snapshotTimeId === slot.id);
-                          const isMissing = !snapshot || snapshot.status === 'missing';
+                          const snapshot = roomSnapshots.find(
+                            (docData) =>
+                              docData.dateLocal === dateKey &&
+                              docData.snapshotTimeId === slot.id,
+                          );
+                          const isMissing =
+                            !snapshot || snapshot.status === "missing";
                           return (
                             <td key={slot.id} className="px-4 py-2">
-                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${isMissing ? 'bg-gray-200 text-gray-600' : 'bg-baylor-green/10 text-baylor-green'}`}>
+                              <span
+                                className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${isMissing ? "bg-gray-200 text-gray-600" : "bg-baylor-green/10 text-baylor-green"}`}
+                              >
                                 {formatSnapshotTemp(snapshot)}
                               </span>
                             </td>
@@ -1900,14 +2273,26 @@ const TemperatureMonitoring = () => {
           </div>
 
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Problem Rooms</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">
+              Problem Rooms
+            </h3>
             {missingCounts.length === 0 ? (
-              <div className="text-xs text-gray-600">No missing data in this range.</div>
+              <div className="text-xs text-gray-600">
+                No missing data in this range.
+              </div>
             ) : (
               <div className="space-y-2 text-xs text-gray-600">
                 {missingCounts.slice(0, 8).map((item) => (
-                  <div key={item.roomId} className="flex items-center justify-between">
-                    <span>{getRoomLabel(roomLookup[item.roomId] || { id: item.roomId }, spacesByKey)}</span>
+                  <div
+                    key={item.roomId}
+                    className="flex items-center justify-between"
+                  >
+                    <span>
+                      {getRoomLabel(
+                        roomLookup[item.roomId] || { id: item.roomId },
+                        spacesByKey,
+                      )}
+                    </span>
                     <span className="text-gray-500">{item.count} missing</span>
                   </div>
                 ))}
@@ -1924,7 +2309,9 @@ const TemperatureMonitoring = () => {
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Bulk Import</h2>
-          <p className="text-sm text-gray-600">Upload Govee CSV exports and map devices to rooms.</p>
+          <p className="text-sm text-gray-600">
+            Upload Govee CSV exports and map devices to rooms.
+          </p>
         </div>
         {importItems.length > 0 && (
           <button
@@ -1953,55 +2340,79 @@ const TemperatureMonitoring = () => {
               <FileUp className="w-5 h-5 text-baylor-green" />
             </div>
             <div>
-              <div className="text-sm font-semibold text-gray-900">Select Govee CSV exports</div>
+              <div className="text-sm font-semibold text-gray-900">
+                Select Govee CSV exports
+              </div>
               <div className="text-xs text-gray-500">
-                Upload one or more CSV files. We'll detect timestamps, temperature, and humidity automatically.
+                Upload one or more CSV files. We'll detect timestamps,
+                temperature, and humidity automatically.
               </div>
             </div>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <label htmlFor="temperature-import-csvs" className="btn-secondary cursor-pointer inline-flex items-center">
+            <label
+              htmlFor="temperature-import-csvs"
+              className="btn-secondary cursor-pointer inline-flex items-center"
+            >
               <FileUp className="w-4 h-4 mr-2" /> Choose CSVs
             </label>
             {importItems.length > 0 && (
-              <span className="text-xs text-gray-500">Selecting new files replaces the current list.</span>
+              <span className="text-xs text-gray-500">
+                Selecting new files replaces the current list.
+              </span>
             )}
           </div>
         </div>
 
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-900">Import Summary</h3>
-            <span className={`text-xs font-medium ${importItems.length ? 'text-baylor-green' : 'text-gray-500'}`}>
-              {importItems.length ? 'Ready for review' : 'Awaiting files'}
+            <h3 className="text-sm font-semibold text-gray-900">
+              Import Summary
+            </h3>
+            <span
+              className={`text-xs font-medium ${importItems.length ? "text-baylor-green" : "text-gray-500"}`}
+            >
+              {importItems.length ? "Ready for review" : "Awaiting files"}
             </span>
           </div>
           <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
             <div className="rounded-lg bg-white border border-gray-200 p-3">
               <div className="text-xs text-gray-500">Files</div>
-              <div className="text-lg font-semibold text-gray-900">{importSummary.fileCount}</div>
+              <div className="text-lg font-semibold text-gray-900">
+                {importSummary.fileCount}
+              </div>
             </div>
             <div className="rounded-lg bg-white border border-gray-200 p-3">
               <div className="text-xs text-gray-500">Devices</div>
-              <div className="text-lg font-semibold text-gray-900">{importSummary.deviceCount}</div>
+              <div className="text-lg font-semibold text-gray-900">
+                {importSummary.deviceCount}
+              </div>
             </div>
             <div className="rounded-lg bg-white border border-gray-200 p-3">
               <div className="text-xs text-gray-500">Rows Parsed</div>
               <div className="text-lg font-semibold text-gray-900">
-                {importSummary.totalRows > 0 ? `${importSummary.parsedRows}/${importSummary.totalRows}` : '0'}
+                {importSummary.totalRows > 0
+                  ? `${importSummary.parsedRows}/${importSummary.totalRows}`
+                  : "0"}
               </div>
             </div>
             <div className="rounded-lg bg-white border border-gray-200 p-3">
               <div className="text-xs text-gray-500">Duplicates</div>
-              <div className="text-lg font-semibold text-gray-600">{importSummary.duplicateCount}</div>
+              <div className="text-lg font-semibold text-gray-600">
+                {importSummary.duplicateCount}
+              </div>
             </div>
             <div className="rounded-lg bg-white border border-gray-200 p-3">
               <div className="text-xs text-gray-500">Errors</div>
-              <div className="text-lg font-semibold text-amber-700">{importSummary.errorCount}</div>
+              <div className="text-lg font-semibold text-amber-700">
+                {importSummary.errorCount}
+              </div>
             </div>
             <div className="rounded-lg bg-white border border-gray-200 p-3">
               <div className="text-xs text-gray-500">Ready</div>
-              <div className="text-lg font-semibold text-baylor-green">{importSummary.readyCount}</div>
+              <div className="text-lg font-semibold text-baylor-green">
+                {importSummary.readyCount}
+              </div>
             </div>
           </div>
         </div>
@@ -2012,9 +2423,16 @@ const TemperatureMonitoring = () => {
           <div className="w-14 h-14 rounded-full bg-baylor-green/10 flex items-center justify-center mx-auto mb-4">
             <FileUp className="w-7 h-7 text-baylor-green" />
           </div>
-          <p className="text-base font-medium text-gray-900 mb-1">No CSV files selected</p>
-          <p className="text-sm text-gray-500 mb-4">Choose one or more Govee CSV exports to import temperature data.</p>
-          <label htmlFor="temperature-import-csvs" className="btn-primary cursor-pointer inline-flex items-center gap-2">
+          <p className="text-base font-medium text-gray-900 mb-1">
+            No CSV files selected
+          </p>
+          <p className="text-sm text-gray-500 mb-4">
+            Choose one or more Govee CSV exports to import temperature data.
+          </p>
+          <label
+            htmlFor="temperature-import-csvs"
+            className="btn-primary cursor-pointer inline-flex items-center gap-2"
+          >
             <FileUp className="w-4 h-4" />
             Select CSV Files
           </label>
@@ -2022,33 +2440,60 @@ const TemperatureMonitoring = () => {
       ) : (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-900">Selected Files</h3>
-            <span className="text-xs text-gray-500">{importSummary.fileCount} files</span>
+            <h3 className="text-sm font-semibold text-gray-900">
+              Selected Files
+            </h3>
+            <span className="text-xs text-gray-500">
+              {importSummary.fileCount} files
+            </span>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">File</th>
-                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">Device</th>
-                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">Rows</th>
-                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">Date Range</th>
-                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">Status</th>
-                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">Action</th>
+                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">
+                    File
+                  </th>
+                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">
+                    Device
+                  </th>
+                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">
+                    Rows
+                  </th>
+                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">
+                    Date Range
+                  </th>
+                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">
+                    Status
+                  </th>
+                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">
+                    Action
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {importItems.map((item) => {
                   const rowTotal = item.rowCount ?? 0;
                   const parsedRows = item.parsedCount ?? 0;
-                  const rowsLabel = rowTotal > 0 ? `${parsedRows}/${rowTotal}` : parsedRows > 0 ? `${parsedRows}` : '-';
+                  const rowsLabel =
+                    rowTotal > 0
+                      ? `${parsedRows}/${rowTotal}`
+                      : parsedRows > 0
+                        ? `${parsedRows}`
+                        : "-";
                   return (
                     <tr key={item.id}>
-                      <td className="px-4 py-2 font-medium text-gray-800">{item.fileName}</td>
-                      <td className="px-4 py-2 text-gray-700">{item.deviceLabel || '-'}</td>
+                      <td className="px-4 py-2 font-medium text-gray-800">
+                        {item.fileName}
+                      </td>
+                      <td className="px-4 py-2 text-gray-700">
+                        {item.deviceLabel || "-"}
+                      </td>
                       <td className="px-4 py-2 text-gray-700">{rowsLabel}</td>
                       <td className="px-4 py-2 text-gray-700">
-                        {item.minTimestamp && item.maxTimestamp ? `${item.minTimestamp} -> ${item.maxTimestamp}` : '-'}
+                        {item.minTimestamp && item.maxTimestamp
+                          ? `${item.minTimestamp} -> ${item.maxTimestamp}`
+                          : "-"}
                       </td>
                       <td className="px-4 py-2 text-gray-700">
                         {item.duplicate ? (
@@ -2057,7 +2502,8 @@ const TemperatureMonitoring = () => {
                           </span>
                         ) : item.errorCount > 0 ? (
                           <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
-                            <AlertTriangle className="w-3 h-3" /> {item.errorCount} errors
+                            <AlertTriangle className="w-3 h-3" />{" "}
+                            {item.errorCount} errors
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-full border border-baylor-green/20 bg-baylor-green/10 px-2 py-1 text-xs text-baylor-green">
@@ -2087,29 +2533,60 @@ const TemperatureMonitoring = () => {
           {pendingMappings.length > 0 && (
             <div className="bg-baylor-gold/10 border border-baylor-gold/30 rounded-lg p-4 space-y-3">
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">Device → Room Mapping</h3>
-                <p className="text-xs text-gray-500">Review and correct room assignments before importing. Changes will be saved for future imports.</p>
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Device → Room Mapping
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Review and correct room assignments before importing. Changes
+                  will be saved for future imports.
+                </p>
               </div>
               <div className="space-y-2">
                 {pendingMappings.map((item) => (
-                  <div key={item.deviceId} className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                  <div
+                    key={item.deviceId}
+                    className="flex flex-col md:flex-row md:items-center md:justify-between gap-2"
+                  >
                     <div>
-                      <div className="text-sm font-medium text-gray-800">{item.deviceLabel}</div>
+                      <div className="text-sm font-medium text-gray-800">
+                        {item.deviceLabel}
+                      </div>
                       <div className="text-xs text-gray-500">
-                        Suggested: {item.suggestedRoomId ? getRoomLabel(roomLookup[item.suggestedRoomId] || { id: item.suggestedRoomId }, spacesByKey) : 'None'} | Confidence {Math.round((item.matchConfidence || 0) * 100)}%
+                        Suggested:{" "}
+                        {item.suggestedRoomId
+                          ? getRoomLabel(
+                              roomLookup[item.suggestedRoomId] || {
+                                id: item.suggestedRoomId,
+                              },
+                              spacesByKey,
+                            )
+                          : "None"}{" "}
+                        | Confidence{" "}
+                        {Math.round((item.matchConfidence || 0) * 100)}%
                       </div>
                     </div>
                     <select
                       className="form-input md:max-w-xs"
-                      value={mappingOverrides[item.deviceId] || item.suggestedRoomId || ''}
-                      onChange={(e) => setMappingOverrides((prev) => ({ ...prev, [item.deviceId]: e.target.value }))}
+                      value={
+                        mappingOverrides[item.deviceId] ||
+                        item.suggestedRoomId ||
+                        ""
+                      }
+                      onChange={(e) =>
+                        setMappingOverrides((prev) => ({
+                          ...prev,
+                          [item.deviceId]: e.target.value,
+                        }))
+                      }
                     >
                       <option value="">Select room...</option>
                       {roomsForBuilding.map((room) => {
                         const roomKey = room.spaceKey || room.id;
                         if (!roomKey) return null;
                         return (
-                          <option key={roomKey} value={roomKey}>{getRoomLabel(room, spacesByKey)}</option>
+                          <option key={roomKey} value={roomKey}>
+                            {getRoomLabel(room, spacesByKey)}
+                          </option>
                         );
                       })}
                     </select>
@@ -2121,10 +2598,15 @@ const TemperatureMonitoring = () => {
 
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="text-sm text-gray-600">
-              Duplicates are skipped automatically. Resolve any mapping prompts before importing.
+              Duplicates are skipped automatically. Resolve any mapping prompts
+              before importing.
             </div>
-            <button className="btn-primary" onClick={handleImport} disabled={importing || hasUnresolvedMappings}>
-              {importing ? 'Importing...' : 'Import Now'}
+            <button
+              className="btn-primary"
+              onClick={handleImport}
+              disabled={importing || hasUnresolvedMappings}
+            >
+              {importing ? "Importing..." : "Import Now"}
             </button>
           </div>
         </div>
@@ -2138,22 +2620,37 @@ const TemperatureMonitoring = () => {
             <table className="min-w-full text-sm">
               <thead className="bg-gray-100">
                 <tr>
-                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">Date</th>
-                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">File</th>
-                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">Rows</th>
-                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">Action</th>
+                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">
+                    Date
+                  </th>
+                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">
+                    File
+                  </th>
+                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">
+                    Rows
+                  </th>
+                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">
+                    Action
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {importHistory.map((item) => {
                   const importDate = item.createdAt?.seconds
                     ? new Date(item.createdAt.seconds * 1000).toLocaleString()
-                    : 'Unknown';
+                    : "Unknown";
                   return (
                     <tr key={item.id}>
                       <td className="px-3 py-2 text-gray-700">{importDate}</td>
-                      <td className="px-3 py-2 text-gray-700 truncate max-w-[200px]" title={item.fileName}>{item.fileName || '-'}</td>
-                      <td className="px-3 py-2 text-gray-700">{item.rowCount ?? '-'}</td>
+                      <td
+                        className="px-3 py-2 text-gray-700 truncate max-w-[200px]"
+                        title={item.fileName}
+                      >
+                        {item.fileName || "-"}
+                      </td>
+                      <td className="px-3 py-2 text-gray-700">
+                        {item.rowCount ?? "-"}
+                      </td>
                       <td className="px-3 py-2">
                         <button
                           className="text-red-600 hover:text-red-800 text-xs font-medium flex items-center gap-1"
@@ -2178,7 +2675,9 @@ const TemperatureMonitoring = () => {
     <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
       <div>
         <h2 className="text-lg font-semibold text-gray-900">Export Data</h2>
-        <p className="text-sm text-gray-600">Download snapshot or raw readings using current filters.</p>
+        <p className="text-sm text-gray-600">
+          Download snapshot or raw readings using current filters.
+        </p>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-3">
@@ -2203,13 +2702,19 @@ const TemperatureMonitoring = () => {
             className="form-input"
             multiple
             value={exportRoomIds}
-            onChange={(e) => setExportRoomIds(Array.from(e.target.selectedOptions).map((opt) => opt.value))}
+            onChange={(e) =>
+              setExportRoomIds(
+                Array.from(e.target.selectedOptions).map((opt) => opt.value),
+              )
+            }
           >
             {roomsForBuilding.map((room) => {
               const roomKey = room.spaceKey || room.id;
               if (!roomKey) return null;
               return (
-                <option key={roomKey} value={roomKey}>{getRoomLabel(room, spacesByKey)}</option>
+                <option key={roomKey} value={roomKey}>
+                  {getRoomLabel(room, spacesByKey)}
+                </option>
               );
             })}
           </select>
@@ -2218,10 +2723,16 @@ const TemperatureMonitoring = () => {
             className="form-input"
             multiple
             value={exportSnapshotIds}
-            onChange={(e) => setExportSnapshotIds(Array.from(e.target.selectedOptions).map((opt) => opt.value))}
+            onChange={(e) =>
+              setExportSnapshotIds(
+                Array.from(e.target.selectedOptions).map((opt) => opt.value),
+              )
+            }
           >
             {snapshotTimes.map((slot) => (
-              <option key={slot.id} value={slot.id}>{slot.label || formatMinutesToLabel(slot.minutes)}</option>
+              <option key={slot.id} value={slot.id}>
+                {slot.label || formatMinutesToLabel(slot.minutes)}
+              </option>
             ))}
           </select>
         </div>
@@ -2231,23 +2742,36 @@ const TemperatureMonitoring = () => {
               <Download className="w-4 h-4 mt-0.5 text-gray-400" />
               <div>
                 <div className="font-medium text-gray-800">Snapshot Export</div>
-                <div>Includes temperature, humidity, snapshot time, and delta to target.</div>
+                <div>
+                  Includes temperature, humidity, snapshot time, and delta to
+                  target.
+                </div>
               </div>
             </div>
-            <button className="btn-primary w-full" onClick={handleSnapshotExport} disabled={exporting}>
-              {exporting ? 'Exporting...' : 'Export Snapshots CSV'}
+            <button
+              className="btn-primary w-full"
+              onClick={handleSnapshotExport}
+              disabled={exporting}
+            >
+              {exporting ? "Exporting..." : "Export Snapshots CSV"}
             </button>
           </div>
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
             <div className="flex items-start gap-2 text-sm text-gray-600">
               <Download className="w-4 h-4 mt-0.5 text-gray-400" />
               <div>
-                <div className="font-medium text-gray-800">Raw Readings Export</div>
+                <div className="font-medium text-gray-800">
+                  Raw Readings Export
+                </div>
                 <div>Full daily readings with local timestamps.</div>
               </div>
             </div>
-            <button className="btn-secondary w-full" onClick={handleRawExport} disabled={exporting}>
-              {exporting ? 'Exporting...' : 'Export Raw Readings CSV'}
+            <button
+              className="btn-secondary w-full"
+              onClick={handleRawExport}
+              disabled={exporting}
+            >
+              {exporting ? "Exporting..." : "Export Raw Readings CSV"}
             </button>
           </div>
         </div>
@@ -2258,8 +2782,12 @@ const TemperatureMonitoring = () => {
   const renderSettings = () => (
     <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-gray-900">Temperature Settings</h2>
-        <p className="text-sm text-gray-600">Manage timezone and snapshot intervals for this building.</p>
+        <h2 className="text-lg font-semibold text-gray-900">
+          Temperature Settings
+        </h2>
+        <p className="text-sm text-gray-600">
+          Manage timezone and snapshot intervals for this building.
+        </p>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4">
@@ -2269,9 +2797,16 @@ const TemperatureMonitoring = () => {
               type="text"
               className="form-input"
               value={buildingSettings?.timezone || DEFAULT_TIMEZONE}
-              onChange={(e) => setBuildingSettings((prev) => ({ ...prev, timezone: e.target.value }))}
+              onChange={(e) =>
+                setBuildingSettings((prev) => ({
+                  ...prev,
+                  timezone: e.target.value,
+                }))
+              }
             />
-            <p className="text-xs text-gray-500 mt-1">Default: {DEFAULT_TIMEZONE}</p>
+            <p className="text-xs text-gray-500 mt-1">
+              Default: {DEFAULT_TIMEZONE}
+            </p>
           </div>
 
           <div>
@@ -2291,7 +2826,7 @@ const TemperatureMonitoring = () => {
                       } else {
                         handleUpdateSnapshotTime(slot.id, {
                           minutes: parsedMinutes,
-                          label: formatMinutesToTime(parsedMinutes)
+                          label: formatMinutesToTime(parsedMinutes),
                         });
                       }
                     }}
@@ -2301,9 +2836,16 @@ const TemperatureMonitoring = () => {
                     min="0"
                     className="form-input w-24"
                     value={slot.toleranceMinutes ?? 15}
-                    onChange={(e) => handleUpdateSnapshotTime(slot.id, { toleranceMinutes: Number(e.target.value) })}
+                    onChange={(e) =>
+                      handleUpdateSnapshotTime(slot.id, {
+                        toleranceMinutes: Number(e.target.value),
+                      })
+                    }
                   />
-                  <button className="btn-ghost" onClick={() => handleRemoveSnapshotTime(slot.id)}>
+                  <button
+                    className="btn-ghost"
+                    onClick={() => handleRemoveSnapshotTime(slot.id)}
+                  >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
@@ -2322,9 +2864,13 @@ const TemperatureMonitoring = () => {
                 min="0"
                 className="form-input w-24"
                 value={newSnapshotTolerance}
-                onChange={(e) => setNewSnapshotTolerance(Number(e.target.value))}
+                onChange={(e) =>
+                  setNewSnapshotTolerance(Number(e.target.value))
+                }
               />
-              <button className="btn-secondary" onClick={handleAddSnapshotTime}>Add</button>
+              <button className="btn-secondary" onClick={handleAddSnapshotTime}>
+                Add
+              </button>
             </div>
           </div>
 
@@ -2336,17 +2882,40 @@ const TemperatureMonitoring = () => {
                 onChange={(e) => setBuildingIsHidden(e.target.checked)}
                 className="w-4 h-4 text-baylor-green border-gray-300 rounded focus:ring-baylor-green"
               />
-              <span className="text-sm text-gray-700">Hide this building from the selector</span>
+              <span className="text-sm text-gray-700">
+                Hide this building from the selector
+              </span>
             </label>
 
             <div className="flex flex-wrap items-center gap-2">
-              <button className="btn-primary" onClick={saveBuildingSettings}>Save Settings</button>
-              <button className="btn-ghost" onClick={() => setBuildingSettings(buildDefaultSettings({ buildingCode: selectedBuilding, buildingName: selectedBuildingName }))}>Reset Defaults</button>
+              <button className="btn-primary" onClick={saveBuildingSettings}>
+                Save Settings
+              </button>
+              <button
+                className="btn-ghost"
+                onClick={() =>
+                  setBuildingSettings(
+                    buildDefaultSettings({
+                      buildingCode: selectedBuilding,
+                      buildingName: selectedBuildingName,
+                    }),
+                  )
+                }
+              >
+                Reset Defaults
+              </button>
               <button
                 className="btn-secondary"
                 onClick={() => {
-                  localStorage.setItem('temperatureDefaultBuilding', selectedBuilding);
-                  showNotification('success', 'Default Set', `${selectedBuildingName || selectedBuilding} is now your default building.`);
+                  localStorage.setItem(
+                    "temperatureDefaultBuilding",
+                    selectedBuilding,
+                  );
+                  showNotification(
+                    "success",
+                    "Default Set",
+                    `${selectedBuildingName || selectedBuilding} is now your default building.`,
+                  );
                 }}
               >
                 Set as Default
@@ -2357,9 +2926,12 @@ const TemperatureMonitoring = () => {
 
         <div className="space-y-4">
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-2">
-            <h3 className="text-sm font-semibold text-gray-900">Recompute Snapshots</h3>
+            <h3 className="text-sm font-semibold text-gray-900">
+              Recompute Snapshots
+            </h3>
             <p className="text-xs text-gray-600">
-              If timezone or mappings change, recompute snapshots for the selected range.
+              If timezone or mappings change, recompute snapshots for the
+              selected range.
             </p>
             <div className="flex items-center gap-2">
               <input
@@ -2376,8 +2948,12 @@ const TemperatureMonitoring = () => {
                 onChange={(e) => setRecomputeEnd(e.target.value)}
               />
             </div>
-            <button className="btn-secondary w-full" onClick={handleRecomputeSnapshots} disabled={recomputing}>
-              {recomputing ? 'Recomputing...' : 'Recompute Snapshots'}
+            <button
+              className="btn-secondary w-full"
+              onClick={handleRecomputeSnapshots}
+              disabled={recomputing}
+            >
+              {recomputing ? "Recomputing..." : "Recompute Snapshots"}
             </button>
           </div>
         </div>
@@ -2387,29 +2963,35 @@ const TemperatureMonitoring = () => {
 
   // Data view tabs (always visible)
   const dataViewTabs = [
-    { id: 'floorplan', label: 'Floorplan', icon: MapIcon },
-    { id: 'daily', label: 'Daily', icon: LayoutGrid },
-    { id: 'historical', label: 'Historical', icon: History }
+    { id: "floorplan", label: "Floorplan", icon: MapIcon },
+    { id: "daily", label: "Daily", icon: LayoutGrid },
+    { id: "historical", label: "Historical", icon: History },
   ];
 
-  // Admin action tabs (only for admins)
-  const adminActionTabs = [
-    { id: 'import', label: 'Import', icon: FileUp },
-    { id: 'export', label: 'Export', icon: Download },
-    { id: 'settings', label: 'Settings', icon: Thermometer }
+  // Action tabs
+  const actionTabs = [
+    { id: "import", label: "Import", icon: FileUp },
+    { id: "export", label: "Export", icon: Download },
+    { id: "settings", label: "Settings", icon: Thermometer },
   ];
 
   // Calculate quick stats
   const roomCount = roomsForBuilding.length;
   const roomsWithData = Object.keys(snapshotLookup).length;
-  const coveragePercent = roomCount > 0 ? Math.round((roomsWithData / roomCount) * 100) : 0;
+  const coveragePercent =
+    roomCount > 0 ? Math.round((roomsWithData / roomCount) * 100) : 0;
 
   return (
     <div className="space-y-6 p-6">
       {/* Page Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Temperature Monitoring</h1>
-        <p className="text-gray-600">Track room temperatures, import sensor data, and visualize daily snapshots.</p>
+        <h1 className="text-2xl font-bold text-gray-900">
+          Temperature Monitoring
+        </h1>
+        <p className="text-gray-600">
+          Track room temperatures, import sensor data, and visualize daily
+          snapshots.
+        </p>
       </div>
 
       {/* Filter Bar - Sticky */}
@@ -2418,7 +3000,9 @@ const TemperatureMonitoring = () => {
           <div className="flex flex-col lg:flex-row lg:items-center gap-4">
             {/* Building Selector - More Prominent */}
             <div className="flex-1 min-w-0">
-              <label className="block text-xs font-medium text-gray-500 mb-1">Building</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Building
+              </label>
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
                   <MapIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10 pointer-events-none" />
@@ -2430,18 +3014,29 @@ const TemperatureMonitoring = () => {
                     <option value="">Select building...</option>
                     {buildingOptions.map((building) => (
                       <option key={building.code} value={building.code}>
-                        {building.name}{hiddenBuildingCodes.has(building.code) ? ' (hidden)' : ''}
+                        {building.name}
+                        {hiddenBuildingCodes.has(building.code)
+                          ? " (hidden)"
+                          : ""}
                       </option>
                     ))}
                   </select>
                 </div>
-                {isAdmin && hiddenBuildingCodes.size > 0 && (
+                {hiddenBuildingCodes.size > 0 && (
                   <button
                     onClick={() => setShowHidden(!showHidden)}
                     className="p-2 rounded-lg text-sm font-medium flex items-center gap-1 transition bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    title={showHidden ? 'Hide hidden buildings' : 'Show hidden buildings'}
+                    title={
+                      showHidden
+                        ? "Hide hidden buildings"
+                        : "Show hidden buildings"
+                    }
                   >
-                    {showHidden ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    {showHidden ? (
+                      <Eye className="w-4 h-4" />
+                    ) : (
+                      <EyeOff className="w-4 h-4" />
+                    )}
                   </button>
                 )}
               </div>
@@ -2452,7 +3047,9 @@ const TemperatureMonitoring = () => {
 
             {/* Date Selector */}
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Date</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Date
+              </label>
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-gray-400" />
                 <input
@@ -2466,7 +3063,9 @@ const TemperatureMonitoring = () => {
 
             {/* Time Selector */}
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Snapshot Time</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Snapshot Time
+              </label>
               <div className="flex items-center gap-2">
                 <Thermometer className="w-4 h-4 text-gray-400" />
                 <select
@@ -2496,10 +3095,11 @@ const TemperatureMonitoring = () => {
                 <button
                   key={tab.id}
                   onClick={() => setViewMode(tab.id)}
-                  className={`px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${isActive
-                    ? 'bg-white text-baylor-green shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                    }`}
+                  className={`px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${
+                    isActive
+                      ? "bg-white text-baylor-green shadow-sm"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
                 >
                   <Icon className="w-4 h-4" />
                   {tab.label}
@@ -2508,94 +3108,96 @@ const TemperatureMonitoring = () => {
             })}
           </div>
 
-          {/* Admin Actions - Styled differently */}
-          {isAdmin && (
-            <div className="flex items-center gap-2">
-              {adminActionTabs.map((tab) => {
-                const Icon = tab.icon;
-                const isActive = viewMode === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setViewMode(tab.id)}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition border ${isActive
-                      ? 'bg-baylor-green text-white border-baylor-green'
-                      : 'bg-white text-gray-700 border-gray-200 hover:border-baylor-green/50 hover:text-baylor-green'
-                      }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span className="hidden sm:inline">{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Export button for non-admins */}
-          {!isAdmin && (
-            <button
-              onClick={() => setViewMode('export')}
-              className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition border ${viewMode === 'export'
-                ? 'bg-baylor-green text-white border-baylor-green'
-                : 'bg-white text-gray-700 border-gray-200 hover:border-baylor-green/50 hover:text-baylor-green'
-                }`}
-            >
-              <Download className="w-4 h-4" />
-              Export
-            </button>
-          )}
+          {/* Action tabs */}
+          <div className="flex items-center gap-2">
+            {actionTabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = viewMode === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setViewMode(tab.id)}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition border ${
+                    isActive
+                      ? "bg-baylor-green text-white border-baylor-green"
+                      : "bg-white text-gray-700 border-gray-200 hover:border-baylor-green/50 hover:text-baylor-green"
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span className="hidden sm:inline">{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
       {/* Quick Stats Card */}
-      {selectedBuilding && !snapshotLoading && (viewMode === 'floorplan' || viewMode === 'daily' || viewMode === 'historical') && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-baylor-green/10 flex items-center justify-center">
-                <MapIcon className="w-5 h-5 text-baylor-green" />
+      {selectedBuilding &&
+        !snapshotLoading &&
+        (viewMode === "floorplan" ||
+          viewMode === "daily" ||
+          viewMode === "historical") && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-baylor-green/10 flex items-center justify-center">
+                  <MapIcon className="w-5 h-5 text-baylor-green" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    {roomCount}
+                  </div>
+                  <div className="text-xs text-gray-500">Total Rooms</div>
+                </div>
               </div>
-              <div>
-                <div className="text-2xl font-bold text-gray-900">{roomCount}</div>
-                <div className="text-xs text-gray-500">Total Rooms</div>
+            </div>
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-baylor-green/10 flex items-center justify-center">
+                  <Thermometer className="w-5 h-5 text-baylor-green" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    {roomsWithData}
+                  </div>
+                  <div className="text-xs text-gray-500">With Data</div>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-10 h-10 rounded-lg flex items-center justify-center ${coveragePercent >= 80 ? "bg-green-100" : coveragePercent >= 50 ? "bg-yellow-100" : "bg-red-100"}`}
+                >
+                  <CheckCircle2
+                    className={`w-5 h-5 ${coveragePercent >= 80 ? "text-green-600" : coveragePercent >= 50 ? "text-yellow-600" : "text-red-600"}`}
+                  />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    {coveragePercent}%
+                  </div>
+                  <div className="text-xs text-gray-500">Coverage</div>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+                  <Calendar className="w-5 h-5 text-gray-600" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">
+                    {buildingSettings?.timezone?.replace("America/", "") ||
+                      "Chicago"}
+                  </div>
+                  <div className="text-xs text-gray-500">Timezone</div>
+                </div>
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-baylor-green/10 flex items-center justify-center">
-                <Thermometer className="w-5 h-5 text-baylor-green" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-gray-900">{roomsWithData}</div>
-                <div className="text-xs text-gray-500">With Data</div>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${coveragePercent >= 80 ? 'bg-green-100' : coveragePercent >= 50 ? 'bg-yellow-100' : 'bg-red-100'}`}>
-                <CheckCircle2 className={`w-5 h-5 ${coveragePercent >= 80 ? 'text-green-600' : coveragePercent >= 50 ? 'text-yellow-600' : 'text-red-600'}`} />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-gray-900">{coveragePercent}%</div>
-                <div className="text-xs text-gray-500">Coverage</div>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
-                <Calendar className="w-5 h-5 text-gray-600" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-gray-900">{buildingSettings?.timezone?.replace('America/', '') || 'Chicago'}</div>
-                <div className="text-xs text-gray-500">Timezone</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+        )}
 
       {snapshotLoading && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 text-gray-600">
@@ -2603,12 +3205,12 @@ const TemperatureMonitoring = () => {
         </div>
       )}
 
-      {!snapshotLoading && viewMode === 'floorplan' && renderFloorplan()}
-      {!snapshotLoading && viewMode === 'daily' && renderDailyTable()}
-      {!snapshotLoading && viewMode === 'historical' && renderHistorical()}
-      {viewMode === 'import' && renderImport()}
-      {viewMode === 'export' && renderExport()}
-      {viewMode === 'settings' && renderSettings()}
+      {!snapshotLoading && viewMode === "floorplan" && renderFloorplan()}
+      {!snapshotLoading && viewMode === "daily" && renderDailyTable()}
+      {!snapshotLoading && viewMode === "historical" && renderHistorical()}
+      {viewMode === "import" && renderImport()}
+      {viewMode === "export" && renderExport()}
+      {viewMode === "settings" && renderSettings()}
 
       <ConfirmDialog
         isOpen={showDeleteFloorplanConfirm}

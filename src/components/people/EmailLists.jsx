@@ -61,10 +61,9 @@ const EmailLists = ({ embedded = false }) => {
   });
   const [nameSort, setNameSort] = useState("firstName");
   const [filters, setFilters] = useState({
-    // Multi-select filters with include/exclude
-    programs: { include: [], exclude: [] },
-    jobTitles: { include: [], exclude: [] },
-    buildings: { include: [], exclude: [] },
+    programs: [],
+    jobTitles: [],
+    buildings: [],
     // Role filters - simplified to radio buttons
     roleFilter: "all", // 'all', 'faculty', 'staff', 'both'
     // Boolean filters with include/exclude options
@@ -72,8 +71,6 @@ const EmailLists = ({ embedded = false }) => {
     tenured: "all", // 'all', 'include', 'exclude'
     upd: "all", // 'all', 'include', 'exclude' - NEW UPD filter
     isRemote: "all", // 'all', 'include', 'exclude' - Remote filter
-    // Email filter
-    hasEmail: true,
   });
   const [showFilters, setShowFilters] = useState(false);
   const [notification, setNotification] = useState({
@@ -101,9 +98,8 @@ const EmailLists = ({ embedded = false }) => {
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [studentSearchTerm, setStudentSearchTerm] = useState("");
   const [studentFilters, setStudentFilters] = useState({
-    buildings: { include: [], exclude: [] },
-    jobTitles: { include: [], exclude: [] },
-    hasEmail: true,
+    buildings: [],
+    jobTitles: [],
   });
   const [studentSortConfig, setStudentSortConfig] = useState({
     key: "name",
@@ -124,15 +120,14 @@ const EmailLists = ({ embedded = false }) => {
     setSearchTerm("");
     // Reset filters to defaults
     setFilters({
-      programs: { include: [], exclude: [] },
-      jobTitles: { include: [], exclude: [] },
-      buildings: { include: [], exclude: [] },
+      programs: [],
+      jobTitles: [],
+      buildings: [],
       roleFilter: "all",
       adjunct: "exclude",
       tenured: "all",
       upd: "all",
       isRemote: "all",
-      hasEmail: true,
     });
     // Clear selections
     setSelectedPeople([]);
@@ -141,9 +136,8 @@ const EmailLists = ({ embedded = false }) => {
     setStudentSearchTerm("");
     setSelectedStudents([]);
     setStudentFilters({
-      buildings: { include: [], exclude: [] },
-      jobTitles: { include: [], exclude: [] },
-      hasEmail: true,
+      buildings: [],
+      jobTitles: [],
     });
     // Reset other options
     setShowOnlyWithCourses(false);
@@ -181,8 +175,8 @@ const EmailLists = ({ embedded = false }) => {
           const fallbackNames = Array.isArray(schedule.instructorNames)
             ? schedule.instructorNames
             : [schedule.instructorName || schedule.Instructor || ""].filter(
-              Boolean,
-            );
+                Boolean,
+              );
           return fallbackNames.includes(person.name);
         });
 
@@ -344,40 +338,17 @@ const EmailLists = ({ embedded = false }) => {
       );
     }
 
-    // Has Email
-    if (studentFilters.hasEmail) {
-      filtered = filtered.filter((s) => s.email && s.email.trim() !== "");
-    }
-
     // Building Filter
-    if (studentFilters.buildings.include.length > 0) {
+    if (studentFilters.buildings.length > 0) {
       filtered = filtered.filter((s) =>
-        s.buildings.some((b) => studentFilters.buildings.include.includes(b)),
-      );
-    }
-    if (studentFilters.buildings.exclude.length > 0) {
-      filtered = filtered.filter(
-        (s) =>
-          !s.buildings.some((b) =>
-            studentFilters.buildings.exclude.includes(b),
-          ),
+        s.buildings.some((b) => studentFilters.buildings.includes(b)),
       );
     }
 
     // Job Title Filter
-    if (studentFilters.jobTitles.include.length > 0) {
+    if (studentFilters.jobTitles.length > 0) {
       filtered = filtered.filter((s) =>
-        s.allJobTitles.some((t) =>
-          studentFilters.jobTitles.include.includes(t),
-        ),
-      );
-    }
-    if (studentFilters.jobTitles.exclude.length > 0) {
-      filtered = filtered.filter(
-        (s) =>
-          !s.allJobTitles.some((t) =>
-            studentFilters.jobTitles.exclude.includes(t),
-          ),
+        s.allJobTitles.some((t) => studentFilters.jobTitles.includes(t)),
       );
     }
 
@@ -574,11 +545,8 @@ const EmailLists = ({ embedded = false }) => {
       );
     }
 
-    // Program filter (include/exclude)
-    if (
-      filters.programs.include.length > 0 ||
-      filters.programs.exclude.length > 0
-    ) {
+    // Program filter
+    if (filters.programs.length > 0) {
       filtered = filtered.filter((person) => {
         let programName = "";
 
@@ -591,59 +559,25 @@ const EmailLists = ({ embedded = false }) => {
           programName = parts.length > 1 ? parts[0].trim() : "";
         }
 
-        // Apply include filter
-        const includeMatch =
-          filters.programs.include.length === 0 ||
-          filters.programs.include.includes(programName);
-        // Apply exclude filter
-        const excludeMatch =
-          filters.programs.exclude.length === 0 ||
-          !filters.programs.exclude.includes(programName);
-
-        return includeMatch && excludeMatch;
+        return filters.programs.includes(programName);
       });
     }
 
-    // Job title filter (include/exclude)
-    if (
-      filters.jobTitles.include.length > 0 ||
-      filters.jobTitles.exclude.length > 0
-    ) {
+    // Job title filter
+    if (filters.jobTitles.length > 0) {
       filtered = filtered.filter((person) => {
         const jobTitle = person.jobTitle || "";
-
-        // Apply include filter
-        const includeMatch =
-          filters.jobTitles.include.length === 0 ||
-          filters.jobTitles.include.includes(jobTitle);
-        // Apply exclude filter
-        const excludeMatch =
-          filters.jobTitles.exclude.length === 0 ||
-          !filters.jobTitles.exclude.includes(jobTitle);
-
-        return includeMatch && excludeMatch;
+        return filters.jobTitles.includes(jobTitle);
       });
     }
 
-    // Building filter (include/exclude)
-    if (
-      filters.buildings.include.length > 0 ||
-      filters.buildings.exclude.length > 0
-    ) {
+    // Building filter
+    if (filters.buildings.length > 0) {
       filtered = filtered.filter((person) => {
         const { buildingName } = resolveOfficeDetails(person, spacesByKey);
         const resolvedBuilding = buildingName || "No Building";
 
-        // Apply include filter
-        const includeMatch =
-          filters.buildings.include.length === 0 ||
-          filters.buildings.include.includes(resolvedBuilding);
-        // Apply exclude filter
-        const excludeMatch =
-          filters.buildings.exclude.length === 0 ||
-          !filters.buildings.exclude.includes(resolvedBuilding);
-
-        return includeMatch && excludeMatch;
+        return filters.buildings.includes(resolvedBuilding);
       });
     }
 
@@ -715,13 +649,6 @@ const EmailLists = ({ embedded = false }) => {
         }
         return true;
       });
-    }
-
-    // Has email filter
-    if (filters.hasEmail) {
-      filtered = filtered.filter(
-        (person) => person.email && person.email.trim() !== "",
-      );
     }
 
     // Remove the automatic exclusion. Instead, use the filter state:
@@ -916,10 +843,10 @@ const EmailLists = ({ embedded = false }) => {
       "Courses Taught (current semester)":
         p.courses && p.courses.length > 0
           ? p.courses
-            .map(
-              (c) => `${c.courseCode} (${c.credits} cr) - ${c.courseTitle}`,
-            )
-            .join("; ")
+              .map(
+                (c) => `${c.courseCode} (${c.credits} cr) - ${c.courseTitle}`,
+              )
+              .join("; ")
           : "",
     }));
 
@@ -1060,15 +987,14 @@ const EmailLists = ({ embedded = false }) => {
 
       // 2. Reset filters to ensure visibility, but handle adjuncts dynamically
       setFilters({
-        programs: { include: [], exclude: [] },
-        jobTitles: { include: [], exclude: [] },
-        buildings: { include: [], exclude: [] },
+        programs: [],
+        jobTitles: [],
+        buildings: [],
         roleFilter: "all",
-        adjunct: hasAdjuncts ? "all" : "exclude", // Unhide adjuncts if needed
+        adjunct: "exclude",
         tenured: "all",
         upd: "all",
         isRemote: "all",
-        hasEmail: true,
       });
       setSearchTerm("");
 
@@ -1095,36 +1021,28 @@ const EmailLists = ({ embedded = false }) => {
   // Count active filters
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (filters.programs.include.length > 0) count++;
-    if (filters.programs.exclude.length > 0) count++;
-    if (filters.jobTitles.include.length > 0) count++;
-    if (filters.jobTitles.exclude.length > 0) count++;
-    if (filters.buildings.include.length > 0) count++;
-    if (filters.buildings.exclude.length > 0) count++;
+    if (filters.programs.length > 0) count++;
+    if (filters.jobTitles.length > 0) count++;
+    if (filters.buildings.length > 0) count++;
     if (filters.roleFilter !== "all") count++;
     if (filters.adjunct !== "all") count++;
     if (filters.tenured !== "all") count++;
     if (filters.upd !== "all") count++;
     if (filters.isRemote !== "all") count++;
-    if (!filters.hasEmail) count++;
     return count;
   }, [filters]);
 
   // Check if filters are at default values (adjuncts excluded)
   const isDefaultFilters = useMemo(() => {
     return (
-      filters.programs.include.length === 0 &&
-      filters.programs.exclude.length === 0 &&
-      filters.jobTitles.include.length === 0 &&
-      filters.jobTitles.exclude.length === 0 &&
-      filters.buildings.include.length === 0 &&
-      filters.buildings.exclude.length === 0 &&
+      filters.programs.length === 0 &&
+      filters.jobTitles.length === 0 &&
+      filters.buildings.length === 0 &&
       filters.roleFilter === "all" &&
       filters.adjunct === "exclude" &&
       filters.tenured === "all" &&
       filters.upd === "all" &&
       filters.isRemote === "all" &&
-      filters.hasEmail === true &&
       searchTerm === ""
     );
   }, [filters, searchTerm]);
@@ -1141,7 +1059,9 @@ const EmailLists = ({ embedded = false }) => {
         <div>
           <div className="flex items-center gap-3">
             {embedded ? (
-              <h2 className="text-xl font-semibold text-gray-900">Email Lists</h2>
+              <h2 className="text-xl font-semibold text-gray-900">
+                Email Lists
+              </h2>
             ) : (
               <h1 className="text-2xl font-bold text-gray-900">Email Lists</h1>
             )}
@@ -1152,7 +1072,8 @@ const EmailLists = ({ embedded = false }) => {
             />
           </div>
           <p className="text-gray-600 mt-1">
-            Filter and select faculty and staff to create email lists for any email client
+            Filter and select faculty and staff to create email lists for any
+            email client
           </p>
         </div>
         <div className="flex items-center space-x-4">
@@ -1168,7 +1089,10 @@ const EmailLists = ({ embedded = false }) => {
           {activeFilterCount > 0 && (
             <div className="flex items-center text-sm text-baylor-green">
               <Filter className="w-4 h-4 mr-1" />
-              <span className="font-medium">{activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active</span>
+              <span className="font-medium">
+                {activeFilterCount} filter{activeFilterCount !== 1 ? "s" : ""}{" "}
+                active
+              </span>
             </div>
           )}
           <div className="flex items-center space-x-2">
@@ -1186,20 +1110,22 @@ const EmailLists = ({ embedded = false }) => {
           <nav className="-mb-px flex space-x-8" aria-label="Tabs">
             <button
               onClick={() => setActiveTab("faculty-staff")}
-              className={`${activeTab === "faculty-staff"
+              className={`${
+                activeTab === "faculty-staff"
                   ? "border-baylor-green text-baylor-green"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
             >
               <Users className="w-4 h-4" />
               Faculty & Staff
             </button>
             <button
               onClick={() => setActiveTab("student-workers")}
-              className={`${activeTab === "student-workers"
+              className={`${
+                activeTab === "student-workers"
                   ? "border-baylor-green text-baylor-green"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
             >
               <GraduationCap className="w-4 h-4" />
               Student Workers
@@ -1312,10 +1238,11 @@ const EmailLists = ({ embedded = false }) => {
               {/* Filter Toggle */}
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center px-4 py-2 border rounded-lg transition-colors ${showFilters
+                className={`flex items-center px-4 py-2 border rounded-lg transition-colors ${
+                  showFilters
                     ? "bg-baylor-green text-white border-baylor-green"
                     : "border-gray-300 text-gray-700 hover:bg-gray-50"
-                  }`}
+                }`}
                 data-tutorial="advanced-filters-btn"
               >
                 <Settings className="w-4 h-4 mr-2" />
@@ -1665,19 +1592,21 @@ const EmailLists = ({ embedded = false }) => {
                     <div className="flex rounded-lg border border-gray-300 overflow-hidden">
                       <button
                         onClick={() => setNameSort("firstName")}
-                        className={`px-3 py-1 text-xs ${nameSort === "firstName"
+                        className={`px-3 py-1 text-xs ${
+                          nameSort === "firstName"
                             ? "bg-baylor-green text-white"
                             : "bg-white text-gray-700 hover:bg-gray-50"
-                          }`}
+                        }`}
                       >
                         First Name
                       </button>
                       <button
                         onClick={() => setNameSort("lastName")}
-                        className={`px-3 py-1 text-xs ${nameSort === "lastName"
+                        className={`px-3 py-1 text-xs ${
+                          nameSort === "lastName"
                             ? "bg-baylor-green text-white"
                             : "bg-white text-gray-700 hover:bg-gray-50"
-                          }`}
+                        }`}
                       >
                         Last Name
                       </button>
@@ -1820,14 +1749,15 @@ const EmailLists = ({ embedded = false }) => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${person.isAdjunct
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              person.isAdjunct
                                 ? "bg-purple-100 text-purple-800"
                                 : person.roleType === "faculty"
                                   ? "bg-baylor-green/10 text-baylor-green"
                                   : person.roleType === "staff"
                                     ? "bg-green-100 text-green-800"
                                     : "bg-baylor-gold/20 text-baylor-gold"
-                              }`}
+                            }`}
                           >
                             {person.isAdjunct ? "Adjunct" : person.role}
                           </span>
@@ -2043,13 +1973,13 @@ const EmailLists = ({ embedded = false }) => {
                 studentFilters.jobTitles.include.length > 0 ||
                 studentFilters.jobTitles.exclude.length > 0 ||
                 studentSearchTerm) && (
-                  <button
-                    onClick={clearStudentFilters}
-                    className="text-sm text-gray-500 hover:text-gray-700 flex items-center"
-                  >
-                    <X className="w-4 h-4 mr-1" /> Clear
-                  </button>
-                )}
+                <button
+                  onClick={clearStudentFilters}
+                  className="text-sm text-gray-500 hover:text-gray-700 flex items-center"
+                >
+                  <X className="w-4 h-4 mr-1" /> Clear
+                </button>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-100">
@@ -2344,10 +2274,11 @@ const EmailLists = ({ embedded = false }) => {
       {/* Notification */}
       {notification.show && (
         <div
-          className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg ${notification.type === "error"
+          className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg ${
+            notification.type === "error"
               ? "bg-red-500 text-white"
               : "bg-baylor-green text-white"
-            }`}
+          }`}
         >
           <div className="flex items-center">
             {notification.type === "error" ? (

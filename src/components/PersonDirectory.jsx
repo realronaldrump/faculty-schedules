@@ -48,7 +48,7 @@ const renderStatusToggles = ({
     };
 
     return (
-      <div key={`${toggle.name}-${index}`} className={toggle.className || 'flex items-center gap-2 text-xs mt-1'}>
+      <div key={`${toggle.name}-${index}`} className={toggle.className || 'flex items-center gap-2 text-xs'}>
         <input
           type="checkbox"
           id={`${idPrefix}-${toggle.name}`}
@@ -296,19 +296,20 @@ const buildBaseColumns = ({
 const buildCreateRow = ({ columns, isCreating, renderCreateActions }) => {
   if (!isCreating) return null;
 
+  // Return table cells (td elements) for use inside a <tr> in DirectoryTable
   return (
-    <div className="flex items-center border-b border-gray-200 bg-baylor-gold/5">
+    <>
       {columns.map((column) => (
-        <div key={column.key} className="px-4 py-2 flex-1 min-w-0 text-sm align-top">
+        <td key={column.key} className="px-4 py-3 align-top">
           {column.renderCreate ? column.renderCreate() : null}
-        </div>
+        </td>
       ))}
       {renderCreateActions && (
-        <div className="px-4 py-2 w-28 flex-none text-right align-top">
+        <td className="px-4 py-3 text-right align-top">
           {renderCreateActions()}
-        </div>
+        </td>
       )}
-    </div>
+    </>
   );
 };
 

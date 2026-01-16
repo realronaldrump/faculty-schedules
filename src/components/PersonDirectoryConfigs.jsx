@@ -285,21 +285,23 @@ const facultyDirectoryConfig = {
           </div>
         ),
         renderCreate: () => (
-          <div className="text-gray-700 font-medium">
+          <div className="text-gray-700 font-medium min-w-[200px]">
             <input
               name="name"
               value={newRecord.name || ''}
               onChange={handleCreateChange}
-              className="w-full p-1 border rounded bg-baylor-gold/10 border-baylor-gold"
+              className="w-full p-2 border rounded bg-baylor-gold/10 border-baylor-gold mb-2"
               placeholder="Full Name"
             />
-            {renderStatusToggles({
-              toggles: statusToggles,
-              formData: newRecord,
-              onChange: handleCreateChange,
-              setFormData: setNewRecord,
-              idPrefix: 'new-faculty'
-            })}
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {renderStatusToggles({
+                toggles: statusToggles,
+                formData: newRecord,
+                onChange: handleCreateChange,
+                setFormData: setNewRecord,
+                idPrefix: 'new-faculty'
+              })}
+            </div>
           </div>
         )
       },
@@ -614,21 +616,23 @@ const staffDirectoryConfig = {
           </div>
         ),
         renderCreate: () => (
-          <div className="text-gray-700 font-medium">
+          <div className="text-gray-700 font-medium min-w-[200px]">
             <input
               name="name"
               value={newRecord.name || ''}
               onChange={handleCreateChange}
-              className="w-full p-1 border rounded bg-baylor-gold/10 border-baylor-gold"
+              className="w-full p-2 border rounded bg-baylor-gold/10 border-baylor-gold mb-2"
               placeholder="Full Name"
             />
-            {renderStatusToggles({
-              toggles: statusToggles,
-              formData: newRecord,
-              onChange: handleCreateChange,
-              setFormData: setNewRecord,
-              idPrefix: 'new-staff'
-            })}
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {renderStatusToggles({
+                toggles: statusToggles,
+                formData: newRecord,
+                onChange: handleCreateChange,
+                setFormData: setNewRecord,
+                idPrefix: 'new-staff'
+              })}
+            </div>
           </div>
         )
       },
@@ -856,21 +860,23 @@ const adjunctDirectoryConfig = {
           </div>
         ),
         renderCreate: () => (
-          <div className="text-gray-700 font-medium">
+          <div className="text-gray-700 font-medium min-w-[200px]">
             <input
               name="name"
               value={newRecord.name || ''}
               onChange={handleCreateChange}
-              className="w-full p-1 border rounded bg-baylor-gold/10 border-baylor-gold"
+              className="w-full p-2 border rounded bg-baylor-gold/10 border-baylor-gold mb-2"
               placeholder="Full Name"
             />
-            {renderStatusToggles({
-              toggles: statusToggles,
-              formData: newRecord,
-              onChange: handleCreateChange,
-              setFormData: setNewRecord,
-              idPrefix: 'new-adjunct'
-            })}
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {renderStatusToggles({
+                toggles: statusToggles,
+                formData: newRecord,
+                onChange: handleCreateChange,
+                setFormData: setNewRecord,
+                idPrefix: 'new-adjunct'
+              })}
+            </div>
           </div>
         )
       },

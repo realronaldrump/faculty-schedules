@@ -54,6 +54,7 @@ import {
   BookOpen,
   Shield,
   BarChart3,
+  Building,
 } from "lucide-react";
 
 // ==================== NAVIGATION CONFIGURATION ====================
@@ -207,6 +208,19 @@ const navigationItems = [
     ],
   },
   {
+    id: "facilities",
+    label: "Facilities",
+    icon: Building,
+    children: [
+      {
+        id: "temperature-monitoring",
+        label: "Temperature Monitoring",
+        path: "facilities/temperature",
+        canonicalId: "facilities/temperature",
+      },
+    ],
+  },
+  {
     id: "administration",
     label: "Administration",
     icon: Shield,
@@ -235,12 +249,6 @@ const navigationItems = [
         label: "Data Hygiene",
         path: "admin/data-hygiene",
         canonicalId: "admin/data-hygiene",
-      },
-      {
-        id: "temperature-monitoring",
-        label: "Temperature Monitoring",
-        path: "admin/temperature",
-        canonicalId: "admin/temperature",
       },
     ],
   },
@@ -549,9 +557,9 @@ function App() {
             <DataHygieneManager />
           </ProtectedContent>
         );
-      case "admin/temperature":
+      case "facilities/temperature":
         return (
-          <ProtectedContent pageId="admin/temperature">
+          <ProtectedContent pageId="facilities/temperature">
             <TemperatureMonitoring />
           </ProtectedContent>
         );
@@ -617,7 +625,7 @@ function App() {
                 handleNavigate(path);
               }}
               collapsed={false}
-              onToggleCollapse={() => { }}
+              onToggleCollapse={() => {}}
               selectedSemester={selectedSemester}
               pinnedPages={pinnedPages}
               togglePinPage={togglePinPage}
@@ -729,10 +737,11 @@ function App() {
                               setSelectedSemester(semester);
                               setShowSemesterDropdown(false);
                             }}
-                            className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${semester === selectedSemester
-                              ? "bg-baylor-green/5 text-baylor-green font-medium"
-                              : "text-gray-900"
-                              }`}
+                            className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${
+                              semester === selectedSemester
+                                ? "bg-baylor-green/5 text-baylor-green font-medium"
+                                : "text-gray-900"
+                            }`}
                           >
                             <span className="flex items-center justify-between">
                               <span>{semester}</span>
@@ -771,10 +780,11 @@ function App() {
                     <button
                       key={child.id}
                       onClick={() => handleNavigate(child.path)}
-                      className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${currentPage === child.path
-                        ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
-                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                        }`}
+                      className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                        currentPage === child.path
+                          ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
+                          : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                      }`}
                     >
                       {child.label}
                     </button>

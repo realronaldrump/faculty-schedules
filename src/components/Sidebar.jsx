@@ -1,33 +1,86 @@
-import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, Menu, X, Home, Calendar, Users, BarChart3, Settings, Bell, Search, User, Database, Shield, Star } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext.jsx';
+import React, { useEffect, useState } from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Menu,
+  X,
+  Home,
+  Calendar,
+  Users,
+  User,
+  Database,
+  Star,
+} from "lucide-react";
+import { useAuth } from "../contexts/AuthContext.jsx";
 
-const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggleCollapse, selectedSemester, pinnedPages, togglePinPage }) => {
+const Sidebar = ({
+  navigationItems,
+  currentPage,
+  onNavigate,
+  collapsed,
+  onToggleCollapse,
+  selectedSemester,
+  pinnedPages,
+  togglePinPage,
+}) => {
   const [expandedSections, setExpandedSections] = useState([]); // Default expanded sections
-  const { canAccess } = useAuth();
+  const { canAccess, userProfile } = useAuth();
 
   const toggleSection = (sectionId) => {
-    setExpandedSections(prev => 
-      prev.includes(sectionId) 
-        ? prev.filter(id => id !== sectionId)
-        : [...prev, sectionId]
+    setExpandedSections((prev) =>
+      prev.includes(sectionId)
+        ? prev.filter((id) => id !== sectionId)
+        : [...prev, sectionId],
     );
   };
+
+  useEffect(() => {
+    if (!currentPage || collapsed) return;
+    const activeSection = navigationItems.find((item) => {
+      if (item.path && item.path === currentPage) return true;
+      if (item.children) {
+        return item.children.some((child) => child.path === currentPage);
+      }
+      return false;
+    });
+    if (!activeSection) return;
+    setExpandedSections((prev) =>
+      prev.includes(activeSection.id) ? prev : [...prev, activeSection.id],
+    );
+  }, [collapsed, currentPage, navigationItems]);
 
   const findNavItem = (id) => {
     for (const section of navigationItems) {
       if (section.id === id) return section;
       if (section.children) {
-        const child = section.children.find(c => c.id === id);
+        const child = section.children.find((c) => c.id === id);
         if (child) return child;
       }
     }
     return null;
   };
 
+  const normalizeRoles = (roles) => {
+    if (Array.isArray(roles)) return roles.filter(Boolean);
+    if (roles && typeof roles === "object") {
+      return Object.keys(roles).filter((key) => roles[key]);
+    }
+    if (typeof roles === "string" && roles.trim()) return [roles.trim()];
+    return [];
+  };
+
+  const userRoles = normalizeRoles(userProfile?.roles);
+  const shouldHideForRole = (item) => {
+    if (item?.hidden) return true;
+    const hiddenRoles = item?.permissions?.hideFromRoles;
+    if (!hiddenRoles || hiddenRoles.length === 0) return false;
+    if (userRoles.length === 0) return false;
+    return userRoles.some((role) => hiddenRoles.includes(role));
+  };
+
   const isActive = (path) => {
-    if (path === 'dashboard') {
-      return currentPage === 'dashboard';
+    if (path === "dashboard") {
+      return currentPage === "dashboard";
     }
     return currentPage.startsWith(path) || currentPage === path;
   };
@@ -35,26 +88,34 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
   const isCurrentPage = (path) => currentPage === path;
 
   return (
-    <div className={`sidebar transition-all duration-300 ${collapsed ? 'w-16' : 'w-72'} flex flex-col min-h-screen h-screen sticky top-0`}>
+    <div
+      className={`sidebar transition-all duration-300 ${collapsed ? "w-16" : "w-72"} flex flex-col min-h-screen h-screen sticky top-0`}
+    >
       {/* Professional University Header */}
-      <div className={`sidebar-header ${collapsed ? 'p-4' : 'p-6'}`}>
+      <div className={`sidebar-header ${collapsed ? "p-4" : "p-6"}`}>
         <div className="flex items-center justify-between">
           {!collapsed && (
             <div className="sidebar-brand">
               <div className="sidebar-logo">
-                <span className="text-white font-bold text-sm font-['DM_Sans']">HSD</span>
+                <span className="text-white font-bold text-sm font-['DM_Sans']">
+                  HSD
+                </span>
               </div>
               <div>
-                <div className="sidebar-title text-lg font-bold text-white font-['DM_Sans']">HSD Dashboard</div>
+                <div className="sidebar-title text-lg font-bold text-white font-['DM_Sans']">
+                  HSD Dashboard
+                </div>
                 <div className="sidebar-subtitle text-sm text-baylor-gold/80 mt-1 font-['DM_Sans']">
-                  {selectedSemester || 'Select Semester'}
+                  {selectedSemester || "Select Semester"}
                 </div>
               </div>
             </div>
           )}
           {collapsed && (
             <div className="sidebar-logo mx-auto">
-              <span className="text-white font-bold text-sm font-['DM_Sans']">HSD</span>
+              <span className="text-white font-bold text-sm font-['DM_Sans']">
+                HSD
+              </span>
             </div>
           )}
           <button
@@ -75,10 +136,14 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
           {/* Pinned Items */}
           {!collapsed && pinnedPages.length > 0 && (
             <div className="space-y-1 mb-4">
-              <div className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Pinned</div>
-              {pinnedPages.map(pageId => {
+              <div className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Pinned
+              </div>
+              {pinnedPages.map((pageId) => {
                 const item = findNavItem(pageId);
                 if (!item) return null;
+                if (!canAccess(item.path) || shouldHideForRole(item))
+                  return null;
                 const Icon = item.icon || User;
                 return (
                   <button
@@ -86,10 +151,12 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
                     onClick={() => {
                       onNavigate(item.path);
                     }}
-                    className={`nav-sub-item w-full ${isCurrentPage(item.path) ? 'nav-sub-item-active' : 'nav-sub-item-inactive'}`}
+                    className={`nav-sub-item w-full ${isCurrentPage(item.path) ? "nav-sub-item-active" : "nav-sub-item-inactive"}`}
                   >
                     <Icon size={16} className="mr-2" />
-                    <span className="text-sm font-['DM_Sans']">{item.label}</span>
+                    <span className="text-sm font-['DM_Sans']">
+                      {item.label}
+                    </span>
                   </button>
                 );
               })}
@@ -102,7 +169,14 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
             const hasChildren = item.children && item.children.length > 0;
             const isExpanded = expandedSections.includes(item.id);
             const itemIsActive = isActive(item.path || item.id);
-            const sectionAllowed = hasChildren ? (item.children || []).some(c => canAccess(c.path)) : canAccess(item.path || item.id);
+            const visibleChildren = hasChildren
+              ? (item.children || []).filter(
+                  (child) => canAccess(child.path) && !shouldHideForRole(child),
+                )
+              : [];
+            const sectionAllowed = hasChildren
+              ? visibleChildren.length > 0
+              : canAccess(item.path || item.id) && !shouldHideForRole(item);
 
             if (!sectionAllowed) {
               return null;
@@ -122,26 +196,34 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
                     }
                   }}
                   className={`nav-item w-full ${
-                    itemIsActive ? 'nav-item-active' : 'nav-item-inactive'
+                    itemIsActive ? "nav-item-active" : "nav-item-inactive"
                   }`}
                   title={collapsed ? item.label : undefined}
                 >
                   <div className="flex items-center space-x-3 flex-1">
-                    <Icon 
-                      size={20} 
+                    <Icon
+                      size={20}
                       className={`flex-shrink-0 ${
-                        itemIsActive ? 'text-white' : 'text-gray-500 group-hover:text-baylor-green'
-                      }`} 
+                        itemIsActive
+                          ? "text-white"
+                          : "text-gray-500 group-hover:text-baylor-green"
+                      }`}
                     />
                     {!collapsed && (
-                      <span className="font-medium text-sm font-['DM_Sans']">{item.label}</span>
+                      <span className="font-medium text-sm font-['DM_Sans']">
+                        {item.label}
+                      </span>
                     )}
                   </div>
                   {!collapsed && hasChildren && (
-                    <div className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>
-                      <ChevronRight 
-                        size={16} 
-                        className={itemIsActive ? 'text-white' : 'text-gray-400'} 
+                    <div
+                      className={`transition-transform duration-200 ${isExpanded ? "rotate-90" : ""}`}
+                    >
+                      <ChevronRight
+                        size={16}
+                        className={
+                          itemIsActive ? "text-white" : "text-gray-400"
+                        }
                       />
                     </div>
                   )}
@@ -150,7 +232,7 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
                 {/* Sub-navigation Items */}
                 {!collapsed && hasChildren && isExpanded && (
                   <div className="space-y-1 pl-2">
-                    {item.children.filter(child => canAccess(child.path)).map((child) => {
+                    {visibleChildren.map((child) => {
                       const isPinned = pinnedPages.includes(child.id);
                       return (
                         <div key={child.id} className="group flex items-center">
@@ -159,10 +241,14 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
                               onNavigate(child.path);
                             }}
                             className={`nav-sub-item w-full text-left ${
-                              isCurrentPage(child.path) ? 'nav-sub-item-active' : 'nav-sub-item-inactive'
+                              isCurrentPage(child.path)
+                                ? "nav-sub-item-active"
+                                : "nav-sub-item-inactive"
                             }`}
                           >
-                            <span className="text-sm font-['DM_Sans']">{child.label}</span>
+                            <span className="text-sm font-['DM_Sans']">
+                              {child.label}
+                            </span>
                           </button>
                           <button
                             onClick={(e) => {
@@ -170,11 +256,11 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
                               togglePinPage(child.id);
                             }}
                             className="p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-baylor-green/20"
-                            title={isPinned ? 'Unpin page' : 'Pin page'}
+                            title={isPinned ? "Unpin page" : "Pin page"}
                           >
-                            <Star 
-                              size={14} 
-                              className={`${isPinned ? 'text-baylor-gold fill-current' : 'text-gray-400'}`}
+                            <Star
+                              size={14}
+                              className={`${isPinned ? "text-baylor-gold fill-current" : "text-gray-400"}`}
                             />
                           </button>
                         </div>
@@ -192,8 +278,12 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
       <div className="border-t border-gray-200 p-4 mt-auto">
         {!collapsed ? (
           <div className="text-center space-y-1">
-            <div className="text-xs font-medium text-baylor-green font-['DM_Sans']">Baylor University</div>
-            <div className="text-xs text-gray-500 font-['DM_Sans']">Human Sciences & Design</div>
+            <div className="text-xs font-medium text-baylor-green font-['DM_Sans']">
+              Baylor University
+            </div>
+            <div className="text-xs text-gray-500 font-['DM_Sans']">
+              Human Sciences & Design
+            </div>
             <div className="text-xs text-gray-400 mt-2 font-['DM_Sans']">
               Faculty Schedule Management System
             </div>
@@ -201,7 +291,9 @@ const Sidebar = ({ navigationItems, currentPage, onNavigate, collapsed, onToggle
         ) : (
           <div className="flex justify-center">
             <div className="w-8 h-8 bg-baylor-green/10 rounded-lg flex items-center justify-center">
-              <span className="text-xs font-bold text-baylor-green font-['DM_Sans']">BU</span>
+              <span className="text-xs font-bold text-baylor-green font-['DM_Sans']">
+                BU
+              </span>
             </div>
           </div>
         )}

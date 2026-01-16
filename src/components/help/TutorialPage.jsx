@@ -5,8 +5,8 @@
  * and provides access to help resources.
  */
 
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   BookOpen,
   Play,
@@ -26,18 +26,18 @@ import {
   BarChart3,
   Database,
   Eye,
-  EyeOff
-} from 'lucide-react';
-import { useTutorial, TUTORIALS } from '../../contexts/TutorialContext';
+  EyeOff,
+} from "lucide-react";
+import { useTutorial, TUTORIALS } from "../../contexts/TutorialContext";
 
 // Category icons mapping
 const categoryIcons = {
-  'People Management': Users,
-  'Scheduling': Calendar,
-  'Analytics': BarChart3,
-  'Administration': Settings,
-  'Resources': Building,
-  'Data Management': Database
+  "People Management": Users,
+  Scheduling: Calendar,
+  Analytics: BarChart3,
+  Administration: Settings,
+  Resources: Building,
+  "Data Management": Database,
 };
 
 // Tutorial card component
@@ -46,16 +46,21 @@ const TutorialCard = ({ tutorial, isCompleted, onStart }) => {
 
   return (
     <div
-      className={`bg-white rounded-xl border-2 transition-all duration-200 hover:shadow-lg ${isCompleted
-        ? 'border-green-200 bg-green-50/30'
-        : 'border-gray-200 hover:border-baylor-green/50'
-        }`}
+      className={`bg-white rounded-xl border-2 transition-all duration-200 hover:shadow-lg ${
+        isCompleted
+          ? "border-green-200 bg-green-50/30"
+          : "border-gray-200 hover:border-baylor-green/50"
+      }`}
     >
       <div className="p-6">
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
-          <div className={`p-3 rounded-lg ${isCompleted ? 'bg-green-100' : 'bg-baylor-green/10'}`}>
-            <CategoryIcon className={`w-6 h-6 ${isCompleted ? 'text-green-600' : 'text-baylor-green'}`} />
+          <div
+            className={`p-3 rounded-lg ${isCompleted ? "bg-green-100" : "bg-baylor-green/10"}`}
+          >
+            <CategoryIcon
+              className={`w-6 h-6 ${isCompleted ? "text-green-600" : "text-baylor-green"}`}
+            />
           </div>
           {isCompleted && (
             <div className="flex items-center gap-1 text-green-600 text-sm font-medium">
@@ -66,8 +71,12 @@ const TutorialCard = ({ tutorial, isCompleted, onStart }) => {
         </div>
 
         {/* Content */}
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">{tutorial.title}</h3>
-        <p className="text-gray-600 text-sm mb-4 line-clamp-2">{tutorial.description}</p>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          {tutorial.title}
+        </h3>
+        <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+          {tutorial.description}
+        </p>
 
         {/* Meta */}
         <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
@@ -91,13 +100,14 @@ const TutorialCard = ({ tutorial, isCompleted, onStart }) => {
         {/* Action button */}
         <button
           onClick={() => onStart(tutorial.id)}
-          className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors ${isCompleted
-            ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            : 'bg-baylor-green text-white hover:bg-baylor-green/90'
-            }`}
+          className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors ${
+            isCompleted
+              ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              : "bg-baylor-green text-white hover:bg-baylor-green/90"
+          }`}
         >
           <Play className="w-4 h-4" />
-          {isCompleted ? 'Review Tutorial' : 'Start Tutorial'}
+          {isCompleted ? "Review Tutorial" : "Start Tutorial"}
         </button>
       </div>
     </div>
@@ -126,32 +136,34 @@ const TutorialPage = () => {
     showTooltips,
     setShowTooltips,
     resetAllProgress,
-    resetHints
+    resetHints,
   } = useTutorial();
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Get all tutorials as array
   const tutorialList = Object.values(TUTORIALS);
 
   // Get unique categories
-  const categories = ['all', ...new Set(tutorialList.map(t => t.category))];
+  const categories = ["all", ...new Set(tutorialList.map((t) => t.category))];
 
   // Filter tutorials
-  const filteredTutorials = tutorialList.filter(tutorial => {
+  const filteredTutorials = tutorialList.filter((tutorial) => {
     const matchesSearch =
       tutorial.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       tutorial.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || tutorial.category === selectedCategory;
+    const matchesCategory =
+      selectedCategory === "all" || tutorial.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
   // Progress stats
-  const completionRate = tutorialList.length > 0
-    ? Math.round((completedTutorials.length / tutorialList.length) * 100)
-    : 0;
+  const completionRate =
+    tutorialList.length > 0
+      ? Math.round((completedTutorials.length / tutorialList.length) * 100)
+      : 0;
 
   // Handle starting a tutorial
   const handleStartTutorial = (tutorialId) => {
@@ -179,10 +191,11 @@ const TutorialPage = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
             <BookOpen className="w-8 h-8 text-baylor-green" />
-            Tutorials & Help
+            Help & Tutorials
           </h1>
           <p className="text-gray-600 mt-1">
-            Learn how to use the HSD Dashboard with interactive step-by-step tutorials
+            Learn how to use the HSD Dashboard with interactive step-by-step
+            tutorials
           </p>
         </div>
 
@@ -190,7 +203,9 @@ const TutorialPage = () => {
         <div className="flex items-center gap-4">
           <div className="text-right">
             <div className="text-sm text-gray-500">Your Progress</div>
-            <div className="text-2xl font-bold text-baylor-green">{completionRate}%</div>
+            <div className="text-2xl font-bold text-baylor-green">
+              {completionRate}%
+            </div>
           </div>
           <div className="w-16 h-16 relative">
             <svg className="w-full h-full transform -rotate-90">
@@ -214,7 +229,9 @@ const TutorialPage = () => {
               />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-              <CheckCircle className={`w-6 h-6 ${completionRate === 100 ? 'text-baylor-green' : 'text-gray-300'}`} />
+              <CheckCircle
+                className={`w-6 h-6 ${completionRate === 100 ? "text-baylor-green" : "text-gray-300"}`}
+              />
             </div>
           </div>
         </div>
@@ -233,12 +250,20 @@ const TutorialPage = () => {
                   onChange={(e) => setShowTooltips(e.target.checked)}
                   className="sr-only"
                 />
-                <div className={`w-11 h-6 rounded-full transition-colors ${showTooltips ? 'bg-baylor-green' : 'bg-gray-300'}`}>
-                  <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${showTooltips ? 'translate-x-5' : ''}`} />
+                <div
+                  className={`w-11 h-6 rounded-full transition-colors ${showTooltips ? "bg-baylor-green" : "bg-gray-300"}`}
+                >
+                  <div
+                    className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${showTooltips ? "translate-x-5" : ""}`}
+                  />
                 </div>
               </div>
               <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
-                {showTooltips ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                {showTooltips ? (
+                  <Eye className="w-4 h-4" />
+                ) : (
+                  <EyeOff className="w-4 h-4" />
+                )}
                 Show Tooltips & Hints
               </span>
             </label>
@@ -297,9 +322,9 @@ const TutorialPage = () => {
               onChange={(e) => setSelectedCategory(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
             >
-              {categories.map(cat => (
+              {categories.map((cat) => (
                 <option key={cat} value={cat}>
-                  {cat === 'all' ? 'All Categories' : cat}
+                  {cat === "all" ? "All Categories" : cat}
                 </option>
               ))}
             </select>
@@ -313,13 +338,14 @@ const TutorialPage = () => {
           <BookOpen className="w-5 h-5 text-baylor-green" />
           Available Tutorials
           <span className="text-sm font-normal text-gray-500">
-            ({filteredTutorials.length} {filteredTutorials.length === 1 ? 'tutorial' : 'tutorials'})
+            ({filteredTutorials.length}{" "}
+            {filteredTutorials.length === 1 ? "tutorial" : "tutorials"})
           </span>
         </h2>
 
         {filteredTutorials.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredTutorials.map(tutorial => (
+            {filteredTutorials.map((tutorial) => (
               <TutorialCard
                 key={tutorial.id}
                 tutorial={tutorial}
@@ -333,7 +359,10 @@ const TutorialPage = () => {
             <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-4" />
             <p className="text-gray-500">No tutorials match your search.</p>
             <button
-              onClick={() => { setSearchTerm(''); setSelectedCategory('all'); }}
+              onClick={() => {
+                setSearchTerm("");
+                setSelectedCategory("all");
+              }}
               className="mt-2 text-baylor-green hover:underline"
             >
               Clear filters
@@ -344,21 +373,26 @@ const TutorialPage = () => {
 
       {/* Coming Soon Section */}
       <div className="bg-gradient-to-r from-baylor-green/5 to-baylor-gold/5 rounded-xl border border-baylor-green/20 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">More Tutorials Coming Soon</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-2">
+          More Tutorials Coming Soon
+        </h2>
         <p className="text-gray-600 mb-4">
-          I'm working on additional tutorials to help you get the most out of the HSD Dashboard.
-          Check back for tutorials on scheduling, analytics, and more.
+          I'm working on additional tutorials to help you get the most out of
+          the HSD Dashboard. Check back for tutorials on scheduling, analytics,
+          and more.
         </p>
         <div className="flex flex-wrap gap-2">
-          {['Faculty Schedules', 'Data Import', 'Reports & Analytics'].map(topic => (
-            <span
-              key={topic}
-              className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-white border border-gray-200 text-gray-600"
-            >
-              <Clock className="w-3 h-3 mr-1.5 text-gray-400" />
-              {topic}
-            </span>
-          ))}
+          {["Faculty Schedules", "Data Import", "Reports & Analytics"].map(
+            (topic) => (
+              <span
+                key={topic}
+                className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-white border border-gray-200 text-gray-600"
+              >
+                <Clock className="w-3 h-3 mr-1.5 text-gray-400" />
+                {topic}
+              </span>
+            ),
+          )}
         </div>
       </div>
 
@@ -367,12 +401,15 @@ const TutorialPage = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Reset Tutorial Progress</h3>
+              <h3 className="text-lg font-semibold text-gray-900">
+                Reset Tutorial Progress
+              </h3>
             </div>
             <div className="p-6">
               <p className="text-gray-600 mb-4">
-                This will reset all your tutorial completion progress and dismissed hints.
-                You'll be able to go through the tutorials again from the beginning.
+                This will reset all your tutorial completion progress and
+                dismissed hints. You'll be able to go through the tutorials
+                again from the beginning.
               </p>
               <p className="text-sm text-gray-500">
                 This action cannot be undone.

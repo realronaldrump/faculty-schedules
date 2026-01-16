@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useMemo, useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   ArrowUpDown,
   BarChart3,
@@ -12,35 +12,42 @@ import {
   Search,
   TrendingUp,
   Users,
-
   List,
-  LayoutGrid
-} from 'lucide-react';
-import MultiSelectDropdown from '../MultiSelectDropdown';
+  LayoutGrid,
+} from "lucide-react";
+import MultiSelectDropdown from "../MultiSelectDropdown";
 import {
   formatCurrency,
   formatHoursValue,
-  getStudentAssignments
-} from '../../utils/studentWorkers';
-import FacultyContactCard from '../FacultyContactCard';
-import { useData } from '../../contexts/DataContext';
-import { usePeople } from '../../contexts/PeopleContext';
+  getStudentAssignments,
+} from "../../utils/studentWorkers";
+import FacultyContactCard from "../FacultyContactCard";
+import { useData } from "../../contexts/DataContext";
+import { usePeople } from "../../contexts/PeopleContext";
 
 const DEFAULT_FILTERS = {
   jobTitles: [],
   buildings: [],
   supervisors: [],
   activeOnly: true,
-  includeEnded: false
+  includeEnded: false,
 };
 
 // Progress bar component for breakdown cards
-const ProgressBar = ({ value, maxValue, label, subLabel, color = 'baylor-green' }) => {
+const ProgressBar = ({
+  value,
+  maxValue,
+  label,
+  subLabel,
+  color = "baylor-green",
+}) => {
   const percentage = maxValue > 0 ? (value / maxValue) * 100 : 0;
   return (
     <div className="group">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-medium text-gray-700 truncate max-w-[60%]">{label}</span>
+        <span className="text-sm font-medium text-gray-700 truncate max-w-[60%]">
+          {label}
+        </span>
         <span className="text-sm text-gray-600">{subLabel}</span>
       </div>
       <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -53,24 +60,28 @@ const ProgressBar = ({ value, maxValue, label, subLabel, color = 'baylor-green' 
   );
 };
 
-
-
-const StudentWorkerAnalytics = () => {
+const StudentWorkerAnalytics = ({ embedded = false }) => {
   const navigate = useNavigate();
   const { studentData = [] } = useData();
   const { loadPeople } = usePeople();
-  const [searchText, setSearchText] = useState('');
+  const [searchText, setSearchText] = useState("");
   const [filters, setFilters] = useState(() => ({ ...DEFAULT_FILTERS }));
-  const [sortConfig, setSortConfig] = useState({ key: 'weeklyHours', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState({
+    key: "weeklyHours",
+    direction: "desc",
+  });
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [selectedAssignments, setSelectedAssignments] = useState([]);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState("overview");
 
-  const handleNavigate = useCallback((path) => {
-    const normalized = path.startsWith('/') ? path : `/${path}`;
-    navigate(normalized);
-  }, [navigate]);
+  const handleNavigate = useCallback(
+    (path) => {
+      const normalized = path.startsWith("/") ? path : `/${path}`;
+      navigate(normalized);
+    },
+    [navigate],
+  );
 
   useEffect(() => {
     loadPeople();
@@ -83,7 +94,7 @@ const StudentWorkerAnalytics = () => {
       const studentAssignments = getStudentAssignments(student);
       return studentAssignments.map((assignment, index) => ({
         ...assignment,
-        id: `${student.id || student.email || student.name || 'student'}-${index}`,
+        id: `${student.id || student.email || student.name || "student"}-${index}`,
         student,
       }));
     });
@@ -102,24 +113,25 @@ const StudentWorkerAnalytics = () => {
       const endDate = parseDate(assignment.endDate || student.endDate);
       const startDate = parseDate(assignment.startDate || student.startDate);
 
-      let status = 'Active';
+      let status = "Active";
       if (student.isActive === false) {
-        status = 'Inactive';
+        status = "Inactive";
       } else if (endDate && endDate < now) {
-        status = 'Ended';
+        status = "Ended";
       } else if (startDate && startDate > now) {
-        status = 'Upcoming';
+        status = "Upcoming";
       }
 
-      const resolvedBuildings = (assignment.buildings && assignment.buildings.length > 0)
-        ? assignment.buildings
-        : Array.isArray(student.primaryBuildings)
-          ? student.primaryBuildings
-          : student.primaryBuilding
-            ? [student.primaryBuilding]
-            : [];
+      const resolvedBuildings =
+        assignment.buildings && assignment.buildings.length > 0
+          ? assignment.buildings
+          : Array.isArray(student.primaryBuildings)
+            ? student.primaryBuildings
+            : student.primaryBuilding
+              ? [student.primaryBuilding]
+              : [];
 
-      const supervisor = assignment.supervisor || student.supervisor || '';
+      const supervisor = assignment.supervisor || student.supervisor || "";
 
       return {
         ...assignment,
@@ -169,10 +181,10 @@ const StudentWorkerAnalytics = () => {
           student.email,
           assignment.jobTitle,
           assignment.supervisor,
-          assignment.resolvedBuildings.join(' ')
+          assignment.resolvedBuildings.join(" "),
         ]
           .filter(Boolean)
-          .join(' ')
+          .join(" ")
           .toLowerCase();
 
         if (!searchSource.includes(normalizedSearch)) {
@@ -181,25 +193,38 @@ const StudentWorkerAnalytics = () => {
       }
 
       if (filters.jobTitles.length > 0) {
-        if (!assignment.jobTitle || !filters.jobTitles.includes(assignment.jobTitle)) {
+        if (
+          !assignment.jobTitle ||
+          !filters.jobTitles.includes(assignment.jobTitle)
+        ) {
           return false;
         }
       }
 
       if (filters.supervisors.length > 0) {
-        if (!assignment.supervisor || !filters.supervisors.includes(assignment.supervisor)) {
+        if (
+          !assignment.supervisor ||
+          !filters.supervisors.includes(assignment.supervisor)
+        ) {
           return false;
         }
       }
 
       if (filters.buildings.length > 0) {
-        if (!assignment.resolvedBuildings.some((b) => filters.buildings.includes(b))) {
+        if (
+          !assignment.resolvedBuildings.some((b) =>
+            filters.buildings.includes(b),
+          )
+        ) {
           return false;
         }
       }
 
       if (filters.activeOnly) {
-        if (!filters.includeEnded && (assignment.status === 'Ended' || assignment.status === 'Inactive')) {
+        if (
+          !filters.includeEnded &&
+          (assignment.status === "Ended" || assignment.status === "Inactive")
+        ) {
           return false;
         }
       }
@@ -209,10 +234,21 @@ const StudentWorkerAnalytics = () => {
   }, [decorateAssignments, filters, searchText]);
 
   const metricsTotals = useMemo(() => {
-    const totalHours = filteredAssignments.reduce((sum, assignment) => sum + (assignment.weeklyHours || 0), 0);
-    const totalPay = filteredAssignments.reduce((sum, assignment) => sum + (assignment.weeklyPay || 0), 0);
+    const totalHours = filteredAssignments.reduce(
+      (sum, assignment) => sum + (assignment.weeklyHours || 0),
+      0,
+    );
+    const totalPay = filteredAssignments.reduce(
+      (sum, assignment) => sum + (assignment.weeklyPay || 0),
+      0,
+    );
     const studentCount = new Set(
-      filteredAssignments.map((assignment) => assignment.student?.id || assignment.student?.email || assignment.student?.name)
+      filteredAssignments.map(
+        (assignment) =>
+          assignment.student?.id ||
+          assignment.student?.email ||
+          assignment.student?.name,
+      ),
     ).size;
     const avgRate = totalHours > 0 ? totalPay / totalHours : 0;
 
@@ -225,12 +261,10 @@ const StudentWorkerAnalytics = () => {
     };
   }, [filteredAssignments]);
 
-
-
   const jobTitleBreakdown = useMemo(() => {
     const map = new Map();
     filteredAssignments.forEach((assignment) => {
-      const key = assignment.jobTitle || 'Unassigned';
+      const key = assignment.jobTitle || "Unassigned";
       const existing = map.get(key) || { hours: 0, pay: 0 };
       existing.hours += assignment.weeklyHours || 0;
       existing.pay += assignment.weeklyPay || 0;
@@ -245,7 +279,7 @@ const StudentWorkerAnalytics = () => {
     const map = new Map();
     filteredAssignments.forEach((assignment) => {
       assignment.resolvedBuildings.forEach((building) => {
-        const key = building || 'Unassigned';
+        const key = building || "Unassigned";
         const existing = map.get(key) || { hours: 0, pay: 0 };
         existing.hours += assignment.weeklyHours || 0;
         existing.pay += assignment.weeklyPay || 0;
@@ -260,7 +294,7 @@ const StudentWorkerAnalytics = () => {
   const supervisorBreakdown = useMemo(() => {
     const map = new Map();
     filteredAssignments.forEach((assignment) => {
-      const key = assignment.supervisor || 'Unassigned';
+      const key = assignment.supervisor || "Unassigned";
       const existing = map.get(key) || { hours: 0, pay: 0, count: 0 };
       existing.hours += assignment.weeklyHours || 0;
       existing.pay += assignment.weeklyPay || 0;
@@ -278,46 +312,46 @@ const StudentWorkerAnalytics = () => {
       let valueA;
       let valueB;
       switch (sortConfig.key) {
-        case 'student':
-          valueA = a.student?.name || '';
-          valueB = b.student?.name || '';
+        case "student":
+          valueA = a.student?.name || "";
+          valueB = b.student?.name || "";
           break;
-        case 'jobTitle':
-          valueA = a.jobTitle || '';
-          valueB = b.jobTitle || '';
+        case "jobTitle":
+          valueA = a.jobTitle || "";
+          valueB = b.jobTitle || "";
           break;
-        case 'supervisor':
-          valueA = a.supervisor || '';
-          valueB = b.supervisor || '';
+        case "supervisor":
+          valueA = a.supervisor || "";
+          valueB = b.supervisor || "";
           break;
-        case 'weeklyHours':
+        case "weeklyHours":
           valueA = a.weeklyHours || 0;
           valueB = b.weeklyHours || 0;
           break;
-        case 'hourlyRate':
+        case "hourlyRate":
           valueA = a.hourlyRateNumber || 0;
           valueB = b.hourlyRateNumber || 0;
           break;
-        case 'weeklyPay':
+        case "weeklyPay":
           valueA = a.weeklyPay || 0;
           valueB = b.weeklyPay || 0;
           break;
-        case 'status':
-          valueA = a.status || '';
-          valueB = b.status || '';
+        case "status":
+          valueA = a.status || "";
+          valueB = b.status || "";
           break;
         default:
-          valueA = '';
-          valueB = '';
+          valueA = "";
+          valueB = "";
       }
 
-      if (typeof valueA === 'number' && typeof valueB === 'number') {
+      if (typeof valueA === "number" && typeof valueB === "number") {
         const diff = valueA - valueB;
-        return sortConfig.direction === 'asc' ? diff : -diff;
+        return sortConfig.direction === "asc" ? diff : -diff;
       }
 
       const comparison = valueA.toString().localeCompare(valueB.toString());
-      return sortConfig.direction === 'asc' ? comparison : -comparison;
+      return sortConfig.direction === "asc" ? comparison : -comparison;
     });
     return sorted;
   }, [filteredAssignments, sortConfig]);
@@ -325,9 +359,9 @@ const StudentWorkerAnalytics = () => {
   const handleSort = (key) => {
     setSortConfig((prev) => {
       if (prev.key === key) {
-        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+        return { key, direction: prev.direction === "asc" ? "desc" : "asc" };
       }
-      return { key, direction: 'desc' };
+      return { key, direction: "desc" };
     });
   };
 
@@ -344,7 +378,7 @@ const StudentWorkerAnalytics = () => {
 
   const handleResetFilters = () => {
     setFilters({ ...DEFAULT_FILTERS });
-    setSearchText('');
+    setSearchText("");
   };
 
   // Count active filters
@@ -361,39 +395,65 @@ const StudentWorkerAnalytics = () => {
 
   const SortableHeader = ({ label, columnKey }) => {
     const isSorted = sortConfig.key === columnKey;
-    const directionIcon = isSorted
-      ? sortConfig.direction === 'asc'
-        ? '▲'
-        : '▼'
-      : <ArrowUpDown size={14} className="opacity-40" />;
+    const directionIcon = isSorted ? (
+      sortConfig.direction === "asc" ? (
+        "▲"
+      ) : (
+        "▼"
+      )
+    ) : (
+      <ArrowUpDown size={14} className="opacity-40" />
+    );
 
     return (
       <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">
-        <button className="flex items-center gap-2" onClick={() => handleSort(columnKey)}>
+        <button
+          className="flex items-center gap-2"
+          onClick={() => handleSort(columnKey)}
+        >
           {label}
-          <span className="inline-flex items-center justify-center w-4">{directionIcon}</span>
+          <span className="inline-flex items-center justify-center w-4">
+            {directionIcon}
+          </span>
         </button>
       </th>
     );
   };
 
   const maxJobHours = Math.max(...jobTitleBreakdown.map((j) => j.hours), 1);
-  const maxBuildingHours = Math.max(...buildingBreakdown.map((b) => b.hours), 1);
-  const maxSupervisorHours = Math.max(...supervisorBreakdown.map((s) => s.hours), 1);
+  const maxBuildingHours = Math.max(
+    ...buildingBreakdown.map((b) => b.hours),
+    1,
+  );
+  const maxSupervisorHours = Math.max(
+    ...supervisorBreakdown.map((s) => s.hours),
+    1,
+  );
 
   return (
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Student Worker Hours & Payroll</h1>
+          {embedded ? (
+            <h2 className="text-xl font-semibold text-gray-900 mb-1">
+              Student Worker Payroll
+            </h2>
+          ) : (
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">
+              Student Worker Payroll
+            </h1>
+          )}
           <p className="text-gray-600">
-            Analytics and insights for student worker assignments and estimated payroll
+            Analytics and insights for student worker assignments and estimated
+            payroll
           </p>
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => handleNavigate('people/people-directory?tab=student')}
+            onClick={() =>
+              handleNavigate("people/people-directory?tab=student")
+            }
             className="px-4 py-2 rounded-lg border border-baylor-green/40 text-baylor-green hover:bg-baylor-green/10 transition-colors font-medium"
           >
             View Student Directory
@@ -412,7 +472,9 @@ const StudentWorkerAnalytics = () => {
               <Filter size={18} className="text-baylor-green" />
             </div>
             <div className="text-left">
-              <span className="font-semibold text-gray-800">Filters & Search</span>
+              <span className="font-semibold text-gray-800">
+                Filters & Search
+              </span>
               {activeFilterCount > 0 && (
                 <span className="ml-2 px-2 py-0.5 bg-baylor-gold/20 text-baylor-green text-xs font-medium rounded-full">
                   {activeFilterCount} active
@@ -431,7 +493,10 @@ const StudentWorkerAnalytics = () => {
           <div className="px-5 pb-5 pt-2 border-t border-gray-100 space-y-4 animate-fade-in">
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <Search
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  size={18}
+                />
                 <input
                   type="text"
                   value={searchText}
@@ -444,21 +509,27 @@ const StudentWorkerAnalytics = () => {
               <MultiSelectDropdown
                 options={availableJobTitles}
                 selected={filters.jobTitles}
-                onChange={(selected) => setFilters((prev) => ({ ...prev, jobTitles: selected }))}
+                onChange={(selected) =>
+                  setFilters((prev) => ({ ...prev, jobTitles: selected }))
+                }
                 placeholder="Filter by job title"
               />
 
               <MultiSelectDropdown
                 options={availableBuildings}
                 selected={filters.buildings}
-                onChange={(selected) => setFilters((prev) => ({ ...prev, buildings: selected }))}
+                onChange={(selected) =>
+                  setFilters((prev) => ({ ...prev, buildings: selected }))
+                }
                 placeholder="Filter by building"
               />
 
               <MultiSelectDropdown
                 options={availableSupervisors}
                 selected={filters.supervisors}
-                onChange={(selected) => setFilters((prev) => ({ ...prev, supervisors: selected }))}
+                onChange={(selected) =>
+                  setFilters((prev) => ({ ...prev, supervisors: selected }))
+                }
                 placeholder="Filter by supervisor"
               />
             </div>
@@ -469,16 +540,28 @@ const StudentWorkerAnalytics = () => {
                   <input
                     type="checkbox"
                     checked={filters.activeOnly}
-                    onChange={(event) => setFilters((prev) => ({ ...prev, activeOnly: event.target.checked }))}
+                    onChange={(event) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        activeOnly: event.target.checked,
+                      }))
+                    }
                     className="w-4 h-4 text-baylor-green rounded focus:ring-baylor-green"
                   />
                   Active assignments only
                 </label>
-                <label className={`flex items-center gap-2 cursor-pointer ${filters.activeOnly ? '' : 'opacity-60'}`}>
+                <label
+                  className={`flex items-center gap-2 cursor-pointer ${filters.activeOnly ? "" : "opacity-60"}`}
+                >
                   <input
                     type="checkbox"
                     checked={filters.includeEnded}
-                    onChange={(event) => setFilters((prev) => ({ ...prev, includeEnded: event.target.checked }))}
+                    onChange={(event) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        includeEnded: event.target.checked,
+                      }))
+                    }
                     disabled={!filters.activeOnly}
                     className="w-4 h-4 text-baylor-green rounded focus:ring-baylor-green"
                   />
@@ -500,7 +583,9 @@ const StudentWorkerAnalytics = () => {
       {filteredAssignments.length === 0 ? (
         <div className="bg-white border border-dashed border-gray-300 rounded-xl p-12 text-center">
           <Users size={48} className="mx-auto text-gray-300 mb-4" />
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">No Assignments Found</h3>
+          <h3 className="text-lg font-semibold text-gray-700 mb-2">
+            No Assignments Found
+          </h3>
           <p className="text-gray-500">
             Adjust the filters or search criteria to see student worker metrics.
           </p>
@@ -512,10 +597,15 @@ const StudentWorkerAnalytics = () => {
             <div className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-shadow group">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Total Weekly Hours</p>
-                  <p className="text-3xl font-bold text-baylor-green">{formatHoursValue(metricsTotals.totalHours)}</p>
+                  <p className="text-sm font-medium text-gray-500 mb-1">
+                    Total Weekly Hours
+                  </p>
+                  <p className="text-3xl font-bold text-baylor-green">
+                    {formatHoursValue(metricsTotals.totalHours)}
+                  </p>
                   <p className="text-sm text-gray-500 mt-1">
-                    {metricsTotals.studentCount} student{metricsTotals.studentCount === 1 ? '' : 's'}
+                    {metricsTotals.studentCount} student
+                    {metricsTotals.studentCount === 1 ? "" : "s"}
                   </p>
                 </div>
                 <div className="p-3 bg-baylor-green/10 rounded-lg group-hover:bg-baylor-green/20 transition-colors">
@@ -527,9 +617,15 @@ const StudentWorkerAnalytics = () => {
             <div className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-shadow group">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Est. Weekly Payroll</p>
-                  <p className="text-3xl font-bold text-baylor-green">{formatCurrency(metricsTotals.totalPay)}</p>
-                  <p className="text-sm text-gray-500 mt-1">Across all assignments</p>
+                  <p className="text-sm font-medium text-gray-500 mb-1">
+                    Est. Weekly Payroll
+                  </p>
+                  <p className="text-3xl font-bold text-baylor-green">
+                    {formatCurrency(metricsTotals.totalPay)}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Across all assignments
+                  </p>
                 </div>
                 <div className="p-3 bg-baylor-green/10 rounded-lg group-hover:bg-baylor-green/20 transition-colors">
                   <DollarSign size={24} className="text-baylor-green" />
@@ -540,9 +636,15 @@ const StudentWorkerAnalytics = () => {
             <div className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-shadow group">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Average Hourly Rate</p>
-                  <p className="text-3xl font-bold text-baylor-green">{formatCurrency(metricsTotals.avgRate)}</p>
-                  <p className="text-sm text-gray-500 mt-1">Weighted by hours</p>
+                  <p className="text-sm font-medium text-gray-500 mb-1">
+                    Average Hourly Rate
+                  </p>
+                  <p className="text-3xl font-bold text-baylor-green">
+                    {formatCurrency(metricsTotals.avgRate)}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Weighted by hours
+                  </p>
                 </div>
                 <div className="p-3 bg-baylor-green/10 rounded-lg group-hover:bg-baylor-green/20 transition-colors">
                   <TrendingUp size={24} className="text-baylor-green" />
@@ -553,9 +655,15 @@ const StudentWorkerAnalytics = () => {
             <div className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-shadow group">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Total Assignments</p>
-                  <p className="text-3xl font-bold text-baylor-green">{metricsTotals.assignmentCount}</p>
-                  <p className="text-sm text-gray-500 mt-1">Currently in view</p>
+                  <p className="text-sm font-medium text-gray-500 mb-1">
+                    Total Assignments
+                  </p>
+                  <p className="text-3xl font-bold text-baylor-green">
+                    {metricsTotals.assignmentCount}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Currently in view
+                  </p>
                 </div>
                 <div className="p-3 bg-baylor-green/10 rounded-lg group-hover:bg-baylor-green/20 transition-colors">
                   <Users size={24} className="text-baylor-green" />
@@ -569,31 +677,33 @@ const StudentWorkerAnalytics = () => {
             {/* Tab Headers */}
             <div className="flex border-b border-gray-200">
               <button
-                onClick={() => setActiveTab('overview')}
-                className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${activeTab === 'overview'
-                  ? 'text-baylor-green bg-baylor-green/5'
-                  : 'text-gray-600 hover:text-baylor-green hover:bg-gray-50'
-                  }`}
+                onClick={() => setActiveTab("overview")}
+                className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${
+                  activeTab === "overview"
+                    ? "text-baylor-green bg-baylor-green/5"
+                    : "text-gray-600 hover:text-baylor-green hover:bg-gray-50"
+                }`}
               >
                 <LayoutGrid size={18} />
                 Overview
-                {activeTab === 'overview' && (
+                {activeTab === "overview" && (
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-baylor-gold" />
                 )}
               </button>
               <button
-                onClick={() => setActiveTab('assignments')}
-                className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${activeTab === 'assignments'
-                  ? 'text-baylor-green bg-baylor-green/5'
-                  : 'text-gray-600 hover:text-baylor-green hover:bg-gray-50'
-                  }`}
+                onClick={() => setActiveTab("assignments")}
+                className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${
+                  activeTab === "assignments"
+                    ? "text-baylor-green bg-baylor-green/5"
+                    : "text-gray-600 hover:text-baylor-green hover:bg-gray-50"
+                }`}
               >
                 <List size={18} />
                 Assignments
                 <span className="ml-1 px-2 py-0.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
                   {sortedAssignments.length}
                 </span>
-                {activeTab === 'assignments' && (
+                {activeTab === "assignments" && (
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-baylor-gold" />
                 )}
               </button>
@@ -601,10 +711,8 @@ const StudentWorkerAnalytics = () => {
 
             {/* Tab Content */}
             <div className="p-6">
-              {activeTab === 'overview' ? (
+              {activeTab === "overview" ? (
                 <div className="space-y-6">
-
-
                   {/* Breakdown Charts */}
                   <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                     {/* Hours by Job Title */}
@@ -631,7 +739,9 @@ const StudentWorkerAnalytics = () => {
                           )}
                         </div>
                       ) : (
-                        <p className="text-sm text-gray-500">No job title data.</p>
+                        <p className="text-sm text-gray-500">
+                          No job title data.
+                        </p>
                       )}
                     </div>
 
@@ -659,7 +769,9 @@ const StudentWorkerAnalytics = () => {
                           )}
                         </div>
                       ) : (
-                        <p className="text-sm text-gray-500">No building data.</p>
+                        <p className="text-sm text-gray-500">
+                          No building data.
+                        </p>
                       )}
                     </div>
 
@@ -687,7 +799,9 @@ const StudentWorkerAnalytics = () => {
                           )}
                         </div>
                       ) : (
-                        <p className="text-sm text-gray-500">No supervisor data.</p>
+                        <p className="text-sm text-gray-500">
+                          No supervisor data.
+                        </p>
                       )}
                     </div>
                   </div>
@@ -710,21 +824,39 @@ const StudentWorkerAnalytics = () => {
                       <thead className="bg-gray-50">
                         <tr>
                           <SortableHeader label="Student" columnKey="student" />
-                          <SortableHeader label="Job Title" columnKey="jobTitle" />
-                          <SortableHeader label="Supervisor" columnKey="supervisor" />
-                          <th className="px-4 py-3 text-left text-sm font-serif font-semibold text-baylor-green">Buildings</th>
-                          <SortableHeader label="Weekly Hours" columnKey="weeklyHours" />
-                          <SortableHeader label="Hourly Rate" columnKey="hourlyRate" />
-                          <SortableHeader label="Weekly Pay" columnKey="weeklyPay" />
+                          <SortableHeader
+                            label="Job Title"
+                            columnKey="jobTitle"
+                          />
+                          <SortableHeader
+                            label="Supervisor"
+                            columnKey="supervisor"
+                          />
+                          <th className="px-4 py-3 text-left text-sm font-serif font-semibold text-baylor-green">
+                            Buildings
+                          </th>
+                          <SortableHeader
+                            label="Weekly Hours"
+                            columnKey="weeklyHours"
+                          />
+                          <SortableHeader
+                            label="Hourly Rate"
+                            columnKey="hourlyRate"
+                          />
+                          <SortableHeader
+                            label="Weekly Pay"
+                            columnKey="weeklyPay"
+                          />
                           <SortableHeader label="Status" columnKey="status" />
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-100">
                         {sortedAssignments.map((assignment) => {
                           const { student } = assignment;
-                          const buildingsDisplay = assignment.resolvedBuildings.length > 0
-                            ? assignment.resolvedBuildings.join(', ')
-                            : '—';
+                          const buildingsDisplay =
+                            assignment.resolvedBuildings.length > 0
+                              ? assignment.resolvedBuildings.join(", ")
+                              : "—";
 
                           return (
                             <tr
@@ -733,29 +865,44 @@ const StudentWorkerAnalytics = () => {
                               onClick={() => handleStudentClick(student)}
                             >
                               <td className="px-4 py-3 text-sm">
-                                <div className="font-medium text-gray-900">{student?.name || 'Unknown Student'}</div>
-                                <div className="text-xs text-gray-500">{student?.email || 'No email on file'}</div>
+                                <div className="font-medium text-gray-900">
+                                  {student?.name || "Unknown Student"}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {student?.email || "No email on file"}
+                                </div>
                               </td>
-                              <td className="px-4 py-3 text-sm text-gray-700">{assignment.jobTitle || 'Unassigned'}</td>
-                              <td className="px-4 py-3 text-sm text-gray-700">{assignment.supervisor || '—'}</td>
-                              <td className="px-4 py-3 text-sm text-gray-700 max-w-[150px] truncate">{buildingsDisplay}</td>
-                              <td className="px-4 py-3 text-sm text-gray-900 font-medium">{formatHoursValue(assignment.weeklyHours)} hrs</td>
+                              <td className="px-4 py-3 text-sm text-gray-700">
+                                {assignment.jobTitle || "Unassigned"}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-700">
+                                {assignment.supervisor || "—"}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-700 max-w-[150px] truncate">
+                                {buildingsDisplay}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                                {formatHoursValue(assignment.weeklyHours)} hrs
+                              </td>
                               <td className="px-4 py-3 text-sm text-gray-700">
                                 {assignment.hourlyRateNumber
                                   ? `${formatCurrency(assignment.hourlyRateNumber)}/hr`
-                                  : assignment.hourlyRateDisplay || '—'}
+                                  : assignment.hourlyRateDisplay || "—"}
                               </td>
-                              <td className="px-4 py-3 text-sm text-gray-900 font-medium">{formatCurrency(assignment.weeklyPay)}</td>
+                              <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                                {formatCurrency(assignment.weeklyPay)}
+                              </td>
                               <td className="px-4 py-3 text-sm">
                                 <span
-                                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${assignment.status === 'Active'
-                                    ? 'bg-green-100 text-green-800'
-                                    : assignment.status === 'Upcoming'
-                                      ? 'bg-blue-100 text-blue-800'
-                                      : assignment.status === 'Ended'
-                                        ? 'bg-gray-100 text-gray-700'
-                                        : 'bg-yellow-100 text-yellow-800'
-                                    }`}
+                                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                    assignment.status === "Active"
+                                      ? "bg-green-100 text-green-800"
+                                      : assignment.status === "Upcoming"
+                                        ? "bg-blue-100 text-blue-800"
+                                        : assignment.status === "Ended"
+                                          ? "bg-gray-100 text-gray-700"
+                                          : "bg-yellow-100 text-yellow-800"
+                                  }`}
                                 >
                                   {assignment.status}
                                 </span>

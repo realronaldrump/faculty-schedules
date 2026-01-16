@@ -1,432 +1,546 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import DOMPurify from 'dompurify';
-import Papa from 'papaparse';
-import { Upload, X, Trash2, FileText, Download, Save as SaveIcon, Database, ArrowLeft } from 'lucide-react';
-import ExportModal from './ExportModal';
-import ExportableRoomSchedule from './ExportableRoomSchedule';
-import { db } from '../../firebase';
-import { collection, addDoc, getDocs, deleteDoc, doc, query, where, orderBy, limit } from 'firebase/firestore';
-import { logCreate, logDelete } from '../../utils/changeLogger';
-import { ConfirmationDialog } from '../CustomAlert';
-import { usePermissions } from '../../utils/permissions';
-import { registerActionKeys } from '../../utils/actionRegistry';
-import { fetchSchedulesByTerm } from '../../utils/dataImportUtils';
-import { getBuildingFromRoom } from '../../utils/buildingUtils';
-import { useSchedules } from '../../contexts/ScheduleContext';
-
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import DOMPurify from "dompurify";
+import Papa from "papaparse";
+import {
+  Upload,
+  X,
+  Trash2,
+  FileText,
+  Download,
+  Save as SaveIcon,
+  Database,
+  ArrowLeft,
+} from "lucide-react";
+import ExportModal from "./ExportModal";
+import ExportableRoomSchedule from "./ExportableRoomSchedule";
+import { db } from "../../firebase";
+import {
+  collection,
+  addDoc,
+  getDocs,
+  deleteDoc,
+  doc,
+  query,
+  where,
+  orderBy,
+  limit,
+} from "firebase/firestore";
+import { logCreate, logDelete } from "../../utils/changeLogger";
+import { ConfirmationDialog } from "../CustomAlert";
+import { usePermissions } from "../../utils/permissions";
+import { registerActionKeys } from "../../utils/actionRegistry";
+import { fetchSchedulesByTerm } from "../../utils/dataImportUtils";
+import { getBuildingFromRoom } from "../../utils/buildingUtils";
+import { useSchedules } from "../../contexts/ScheduleContext";
 
 const RoomGridGenerator = () => {
-    const { canEdit, canAction } = usePermissions();
-    const { availableSemesters = [], selectedSemester, getTermByLabel } = useSchedules();
-    // Register actions for this feature so admin UI can see them
-    useEffect(() => {
-        registerActionKeys(['roomGrids.save', 'roomGrids.delete']);
-    }, []);
-    const [allClassData, setAllClassData] = useState([]);
-    const [buildings, setBuildings] = useState({});
-    const [selectedBuilding, setSelectedBuilding] = useState('');
-    const [selectedRoom, setSelectedRoom] = useState('');
-    const [selectedDayType, setSelectedDayType] = useState('MWF');
-    const [semester, setSemester] = useState('');
-    const [message, setMessage] = useState({ text: '', type: '' });
-    const [scheduleHtml, setScheduleHtml] = useState('');
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-    const [isSaving, setIsSaving] = useState(false);
-    const [isLoadingSaved, setIsLoadingSaved] = useState(false);
-    const [savedGrids, setSavedGrids] = useState([]);
+  const { canEdit, canAction } = usePermissions();
+  const {
+    availableSemesters = [],
+    selectedSemester,
+    getTermByLabel,
+  } = useSchedules();
+  // Register actions for this feature so admin UI can see them
+  useEffect(() => {
+    registerActionKeys(["roomGrids.save", "roomGrids.delete"]);
+  }, []);
+  const [allClassData, setAllClassData] = useState([]);
+  const [buildings, setBuildings] = useState({});
+  const [selectedBuilding, setSelectedBuilding] = useState("");
+  const [selectedRoom, setSelectedRoom] = useState("");
+  const [selectedDayType, setSelectedDayType] = useState("MWF");
+  const [semester, setSemester] = useState("");
+  const [message, setMessage] = useState({ text: "", type: "" });
+  const [scheduleHtml, setScheduleHtml] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingSaved, setIsLoadingSaved] = useState(false);
+  const [savedGrids, setSavedGrids] = useState([]);
 
-    // Mode selection: null = wizard, 'auto' = dashboard data, 'csv' = CLSS import
-    const [dataMode, setDataMode] = useState(null);
-    const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
-    const [dashboardSchedules, setDashboardSchedules] = useState(null);
-    const [loadedTerm, setLoadedTerm] = useState('');
+  // Mode selection: null = wizard, 'auto' = dashboard data, 'csv' = CLSS import
+  const [dataMode, setDataMode] = useState(null);
+  const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
+  const [dashboardSchedules, setDashboardSchedules] = useState(null);
+  const [loadedTerm, setLoadedTerm] = useState("");
 
-    // Dialog states
-    const [alertDialog, setAlertDialog] = useState({ isOpen: false, message: '', title: '' });
-    const [deleteConfirmDialog, setDeleteConfirmDialog] = useState({ isOpen: false, grid: null });
+  // Dialog states
+  const [alertDialog, setAlertDialog] = useState({
+    isOpen: false,
+    message: "",
+    title: "",
+  });
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState({
+    isOpen: false,
+    grid: null,
+  });
 
-    // State for the new exportable weekly schedule
-    const [weeklyClasses, setWeeklyClasses] = useState([]);
-    const [showExportableWeek, setShowExportableWeek] = useState(false);
+  // State for the new exportable weekly schedule
+  const [weeklyClasses, setWeeklyClasses] = useState([]);
+  const [showExportableWeek, setShowExportableWeek] = useState(false);
 
-    const printRef = useRef();
-    const exportableRef = useRef();
-    const fileInputRef = useRef();
+  const printRef = useRef();
+  const exportableRef = useRef();
+  const fileInputRef = useRef();
 
-    const timeSlots = {
-        MWF: [
-            "8:00 am - 8:50 am", "9:05 am - 9:55 am", "10:10 am - 11:00 am",
-            "11:15 am - 12:05 pm", "12:20 pm - 1:10 pm", "1:25 pm - 2:15 pm",
-            "2:30 pm - 3:20 pm", "3:35 pm - 4:25 pm", "4:40 pm - 5:30 pm"
-        ],
-        TR: [
-            "8:00 am - 9:15 am", "9:30 am - 10:45 am", "11:00 am - 12:15 pm",
-            "12:30 pm - 1:45 pm", "2:00 pm - 3:15 pm", "3:30 pm - 4:45 pm",
-            "5:00 pm - 6:15 pm"
-        ]
-    };
+  const timeSlots = {
+    MWF: [
+      "8:00 am - 8:50 am",
+      "9:05 am - 9:55 am",
+      "10:10 am - 11:00 am",
+      "11:15 am - 12:05 pm",
+      "12:20 pm - 1:10 pm",
+      "1:25 pm - 2:15 pm",
+      "2:30 pm - 3:20 pm",
+      "3:35 pm - 4:25 pm",
+      "4:40 pm - 5:30 pm",
+    ],
+    TR: [
+      "8:00 am - 9:15 am",
+      "9:30 am - 10:45 am",
+      "11:00 am - 12:15 pm",
+      "12:30 pm - 1:45 pm",
+      "2:00 pm - 3:15 pm",
+      "3:30 pm - 4:45 pm",
+      "5:00 pm - 6:15 pm",
+    ],
+  };
 
-    const showMessage = (text, type = 'error') => {
-        setMessage({ text, type });
-    };
+  const showMessage = (text, type = "error") => {
+    setMessage({ text, type });
+  };
 
-    const resetUI = (soft = false) => {
-        if (!soft) {
-            setAllClassData([]);
-            setBuildings({});
-            setSelectedBuilding('');
-            if (fileInputRef.current) {
-                fileInputRef.current.value = '';
-            }
+  const resetUI = (soft = false) => {
+    if (!soft) {
+      setAllClassData([]);
+      setBuildings({});
+      setSelectedBuilding("");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+    setSelectedRoom("");
+    setScheduleHtml("");
+    setWeeklyClasses([]);
+    setShowExportableWeek(false);
+    setMessage({ text: "", type: "" });
+  };
+
+  // Load schedules for a specific term in auto-populate mode
+  const loadDashboardData = useCallback(
+    async (targetSemester = "") => {
+      setIsLoadingDashboard(true);
+      try {
+        const termLabel =
+          targetSemester ||
+          semester ||
+          selectedSemester ||
+          availableSemesters[0] ||
+          "";
+        if (!termLabel) {
+          showMessage("Select a semester to load dashboard data.");
+          return;
         }
-        setSelectedRoom('');
-        setScheduleHtml('');
-        setWeeklyClasses([]);
-        setShowExportableWeek(false);
-        setMessage({ text: '', type: '' });
-    };
-
-    // Load schedules for a specific term in auto-populate mode
-    const loadDashboardData = useCallback(async (targetSemester = '') => {
-        setIsLoadingDashboard(true);
-        try {
-            const termLabel = targetSemester || semester || selectedSemester || availableSemesters[0] || '';
-            if (!termLabel) {
-                showMessage('Select a semester to load dashboard data.');
-                return;
-            }
-            if (!semester) {
-                setSemester(termLabel);
-            }
-            const termMeta = getTermByLabel?.(termLabel);
-            const { schedules } = await fetchSchedulesByTerm({
-                term: termLabel,
-                termCode: termMeta?.termCode || ''
-            });
-            setDashboardSchedules(schedules);
-            setLoadedTerm(termLabel);
-            showMessage(`Loaded ${schedules.length} schedules for ${termLabel}.`, 'success');
-        } catch (error) {
-            console.error('Error loading dashboard data:', error);
-            showMessage('Failed to load dashboard data. ' + error.message);
-        } finally {
-            setIsLoadingDashboard(false);
+        if (!semester) {
+          setSemester(termLabel);
         }
-    }, [availableSemesters, getTermByLabel, selectedSemester, semester]);
-
-    // Transform dashboard schedules to allClassData format (matching CSV processing output)
-    const processDashboardData = useCallback((targetSemester) => {
-        if (!dashboardSchedules || dashboardSchedules.length === 0) return;
-
-        const semesterSchedules = Array.isArray(dashboardSchedules) ? dashboardSchedules : [];
-
-        // Transform each schedule to the format expected by the grid generator
-        const items = semesterSchedules.flatMap(schedule => {
-            // Skip schedules without rooms or meeting patterns
-            const roomNames = schedule.roomNames || (schedule.roomName ? [schedule.roomName] : []);
-            const meetingPatterns = schedule.meetingPatterns || [];
-
-            if (roomNames.length === 0 || meetingPatterns.length === 0) {
-                return [];
-            }
-
-            // Skip online/no room schedules
-            const firstRoom = roomNames[0] || '';
-            if (firstRoom.toLowerCase().includes('online') ||
-                firstRoom.toLowerCase().includes('no room') ||
-                firstRoom.toLowerCase().includes('tba')) {
-                return [];
-            }
-
-            const courseCode = schedule.courseCode || `${schedule.subjectCode || ''} ${schedule.catalogNumber || ''}`.trim();
-            const instructorName = schedule.instructorName ||
-                (schedule.instructor ? `${schedule.instructor.lastName || ''}`.trim() : 'Staff');
-
-            // Create entries for each room/pattern combination
-            return roomNames.flatMap(roomString => {
-                // Use centralized building utility for consistent naming
-                const buildingName = getBuildingFromRoom(roomString);
-
-                // Extract room number (last word that contains digits)
-                let roomNumber = 'N/A';
-                const roomMatch = roomString.match(/([\w\d\-/]+)\s*$/);
-                if (roomMatch && /\d/.test(roomMatch[1])) {
-                    roomNumber = roomMatch[1].trim();
-                }
-
-                // Skip general assignment rooms, empty buildings, online
-                if (!buildingName ||
-                    buildingName.toLowerCase().includes('general') ||
-                    buildingName.toLowerCase() === 'online' ||
-                    buildingName.toLowerCase() === 'off campus') {
-                    return [];
-                }
-
-                return meetingPatterns.map(pattern => {
-                    const days = pattern.day || '';
-                    const time = pattern.startTime && pattern.endTime
-                        ? `${pattern.startTime} - ${pattern.endTime}`
-                        : '';
-
-                    if (!days || !time) return null;
-
-                    return {
-                        building: buildingName,
-                        room: roomNumber,
-                        days: days,
-                        time: time,
-                        class: courseCode,
-                        section: (schedule.section || '').split(' ')[0],
-                        professor: instructorName
-                    };
-                }).filter(Boolean);
-            });
+        const termMeta = getTermByLabel?.(termLabel);
+        const { schedules } = await fetchSchedulesByTerm({
+          term: termLabel,
+          termCode: termMeta?.termCode || "",
         });
+        setDashboardSchedules(schedules);
+        setLoadedTerm(termLabel);
+        showMessage(
+          `Loaded ${schedules.length} schedules for ${termLabel}.`,
+          "success",
+        );
+      } catch (error) {
+        console.error("Error loading dashboard data:", error);
+        showMessage("Failed to load dashboard data. " + error.message);
+      } finally {
+        setIsLoadingDashboard(false);
+      }
+    },
+    [availableSemesters, getTermByLabel, selectedSemester, semester],
+  );
 
-        // Deduplicate identical entries
-        const dedupedMap = new Map();
-        for (const item of items) {
-            const key = [
-                item.building,
-                item.room,
-                item.days.replace(/\s/g, ''),
-                item.time.replace(/\s/g, ''),
-                item.class,
-                item.section,
-                item.professor
-            ].join('|');
-            if (!dedupedMap.has(key)) dedupedMap.set(key, item);
+  // Transform dashboard schedules to allClassData format (matching CSV processing output)
+  const processDashboardData = useCallback(
+    (targetSemester) => {
+      if (!dashboardSchedules || dashboardSchedules.length === 0) return;
+
+      const semesterSchedules = Array.isArray(dashboardSchedules)
+        ? dashboardSchedules
+        : [];
+
+      // Transform each schedule to the format expected by the grid generator
+      const items = semesterSchedules.flatMap((schedule) => {
+        // Skip schedules without rooms or meeting patterns
+        const roomNames =
+          schedule.roomNames || (schedule.roomName ? [schedule.roomName] : []);
+        const meetingPatterns = schedule.meetingPatterns || [];
+
+        if (roomNames.length === 0 || meetingPatterns.length === 0) {
+          return [];
         }
-        const processedClassData = Array.from(dedupedMap.values());
 
-        setAllClassData(processedClassData);
-
-        // Build buildings map from processed data
-        const newBuildings = processedClassData.reduce((acc, item) => {
-            if (!acc[item.building]) {
-                acc[item.building] = new Set();
-            }
-            acc[item.building].add(item.room);
-            return acc;
-        }, {});
-
-        setBuildings(newBuildings);
-
-        if (Object.keys(newBuildings).length === 0) {
-            showMessage(`No classes with room assignments found for ${targetSemester}.`);
-        } else {
-            showMessage(`Found ${processedClassData.length} classes across ${Object.keys(newBuildings).length} buildings for ${targetSemester}.`, 'success');
+        // Skip online/no room schedules
+        const firstRoom = roomNames[0] || "";
+        if (
+          firstRoom.toLowerCase().includes("online") ||
+          firstRoom.toLowerCase().includes("no room") ||
+          firstRoom.toLowerCase().includes("tba")
+        ) {
+          return [];
         }
-    }, [dashboardSchedules]);
 
-    // When semester changes in auto mode, reload and reprocess data
-    useEffect(() => {
-        if (dataMode === 'auto' && semester && semester !== loadedTerm) {
-            loadDashboardData(semester);
-        }
-    }, [dataMode, semester, loadedTerm, loadDashboardData]);
+        const courseCode =
+          schedule.courseCode ||
+          `${schedule.subjectCode || ""} ${schedule.catalogNumber || ""}`.trim();
+        const instructorName =
+          schedule.instructorName ||
+          (schedule.instructor
+            ? `${schedule.instructor.lastName || ""}`.trim()
+            : "Staff");
 
-    useEffect(() => {
-        if (dataMode === 'auto' && dashboardSchedules && semester) {
-            processDashboardData(semester);
-        }
-    }, [dataMode, semester, dashboardSchedules, processDashboardData]);
+        // Create entries for each room/pattern combination
+        return roomNames.flatMap((roomString) => {
+          // Use centralized building utility for consistent naming
+          const buildingName = getBuildingFromRoom(roomString);
 
-    useEffect(() => {
-        if (dataMode === 'auto' && !semester && availableSemesters.length > 0) {
-            setSemester(selectedSemester || availableSemesters[0]);
-        }
-    }, [dataMode, semester, availableSemesters, selectedSemester]);
+          // Extract room number (last word that contains digits)
+          let roomNumber = "N/A";
+          const roomMatch = roomString.match(/([\w\d\-/]+)\s*$/);
+          if (roomMatch && /\d/.test(roomMatch[1])) {
+            roomNumber = roomMatch[1].trim();
+          }
 
-    // Reset when changing modes
-    const handleModeChange = (mode) => {
-        resetUI();
-        setDataMode(mode);
-        if (mode === 'csv') {
-            setSemester(''); // Let user set semester manually for CSV
-        }
-    };
+          // Skip general assignment rooms, empty buildings, online
+          if (
+            !buildingName ||
+            buildingName.toLowerCase().includes("general") ||
+            buildingName.toLowerCase() === "online" ||
+            buildingName.toLowerCase() === "off campus"
+          ) {
+            return [];
+          }
 
-    const handleFileUpload = (file) => {
-        if (!file) return;
+          return meetingPatterns
+            .map((pattern) => {
+              const days = pattern.day || "";
+              const time =
+                pattern.startTime && pattern.endTime
+                  ? `${pattern.startTime} - ${pattern.endTime}`
+                  : "";
 
-        resetUI(true);
-        setIsProcessing(true);
+              if (!days || !time) return null;
 
-        Papa.parse(file, {
-            header: true,
-            skipEmptyLines: "greedy",
-            beforeFirstChunk: (chunk) => {
-                const lines = chunk.split(/\r\n|\n|\r/);
-                const headerIndex = lines.findIndex(line =>
-                    line.includes('"CLSS ID","CRN","Term"') || line.includes('"CLSS ID","CRN","Semester"')
-                );
-
-                if (headerIndex === -1) {
-                    console.error("Could not find the header row in the CSV file.");
-                    return "";
-                }
-
-                const header = lines[headerIndex];
-                const dataLines = lines.slice(headerIndex + 1);
-                return [header, ...dataLines].join('\n');
-            },
-            complete: (results) => {
-                processData(results.data);
-                setIsProcessing(false);
-            },
-            error: (error) => {
-                console.error("Error parsing CSV:", error);
-                showMessage("Error parsing CSV. Please check file format and console for details.");
-                setIsProcessing(false);
-            }
+              return {
+                building: buildingName,
+                room: roomNumber,
+                days: days,
+                time: time,
+                class: courseCode,
+                section: (schedule.section || "").split(" ")[0],
+                professor: instructorName,
+              };
+            })
+            .filter(Boolean);
         });
-    };
+      });
 
-    const processData = (data) => {
-        const items = data.flatMap(row => {
-            try {
-                const roomRaw = row['Room'] || '';
-                const meetingPatternRaw = row['Meeting Pattern'] || '';
-                const instructorRaw = row['Instructor'] || '';
+      // Deduplicate identical entries
+      const dedupedMap = new Map();
+      for (const item of items) {
+        const key = [
+          item.building,
+          item.room,
+          item.days.replace(/\s/g, ""),
+          item.time.replace(/\s/g, ""),
+          item.class,
+          item.section,
+          item.professor,
+        ].join("|");
+        if (!dedupedMap.has(key)) dedupedMap.set(key, item);
+      }
+      const processedClassData = Array.from(dedupedMap.values());
 
-                if (!roomRaw || roomRaw.toLowerCase().includes('no room needed') || roomRaw.toLowerCase().includes('online') || !meetingPatternRaw || meetingPatternRaw.toLowerCase().startsWith('does not meet')) {
-                    return [];
-                }
+      setAllClassData(processedClassData);
 
-                const roomsList = roomRaw.split(';').map(r => r.trim());
-                const patternsList = meetingPatternRaw.split(';').map(p => p.trim());
+      // Build buildings map from processed data
+      const newBuildings = processedClassData.reduce((acc, item) => {
+        if (!acc[item.building]) {
+          acc[item.building] = new Set();
+        }
+        acc[item.building].add(item.room);
+        return acc;
+      }, {});
 
-                const baseInfo = {
-                    class: `${row['Subject Code']} ${row['Catalog Number']}`,
-                    section: (row['Section #'] || '').split(' ')[0],
-                    professor: (instructorRaw || '').split(',')[0].trim()
-                };
+      setBuildings(newBuildings);
 
-                return roomsList.map((roomString, i) => {
-                    const patternString = patternsList[i] || patternsList[0];
-                    let buildingName, roomNumber;
-                    const roomMatch = roomString.match(/(.+?)\s+([\w\d\-/]+)$/);
-                    if (roomMatch) {
-                        buildingName = roomMatch[1].trim();
-                        roomNumber = roomMatch[2].trim();
-                    } else {
-                        if (roomString.toLowerCase().includes('general assignment')) return null;
-                        buildingName = roomString.trim();
-                        roomNumber = "N/A";
-                    }
+      if (Object.keys(newBuildings).length === 0) {
+        showMessage(
+          `No classes with room assignments found for ${targetSemester}.`,
+        );
+      } else {
+        showMessage(
+          `Found ${processedClassData.length} classes across ${Object.keys(newBuildings).length} buildings for ${targetSemester}.`,
+          "success",
+        );
+      }
+    },
+    [dashboardSchedules],
+  );
 
-                    const mp = patternString.trim().match(/^([A-Za-z]+)\s+(.+)$/);
-                    const days = mp ? mp[1] : (patternString.split(/\s+/)[0] || '');
-                    const time = mp ? mp[2].trim() : patternString.replace(days, '').trim();
+  // When semester changes in auto mode, reload and reprocess data
+  useEffect(() => {
+    if (dataMode === "auto" && semester && semester !== loadedTerm) {
+      loadDashboardData(semester);
+    }
+  }, [dataMode, semester, loadedTerm, loadDashboardData]);
 
-                    if (!buildingName || !roomNumber || !days || !time) return null;
+  useEffect(() => {
+    if (dataMode === "auto" && dashboardSchedules && semester) {
+      processDashboardData(semester);
+    }
+  }, [dataMode, semester, dashboardSchedules, processDashboardData]);
 
-                    return { ...baseInfo, building: buildingName, room: roomNumber, days: days, time: time };
-                }).filter(Boolean);
+  useEffect(() => {
+    if (dataMode === "auto" && !semester && availableSemesters.length > 0) {
+      setSemester(selectedSemester || availableSemesters[0]);
+    }
+  }, [dataMode, semester, availableSemesters, selectedSemester]);
 
-            } catch (e) {
-                console.warn("Could not process row:", row, "Error:", e);
-                return [];
+  // Reset when changing modes
+  const handleModeChange = (mode) => {
+    resetUI();
+    setDataMode(mode);
+    if (mode === "csv") {
+      setSemester(""); // Let user set semester manually for CSV
+    }
+  };
+
+  const handleFileUpload = (file) => {
+    if (!file) return;
+
+    resetUI(true);
+    setIsProcessing(true);
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: "greedy",
+      beforeFirstChunk: (chunk) => {
+        const lines = chunk.split(/\r\n|\n|\r/);
+        const headerIndex = lines.findIndex(
+          (line) =>
+            line.includes('"CLSS ID","CRN","Term"') ||
+            line.includes('"CLSS ID","CRN","Semester"'),
+        );
+
+        if (headerIndex === -1) {
+          console.error("Could not find the header row in the CSV file.");
+          return "";
+        }
+
+        const header = lines[headerIndex];
+        const dataLines = lines.slice(headerIndex + 1);
+        return [header, ...dataLines].join("\n");
+      },
+      complete: (results) => {
+        processData(results.data);
+        setIsProcessing(false);
+      },
+      error: (error) => {
+        console.error("Error parsing CSV:", error);
+        showMessage(
+          "Error parsing CSV. Please check file format and console for details.",
+        );
+        setIsProcessing(false);
+      },
+    });
+  };
+
+  const processData = (data) => {
+    const items = data.flatMap((row) => {
+      try {
+        const roomRaw = row["Room"] || "";
+        const meetingPatternRaw = row["Meeting Pattern"] || "";
+        const instructorRaw = row["Instructor"] || "";
+
+        if (
+          !roomRaw ||
+          roomRaw.toLowerCase().includes("no room needed") ||
+          roomRaw.toLowerCase().includes("online") ||
+          !meetingPatternRaw ||
+          meetingPatternRaw.toLowerCase().startsWith("does not meet")
+        ) {
+          return [];
+        }
+
+        const roomsList = roomRaw.split(";").map((r) => r.trim());
+        const patternsList = meetingPatternRaw.split(";").map((p) => p.trim());
+
+        const baseInfo = {
+          class: `${row["Subject Code"]} ${row["Catalog Number"]}`,
+          section: (row["Section #"] || "").split(" ")[0],
+          professor: (instructorRaw || "").split(",")[0].trim(),
+        };
+
+        return roomsList
+          .map((roomString, i) => {
+            const patternString = patternsList[i] || patternsList[0];
+            let buildingName, roomNumber;
+            const roomMatch = roomString.match(/(.+?)\s+([\w\d\-/]+)$/);
+            if (roomMatch) {
+              buildingName = roomMatch[1].trim();
+              roomNumber = roomMatch[2].trim();
+            } else {
+              if (roomString.toLowerCase().includes("general assignment"))
+                return null;
+              buildingName = roomString.trim();
+              roomNumber = "N/A";
             }
-        });
 
-        // Deduplicate identical entries that sometimes occur in CLSS exports
-        const dedupedMap = new Map();
-        for (const item of items) {
-            const key = [
-                item.building,
-                item.room,
-                item.days.replace(/\s/g, ''),
-                item.time.replace(/\s/g, ''),
-                item.class,
-                item.section,
-                item.professor
-            ].join('|');
-            if (!dedupedMap.has(key)) dedupedMap.set(key, item);
-        }
-        const processedClassData = Array.from(dedupedMap.values());
+            const mp = patternString.trim().match(/^([A-Za-z]+)\s+(.+)$/);
+            const days = mp ? mp[1] : patternString.split(/\s+/)[0] || "";
+            const time = mp
+              ? mp[2].trim()
+              : patternString.replace(days, "").trim();
 
-        setAllClassData(processedClassData);
+            if (!buildingName || !roomNumber || !days || !time) return null;
 
-        const newBuildings = processedClassData.reduce((acc, item) => {
-            if (!acc[item.building]) {
-                acc[item.building] = new Set();
-            }
-            acc[item.building].add(item.room);
-            return acc;
-        }, {});
+            return {
+              ...baseInfo,
+              building: buildingName,
+              room: roomNumber,
+              days: days,
+              time: time,
+            };
+          })
+          .filter(Boolean);
+      } catch (e) {
+        console.warn("Could not process row:", row, "Error:", e);
+        return [];
+      }
+    });
 
-        setBuildings(newBuildings);
+    // Deduplicate identical entries that sometimes occur in CLSS exports
+    const dedupedMap = new Map();
+    for (const item of items) {
+      const key = [
+        item.building,
+        item.room,
+        item.days.replace(/\s/g, ""),
+        item.time.replace(/\s/g, ""),
+        item.class,
+        item.section,
+        item.professor,
+      ].join("|");
+      if (!dedupedMap.has(key)) dedupedMap.set(key, item);
+    }
+    const processedClassData = Array.from(dedupedMap.values());
 
-        if (Object.keys(newBuildings).length === 0) {
-            showMessage("CSV processed, but no valid class data with rooms was found.");
-        } else {
-            showMessage(`Successfully processed ${processedClassData.length} classes.`, 'success');
-        }
-    };
+    setAllClassData(processedClassData);
 
-    const generateSchedule = () => {
-        if (!selectedBuilding || !selectedRoom) {
-            showMessage("Please select a building and a room.");
-            return;
-        }
+    const newBuildings = processedClassData.reduce((acc, item) => {
+      if (!acc[item.building]) {
+        acc[item.building] = new Set();
+      }
+      acc[item.building].add(item.room);
+      return acc;
+    }, {});
 
-        if (selectedDayType === 'WEEK') {
-            generateExportableWeeklySchedule();
-            return;
-        }
+    setBuildings(newBuildings);
 
-        const dayChars = selectedDayType === 'MWF' ? ['M', 'W', 'F'] : ['T', 'R'];
-        const relevantClasses = allClassData.filter(c => {
-            const meetingDays = parseDaysToChars(c.days);
-            return c.building === selectedBuilding &&
-                c.room === selectedRoom &&
-                meetingDays.some(d => dayChars.includes(d));
-        });
+    if (Object.keys(newBuildings).length === 0) {
+      showMessage(
+        "CSV processed, but no valid class data with rooms was found.",
+      );
+    } else {
+      showMessage(
+        `Successfully processed ${processedClassData.length} classes.`,
+        "success",
+      );
+    }
+  };
 
-        if (relevantClasses.length === 0) {
-            setScheduleHtml(`<div class="text-center p-8 text-gray-500">No classes found for ${selectedBuilding} ${selectedRoom} on ${selectedDayType} days.</div>`);
-            return;
-        }
+  const generateSchedule = () => {
+    if (!selectedBuilding || !selectedRoom) {
+      showMessage("Please select a building and a room.");
+      return;
+    }
 
-        const tableHeader = `
-            <div class="text-2xl font-bold" contenteditable="true">${selectedBuilding.replace(' Bldg', '').toUpperCase()} ${selectedRoom}</div>
-            <div class="text-lg font-medium">${selectedDayType === 'MWF' ? 'Monday - Wednesday - Friday' : 'Tuesday - Thursday'}</div>
+    if (selectedDayType === "WEEK") {
+      generateExportableWeeklySchedule();
+      return;
+    }
+
+    const dayChars = selectedDayType === "MWF" ? ["M", "W", "F"] : ["T", "R"];
+    const relevantClasses = allClassData.filter((c) => {
+      const meetingDays = parseDaysToChars(c.days);
+      return (
+        c.building === selectedBuilding &&
+        c.room === selectedRoom &&
+        meetingDays.some((d) => dayChars.includes(d))
+      );
+    });
+
+    if (relevantClasses.length === 0) {
+      setScheduleHtml(
+        `<div class="text-center p-8 text-gray-500">No classes found for ${selectedBuilding} ${selectedRoom} on ${selectedDayType} days.</div>`,
+      );
+      return;
+    }
+
+    const tableHeader = `
+            <div class="text-2xl font-bold" contenteditable="true">${selectedBuilding.replace(" Bldg", "").toUpperCase()} ${selectedRoom}</div>
+            <div class="text-lg font-medium">${selectedDayType === "MWF" ? "Monday - Wednesday - Friday" : "Tuesday - Thursday"}</div>
             <div class="text-md" contenteditable="true">${semester}</div>
         `;
 
-        const tableBody = timeSlots[selectedDayType].map(slot => {
-            const classesInSlot = findClassesInSlot(relevantClasses, slot);
-            const classContent = classesInSlot.length > 0 ? classesInSlot.map(c => {
-                let daysIndicator = '';
-                const mdays = parseDaysToChars(c.days);
-                const expected = selectedDayType === 'MWF' ? ['M', 'W', 'F'] : ['T', 'R'];
-                const isFullPattern = expected.every(d => mdays.includes(d)) && mdays.every(d => expected.includes(d));
-                if (!isFullPattern) {
-                    const overlap = mdays.filter(d => expected.includes(d)).join('');
+    const tableBody = timeSlots[selectedDayType]
+      .map((slot) => {
+        const classesInSlot = findClassesInSlot(relevantClasses, slot);
+        const classContent =
+          classesInSlot.length > 0
+            ? classesInSlot
+                .map((c) => {
+                  let daysIndicator = "";
+                  const mdays = parseDaysToChars(c.days);
+                  const expected =
+                    selectedDayType === "MWF" ? ["M", "W", "F"] : ["T", "R"];
+                  const isFullPattern =
+                    expected.every((d) => mdays.includes(d)) &&
+                    mdays.every((d) => expected.includes(d));
+                  if (!isFullPattern) {
+                    const overlap = mdays
+                      .filter((d) => expected.includes(d))
+                      .join("");
                     daysIndicator = overlap ? ` (${overlap})` : ` (${c.days})`;
-                }
-                return `<div class="class-entry-wrapper">
+                  }
+                  return `<div class="class-entry-wrapper">
                             <button class="delete-entry-btn export-ignore" data-action="delete-class" title="Remove">×</button>
                             <div class="class-entry" contenteditable="true">${c.class}.${c.section}${daysIndicator}</div>
                             <div class="prof-entry" contenteditable="true">${c.professor}</div>
                         </div>`;
-            }).join('') : '';
+                })
+                .join("")
+            : "";
 
-            return `
+        return `
                 <tr>
-                    <td class="time-slot">${slot.replace(/ am/g, '').replace(/ pm/g, '')}</td>
+                    <td class="time-slot">${slot.replace(/ am/g, "").replace(/ pm/g, "")}</td>
                     <td data-slot="${slot}">
                         <div class="slot-toolbar export-ignore"><button type="button" class="slot-add-btn export-ignore" data-action="add-class" title="Add entry">＋</button></div>
                         <div class="class-list">${classContent}</div>
                     </td>
                 </tr>
             `;
-        }).join('');
+      })
+      .join("");
 
-        const htmlUnsafe = `
+    const htmlUnsafe = `
             <div class="schedule-sheet">
                 <table class="schedule-table">
                     <thead>
@@ -440,99 +554,124 @@ const RoomGridGenerator = () => {
                 </table>
             </div>
         `;
-        setScheduleHtml(DOMPurify.sanitize(htmlUnsafe, { USE_PROFILES: { html: true } }));
-        showMessage("Schedule generated. Click on fields to edit before printing.", 'success');
+    setScheduleHtml(
+      DOMPurify.sanitize(htmlUnsafe, { USE_PROFILES: { html: true } }),
+    );
+    showMessage(
+      "Schedule generated. Click on fields to edit before printing.",
+      "success",
+    );
+  };
+
+  const parseDaysToChars = (daysStr) => {
+    const str = (daysStr || "").replace(/\s/g, "");
+    if (!str) return [];
+    const chars = [];
+    const add = (d) => {
+      if (!chars.includes(d)) chars.push(d);
     };
+    if (/M/.test(str)) add("M");
+    if (/(T(?!h)|Tu)/i.test(str) || /\bT\b/.test(str)) add("T");
+    if (/W/.test(str)) add("W");
+    if (/(Th|R)/i.test(str)) add("R");
+    if (/F/.test(str)) add("F");
+    // Common shorthands
+    if (/MWF/i.test(str)) return ["M", "W", "F"];
+    if (/(TTh|TR)/i.test(str)) return ["T", "R"];
+    return chars;
+  };
 
-    const parseDaysToChars = (daysStr) => {
-        const str = (daysStr || '').replace(/\s/g, '');
-        if (!str) return [];
-        const chars = [];
-        const add = (d) => { if (!chars.includes(d)) chars.push(d); };
-        if (/M/.test(str)) add('M');
-        if (/(T(?!h)|Tu)/i.test(str) || /\bT\b/.test(str)) add('T');
-        if (/W/.test(str)) add('W');
-        if (/(Th|R)/i.test(str)) add('R');
-        if (/F/.test(str)) add('F');
-        // Common shorthands
-        if (/MWF/i.test(str)) return ['M', 'W', 'F'];
-        if (/(TTh|TR)/i.test(str)) return ['T', 'R'];
-        return chars;
-    };
+  const formatTimeLabel = (mins) => {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    const period = h >= 12 ? "PM" : "AM";
+    let hour = h % 12;
+    if (hour === 0) hour = 12;
+    return `${hour}:${m.toString().padStart(2, "0")} ${period}`.replace(
+      ":00",
+      "",
+    );
+  };
 
-    const formatTimeLabel = (mins) => {
-        const h = Math.floor(mins / 60);
-        const m = mins % 60;
-        const period = h >= 12 ? 'PM' : 'AM';
-        let hour = h % 12; if (hour === 0) hour = 12;
-        return `${hour}:${m.toString().padStart(2, '0')} ${period}`.replace(':00', '');
-    };
+  const roundDownTo = (mins, step) => Math.floor(mins / step) * step;
+  const roundUpTo = (mins, step) => Math.ceil(mins / step) * step;
 
-    const roundDownTo = (mins, step) => Math.floor(mins / step) * step;
-    const roundUpTo = (mins, step) => Math.ceil(mins / step) * step;
+  // New exportable weekly schedule using the clean React component
+  const generateExportableWeeklySchedule = () => {
+    const relevant = allClassData.filter(
+      (c) => c.building === selectedBuilding && c.room === selectedRoom,
+    );
+    if (relevant.length === 0) {
+      setWeeklyClasses([]);
+      setShowExportableWeek(false);
+      setScheduleHtml(
+        `<div class="text-center p-8 text-gray-500">No classes found for ${selectedBuilding} ${selectedRoom}.</div>`,
+      );
+      return;
+    }
 
-    // New exportable weekly schedule using the clean React component
-    const generateExportableWeeklySchedule = () => {
-        const relevant = allClassData.filter(c => c.building === selectedBuilding && c.room === selectedRoom);
-        if (relevant.length === 0) {
-            setWeeklyClasses([]);
-            setShowExportableWeek(false);
-            setScheduleHtml(`<div class="text-center p-8 text-gray-500">No classes found for ${selectedBuilding} ${selectedRoom}.</div>`);
-            return;
-        }
+    // Set up the classes for the exportable component
+    setWeeklyClasses(relevant);
+    setShowExportableWeek(true);
+    setScheduleHtml(""); // Clear the old HTML-based schedule
+    showMessage(
+      "Weekly schedule generated. Click Export to save as PNG.",
+      "success",
+    );
+  };
 
-        // Set up the classes for the exportable component
-        setWeeklyClasses(relevant);
-        setShowExportableWeek(true);
-        setScheduleHtml(''); // Clear the old HTML-based schedule
-        showMessage("Weekly schedule generated. Click Export to save as PNG.", 'success');
-    };
+  // Legacy weekly schedule (kept for reference, but no longer used)
+  const generateWeeklySchedule = () => {
+    const relevant = allClassData.filter(
+      (c) => c.building === selectedBuilding && c.room === selectedRoom,
+    );
+    if (relevant.length === 0) {
+      setScheduleHtml(
+        `<div class="text-center p-8 text-gray-500">No classes found for ${selectedBuilding} ${selectedRoom}.</div>`,
+      );
+      return;
+    }
 
-    // Legacy weekly schedule (kept for reference, but no longer used)
-    const generateWeeklySchedule = () => {
-        const relevant = allClassData.filter(c => c.building === selectedBuilding && c.room === selectedRoom);
-        if (relevant.length === 0) {
-            setScheduleHtml(`<div class="text-center p-8 text-gray-500">No classes found for ${selectedBuilding} ${selectedRoom}.</div>`);
-            return;
-        }
+    // Determine time range
+    let earliest = timeToMinutes("8:00 am");
+    let latest = timeToMinutes("5:00 pm");
+    try {
+      const starts = relevant.map((c) => parseTimeRange(c.time)[0]);
+      const ends = relevant.map((c) => parseTimeRange(c.time)[1]);
+      if (starts.length) earliest = Math.min(earliest, ...starts);
+      if (ends.length) latest = Math.max(latest, ...ends);
+    } catch (error) {
+      console.warn(error);
+    }
+    const step = 15; // minutes per grid row (visual height scales to fit the sheet)
+    const start = roundDownTo(earliest, 60); // snap to hour for cleaner labels
+    const end = roundUpTo(latest, 30);
+    const slots = Math.max(1, Math.round((end - start) / step));
 
-        // Determine time range
-        let earliest = timeToMinutes('8:00 am');
-        let latest = timeToMinutes('5:00 pm');
-        try {
-            const starts = relevant.map(c => parseTimeRange(c.time)[0]);
-            const ends = relevant.map(c => parseTimeRange(c.time)[1]);
-            if (starts.length) earliest = Math.min(earliest, ...starts);
-            if (ends.length) latest = Math.max(latest, ...ends);
-        } catch (error) {
-            console.warn(error);
-        }
-        const step = 15; // minutes per grid row (visual height scales to fit the sheet)
-        const start = roundDownTo(earliest, 60); // snap to hour for cleaner labels
-        const end = roundUpTo(latest, 30);
-        const slots = Math.max(1, Math.round((end - start) / step));
-
-        // Build hour labels and horizontal gridlines
-        const hourMarks = [];
-        const headerOffset = 2; // reserve row 1 for day headers
-        for (let t = start; t <= end; t += 60) {
-            const row = Math.round((t - start) / step) + headerOffset;
-            const span = 60 / step;
-            hourMarks.push(`
+    // Build hour labels and horizontal gridlines
+    const hourMarks = [];
+    const headerOffset = 2; // reserve row 1 for day headers
+    for (let t = start; t <= end; t += 60) {
+      const row = Math.round((t - start) / step) + headerOffset;
+      const span = 60 / step;
+      hourMarks.push(`
                 <div class="hour-label" style="grid-column: 1; grid-row: ${row} / span ${span};">${formatTimeLabel(t)}</div>
                 <div class="hour-line" style="grid-column: 2 / -1; grid-row: ${row};"></div>
             `);
-        }
+    }
 
-        // Build class blocks per day
-        const dayToColumn = { 'M': 2, 'T': 3, 'W': 4, 'R': 5, 'F': 6 };
-        const blocks = relevant.flatMap(c => {
-            const [classStart, classEnd] = parseTimeRange(c.time);
-            const startRow = Math.floor((classStart - start) / step) + headerOffset;
-            const endRow = Math.ceil((classEnd - start) / step) + headerOffset;
-            return parseDaysToChars(c.days).filter(d => dayToColumn[d]).map(d => {
-                const col = dayToColumn[d];
-                return `
+    // Build class blocks per day
+    const dayToColumn = { M: 2, T: 3, W: 4, R: 5, F: 6 };
+    const blocks = relevant
+      .flatMap((c) => {
+        const [classStart, classEnd] = parseTimeRange(c.time);
+        const startRow = Math.floor((classStart - start) / step) + headerOffset;
+        const endRow = Math.ceil((classEnd - start) / step) + headerOffset;
+        return parseDaysToChars(c.days)
+          .filter((d) => dayToColumn[d])
+          .map((d) => {
+            const col = dayToColumn[d];
+            return `
                     <div class="class-block" style="grid-column: ${col}; grid-row: ${startRow} / ${endRow};">
                         <button class="delete-entry-btn delete-block-btn export-ignore" data-action="delete-block" title="Remove">×</button>
                         <div class="class-title" contenteditable="true">${c.class}.${c.section}</div>
@@ -540,16 +679,21 @@ const RoomGridGenerator = () => {
                         <div class="class-time">${c.time}</div>
                     </div>
                 `;
-            });
-        }).join('');
+          });
+      })
+      .join("");
 
-        const vLines = Object.values(dayToColumn).slice(0, -1).map(col =>
-            `<div style="grid-column: ${col}; grid-row: 1 / -1; border-right: 1px solid var(--neutral-border);"></div>`
-        ).join('');
+    const vLines = Object.values(dayToColumn)
+      .slice(0, -1)
+      .map(
+        (col) =>
+          `<div style="grid-column: ${col}; grid-row: 1 / -1; border-right: 1px solid var(--neutral-border);"></div>`,
+      )
+      .join("");
 
-        const grid = `
+    const grid = `
             <div class="weekly-grid" style="--rows:${slots};" data-start="${start}" data-end="${end}" data-step="${step}" data-headeroffset="${headerOffset}">
-                ${hourMarks.join('')}
+                ${hourMarks.join("")}
                 ${vLines}
                 ${blocks}
                 <div class="day-header" style="grid-column: 2;">Monday</div>
@@ -560,10 +704,10 @@ const RoomGridGenerator = () => {
             </div>
         `;
 
-        const header = `
+    const header = `
             <div class="weekly-header">
                 <div class="header-left">
-                    <div class="text-2xl font-bold" contenteditable="true">${selectedBuilding.replace(' Bldg', '').toUpperCase()} ${selectedRoom} Schedule</div>
+                    <div class="text-2xl font-bold" contenteditable="true">${selectedBuilding.replace(" Bldg", "").toUpperCase()} ${selectedRoom} Schedule</div>
                     <div class="text-md" contenteditable="true">${semester}</div>
                 </div>
                 <div class="header-actions export-ignore">
@@ -572,133 +716,151 @@ const RoomGridGenerator = () => {
             </div>
         `;
 
-        const htmlUnsafe = `
+    const htmlUnsafe = `
             <div class="schedule-sheet weekly-sheet">
                 ${header}
                 ${grid}
             </div>
         `;
-        setScheduleHtml(DOMPurify.sanitize(htmlUnsafe, { USE_PROFILES: { html: true } }));
-        showMessage("Weekly grid generated. Click on fields to edit before printing.", 'success');
-    };
+    setScheduleHtml(
+      DOMPurify.sanitize(htmlUnsafe, { USE_PROFILES: { html: true } }),
+    );
+    showMessage(
+      "Weekly grid generated. Click on fields to edit before printing.",
+      "success",
+    );
+  };
 
-    const findClassesInSlot = (classes, slot) => {
+  const findClassesInSlot = (classes, slot) => {
+    try {
+      const [slotStart, slotEnd] = parseTimeRange(slot);
+      return classes.filter((c) => {
         try {
-            const [slotStart, slotEnd] = parseTimeRange(slot);
-            return classes.filter(c => {
-                try {
-                    const [classStart, classEnd] = parseTimeRange(c.time);
-                    return classStart < slotEnd && classEnd > slotStart;
-                } catch (e) {
-                    console.warn(`Could not parse time for class, skipping:`, c, `Error:`, e);
-                    return false;
-                }
-            });
+          const [classStart, classEnd] = parseTimeRange(c.time);
+          return classStart < slotEnd && classEnd > slotStart;
         } catch (e) {
-            console.error("Error parsing time slot:", slot, e);
-            return [];
+          console.warn(
+            `Could not parse time for class, skipping:`,
+            c,
+            `Error:`,
+            e,
+          );
+          return false;
         }
-    };
+      });
+    } catch (e) {
+      console.error("Error parsing time slot:", slot, e);
+      return [];
+    }
+  };
 
-    const timeToMinutes = (timeStr) => {
-        const cleanedTimeStr = timeStr.toLowerCase().trim();
-        const match = cleanedTimeStr.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/);
-        if (!match) throw new Error(`Invalid time format: "${timeStr}"`);
-        let [_, hours, minutes, modifier] = match;
-        hours = parseInt(hours, 10);
-        minutes = parseInt(minutes, 10) || 0;
-        if (modifier === 'pm' && hours < 12) hours += 12;
-        if (modifier === 'am' && hours === 12) hours = 0;
-        return hours * 60 + minutes;
-    };
+  const timeToMinutes = (timeStr) => {
+    const cleanedTimeStr = timeStr.toLowerCase().trim();
+    const match = cleanedTimeStr.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/);
+    if (!match) throw new Error(`Invalid time format: "${timeStr}"`);
+    let [_, hours, minutes, modifier] = match;
+    hours = parseInt(hours, 10);
+    minutes = parseInt(minutes, 10) || 0;
+    if (modifier === "pm" && hours < 12) hours += 12;
+    if (modifier === "am" && hours === 12) hours = 0;
+    return hours * 60 + minutes;
+  };
 
-    const parseTimeRange = (rangeStr) => {
-        const parts = rangeStr.replace(/\s/g, '').toLowerCase().split('-');
-        if (parts.length === 1) {
-            const singleTime = timeToMinutes(parts[0]);
-            return [singleTime, singleTime + 1];
-        }
-        if (parts.length !== 2) throw new Error(`Invalid time range format: "${rangeStr}"`);
-        let [startStr, endStr] = parts;
-        const startModifierMatch = startStr.match(/(am|pm)/);
-        const endModifierMatch = endStr.match(/(am|pm)/);
-        if (!startModifierMatch && endModifierMatch) startStr += endModifierMatch[0];
-        else if (startModifierMatch && !endModifierMatch) endStr += startModifierMatch[0];
-        return [timeToMinutes(startStr), timeToMinutes(endStr)];
-    };
+  const parseTimeRange = (rangeStr) => {
+    const parts = rangeStr.replace(/\s/g, "").toLowerCase().split("-");
+    if (parts.length === 1) {
+      const singleTime = timeToMinutes(parts[0]);
+      return [singleTime, singleTime + 1];
+    }
+    if (parts.length !== 2)
+      throw new Error(`Invalid time range format: "${rangeStr}"`);
+    let [startStr, endStr] = parts;
+    const startModifierMatch = startStr.match(/(am|pm)/);
+    const endModifierMatch = endStr.match(/(am|pm)/);
+    if (!startModifierMatch && endModifierMatch)
+      startStr += endModifierMatch[0];
+    else if (startModifierMatch && !endModifierMatch)
+      endStr += startModifierMatch[0];
+    return [timeToMinutes(startStr), timeToMinutes(endStr)];
+  };
 
-    const fileUploaderRef = useRef(null);
+  const fileUploaderRef = useRef(null);
 
-    const handleFileChange = (event) => {
-        const file = event.target.files[0];
-        if (file) {
-            handleFileUpload(file);
-        }
-    };
+  const handleFileChange = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  };
 
-    const triggerFileUpload = () => {
-        fileUploaderRef.current.click();
-    };
+  const triggerFileUpload = () => {
+    fileUploaderRef.current.click();
+  };
 
-    const updateTableSizing = useCallback(() => {
-        const container = printRef.current;
-        if (!container) return;
-        const sheet = container.querySelector('.schedule-sheet');
-        if (!sheet) return;
-        const table = sheet.querySelector('.schedule-table');
-        if (!table) return;
-        const header = table.querySelector('thead');
-        const rows = table.querySelectorAll('tbody tr');
-        if (!header || rows.length === 0) return;
-        const sheetStyles = getComputedStyle(sheet);
-        const paddingTop = parseFloat(sheetStyles.paddingTop) || 0;
-        const paddingBottom = parseFloat(sheetStyles.paddingBottom) || 0;
-        const availableHeight = sheet.clientHeight - paddingTop - paddingBottom - header.offsetHeight;
-        if (availableHeight <= 0) return;
-        const rowHeight = Math.floor(availableHeight / rows.length);
-        sheet.style.setProperty('--rowHeight', `${rowHeight}px`);
-    }, []);
+  const updateTableSizing = useCallback(() => {
+    const container = printRef.current;
+    if (!container) return;
+    const sheet = container.querySelector(".schedule-sheet");
+    if (!sheet) return;
+    const table = sheet.querySelector(".schedule-table");
+    if (!table) return;
+    const header = table.querySelector("thead");
+    const rows = table.querySelectorAll("tbody tr");
+    if (!header || rows.length === 0) return;
+    const sheetStyles = getComputedStyle(sheet);
+    const paddingTop = parseFloat(sheetStyles.paddingTop) || 0;
+    const paddingBottom = parseFloat(sheetStyles.paddingBottom) || 0;
+    const availableHeight =
+      sheet.clientHeight - paddingTop - paddingBottom - header.offsetHeight;
+    if (availableHeight <= 0) return;
+    const rowHeight = Math.floor(availableHeight / rows.length);
+    sheet.style.setProperty("--rowHeight", `${rowHeight}px`);
+  }, []);
 
-    // Delegated events for add/delete within rendered HTML
-    useEffect(() => {
-        const container = printRef.current;
-        if (!container) return;
-        const handleClick = (e) => {
-            let target = e.target;
-            // If target is a text node, normalize to its parent element
-            if (target && target.nodeType !== 1 && target.parentElement) {
-                target = target.parentElement;
-            }
-            const actionEl = target && target.closest ? target.closest('[data-action]') : null;
-            if (!actionEl) return;
-            const action = actionEl.getAttribute('data-action');
-            if (action === 'add-class') {
-                const td = actionEl.closest('td[data-slot]');
-                if (!td) return;
-                const list = td.querySelector('.class-list');
-                if (!list) return;
-                const wrapper = document.createElement('div');
-                wrapper.className = 'class-entry-wrapper';
-                wrapper.innerHTML = `
+  // Delegated events for add/delete within rendered HTML
+  useEffect(() => {
+    const container = printRef.current;
+    if (!container) return;
+    const handleClick = (e) => {
+      let target = e.target;
+      // If target is a text node, normalize to its parent element
+      if (target && target.nodeType !== 1 && target.parentElement) {
+        target = target.parentElement;
+      }
+      const actionEl =
+        target && target.closest ? target.closest("[data-action]") : null;
+      if (!actionEl) return;
+      const action = actionEl.getAttribute("data-action");
+      if (action === "add-class") {
+        const td = actionEl.closest("td[data-slot]");
+        if (!td) return;
+        const list = td.querySelector(".class-list");
+        if (!list) return;
+        const wrapper = document.createElement("div");
+        wrapper.className = "class-entry-wrapper";
+        wrapper.innerHTML = `
                     <button class="delete-entry-btn export-ignore" data-action="delete-class" title="Remove">×</button>
                     <div class="class-entry" contenteditable="true">NEW 000.01</div>
                     <div class="prof-entry" contenteditable="true">Instructor Name</div>
                 `;
-                list.appendChild(wrapper);
-            } else if (action === 'delete-class') {
-                const wrapper = actionEl.closest('.class-entry-wrapper');
-                if (wrapper) wrapper.remove();
-            } else if (action === 'delete-block') {
-                const block = actionEl.closest('.class-block');
-                if (block) block.remove();
-            } else if (action === 'add-week-block') {
-                const grid = container.querySelector('.weekly-grid');
-                if (!grid) return;
-                const existing = container.querySelector('.weekly-add-form');
-                if (existing) { existing.remove(); return; }
-                const formEl = document.createElement('div');
-                formEl.className = 'weekly-add-form export-ignore';
-                formEl.innerHTML = `
+        list.appendChild(wrapper);
+      } else if (action === "delete-class") {
+        const wrapper = actionEl.closest(".class-entry-wrapper");
+        if (wrapper) wrapper.remove();
+      } else if (action === "delete-block") {
+        const block = actionEl.closest(".class-block");
+        if (block) block.remove();
+      } else if (action === "add-week-block") {
+        const grid = container.querySelector(".weekly-grid");
+        if (!grid) return;
+        const existing = container.querySelector(".weekly-add-form");
+        if (existing) {
+          existing.remove();
+          return;
+        }
+        const formEl = document.createElement("div");
+        formEl.className = "weekly-add-form export-ignore";
+        formEl.innerHTML = `
                     <div class="inline-form">
                         <label>Days</label>
                         <div class="day-checkboxes">
@@ -731,42 +893,55 @@ const RoomGridGenerator = () => {
                         <button class="btn-secondary inline-btn" data-action="add-week-block" type="button">Cancel</button>
                     </div>
                 `;
-                grid.insertAdjacentElement('beforebegin', formEl);
-            } else if (action === 'submit-week-form') {
-                const form = actionEl.closest('.weekly-add-form');
-                if (!form) return;
-                const grid = container.querySelector('.weekly-grid');
-                if (!grid) return;
+        grid.insertAdjacentElement("beforebegin", formEl);
+      } else if (action === "submit-week-form") {
+        const form = actionEl.closest(".weekly-add-form");
+        if (!form) return;
+        const grid = container.querySelector(".weekly-grid");
+        if (!grid) return;
 
-                // Get selected days
-                const selectedDays = Array.from(form.querySelectorAll('.day-input:checked')).map(cb => cb.value);
-                if (selectedDays.length === 0) {
-                    setAlertDialog({ isOpen: true, title: 'Validation Error', message: 'Please select at least one day.' });
-                    return;
-                }
+        // Get selected days
+        const selectedDays = Array.from(
+          form.querySelectorAll(".day-input:checked"),
+        ).map((cb) => cb.value);
+        if (selectedDays.length === 0) {
+          setAlertDialog({
+            isOpen: true,
+            title: "Validation Error",
+            message: "Please select at least one day.",
+          });
+          return;
+        }
 
-                const startStr = form.querySelector('input.start').value;
-                const endStr = form.querySelector('input.end').value;
-                if (!startStr || !endStr) {
-                    setAlertDialog({ isOpen: true, title: 'Validation Error', message: 'Please enter both start and end times.' });
-                    return;
-                }
+        const startStr = form.querySelector("input.start").value;
+        const endStr = form.querySelector("input.end").value;
+        if (!startStr || !endStr) {
+          setAlertDialog({
+            isOpen: true,
+            title: "Validation Error",
+            message: "Please enter both start and end times.",
+          });
+          return;
+        }
 
-                const timeStr = `${startStr} - ${endStr}`;
-                try {
-                    const colMap = { 'M': 2, 'T': 3, 'W': 4, 'R': 5, 'F': 6 };
-                    const start = parseInt(grid.getAttribute('data-start'), 10);
-                    const step = parseInt(grid.getAttribute('data-step'), 10);
-                    const headerOffset = parseInt(grid.getAttribute('data-headeroffset'), 10);
-                    const [startMin, endMin] = parseTimeRange(timeStr);
-                    const startRow = Math.floor((startMin - start) / step) + headerOffset;
-                    const endRow = Math.ceil((endMin - start) / step) + headerOffset;
+        const timeStr = `${startStr} - ${endStr}`;
+        try {
+          const colMap = { M: 2, T: 3, W: 4, R: 5, F: 6 };
+          const start = parseInt(grid.getAttribute("data-start"), 10);
+          const step = parseInt(grid.getAttribute("data-step"), 10);
+          const headerOffset = parseInt(
+            grid.getAttribute("data-headeroffset"),
+            10,
+          );
+          const [startMin, endMin] = parseTimeRange(timeStr);
+          const startRow = Math.floor((startMin - start) / step) + headerOffset;
+          const endRow = Math.ceil((endMin - start) / step) + headerOffset;
 
-                    // Create a block for each selected day
-                    selectedDays.forEach(day => {
-                        const col = colMap[day];
-                        if (col) {
-                            const html = `
+          // Create a block for each selected day
+          selectedDays.forEach((day) => {
+            const col = colMap[day];
+            if (col) {
+              const html = `
                                 <div class="class-block" style="grid-column: ${col}; grid-row: ${startRow} / ${endRow};">
                                     <button class="delete-entry-btn delete-block-btn export-ignore" data-action="delete-block" title="Remove">×</button>
                                     <div class="class-title" contenteditable="true">NEW 000.01</div>
@@ -774,461 +949,599 @@ const RoomGridGenerator = () => {
                                     <div class="class-time">${timeStr}</div>
                                 </div>
                             `;
-                            grid.insertAdjacentHTML('beforeend', html);
-                        }
-                    });
-                    form.remove();
-                } catch (err) {
-                    setAlertDialog({ isOpen: true, title: 'Invalid Time Format', message: 'Please use format like "10:00 am - 10:50 am"' });
-                }
+              grid.insertAdjacentHTML("beforeend", html);
             }
-        };
-        container.addEventListener('click', handleClick);
-        const resizeId = requestAnimationFrame(updateTableSizing);
-        return () => {
-            cancelAnimationFrame(resizeId);
-            container.removeEventListener('click', handleClick);
-        };
-    }, [scheduleHtml, updateTableSizing]);
-
-    // Firestore: saved grids
-    const fetchSavedGrids = useCallback(async () => {
-        setIsLoadingSaved(true);
-        try {
-            const gridsRef = collection(db, 'roomGrids');
-            const q = query(gridsRef, orderBy('createdAt', 'desc'), limit(25));
-            const snap = await getDocs(q);
-            const results = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            setSavedGrids(results);
+          });
+          form.remove();
         } catch (err) {
-            console.error('Error loading saved grids:', err);
-        } finally {
-            setIsLoadingSaved(false);
+          setAlertDialog({
+            isOpen: true,
+            title: "Invalid Time Format",
+            message: 'Please use format like "10:00 am - 10:50 am"',
+          });
         }
-    }, []);
-
-    useEffect(() => {
-        fetchSavedGrids();
-    }, [fetchSavedGrids]);
-
-    const saveGrid = async () => {
-        const allowed = canAction('roomGrids.save');
-        if (!allowed) {
-            showMessage('You do not have permission to save grids. An admin can grant “Room Grids: Save” to your account.', 'error');
-            return;
-        }
-        if (!scheduleHtml || !selectedBuilding || !selectedRoom) {
-            showMessage('Generate a schedule first, and ensure building/room are selected.');
-            return;
-        }
-        setIsSaving(true);
-        try {
-            const htmlRaw = printRef.current ? printRef.current.innerHTML : scheduleHtml;
-            const html = DOMPurify.sanitize(htmlRaw, { USE_PROFILES: { html: true } });
-            const payload = {
-                title: `${selectedBuilding}-${selectedRoom}-${selectedDayType}-${semester}`,
-                building: selectedBuilding,
-                room: selectedRoom,
-                dayType: selectedDayType,
-                semester,
-                html,
-                createdAt: Date.now()
-            };
-            const ref = await addDoc(collection(db, 'roomGrids'), payload);
-            logCreate(`Room Grid - ${payload.title}`, 'roomGrids', ref.id, payload, 'RoomGridGenerator.jsx - saveGrid').catch(() => { });
-            showMessage('Grid saved.', 'success');
-            fetchSavedGrids();
-        } catch (err) {
-            console.error('Save failed:', err);
-            showMessage('Failed to save grid.');
-        } finally {
-            setIsSaving(false);
-        }
+      }
     };
-
-    const loadGrid = (grid) => {
-        if (!grid) return;
-        setSelectedBuilding(grid.building || selectedBuilding);
-        setSelectedRoom(grid.room || selectedRoom);
-        setSelectedDayType(grid.dayType || selectedDayType);
-        setSemester(grid.semester || semester);
-        setScheduleHtml(DOMPurify.sanitize(grid.html || '', { USE_PROFILES: { html: true } }));
-        showMessage('Loaded saved grid.', 'success');
+    container.addEventListener("click", handleClick);
+    const resizeId = requestAnimationFrame(updateTableSizing);
+    return () => {
+      cancelAnimationFrame(resizeId);
+      container.removeEventListener("click", handleClick);
     };
+  }, [scheduleHtml, updateTableSizing]);
 
-    const deleteSavedGrid = async (grid) => {
-        const allowed = canEdit() || canAction('roomGrids.delete');
-        if (!allowed) {
-            showMessage('You do not have permission to delete grids. An admin can grant “Room Grids: Delete” to your account.', 'error');
-            return;
-        }
-        if (!grid) return;
-        setDeleteConfirmDialog({ isOpen: true, grid });
-    };
+  // Firestore: saved grids
+  const fetchSavedGrids = useCallback(async () => {
+    setIsLoadingSaved(true);
+    try {
+      const gridsRef = collection(db, "roomGrids");
+      const q = query(gridsRef, orderBy("createdAt", "desc"), limit(25));
+      const snap = await getDocs(q);
+      const results = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setSavedGrids(results);
+    } catch (err) {
+      console.error("Error loading saved grids:", err);
+    } finally {
+      setIsLoadingSaved(false);
+    }
+  }, []);
 
-    const handleConfirmDelete = async () => {
-        if (!deleteConfirmDialog.grid) return;
-        if (!canAction('roomGrids.delete')) {
-            showMessage('You do not have permission to delete grids. An admin can grant “Room Grids: Delete”.', 'error');
-            return;
-        }
-        try {
-            await deleteDoc(doc(collection(db, 'roomGrids'), deleteConfirmDialog.grid.id));
-            logDelete(`Room Grid - ${deleteConfirmDialog.grid.title}`, 'roomGrids', deleteConfirmDialog.grid.id, deleteConfirmDialog.grid, 'RoomGridGenerator.jsx - deleteSavedGrid').catch(() => { });
-            showMessage('Deleted saved grid.', 'success');
-            setSavedGrids(prev => prev.filter(g => g.id !== deleteConfirmDialog.grid.id));
-        } catch (err) {
-            console.error('Delete failed:', err);
-            showMessage('Failed to delete saved grid.');
-        } finally {
-            setDeleteConfirmDialog({ isOpen: false, grid: null });
-        }
-    };
+  useEffect(() => {
+    fetchSavedGrids();
+  }, [fetchSavedGrids]);
 
-    const handleCancelDelete = () => {
-        setDeleteConfirmDialog({ isOpen: false, grid: null });
-    };
+  const saveGrid = async () => {
+    const allowed = canAction("roomGrids.save");
+    if (!allowed) {
+      showMessage(
+        "You do not have permission to save grids. An admin can grant “Room Grids: Save” to your account.",
+        "error",
+      );
+      return;
+    }
+    if (!scheduleHtml || !selectedBuilding || !selectedRoom) {
+      showMessage(
+        "Generate a schedule first, and ensure building/room are selected.",
+      );
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const htmlRaw = printRef.current
+        ? printRef.current.innerHTML
+        : scheduleHtml;
+      const html = DOMPurify.sanitize(htmlRaw, {
+        USE_PROFILES: { html: true },
+      });
+      const payload = {
+        title: `${selectedBuilding}-${selectedRoom}-${selectedDayType}-${semester}`,
+        building: selectedBuilding,
+        room: selectedRoom,
+        dayType: selectedDayType,
+        semester,
+        html,
+        createdAt: Date.now(),
+      };
+      const ref = await addDoc(collection(db, "roomGrids"), payload);
+      logCreate(
+        `Room Grid - ${payload.title}`,
+        "roomGrids",
+        ref.id,
+        payload,
+        "RoomGridGenerator.jsx - saveGrid",
+      ).catch(() => {});
+      showMessage("Grid saved.", "success");
+      fetchSavedGrids();
+    } catch (err) {
+      console.error("Save failed:", err);
+      showMessage("Failed to save grid.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
+  const loadGrid = (grid) => {
+    if (!grid) return;
+    setSelectedBuilding(grid.building || selectedBuilding);
+    setSelectedRoom(grid.room || selectedRoom);
+    setSelectedDayType(grid.dayType || selectedDayType);
+    setSemester(grid.semester || semester);
+    setScheduleHtml(
+      DOMPurify.sanitize(grid.html || "", { USE_PROFILES: { html: true } }),
+    );
+    showMessage("Loaded saved grid.", "success");
+  };
 
-    const buildingOptions = Object.keys(buildings).sort().map(name => (
-        <option key={name} value={name}>{name}</option>
+  const deleteSavedGrid = async (grid) => {
+    const allowed = canEdit() || canAction("roomGrids.delete");
+    if (!allowed) {
+      showMessage(
+        "You do not have permission to delete grids. An admin can grant “Room Grids: Delete” to your account.",
+        "error",
+      );
+      return;
+    }
+    if (!grid) return;
+    setDeleteConfirmDialog({ isOpen: true, grid });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmDialog.grid) return;
+    if (!canAction("roomGrids.delete")) {
+      showMessage(
+        "You do not have permission to delete grids. An admin can grant “Room Grids: Delete”.",
+        "error",
+      );
+      return;
+    }
+    try {
+      await deleteDoc(
+        doc(collection(db, "roomGrids"), deleteConfirmDialog.grid.id),
+      );
+      logDelete(
+        `Room Grid - ${deleteConfirmDialog.grid.title}`,
+        "roomGrids",
+        deleteConfirmDialog.grid.id,
+        deleteConfirmDialog.grid,
+        "RoomGridGenerator.jsx - deleteSavedGrid",
+      ).catch(() => {});
+      showMessage("Deleted saved grid.", "success");
+      setSavedGrids((prev) =>
+        prev.filter((g) => g.id !== deleteConfirmDialog.grid.id),
+      );
+    } catch (err) {
+      console.error("Delete failed:", err);
+      showMessage("Failed to delete saved grid.");
+    } finally {
+      setDeleteConfirmDialog({ isOpen: false, grid: null });
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setDeleteConfirmDialog({ isOpen: false, grid: null });
+  };
+
+  const buildingOptions = Object.keys(buildings)
+    .sort()
+    .map((name) => (
+      <option key={name} value={name}>
+        {name}
+      </option>
     ));
 
-    const roomOptions = selectedBuilding && buildings[selectedBuilding]
-        ? Array.from(buildings[selectedBuilding]).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map(room => (
-            <option key={room} value={room}>{room}</option>
-        ))
-        : [];
+  const roomOptions =
+    selectedBuilding && buildings[selectedBuilding]
+      ? Array.from(buildings[selectedBuilding])
+          .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+          .map((room) => (
+            <option key={room} value={room}>
+              {room}
+            </option>
+          ))
+      : [];
 
-    return (
-        <div className="page-content">
-            <div className="university-header rounded-xl p-8 mb-8">
-                <h1 className="university-title">Room Schedule Generator</h1>
-                <p className="university-subtitle">Generate printable room schedules from dashboard data or a CLSS export.</p>
-            </div>
+  return (
+    <div className="page-content">
+      <div className="university-header rounded-xl p-8 mb-8">
+        <h1 className="university-title">Room Grid Generator</h1>
+        <p className="university-subtitle">
+          Generate printable room schedules from dashboard data or a CLSS
+          export.
+        </p>
+      </div>
 
-            {/* Mode Selection Wizard */}
-            {dataMode === null && (
-                <div className="university-card mb-8">
-                    <div className="university-card-content">
-                        <h3 className="text-lg font-semibold text-baylor-green mb-4">Select Data Source</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Auto-Populate Option */}
-                            <div
-                                onClick={() => handleModeChange('auto')}
-                                className="border-2 border-gray-200 rounded-xl p-6 cursor-pointer hover:border-baylor-green hover:bg-green-50 transition-all duration-200 group"
-                            >
-                                <div className="flex items-center mb-3">
-                                    <Database className="w-8 h-8 text-baylor-green mr-3" />
-                                    <h4 className="text-lg font-semibold text-gray-900 group-hover:text-baylor-green">Auto-Populate from Dashboard</h4>
-                                </div>
-                                <p className="text-gray-600 text-sm mb-3">
-                                    Uses existing schedule data already in the application. Select a semester and instantly generate room grids.
-                                </p>
-                                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-baylor-green text-white">
-                                    Recommended
-                                </span>
-                            </div>
-
-                            {/* CSV Import Option */}
-                            <div
-                                onClick={() => handleModeChange('csv')}
-                                className="border-2 border-gray-200 rounded-xl p-6 cursor-pointer hover:border-baylor-green hover:bg-green-50 transition-all duration-200 group"
-                            >
-                                <div className="flex items-center mb-3">
-                                    <Upload className="w-8 h-8 text-baylor-gold mr-3" />
-                                    <h4 className="text-lg font-semibold text-gray-900 group-hover:text-baylor-green">Import CLSS CSV</h4>
-                                </div>
-                                <p className="text-gray-600 text-sm mb-3">
-                                    Upload a fresh CLSS export CSV file. Use this for the most up-to-date data or when working with a new semester not yet imported.
-                                </p>
-                                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-700">
-                                    Manual Upload
-                                </span>
-                            </div>
-                        </div>
-                    </div>
+      {/* Mode Selection Wizard */}
+      {dataMode === null && (
+        <div className="university-card mb-8">
+          <div className="university-card-content">
+            <h3 className="text-lg font-semibold text-baylor-green mb-4">
+              Select Data Source
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Auto-Populate Option */}
+              <div
+                onClick={() => handleModeChange("auto")}
+                className="border-2 border-gray-200 rounded-xl p-6 cursor-pointer hover:border-baylor-green hover:bg-green-50 transition-all duration-200 group"
+              >
+                <div className="flex items-center mb-3">
+                  <Database className="w-8 h-8 text-baylor-green mr-3" />
+                  <h4 className="text-lg font-semibold text-gray-900 group-hover:text-baylor-green">
+                    Auto-Populate from Dashboard
+                  </h4>
                 </div>
+                <p className="text-gray-600 text-sm mb-3">
+                  Uses existing schedule data already in the application. Select
+                  a semester and instantly generate room grids.
+                </p>
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-baylor-green text-white">
+                  Recommended
+                </span>
+              </div>
+
+              {/* CSV Import Option */}
+              <div
+                onClick={() => handleModeChange("csv")}
+                className="border-2 border-gray-200 rounded-xl p-6 cursor-pointer hover:border-baylor-green hover:bg-green-50 transition-all duration-200 group"
+              >
+                <div className="flex items-center mb-3">
+                  <Upload className="w-8 h-8 text-baylor-gold mr-3" />
+                  <h4 className="text-lg font-semibold text-gray-900 group-hover:text-baylor-green">
+                    Import CLSS CSV
+                  </h4>
+                </div>
+                <p className="text-gray-600 text-sm mb-3">
+                  Upload a fresh CLSS export CSV file. Use this for the most
+                  up-to-date data or when working with a new semester not yet
+                  imported.
+                </p>
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-700">
+                  Manual Upload
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change Mode Button - shown when a mode is selected */}
+      {dataMode !== null && (
+        <div className="mb-4">
+          <button
+            onClick={() => {
+              resetUI();
+              setDataMode(null);
+              setDashboardSchedules(null);
+            }}
+            className="btn-secondary text-sm"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Change Data Source
+          </button>
+          <span className="ml-4 text-sm text-gray-600">
+            Current:{" "}
+            <strong>
+              {dataMode === "auto" ? "Dashboard Data" : "CLSS CSV Import"}
+            </strong>
+          </span>
+        </div>
+      )}
+
+      {message.text && (
+        <div
+          className={`alert mb-6 ${message.type === "success" ? "alert-success" : "alert-error"}`}
+          role="alert"
+        >
+          <strong className="font-bold">Notice:</strong>
+          <span className="block sm:inline"> {message.text}</span>
+          <span
+            onClick={() => setMessage({ text: "", type: "" })}
+            className="absolute top-0 bottom-0 right-0 px-4 py-3 cursor-pointer"
+          >
+            <X
+              className={`h-6 w-6 ${message.type === "success" ? "text-baylor-green" : "text-red-500"}`}
+            />
+          </span>
+        </div>
+      )}
+
+      {/* Configuration Panel - only shown when mode is selected */}
+      {dataMode !== null && (
+        <div className="university-card">
+          <div className="university-card-content">
+            {isLoadingDashboard && (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-baylor-green mr-3"></div>
+                <span className="text-gray-600">Loading dashboard data...</span>
+              </div>
             )}
 
-            {/* Change Mode Button - shown when a mode is selected */}
-            {dataMode !== null && (
-                <div className="mb-4">
-                    <button
-                        onClick={() => { resetUI(); setDataMode(null); setDashboardSchedules(null); }}
-                        className="btn-secondary text-sm"
+            {!isLoadingDashboard && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                  {/* CSV Upload - only for csv mode */}
+                  {dataMode === "csv" && (
+                    <div className="md:col-span-2 lg:col-span-1">
+                      <label
+                        htmlFor="csvFile"
+                        className="block text-sm font-medium text-gray-700 mb-1"
+                      >
+                        1. Upload CLSS Export
+                      </label>
+                      <input
+                        type="file"
+                        ref={fileUploaderRef}
+                        onChange={handleFileChange}
+                        className="hidden"
+                        accept=".csv"
+                      />
+                      <button
+                        onClick={triggerFileUpload}
+                        className="btn-secondary w-full justify-center"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {isProcessing ? "Processing..." : "Upload CSV"}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Semester Selection */}
+                  <div>
+                    <label
+                      htmlFor="semesterInput"
+                      className="block text-sm font-medium text-gray-700 mb-1"
                     >
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        Change Data Source
+                      {dataMode === "csv"
+                        ? "2. Semester"
+                        : "1. Select Semester"}
+                    </label>
+                    {dataMode === "auto" && availableSemesters.length > 0 ? (
+                      <select
+                        id="semesterSelect"
+                        value={semester}
+                        onChange={(e) => setSemester(e.target.value)}
+                        className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">-- Select Semester --</option>
+                        {availableSemesters.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        id="semesterInput"
+                        value={semester}
+                        onChange={(e) => setSemester(e.target.value)}
+                        className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g., Fall 2025"
+                      />
+                    )}
+                  </div>
+
+                  {/* Building Selection */}
+                  <div>
+                    <label
+                      htmlFor="buildingSelect"
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                    >
+                      {dataMode === "csv"
+                        ? "3. Select Building"
+                        : "2. Select Building"}
+                    </label>
+                    <select
+                      id="buildingSelect"
+                      value={selectedBuilding}
+                      onChange={(e) => setSelectedBuilding(e.target.value)}
+                      className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                      disabled={Object.keys(buildings).length === 0}
+                    >
+                      <option value="">-- Select Building --</option>
+                      {buildingOptions}
+                    </select>
+                  </div>
+
+                  {/* Room Selection */}
+                  <div>
+                    <label
+                      htmlFor="roomSelect"
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                    >
+                      {dataMode === "csv" ? "4. Select Room" : "3. Select Room"}
+                    </label>
+                    <select
+                      id="roomSelect"
+                      value={selectedRoom}
+                      onChange={(e) => setSelectedRoom(e.target.value)}
+                      className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                      disabled={!selectedBuilding}
+                    >
+                      <option value="">-- Select Room --</option>
+                      {roomOptions}
+                    </select>
+                  </div>
+
+                  {/* View Type Selection */}
+                  <div>
+                    <label
+                      htmlFor="dayTypeSelect"
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                    >
+                      {dataMode === "csv" ? "5. Select View" : "4. Select View"}
+                    </label>
+                    <select
+                      id="dayTypeSelect"
+                      value={selectedDayType}
+                      onChange={(e) => setSelectedDayType(e.target.value)}
+                      className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                      disabled={Object.keys(buildings).length === 0}
+                    >
+                      <option value="MWF">MWF</option>
+                      <option value="TR">TR</option>
+                      <option value="WEEK">Week (M-F)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-end space-x-4">
+                  <button onClick={() => resetUI()} className="btn-danger">
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Clear
+                  </button>
+                  <button
+                    onClick={generateSchedule}
+                    className="btn-primary"
+                    disabled={Object.keys(buildings).length === 0}
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Generate Schedule
+                  </button>
+                  {canAction("roomGrids.save") && (
+                    <button
+                      onClick={saveGrid}
+                      className="btn-secondary"
+                      disabled={!scheduleHtml || isSaving}
+                    >
+                      <SaveIcon className="w-4 h-4 mr-2" />
+                      {isSaving ? "Saving..." : "Save Grid"}
                     </button>
-                    <span className="ml-4 text-sm text-gray-600">
-                        Current: <strong>{dataMode === 'auto' ? 'Dashboard Data' : 'CLSS CSV Import'}</strong>
-                    </span>
+                  )}
                 </div>
+              </>
             )}
+          </div>
+        </div>
+      )}
 
-            {message.text && (
-                <div className={`alert mb-6 ${message.type === 'success' ? 'alert-success' : 'alert-error'}`} role="alert">
-                    <strong className="font-bold">Notice:</strong>
-                    <span className="block sm:inline"> {message.text}</span>
-                    <span onClick={() => setMessage({ text: '', type: '' })} className="absolute top-0 bottom-0 right-0 px-4 py-3 cursor-pointer">
-                        <X className={`h-6 w-6 ${message.type === 'success' ? 'text-baylor-green' : 'text-red-500'}`} />
-                    </span>
-                </div>
-            )}
-
-            {/* Configuration Panel - only shown when mode is selected */}
-            {dataMode !== null && (
-                <div className="university-card">
-                    <div className="university-card-content">
-                        {isLoadingDashboard && (
-                            <div className="flex items-center justify-center py-8">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-baylor-green mr-3"></div>
-                                <span className="text-gray-600">Loading dashboard data...</span>
-                            </div>
-                        )}
-
-                        {!isLoadingDashboard && (
-                            <>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-                                    {/* CSV Upload - only for csv mode */}
-                                    {dataMode === 'csv' && (
-                                        <div className="md:col-span-2 lg:col-span-1">
-                                            <label htmlFor="csvFile" className="block text-sm font-medium text-gray-700 mb-1">1. Upload CLSS Export</label>
-                                            <input type="file" ref={fileUploaderRef} onChange={handleFileChange} className="hidden" accept=".csv" />
-                                            <button onClick={triggerFileUpload} className="btn-secondary w-full justify-center">
-                                                <Upload className="w-4 h-4 mr-2" />
-                                                {isProcessing ? 'Processing...' : 'Upload CSV'}
-                                            </button>
-                                        </div>
-                                    )}
-
-                                    {/* Semester Selection */}
-                                    <div>
-                                        <label htmlFor="semesterInput" className="block text-sm font-medium text-gray-700 mb-1">
-                                            {dataMode === 'csv' ? '2. Semester' : '1. Select Semester'}
-                                        </label>
-                                        {dataMode === 'auto' && availableSemesters.length > 0 ? (
-                                            <select
-                                                id="semesterSelect"
-                                                value={semester}
-                                                onChange={e => setSemester(e.target.value)}
-                                                className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                            >
-                                                <option value="">-- Select Semester --</option>
-                                                {availableSemesters.map(s => (
-                                                    <option key={s} value={s}>{s}</option>
-                                                ))}
-                                            </select>
-                                        ) : (
-                                            <input
-                                                type="text"
-                                                id="semesterInput"
-                                                value={semester}
-                                                onChange={e => setSemester(e.target.value)}
-                                                className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                                placeholder="e.g., Fall 2025"
-                                            />
-                                        )}
-                                    </div>
-
-                                    {/* Building Selection */}
-                                    <div>
-                                        <label htmlFor="buildingSelect" className="block text-sm font-medium text-gray-700 mb-1">
-                                            {dataMode === 'csv' ? '3. Select Building' : '2. Select Building'}
-                                        </label>
-                                        <select
-                                            id="buildingSelect"
-                                            value={selectedBuilding}
-                                            onChange={e => setSelectedBuilding(e.target.value)}
-                                            className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                            disabled={Object.keys(buildings).length === 0}
-                                        >
-                                            <option value="">-- Select Building --</option>
-                                            {buildingOptions}
-                                        </select>
-                                    </div>
-
-                                    {/* Room Selection */}
-                                    <div>
-                                        <label htmlFor="roomSelect" className="block text-sm font-medium text-gray-700 mb-1">
-                                            {dataMode === 'csv' ? '4. Select Room' : '3. Select Room'}
-                                        </label>
-                                        <select
-                                            id="roomSelect"
-                                            value={selectedRoom}
-                                            onChange={e => setSelectedRoom(e.target.value)}
-                                            className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                            disabled={!selectedBuilding}
-                                        >
-                                            <option value="">-- Select Room --</option>
-                                            {roomOptions}
-                                        </select>
-                                    </div>
-
-                                    {/* View Type Selection */}
-                                    <div>
-                                        <label htmlFor="dayTypeSelect" className="block text-sm font-medium text-gray-700 mb-1">
-                                            {dataMode === 'csv' ? '5. Select View' : '4. Select View'}
-                                        </label>
-                                        <select
-                                            id="dayTypeSelect"
-                                            value={selectedDayType}
-                                            onChange={e => setSelectedDayType(e.target.value)}
-                                            className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                            disabled={Object.keys(buildings).length === 0}
-                                        >
-                                            <option value="MWF">MWF</option>
-                                            <option value="TR">TR</option>
-                                            <option value="WEEK">Week (M-F)</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div className="mt-6 flex justify-end space-x-4">
-                                    <button onClick={() => resetUI()} className="btn-danger">
-                                        <Trash2 className="w-4 h-4 mr-2" />
-                                        Clear
-                                    </button>
-                                    <button onClick={generateSchedule} className="btn-primary" disabled={Object.keys(buildings).length === 0}>
-                                        <FileText className="w-4 h-4 mr-2" />
-                                        Generate Schedule
-                                    </button>
-                                    {(canAction('roomGrids.save')) && (
-                                        <button onClick={saveGrid} className="btn-secondary" disabled={!scheduleHtml || isSaving}>
-                                            <SaveIcon className="w-4 h-4 mr-2" />
-                                            {isSaving ? 'Saving...' : 'Save Grid'}
-                                        </button>
-                                    )}
-                                </div>
-                            </>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            <div className="university-card mt-6">
-                <div className="university-card-content">
-                    <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-lg font-semibold text-baylor-green">Saved Grids</h3>
-                        <button onClick={fetchSavedGrids} className="btn-secondary">Refresh</button>
-                    </div>
-                    {isLoadingSaved ? (
-                        <div className="text-gray-500">Loading...</div>
-                    ) : savedGrids.length === 0 ? (
-                        <div className="text-gray-500">No saved grids yet.</div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full text-sm">
-                                <thead>
-                                    <tr className="text-left text-gray-600">
-                                        <th className="py-2 pr-4">Title</th>
-                                        <th className="py-2 pr-4">Building</th>
-                                        <th className="py-2 pr-4">Room</th>
-                                        <th className="py-2 pr-4">View</th>
-                                        <th className="py-2 pr-4">Semester</th>
-                                        <th className="py-2 pr-4">Created</th>
-                                        <th className="py-2">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {savedGrids.map(g => (
-                                        <tr key={g.id} className="border-t border-gray-200">
-                                            <td className="py-2 pr-4">{g.title}</td>
-                                            <td className="py-2 pr-4">{g.building}</td>
-                                            <td className="py-2 pr-4">{g.room}</td>
-                                            <td className="py-2 pr-4">{g.dayType}</td>
-                                            <td className="py-2 pr-4">{g.semester}</td>
-                                            <td className="py-2 pr-4 text-gray-600">
-                                                {g.createdAt ? new Date(g.createdAt).toLocaleString() : 'Unknown'}
-                                            </td>
-                                            <td className="py-2 space-x-2">
-                                                <button onClick={() => loadGrid(g)} className="btn-secondary">Load</button>
-                                                <button onClick={() => deleteSavedGrid(g)} className="btn-danger">Delete</button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </div>
+      <div className="university-card mt-6">
+        <div className="university-card-content">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-semibold text-baylor-green">
+              Saved Grids
+            </h3>
+            <button onClick={fetchSavedGrids} className="btn-secondary">
+              Refresh
+            </button>
+          </div>
+          {isLoadingSaved ? (
+            <div className="text-gray-500">Loading...</div>
+          ) : savedGrids.length === 0 ? (
+            <div className="text-gray-500">No saved grids yet.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-600">
+                    <th className="py-2 pr-4">Title</th>
+                    <th className="py-2 pr-4">Building</th>
+                    <th className="py-2 pr-4">Room</th>
+                    <th className="py-2 pr-4">View</th>
+                    <th className="py-2 pr-4">Semester</th>
+                    <th className="py-2 pr-4">Created</th>
+                    <th className="py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {savedGrids.map((g) => (
+                    <tr key={g.id} className="border-t border-gray-200">
+                      <td className="py-2 pr-4">{g.title}</td>
+                      <td className="py-2 pr-4">{g.building}</td>
+                      <td className="py-2 pr-4">{g.room}</td>
+                      <td className="py-2 pr-4">{g.dayType}</td>
+                      <td className="py-2 pr-4">{g.semester}</td>
+                      <td className="py-2 pr-4 text-gray-600">
+                        {g.createdAt
+                          ? new Date(g.createdAt).toLocaleString()
+                          : "Unknown"}
+                      </td>
+                      <td className="py-2 space-x-2">
+                        <button
+                          onClick={() => loadGrid(g)}
+                          className="btn-secondary"
+                        >
+                          Load
+                        </button>
+                        <button
+                          onClick={() => deleteSavedGrid(g)}
+                          className="btn-danger"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
+          )}
+        </div>
+      </div>
 
-            <ExportModal
-                isOpen={isExportModalOpen}
-                onClose={() => setIsExportModalOpen(false)}
-                scheduleTableRef={showExportableWeek ? exportableRef : printRef}
-                title={`${selectedBuilding}-${selectedRoom}-${selectedDayType}-${semester}`}
-                exportScale={3}
-                onExport={showExportableWeek ? undefined : () => updateTableSizing()}
-            />
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        scheduleTableRef={showExportableWeek ? exportableRef : printRef}
+        title={`${selectedBuilding}-${selectedRoom}-${selectedDayType}-${semester}`}
+        exportScale={3}
+        onExport={showExportableWeek ? undefined : () => updateTableSizing()}
+      />
 
-            {/* Alert Dialog */}
-            <ConfirmationDialog
-                isOpen={alertDialog.isOpen}
-                title={alertDialog.title}
-                message={alertDialog.message}
-                type="warning"
-                confirmText="OK"
-                onConfirm={() => setAlertDialog({ isOpen: false, message: '', title: '' })}
-                onCancel={() => setAlertDialog({ isOpen: false, message: '', title: '' })}
-            />
+      {/* Alert Dialog */}
+      <ConfirmationDialog
+        isOpen={alertDialog.isOpen}
+        title={alertDialog.title}
+        message={alertDialog.message}
+        type="warning"
+        confirmText="OK"
+        onConfirm={() =>
+          setAlertDialog({ isOpen: false, message: "", title: "" })
+        }
+        onCancel={() =>
+          setAlertDialog({ isOpen: false, message: "", title: "" })
+        }
+      />
 
-            {/* Delete Confirmation Dialog */}
-            <ConfirmationDialog
-                isOpen={deleteConfirmDialog.isOpen}
-                title="Delete Saved Grid"
-                message={`Are you sure you want to delete "${deleteConfirmDialog.grid?.title}"? This action cannot be undone.`}
-                type="danger"
-                confirmText="Delete"
-                cancelText="Cancel"
-                onConfirm={handleConfirmDelete}
-                onCancel={handleCancelDelete}
-            />
+      {/* Delete Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={deleteConfirmDialog.isOpen}
+        title="Delete Saved Grid"
+        message={`Are you sure you want to delete "${deleteConfirmDialog.grid?.title}"? This action cannot be undone.`}
+        type="danger"
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
 
-            <div className="university-card mt-8">
-                <div className="university-card-content min-h-[400px]">
-                    {/* Export button - show for either old HTML schedules or new exportable component */}
-                    {(scheduleHtml || showExportableWeek) && (
-                        <div className="flex justify-end mb-4">
-                            <button onClick={() => setIsExportModalOpen(true)} className="btn-secondary">
-                                <Download className="w-4 h-4 mr-2" />
-                                Export
-                            </button>
-                        </div>
-                    )}
-                    {isProcessing ? (
-                        <div className="text-center text-gray-500 flex flex-col items-center justify-center h-full">
-                            <p>Processing file...</p>
-                        </div>
-                    ) : showExportableWeek ? (
-                        /* New exportable weekly schedule component */
-                        <div style={{ display: 'flex', justifyContent: 'center' }}>
-                            <ExportableRoomSchedule
-                                ref={exportableRef}
-                                roomName={selectedRoom}
-                                buildingName={selectedBuilding}
-                                semester={semester}
-                                classes={weeklyClasses}
-                            />
-                        </div>
-                    ) : scheduleHtml ? (
-                        /* Legacy HTML-based schedules (MWF/TR) */
-                        <div
-                            ref={printRef}
-                            style={{ margin: '0 auto' }}
-                            dangerouslySetInnerHTML={{ __html: scheduleHtml }}
-                        ></div>
-                    ) : (
-                        <div className="text-center text-gray-500 flex flex-col items-center justify-center h-full">
-                            <FileText className="w-16 h-16 text-gray-300 mb-4" />
-                            <p>Your generated schedule will appear here. You can click on fields to edit them before printing.</p>
-                        </div>
-                    )}
-                </div>
+      <div className="university-card mt-8">
+        <div className="university-card-content min-h-[400px]">
+          {/* Export button - show for either old HTML schedules or new exportable component */}
+          {(scheduleHtml || showExportableWeek) && (
+            <div className="flex justify-end mb-4">
+              <button
+                onClick={() => setIsExportModalOpen(true)}
+                className="btn-secondary"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export
+              </button>
             </div>
-            <style>{`
+          )}
+          {isProcessing ? (
+            <div className="text-center text-gray-500 flex flex-col items-center justify-center h-full">
+              <p>Processing file...</p>
+            </div>
+          ) : showExportableWeek ? (
+            /* New exportable weekly schedule component */
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <ExportableRoomSchedule
+                ref={exportableRef}
+                roomName={selectedRoom}
+                buildingName={selectedBuilding}
+                semester={semester}
+                classes={weeklyClasses}
+              />
+            </div>
+          ) : scheduleHtml ? (
+            /* Legacy HTML-based schedules (MWF/TR) */
+            <div
+              ref={printRef}
+              style={{ margin: "0 auto" }}
+              dangerouslySetInnerHTML={{ __html: scheduleHtml }}
+            ></div>
+          ) : (
+            <div className="text-center text-gray-500 flex flex-col items-center justify-center h-full">
+              <FileText className="w-16 h-16 text-gray-300 mb-4" />
+              <p>
+                Your generated schedule will appear here. You can click on
+                fields to edit them before printing.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+      <style>{`
                 /* Baylor brand palette */
                 .schedule-sheet { 
                     --baylor-green: #154734; 
@@ -1558,8 +1871,8 @@ const RoomGridGenerator = () => {
                   .export-ignore { display: none !important; }
                 }
             `}</style>
-        </div>
-    );
+    </div>
+  );
 };
 
 export default RoomGridGenerator;

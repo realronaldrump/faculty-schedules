@@ -33,7 +33,7 @@ import { useAppConfig } from "../../contexts/AppConfigContext";
 import { useSchedules } from "../../contexts/ScheduleContext";
 import { parseTermDate } from "../../utils/termUtils";
 
-const RoomSchedules = () => {
+const RoomSchedules = ({ embedded = false }) => {
   const { scheduleData = [], facultyData = [] } = useData();
   const { loadPeople } = usePeople();
   const { startTutorial } = useTutorial();
@@ -143,8 +143,8 @@ const RoomSchedules = () => {
     );
     const byBuilding = selectedBuilding
       ? bySearch.filter(
-        (room) => getBuildingFromRoom(room) === selectedBuilding,
-      )
+          (room) => getBuildingFromRoom(room) === selectedBuilding,
+        )
       : bySearch;
     return byBuilding;
   }, [uniqueRooms, searchTerm, selectedBuilding]);
@@ -268,8 +268,8 @@ const RoomSchedules = () => {
       item.__pattern ||
       normalizePattern(
         getMeetingPattern(item.Course, item["Start Time"], item["End Time"]) ||
-        item.Day ||
-        "",
+          item.Day ||
+          "",
       );
     const room =
       roomOverride ||
@@ -558,8 +558,8 @@ const RoomSchedules = () => {
                           e.stopPropagation();
                           handleShowContactCard(
                             item.instructorIds?.[0] ||
-                            item.instructorId ||
-                            item.Instructor,
+                              item.instructorId ||
+                              item.Instructor,
                             item.Instructor,
                           );
                         }}
@@ -628,8 +628,8 @@ const RoomSchedules = () => {
                             e.stopPropagation();
                             handleShowContactCard(
                               session.instructorIds?.[0] ||
-                              session.instructorId ||
-                              session.Instructor,
+                                session.instructorId ||
+                                session.Instructor,
                               session.Instructor,
                             );
                           }}
@@ -684,9 +684,15 @@ const RoomSchedules = () => {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Room Schedules
-          </h1>
+          {embedded ? (
+            <h2 className="text-xl font-semibold text-gray-900 mb-1">
+              Room Schedules
+            </h2>
+          ) : (
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+              Room Schedules
+            </h1>
+          )}
           <p className="text-gray-600">
             View classroom usage and availability across the department
           </p>
@@ -727,20 +733,20 @@ const RoomSchedules = () => {
               showOnlyInUse ||
               sortBy !== "room" ||
               density !== "comfortable") && (
-                <button
-                  onClick={() => {
-                    setSelectedRoom("");
-                    setSelectedBuilding("");
-                    setSearchTerm("");
-                    setShowOnlyInUse(false);
-                    setSortBy("room");
-                    setDensity("comfortable");
-                  }}
-                  className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900"
-                >
-                  <X className="mr-1 h-4 w-4" /> Clear
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  setSelectedRoom("");
+                  setSelectedBuilding("");
+                  setSearchTerm("");
+                  setShowOnlyInUse(false);
+                  setSortBy("room");
+                  setDensity("comfortable");
+                }}
+                className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900"
+              >
+                <X className="mr-1 h-4 w-4" /> Clear
+              </button>
+            )}
           </div>
           {/* Row 1: Date Picker */}
           <div className="grid grid-cols-1 gap-4">
@@ -863,40 +869,44 @@ const RoomSchedules = () => {
               >
                 <button
                   onClick={() => setViewMode("timeline")}
-                  className={`px-2 py-2 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${viewMode === "timeline"
+                  className={`px-2 py-2 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${
+                    viewMode === "timeline"
                       ? "bg-baylor-green text-white shadow"
                       : "text-gray-600 hover:bg-gray-200"
-                    }`}
+                  }`}
                 >
                   <Grid className="mr-1" size={14} />
                   Timeline
                 </button>
                 <button
                   onClick={() => setViewMode("list")}
-                  className={`px-2 py-2 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${viewMode === "list"
+                  className={`px-2 py-2 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${
+                    viewMode === "list"
                       ? "bg-baylor-green text-white shadow"
                       : "text-gray-600 hover:bg-gray-200"
-                    }`}
+                  }`}
                 >
                   <List className="mr-1" size={14} />
                   List
                 </button>
                 <button
                   onClick={() => setViewMode("week")}
-                  className={`px-2 py-2 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${viewMode === "week"
+                  className={`px-2 py-2 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${
+                    viewMode === "week"
                       ? "bg-baylor-green text-white shadow"
                       : "text-gray-600 hover:bg-gray-200"
-                    }`}
+                  }`}
                 >
                   <Calendar className="mr-1" size={14} />
                   Week
                 </button>
                 <button
                   onClick={() => setViewMode("calendar")}
-                  className={`px-2 py-2 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${viewMode === "calendar"
+                  className={`px-2 py-2 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${
+                    viewMode === "calendar"
                       ? "bg-baylor-green text-white shadow"
                       : "text-gray-600 hover:bg-gray-200"
-                    }`}
+                  }`}
                 >
                   <CalendarDays className="mr-1" size={14} />
                   Calendar

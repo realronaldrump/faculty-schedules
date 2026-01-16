@@ -96,7 +96,21 @@ const AccessControl = () => {
 
   const PAGE_GROUPS = useMemo(() => {
     const groups = [
-      { name: "Dashboard", pages: ["dashboard", "live-view"] },
+      {
+        name: "Home",
+        pages: ["dashboard", "live-view", "analytics/department-insights"],
+      },
+      {
+        name: "People",
+        pages: [
+          "people/people-directory",
+          "people/email-lists",
+          "resources/building-directory",
+          "analytics/program-management",
+          "people/baylor-id-manager",
+          "resources/baylor-acronyms",
+        ],
+      },
       {
         name: "Scheduling",
         pages: [
@@ -105,49 +119,27 @@ const AccessControl = () => {
           "scheduling/room-schedules",
           "scheduling/student-schedules",
           "scheduling/group-meeting-scheduler",
-        ],
-      },
-      {
-        name: "Directory",
-        pages: [
-          "people/people-directory",
-          "people/email-lists",
-          "people/baylor-id-manager",
-          "resources/building-directory",
-          "resources/baylor-acronyms",
-        ],
-      },
-      {
-        name: "Analytics",
-        pages: [
-          "analytics/department-insights",
+          "tools/outlook-export",
+          "tools/room-grid-generator",
           "analytics/student-worker-analytics",
-          "analytics/course-management",
-          "analytics/program-management",
         ],
       },
       {
-        name: "Tools",
+        name: "Tools & Settings",
         pages: [
+          "administration/app-settings",
           "tools/import-wizard",
           "tools/data-hygiene",
           "tools/crn-tools",
-          "tools/outlook-export",
-          "tools/room-grid-generator",
+          "analytics/course-management",
           "tools/temperature-monitoring",
-        ],
-      },
-      {
-        name: "Administration",
-        pages: [
-          "administration/app-settings",
           "administration/access-control",
           "administration/recent-changes",
         ],
       },
       {
-        name: "Resources",
-        pages: ["resources/baylor-systems", "help/tutorials"],
+        name: "Help & Resources",
+        pages: ["help/tutorials", "resources/baylor-systems"],
       },
     ];
     const grouped = new Set(groups.flatMap((g) => g.pages));
@@ -556,8 +548,12 @@ const AccessControl = () => {
   }
 
   const selectedUser = users.find((u) => u.id === selectedUserId);
-  const selectedUserRoles = selectedUser ? normalizeRoleList(selectedUser.roles) : [];
-  const selectedUserStatus = selectedUser ? resolveUserStatus(selectedUser) : USER_STATUS.ACTIVE;
+  const selectedUserRoles = selectedUser
+    ? normalizeRoleList(selectedUser.roles)
+    : [];
+  const selectedUserStatus = selectedUser
+    ? resolveUserStatus(selectedUser)
+    : USER_STATUS.ACTIVE;
 
   return (
     <div className="space-y-6">
@@ -1058,9 +1054,7 @@ const AccessControl = () => {
                     <button
                       className="px-4 py-2 bg-white text-baylor-green rounded hover:bg-gray-100 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       onClick={saveUserOverrides}
-                      disabled={
-                        saving || selectedUserRoles.includes("admin")
-                      }
+                      disabled={saving || selectedUserRoles.includes("admin")}
                     >
                       {saving ? "Saving..." : "Save Overrides"}
                     </button>
@@ -1119,7 +1113,11 @@ const AccessControl = () => {
                         data until approved.
                       </p>
                       <div className="flex items-center gap-4">
-                        {[USER_STATUS.PENDING, USER_STATUS.ACTIVE, USER_STATUS.DISABLED].map((status) => (
+                        {[
+                          USER_STATUS.PENDING,
+                          USER_STATUS.ACTIVE,
+                          USER_STATUS.DISABLED,
+                        ].map((status) => (
                           <label
                             key={`status-${status}`}
                             className="inline-flex items-center gap-2 cursor-pointer"
@@ -1159,23 +1157,22 @@ const AccessControl = () => {
 
                     {/* Admin Notice */}
                     {selectedUserRoles.includes("admin") && (
-                        <div className="bg-baylor-green/10 border border-baylor-green/30 rounded-lg p-4">
-                          <div className="flex items-start gap-3">
-                            <Shield className="w-5 h-5 text-baylor-green mt-0.5 flex-shrink-0" />
-                            <div>
-                              <h4 className="font-semibold text-baylor-green mb-1">
-                                Administrator Access
-                              </h4>
-                              <p className="text-sm text-gray-700">
-                                This user has the <strong>Admin</strong> role
-                                and automatically has access to all pages and
-                                actions. Overrides are not needed and are
-                                disabled below.
-                              </p>
-                            </div>
+                      <div className="bg-baylor-green/10 border border-baylor-green/30 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                          <Shield className="w-5 h-5 text-baylor-green mt-0.5 flex-shrink-0" />
+                          <div>
+                            <h4 className="font-semibold text-baylor-green mb-1">
+                              Administrator Access
+                            </h4>
+                            <p className="text-sm text-gray-700">
+                              This user has the <strong>Admin</strong> role and
+                              automatically has access to all pages and actions.
+                              Overrides are not needed and are disabled below.
+                            </p>
                           </div>
                         </div>
-                      )}
+                      </div>
+                    )}
 
                     {/* Show current role permissions */}
                     {!selectedUserRoles.includes("admin") &&
@@ -1265,10 +1262,10 @@ const AccessControl = () => {
                           additional granted)
                         </span>
                         {selectedUserRoles.includes("admin") && (
-                            <span className="text-xs text-amber-600 font-medium">
-                              ⚠️ Disabled (Admin role)
-                            </span>
-                          )}
+                          <span className="text-xs text-amber-600 font-medium">
+                            ⚠️ Disabled (Admin role)
+                          </span>
+                        )}
                       </div>
                       <div
                         className={`bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto baylor-scrollbar ${
@@ -1358,10 +1355,10 @@ const AccessControl = () => {
                           additional granted)
                         </span>
                         {selectedUserRoles.includes("admin") && (
-                            <span className="text-xs text-amber-600 font-medium">
-                              ⚠️ Disabled (Admin role)
-                            </span>
-                          )}
+                          <span className="text-xs text-amber-600 font-medium">
+                            ⚠️ Disabled (Admin role)
+                          </span>
+                        )}
                       </div>
                       <div
                         className={`bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto baylor-scrollbar ${

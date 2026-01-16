@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Building2,
   MapPin,
@@ -14,19 +14,19 @@ import {
   ChevronRight,
   UserCog,
   Eye,
-  Wifi
-} from 'lucide-react';
-import FacultyContactCard from '../FacultyContactCard';
-import { useData } from '../../contexts/DataContext';
-import { usePeople } from '../../contexts/PeopleContext';
-import { resolveOfficeDetails } from '../../utils/directoryUtils';
+  Wifi,
+} from "lucide-react";
+import FacultyContactCard from "../FacultyContactCard";
+import { useData } from "../../contexts/DataContext";
+import { usePeople } from "../../contexts/PeopleContext";
+import { resolveOfficeDetails } from "../../utils/directoryUtils";
 
-const BuildingDirectory = () => {
+const BuildingDirectory = ({ embedded = false }) => {
   const { facultyData = [], staffData = [], spacesByKey } = useData();
   const { loadPeople } = usePeople();
   const [selectedPersonForCard, setSelectedPersonForCard] = useState(null);
-  const [searchText, setSearchText] = useState('');
-  const [selectedBuilding, setSelectedBuilding] = useState('all');
+  const [searchText, setSearchText] = useState("");
+  const [selectedBuilding, setSelectedBuilding] = useState("all");
   const [expandedBuildings, setExpandedBuildings] = useState(new Set());
   const [showStaff, setShowStaff] = useState(true);
   const [showFaculty, setShowFaculty] = useState(true);
@@ -42,18 +42,20 @@ const BuildingDirectory = () => {
 
     // Process faculty data
     if (showFaculty && facultyData && Array.isArray(facultyData)) {
-      const facultyToProcess = showAdjuncts ? facultyData : facultyData.filter(f => !f.isAdjunct);
+      const facultyToProcess = showAdjuncts
+        ? facultyData
+        : facultyData.filter((f) => !f.isAdjunct);
 
-      facultyToProcess.forEach(person => {
+      facultyToProcess.forEach((person) => {
         // Route remote people to "Remote" section, otherwise use building
         let buildingName;
-        let roomNumber = '';
+        let roomNumber = "";
         if (person.isRemote) {
-          buildingName = 'Remote';
+          buildingName = "Remote";
         } else {
           const resolved = resolveOfficeDetails(person, spacesByKey);
-          buildingName = resolved.buildingName || 'No Building';
-          roomNumber = resolved.roomNumber || '';
+          buildingName = resolved.buildingName || "No Building";
+          roomNumber = resolved.roomNumber || "";
         }
 
         if (!buildings[buildingName]) {
@@ -61,17 +63,17 @@ const BuildingDirectory = () => {
             name: buildingName,
             people: [],
             facultyCount: 0,
-            staffCount: 0
+            staffCount: 0,
           };
         }
 
         buildings[buildingName].people.push({
           ...person,
-          roleType: 'faculty',
-          displayRole: person.isAdjunct ? 'Adjunct Faculty' : 'Faculty',
+          roleType: "faculty",
+          displayRole: person.isAdjunct ? "Adjunct Faculty" : "Faculty",
           buildingName,
           roomNumber,
-          sortKey: roomNumber || person.name || ''
+          sortKey: roomNumber || person.name || "",
         });
         buildings[buildingName].facultyCount++;
       });
@@ -79,16 +81,16 @@ const BuildingDirectory = () => {
 
     // Process staff data
     if (showStaff && staffData && Array.isArray(staffData)) {
-      staffData.forEach(person => {
+      staffData.forEach((person) => {
         // Route remote people to "Remote" section, otherwise use building
         let buildingName;
-        let roomNumber = '';
+        let roomNumber = "";
         if (person.isRemote) {
-          buildingName = 'Remote';
+          buildingName = "Remote";
         } else {
           const resolved = resolveOfficeDetails(person, spacesByKey);
-          buildingName = resolved.buildingName || 'No Building';
-          roomNumber = resolved.roomNumber || '';
+          buildingName = resolved.buildingName || "No Building";
+          roomNumber = resolved.roomNumber || "";
         }
 
         if (!buildings[buildingName]) {
@@ -96,24 +98,24 @@ const BuildingDirectory = () => {
             name: buildingName,
             people: [],
             facultyCount: 0,
-            staffCount: 0
+            staffCount: 0,
           };
         }
 
         buildings[buildingName].people.push({
           ...person,
-          roleType: 'staff',
-          displayRole: person.isAlsoFaculty ? 'Faculty & Staff' : 'Staff',
+          roleType: "staff",
+          displayRole: person.isAlsoFaculty ? "Faculty & Staff" : "Staff",
           buildingName,
           roomNumber,
-          sortKey: roomNumber || person.name || ''
+          sortKey: roomNumber || person.name || "",
         });
         buildings[buildingName].staffCount++;
       });
     }
 
     // Sort people within each building by room number, then by name
-    Object.values(buildings).forEach(building => {
+    Object.values(buildings).forEach((building) => {
       building.people.sort((a, b) => {
         // First sort by room number (numeric)
         const roomA = parseInt(a.roomNumber) || 9999;
@@ -123,12 +125,19 @@ const BuildingDirectory = () => {
         }
 
         // Then sort by name
-        return (a.name || '').localeCompare(b.name || '');
+        return (a.name || "").localeCompare(b.name || "");
       });
     });
 
     return buildings;
-  }, [facultyData, staffData, showFaculty, showStaff, showAdjuncts, spacesByKey]);
+  }, [
+    facultyData,
+    staffData,
+    showFaculty,
+    showStaff,
+    showAdjuncts,
+    spacesByKey,
+  ]);
 
   const buildingList = Object.keys(buildingData).sort();
 
@@ -137,7 +146,7 @@ const BuildingDirectory = () => {
     let buildings = { ...buildingData };
 
     // Filter by selected building
-    if (selectedBuilding !== 'all') {
+    if (selectedBuilding !== "all") {
       buildings = { [selectedBuilding]: buildingData[selectedBuilding] };
     }
 
@@ -147,18 +156,19 @@ const BuildingDirectory = () => {
       const filteredBuildings = {};
 
       Object.entries(buildings).forEach(([buildingName, building]) => {
-        const filteredPeople = building.people.filter(person =>
-          person.name?.toLowerCase().includes(searchLower) ||
-          person.email?.toLowerCase().includes(searchLower) ||
-          person.jobTitle?.toLowerCase().includes(searchLower) ||
-          person.office?.toLowerCase().includes(searchLower) ||
-          person.roomNumber?.toLowerCase().includes(searchLower)
+        const filteredPeople = building.people.filter(
+          (person) =>
+            person.name?.toLowerCase().includes(searchLower) ||
+            person.email?.toLowerCase().includes(searchLower) ||
+            person.jobTitle?.toLowerCase().includes(searchLower) ||
+            person.office?.toLowerCase().includes(searchLower) ||
+            person.roomNumber?.toLowerCase().includes(searchLower),
         );
 
         if (filteredPeople.length > 0) {
           filteredBuildings[buildingName] = {
             ...building,
-            people: filteredPeople
+            people: filteredPeople,
           };
         }
       });
@@ -182,8 +192,8 @@ const BuildingDirectory = () => {
 
   // Format phone number
   const formatPhoneNumber = (phoneStr) => {
-    if (!phoneStr) return '-';
-    const cleaned = ('' + phoneStr).replace(/\D/g, '');
+    if (!phoneStr) return "-";
+    const cleaned = ("" + phoneStr).replace(/\D/g, "");
     if (cleaned.length === 10) {
       const match = cleaned.match(/^(\d{3})(\d{3})(\d{4})$/);
       if (match) {
@@ -193,7 +203,10 @@ const BuildingDirectory = () => {
     return phoneStr;
   };
 
-  const totalPeople = Object.values(filteredData).reduce((sum, building) => sum + building.people.length, 0);
+  const totalPeople = Object.values(filteredData).reduce(
+    (sum, building) => sum + building.people.length,
+    0,
+  );
   const totalBuildings = Object.keys(filteredData).length;
 
   return (
@@ -201,8 +214,14 @@ const BuildingDirectory = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Office Directory</h1>
-          <p className="text-gray-600">Find faculty and staff by building location</p>
+          {embedded ? (
+            <h2 className="text-xl font-semibold text-gray-900">Offices</h2>
+          ) : (
+            <h1 className="text-2xl font-bold text-gray-900">Offices</h1>
+          )}
+          <p className="text-gray-600">
+            Find faculty and staff by building location
+          </p>
         </div>
         <div className="text-right">
           <div className="text-sm text-gray-600">
@@ -234,8 +253,10 @@ const BuildingDirectory = () => {
                 className="p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-baylor-green"
               >
                 <option value="all">All Buildings</option>
-                {buildingList.map(building => (
-                  <option key={building} value={building}>{building}</option>
+                {buildingList.map((building) => (
+                  <option key={building} value={building}>
+                    {building}
+                  </option>
                 ))}
               </select>
             </div>
@@ -281,24 +302,25 @@ const BuildingDirectory = () => {
         {Object.keys(filteredData).length === 0 ? (
           <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
             <Building2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Results Found</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              No Results Found
+            </h3>
             <p className="text-gray-600">
               {searchText
                 ? `No people found matching "${searchText}". Try adjusting your search or filters.`
-                : 'No people found with the current filters. Try enabling more role types.'
-              }
+                : "No people found with the current filters. Try enabling more role types."}
             </p>
           </div>
         ) : (
           Object.entries(filteredData)
             .sort(([a], [b]) => {
               // Sort "Remote" and "No Building" last, with Remote before No Building
-              if (a === 'Remote' && b === 'No Building') return -1;
-              if (a === 'No Building' && b === 'Remote') return 1;
-              if (a === 'Remote') return 1;
-              if (b === 'Remote') return -1;
-              if (a === 'No Building') return 1;
-              if (b === 'No Building') return -1;
+              if (a === "Remote" && b === "No Building") return -1;
+              if (a === "No Building" && b === "Remote") return 1;
+              if (a === "Remote") return 1;
+              if (b === "Remote") return -1;
+              if (a === "No Building") return 1;
+              if (b === "No Building") return -1;
               return a.localeCompare(b);
             })
             .map(([buildingName, building]) => {
@@ -328,9 +350,9 @@ const BuildingDirectory = () => {
                           </h2>
                           <p className="text-sm text-gray-600">
                             {building.people.length} people
-                            {building.facultyCount > 0 && building.staffCount > 0 &&
-                              ` • ${building.facultyCount} faculty, ${building.staffCount} staff`
-                            }
+                            {building.facultyCount > 0 &&
+                              building.staffCount > 0 &&
+                              ` • ${building.facultyCount} faculty, ${building.staffCount} staff`}
                           </p>
                         </div>
                       </div>
@@ -375,20 +397,25 @@ const BuildingDirectory = () => {
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
-                            {building.people.map(person => {
+                            {building.people.map((person) => {
                               // Ensure a unique key by combining id and roleType (faculty/staff)
                               const rowKey = `${person.id}-${person.roleType}`;
                               return (
                                 <tr
                                   key={rowKey}
                                   className="hover:bg-gray-50 cursor-pointer"
-                                  onClick={() => setSelectedPersonForCard(person)}
+                                  onClick={() =>
+                                    setSelectedPersonForCard(person)
+                                  }
                                 >
                                   <td className="px-4 py-3 whitespace-nowrap">
                                     <div className="flex items-center gap-2">
-                                      <MapPin size={14} className="text-gray-400" />
+                                      <MapPin
+                                        size={14}
+                                        className="text-gray-400"
+                                      />
                                       <span className="text-sm font-medium text-gray-900">
-                                        {person.roomNumber || 'No room'}
+                                        {person.roomNumber || "No room"}
                                       </span>
                                     </div>
                                     {person.office && (
@@ -403,22 +430,29 @@ const BuildingDirectory = () => {
                                       <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
                                         {person.name}
                                         {person.isUPD && (
-                                          <UserCog size={14} className="text-amber-600" title="Undergraduate Program Director" />
+                                          <UserCog
+                                            size={14}
+                                            className="text-amber-600"
+                                            title="Undergraduate Program Director"
+                                          />
                                         )}
                                       </div>
                                       <div className="text-xs text-gray-600">
                                         {person.displayRole}
                                       </div>
-                                      {person.program && person.program.name && (
-                                        <div className="text-xs text-baylor-green font-medium">
-                                          {person.program.name}
-                                        </div>
-                                      )}
+                                      {person.program &&
+                                        person.program.name && (
+                                          <div className="text-xs text-baylor-green font-medium">
+                                            {person.program.name}
+                                          </div>
+                                        )}
                                     </div>
                                   </td>
 
                                   <td className="px-4 py-3 whitespace-nowrap">
-                                    <div className="text-sm text-gray-900">{person.jobTitle || '-'}</div>
+                                    <div className="text-sm text-gray-900">
+                                      {person.jobTitle || "-"}
+                                    </div>
                                     <div className="flex gap-1 mt-1 flex-wrap">
                                       {person.isTenured && (
                                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
@@ -505,4 +539,4 @@ const BuildingDirectory = () => {
   );
 };
 
-export default BuildingDirectory; 
+export default BuildingDirectory;

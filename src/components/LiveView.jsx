@@ -392,9 +392,9 @@ const LiveView = () => {
               <Radio className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">Live View</h1>
+              <h1 className="text-2xl font-bold text-white">Today</h1>
               <p className="text-white/80 text-sm mt-1">
-                Real-time overview • {selectedSemester || "All semesters"}
+                Live snapshot • {selectedSemester || "All semesters"}
               </p>
             </div>
           </div>
@@ -756,7 +756,7 @@ const LiveView = () => {
               <div className="university-card-content flex items-center gap-3">
                 <Users className="w-5 h-5 text-baylor-green group-hover:text-baylor-gold transition-colors" />
                 <span className="text-sm font-medium text-gray-700">
-                  Student Schedules
+                  Student Worker Schedules
                 </span>
                 <ChevronRight className="w-4 h-4 text-gray-400 ml-auto group-hover:translate-x-1 transition-transform" />
               </div>

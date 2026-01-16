@@ -35,8 +35,8 @@ const Dashboard = () => {
   const quickActions = useMemo(() => {
     const actions = [
       {
-        title: 'Faculty Directory',
-        description: 'Contact information and faculty details',
+        title: 'People Directory',
+        description: 'Faculty, staff, and student worker contacts',
         icon: GraduationCap,
         path: 'people/people-directory',
         color: 'bg-baylor-green',
@@ -180,7 +180,7 @@ const Dashboard = () => {
       <div className="mb-8">
         <div className="university-card-header">
           <h2 className="university-card-title">Quick Actions</h2>
-          <p className="university-card-subtitle">Common administrative tasks and tools</p>
+          <p className="university-card-subtitle">Common tasks and tools</p>
         </div>
         {quickActions.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">

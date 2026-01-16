@@ -13,15 +13,11 @@ import React, { useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./components/Dashboard";
-import GroupMeetings from "./components/scheduling/GroupMeetings.jsx";
-import IndividualAvailability from "./components/scheduling/IndividualAvailability";
-import RoomSchedules from "./components/scheduling/RoomSchedules";
-import StudentSchedules from "./components/scheduling/StudentSchedules.jsx";
-import FacultySchedules from "./components/scheduling/FacultySchedules";
-import PeopleDirectory from "./components/people/PeopleDirectory";
-import ProgramManagement from "./components/analytics/ProgramManagement";
+import FacultyHub from "./components/scheduling/FacultyHub.jsx";
+import RoomsHub from "./components/scheduling/RoomsHub.jsx";
+import StudentWorkersHub from "./components/scheduling/StudentWorkersHub.jsx";
+import PeopleHub from "./components/people/PeopleHub.jsx";
 import DepartmentInsights from "./components/analytics/DepartmentInsights.jsx";
-import StudentWorkerAnalytics from "./components/analytics/StudentWorkerAnalytics.jsx";
 import CourseManagement from "./components/analytics/CourseManagement";
 import ImportWizard from "./components/administration/ImportWizard";
 import AppSettings from "./components/administration/AppSettings";
@@ -29,13 +25,8 @@ import DataHygieneManager from "./components/administration/DataHygieneManager";
 import BaylorSystems from "./components/resources/BaylorSystems";
 import BaylorAcronyms from "./components/administration/BaylorAcronyms";
 import CRNQualityTools from "./components/administration/CRNQualityTools";
-import OutlookRoomExport from "./components/tools/OutlookRoomExport.jsx";
 import RecentChangesPage from "./components/administration/RecentChangesPage";
-import RoomGridGenerator from "./components/administration/RoomGridGenerator";
-import BaylorIDManager from "./components/people/BaylorIDManager";
 import LiveView from "./components/LiveView";
-import EmailLists from "./components/people/EmailLists";
-import BuildingDirectory from "./components/resources/BuildingDirectory";
 import TemperatureMonitoring from "./components/temperature/TemperatureMonitoring";
 import Login from "./components/Login";
 import ProtectedContent from "./components/ProtectedContent.jsx";
@@ -53,8 +44,6 @@ import {
   Home,
   Calendar,
   Users,
-  BarChart3,
-  Settings,
   GraduationCap,
   Menu,
   LogOut,
@@ -69,57 +58,38 @@ import {
 
 const navigationItems = [
   {
-    id: "dashboard",
-    label: "Dashboard",
+    id: "home",
+    label: "Home",
     icon: Home,
-    path: "dashboard",
-  },
-  {
-    id: "live-view",
-    label: "Live View",
-    icon: Radio,
-    path: "live-view",
-  },
-  {
-    id: "scheduling",
-    label: "Scheduling",
-    icon: Calendar,
     children: [
       {
-        id: "faculty-schedules",
-        label: "Faculty Schedules",
-        path: "scheduling/faculty-schedules",
+        id: "dashboard",
+        label: "Dashboard",
+        path: "dashboard",
       },
       {
-        id: "individual-availability",
-        label: "Individual Availability",
-        path: "scheduling/individual-availability",
+        id: "live-view",
+        label: "Today",
+        path: "live-view",
       },
       {
-        id: "room-schedules",
-        label: "Room Schedules",
-        path: "scheduling/room-schedules",
-      },
-      {
-        id: "student-schedules",
-        label: "Student Worker Schedules",
-        path: "scheduling/student-schedules",
-      },
-      {
-        id: "group-meeting-scheduler",
-        label: "Group Meetings",
-        path: "scheduling/group-meeting-scheduler",
+        id: "department-insights",
+        label: "Department Insights",
+        path: "analytics/department-insights",
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
       },
     ],
   },
   {
-    id: "directory",
-    label: "Directory",
+    id: "people",
+    label: "People",
     icon: Users,
     children: [
       {
         id: "people-directory",
-        label: "People Directory",
+        label: "Directory",
         path: "people/people-directory",
       },
       {
@@ -128,108 +98,178 @@ const navigationItems = [
         path: "people/email-lists",
       },
       {
-        id: "baylor-id-manager",
-        label: "Baylor ID Manager",
-        path: "people/baylor-id-manager",
-      },
-      {
-        id: "building-directory",
-        label: "Building Directory",
+        id: "office-directory",
+        label: "Offices",
         path: "resources/building-directory",
-      },
-    ],
-  },
-  {
-    id: "analytics",
-    label: "Analytics",
-    icon: BarChart3,
-    children: [
-      {
-        id: "department-insights",
-        label: "Department Insights",
-        path: "analytics/department-insights",
-      },
-      {
-        id: "student-worker-analytics",
-        label: "Student Worker Analytics",
-        path: "analytics/student-worker-analytics",
-      },
-      {
-        id: "course-management",
-        label: "Course Management",
-        path: "analytics/course-management",
       },
       {
         id: "program-management",
-        label: "Program Management",
+        label: "Programs & UPDs",
         path: "analytics/program-management",
+        hidden: true,
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
       },
+      {
+        id: "baylor-id-manager",
+        label: "Baylor IDs",
+        path: "people/baylor-id-manager",
+        hidden: true,
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
+      }
     ],
   },
   {
-    id: "tools",
-    label: "Tools",
-    icon: Database,
+    id: "scheduling",
+    label: "Scheduling",
+    icon: Calendar,
     children: [
       {
-        id: "smart-import",
-        label: "Import Wizard",
-        path: "tools/import-wizard",
+        id: "faculty-schedules",
+        label: "Faculty",
+        path: "scheduling/faculty-schedules",
       },
       {
-        id: "data-hygiene",
-        label: "Data Hygiene",
-        path: "tools/data-hygiene",
+        id: "individual-availability",
+        label: "Faculty Availability",
+        path: "scheduling/individual-availability",
+        hidden: true,
       },
       {
-        id: "crn-tools",
-        label: "CRN Quality Tools",
-        path: "tools/crn-tools",
+        id: "group-meeting-scheduler",
+        label: "Group Meetings",
+        path: "scheduling/group-meeting-scheduler",
+        hidden: true,
+      },
+      {
+        id: "room-schedules",
+        label: "Rooms",
+        path: "scheduling/room-schedules",
       },
       {
         id: "outlook-export",
-        label: "Outlook Room Export",
+        label: "Room Calendar Export",
         path: "tools/outlook-export",
+        hidden: true,
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
       },
       {
         id: "room-grid-generator",
         label: "Room Grid Generator",
         path: "tools/room-grid-generator",
+        hidden: true,
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
       },
       {
-        id: "temperature-monitoring",
-        label: "Temperature Monitoring",
-        path: "tools/temperature-monitoring",
+        id: "student-schedules",
+        label: "Student Workers",
+        path: "scheduling/student-schedules",
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
+      },
+      {
+        id: "student-worker-analytics",
+        label: "Student Worker Payroll",
+        path: "analytics/student-worker-analytics",
+        hidden: true,
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
       },
     ],
   },
   {
-    id: "administration",
-    label: "Administration",
-    icon: Settings,
+    id: "tools-settings",
+    label: "Tools & Settings",
+    icon: Database,
     children: [
       {
         id: "app-settings",
         label: "App Settings",
         path: "administration/app-settings",
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
+      },
+      {
+        id: "smart-import",
+        label: "Import Wizard",
+        path: "tools/import-wizard",
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
+      },
+      {
+        id: "crn-tools",
+        label: "CRN Quality Tools",
+        path: "tools/crn-tools",
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
+      },
+      {
+        id: "course-management",
+        label: "Schedule Data",
+        path: "analytics/course-management",
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
+      },
+      {
+        id: "temperature-monitoring",
+        label: "Temperature Monitoring",
+        path: "tools/temperature-monitoring",
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
+      },
+      {
+        id: "data-hygiene",
+        label: "Data Hygiene",
+        path: "tools/data-hygiene",
+        hidden: true,
+        permissions: {
+          hideFromRoles: ["faculty", "staff"],
+        },
       },
       {
         id: "access-control",
         label: "Access Control",
         path: "administration/access-control",
+        hidden: true,
+        permissions: {
+          hideFromRoles: ["faculty", "staff"],
+        },
       },
       {
         id: "recent-changes",
         label: "Recent Changes",
         path: "administration/recent-changes",
-      },
+        hidden: true,
+        permissions: {
+          hideFromRoles: ["faculty", "staff"],
+        },
+      }
     ],
   },
   {
-    id: "resources",
-    label: "Resources",
+    id: "help",
+    label: "Help & Resources",
     icon: BookOpen,
     children: [
+      {
+        id: "help",
+        label: "Tutorials",
+        path: "help/tutorials",
+      },
       {
         id: "baylor-systems",
         label: "Baylor Systems",
@@ -237,13 +277,8 @@ const navigationItems = [
       },
       {
         id: "baylor-acronyms",
-        label: "Baylor Acronyms",
+        label: "Acronyms",
         path: "resources/baylor-acronyms",
-      },
-      {
-        id: "help",
-        label: "Help & Tutorials",
-        path: "help/tutorials",
       },
     ],
   },
@@ -363,12 +398,11 @@ function App() {
 
   // Breadcrumb generation
   const getCurrentBreadcrumb = () => {
-    const pathParts = currentPage.split("/");
     const crumbs = [];
-    const dashboardCrumb = { label: "Dashboard", path: "dashboard" };
-    crumbs.push(dashboardCrumb);
+    const homeCrumb = { label: "Home", path: "dashboard" };
+    crumbs.push(homeCrumb);
 
-    const section = navigationItems.find((item) => item.id === pathParts[0]);
+    const section = getActiveSection();
     if (!section || currentPage === "dashboard") return crumbs;
 
     const sectionCrumb = {
@@ -376,15 +410,15 @@ function App() {
       path:
         section.children && section.children.length > 0
           ? section.children[0].path
-          : null,
+          : section.path || null,
     };
     crumbs.push(sectionCrumb);
 
-    if (pathParts.length > 1) {
-      const subsection = section.children?.find(
-        (child) => child.path === currentPage,
-      );
-      if (subsection) crumbs.push({ label: subsection.label, path: null });
+    const subsection = section.children?.find(
+      (child) => child.path === currentPage,
+    );
+    if (subsection && subsection.label !== section.label) {
+      crumbs.push({ label: subsection.label, path: null });
     }
 
     return crumbs;
@@ -392,8 +426,16 @@ function App() {
 
   // Get active section for sub-navigation
   const getActiveSection = () => {
-    const pathParts = currentPage.split("/");
-    return navigationItems.find((item) => item.id === pathParts[0]) || null;
+    if (!currentPage) return null;
+    return (
+      navigationItems.find((item) => {
+        if (item.path && item.path === currentPage) return true;
+        if (item.children) {
+          return item.children.some((child) => child.path === currentPage);
+        }
+        return false;
+      }) || null
+    );
   };
 
   // Page content renderer
@@ -423,75 +465,64 @@ function App() {
           </ProtectedContent>
         );
       case "scheduling/faculty-schedules":
-        return (
-          <ProtectedContent pageId="scheduling/faculty-schedules">
-            <FacultySchedules />
-          </ProtectedContent>
-        );
+      case "scheduling/individual-availability":
       case "scheduling/group-meeting-scheduler":
         return (
-          <ProtectedContent pageId="scheduling/group-meeting-scheduler">
-            <GroupMeetings />
-          </ProtectedContent>
-        );
-      case "scheduling/individual-availability":
-        return (
-          <ProtectedContent pageId="scheduling/individual-availability">
-            <IndividualAvailability />
+          <ProtectedContent pageId="scheduling/faculty-schedules">
+            <FacultyHub
+              initialTab={
+                currentPage === "scheduling/individual-availability"
+                  ? "availability"
+                  : currentPage === "scheduling/group-meeting-scheduler"
+                    ? "meetings"
+                    : "compare"
+              }
+            />
           </ProtectedContent>
         );
       case "scheduling/room-schedules":
+      case "tools/outlook-export":
+      case "tools/room-grid-generator":
         return (
           <ProtectedContent pageId="scheduling/room-schedules">
-            <RoomSchedules />
+            <RoomsHub
+              initialTab={
+                currentPage === "tools/outlook-export"
+                  ? "calendar"
+                  : currentPage === "tools/room-grid-generator"
+                    ? "grids"
+                    : "browse"
+              }
+            />
           </ProtectedContent>
         );
       case "scheduling/student-schedules":
+      case "analytics/student-worker-analytics":
         return (
           <ProtectedContent pageId="scheduling/student-schedules">
-            <StudentSchedules />
+            <StudentWorkersHub
+              initialTab={
+                currentPage === "analytics/student-worker-analytics"
+                  ? "payroll"
+                  : "schedule"
+              }
+            />
           </ProtectedContent>
         );
       case "people/people-directory":
-        return (
-          <ProtectedContent pageId="people/people-directory">
-            <PeopleDirectory />
-          </ProtectedContent>
-        );
+      case "people/email-lists":
+      case "resources/building-directory":
+      case "analytics/program-management":
       case "people/baylor-id-manager":
         return (
-          <ProtectedContent pageId="people/baylor-id-manager">
-            <BaylorIDManager />
-          </ProtectedContent>
-        );
-      case "analytics/program-management":
-        return (
-          <ProtectedContent pageId="analytics/program-management">
-            <ProgramManagement />
-          </ProtectedContent>
-        );
-      case "people/email-lists":
-        return (
-          <ProtectedContent pageId="people/email-lists">
-            <EmailLists />
-          </ProtectedContent>
-        );
-      case "resources/building-directory":
-        return (
-          <ProtectedContent pageId="resources/building-directory">
-            <BuildingDirectory />
+          <ProtectedContent pageId="people/people-directory">
+            <PeopleHub />
           </ProtectedContent>
         );
       case "analytics/department-insights":
         return (
           <ProtectedContent pageId="analytics/department-insights">
             <DepartmentInsights />
-          </ProtectedContent>
-        );
-      case "analytics/student-worker-analytics":
-        return (
-          <ProtectedContent pageId="analytics/student-worker-analytics">
-            <StudentWorkerAnalytics />
           </ProtectedContent>
         );
       case "analytics/course-management":
@@ -522,18 +553,6 @@ function App() {
         return (
           <ProtectedContent pageId="tools/crn-tools">
             <CRNQualityTools />
-          </ProtectedContent>
-        );
-      case "tools/outlook-export":
-        return (
-          <ProtectedContent pageId="tools/outlook-export">
-            <OutlookRoomExport />
-          </ProtectedContent>
-        );
-      case "tools/room-grid-generator":
-        return (
-          <ProtectedContent pageId="tools/room-grid-generator">
-            <RoomGridGenerator />
           </ProtectedContent>
         );
       case "tools/temperature-monitoring":
@@ -645,7 +664,7 @@ function App() {
                 handleNavigate(path);
               }}
               collapsed={false}
-              onToggleCollapse={() => {}}
+              onToggleCollapse={() => { }}
               selectedSemester={selectedSemester}
               pinnedPages={pinnedPages}
               togglePinPage={togglePinPage}
@@ -757,11 +776,10 @@ function App() {
                               setSelectedSemester(semester);
                               setShowSemesterDropdown(false);
                             }}
-                            className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${
-                              semester === selectedSemester
-                                ? "bg-baylor-green/5 text-baylor-green font-medium"
-                                : "text-gray-900"
-                            }`}
+                            className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${semester === selectedSemester
+                              ? "bg-baylor-green/5 text-baylor-green font-medium"
+                              : "text-gray-900"
+                              }`}
                           >
                             <span className="flex items-center justify-between">
                               <span>{semester}</span>
@@ -800,11 +818,10 @@ function App() {
                     <button
                       key={child.id}
                       onClick={() => handleNavigate(child.path)}
-                      className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                        currentPage === child.path
-                          ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
-                          : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                      }`}
+                      className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${currentPage === child.path
+                        ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
+                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                        }`}
                     >
                       {child.label}
                     </button>

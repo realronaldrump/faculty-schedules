@@ -1,92 +1,115 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { IdCard, Search, Edit, Save, X, Filter, CheckCircle2, AlertCircle, Download } from 'lucide-react';
-import FacultyContactCard from '../FacultyContactCard';
-import { usePeople } from '../../contexts/PeopleContext';
-import { usePeopleOperations } from '../../hooks';
-import { useUI } from '../../contexts/UIContext';
-import { usePermissions } from '../../utils/permissions';
+import React, { useMemo, useState, useEffect } from "react";
+import {
+  IdCard,
+  Search,
+  Edit,
+  Save,
+  X,
+  Filter,
+  CheckCircle2,
+  AlertCircle,
+  Download,
+} from "lucide-react";
+import FacultyContactCard from "../FacultyContactCard";
+import { usePeople } from "../../contexts/PeopleContext";
+import { usePeopleOperations } from "../../hooks";
+import { useUI } from "../../contexts/UIContext";
+import { usePermissions } from "../../utils/permissions";
 
 const hasRole = (person, roleKey) => {
   const roles = person?.roles;
   if (!roles) return false;
   if (Array.isArray(roles)) return roles.includes(roleKey);
-  if (typeof roles === 'object') return roles[roleKey] === true;
+  if (typeof roles === "object") return roles[roleKey] === true;
   return false;
 };
 
 const getDisplayRoleLabels = (person) => {
   const labels = [];
-  if (hasRole(person, 'faculty')) labels.push('Faculty');
-  if (hasRole(person, 'staff')) labels.push('Staff');
-  if (hasRole(person, 'student')) labels.push('Student');
-  if (person.isAdjunct) labels.push('Adjunct'); // derive adjunct only from explicit flag
+  if (hasRole(person, "faculty")) labels.push("Faculty");
+  if (hasRole(person, "staff")) labels.push("Staff");
+  if (hasRole(person, "student")) labels.push("Student");
+  if (person.isAdjunct) labels.push("Adjunct"); // derive adjunct only from explicit flag
   return labels;
 };
 
 const getPersonType = (person) => {
-  if (hasRole(person, 'student')) return 'student';
-  if (hasRole(person, 'staff')) return 'staff';
-  return 'faculty'; // default to faculty
+  if (hasRole(person, "student")) return "student";
+  if (hasRole(person, "staff")) return "staff";
+  return "faculty"; // default to faculty
 };
 
-const BaylorIDManager = () => {
+const BaylorIDManager = ({ embedded = false }) => {
   const { people: directoryData, loadPeople } = usePeople();
-  const { handleFacultyUpdate, handleStaffUpdate, handleStudentUpdate } = usePeopleOperations();
+  const { handleFacultyUpdate, handleStaffUpdate, handleStudentUpdate } =
+    usePeopleOperations();
   const { showNotification } = useUI();
   const { canEdit } = usePermissions();
-  const [filterText, setFilterText] = useState('');
-  const [roleChecks, setRoleChecks] = useState({ faculty: true, adjunct: true, staff: true, studentWorkers: true });
+  const [filterText, setFilterText] = useState("");
+  const [roleChecks, setRoleChecks] = useState({
+    faculty: true,
+    adjunct: true,
+    staff: true,
+    studentWorkers: true,
+  });
   const [onlyMissing, setOnlyMissing] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [baylorIdDraft, setBaylorIdDraft] = useState('');
-  const [error, setError] = useState('');
+  const [baylorIdDraft, setBaylorIdDraft] = useState("");
+  const [error, setError] = useState("");
   const [selectedPersonForCard, setSelectedPersonForCard] = useState(null);
 
   useEffect(() => {
     loadPeople();
   }, [loadPeople]);
 
-  const people = useMemo(() => Array.isArray(directoryData) ? directoryData : [], [directoryData]);
+  const people = useMemo(
+    () => (Array.isArray(directoryData) ? directoryData : []),
+    [directoryData],
+  );
 
   const filtered = useMemo(() => {
     const term = filterText.trim().toLowerCase();
     return people
       .filter((p) => {
         if (!p) return false;
-        const includeByRole = (
-          (roleChecks.faculty && hasRole(p, 'faculty') && !p.isAdjunct) ||
+        const includeByRole =
+          (roleChecks.faculty && hasRole(p, "faculty") && !p.isAdjunct) ||
           (roleChecks.adjunct && p.isAdjunct) ||
-          (roleChecks.staff && hasRole(p, 'staff')) ||
-          (roleChecks.studentWorkers && hasRole(p, 'student'))
-        );
+          (roleChecks.staff && hasRole(p, "staff")) ||
+          (roleChecks.studentWorkers && hasRole(p, "student"));
         if (!includeByRole) return false;
-        if (onlyMissing && (p.baylorId && p.baylorId.trim() !== '')) return false;
+        if (onlyMissing && p.baylorId && p.baylorId.trim() !== "") return false;
         if (!term) return true;
-        const name = (p.name || '').toLowerCase();
-        const email = (p.email || '').toLowerCase();
-        const id = (p.baylorId || '').toLowerCase();
+        const name = (p.name || "").toLowerCase();
+        const email = (p.email || "").toLowerCase();
+        const id = (p.baylorId || "").toLowerCase();
         return name.includes(term) || email.includes(term) || id.includes(term);
       })
-      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [people, filterText, roleChecks, onlyMissing]);
 
   const exportToCSV = () => {
-    const headers = ['Name', 'Baylor ID'];
-    const rows = filtered.map(person => [
-      person.name || '',
-      person.baylorId || ''
+    const headers = ["Name", "Baylor ID"];
+    const rows = filtered.map((person) => [
+      person.name || "",
+      person.baylorId || "",
     ]);
 
     const csvContent = [headers, ...rows]
-      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
+      .map((row) =>
+        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","),
+      )
+      .join("\n");
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `baylor-id-export-${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `baylor-id-export-${new Date().toISOString().split("T")[0]}.csv`,
+    );
+    link.style.visibility = "hidden";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -94,21 +117,21 @@ const BaylorIDManager = () => {
 
   const startEdit = (person) => {
     setEditingId(person.id);
-    setBaylorIdDraft(person.baylorId || '');
-    setError('');
+    setBaylorIdDraft(person.baylorId || "");
+    setError("");
   };
 
   const cancelEdit = () => {
     setEditingId(null);
-    setBaylorIdDraft('');
-    setError('');
+    setBaylorIdDraft("");
+    setError("");
   };
 
   const validateId = (value) => {
-    if (!value) return 'Baylor ID must be 9 digits';
-    const digits = value.replace(/\D/g, '');
-    if (digits.length !== 9) return 'Baylor ID must be exactly 9 digits';
-    return '';
+    if (!value) return "Baylor ID must be 9 digits";
+    const digits = value.replace(/\D/g, "");
+    if (digits.length !== 9) return "Baylor ID must be exactly 9 digits";
+    return "";
   };
 
   const saveId = async (person) => {
@@ -118,35 +141,55 @@ const BaylorIDManager = () => {
       return;
     }
     if (!canEdit()) {
-      showNotification?.('warning', 'Permission Denied', 'Only admins can modify Baylor IDs.');
+      showNotification?.(
+        "warning",
+        "Permission Denied",
+        "Only admins can modify Baylor IDs.",
+      );
       return;
     }
-    const payload = { id: person.id, baylorId: baylorIdDraft.replace(/\D/g, '') };
+    const payload = {
+      id: person.id,
+      baylorId: baylorIdDraft.replace(/\D/g, ""),
+    };
     const roles = getDisplayRoleLabels(person);
     try {
-      if (roles.includes('student')) {
+      if (roles.includes("student")) {
         await handleStudentUpdate(payload);
-      } else if (roles.includes('staff') && !roles.includes('faculty')) {
+      } else if (roles.includes("staff") && !roles.includes("faculty")) {
         await handleStaffUpdate(payload);
       } else {
         await handleFacultyUpdate(payload, person);
       }
       setEditingId(null);
-      setBaylorIdDraft('');
-      setError('');
-      showNotification?.('success', 'Baylor ID Updated', `${person.name}'s Baylor ID was updated.`);
+      setBaylorIdDraft("");
+      setError("");
+      showNotification?.(
+        "success",
+        "Baylor ID Updated",
+        `${person.name}'s Baylor ID was updated.`,
+      );
     } catch (e) {
-      setError(e?.message || 'Failed to save.');
+      setError(e?.message || "Failed to save.");
     }
   };
 
   return (
     <div className="space-y-6">
+      <div>
+        {embedded ? (
+          <h2 className="text-xl font-semibold text-gray-900">Baylor IDs</h2>
+        ) : (
+          <h1 className="text-2xl font-bold text-gray-900">Baylor IDs</h1>
+        )}
+        <p className="text-gray-600">
+          Quickly view and update Baylor IDs across directory members.
+        </p>
+      </div>
       <div className="university-card">
         <div className="university-card-header flex justify-between items-center">
           <div>
-            <h2 className="university-card-title">Baylor ID Manager</h2>
-            <p className="university-card-subtitle">Quickly view and update Baylor IDs across directory members.</p>
+            <h2 className="university-card-title">Directory Baylor IDs</h2>
           </div>
           <div className="p-3 bg-baylor-green/10 rounded-lg">
             <IdCard className="h-6 w-6 text-baylor-green" />
@@ -156,7 +199,10 @@ const BaylorIDManager = () => {
         <div className="university-card-content">
           <div className="flex flex-wrap gap-3 items-center mb-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                size={18}
+              />
               <input
                 type="text"
                 placeholder="Search by name, email, or ID..."
@@ -171,7 +217,12 @@ const BaylorIDManager = () => {
                 <input
                   type="checkbox"
                   checked={roleChecks.faculty}
-                  onChange={(e) => setRoleChecks(prev => ({ ...prev, faculty: e.target.checked }))}
+                  onChange={(e) =>
+                    setRoleChecks((prev) => ({
+                      ...prev,
+                      faculty: e.target.checked,
+                    }))
+                  }
                   className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                 />
                 Faculty
@@ -180,7 +231,12 @@ const BaylorIDManager = () => {
                 <input
                   type="checkbox"
                   checked={roleChecks.adjunct}
-                  onChange={(e) => setRoleChecks(prev => ({ ...prev, adjunct: e.target.checked }))}
+                  onChange={(e) =>
+                    setRoleChecks((prev) => ({
+                      ...prev,
+                      adjunct: e.target.checked,
+                    }))
+                  }
                   className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                 />
                 Adjunct
@@ -189,7 +245,12 @@ const BaylorIDManager = () => {
                 <input
                   type="checkbox"
                   checked={roleChecks.staff}
-                  onChange={(e) => setRoleChecks(prev => ({ ...prev, staff: e.target.checked }))}
+                  onChange={(e) =>
+                    setRoleChecks((prev) => ({
+                      ...prev,
+                      staff: e.target.checked,
+                    }))
+                  }
                   className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                 />
                 Staff
@@ -198,7 +259,12 @@ const BaylorIDManager = () => {
                 <input
                   type="checkbox"
                   checked={roleChecks.studentWorkers}
-                  onChange={(e) => setRoleChecks(prev => ({ ...prev, studentWorkers: e.target.checked }))}
+                  onChange={(e) =>
+                    setRoleChecks((prev) => ({
+                      ...prev,
+                      studentWorkers: e.target.checked,
+                    }))
+                  }
                   className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                 />
                 Student Workers
@@ -226,9 +292,15 @@ const BaylorIDManager = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-baylor-green/5">
-                  <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">Name</th>
-                  <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">Roles</th>
-                  <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">Baylor ID</th>
+                  <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">
+                    Name
+                  </th>
+                  <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">
+                    Roles
+                  </th>
+                  <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">
+                    Baylor ID
+                  </th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -236,7 +308,8 @@ const BaylorIDManager = () => {
                 {filtered.map((person) => {
                   const roles = getDisplayRoleLabels(person);
                   const isEditing = editingId === person.id;
-                  const hasId = person.baylorId && person.baylorId.trim() !== '';
+                  const hasId =
+                    person.baylorId && person.baylorId.trim() !== "";
                   return (
                     <tr key={person.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
@@ -244,17 +317,28 @@ const BaylorIDManager = () => {
                           className="text-gray-900 font-medium cursor-pointer hover:text-baylor-green"
                           onClick={() => setSelectedPersonForCard(person)}
                         >
-                          {person.name || '-'}
+                          {person.name || "-"}
                         </div>
-                        <div className="text-xs text-gray-500">{person.email || ''}</div>
+                        <div className="text-xs text-gray-500">
+                          {person.email || ""}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {roles.length === 0 ? (
-                            <span className="text-xs text-gray-500">Unassigned</span>
-                          ) : roles.map((r) => (
-                            <span key={r} className="px-2 py-0.5 bg-gray-100 rounded-full text-xs text-gray-700">{r}</span>
-                          ))}
+                            <span className="text-xs text-gray-500">
+                              Unassigned
+                            </span>
+                          ) : (
+                            roles.map((r) => (
+                              <span
+                                key={r}
+                                className="px-2 py-0.5 bg-gray-100 rounded-full text-xs text-gray-700"
+                              >
+                                {r}
+                              </span>
+                            ))
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -263,12 +347,14 @@ const BaylorIDManager = () => {
                             <input
                               value={baylorIdDraft}
                               onChange={(e) => {
-                                const v = e.target.value.replace(/\D/g, '').slice(0, 9);
+                                const v = e.target.value
+                                  .replace(/\D/g, "")
+                                  .slice(0, 9);
                                 setBaylorIdDraft(v);
-                                if (error) setError('');
+                                if (error) setError("");
                               }}
                               placeholder="9 digits"
-                              className={`w-48 p-2 border rounded ${error ? 'border-red-500' : 'border-gray-300'}`}
+                              className={`w-48 p-2 border rounded ${error ? "border-red-500" : "border-gray-300"}`}
                             />
                             {error && (
                               <div className="flex items-center gap-1 text-red-600 text-xs mt-1">
@@ -281,11 +367,16 @@ const BaylorIDManager = () => {
                           <div className="flex items-center gap-2">
                             {hasId ? (
                               <span className="inline-flex items-center gap-1 text-gray-800">
-                                <CheckCircle2 size={14} className="text-green-600" />
+                                <CheckCircle2
+                                  size={14}
+                                  className="text-green-600"
+                                />
                                 {person.baylorId}
                               </span>
                             ) : (
-                              <span className="text-gray-500 italic">Missing</span>
+                              <span className="text-gray-500 italic">
+                                Missing
+                              </span>
                             )}
                           </div>
                         )}
@@ -328,8 +419,12 @@ const BaylorIDManager = () => {
           {filtered.length === 0 && (
             <div className="text-center py-12">
               <IdCard className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No people found</h3>
-              <p className="mt-1 text-sm text-gray-500">Adjust your search or filters.</p>
+              <h3 className="mt-2 text-sm font-medium text-gray-900">
+                No people found
+              </h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Adjust your search or filters.
+              </p>
             </div>
           )}
         </div>

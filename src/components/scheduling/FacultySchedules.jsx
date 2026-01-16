@@ -1,79 +1,106 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { User, Calendar, Clock, Search, ChevronDown, ChevronsUpDown, Grid, List, Plus, X, Eye, Info, Building, BookOpen, Users, GraduationCap } from 'lucide-react';
-import FacultyContactCard from '../FacultyContactCard';
-import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
-import { useData } from '../../contexts/DataContext';
-import { usePeople } from '../../contexts/PeopleContext';
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import {
+  User,
+  Calendar,
+  Clock,
+  Search,
+  ChevronDown,
+  ChevronsUpDown,
+  Grid,
+  List,
+  Plus,
+  X,
+  Eye,
+  Info,
+  Building,
+  BookOpen,
+  Users,
+  GraduationCap,
+} from "lucide-react";
+import FacultyContactCard from "../FacultyContactCard";
+import { parseTime, formatMinutesToTime } from "../../utils/timeUtils";
+import { useData } from "../../contexts/DataContext";
+import { usePeople } from "../../contexts/PeopleContext";
 
-const FacultySchedules = () => {
+const FacultySchedules = ({ embedded = false }) => {
   const { scheduleData = [], facultyData = [] } = useData();
   const { loadPeople } = usePeople();
   const [selectedFaculty, setSelectedFaculty] = useState([]);
-  const [viewMode, setViewMode] = useState('timeline');
-  const [selectedDays, setSelectedDays] = useState(['M', 'T', 'W', 'R', 'F']);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [viewMode, setViewMode] = useState("timeline");
+  const [selectedDays, setSelectedDays] = useState(["M", "T", "W", "R", "F"]);
+  const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [isProgramDropdownOpen, setIsProgramDropdownOpen] = useState(false);
-  const [programSearchTerm, setProgramSearchTerm] = useState('');
+  const [programSearchTerm, setProgramSearchTerm] = useState("");
   const [showAdjuncts, setShowAdjuncts] = useState(true);
 
   const facultyDropdownRef = useRef(null);
   const programDropdownRef = useRef(null);
 
-  const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
+  const dayNames = {
+    M: "Monday",
+    T: "Tuesday",
+    W: "Wednesday",
+    R: "Thursday",
+    F: "Friday",
+  };
 
   useEffect(() => {
     loadPeople();
   }, [loadPeople]);
 
   const handleDayToggle = (dayCode) => {
-    setSelectedDays(prev =>
+    setSelectedDays((prev) =>
       prev.includes(dayCode)
-        ? prev.filter(d => d !== dayCode)
-        : [...prev, dayCode]
+        ? prev.filter((d) => d !== dayCode)
+        : [...prev, dayCode],
     );
   };
 
   // Get unique instructors (filtered by adjunct preference)
   const uniqueInstructors = useMemo(() => {
     const names = new Set();
-    scheduleData.forEach(item => {
+    scheduleData.forEach((item) => {
       const fallbackName = item.instructor
-        ? `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim()
-        : (item.Instructor || item.instructorName || '');
-      const list = Array.isArray(item.instructorNames) && item.instructorNames.length > 0
-        ? item.instructorNames
-        : [fallbackName].filter(Boolean);
+        ? `${item.instructor.firstName || ""} ${item.instructor.lastName || ""}`.trim()
+        : item.Instructor || item.instructorName || "";
+      const list =
+        Array.isArray(item.instructorNames) && item.instructorNames.length > 0
+          ? item.instructorNames
+          : [fallbackName].filter(Boolean);
       list.forEach((name) => {
-        if (name && name !== 'Staff') names.add(name);
+        if (name && name !== "Staff") names.add(name);
       });
     });
     const instructorNames = Array.from(names);
 
     // Filter out adjuncts if showAdjuncts is false
     if (!showAdjuncts) {
-      return instructorNames.filter(instructorName => {
-        const faculty = facultyData.find(f => f.name === instructorName);
-        return faculty && !faculty.isAdjunct;
-      }).sort();
+      return instructorNames
+        .filter((instructorName) => {
+          const faculty = facultyData.find((f) => f.name === instructorName);
+          return faculty && !faculty.isAdjunct;
+        })
+        .sort();
     }
 
     return instructorNames.sort();
   }, [scheduleData, facultyData, showAdjuncts]);
 
-  const filteredInstructors = useMemo(() =>
-    uniqueInstructors.filter(instructor =>
-      instructor.toLowerCase().includes(searchTerm.toLowerCase())
-    ),
-    [uniqueInstructors, searchTerm]
+  const filteredInstructors = useMemo(
+    () =>
+      uniqueInstructors.filter((instructor) =>
+        instructor.toLowerCase().includes(searchTerm.toLowerCase()),
+      ),
+    [uniqueInstructors, searchTerm],
   );
 
   // Get unique programs from faculty data (filtered by adjunct preference)
   const uniquePrograms = useMemo(() => {
     const programs = new Set();
-    facultyData.forEach(faculty => {
+    facultyData.forEach((faculty) => {
       // Skip adjuncts if showAdjuncts is false
       if (!showAdjuncts && faculty.isAdjunct) {
         return;
@@ -85,59 +112,70 @@ const FacultySchedules = () => {
     return Array.from(programs).sort();
   }, [facultyData, showAdjuncts]);
 
-  const filteredPrograms = useMemo(() =>
-    uniquePrograms.filter(program =>
-      program.toLowerCase().includes(programSearchTerm.toLowerCase())
-    ),
-    [uniquePrograms, programSearchTerm]
+  const filteredPrograms = useMemo(
+    () =>
+      uniquePrograms.filter((program) =>
+        program.toLowerCase().includes(programSearchTerm.toLowerCase()),
+      ),
+    [uniquePrograms, programSearchTerm],
   );
 
   // Get faculty names by program (filtered by adjunct preference)
   const getFacultyByProgram = (programName) => {
     return facultyData
-      .filter(faculty => {
+      .filter((faculty) => {
         // Skip adjuncts if showAdjuncts is false
         if (!showAdjuncts && faculty.isAdjunct) {
           return false;
         }
         return faculty.program && faculty.program.name === programName;
       })
-      .map(faculty => faculty.name)
-      .filter(name => uniqueInstructors.includes(name)); // Only include faculty with schedules
+      .map((faculty) => faculty.name)
+      .filter((name) => uniqueInstructors.includes(name)); // Only include faculty with schedules
   };
 
   // Handle adding all faculty from a program
   const handleAddProgramFaculty = (programName) => {
     const programFaculty = getFacultyByProgram(programName);
-    const newFaculty = programFaculty.filter(name => !selectedFaculty.includes(name));
+    const newFaculty = programFaculty.filter(
+      (name) => !selectedFaculty.includes(name),
+    );
 
     if (newFaculty.length === 0) {
       // All faculty from this program are already selected
       return;
     }
 
-    setSelectedFaculty(prev => [...prev, ...newFaculty]);
+    setSelectedFaculty((prev) => [...prev, ...newFaculty]);
     setIsProgramDropdownOpen(false);
-    setProgramSearchTerm('');
+    setProgramSearchTerm("");
 
     // Show a brief notification (you can replace this with your notification system)
-    console.log(`Added ${newFaculty.length} faculty from ${programName} program`);
+    console.log(
+      `Added ${newFaculty.length} faculty from ${programName} program`,
+    );
   };
 
   // Handle click outside to close dropdowns
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (facultyDropdownRef.current && !facultyDropdownRef.current.contains(event.target)) {
+      if (
+        facultyDropdownRef.current &&
+        !facultyDropdownRef.current.contains(event.target)
+      ) {
         setIsDropdownOpen(false);
       }
-      if (programDropdownRef.current && !programDropdownRef.current.contains(event.target)) {
+      if (
+        programDropdownRef.current &&
+        !programDropdownRef.current.contains(event.target)
+      ) {
         setIsProgramDropdownOpen(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
 
@@ -147,94 +185,108 @@ const FacultySchedules = () => {
       setSelectedFacultyForCard(event.detail);
     };
 
-    window.addEventListener('showFacultyCard', handleShowFacultyCard);
+    window.addEventListener("showFacultyCard", handleShowFacultyCard);
     return () => {
-      window.removeEventListener('showFacultyCard', handleShowFacultyCard);
+      window.removeEventListener("showFacultyCard", handleShowFacultyCard);
     };
   }, []);
 
   // Remove adjunct faculty from selected list when adjunct filter is disabled
   useEffect(() => {
     if (!showAdjuncts) {
-      const adjunctFaculty = selectedFaculty.filter(facultyName => {
-        const faculty = facultyData.find(f => f.name === facultyName);
+      const adjunctFaculty = selectedFaculty.filter((facultyName) => {
+        const faculty = facultyData.find((f) => f.name === facultyName);
         return faculty && faculty.isAdjunct;
       });
 
       if (adjunctFaculty.length > 0) {
-        setSelectedFaculty(prev => prev.filter(name => !adjunctFaculty.includes(name)));
+        setSelectedFaculty((prev) =>
+          prev.filter((name) => !adjunctFaculty.includes(name)),
+        );
       }
     }
   }, [showAdjuncts, facultyData, selectedFaculty]);
 
   // Get schedule data for selected faculty
   const getFacultyScheduleData = (facultyName, day) => {
-    const facultySchedule = scheduleData.filter(item => {
+    const facultySchedule = scheduleData.filter((item) => {
       const fallbackName = item.instructor
-        ? `${item.instructor.firstName || ''} ${item.instructor.lastName || ''}`.trim()
-        : (item.Instructor || item.instructorName || '');
-      const instructorNames = Array.isArray(item.instructorNames) && item.instructorNames.length > 0
-        ? item.instructorNames
-        : [fallbackName].filter(Boolean);
+        ? `${item.instructor.firstName || ""} ${item.instructor.lastName || ""}`.trim()
+        : item.Instructor || item.instructorName || "";
+      const instructorNames =
+        Array.isArray(item.instructorNames) && item.instructorNames.length > 0
+          ? item.instructorNames
+          : [fallbackName].filter(Boolean);
       const matchesInstructor = instructorNames.includes(facultyName);
 
       if (item.meetingPatterns) {
-        return matchesInstructor &&
-          item.meetingPatterns.some(pattern => pattern.day === day);
+        return (
+          matchesInstructor &&
+          item.meetingPatterns.some((pattern) => pattern.day === day)
+        );
       }
 
       return matchesInstructor && item.Day === day;
     });
 
     const courses = facultySchedule
-      .flatMap(item => {
+      .flatMap((item) => {
         if (item.meetingPatterns) {
-              return item.meetingPatterns
-            .filter(pattern => pattern.day === day)
-            .map(pattern => ({
+          return item.meetingPatterns
+            .filter((pattern) => pattern.day === day)
+            .map((pattern) => ({
               id: `${item.id}-${pattern.day}`,
               start: parseTime(pattern.startTime),
               end: parseTime(pattern.endTime),
               course: item.courseCode || item.Course,
-              title: item.courseTitle || item['Course Title'],
+              title: item.courseTitle || item["Course Title"],
               room: (() => {
-                if (item.locationType === 'no_room' || item.isOnline) {
-                  return item.locationLabel || 'No Room Needed';
+                if (item.locationType === "no_room" || item.isOnline) {
+                  return item.locationLabel || "No Room Needed";
                 }
-                if (Array.isArray(item.roomNames) && item.roomNames.length > 0) {
-                  return item.roomNames.join('; ');
+                if (
+                  Array.isArray(item.roomNames) &&
+                  item.roomNames.length > 0
+                ) {
+                  return item.roomNames.join("; ");
                 }
-                return item.room ? (item.room.displayName || item.room.name) : (item.roomName || item.Room);
+                return item.room
+                  ? item.room.displayName || item.room.name
+                  : item.roomName || item.Room;
               })(),
               section: item.section || item.Section,
               credits: item.credits || item.Credits,
               term: item.term || item.Term,
-              rawData: item
+              rawData: item,
             }));
         }
 
-        return [{
-          id: item.id || `${item.Course}-${item['Start Time']}-${item['End Time']}`,
-          start: parseTime(item['Start Time']),
-          end: parseTime(item['End Time']),
-          course: item.Course,
-          title: item['Course Title'],
-          room: (() => {
-            if (item.locationType === 'no_room' || item.isOnline) {
-              return item.locationLabel || 'No Room Needed';
-            }
-            if (Array.isArray(item.roomNames) && item.roomNames.length > 0) {
-              return item.roomNames.join('; ');
-            }
-            return item.Room;
-          })(),
-          section: item.Section,
-          credits: item.Credits,
-          term: item.Term,
-          rawData: item
-        }];
+        return [
+          {
+            id:
+              item.id ||
+              `${item.Course}-${item["Start Time"]}-${item["End Time"]}`,
+            start: parseTime(item["Start Time"]),
+            end: parseTime(item["End Time"]),
+            course: item.Course,
+            title: item["Course Title"],
+            room: (() => {
+              if (item.locationType === "no_room" || item.isOnline) {
+                return item.locationLabel || "No Room Needed";
+              }
+              if (Array.isArray(item.roomNames) && item.roomNames.length > 0) {
+                return item.roomNames.join("; ");
+              }
+              return item.Room;
+            })(),
+            section: item.Section,
+            credits: item.Credits,
+            term: item.Term,
+            rawData: item,
+          },
+        ];
       })
-      .filter(course => course.start !== null && course.end !== null)
+      .filter((course) => course.start !== null && course.end !== null)
       .sort((a, b) => a.start - b.start);
 
     return courses;
@@ -245,7 +297,10 @@ const FacultySchedules = () => {
     const dayStart = 8 * 60;
     const dayEnd = 18 * 60;
     const totalMinutes = dayEnd - dayStart;
-    const timeLabels = Array.from({ length: (dayEnd - dayStart) / 60 + 1 }, (_, i) => dayStart + i * 60);
+    const timeLabels = Array.from(
+      { length: (dayEnd - dayStart) / 60 + 1 },
+      (_, i) => dayStart + i * 60,
+    );
 
     return (
       <div className="mt-6">
@@ -259,27 +314,32 @@ const FacultySchedules = () => {
                 Faculty Member
               </div>
               <div className="flex-grow flex">
-                {timeLabels.slice(0, -1).map(time => (
+                {timeLabels.slice(0, -1).map((time) => (
                   <div
                     key={time}
                     style={{ width: `${(60 / totalMinutes) * 100}%` }}
                     className="text-center text-xs font-medium p-2 border-l border-gray-200 text-baylor-green"
                   >
-                    {formatMinutesToTime(time).replace(':00', '')}
+                    {formatMinutesToTime(time).replace(":00", "")}
                   </div>
                 ))}
               </div>
             </div>
 
-            {selectedFaculty.map(facultyName => {
+            {selectedFaculty.map((facultyName) => {
               const courses = getFacultyScheduleData(facultyName, dayCode);
 
               return (
-                <div key={facultyName} className="flex border-b border-gray-100 hover:bg-gray-50/50">
+                <div
+                  key={facultyName}
+                  className="flex border-b border-gray-100 hover:bg-gray-50/50"
+                >
                   <div className="w-48 flex-shrink-0 p-4 border-r border-gray-200 bg-gray-50/30">
                     <button
                       onClick={() => {
-                        const faculty = facultyData.find(f => f.name === facultyName);
+                        const faculty = facultyData.find(
+                          (f) => f.name === facultyName,
+                        );
                         if (faculty) {
                           setSelectedFacultyForCard(faculty);
                           setSelectedCourse(null); // Close course modal if open
@@ -290,7 +350,11 @@ const FacultySchedules = () => {
                       {facultyName}
                     </button>
                     <button
-                      onClick={() => setSelectedFaculty(prev => prev.filter(f => f !== facultyName))}
+                      onClick={() =>
+                        setSelectedFaculty((prev) =>
+                          prev.filter((f) => f !== facultyName),
+                        )
+                      }
                       className="ml-2 text-gray-400 hover:text-red-500"
                     >
                       <X size={16} />
@@ -298,21 +362,26 @@ const FacultySchedules = () => {
                   </div>
 
                   <div className="flex-grow relative h-20">
-                    {courses.map(course => {
-                      const left = Math.max(0, ((course.start - dayStart) / totalMinutes) * 100);
-                      const width = (((course.end - course.start) / totalMinutes) * 100);
+                    {courses.map((course) => {
+                      const left = Math.max(
+                        0,
+                        ((course.start - dayStart) / totalMinutes) * 100,
+                      );
+                      const width =
+                        ((course.end - course.start) / totalMinutes) * 100;
 
-                      if (course.end < dayStart || course.start > dayEnd) return null;
+                      if (course.end < dayStart || course.start > dayEnd)
+                        return null;
 
                       return (
                         <div
                           key={course.id}
                           style={{
-                            position: 'absolute',
+                            position: "absolute",
                             left: `${left}%`,
                             width: `${width}%`,
-                            top: '8px',
-                            bottom: '8px'
+                            top: "8px",
+                            bottom: "8px",
                           }}
                           className="px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green shadow-sm transition-all cursor-pointer"
                           onClick={() => {
@@ -321,9 +390,16 @@ const FacultySchedules = () => {
                           }}
                           title={`${course.course} - ${course.title}\n${formatMinutesToTime(course.start)} - ${formatMinutesToTime(course.end)}\nRoom: ${course.room}`}
                         >
-                          <div className="font-bold truncate">{course.course}</div>
-                          <div className="text-xs opacity-75 truncate">{course.room}</div>
-                          <div className="text-xs opacity-75 truncate">{formatMinutesToTime(course.start)} - {formatMinutesToTime(course.end)}</div>
+                          <div className="font-bold truncate">
+                            {course.course}
+                          </div>
+                          <div className="text-xs opacity-75 truncate">
+                            {course.room}
+                          </div>
+                          <div className="text-xs opacity-75 truncate">
+                            {formatMinutesToTime(course.start)} -{" "}
+                            {formatMinutesToTime(course.end)}
+                          </div>
                         </div>
                       );
                     })}
@@ -347,18 +423,31 @@ const FacultySchedules = () => {
     if (!course) return null;
 
     const { rawData, facultyName } = course;
-    const faculty = facultyData.find(f => f.name === facultyName);
+    const faculty = facultyData.find((f) => f.name === facultyName);
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 transition-opacity" onClick={onClose}>
-        <div className="bg-white rounded-xl shadow-2xl p-8 m-4 max-w-lg w-full relative transform transition-all" onClick={e => e.stopPropagation()}>
-          <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+      <div
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 transition-opacity"
+        onClick={onClose}
+      >
+        <div
+          className="bg-white rounded-xl shadow-2xl p-8 m-4 max-w-lg w-full relative transform transition-all"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+          >
             <X size={24} />
           </button>
 
           <div className="mb-6">
-            <p className="text-sm font-semibold text-baylor-green tracking-wider uppercase">{course.course}</p>
-            <h2 className="text-3xl font-bold font-serif text-gray-900 mt-1">{course.title}</h2>
+            <p className="text-sm font-semibold text-baylor-green tracking-wider uppercase">
+              {course.course}
+            </p>
+            <h2 className="text-3xl font-bold font-serif text-gray-900 mt-1">
+              {course.title}
+            </h2>
           </div>
 
           <div className="space-y-4 text-gray-700">
@@ -380,14 +469,17 @@ const FacultySchedules = () => {
               <Building size={20} className="text-gray-400 mr-4" />
               <div>
                 <p className="font-semibold">Room</p>
-                <p>{course.room || 'N/A'}</p>
+                <p>{course.room || "N/A"}</p>
               </div>
             </div>
             <div className="flex items-center">
               <Clock size={20} className="text-gray-400 mr-4" />
               <div>
                 <p className="font-semibold">Time</p>
-                <p>{formatMinutesToTime(course.start)} - {formatMinutesToTime(course.end)}</p>
+                <p>
+                  {formatMinutesToTime(course.start)} -{" "}
+                  {formatMinutesToTime(course.end)}
+                </p>
               </div>
             </div>
           </div>
@@ -395,13 +487,17 @@ const FacultySchedules = () => {
           {faculty && (
             <div className="mt-8 pt-6 border-t border-gray-200">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-800">Instructor</h3>
+                <h3 className="text-lg font-semibold text-gray-800">
+                  Instructor
+                </h3>
                 <button
                   onClick={() => {
                     onClose();
                     // Trigger showing the faculty contact card
                     setTimeout(() => {
-                      const event = new CustomEvent('showFacultyCard', { detail: faculty });
+                      const event = new CustomEvent("showFacultyCard", {
+                        detail: faculty,
+                      });
                       window.dispatchEvent(event);
                     }, 100);
                   }}
@@ -422,18 +518,29 @@ const FacultySchedules = () => {
     );
   };
 
-
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Faculty Schedules</h1>
-        <p className="text-gray-600">Compare interactive schedules across faculty members</p>
+        {embedded ? (
+          <h2 className="text-xl font-semibold text-gray-900 mb-1">
+            Faculty Schedules
+          </h2>
+        ) : (
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            Faculty Schedules
+          </h1>
+        )}
+        <p className="text-gray-600">
+          Compare schedules across faculty members
+        </p>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Add Faculty to Compare</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Add Faculty to Compare
+            </label>
             <div className="relative" ref={facultyDropdownRef}>
               <button
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -456,23 +563,31 @@ const FacultySchedules = () => {
                   </div>
 
                   <div className="max-h-48 overflow-auto">
-                    {filteredInstructors
-                      .filter(instructor => !selectedFaculty.includes(instructor))
-                      .length === 0 ? (
+                    {filteredInstructors.filter(
+                      (instructor) => !selectedFaculty.includes(instructor),
+                    ).length === 0 ? (
                       <div className="px-3 py-2 text-sm text-gray-500">
-                        {searchTerm ? 'No faculty found matching your search.' :
-                          !showAdjuncts ? 'No full-time faculty available.' : 'No faculty available.'}
+                        {searchTerm
+                          ? "No faculty found matching your search."
+                          : !showAdjuncts
+                            ? "No full-time faculty available."
+                            : "No faculty available."}
                       </div>
                     ) : (
                       filteredInstructors
-                        .filter(instructor => !selectedFaculty.includes(instructor))
+                        .filter(
+                          (instructor) => !selectedFaculty.includes(instructor),
+                        )
                         .map((instructor) => (
                           <button
                             key={instructor}
                             onClick={() => {
-                              setSelectedFaculty(prev => [...prev, instructor]);
+                              setSelectedFaculty((prev) => [
+                                ...prev,
+                                instructor,
+                              ]);
                               setIsDropdownOpen(false);
-                              setSearchTerm('');
+                              setSearchTerm("");
                             }}
                             className="w-full text-left px-3 py-2 hover:bg-baylor-green/10 transition-colors text-sm"
                           >
@@ -487,7 +602,9 @@ const FacultySchedules = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Add Faculty by Program</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Add Faculty by Program
+            </label>
             <div className="relative" ref={programDropdownRef}>
               <button
                 onClick={() => setIsProgramDropdownOpen(!isProgramDropdownOpen)}
@@ -512,13 +629,18 @@ const FacultySchedules = () => {
                   <div className="max-h-48 overflow-auto">
                     {filteredPrograms.length === 0 ? (
                       <div className="px-3 py-2 text-sm text-gray-500">
-                        {programSearchTerm ? 'No programs found matching your search.' :
-                          !showAdjuncts ? 'No programs with full-time faculty available.' : 'No programs available.'}
+                        {programSearchTerm
+                          ? "No programs found matching your search."
+                          : !showAdjuncts
+                            ? "No programs with full-time faculty available."
+                            : "No programs available."}
                       </div>
                     ) : (
                       filteredPrograms.map((program) => {
                         const programFaculty = getFacultyByProgram(program);
-                        const availableFaculty = programFaculty.filter(name => !selectedFaculty.includes(name));
+                        const availableFaculty = programFaculty.filter(
+                          (name) => !selectedFaculty.includes(name),
+                        );
                         const facultyCount = availableFaculty.length;
 
                         return (
@@ -526,13 +648,18 @@ const FacultySchedules = () => {
                             key={program}
                             onClick={() => handleAddProgramFaculty(program)}
                             disabled={facultyCount === 0}
-                            className={`w-full text-left px-3 py-2 hover:bg-baylor-green/10 transition-colors text-sm ${facultyCount === 0 ? 'text-gray-400 cursor-not-allowed' : ''
-                              }`}
+                            className={`w-full text-left px-3 py-2 hover:bg-baylor-green/10 transition-colors text-sm ${
+                              facultyCount === 0
+                                ? "text-gray-400 cursor-not-allowed"
+                                : ""
+                            }`}
                           >
                             <div className="flex items-center justify-between">
                               <span>{program}</span>
                               <span className="text-xs text-gray-500">
-                                {facultyCount === 0 ? 'All selected' : `${facultyCount} faculty`}
+                                {facultyCount === 0
+                                  ? "All selected"
+                                  : `${facultyCount} faculty`}
                               </span>
                             </div>
                           </button>
@@ -546,16 +673,19 @@ const FacultySchedules = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Select Days to View</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Days to View
+            </label>
             <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
               {Object.entries(dayNames).map(([dayCode, dayName]) => (
                 <button
                   key={dayCode}
                   onClick={() => handleDayToggle(dayCode)}
-                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors flex-1 ${selectedDays.includes(dayCode)
-                    ? 'bg-baylor-green text-white shadow'
-                    : 'text-gray-600 hover:bg-gray-200'
-                    }`}
+                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors flex-1 ${
+                    selectedDays.includes(dayCode)
+                      ? "bg-baylor-green text-white shadow"
+                      : "text-gray-600 hover:bg-gray-200"
+                  }`}
                 >
                   {dayName.slice(0, 3)}
                 </button>
@@ -568,24 +698,31 @@ const FacultySchedules = () => {
         <div className="mt-4 pt-4 border-t border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <label className="text-sm font-medium text-gray-700">Include Adjunct Faculty</label>
-              <p className="text-xs text-gray-500 mt-1">Toggle to show/hide adjunct faculty members</p>
+              <label className="text-sm font-medium text-gray-700">
+                Include Adjunct Faculty
+              </label>
+              <p className="text-xs text-gray-500 mt-1">
+                Toggle to show/hide adjunct faculty members
+              </p>
             </div>
             <button
               onClick={() => setShowAdjuncts(!showAdjuncts)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-baylor-green focus:ring-offset-2 ${showAdjuncts ? 'bg-baylor-green' : 'bg-gray-200'
-                }`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-baylor-green focus:ring-offset-2 ${
+                showAdjuncts ? "bg-baylor-green" : "bg-gray-200"
+              }`}
             >
               <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showAdjuncts ? 'translate-x-6' : 'translate-x-1'
-                  }`}
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  showAdjuncts ? "translate-x-6" : "translate-x-1"
+                }`}
               />
             </button>
           </div>
           {!showAdjuncts && (
             <div className="mt-2 p-2 bg-baylor-green/5 border border-baylor-green/20 rounded-md">
               <p className="text-xs text-baylor-green">
-                Adjunct faculty are currently hidden. Only full-time faculty schedules are displayed.
+                Adjunct faculty are currently hidden. Only full-time faculty
+                schedules are displayed.
               </p>
             </div>
           )}
@@ -595,43 +732,60 @@ const FacultySchedules = () => {
           <div className="mt-4 pt-4 border-t border-gray-200">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center space-x-2">
-                <span className="text-sm font-medium text-gray-700">Comparing:</span>
+                <span className="text-sm font-medium text-gray-700">
+                  Comparing:
+                </span>
                 <span className="text-sm text-gray-600">
-                  {selectedFaculty.length} faculty member{selectedFaculty.length !== 1 ? 's' : ''}
+                  {selectedFaculty.length} faculty member
+                  {selectedFaculty.length !== 1 ? "s" : ""}
                 </span>
               </div>
-              {showAdjuncts && (() => {
-                const adjunctCount = selectedFaculty.filter(name => {
-                  const faculty = facultyData.find(f => f.name === name);
-                  return faculty && faculty.isAdjunct;
-                }).length;
-                return adjunctCount > 0 ? (
-                  <div className="text-xs text-gray-500">
-                    {adjunctCount} adjunct{adjunctCount !== 1 ? 's' : ''} included
-                  </div>
-                ) : null;
-              })()}
+              {showAdjuncts &&
+                (() => {
+                  const adjunctCount = selectedFaculty.filter((name) => {
+                    const faculty = facultyData.find((f) => f.name === name);
+                    return faculty && faculty.isAdjunct;
+                  }).length;
+                  return adjunctCount > 0 ? (
+                    <div className="text-xs text-gray-500">
+                      {adjunctCount} adjunct{adjunctCount !== 1 ? "s" : ""}{" "}
+                      included
+                    </div>
+                  ) : null;
+                })()}
             </div>
             <div className="flex items-center space-x-2 flex-wrap">
-              {selectedFaculty.map(facultyName => {
-                const faculty = facultyData.find(f => f.name === facultyName);
+              {selectedFaculty.map((facultyName) => {
+                const faculty = facultyData.find((f) => f.name === facultyName);
                 const programName = faculty?.program?.name;
                 const isAdjunct = faculty?.isAdjunct;
 
                 return (
-                  <div key={facultyName} className={`flex items-center px-3 py-1 rounded-full text-sm ${isAdjunct
-                    ? 'bg-baylor-gold/20 text-baylor-gold border border-baylor-gold/30'
-                    : 'bg-baylor-green/10 text-baylor-green'
-                    }`}>
+                  <div
+                    key={facultyName}
+                    className={`flex items-center px-3 py-1 rounded-full text-sm ${
+                      isAdjunct
+                        ? "bg-baylor-gold/20 text-baylor-gold border border-baylor-gold/30"
+                        : "bg-baylor-green/10 text-baylor-green"
+                    }`}
+                  >
                     <span>{facultyName}</span>
                     {programName && (
-                      <span className="ml-1 text-xs opacity-75">({programName})</span>
+                      <span className="ml-1 text-xs opacity-75">
+                        ({programName})
+                      </span>
                     )}
                     {isAdjunct && (
-                      <span className="ml-1 text-xs bg-baylor-gold/30 px-1 rounded">Adjunct</span>
+                      <span className="ml-1 text-xs bg-baylor-gold/30 px-1 rounded">
+                        Adjunct
+                      </span>
                     )}
                     <button
-                      onClick={() => setSelectedFaculty(prev => prev.filter(f => f !== facultyName))}
+                      onClick={() =>
+                        setSelectedFaculty((prev) =>
+                          prev.filter((f) => f !== facultyName),
+                        )
+                      }
                       className="ml-2 hover:text-red-500 transition-colors"
                     >
                       <X size={14} />
@@ -649,12 +803,20 @@ const FacultySchedules = () => {
           <div className="space-y-8">
             {selectedDays.length > 0 ? (
               selectedDays
-                .sort((a, b) => Object.keys(dayNames).indexOf(a) - Object.keys(dayNames).indexOf(b))
-                .map(dayCode => <DayTimelineView key={dayCode} dayCode={dayCode} />)
+                .sort(
+                  (a, b) =>
+                    Object.keys(dayNames).indexOf(a) -
+                    Object.keys(dayNames).indexOf(b),
+                )
+                .map((dayCode) => (
+                  <DayTimelineView key={dayCode} dayCode={dayCode} />
+                ))
             ) : (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
                 <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">No Days Selected</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  No Days Selected
+                </h3>
                 <p className="text-gray-600">
                   Please select at least one day to view schedules.
                 </p>
@@ -664,9 +826,12 @@ const FacultySchedules = () => {
         ) : (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
             <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Select Faculty to Compare</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Select Faculty to Compare
+            </h3>
             <p className="text-gray-600">
-              Choose one or more faculty members to view and compare their schedules.
+              Choose one or more faculty members to view and compare their
+              schedules.
             </p>
           </div>
         )}
@@ -684,11 +849,11 @@ const FacultySchedules = () => {
         <FacultyContactCard
           faculty={selectedFacultyForCard}
           onClose={() => setSelectedFacultyForCard(null)}
-          showNotification={() => { }}
+          showNotification={() => {}}
         />
       )}
     </div>
   );
 };
 
-export default FacultySchedules; 
+export default FacultySchedules;

@@ -416,9 +416,8 @@ const EmailLists = ({ embedded = false }) => {
 
   const clearStudentFilters = () => {
     setStudentFilters({
-      buildings: { include: [], exclude: [] },
-      jobTitles: { include: [], exclude: [] },
-      hasEmail: true,
+      buildings: [],
+      jobTitles: [],
     });
     setStudentSearchTerm("");
     setSelectedStudents([]);
@@ -873,15 +872,14 @@ const EmailLists = ({ embedded = false }) => {
 
   const clearFilters = () => {
     setFilters({
-      programs: { include: [], exclude: [] },
-      jobTitles: { include: [], exclude: [] },
-      buildings: { include: [], exclude: [] },
+      programs: [],
+      jobTitles: [],
+      buildings: [],
       roleFilter: "all",
       adjunct: "exclude",
       tenured: "all",
       upd: "all",
       isRemote: "all",
-      hasEmail: true,
     });
     setSearchTerm("");
     setSelectedPeople([]);
@@ -1066,7 +1064,7 @@ const EmailLists = ({ embedded = false }) => {
               <h1 className="text-2xl font-bold text-gray-900">Email Lists</h1>
             )}
             <HelpTooltip
-              content="This tool helps you create customized email lists for faculty, staff, and student workers."
+              content="Create custom email lists for faculty, staff, and student workers using clear, practical filters."
               position="right"
               variant="help"
             />
@@ -1120,15 +1118,19 @@ const EmailLists = ({ embedded = false }) => {
               Faculty & Staff
             </button>
             <button
-              onClick={() => setActiveTab("student-workers")}
-              className={`${
-                activeTab === "student-workers"
-                  ? "border-baylor-green text-baylor-green"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center px-4 py-2 border rounded-lg transition-colors ${
+                showFilters
+                  ? "bg-baylor-green text-white border-baylor-green"
+                  : "border-gray-300 text-gray-700 hover:bg-gray-50"
+              }`}
+              data-tutorial="advanced-filters-btn"
             >
-              <GraduationCap className="w-4 h-4" />
-              Student Workers
+              <Settings className="w-4 h-4 mr-2" />
+              Filters
+              <ChevronDown
+                className={`w-4 h-4 ml-2 transition-transform ${showFilters ? "rotate-180" : ""}`}
+              />
             </button>
           </nav>
         </div>
@@ -1146,7 +1148,7 @@ const EmailLists = ({ embedded = false }) => {
               <div className="text-sm text-amber-800">
                 <span className="font-medium">Note:</span> Adjunct faculty are
                 hidden by default. Uncheck "Exclude Adjuncts" below or use the
-                Advanced Filters to include them.
+                filters to include them.
               </div>
             </div>
           )}
@@ -1246,7 +1248,7 @@ const EmailLists = ({ embedded = false }) => {
                 data-tutorial="advanced-filters-btn"
               >
                 <Settings className="w-4 h-4 mr-2" />
-                Advanced Filters
+                Filters
                 <ChevronDown
                   className={`w-4 h-4 ml-2 transition-transform ${showFilters ? "rotate-180" : ""}`}
                 />
@@ -1270,14 +1272,13 @@ const EmailLists = ({ embedded = false }) => {
             {/* Expanded Filters */}
             {showFilters && (
               <div className="pt-4 border-t border-gray-200 space-y-6">
-                {/* Programs Filter */}
                 <div
-                  className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                  className="grid grid-cols-1 md:grid-cols-3 gap-4"
                   data-tutorial="program-filters"
                 >
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                      Include Programs
+                      Programs
                       <HelpTooltip
                         content="Select programs to only show people from those programs. Leave empty to show all."
                         position="right"
@@ -1286,102 +1287,46 @@ const EmailLists = ({ embedded = false }) => {
                     </label>
                     <MultiSelectDropdown
                       options={filterOptions.programs}
-                      selected={filters.programs.include}
+                      selected={filters.programs}
                       onChange={(selected) =>
                         setFilters((prev) => ({
                           ...prev,
-                          programs: { ...prev.programs, include: selected },
+                          programs: selected,
                         }))
                       }
-                      placeholder="Select programs to include..."
+                      placeholder="Select programs..."
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Exclude Programs
-                    </label>
-                    <MultiSelectDropdown
-                      options={filterOptions.programs}
-                      selected={filters.programs.exclude}
-                      onChange={(selected) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          programs: { ...prev.programs, exclude: selected },
-                        }))
-                      }
-                      placeholder="Select programs to exclude..."
-                    />
-                  </div>
-                </div>
-
-                {/* Job Titles Filter */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Include Job Titles
+                      Job Titles
                     </label>
                     <MultiSelectDropdown
                       options={filterOptions.jobTitles}
-                      selected={filters.jobTitles.include}
+                      selected={filters.jobTitles}
                       onChange={(selected) =>
                         setFilters((prev) => ({
                           ...prev,
-                          jobTitles: { ...prev.jobTitles, include: selected },
+                          jobTitles: selected,
                         }))
                       }
-                      placeholder="Select job titles to include..."
+                      placeholder="Select job titles..."
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Exclude Job Titles
-                    </label>
-                    <MultiSelectDropdown
-                      options={filterOptions.jobTitles}
-                      selected={filters.jobTitles.exclude}
-                      onChange={(selected) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          jobTitles: { ...prev.jobTitles, exclude: selected },
-                        }))
-                      }
-                      placeholder="Select job titles to exclude..."
-                    />
-                  </div>
-                </div>
-
-                {/* Buildings Filter */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Include Buildings
+                      Buildings
                     </label>
                     <MultiSelectDropdown
                       options={filterOptions.buildings}
-                      selected={filters.buildings.include}
+                      selected={filters.buildings}
                       onChange={(selected) =>
                         setFilters((prev) => ({
                           ...prev,
-                          buildings: { ...prev.buildings, include: selected },
+                          buildings: selected,
                         }))
                       }
-                      placeholder="Select buildings to include..."
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Exclude Buildings
-                    </label>
-                    <MultiSelectDropdown
-                      options={filterOptions.buildings}
-                      selected={filters.buildings.exclude}
-                      onChange={(selected) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          buildings: { ...prev.buildings, exclude: selected },
-                        }))
-                      }
-                      placeholder="Select buildings to exclude..."
+                      placeholder="Select buildings..."
                     />
                   </div>
                 </div>
@@ -1483,25 +1428,6 @@ const EmailLists = ({ embedded = false }) => {
                       <option value="all">All</option>
                       <option value="include">Remote Only</option>
                       <option value="exclude">Exclude Remote</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Email Requirement
-                    </label>
-                    <select
-                      value={filters.hasEmail ? "yes" : "no"}
-                      onChange={(e) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          hasEmail: e.target.value === "yes",
-                        }))
-                      }
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                    >
-                      <option value="yes">Has Email</option>
-                      <option value="no">Include No Email</option>
                     </select>
                   </div>
                 </div>
@@ -1968,10 +1894,8 @@ const EmailLists = ({ embedded = false }) => {
               </div>
 
               {/* Clear Filters */}
-              {(studentFilters.buildings.include.length > 0 ||
-                studentFilters.buildings.exclude.length > 0 ||
-                studentFilters.jobTitles.include.length > 0 ||
-                studentFilters.jobTitles.exclude.length > 0 ||
+              {(studentFilters.buildings.length > 0 ||
+                studentFilters.jobTitles.length > 0 ||
                 studentSearchTerm) && (
                 <button
                   onClick={clearStudentFilters}
@@ -1988,34 +1912,17 @@ const EmailLists = ({ embedded = false }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Buildings
                 </label>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <MultiSelectDropdown
-                      options={studentFilterOptions.buildings}
-                      selected={studentFilters.buildings.include}
-                      onChange={(sel) =>
-                        setStudentFilters((prev) => ({
-                          ...prev,
-                          buildings: { ...prev.buildings, include: sel },
-                        }))
-                      }
-                      placeholder="Include buildings..."
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <MultiSelectDropdown
-                      options={studentFilterOptions.buildings}
-                      selected={studentFilters.buildings.exclude}
-                      onChange={(sel) =>
-                        setStudentFilters((prev) => ({
-                          ...prev,
-                          buildings: { ...prev.buildings, exclude: sel },
-                        }))
-                      }
-                      placeholder="Exclude buildings..."
-                    />
-                  </div>
-                </div>
+                <MultiSelectDropdown
+                  options={studentFilterOptions.buildings}
+                  selected={studentFilters.buildings}
+                  onChange={(sel) =>
+                    setStudentFilters((prev) => ({
+                      ...prev,
+                      buildings: sel,
+                    }))
+                  }
+                  placeholder="Select buildings..."
+                />
               </div>
 
               {/* Job Title Filter */}
@@ -2025,14 +1932,14 @@ const EmailLists = ({ embedded = false }) => {
                 </label>
                 <MultiSelectDropdown
                   options={studentFilterOptions.jobTitles}
-                  selected={studentFilters.jobTitles.include}
+                  selected={studentFilters.jobTitles}
                   onChange={(sel) =>
                     setStudentFilters((prev) => ({
                       ...prev,
-                      jobTitles: { ...prev.jobTitles, include: sel },
+                      jobTitles: sel,
                     }))
                   }
-                  placeholder="Filter by job title..."
+                  placeholder="Select job titles..."
                 />
               </div>
             </div>

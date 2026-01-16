@@ -29,7 +29,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         debug: false,
         disable_compression: true, // Helps with some adblockers
         // Suppress errors when blocked by adblockers
-        on_request_error: () => { }, // Silently handle failed requests
+        on_request_error: () => {}, // Silently handle failed requests
         request_batching: {
           max_retry_attempts: 0, // Don't retry failed requests
         },
@@ -37,9 +37,12 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         loaded: (posthog) => {
           posthog.register({ environment: import.meta.env.MODE });
         },
+        autocapture: false,
       }}
     >
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <BrowserRouter
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <AuthProvider>
           <AppConfigProvider>
             <UIProvider>

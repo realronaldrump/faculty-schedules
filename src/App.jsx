@@ -66,16 +66,19 @@ const navigationItems = [
         id: "dashboard",
         label: "Dashboard",
         path: "dashboard",
+        canonicalId: "dashboard",
       },
       {
         id: "live-view",
         label: "Today",
         path: "live-view",
+        canonicalId: "live-view",
       },
       {
         id: "department-insights",
         label: "Department Insights",
         path: "analytics/department-insights",
+        canonicalId: "analytics/department-insights",
         permissions: {
           hideFromRoles: ["faculty"],
         },
@@ -91,21 +94,25 @@ const navigationItems = [
         id: "people-directory",
         label: "Directory",
         path: "people/people-directory",
+        canonicalId: "people/people-directory",
       },
       {
         id: "email-lists",
         label: "Email Lists",
         path: "people/email-lists",
+        canonicalId: "people/email-lists",
       },
       {
         id: "office-directory",
         label: "Offices",
         path: "resources/building-directory",
+        canonicalId: "resources/building-directory",
       },
       {
         id: "program-management",
         label: "Programs & UPDs",
         path: "analytics/program-management",
+        canonicalId: "analytics/program-management",
         hidden: true,
         permissions: {
           hideFromRoles: ["faculty"],
@@ -115,11 +122,12 @@ const navigationItems = [
         id: "baylor-id-manager",
         label: "Baylor IDs",
         path: "people/baylor-id-manager",
+        canonicalId: "people/baylor-id-manager",
         hidden: true,
         permissions: {
           hideFromRoles: ["faculty"],
         },
-      }
+      },
     ],
   },
   {
@@ -131,28 +139,33 @@ const navigationItems = [
         id: "faculty-schedules",
         label: "Faculty",
         path: "scheduling/faculty-schedules",
+        canonicalId: "scheduling/faculty-schedules",
       },
       {
         id: "individual-availability",
         label: "Faculty Availability",
         path: "scheduling/individual-availability",
+        canonicalId: "scheduling/faculty-schedules",
         hidden: true,
       },
       {
         id: "group-meeting-scheduler",
         label: "Group Meetings",
         path: "scheduling/group-meeting-scheduler",
+        canonicalId: "scheduling/faculty-schedules",
         hidden: true,
       },
       {
         id: "room-schedules",
         label: "Rooms",
         path: "scheduling/room-schedules",
+        canonicalId: "scheduling/room-schedules",
       },
       {
         id: "outlook-export",
         label: "Room Calendar Export",
         path: "tools/outlook-export",
+        canonicalId: "scheduling/room-schedules",
         hidden: true,
         permissions: {
           hideFromRoles: ["faculty"],
@@ -162,6 +175,7 @@ const navigationItems = [
         id: "room-grid-generator",
         label: "Room Grid Generator",
         path: "tools/room-grid-generator",
+        canonicalId: "scheduling/room-schedules",
         hidden: true,
         permissions: {
           hideFromRoles: ["faculty"],
@@ -171,6 +185,7 @@ const navigationItems = [
         id: "student-schedules",
         label: "Student Workers",
         path: "scheduling/student-schedules",
+        canonicalId: "scheduling/student-schedules",
         permissions: {
           hideFromRoles: ["faculty"],
         },
@@ -179,6 +194,7 @@ const navigationItems = [
         id: "student-worker-analytics",
         label: "Student Worker Payroll",
         path: "analytics/student-worker-analytics",
+        canonicalId: "scheduling/student-schedules",
         hidden: true,
         permissions: {
           hideFromRoles: ["faculty"],
@@ -195,6 +211,7 @@ const navigationItems = [
         id: "app-settings",
         label: "App Settings",
         path: "administration/app-settings",
+        canonicalId: "administration/app-settings",
         permissions: {
           hideFromRoles: ["faculty"],
         },
@@ -203,6 +220,7 @@ const navigationItems = [
         id: "smart-import",
         label: "Import Wizard",
         path: "tools/import-wizard",
+        canonicalId: "tools/import-wizard",
         permissions: {
           hideFromRoles: ["faculty"],
         },
@@ -211,6 +229,7 @@ const navigationItems = [
         id: "crn-tools",
         label: "CRN Quality Tools",
         path: "tools/crn-tools",
+        canonicalId: "tools/crn-tools",
         permissions: {
           hideFromRoles: ["faculty"],
         },
@@ -219,6 +238,7 @@ const navigationItems = [
         id: "course-management",
         label: "Schedule Data",
         path: "analytics/course-management",
+        canonicalId: "analytics/course-management",
         permissions: {
           hideFromRoles: ["faculty"],
         },
@@ -227,6 +247,7 @@ const navigationItems = [
         id: "temperature-monitoring",
         label: "Temperature Monitoring",
         path: "tools/temperature-monitoring",
+        canonicalId: "tools/temperature-monitoring",
         permissions: {
           hideFromRoles: ["faculty"],
         },
@@ -235,6 +256,7 @@ const navigationItems = [
         id: "data-hygiene",
         label: "Data Hygiene",
         path: "tools/data-hygiene",
+        canonicalId: "tools/data-hygiene",
         hidden: true,
         permissions: {
           hideFromRoles: ["faculty", "staff"],
@@ -244,6 +266,7 @@ const navigationItems = [
         id: "access-control",
         label: "Access Control",
         path: "administration/access-control",
+        canonicalId: "administration/access-control",
         hidden: true,
         permissions: {
           hideFromRoles: ["faculty", "staff"],
@@ -253,6 +276,7 @@ const navigationItems = [
         id: "recent-changes",
         label: "Recent Changes",
         path: "administration/recent-changes",
+        canonicalId: "administration/recent-changes",
         hidden: true,
         permissions: {
           hideFromRoles: ["faculty", "staff"],
@@ -269,16 +293,19 @@ const navigationItems = [
         id: "help",
         label: "Tutorials",
         path: "help/tutorials",
+        canonicalId: "help/tutorials",
       },
       {
         id: "baylor-systems",
         label: "Baylor Systems",
         path: "resources/baylor-systems",
+        canonicalId: "resources/baylor-systems",
       },
       {
         id: "baylor-acronyms",
         label: "Acronyms",
         path: "resources/baylor-acronyms",
+        canonicalId: "resources/baylor-acronyms",
       },
     ],
   },
@@ -361,6 +388,17 @@ function App() {
     registerNavigationPages(navigationItems);
   }, []);
 
+  useEffect(() => {
+    const canonicalId = getCanonicalPageId();
+    if (canonicalId) {
+      try {
+        window?.posthog?.register({ canonical_page: canonicalId });
+      } catch (error) {
+        // Ignore analytics failures
+      }
+    }
+  }, [currentPage]);
+
   // Check authentication on mount
   useEffect(() => {
     const authStatus = localStorage.getItem("isAuthenticated");
@@ -436,6 +474,20 @@ function App() {
         return false;
       }) || null
     );
+  };
+
+  const getCanonicalPageId = () => {
+    if (!currentPage) return currentPage;
+    for (const item of navigationItems) {
+      if (item.path && item.path === currentPage) {
+        return item.canonicalId || item.path;
+      }
+      if (item.children) {
+        const child = item.children.find((c) => c.path === currentPage);
+        if (child) return child.canonicalId || child.path;
+      }
+    }
+    return currentPage;
   };
 
   // Page content renderer
@@ -777,8 +829,8 @@ function App() {
                               setShowSemesterDropdown(false);
                             }}
                             className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${semester === selectedSemester
-                              ? "bg-baylor-green/5 text-baylor-green font-medium"
-                              : "text-gray-900"
+                                ? "bg-baylor-green/5 text-baylor-green font-medium"
+                                : "text-gray-900"
                               }`}
                           >
                             <span className="flex items-center justify-between">
@@ -819,8 +871,8 @@ function App() {
                       key={child.id}
                       onClick={() => handleNavigate(child.path)}
                       className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${currentPage === child.path
-                        ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
-                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                          ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
+                          : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
                         }`}
                     >
                       {child.label}

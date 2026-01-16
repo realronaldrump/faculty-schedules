@@ -184,10 +184,21 @@ export const DataProvider = ({ children }) => {
         return s.roomName || '';
       };
 
+      const courseTitle =
+        schedule.courseTitle ||
+        schedule['Course Title'] ||
+        schedule.Title ||
+        schedule.title ||
+        '';
+      const crn = schedule.crn || schedule.CRN || '';
+
       const commonProps = {
         ...schedule,
         Course: schedule.courseCode || '',
-        'Course Title': schedule.courseTitle || '',
+        courseTitle,
+        crn,
+        'Course Title': courseTitle,
+        CRN: crn,
         Instructor: displayName,
         instructorName: displayName,
         InstructorId: primaryInstructorId || '',

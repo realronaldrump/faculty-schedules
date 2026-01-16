@@ -174,15 +174,6 @@ export const TUTORIALS = {
         actionType: "click",
       },
       {
-        id: "room-search",
-        title: "Search for Rooms",
-        content:
-          "Type a room number or partial name to quickly filter the room list. This is helpful when you're looking for a specific classroom.",
-        target: '[data-tutorial="room-search"]',
-        position: "bottom",
-        action: null,
-      },
-      {
         id: "building-filter",
         title: "Filter by Building",
         content:

@@ -3,17 +3,12 @@ import {
   MapPin,
   Calendar,
   CalendarDays,
-  Clock,
-  Search,
   Grid,
   List,
-  Filter,
   Building2,
   X,
   SlidersHorizontal,
   ArrowUpDown,
-  Download,
-  Printer,
   Play,
   Info,
 } from "lucide-react";
@@ -68,7 +63,6 @@ const RoomSchedules = ({ embedded = false }) => {
   }, [selectedDate, selectedTermMeta]);
   const [viewMode, setViewMode] = useState("timeline"); // 'timeline', 'list', or 'week'
   const [selectedRoom, setSelectedRoom] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [selectedBuilding, setSelectedBuilding] = useState("");
   const [showOnlyInUse, setShowOnlyInUse] = useState(false);
@@ -136,18 +130,15 @@ const RoomSchedules = ({ embedded = false }) => {
     );
   }, [uniqueRooms, buildingConfigVersion]);
 
-  // Filter rooms based on search
+  // Filter rooms based on building
   const filteredRooms = useMemo(() => {
-    const bySearch = uniqueRooms.filter((room) =>
-      room.toLowerCase().includes(searchTerm.toLowerCase()),
+    if (!selectedBuilding) {
+      return uniqueRooms;
+    }
+    return uniqueRooms.filter(
+      (room) => getBuildingFromRoom(room) === selectedBuilding,
     );
-    const byBuilding = selectedBuilding
-      ? bySearch.filter(
-          (room) => getBuildingFromRoom(room) === selectedBuilding,
-        )
-      : bySearch;
-    return byBuilding;
-  }, [uniqueRooms, searchTerm, selectedBuilding]);
+  }, [uniqueRooms, selectedBuilding]);
 
   // Calculate daily room schedules
   const dailyRoomSchedules = useMemo(() => {
@@ -703,7 +694,6 @@ const RoomSchedules = ({ embedded = false }) => {
             setSelectedDate(new Date());
             setViewMode("timeline");
             setSelectedRoom("");
-            setSearchTerm("");
             setSelectedBuilding("");
             setShowOnlyInUse(false);
             setDensity("comfortable");
@@ -729,7 +719,6 @@ const RoomSchedules = ({ embedded = false }) => {
             </div>
             {(selectedRoom ||
               selectedBuilding ||
-              searchTerm ||
               showOnlyInUse ||
               sortBy !== "room" ||
               density !== "comfortable") && (
@@ -737,7 +726,6 @@ const RoomSchedules = ({ embedded = false }) => {
                 onClick={() => {
                   setSelectedRoom("");
                   setSelectedBuilding("");
-                  setSearchTerm("");
                   setShowOnlyInUse(false);
                   setSortBy("room");
                   setDensity("comfortable");
@@ -786,34 +774,14 @@ const RoomSchedules = ({ embedded = false }) => {
             </div>
           </div>
 
-          {/* Row 2: Search, Building, Room, View Mode */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-            {/* Room Filter */}
-            <div className="flex-1 max-w-full">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Filter Rooms
-              </label>
-              <div className="relative" data-tutorial="room-search">
-                <Search
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                  size={16}
-                />
-                <input
-                  type="text"
-                  placeholder="Search rooms..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
-                />
-              </div>
-            </div>
-
+          {/* Row 2: Building, Room, View Mode */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
             {/* Building Filter */}
-            <div className="flex-1 max-w-full">
+            <div className="flex-1 max-w-full" data-tutorial="building-filter">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Building
               </label>
-              <div className="relative" data-tutorial="building-filter">
+              <div className="relative">
                 <Building2
                   className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
                   size={16}
@@ -1067,11 +1035,6 @@ const RoomSchedules = ({ embedded = false }) => {
               })}{" "}
               Schedule
             </h2>
-            {searchTerm && (
-              <div className="text-sm text-gray-600">
-                Filtered by: "{searchTerm}"
-              </div>
-            )}
           </div>
         )}
 
@@ -1112,9 +1075,7 @@ const RoomSchedules = ({ embedded = false }) => {
               No Rooms Found
             </h3>
             <p className="text-gray-600">
-              {searchTerm
-                ? `No rooms match your search "${searchTerm}". Try adjusting your search criteria.`
-                : "No room data available for the selected day."}
+              No room data available for the selected day.
             </p>
           </div>
         )}

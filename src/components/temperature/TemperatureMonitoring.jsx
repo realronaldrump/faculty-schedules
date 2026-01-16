@@ -126,6 +126,7 @@ const TemperatureMonitoring = () => {
   const [viewMode, setViewMode] = useState('floorplan');
   const [snapshotDocs, setSnapshotDocs] = useState([]);
   const [hiddenBuildingCodes, setHiddenBuildingCodes] = useState(new Set());
+  const [hiddenLoaded, setHiddenLoaded] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [deviceDocs, setDeviceDocs] = useState({});
@@ -280,7 +281,11 @@ const TemperatureMonitoring = () => {
 
   // Load hidden buildings first (for admins)
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin) {
+      // Non-admins don't see hidden buildings, mark as loaded immediately
+      setHiddenLoaded(true);
+      return;
+    }
     const fetchHidden = async () => {
       try {
         const q = query(collection(db, 'temperatureBuildingSettings'), where('hidden', '==', true));
@@ -289,6 +294,8 @@ const TemperatureMonitoring = () => {
         setHiddenBuildingCodes(codes);
       } catch (err) {
         console.error('Error fetching hidden buildings:', err);
+      } finally {
+        setHiddenLoaded(true);
       }
     };
     fetchHidden();
@@ -296,10 +303,12 @@ const TemperatureMonitoring = () => {
 
   // Set default building - skip hidden buildings unless explicitly saved as default
   useEffect(() => {
+    // Wait for hidden buildings to load before selecting default
+    if (!hiddenLoaded) return;
     if (!selectedBuilding && buildingList.length > 0) {
       const defaultBuilding = localStorage.getItem('temperatureDefaultBuilding');
       // If user had explicitly set a default building, use it even if hidden
-      if (defaultBuilding && buildingList.includes(defaultBuilding)) {
+      if (defaultBuilding && buildingList.includes(defaultBuilding) && !hiddenBuildingCodes.has(defaultBuilding)) {
         setSelectedBuilding(defaultBuilding);
       } else {
         // Find the first non-hidden building
@@ -307,7 +316,7 @@ const TemperatureMonitoring = () => {
         setSelectedBuilding(firstNonHidden || buildingList[0]);
       }
     }
-  }, [buildingList, selectedBuilding, hiddenBuildingCodes]);
+  }, [buildingList, selectedBuilding, hiddenBuildingCodes, hiddenLoaded]);
 
   useEffect(() => {
     if (!selectedBuilding) return;
@@ -2410,9 +2419,9 @@ const TemperatureMonitoring = () => {
               <label className="block text-xs font-medium text-gray-500 mb-1">Building</label>
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
-                  <MapIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <MapIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10 pointer-events-none" />
                   <select
-                    className="form-input pl-9 w-full font-medium"
+                    className="form-select pl-9 w-full font-medium"
                     value={selectedBuilding}
                     onChange={(e) => setSelectedBuilding(e.target.value)}
                   >

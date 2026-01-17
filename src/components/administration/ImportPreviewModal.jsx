@@ -12,6 +12,43 @@ import {
 } from 'lucide-react';
 import { usePeople } from '../../contexts/PeopleContext';
 
+const INTERNAL_SCHEDULE_DIFF_KEYS = new Set([
+  'identityKey',
+  'identityKeys',
+  'identitySource',
+  'updatedAt'
+]);
+
+const FIELD_LABELS = {
+  courseCode: 'Course Code',
+  courseTitle: 'Course Title',
+  section: 'Section',
+  crn: 'CRN',
+  credits: 'Credits',
+  term: 'Semester',
+  termCode: 'Semester Code',
+  academicYear: 'Academic Year',
+  instructorName: 'Instructor',
+  instructorBaylorId: 'Instructor Baylor ID',
+  instructorIds: 'Instructor IDs',
+  instructorAssignments: 'Instructor Assignments',
+  roomNames: 'Rooms',
+  roomIds: 'Room IDs',
+  spaceIds: 'Space IDs',
+  spaceDisplayNames: 'Room Labels',
+  locationType: 'Location Type',
+  locationLabel: 'Location',
+  scheduleType: 'Schedule Type',
+  status: 'Status',
+  meetingPatterns: 'Meeting Patterns',
+  instructionMethod: 'Instruction Method'
+};
+
+const formatValue = (value) => {
+  if (value === undefined || value === null || value === '') return '-';
+  return String(value);
+};
+
 const ImportPreviewModal = ({
   transaction,
   onClose,
@@ -31,11 +68,49 @@ const ImportPreviewModal = ({
 
   const allChanges = useMemo(() => transaction?.getAllChanges() || [], [transaction]);
   const matchingIssues = useMemo(() => transaction?.matchingIssues || [], [transaction]);
+  const changeMeta = useMemo(() => {
+    const metaById = new Map();
+    const visibleChanges = [];
+    const internalOnlyChanges = [];
+
+    allChanges.forEach((change) => {
+      let displayDiff = Array.isArray(change.diff) ? change.diff : [];
+      let internalDiff = [];
+      let internalOnly = false;
+
+      if (change.collection === 'schedules' && change.action === 'modify') {
+        const updateKeys = Object.keys(change.newData || {});
+        const visibleKeys = updateKeys.filter((key) => !INTERNAL_SCHEDULE_DIFF_KEYS.has(key));
+        internalOnly = updateKeys.length > 0 && visibleKeys.length === 0;
+
+        if (Array.isArray(change.diff) && change.diff.length > 0) {
+          internalDiff = change.diff.filter((entry) => INTERNAL_SCHEDULE_DIFF_KEYS.has(entry.key));
+          displayDiff = change.diff.filter((entry) => !INTERNAL_SCHEDULE_DIFF_KEYS.has(entry.key));
+        }
+      }
+
+      metaById.set(change.id, { displayDiff, internalDiff, internalOnly });
+      if (internalOnly) {
+        internalOnlyChanges.push(change);
+      } else {
+        visibleChanges.push(change);
+      }
+    });
+
+    return { metaById, visibleChanges, internalOnlyChanges };
+  }, [allChanges]);
+  const visibleChanges = changeMeta.visibleChanges;
+  const internalOnlyChanges = changeMeta.internalOnlyChanges;
   const people = useMemo(() => Array.isArray(directoryPeople) ? directoryPeople : [], [directoryPeople]);
   const previewSummary = useMemo(() => transaction?.previewSummary || null, [transaction]);
   const validation = useMemo(() => transaction?.validation || {}, [transaction]);
   const validationErrors = Array.isArray(validation.errors) ? validation.errors : [];
   const validationWarnings = Array.isArray(validation.warnings) ? validation.warnings : [];
+  const collisionSummary = validation?.identityCollisionSummary || null;
+  const displayWarnings = useMemo(
+    () => validationWarnings.filter((warn) => !/duplicate schedule identities/i.test(warn)),
+    [validationWarnings]
+  );
 
   const groupedChanges = useMemo(() => {
     const groups = {
@@ -44,14 +119,14 @@ const ImportPreviewModal = ({
       rooms: { added: [], modified: [], deleted: [] }
     };
 
-    allChanges.forEach(change => {
+    visibleChanges.forEach(change => {
       const actionKey = change.action === 'add' ? 'added' :
         change.action === 'modify' ? 'modified' : 'deleted';
       groups[change.collection][actionKey].push(change);
     });
 
     return groups;
-  }, [allChanges]);
+  }, [visibleChanges]);
 
   const pendingPersonChangeIds = useMemo(() => {
     return new Set(
@@ -73,19 +148,34 @@ const ImportPreviewModal = ({
   }, [allChanges]);
 
   const stats = useMemo(() => {
-    const selected = Array.from(selectedChanges);
+    const selectedVisible = visibleChanges.filter((change) => selectedChanges.has(change.id));
     return {
-      total: allChanges.length,
-      selected: selected.length,
-      schedules: selected.filter(id => allChanges.find(c => c.id === id)?.collection === 'schedules').length,
-      people: selected.filter(id => allChanges.find(c => c.id === id)?.collection === 'people').length,
-      rooms: selected.filter(id => allChanges.find(c => c.id === id)?.collection === 'rooms').length
+      totalVisible: visibleChanges.length,
+      selectedVisible: selectedVisible.length,
+      selectedTotal: selectedChanges.size,
+      internalOnly: internalOnlyChanges.length,
+      schedules: selectedVisible.filter(change => change.collection === 'schedules').length,
+      people: selectedVisible.filter(change => change.collection === 'people').length,
+      rooms: selectedVisible.filter(change => change.collection === 'rooms').length
     };
-  }, [selectedChanges, allChanges]);
+  }, [selectedChanges, visibleChanges, internalOnlyChanges]);
+
+  const visibleChangeIds = useMemo(
+    () => new Set(visibleChanges.map((change) => change.id)),
+    [visibleChanges]
+  );
+  const internalChangeIds = useMemo(
+    () => new Set(internalOnlyChanges.map((change) => change.id)),
+    [internalOnlyChanges]
+  );
 
   const updateSelectedChanges = (nextSelected) => {
-    setSelectedChanges(nextSelected);
-    setSelectAll(nextSelected.size === allChanges.length);
+    const merged = new Set(nextSelected);
+    internalChangeIds.forEach((id) => merged.add(id));
+    setSelectedChanges(merged);
+    const allVisibleSelected = visibleChangeIds.size > 0 &&
+      Array.from(visibleChangeIds).every((id) => merged.has(id));
+    setSelectAll(allVisibleSelected);
   };
 
   React.useEffect(() => {
@@ -104,8 +194,7 @@ const ImportPreviewModal = ({
     if (allChanges.length > 0 && selectedChanges.size === 0) {
       const initial = new Set(allChanges.map(c => c.id));
       pendingPersonChangeIds.forEach((id) => initial.delete(id));
-      setSelectedChanges(initial);
-      setSelectAll(initial.size === allChanges.length);
+      updateSelectedChanges(initial);
     }
   }, [allChanges, pendingPersonChangeIds, transaction?.id]);
 
@@ -125,7 +214,7 @@ const ImportPreviewModal = ({
     if (selectAll) {
       updateSelectedChanges(new Set());
     } else {
-      updateSelectedChanges(new Set(allChanges.map(c => c.id)));
+      updateSelectedChanges(new Set(visibleChanges.map(c => c.id)));
     }
   };
 
@@ -186,11 +275,13 @@ const ImportPreviewModal = ({
     // Build mapping of selected field keys for modify changes
     const fieldMap = {};
     allChanges.forEach((change) => {
-      if (change.action === 'modify' && selectedChanges.has(change.id) && change.diff && change.diff.length > 0) {
-        const selectedSet = selectedFieldsByChange[change.id];
-        if (selectedSet && selectedSet.size > 0) {
-          fieldMap[change.id] = Array.from(selectedSet);
-        }
+      if (change.action !== 'modify' || !selectedChanges.has(change.id)) return;
+      const meta = changeMeta.metaById.get(change.id);
+      const diff = meta?.displayDiff || change.diff || [];
+      if (diff.length === 0) return;
+      const selectedSet = selectedFieldsByChange[change.id];
+      if (selectedSet && selectedSet.size > 0) {
+        fieldMap[change.id] = Array.from(selectedSet);
       }
     });
     onCommit(
@@ -228,21 +319,41 @@ const ImportPreviewModal = ({
     }
   };
 
+  const getDisplayData = (change) => {
+    if (!change) return {};
+    if (change.action === 'modify') {
+      return { ...(change.originalData || {}), ...(change.newData || {}) };
+    }
+    if (change.action === 'delete') {
+      return change.originalData || {};
+    }
+    return change.newData || {};
+  };
+
   const formatChangeTitle = (change) => {
+    const data = getDisplayData(change);
     if (change.collection === 'schedules') {
-      return `${change.newData.courseCode} - ${change.newData.courseTitle}`;
+      const courseCode = data.courseCode || '';
+      const section = data.section || '';
+      const title = data.courseTitle || '';
+      const crn = data.crn || '';
+      const base = [courseCode, section].filter(Boolean).join(' ') || crn || 'Schedule';
+      return title ? `${base} - ${title}` : base;
     } else if (change.collection === 'people') {
-      return `${change.newData.firstName} ${change.newData.lastName}`;
+      const first = data.firstName || '';
+      const last = data.lastName || '';
+      return `${first} ${last}`.trim() || 'Person';
     } else if (change.collection === 'rooms') {
-      return change.newData.displayName || change.newData.name;
+      return data.displayName || data.name || 'Room';
     }
     return 'Unknown';
   };
 
   const formatChangeDetails = (change) => {
+    const data = getDisplayData(change);
     if (change.collection === 'schedules') {
-      const meetingSummary = Array.isArray(change.newData.meetingPatterns)
-        ? change.newData.meetingPatterns
+      const meetingSummary = Array.isArray(data.meetingPatterns)
+        ? data.meetingPatterns
           .map((pattern) => {
             if (pattern.day && pattern.startTime && pattern.endTime) {
               return `${pattern.day} ${pattern.startTime}-${pattern.endTime}`;
@@ -254,55 +365,70 @@ const ImportPreviewModal = ({
         : '';
 
       return {
-        'Course Code': change.newData.courseCode || '',
-        'Course Title': change.newData.courseTitle || '',
-        'Section': change.newData.section || '',
-        'CRN': change.newData.crn || '',
-        'Credits': change.newData.credits ?? '',
-        'Semester': change.newData.term || '',
-        'Semester Code': change.newData.termCode || '',
-        'Academic Year': change.newData.academicYear || '',
-        'Instructor(s)': change.newData.instructorName || '',
-        'Instructor Baylor ID': change.newData.instructorBaylorId || '',
-        'Instructor IDs (linked)': Array.isArray(change.newData.instructorIds)
-          ? change.newData.instructorIds.join(', ')
-          : (change.newData.instructorId || ''),
-        'Location Type': change.newData.locationType || '',
-        'Location Label': change.newData.locationLabel || '',
-        'Room Names': Array.isArray(change.newData.roomNames)
-          ? change.newData.roomNames.join(', ')
-          : (change.newData.roomName || ''),
-        'Room IDs': Array.isArray(change.newData.roomIds)
-          ? change.newData.roomIds.join(', ')
+        'Course Code': data.courseCode || '',
+        'Course Title': data.courseTitle || '',
+        'Section': data.section || '',
+        'CRN': data.crn || '',
+        'Credits': data.credits ?? '',
+        'Semester': data.term || '',
+        'Semester Code': data.termCode || '',
+        'Academic Year': data.academicYear || '',
+        'Instructor(s)': data.instructorName || '',
+        'Instructor Baylor ID': data.instructorBaylorId || '',
+        'Instructor IDs (linked)': Array.isArray(data.instructorIds)
+          ? data.instructorIds.join(', ')
+          : (data.instructorId || ''),
+        'Location Type': data.locationType || '',
+        'Location Label': data.locationLabel || '',
+        'Room Names': Array.isArray(data.roomNames)
+          ? data.roomNames.join(', ')
+          : (data.roomName || ''),
+        'Room IDs': Array.isArray(data.roomIds)
+          ? data.roomIds.join(', ')
           : '',
-        'Schedule Type': change.newData.scheduleType || '',
-        'Status': change.newData.status || '',
+        'Schedule Type': data.scheduleType || '',
+        'Status': data.status || '',
         'Meeting Patterns': meetingSummary
       };
     } else if (change.collection === 'people') {
       return {
-        'Name': `${change.newData.firstName} ${change.newData.lastName}`,
-        'Email': change.newData.email,
-        'Phone': change.newData.phone || '',
-        'Office': change.newData.office || '',
-        'Title': change.newData.title || '',
-        'Job Title': change.newData.jobTitle || '',
-        'Department': change.newData.department || ''
+        'Name': `${data.firstName || ''} ${data.lastName || ''}`.trim(),
+        'Email': data.email,
+        'Phone': data.phone || '',
+        'Office': data.office || '',
+        'Title': data.title || '',
+        'Job Title': data.jobTitle || '',
+        'Department': data.department || ''
       };
     } else if (change.collection === 'rooms') {
       return {
-        'Name': change.newData.name,
-        'Display Name': change.newData.displayName,
-        'Building': change.newData.building || '',
-        'Type': change.newData.type || ''
+        'Name': data.name,
+        'Display Name': data.displayName,
+        'Building': data.building || '',
+        'Type': data.type || ''
       };
     }
     return {};
   };
 
   const renderFieldDiffs = (change) => {
-    if (!change.diff || change.diff.length === 0) return null;
-    const selectedSet = selectedFieldsByChange[change.id] || new Set(change.diff.map(d => d.key));
+    const meta = changeMeta.metaById.get(change.id);
+    const diff = meta?.displayDiff || change.diff || [];
+    const internalDiff = meta?.internalDiff || [];
+    const internalOnly = meta?.internalOnly || false;
+
+    if (!diff || diff.length === 0) {
+      if (internalOnly || internalDiff.length > 0) {
+        return (
+          <div className="mt-3 text-xs text-gray-600">
+            No visible field changes. Internal identity metadata will be updated automatically.
+          </div>
+        );
+      }
+      return null;
+    }
+
+    const selectedSet = selectedFieldsByChange[change.id] || new Set(diff.map(d => d.key));
 
     const toggleField = (key) => {
       setSelectedFieldsByChange((prev) => {
@@ -315,22 +441,27 @@ const ImportPreviewModal = ({
     const toggleAllFields = (checked) => {
       setSelectedFieldsByChange((prev) => ({
         ...prev,
-        [change.id]: checked ? new Set(change.diff.map(d => d.key)) : new Set()
+        [change.id]: checked ? new Set(diff.map(d => d.key)) : new Set()
       }));
     };
 
-    const allChecked = selectedSet.size === change.diff.length;
+    const allChecked = selectedSet.size === diff.length;
 
     return (
       <div className="mt-3">
         <div className="flex items-center mb-2">
           <label className="flex items-center space-x-2 cursor-pointer text-sm text-gray-700">
             <input type="checkbox" className="form-checkbox h-4 w-4 text-baylor-green" checked={allChecked} onChange={(e) => toggleAllFields(e.target.checked)} />
-            <span>Select all fields ({selectedSet.size}/{change.diff.length})</span>
+            <span>Select all fields ({selectedSet.size}/{diff.length})</span>
           </label>
         </div>
+        {internalDiff.length > 0 && (
+          <div className="text-xs text-gray-500 mb-2">
+            Internal identity metadata will also be updated.
+          </div>
+        )}
         <div className="divide-y divide-gray-100">
-          {change.diff.map(({ key, from, to }) => (
+          {diff.map(({ key, from, to }) => (
             <label key={key} className="flex items-start py-2 space-x-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -339,9 +470,9 @@ const ImportPreviewModal = ({
                 onChange={() => toggleField(key)}
               />
               <div className="flex-1">
-                <div className="text-xs text-gray-500">{key}</div>
-                <div className="text-sm text-gray-900">{String(to || '')}</div>
-                <div className="text-xs text-gray-500 line-through">{String(from || '')}</div>
+                <div className="text-xs text-gray-500">{FIELD_LABELS[key] || key}</div>
+                <div className="text-sm text-gray-900">{formatValue(to)}</div>
+                <div className="text-xs text-gray-500 line-through">{formatValue(from)}</div>
               </div>
             </label>
           ))}
@@ -376,8 +507,8 @@ const ImportPreviewModal = ({
           <div className="p-6 bg-gray-50 border-b border-gray-200">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-                <div className="text-sm text-gray-600">Total Changes</div>
+                <div className="text-2xl font-bold text-gray-900">{stats.totalVisible}</div>
+                <div className="text-sm text-gray-600">Visible Changes</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-600">{stats.schedules}</div>
@@ -404,14 +535,21 @@ const ImportPreviewModal = ({
                     className="form-checkbox h-4 w-4 text-baylor-green"
                   />
                   <span className="text-sm font-medium text-gray-700">
-                    Select All ({stats.selected}/{stats.total})
+                    Select All ({stats.selectedVisible}/{stats.totalVisible})
                   </span>
                 </label>
               </div>
               <div className="text-sm text-gray-600">
-                {stats.selected} changes selected for import
+                {stats.selectedVisible} visible change{stats.selectedVisible === 1 ? '' : 's'} selected
+                {stats.internalOnly > 0 ? ` + ${stats.internalOnly} internal update${stats.internalOnly === 1 ? '' : 's'}` : ''}
               </div>
             </div>
+
+            {stats.internalOnly > 0 && (
+              <div className="mt-2 text-xs text-gray-500">
+                Internal updates keep schedule identity metadata in sync and do not change class details.
+              </div>
+            )}
 
             {previewSummary && (
               <div className="mt-4 pt-4 border-t border-gray-200">
@@ -440,11 +578,16 @@ const ImportPreviewModal = ({
                     <div>Rows skipped</div>
                   </div>
                 </div>
+                {previewSummary.schedulesMetadataOnly > 0 && (
+                  <div className="mt-2 text-xs text-gray-500">
+                    {previewSummary.schedulesMetadataOnly} schedule update{previewSummary.schedulesMetadataOnly === 1 ? '' : 's'} are internal identity-only changes.
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {(validationErrors.length > 0 || validationWarnings.length > 0) && (
+          {(validationErrors.length > 0 || displayWarnings.length > 0 || collisionSummary) && (
             <div className="p-6 border-b border-gray-200 bg-white">
               <div className="flex items-center justify-between mb-3">
                 <div>
@@ -469,11 +612,42 @@ const ImportPreviewModal = ({
                 </div>
               )}
 
-              {validationWarnings.length > 0 && (
+              {collisionSummary && (
+                <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
+                  <div className="text-sm font-semibold text-yellow-800">
+                    Duplicate schedules found in existing data
+                  </div>
+                  <p className="text-xs text-yellow-700 mt-1">
+                    {collisionSummary.total} schedule identity collisions were detected (same CRN/section/meeting/room).
+                    Imports will update the preferred record for each key. Consider resolving duplicates in Data Hygiene.
+                  </p>
+                  {collisionSummary.byType && Object.keys(collisionSummary.byType).length > 0 && (
+                    <div className="mt-2 text-xs text-yellow-700">
+                      {Object.entries(collisionSummary.byType)
+                        .map(([type, count]) => `${type.toUpperCase()}: ${count}`)
+                        .join(' • ')}
+                    </div>
+                  )}
+                  {Array.isArray(collisionSummary.examples) && collisionSummary.examples.length > 0 && (
+                    <details className="mt-2 text-xs text-yellow-700">
+                      <summary className="cursor-pointer">View examples</summary>
+                      <ul className="list-disc list-inside mt-1 space-y-1">
+                        {collisionSummary.examples.map((example, idx) => (
+                          <li key={`collision-${idx}`}>
+                            {example.key} (kept {example.preferredId || example.existingId || 'unknown'})
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
+
+              {displayWarnings.length > 0 && (
                 <div>
                   <div className="text-sm font-semibold text-yellow-700 mb-2">Warnings</div>
                   <ul className="list-disc list-inside text-sm text-yellow-700 space-y-1">
-                    {validationWarnings.map((warn, idx) => (
+                    {displayWarnings.map((warn, idx) => (
                       <li key={`warn-${idx}`}>{warn}</li>
                     ))}
                   </ul>
@@ -771,7 +945,7 @@ const ImportPreviewModal = ({
               </button>
               <button
                 onClick={handleCommit}
-                disabled={stats.selected === 0 || unresolvedMatchCount > 0 || isCommitting}
+                disabled={stats.selectedTotal === 0 || unresolvedMatchCount > 0 || isCommitting}
                 className="px-6 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >
                 {isCommitting ? (
@@ -782,7 +956,10 @@ const ImportPreviewModal = ({
                 ) : (
                   <>
                     <Check className="w-4 h-4" />
-                    <span>Apply Selected Changes ({stats.selected})</span>
+                    <span>
+                      Apply Selected Changes ({stats.selectedVisible}
+                      {stats.internalOnly > 0 ? ` + ${stats.internalOnly} internal` : ''})
+                    </span>
                   </>
                 )}
               </button>

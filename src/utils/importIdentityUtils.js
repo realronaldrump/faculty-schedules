@@ -39,6 +39,45 @@ const normalizeTermParts = ({ term, termCode }) => {
   };
 };
 
+const identityStrength = (key) => {
+  if (!key) return 0;
+  if (key.startsWith("clss:")) return 4;
+  if (key.startsWith("crn:")) return 3;
+  if (key.startsWith("section:")) return 2;
+  if (key.startsWith("composite:")) return 1;
+  return 0;
+};
+
+const schedulePreferenceScore = (schedule = {}) => {
+  let score = 0;
+  const identityKey = schedule.identityKey || "";
+  score += identityStrength(identityKey) * 10;
+  if (Array.isArray(schedule.identityKeys) && schedule.identityKeys.length > 0) {
+    score += 4;
+  }
+  if ((schedule.id || "").startsWith("sched_")) {
+    score += 3;
+  }
+  if (schedule.clssId || schedule.externalIds?.clssId) {
+    score += 2;
+  }
+  if (schedule.crn) {
+    score += 1;
+  }
+  return score;
+};
+
+const choosePreferredSchedule = (a, b) => {
+  const scoreA = schedulePreferenceScore(a);
+  const scoreB = schedulePreferenceScore(b);
+  if (scoreA !== scoreB) return scoreA > scoreB ? a : b;
+  const idA = a?.id || "";
+  const idB = b?.id || "";
+  if (!idA && idB) return b;
+  if (!idB && idA) return a;
+  return idA.localeCompare(idB) <= 0 ? a : b;
+};
+
 const buildMeetingPatternKey = (patterns = []) => {
   if (!Array.isArray(patterns) || patterns.length === 0) return "";
 
@@ -219,11 +258,17 @@ export const buildScheduleIdentityIndex = (schedules = []) => {
     allKeys.forEach((key) => {
       if (!key) return;
       if (index.has(key)) {
+        const existingEntry = index.get(key);
+        const preferred = choosePreferredSchedule(existingEntry?.schedule, schedule);
         collisions.push({
           key,
-          existing: index.get(key)?.schedule,
+          existing: existingEntry?.schedule,
           incoming: schedule,
+          preferred: preferred?.id || "",
         });
+        if (preferred === schedule) {
+          index.set(key, { schedule, identity });
+        }
       } else {
         index.set(key, { schedule, identity });
       }

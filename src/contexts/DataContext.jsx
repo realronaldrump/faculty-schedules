@@ -51,6 +51,7 @@ export const DataProvider = ({ children }) => {
 
   // Local state for other entities
   const [rawPrograms, setRawPrograms] = useState([]);
+  const [rawCourses, setRawCourses] = useState([]);
   const [roomsData, setRoomsData] = useState({});
   const [spacesByKey, setSpacesByKey] = useState(new Map());
   const [spacesList, setSpacesList] = useState([]);
@@ -59,6 +60,8 @@ export const DataProvider = ({ children }) => {
   const [localLoading, setLocalLoading] = useState(false);
   const [dataError, setDataError] = useState(null);
   const [programsLoaded, setProgramsLoaded] = useState(false);
+  const [coursesLoaded, setCoursesLoaded] = useState(false);
+  const [coursesLoading, setCoursesLoading] = useState(false);
   const [roomsLoaded, setRoomsLoaded] = useState(false);
   const [roomsLoading, setRoomsLoading] = useState(false);
   const roomsUnsubscribeRef = useRef(null);
@@ -163,6 +166,27 @@ export const DataProvider = ({ children }) => {
   const scheduleData = useMemo(() => {
     if (!rawScheduleData || rawScheduleData.length === 0) return [];
 
+    const normalizeCourseCode = (value) => {
+      if (!value) return '';
+      return String(value).trim().toUpperCase().replace(/\s+/g, ' ');
+    };
+    const normalizeCourseId = (value) => {
+      if (!value) return '';
+      return String(value).trim().toUpperCase().replace(/\s+/g, '_');
+    };
+    const coursesById = new Map();
+    const coursesByCode = new Map();
+    rawCourses.forEach((course) => {
+      if (!course) return;
+      if (course.id) coursesById.set(course.id, course);
+      const courseCode = normalizeCourseCode(course.courseCode || course.code || '');
+      if (courseCode) coursesByCode.set(courseCode, course);
+      const normalizedId = normalizeCourseId(course.courseCode || course.code || '');
+      if (normalizedId && !coursesById.has(normalizedId)) {
+        coursesById.set(normalizedId, course);
+      }
+    });
+
     const flattened = [];
     rawScheduleData.forEach(schedule => {
       if (!schedule || !schedule.id) return;
@@ -184,17 +208,31 @@ export const DataProvider = ({ children }) => {
         return s.roomName || '';
       };
 
-      const courseTitle =
+      const courseCode = schedule.courseCode || schedule.Course || '';
+      const courseFromId = schedule.courseId
+        ? (coursesById.get(schedule.courseId) || coursesById.get(normalizeCourseId(schedule.courseId)))
+        : null;
+      const courseFromCode = courseCode
+        ? (coursesByCode.get(normalizeCourseCode(courseCode)) || coursesById.get(normalizeCourseId(courseCode)))
+        : null;
+      const resolvedCourse = courseFromId || courseFromCode;
+      const baseCourseTitle =
         schedule.courseTitle ||
         schedule['Course Title'] ||
         schedule.Title ||
         schedule.title ||
         '';
+      const courseTitle =
+        baseCourseTitle ||
+        resolvedCourse?.title ||
+        resolvedCourse?.courseTitle ||
+        resolvedCourse?.['Course Title'] ||
+        '';
       const crn = schedule.crn || schedule.CRN || '';
 
       const commonProps = {
         ...schedule,
-        Course: schedule.courseCode || '',
+        Course: courseCode,
         courseTitle,
         crn,
         'Course Title': courseTitle,
@@ -208,7 +246,7 @@ export const DataProvider = ({ children }) => {
         instructors,
         instructor: primaryInstructor,
         Section: schedule.section || '',
-        Credits: deriveCreditsFromSchedule(schedule.courseCode, schedule.credits),
+        Credits: deriveCreditsFromSchedule(courseCode, schedule.credits),
         Program: schedule.program || '',
         Term: schedule.term || '',
         Status: schedule.status || 'Active',
@@ -235,7 +273,7 @@ export const DataProvider = ({ children }) => {
       }
     });
     return flattened;
-  }, [rawScheduleData, buildInstructorInfo, spacesByKey]);
+  }, [rawScheduleData, rawCourses, buildInstructorInfo, spacesByKey]);
 
   // Analytics calculation (Legacy, keep for now)
   const analytics = useMemo(() => {
@@ -311,6 +349,27 @@ export const DataProvider = ({ children }) => {
     }
   }, [programsLoaded, rawPrograms]);
 
+  const loadCourses = useCallback(async ({ force = false } = {}) => {
+    if (coursesLoaded && !force) return rawCourses;
+    setCoursesLoading(true);
+    try {
+      const snapshot = await getDocs(collection(db, 'courses'));
+      const courses = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      }));
+      setRawCourses(courses);
+      setCoursesLoaded(true);
+      return courses;
+    } catch (e) {
+      console.error('Courses load error:', e);
+      setDataError(e.message);
+      return [];
+    } finally {
+      setCoursesLoading(false);
+    }
+  }, [coursesLoaded, rawCourses]);
+
   // Load rooms from Firestore
   const normalizeRoomsSnapshot = useCallback((snapshot) => {
     const rooms = {};
@@ -362,6 +421,12 @@ export const DataProvider = ({ children }) => {
     };
   }, [startRoomsSubscription]);
 
+  useEffect(() => {
+    if (!rawScheduleData || rawScheduleData.length === 0) return;
+    if (coursesLoaded || coursesLoading) return;
+    loadCourses();
+  }, [rawScheduleData, coursesLoaded, coursesLoading, loadCourses]);
+
   const loadRooms = useCallback(async ({ force = false } = {}) => {
     if (!roomsUnsubscribeRef.current || force) {
       if (roomsUnsubscribeRef.current && force) {
@@ -409,6 +474,7 @@ export const DataProvider = ({ children }) => {
   const loadData = useCallback(async ({
     silent = false,
     includePeople = true,
+    includeCourses = true,
     includePrograms = true,
     includeEditHistory = true,
     includeRecentChanges = true,
@@ -420,6 +486,7 @@ export const DataProvider = ({ children }) => {
 
       const tasks = [];
       if (includePeople) tasks.push(loadPeople({ force }));
+      if (includeCourses) tasks.push(loadCourses({ force }));
       if (includePrograms) tasks.push(loadPrograms({ force }));
       if (includeEditHistory) tasks.push(loadEditHistory({ force }));
       if (includeRecentChanges) tasks.push(loadRecentChanges({ force }));
@@ -432,7 +499,7 @@ export const DataProvider = ({ children }) => {
     } finally {
       if (!silent) setLocalLoading(false);
     }
-  }, [loadPeople, loadPrograms, loadEditHistory, loadRecentChanges]);
+  }, [loadPeople, loadCourses, loadPrograms, loadEditHistory, loadRecentChanges]);
 
   // Initial Load effect handled by components calling loadData or individual contexts
 
@@ -443,6 +510,7 @@ export const DataProvider = ({ children }) => {
     allPeople,
     peopleIndex,
     rawPrograms,
+    rawCourses,
 
     // Transformed/Legacy Data
     scheduleData,
@@ -450,6 +518,7 @@ export const DataProvider = ({ children }) => {
     staffData,
     studentData,
     programs: rawPrograms,
+    courses: rawCourses,
     directoryData: rawPeople,
 
     analytics,
@@ -471,6 +540,7 @@ export const DataProvider = ({ children }) => {
 
     // Actions
     loadData,
+    loadCourses,
     loadPrograms,
     loadRooms,
     refreshRooms,
@@ -480,6 +550,8 @@ export const DataProvider = ({ children }) => {
 
     // Load State
     programsLoaded,
+    coursesLoaded,
+    coursesLoading,
     roomsLoaded,
     roomsLoading,
     editHistoryLoaded,
@@ -488,13 +560,13 @@ export const DataProvider = ({ children }) => {
     // Permissions (Passthrough)
     ...permissions
   }), [
-    rawScheduleData, rawPeople, allPeople, peopleIndex, rawPrograms,
+    rawScheduleData, rawPeople, allPeople, peopleIndex, rawPrograms, rawCourses,
     scheduleData, facultyData, staffData, studentData,
     analytics, editHistory, recentChanges, roomsData, spacesByKey, spacesList,
     selectedSemester, availableSemesters,
     loading, dataError, loadData,
-    loadPrograms, loadRooms, refreshRooms, loadEditHistory, loadRecentChanges,
-    programsLoaded, roomsLoaded, roomsLoading, editHistoryLoaded, recentChangesLoaded,
+    loadCourses, loadPrograms, loadRooms, refreshRooms, loadEditHistory, loadRecentChanges,
+    programsLoaded, coursesLoaded, coursesLoading, roomsLoaded, roomsLoading, editHistoryLoaded, recentChangesLoaded,
     permissions
   ]);
 

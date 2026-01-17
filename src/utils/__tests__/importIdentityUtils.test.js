@@ -87,6 +87,42 @@ describe("importIdentityUtils", () => {
     expect(match.schedule?.id).toBe("sched_clss_202610_2962");
   });
 
+  it("prefers canonical schedules when duplicate identity keys exist", () => {
+    const existingSchedules = [
+      {
+        id: "202610_33802",
+        courseCode: "ADM 1321",
+        section: "01",
+        term: "Spring 2026",
+        termCode: "202610",
+        crn: "33802",
+      },
+      {
+        id: "sched_clss_202610_2056",
+        courseCode: "ADM 1321",
+        section: "01",
+        term: "Spring 2026",
+        termCode: "202610",
+        clssId: "2056",
+        crn: "33802",
+        identityKey: "clss:202610:2056",
+        identityKeys: ["clss:202610:2056", "crn:202610:33802"],
+      },
+    ];
+
+    const { index } = buildScheduleIdentityIndex(existingSchedules);
+    const identity = deriveScheduleIdentity({
+      courseCode: "ADM 1321",
+      section: "01",
+      term: "Spring 2026",
+      termCode: "202610",
+      crn: "33802",
+    });
+
+    const match = resolveScheduleIdentityMatch(identity.keys, index);
+    expect(match.schedule?.id).toBe("sched_clss_202610_2056");
+  });
+
   it("keeps identity stable for minor CSV edits", () => {
     const base = deriveScheduleIdentity({
       courseCode: "ADM 1300",

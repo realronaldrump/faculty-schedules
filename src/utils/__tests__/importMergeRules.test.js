@@ -67,4 +67,36 @@ describe("buildScheduleImportUpdates", () => {
     expect(updates.roomName).toBe("");
     expect(updates.roomNames).toEqual([]);
   });
+
+  it("treats room name order and casing as equivalent", () => {
+    const existing = {
+      roomNames: ["Mary Gibbs Jones (FCS) 213", "Goebel Building 111"],
+    };
+    const incoming = {
+      roomNames: ["goebel building 111", "MARY GIBBS JONES (FCS) 213"],
+    };
+
+    const { updates, hasChanges } = buildScheduleImportUpdates(existing, incoming);
+    expect(hasChanges).toBe(false);
+    expect(updates.roomNames).toBeUndefined();
+  });
+
+  it("treats meeting pattern order as equivalent", () => {
+    const existing = {
+      meetingPatterns: [
+        { day: "M", startTime: "8:00 AM", endTime: "9:00 AM", raw: "M 8:00 AM-9:00 AM" },
+        { day: "W", startTime: "8:00 AM", endTime: "9:00 AM", raw: "W 8:00 AM-9:00 AM" },
+      ],
+    };
+    const incoming = {
+      meetingPatterns: [
+        { day: "W", startTime: "8:00 AM", endTime: "9:00 AM", raw: "W 8:00 AM-9:00 AM" },
+        { day: "M", startTime: "8:00 AM", endTime: "9:00 AM", raw: "M 8:00 AM-9:00 AM" },
+      ],
+    };
+
+    const { updates, hasChanges } = buildScheduleImportUpdates(existing, incoming);
+    expect(hasChanges).toBe(false);
+    expect(updates.meetingPatterns).toBeUndefined();
+  });
 });

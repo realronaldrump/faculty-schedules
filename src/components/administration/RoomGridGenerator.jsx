@@ -1268,7 +1268,9 @@ const RoomGridGenerator = () => {
     hasGeneratedSchedules && generatedSchedules.length > 1
       ? "Export All"
       : "Export";
-  const exportNeedsSizing = selectedDayType !== "WEEK";
+  const exportNeedsSizing = hasGeneratedSchedules
+    ? generatedSchedules.some((schedule) => schedule.kind === "table")
+    : !showExportableWeek;
 
   return (
     <div className="page-content">

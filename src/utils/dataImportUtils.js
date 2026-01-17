@@ -1856,7 +1856,7 @@ const isValidScheduleRow = (rowData) => {
 
 // ==================== RELATIONAL DATA FETCHING ====================
 
-const enrichSchedules = (schedules, people, rooms, programs) => {
+const enrichSchedules = (schedules, people, rooms, programs, courses = []) => {
   const { peopleMap, resolvePersonId, canonicalPeople } =
     buildPeopleIndex(people);
   const roomsMap = new Map(rooms.map((r) => [r.id, r]));
@@ -1867,6 +1867,28 @@ const enrichSchedules = (schedules, people, rooms, programs) => {
     }
   });
   const programsMap = new Map(programs.map((p) => [p.id, p]));
+  const coursesById = new Map();
+  const coursesByCode = new Map();
+  const normalizeCourseCode = (value) => {
+    if (!value) return "";
+    return String(value).trim().toUpperCase().replace(/\s+/g, " ");
+  };
+  const normalizeCourseId = (value) => {
+    if (!value) return "";
+    return String(value).trim().toUpperCase().replace(/\s+/g, "_");
+  };
+
+  courses.forEach((course) => {
+    if (!course) return;
+    if (course.id) coursesById.set(course.id, course);
+    const code = course.courseCode || course.code || "";
+    const normalizedCode = normalizeCourseCode(code);
+    if (normalizedCode) coursesByCode.set(normalizedCode, course);
+    const normalizedId = normalizeCourseId(code);
+    if (normalizedId && !coursesById.has(normalizedId)) {
+      coursesById.set(normalizedId, course);
+    }
+  });
 
   const enrichedSchedules = schedules.map((schedule) => {
     const resolvedInstructorId = schedule.instructorId
@@ -1918,8 +1940,31 @@ const enrichSchedules = (schedules, people, rooms, programs) => {
         ? UNASSIGNED
         : schedule.instructorName || UNASSIGNED;
 
+    const resolvedCourse =
+      (schedule.courseId
+        ? coursesById.get(schedule.courseId) ||
+          coursesById.get(normalizeCourseId(schedule.courseId))
+        : null) ||
+      (schedule.courseCode
+        ? coursesByCode.get(normalizeCourseCode(schedule.courseCode)) ||
+          coursesById.get(normalizeCourseId(schedule.courseCode))
+        : null);
+    const baseCourseTitle =
+      schedule.courseTitle ||
+      schedule["Course Title"] ||
+      schedule.Title ||
+      schedule.title ||
+      "";
+    const resolvedCourseTitle =
+      baseCourseTitle ||
+      resolvedCourse?.title ||
+      resolvedCourse?.courseTitle ||
+      resolvedCourse?.["Course Title"] ||
+      "";
+
     return {
       ...schedule,
+      courseTitle: resolvedCourseTitle,
       instructorId: resolvedInstructorId || schedule.instructorId,
       instructor: instructorWithProgram,
       rooms: resolvedRooms,
@@ -1941,20 +1986,26 @@ const enrichSchedules = (schedules, people, rooms, programs) => {
     people: canonicalPeople,
     rooms,
     programs,
+    courses,
   };
 };
 
 const fetchRelationalCollections = async () => {
-  const [peopleSnapshot, roomsSnapshot, programsSnapshot] = await Promise.all([
+  const [peopleSnapshot, roomsSnapshot, programsSnapshot, coursesSnapshot] = await Promise.all([
     getDocs(collection(db, "people")),
     getDocs(collection(db, "rooms")),
     getDocs(collection(db, COLLECTIONS.PROGRAMS)),
+    getDocs(collection(db, COLLECTIONS.COURSES)),
   ]);
 
   return {
     people: peopleSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
     rooms: roomsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
     programs: programsSnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    })),
+    courses: coursesSnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
     })),
@@ -1980,6 +2031,7 @@ export const fetchSchedulesWithRelationalData = async () => {
       relational.people,
       relational.rooms,
       relational.programs,
+      relational.courses,
     );
   } catch (error) {
     console.error("Error fetching relational schedule data:", error);
@@ -2005,7 +2057,7 @@ export const fetchSchedulesByTerms = async ({
       normalizedTerms.length === 0 &&
       normalizedTermCodes.length === 0
     ) {
-      return { schedules: [], people: [], rooms: [], programs: [] };
+      return { schedules: [], people: [], rooms: [], programs: [], courses: [] };
     }
     const shouldFetchAll = allowAll;
     const schedules = [];
@@ -2057,6 +2109,7 @@ export const fetchSchedulesByTerms = async ({
       relational.people,
       relational.rooms,
       relational.programs,
+      relational.courses,
     );
   } catch (error) {
     console.error("Error fetching schedules by terms:", error);
@@ -2080,7 +2133,7 @@ export const fetchSchedulesByTerm = async (termInput) => {
     const resolvedTermCode = termCodeFromLabel(termCode || normalizedTerm);
 
     if (!resolvedTermCode && !normalizedTerm) {
-      return { schedules: [], people: [], rooms: [], programs: [] };
+      return { schedules: [], people: [], rooms: [], programs: [], courses: [] };
     }
 
     // console.log(`📡 Loading schedules for term: ${normalizedTerm || term}`);
@@ -2121,6 +2174,7 @@ export const fetchSchedulesByTerm = async (termInput) => {
       relational.people,
       relational.rooms,
       relational.programs,
+      relational.courses,
     );
   } catch (error) {
     console.error(`Error fetching schedules for term "${termInput}":`, error);

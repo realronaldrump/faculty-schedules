@@ -10,6 +10,11 @@ import {
   Save as SaveIcon,
   Database,
   ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  HelpCircle,
+  RotateCcw,
+  Info,
 } from "lucide-react";
 import ExportModal from "./ExportModal";
 import ExportableRoomSchedule from "./ExportableRoomSchedule";
@@ -73,6 +78,11 @@ const RoomGridGenerator = () => {
     isOpen: false,
     grid: null,
   });
+  const [resetConfirmDialog, setResetConfirmDialog] = useState(false);
+
+  // UX state
+  const [savedGridsExpanded, setSavedGridsExpanded] = useState(false);
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
   // State for the new exportable weekly schedule
   const [weeklyClasses, setWeeklyClasses] = useState([]);
@@ -523,27 +533,27 @@ const RoomGridGenerator = () => {
         const classContent =
           classesInSlot.length > 0
             ? classesInSlot
-                .map((c) => {
-                  let daysIndicator = "";
-                  const mdays = parseDaysToChars(c.days);
-                  const expected =
-                    dayType === "MWF" ? ["M", "W", "F"] : ["T", "R"];
-                  const isFullPattern =
-                    expected.every((d) => mdays.includes(d)) &&
-                    mdays.every((d) => expected.includes(d));
-                  if (!isFullPattern) {
-                    const overlap = mdays
-                      .filter((d) => expected.includes(d))
-                      .join("");
-                    daysIndicator = overlap ? ` (${overlap})` : ` (${c.days})`;
-                  }
-                  return `<div class="class-entry-wrapper">
+              .map((c) => {
+                let daysIndicator = "";
+                const mdays = parseDaysToChars(c.days);
+                const expected =
+                  dayType === "MWF" ? ["M", "W", "F"] : ["T", "R"];
+                const isFullPattern =
+                  expected.every((d) => mdays.includes(d)) &&
+                  mdays.every((d) => expected.includes(d));
+                if (!isFullPattern) {
+                  const overlap = mdays
+                    .filter((d) => expected.includes(d))
+                    .join("");
+                  daysIndicator = overlap ? ` (${overlap})` : ` (${c.days})`;
+                }
+                return `<div class="class-entry-wrapper">
                             <button class="delete-entry-btn export-ignore" data-action="delete-class" title="Remove">×</button>
                             <div class="class-entry" contenteditable="true">${c.class}.${c.section}${daysIndicator}</div>
                             <div class="prof-entry" contenteditable="true">${c.professor}</div>
                         </div>`;
-                })
-                .join("")
+              })
+              .join("")
             : "";
 
         return `
@@ -592,8 +602,8 @@ const RoomGridGenerator = () => {
       return sortedBuildings.flatMap((building) => {
         const rooms = buildings[building]
           ? Array.from(buildings[building]).sort((a, b) =>
-              a.localeCompare(b, undefined, { numeric: true }),
-            )
+            a.localeCompare(b, undefined, { numeric: true }),
+          )
           : [];
         return rooms.map((room) => ({ building, room }));
       });
@@ -1168,7 +1178,7 @@ const RoomGridGenerator = () => {
         ref.id,
         payload,
         "RoomGridGenerator.jsx - saveGrid",
-      ).catch(() => {});
+      ).catch(() => { });
       showMessage("Grid saved.", "success");
       fetchSavedGrids();
     } catch (err) {
@@ -1221,7 +1231,7 @@ const RoomGridGenerator = () => {
         deleteConfirmDialog.grid.id,
         deleteConfirmDialog.grid,
         "RoomGridGenerator.jsx - deleteGrid",
-      ).catch(() => {});
+      ).catch(() => { });
       showMessage("Grid deleted.", "success");
       fetchSavedGrids();
     } catch (err) {
@@ -1247,12 +1257,12 @@ const RoomGridGenerator = () => {
   const roomOptions =
     selectedBuilding && buildings[selectedBuilding]
       ? Array.from(buildings[selectedBuilding])
-          .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-          .map((room) => (
-            <option key={room} value={room}>
-              {room}
-            </option>
-          ))
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        .map((room) => (
+          <option key={room} value={room}>
+            {room}
+          </option>
+        ))
       : [];
 
   const hasGeneratedSchedules = generatedSchedules.length > 0;
@@ -1277,8 +1287,9 @@ const RoomGridGenerator = () => {
       <div className="university-header rounded-xl p-8 mb-8">
         <h1 className="university-title">Room Grid Generator</h1>
         <p className="university-subtitle">
-          Generate printable room schedules from dashboard data or a CLSS
-          export.
+          Create printable room schedules for door signage. Select a semester,
+          choose a building and room, then generate a visual grid showing when
+          classes meet.
         </p>
       </div>
 

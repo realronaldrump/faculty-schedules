@@ -245,18 +245,64 @@ export const previewImportChanges = async (csvData, importType, selectedSemester
     let existingRoomsData = [];
 
     if (importType === 'schedule') {
-      const termCode = termCodeFromLabel(normalizedSemester || selectedSemester || '');
-      const schedulesQuery = termCode
-        ? query(collection(db, COLLECTIONS.SCHEDULES), where('termCode', '==', termCode))
-        : (normalizedSemester ? query(collection(db, COLLECTIONS.SCHEDULES), where('term', '==', normalizedSemester)) : null);
+      const termCodes = new Set();
+      const termLabels = new Set();
 
-      const [schedulesSnapshot, peopleSnapshot, roomsSnapshot] = await Promise.all([
-        schedulesQuery ? getDocs(schedulesQuery) : Promise.resolve({ docs: [] }),
+      rows.forEach((row) => {
+        const rawTerm = (row?.Semester || row?.Term || normalizedSemester || selectedSemester || '').toString().trim();
+        const normalizedTerm = normalizeTermLabel(rawTerm);
+        const termCode = termCodeFromLabel(
+          row?.['Semester Code'] || row?.['Term Code'] || normalizedTerm || rawTerm
+        );
+        if (termCode) termCodes.add(termCode);
+        if (rawTerm) termLabels.add(rawTerm);
+        if (normalizedTerm) termLabels.add(normalizedTerm);
+      });
+
+      const chunkItems = (items) => {
+        const chunks = [];
+        for (let i = 0; i < items.length; i += 10) {
+          chunks.push(items.slice(i, i + 10));
+        }
+        return chunks;
+      };
+
+      const schedules = [];
+      const seenIds = new Set();
+      const scheduleQueries = [];
+
+      if (termCodes.size > 0) {
+        chunkItems(Array.from(termCodes)).forEach((chunk) => {
+          scheduleQueries.push(
+            query(collection(db, COLLECTIONS.SCHEDULES), where('termCode', 'in', chunk))
+          );
+        });
+      }
+
+      if (termLabels.size > 0) {
+        chunkItems(Array.from(termLabels)).forEach((chunk) => {
+          scheduleQueries.push(
+            query(collection(db, COLLECTIONS.SCHEDULES), where('term', 'in', chunk))
+          );
+        });
+      }
+
+      const [peopleSnapshot, roomsSnapshot, ...scheduleSnapshots] = await Promise.all([
         getDocs(collection(db, COLLECTIONS.PEOPLE)),
-        getDocs(collection(db, COLLECTIONS.ROOMS))
+        getDocs(collection(db, COLLECTIONS.ROOMS)),
+        ...scheduleQueries.map((q) => getDocs(q))
       ]);
 
-      existingSchedulesData = schedulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      scheduleSnapshots.forEach((snapshot) => {
+        snapshot.docs.forEach((docSnap) => {
+          if (!seenIds.has(docSnap.id)) {
+            seenIds.add(docSnap.id);
+            schedules.push({ id: docSnap.id, ...docSnap.data() });
+          }
+        });
+      });
+
+      existingSchedulesData = schedules;
       existingPeopleData = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       existingRoomsData = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } else {

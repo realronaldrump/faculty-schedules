@@ -362,8 +362,8 @@ const ExportableRoomSchedule = forwardRef(({
                                     >
                                         {/* Course code */}
                                         <div style={{
-                                            fontSize: isCompact ? '9px' : '10px',
-                                            fontWeight: '800', // Bolder
+                                            fontSize: isCompact ? '10px' : '12px', // Increased from 9/10
+                                            fontWeight: '800',
                                             color: colors.baylorGreen,
                                             lineHeight: '1.1',
                                             whiteSpace: 'nowrap',
@@ -376,7 +376,7 @@ const ExportableRoomSchedule = forwardRef(({
                                         {/* Time range - lower threshold for visibility */}
                                         {(cls.endMinutes - cls.startMinutes) >= 30 && (
                                             <div style={{
-                                                fontSize: '7px',
+                                                fontSize: '8px', // Increased from 7
                                                 color: colors.textMuted,
                                                 textAlign: 'center',
                                                 lineHeight: '1.1',
@@ -389,7 +389,7 @@ const ExportableRoomSchedule = forwardRef(({
                                         {/* Instructor - lower threshold for visibility */}
                                         {!isCompact && (cls.endMinutes - cls.startMinutes) >= 50 && cls.professor && (
                                             <div style={{
-                                                fontSize: '7px',
+                                                fontSize: '8px', // Increased from 7
                                                 color: colors.textLight,
                                                 textAlign: 'center',
                                                 lineHeight: '1.1',

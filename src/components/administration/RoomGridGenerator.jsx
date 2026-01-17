@@ -1392,23 +1392,24 @@ const RoomGridGenerator = () => {
         <div className="university-card">
           <div className="university-card-content">
             {isLoadingDashboard && (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-baylor-green mr-3"></div>
-                <span className="text-gray-600">Loading dashboard data...</span>
+              <div className="flex items-center justify-center py-8" role="status" aria-live="polite">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-baylor-green mr-3" aria-hidden="true"></div>
+                <span className="text-gray-600">Loading schedule data...</span>
               </div>
             )}
 
             {!isLoadingDashboard && (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                {/* Form grid - responsive 2-column layout */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                   {/* CSV Upload - only for csv mode */}
                   {dataMode === "csv" && (
-                    <div className="md:col-span-2 lg:col-span-1">
+                    <div className="sm:col-span-2 lg:col-span-1">
                       <label
                         htmlFor="csvFile"
-                        className="block text-sm font-medium text-gray-700 mb-1"
+                        className="block text-sm font-semibold text-gray-700 mb-2"
                       >
-                        1. Upload CLSS Export
+                        CLSS Export File
                       </label>
                       <input
                         type="file"
@@ -1416,35 +1417,41 @@ const RoomGridGenerator = () => {
                         onChange={handleFileChange}
                         className="hidden"
                         accept=".csv"
+                        aria-describedby="csv-help"
                       />
                       <button
                         onClick={triggerFileUpload}
                         className="btn-secondary w-full justify-center"
+                        aria-label="Upload CLSS CSV file"
                       >
-                        <Upload className="w-4 h-4 mr-2" />
-                        {isProcessing ? "Processing..." : "Upload CSV"}
+                        <Upload className="w-4 h-4 mr-2" aria-hidden="true" />
+                        {isProcessing ? "Processing..." : "Choose File..."}
                       </button>
+                      <p id="csv-help" className="text-xs text-gray-500 mt-1">
+                        Export from CLSS with room assignments
+                      </p>
                     </div>
                   )}
 
                   {/* Semester Selection */}
                   <div>
                     <label
-                      htmlFor="semesterInput"
-                      className="block text-sm font-medium text-gray-700 mb-1"
+                      htmlFor="semesterSelect"
+                      className="block text-sm font-semibold text-gray-700 mb-2"
                     >
-                      {dataMode === "csv"
-                        ? "2. Semester"
-                        : "1. Select Semester"}
+                      Semester
+                      <span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
                     </label>
                     {dataMode === "auto" && availableSemesters.length > 0 ? (
                       <select
                         id="semesterSelect"
                         value={semester}
                         onChange={(e) => setSemester(e.target.value)}
-                        className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        className="form-select"
+                        aria-required="true"
+                        aria-describedby="semester-help"
                       >
-                        <option value="">-- Select Semester --</option>
+                        <option value="">Choose semester...</option>
                         {availableSemesters.map((s) => (
                           <option key={s} value={s}>
                             {s}
@@ -1457,145 +1464,234 @@ const RoomGridGenerator = () => {
                         id="semesterInput"
                         value={semester}
                         onChange={(e) => setSemester(e.target.value)}
-                        className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        className="form-input"
                         placeholder="e.g., Fall 2025"
+                        aria-required="true"
+                        aria-describedby="semester-help"
                       />
                     )}
+                    <p id="semester-help" className="text-xs text-gray-500 mt-1">
+                      {Object.keys(buildings).length > 0
+                        ? `${Object.keys(buildings).length} buildings available`
+                        : dataMode === "auto" ? "Select to load buildings" : "Upload CSV first"}
+                    </p>
                   </div>
 
                   {/* Building Selection */}
                   <div>
                     <label
                       htmlFor="buildingSelect"
-                      className="block text-sm font-medium text-gray-700 mb-1"
+                      className="block text-sm font-semibold text-gray-700 mb-2"
                     >
-                      {dataMode === "csv"
-                        ? `3. Select Building${multiRoomMode ? "(s)" : ""}`
-                        : `2. Select Building${multiRoomMode ? "(s)" : ""}`}
+                      Building
+                      <span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
                     </label>
-                    <div className="flex items-center gap-2 mb-2">
-                      <input
-                        id="multiRoomToggle"
-                        type="checkbox"
-                        checked={multiRoomMode}
-                        onChange={handleMultiRoomToggle}
-                        className="h-4 w-4 text-baylor-green border-gray-300 rounded"
-                      />
-                      <label
-                        htmlFor="multiRoomToggle"
-                        className="text-xs text-gray-600"
-                      >
-                        Generate all rooms in selected building(s)
-                      </label>
-                    </div>
-                    {multiRoomMode ? (
-                      <>
-                        <select
-                          id="buildingSelect"
-                          multiple
-                          value={selectedBuildings}
-                          onChange={handleSelectedBuildingsChange}
-                          className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                          disabled={Object.keys(buildings).length === 0}
-                        >
-                          {buildingOptions}
-                        </select>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Hold Cmd/Ctrl to select multiple buildings.
-                        </p>
-                      </>
-                    ) : (
-                      <select
-                        id="buildingSelect"
-                        value={selectedBuilding}
-                        onChange={(e) => {
-                          setSelectedBuilding(e.target.value);
-                          setSelectedBuildings(
-                            e.target.value ? [e.target.value] : [],
-                          );
-                        }}
-                        className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                        disabled={Object.keys(buildings).length === 0}
-                      >
-                        <option value="">-- Select Building --</option>
-                        {buildingOptions}
-                      </select>
-                    )}
+                    <select
+                      id="buildingSelect"
+                      value={multiRoomMode ? "" : selectedBuilding}
+                      onChange={(e) => {
+                        setSelectedBuilding(e.target.value);
+                        setSelectedBuildings(
+                          e.target.value ? [e.target.value] : [],
+                        );
+                        setSelectedRoom("");
+                      }}
+                      className="form-select"
+                      disabled={Object.keys(buildings).length === 0}
+                      aria-required="true"
+                      aria-describedby="building-help"
+                      {...(multiRoomMode && { multiple: true, value: selectedBuildings, onChange: handleSelectedBuildingsChange })}
+                    >
+                      {!multiRoomMode && <option value="">Choose building...</option>}
+                      {buildingOptions}
+                    </select>
+                    <p id="building-help" className="text-xs text-gray-500 mt-1">
+                      {Object.keys(buildings).length === 0
+                        ? "No buildings loaded yet"
+                        : selectedBuilding && buildings[selectedBuilding]
+                          ? `${Array.from(buildings[selectedBuilding]).length} rooms`
+                          : "Select a building to see rooms"}
+                    </p>
                   </div>
 
                   {/* Room Selection */}
                   <div>
                     <label
                       htmlFor="roomSelect"
-                      className="block text-sm font-medium text-gray-700 mb-1"
+                      className="block text-sm font-semibold text-gray-700 mb-2"
                     >
-                      {dataMode === "csv"
-                        ? "4. Select Room"
-                        : "3. Select Room"}
+                      Room
+                      {!multiRoomMode && <span className="text-red-500 ml-0.5" aria-hidden="true">*</span>}
                     </label>
                     {multiRoomMode ? (
-                      <div className="block w-full p-2 border border-gray-300 rounded-md bg-gray-100 text-gray-600">
-                        All rooms in selected buildings
+                      <div
+                        className="form-input bg-gray-50 text-gray-600 cursor-not-allowed"
+                        aria-live="polite"
+                      >
+                        <span className="flex items-center">
+                          <Info className="w-4 h-4 mr-2 text-baylor-green" aria-hidden="true" />
+                          All rooms will be generated
+                        </span>
                       </div>
                     ) : (
                       <select
                         id="roomSelect"
                         value={selectedRoom}
                         onChange={(e) => setSelectedRoom(e.target.value)}
-                        className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        className="form-select"
                         disabled={!selectedBuilding}
+                        aria-required="true"
+                        aria-describedby="room-help"
                       >
-                        <option value="">-- Select Room --</option>
+                        <option value="">
+                          {!selectedBuilding ? "Select building first" : "Choose room..."}
+                        </option>
                         {roomOptions}
                       </select>
                     )}
-                  </div>
-
-                  {/* View Type Selection */}
-                  <div>
-                    <label
-                      htmlFor="dayTypeSelect"
-                      className="block text-sm font-medium text-gray-700 mb-1"
-                    >
-                      {dataMode === "csv" ? "5. Select View" : "4. Select View"}
-                    </label>
-                    <select
-                      id="dayTypeSelect"
-                      value={selectedDayType}
-                      onChange={(e) => setSelectedDayType(e.target.value)}
-                      className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                      disabled={Object.keys(buildings).length === 0}
-                    >
-                      <option value="MWF">MWF</option>
-                      <option value="TR">TR</option>
-                      <option value="WEEK">Week (M-F)</option>
-                    </select>
+                    {!multiRoomMode && (
+                      <p id="room-help" className="text-xs text-gray-500 mt-1">
+                        {!selectedBuilding
+                          ? "Building required"
+                          : roomOptions.length === 0
+                            ? "No rooms found"
+                            : "Select a specific room"}
+                      </p>
+                    )}
                   </div>
                 </div>
 
-                <div className="mt-6 flex justify-end space-x-4">
-                  <button onClick={() => resetUI()} className="btn-danger">
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Clear
-                  </button>
+                {/* Day Pattern Selection - separate row for clarity */}
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div>
+                      <label
+                        htmlFor="dayTypeSelect"
+                        className="block text-sm font-semibold text-gray-700 mb-2"
+                      >
+                        Day Pattern
+                      </label>
+                      <select
+                        id="dayTypeSelect"
+                        value={selectedDayType}
+                        onChange={(e) => setSelectedDayType(e.target.value)}
+                        className="form-select w-auto min-w-[180px]"
+                        disabled={Object.keys(buildings).length === 0}
+                        aria-describedby="daytype-help"
+                      >
+                        <option value="WEEK">Full Week (Mon–Fri)</option>
+                        <option value="MWF">Mon / Wed / Fri only</option>
+                        <option value="TR">Tue / Thu only</option>
+                      </select>
+                    </div>
+                    <p id="daytype-help" className="text-sm text-gray-500 self-end pb-2">
+                      Choose which days to include in the schedule grid
+                    </p>
+                  </div>
+                </div>
+
+                {/* Advanced Options - collapsible */}
+                <div className="mt-4">
                   <button
-                    onClick={generateSchedule}
-                    className="btn-primary"
-                    disabled={Object.keys(buildings).length === 0}
+                    type="button"
+                    onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
+                    className="flex items-center text-sm text-gray-600 hover:text-baylor-green transition-colors"
+                    aria-expanded={showAdvancedOptions}
+                    aria-controls="advanced-options"
                   >
-                    <FileText className="w-4 h-4 mr-2" />
-                    Generate Schedule
+                    {showAdvancedOptions ? (
+                      <ChevronUp className="w-4 h-4 mr-1" aria-hidden="true" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 mr-1" aria-hidden="true" />
+                    )}
+                    Advanced Options
                   </button>
-                  {canEditHere && !multiRoomMode && (
-                    <button
-                      onClick={saveGrid}
-                      disabled={isSaving}
-                      className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+                  {showAdvancedOptions && (
+                    <div
+                      id="advanced-options"
+                      className="mt-3 p-4 bg-gray-50 rounded-lg border border-gray-200"
                     >
-                      <SaveIcon className="w-4 h-4" />
-                      {isSaving ? "Saving..." : "Save Grid"}
-                    </button>
+                      <div className="flex items-start gap-3">
+                        <input
+                          id="multiRoomToggle"
+                          type="checkbox"
+                          checked={multiRoomMode}
+                          onChange={handleMultiRoomToggle}
+                          className="h-4 w-4 text-baylor-green border-gray-300 rounded mt-0.5"
+                        />
+                        <div>
+                          <label
+                            htmlFor="multiRoomToggle"
+                            className="text-sm font-medium text-gray-700 cursor-pointer"
+                          >
+                            Batch Mode: Generate all rooms at once
+                          </label>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Creates a grid for every room in the selected building(s).
+                            {multiRoomMode && " Hold Cmd/Ctrl to select multiple buildings."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="mt-6 flex flex-wrap justify-between items-center gap-4">
+                  <button
+                    onClick={() => setResetConfirmDialog(true)}
+                    className="btn-ghost text-gray-600 hover:text-gray-800"
+                    aria-label="Reset form to default values"
+                  >
+                    <RotateCcw className="w-4 h-4 mr-2" aria-hidden="true" />
+                    Reset Form
+                  </button>
+
+                  <div className="flex flex-wrap gap-3">
+                    {/* Generate Button with contextual disabled state */}
+                    <div className="relative group">
+                      <button
+                        onClick={generateSchedule}
+                        className="btn-primary"
+                        disabled={
+                          Object.keys(buildings).length === 0 ||
+                          (!multiRoomMode && (!selectedBuilding || !selectedRoom))
+                        }
+                        aria-describedby="generate-help"
+                      >
+                        <FileText className="w-4 h-4 mr-2" aria-hidden="true" />
+                        Generate Schedule
+                      </button>
+                      {/* Tooltip for disabled state */}
+                      {(Object.keys(buildings).length === 0 ||
+                        (!multiRoomMode && (!selectedBuilding || !selectedRoom))) && (
+                          <div
+                            id="generate-help"
+                            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10"
+                            role="tooltip"
+                          >
+                            {Object.keys(buildings).length === 0
+                              ? "Load schedule data first"
+                              : !selectedBuilding
+                                ? "Select a building"
+                                : "Select a room"}
+                          </div>
+                        )}
+                    </div>
+
+                    {/* Save Grid Button - only when schedule is generated */}
+                    {canEditHere && !multiRoomMode && scheduleHtml && (
+                      <button
+                        onClick={saveGrid}
+                        disabled={isSaving}
+                        className="btn-secondary"
+                        aria-label={isSaving ? "Saving grid..." : "Save this grid to view later"}
+                      >
+                        <SaveIcon className="w-4 h-4 mr-2" aria-hidden="true" />
+                        {isSaving ? "Saving..." : "Save Grid"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </>
             )}
@@ -1603,122 +1699,48 @@ const RoomGridGenerator = () => {
         </div>
       )}
 
-      <div className="university-card mt-6">
-        <div className="university-card-content">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-semibold text-baylor-green">
-              Saved Grids
-            </h3>
-            <button onClick={fetchSavedGrids} className="btn-secondary">
-              Refresh
-            </button>
-          </div>
-          {isLoadingSaved ? (
-            <div className="text-gray-500">Loading...</div>
-          ) : savedGrids.length === 0 ? (
-            <div className="text-gray-500">No saved grids yet.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left text-gray-600">
-                    <th className="py-2 pr-4">Title</th>
-                    <th className="py-2 pr-4">Building</th>
-                    <th className="py-2 pr-4">Room</th>
-                    <th className="py-2 pr-4">View</th>
-                    <th className="py-2 pr-4">Semester</th>
-                    <th className="py-2 pr-4">Created</th>
-                    <th className="py-2">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {savedGrids.map((g) => (
-                    <tr key={g.id} className="border-t border-gray-200">
-                      <td className="py-2 pr-4">{g.title}</td>
-                      <td className="py-2 pr-4">{g.building}</td>
-                      <td className="py-2 pr-4">{g.room}</td>
-                      <td className="py-2 pr-4">{g.dayType}</td>
-                      <td className="py-2 pr-4">{g.semester}</td>
-                      <td className="py-2 pr-4 text-gray-600">
-                        {g.createdAt
-                          ? new Date(g.createdAt).toLocaleString()
-                          : "Unknown"}
-                      </td>
-                      <td className="py-2 space-x-2">
-                        <button
-                          onClick={() => loadGrid(g)}
-                          className="btn-secondary"
-                        >
-                          Load
-                        </button>
-                        <button
-                          onClick={() => deleteSavedGrid(g)}
-                          className="btn-danger"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <ExportModal
-        isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-        scheduleTableRef={exportTargetRef}
-        title={exportTitle}
-        exportScale={3}
-        onExport={exportNeedsSizing ? () => updateTableSizing() : undefined}
-      />
-
-      {/* Alert Dialog */}
+      {/* Reset Confirmation Dialog */}
       <ConfirmationDialog
-        isOpen={alertDialog.isOpen}
-        title={alertDialog.title}
-        message={alertDialog.message}
+        isOpen={resetConfirmDialog}
+        title="Reset Form"
+        message="This will clear all selections and the generated schedule. Are you sure?"
         type="warning"
-        confirmText="OK"
-        onConfirm={() =>
-          setAlertDialog({ isOpen: false, message: "", title: "" })
-        }
-        onCancel={() =>
-          setAlertDialog({ isOpen: false, message: "", title: "" })
-        }
-      />
-
-      {/* Delete Confirmation Dialog */}
-      <ConfirmationDialog
-        isOpen={deleteConfirmDialog.isOpen}
-        title="Delete Saved Grid"
-        message={`Are you sure you want to delete "${deleteConfirmDialog.grid?.title}"? This action cannot be undone.`}
-        type="danger"
-        confirmText="Delete"
+        confirmText="Reset"
         cancelText="Cancel"
-        onConfirm={handleConfirmDelete}
-        onCancel={handleCancelDelete}
+        onConfirm={() => {
+          resetUI();
+          setResetConfirmDialog(false);
+        }}
+        onCancel={() => setResetConfirmDialog(false)}
       />
 
-      <div className="university-card mt-8">
-        <div className="university-card-content min-h-[400px]">
+      {/* Schedule Preview - MOVED ABOVE Saved Grids for better visibility */}
+      <div className="university-card mt-6">
+        <div className="university-card-header flex items-center justify-between">
+          <div>
+            <h2 className="university-card-title">Schedule Preview</h2>
+            <p className="university-card-subtitle">
+              {scheduleHtml || showExportableWeek || hasGeneratedSchedules
+                ? "Click any text to edit before exporting"
+                : "Generate a schedule to see the preview"}
+            </p>
+          </div>
           {/* Export button - show for either old HTML schedules or new exportable component */}
           {(scheduleHtml || showExportableWeek || hasGeneratedSchedules) && (
-            <div className="flex justify-end mb-4">
-              <button
-                onClick={() => setIsExportModalOpen(true)}
-                className="btn-secondary"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                {exportButtonLabel}
-              </button>
-            </div>
+            <button
+              onClick={() => setIsExportModalOpen(true)}
+              className="btn-primary"
+              aria-label="Export schedule as image"
+            >
+              <Download className="w-4 h-4 mr-2" aria-hidden="true" />
+              {exportButtonLabel}
+            </button>
           )}
+        </div>
+        <div className="university-card-content min-h-[300px]">
           {isProcessing ? (
-            <div className="text-center text-gray-500 flex flex-col items-center justify-center h-full">
+            <div className="text-center text-gray-500 flex flex-col items-center justify-center h-full py-12" role="status" aria-live="polite">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-baylor-green mb-4" aria-hidden="true"></div>
               <p>Processing file...</p>
             </div>
           ) : hasGeneratedSchedules ? (
@@ -1775,16 +1797,171 @@ const RoomGridGenerator = () => {
               dangerouslySetInnerHTML={{ __html: scheduleHtml }}
             ></div>
           ) : (
-            <div className="text-center text-gray-500 flex flex-col items-center justify-center h-full">
-              <FileText className="w-16 h-16 text-gray-300 mb-4" />
-              <p>
-                Your generated schedule will appear here. You can click on
-                fields to edit them before printing.
+            /* Empty state with better guidance */
+            <div className="text-center py-16">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gray-100 mb-6">
+                <FileText className="w-10 h-10 text-gray-400" aria-hidden="true" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-700 mb-2">
+                No Schedule Generated Yet
+              </h3>
+              <p className="text-gray-500 max-w-md mx-auto">
+                {dataMode === null
+                  ? "Choose a data source above to get started."
+                  : Object.keys(buildings).length === 0
+                    ? "Select a semester to load available buildings and rooms."
+                    : !selectedBuilding
+                      ? "Select a building to continue."
+                      : !selectedRoom && !multiRoomMode
+                        ? "Select a room, then click Generate Schedule."
+                        : "Click Generate Schedule to create your room grid."}
               </p>
             </div>
           )}
         </div>
       </div>
+
+      {/* Saved Grids - Collapsible Section */}
+      <div className="university-card mt-6">
+        <button
+          onClick={() => setSavedGridsExpanded(!savedGridsExpanded)}
+          className="w-full university-card-header flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors"
+          aria-expanded={savedGridsExpanded}
+          aria-controls="saved-grids-content"
+        >
+          <div className="flex items-center gap-3">
+            {savedGridsExpanded ? (
+              <ChevronUp className="w-5 h-5 text-baylor-green" aria-hidden="true" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-baylor-green" aria-hidden="true" />
+            )}
+            <div className="text-left">
+              <h2 className="text-lg font-semibold text-baylor-green">
+                Saved Grids
+              </h2>
+              <p className="text-sm text-gray-500">
+                {savedGrids.length} saved schedule{savedGrids.length !== 1 ? "s" : ""}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              fetchSavedGrids();
+            }}
+            className="btn-ghost text-sm"
+            aria-label="Refresh saved grids list"
+          >
+            Refresh
+          </button>
+        </button>
+
+        {savedGridsExpanded && (
+          <div id="saved-grids-content" className="university-card-content border-t border-gray-200">
+            {isLoadingSaved ? (
+              <div className="text-gray-500 py-4" role="status" aria-live="polite">
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-baylor-green mr-3" aria-hidden="true"></div>
+                  Loading saved grids...
+                </div>
+              </div>
+            ) : savedGrids.length === 0 ? (
+              <div className="text-gray-500 py-8 text-center">
+                <p>No saved grids yet.</p>
+                <p className="text-sm mt-1">Generate a schedule and click "Save Grid" to save it for later.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm" role="table">
+                  <thead>
+                    <tr className="text-left text-gray-600">
+                      <th className="py-2 pr-4" scope="col">Title</th>
+                      <th className="py-2 pr-4" scope="col">Building</th>
+                      <th className="py-2 pr-4" scope="col">Room</th>
+                      <th className="py-2 pr-4" scope="col">Pattern</th>
+                      <th className="py-2 pr-4" scope="col">Semester</th>
+                      <th className="py-2 pr-4" scope="col">Created</th>
+                      <th className="py-2" scope="col">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {savedGrids.map((g) => (
+                      <tr key={g.id} className="border-t border-gray-200 hover:bg-gray-50">
+                        <td className="py-2 pr-4 font-medium">{g.title}</td>
+                        <td className="py-2 pr-4">{g.building}</td>
+                        <td className="py-2 pr-4">{g.room}</td>
+                        <td className="py-2 pr-4">
+                          {g.dayType === "WEEK" ? "Full Week" : g.dayType === "MWF" ? "Mon/Wed/Fri" : "Tue/Thu"}
+                        </td>
+                        <td className="py-2 pr-4">{g.semester}</td>
+                        <td className="py-2 pr-4 text-gray-600">
+                          {g.createdAt
+                            ? new Date(g.createdAt).toLocaleDateString()
+                            : "Unknown"}
+                        </td>
+                        <td className="py-2 space-x-2">
+                          <button
+                            onClick={() => loadGrid(g)}
+                            className="btn-secondary text-sm py-1 px-3"
+                            aria-label={`Load ${g.title}`}
+                          >
+                            Load
+                          </button>
+                          <button
+                            onClick={() => deleteSavedGrid(g)}
+                            className="btn-danger text-sm py-1 px-3"
+                            aria-label={`Delete ${g.title}`}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        scheduleTableRef={exportTargetRef}
+        title={exportTitle}
+        exportScale={3}
+        onExport={exportNeedsSizing ? () => updateTableSizing() : undefined}
+      />
+
+      {/* Alert Dialog */}
+      <ConfirmationDialog
+        isOpen={alertDialog.isOpen}
+        title={alertDialog.title}
+        message={alertDialog.message}
+        type="warning"
+        confirmText="OK"
+        onConfirm={() =>
+          setAlertDialog({ isOpen: false, message: "", title: "" })
+        }
+        onCancel={() =>
+          setAlertDialog({ isOpen: false, message: "", title: "" })
+        }
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={deleteConfirmDialog.isOpen}
+        title="Delete Saved Grid"
+        message={`Are you sure you want to delete "${deleteConfirmDialog.grid?.title}"? This action cannot be undone.`}
+        type="danger"
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
+
       <style>{`
                 /* Baylor brand palette */
                 .schedule-sheet { 

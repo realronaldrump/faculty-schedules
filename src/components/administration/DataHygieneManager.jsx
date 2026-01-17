@@ -40,6 +40,8 @@ import {
   previewLocationMigration,
   applyLocationMigration,
   getLocationHealthStats,
+  previewScheduleIdentityBackfill,
+  applyScheduleIdentityBackfill,
 } from "../../utils/dataHygiene";
 import { normalizeSpaceRecord } from "../../utils/spaceUtils";
 import {
@@ -788,6 +790,10 @@ const DataHygieneManager = () => {
   const [cleanupPreviewOpen, setCleanupPreviewOpen] = useState(false);
   const [cleanupPreviewItems, setCleanupPreviewItems] = useState([]);
   const [cleanupPreviewLoading, setCleanupPreviewLoading] = useState(false);
+  // Schedule identity backfill preview state
+  const [identityPreviewOpen, setIdentityPreviewOpen] = useState(false);
+  const [identityPreviewItems, setIdentityPreviewItems] = useState([]);
+  const [identityPreviewLoading, setIdentityPreviewLoading] = useState(false);
   const { user, loading: authLoading } = useAuth();
 
   // Location migration state
@@ -1726,6 +1732,39 @@ const DataHygieneManager = () => {
                 {cleanupPreviewLoading ? "Preparing…" : "Clean Up Section/CRN"}
               </button>
             </div>
+
+            <div className="border-t pt-6">
+              <h4 className="text-md font-semibold text-gray-900 mb-2">
+                Schedule Identity Backfill
+              </h4>
+              <p className="text-sm text-gray-600 mb-3">
+                Backfill identity keys on existing schedules so future imports
+                match the same records even after hygiene transformations.
+              </p>
+              <button
+                onClick={async () => {
+                  setIdentityPreviewLoading(true);
+                  try {
+                    const preview = await previewScheduleIdentityBackfill();
+                    setIdentityPreviewItems(preview.changes || []);
+                    setIdentityPreviewOpen(true);
+                  } catch (e) {
+                    console.error("Preview error:", e);
+                    showNotification(
+                      "error",
+                      "Preview Failed",
+                      e.message || "Could not prepare preview",
+                    );
+                  }
+                  setIdentityPreviewLoading(false);
+                }}
+                className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {identityPreviewLoading
+                  ? "Preparing…"
+                  : "Backfill Schedule Identity Keys"}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2595,6 +2634,111 @@ const DataHygieneManager = () => {
                   }}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                   disabled={cleanupPreviewItems.length === 0}
+                >
+                  Apply Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Identity Backfill Preview Modal */}
+      {identityPreviewOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[80vh] mx-4">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Preview: Backfill Schedule Identity Keys
+              </h3>
+              <button
+                onClick={() => setIdentityPreviewOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto" style={{ maxHeight: "60vh" }}>
+              {identityPreviewItems.length === 0 ? (
+                <div className="text-center text-gray-600">
+                  No changes needed
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {identityPreviewItems.slice(0, 200).map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between text-sm border rounded p-2"
+                    >
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900">
+                          {item.courseCode || "Unknown"} • {item.term || "—"}
+                        </div>
+                        <div className="text-gray-600">
+                          identityKey:{" "}
+                          <span className="font-medium">
+                            {item.before.identityKey || "—"}
+                          </span>{" "}
+                          →{" "}
+                          <span className="font-medium">
+                            {item.after.identityKey || "—"}
+                          </span>
+                        </div>
+                        <div className="text-gray-600">
+                          identityKeys: {item.before.identityKeys.length} →{" "}
+                          {item.after.identityKeys.length}
+                        </div>
+                      </div>
+                      <div className="ml-4 text-gray-400">{item.id}</div>
+                    </div>
+                  ))}
+                  {identityPreviewItems.length > 200 && (
+                    <div className="text-center text-gray-500">
+                      Showing 200 of {identityPreviewItems.length}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-between p-6 border-t bg-gray-50">
+              <div className="text-sm text-gray-600">
+                {identityPreviewItems.length} schedules will be updated
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setIdentityPreviewOpen(false)}
+                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      if (identityPreviewItems.length === 0) {
+                        setIdentityPreviewOpen(false);
+                        return;
+                      }
+                      const result = await applyScheduleIdentityBackfill(
+                        identityPreviewItems,
+                      );
+                      setIdentityPreviewOpen(false);
+                      showNotification(
+                        "success",
+                        "Identity Keys Backfilled",
+                        `Updated ${result.updated} schedules`,
+                      );
+                      await loadHealthReport();
+                    } catch (e) {
+                      console.error("Apply identity backfill error:", e);
+                      showNotification(
+                        "error",
+                        "Backfill Failed",
+                        e.message || "Could not apply identity backfill",
+                      );
+                    }
+                  }}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                  disabled={identityPreviewItems.length === 0}
                 >
                   Apply Changes
                 </button>

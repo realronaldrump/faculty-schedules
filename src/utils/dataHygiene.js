@@ -2026,6 +2026,94 @@ export const getStandardizationHistory = async (limitCount = 10) => {
   }
 };
 
+// ---------------------------------------------------------------------------
+// SCHEDULE IDENTITY BACKFILL
+// ---------------------------------------------------------------------------
+
+export const previewScheduleIdentityBackfill = async () => {
+  const snapshot = await getDocs(collection(db, 'schedules'));
+  const changes = [];
+
+  snapshot.docs.forEach((docSnap) => {
+    const data = docSnap.data() || {};
+    const identity = deriveScheduleIdentityFromSchedule({
+      id: docSnap.id,
+      ...data
+    });
+    if (!identity.primaryKey) return;
+
+    const resolvedIdentityKey = preferIdentityKey(
+      data.identityKey,
+      identity.primaryKey
+    );
+    const mergedIdentityKeys = mergeIdentityKeys(
+      data.identityKeys,
+      identity.keys
+    );
+    const resolvedSource = resolvedIdentityKey
+      ? resolvedIdentityKey.split(':')[0]
+      : (data.identitySource || '');
+
+    const before = {
+      identityKey: data.identityKey || '',
+      identityKeys: Array.isArray(data.identityKeys) ? data.identityKeys : [],
+      identitySource: data.identitySource || ''
+    };
+    const after = {
+      identityKey: resolvedIdentityKey || '',
+      identityKeys: mergedIdentityKeys,
+      identitySource: resolvedSource
+    };
+
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      changes.push({
+        id: docSnap.id,
+        courseCode: data.courseCode || '',
+        term: data.term || '',
+        before,
+        after
+      });
+    }
+  });
+
+  return {
+    totalRecords: snapshot.size,
+    recordsToUpdate: changes.length,
+    changes
+  };
+};
+
+export const applyScheduleIdentityBackfill = async (changes = []) => {
+  if (!Array.isArray(changes) || changes.length === 0) {
+    return { updated: 0 };
+  }
+
+  const batchWriter = createBatchWriter();
+  const now = new Date().toISOString();
+
+  for (const item of changes) {
+    if (!item?.id || !item.after) continue;
+    await batchWriter.add((batch) => {
+      batch.update(doc(db, 'schedules', item.id), {
+        identityKey: item.after.identityKey,
+        identityKeys: item.after.identityKeys,
+        identitySource: item.after.identitySource,
+        updatedAt: now
+      });
+    });
+  }
+
+  await batchWriter.flush();
+  await logBulkUpdate(
+    'Backfill schedule identity keys',
+    'schedules',
+    changes.length,
+    'dataHygiene.js - applyScheduleIdentityBackfill'
+  );
+
+  return { updated: changes.length };
+};
+
 // ============================================================================
 // LOCATION MIGRATION UTILITIES
 // ============================================================================

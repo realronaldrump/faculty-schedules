@@ -116,6 +116,7 @@ const RoomGridGenerator = () => {
       setBuildings({});
       setSelectedBuilding("");
       setSelectedBuildings([]);
+      setSelectedDayType("WEEK");
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }

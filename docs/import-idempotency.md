@@ -36,13 +36,11 @@ Each committed run records:
 
 These are used to make repeated imports idempotent while preserving auditability.
 
-## Migration
+## Backfill (in-app)
 
-Backfill identity keys for existing schedules (run once with admin creds):
-
-```bash
-node scripts/backfill-schedule-identity.mjs
-```
+If existing schedules were imported before identity keys existed, use the
+Data Hygiene page to run the **Schedule Identity Backfill** action. It will
+preview changes and apply them in-app without a terminal step.
 
 ## Tests
 

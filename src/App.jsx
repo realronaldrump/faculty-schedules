@@ -102,6 +102,22 @@ const navigationItems = [
         path: "people/offices",
         canonicalId: "people/offices",
       },
+      {
+        id: "programs",
+        label: "Programs",
+        path: "people/programs",
+        canonicalId: "people/programs",
+      },
+      {
+        id: "baylor-ids",
+        label: "Baylor IDs",
+        path: "people/baylor-ids",
+        canonicalId: "people/baylor-ids",
+        permissions: {
+          // Inherit from parent or specify if needed. 
+          // BaylorIDManager checks permissions internally ("people/baylor-id-manager")
+        },
+      },
     ],
   },
   {
@@ -482,6 +498,8 @@ function App() {
       case "people/directory":
       case "people/email-lists":
       case "people/offices":
+      case "people/programs":
+      case "people/baylor-ids":
         return (
           <ProtectedContent pageId={currentPage}>
             <PeopleHub />
@@ -625,7 +643,7 @@ function App() {
                 handleNavigate(path);
               }}
               collapsed={false}
-              onToggleCollapse={() => {}}
+              onToggleCollapse={() => { }}
               selectedSemester={selectedSemester}
               pinnedPages={pinnedPages}
               togglePinPage={togglePinPage}
@@ -737,11 +755,10 @@ function App() {
                               setSelectedSemester(semester);
                               setShowSemesterDropdown(false);
                             }}
-                            className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${
-                              semester === selectedSemester
+                            className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${semester === selectedSemester
                                 ? "bg-baylor-green/5 text-baylor-green font-medium"
                                 : "text-gray-900"
-                            }`}
+                              }`}
                           >
                             <span className="flex items-center justify-between">
                               <span>{semester}</span>
@@ -780,11 +797,10 @@ function App() {
                     <button
                       key={child.id}
                       onClick={() => handleNavigate(child.path)}
-                      className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                        currentPage === child.path
+                      className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${currentPage === child.path
                           ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
                           : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                      }`}
+                        }`}
                     >
                       {child.label}
                     </button>

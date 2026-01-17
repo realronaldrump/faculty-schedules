@@ -241,50 +241,34 @@ const ExportableRoomSchedule = forwardRef(({
                 padding: '8px 8px 6px 8px',
             }}>
                 {/* Time column */}
-                {/* Time column */}
                 <div style={{
                     width: '42px',
                     flexShrink: 0,
                     display: 'flex',
                     flexDirection: 'column',
-                    // matched padding of container
+                    paddingTop: '24px', // Align with day headers
+                    position: 'relative',
                 }}>
-                    {/* Header Spacer to match day headers */
-                        /* Day Header: Line height approx 17px (11px * 1.5) + 8px padding + 3px top border radius adjustment ~ 25px */
-                    }
-                    <div style={{
-                        height: '25px',
-                        marginBottom: '4px', // Gap match
-                        flexShrink: 0,
-                    }} />
-
-                    {/* Time Labels Container */}
-                    <div style={{
-                        flex: 1,
-                        position: 'relative',
-                        // Remove padding top, alignment handled by relative positioning to Spacer
-                    }}>
-                        {hourLabels.map((minutes, idx) => {
-                            const top = ((minutes - timeRange.start) / totalMinutes) * 100;
-                            return (
-                                <div
-                                    key={minutes}
-                                    style={{
-                                        position: 'absolute',
-                                        top: `${top}%`,
-                                        right: '4px',
-                                        transform: 'translateY(-50%)',
-                                        fontSize: '9px',
-                                        fontWeight: '600',
-                                        color: colors.baylorGreen,
-                                        whiteSpace: 'nowrap',
-                                    }}
-                                >
-                                    {formatTime(minutes)}
-                                </div>
-                            );
-                        })}
-                    </div>
+                    {hourLabels.map((minutes, idx) => {
+                        const top = ((minutes - timeRange.start) / totalMinutes) * 100;
+                        return (
+                            <div
+                                key={minutes}
+                                style={{
+                                    position: 'absolute',
+                                    top: `${top}%`,
+                                    right: '4px',
+                                    transform: 'translateY(-50%)',
+                                    fontSize: '9px',
+                                    fontWeight: '600',
+                                    color: colors.baylorGreen,
+                                    whiteSpace: 'nowrap',
+                                }}
+                            >
+                                {formatTime(minutes)}
+                            </div>
+                        );
+                    })}
                 </div>
 
                 {/* Days grid */}

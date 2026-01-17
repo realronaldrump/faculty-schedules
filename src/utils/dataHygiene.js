@@ -10,10 +10,11 @@
 
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, deleteDoc, writeBatch, addDoc, orderBy, limit, deleteField, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { logUpdate, logStandardization, logMerge } from './changeLogger';
+import { logUpdate, logStandardization, logMerge, logBulkUpdate } from './changeLogger';
 import { normalizedSchema } from './normalizedSchema';
 import { getRoomKeyFromRoomRecord, parseRoomLabel } from './roomUtils';
 import { isStudentWorker } from './peopleUtils';
+import { deriveScheduleIdentityFromSchedule } from './importIdentityUtils';
 import {
   DEFAULT_PERSON_SCHEMA,
   standardizePerson,

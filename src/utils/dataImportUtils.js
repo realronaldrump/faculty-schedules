@@ -36,11 +36,7 @@ import {
   normalizeTermLabel,
   termCodeFromLabel,
 } from "./termUtils";
-import {
-  generateSectionId,
-  normalizeSectionNumber,
-  extractCrnFromSection,
-} from "./canonicalSchema";
+import { normalizeSectionNumber, extractCrnFromSection } from "./canonicalSchema";
 // Import from centralized location service
 import {
   splitMultiRoom,
@@ -53,6 +49,13 @@ import {
   normalizeSpaceNumber
 } from "./locationService";
 import { resolveScheduleSpaces } from "./spaceUtils";
+import { hashRecord } from "./hashUtils";
+import {
+  buildScheduleDocId,
+  buildScheduleIdentityIndex,
+  deriveScheduleIdentityFromSchedule,
+  resolveScheduleIdentityMatch,
+} from "./importIdentityUtils";
 
 // ==================== PROGRAM MAPPING ====================
 
@@ -284,6 +287,34 @@ export const buildUpsertUpdates = (
   }
 
   return { updates, hasChanges };
+};
+
+const identityStrength = (key) => {
+  if (!key) return 0;
+  if (key.startsWith("clss:")) return 4;
+  if (key.startsWith("crn:")) return 3;
+  if (key.startsWith("section:")) return 2;
+  if (key.startsWith("composite:")) return 1;
+  return 0;
+};
+
+const mergeIdentityKeys = (existingKeys, incomingKeys) => {
+  const merged = new Set();
+  (Array.isArray(existingKeys) ? existingKeys : []).forEach((key) => {
+    if (key) merged.add(key);
+  });
+  (Array.isArray(incomingKeys) ? incomingKeys : []).forEach((key) => {
+    if (key) merged.add(key);
+  });
+  return Array.from(merged);
+};
+
+const preferIdentityKey = (existingKey, incomingKey) => {
+  if (!incomingKey) return existingKey || "";
+  if (!existingKey) return incomingKey;
+  return identityStrength(incomingKey) >= identityStrength(existingKey)
+    ? incomingKey
+    : existingKey;
 };
 
 /**
@@ -981,53 +1012,18 @@ export const processScheduleImport = async (csvData) => {
     `📊 Found ${existingPeople.length} existing people, ${existingRooms.length} rooms`,
   );
 
-  // Normalize section strings like "01 (33070)" → "01"
-  const normalizeSection = (sectionField) => {
-    const raw = (sectionField || "").toString().trim();
-    if (!raw) return "";
-    const cut = raw.split(" ")[0];
-    const idx = cut.indexOf("(");
-    return idx > -1 ? cut.substring(0, idx).trim() : cut.trim();
-  };
-
-  // Build a deterministic composite key for schedules when CRN/section are missing
-  const toMeetingKey = (patterns) => {
-    if (!Array.isArray(patterns) || patterns.length === 0) return "";
-    const norm = patterns.map((p) => ({
-      d: (p?.day || "").toString().trim().toUpperCase(),
-      s: (p?.startTime || "").toString().trim(),
-      e: (p?.endTime || "").toString().trim(),
-    }));
-    // Sort by day then start time for stability
-    norm.sort(
-      (a, b) =>
-        a.d.localeCompare(b.d) ||
-        a.s.localeCompare(b.s) ||
-        a.e.localeCompare(b.e),
+  const { index: scheduleIdentityIndex, collisions: scheduleIdentityCollisions } =
+    buildScheduleIdentityIndex(existingSchedules);
+  if (scheduleIdentityCollisions.length > 0) {
+    console.warn(
+      `⚠️ Schedule identity collisions detected: ${scheduleIdentityCollisions.length}`,
     );
-    return norm.map((p) => `${p.d}|${p.s}|${p.e}`).join("~");
-  };
-  const toRoomKey = (schedule) => {
-    const names = Array.isArray(schedule?.roomNames)
-      ? schedule.roomNames
-      : schedule?.roomName
-        ? [schedule.roomName]
-        : [];
-    if (!names || names.length === 0) return "";
-    const cleaned = names
-      .map((n) => (n || "").toString().trim().toLowerCase())
-      .filter(Boolean)
-      .sort();
-    return cleaned.join("|");
-  };
-  const buildCompositeKey = (s) => {
-    const course = (s.courseCode || "").toString().trim().toUpperCase();
-    const termVal = (s.term || "").toString().trim();
-    const mp = toMeetingKey(s.meetingPatterns);
-    const rm = toRoomKey(s);
-    if (!course || !termVal || !mp || !rm) return "";
-    return `${course}__${termVal}__${mp}__${rm}`;
-  };
+  }
+  const seenIdentityKeys = new Set();
+
+  // Normalize section strings like "01 (33070)" → "01"
+  const normalizeSection = (sectionField) =>
+    normalizeSectionNumber(sectionField);
 
   for (const row of csvData) {
     try {
@@ -1443,6 +1439,7 @@ export const processScheduleImport = async (csvData) => {
         catalogNumber,
         courseLevel: parsedCourse.level,
         section,
+        clssId: row["CLSS ID"] || "",
         crn, // Pass CRN to the model
         meetingPatterns,
         // Multi-room fields (new canonical format)
@@ -1470,6 +1467,20 @@ export const processScheduleImport = async (csvData) => {
         status,
       });
 
+      const identity = deriveScheduleIdentityFromSchedule(scheduleData);
+      if (!identity.primaryKey) {
+        results.errors.push(`Missing identity key for ${courseCode} ${section} (${term})`);
+        continue;
+      }
+      if (seenIdentityKeys.has(identity.primaryKey)) {
+        results.skipped++;
+        continue;
+      }
+      seenIdentityKeys.add(identity.primaryKey);
+      scheduleData.identityKey = identity.primaryKey;
+      scheduleData.identityKeys = identity.keys;
+      scheduleData.identitySource = identity.source;
+
       // Parse cross-listings from CSV text (store related CRNs if present)
       const crossListCrns = parseCrossListCrns(row);
 
@@ -1484,35 +1495,25 @@ export const processScheduleImport = async (csvData) => {
         scheduleWrite.crossListCrns = Array.from(new Set(crossListCrns));
       }
 
-      // Prefer CRN + Term matching when available, fallback to Course + Section + Term
-      let existingMatch = null;
-      if (scheduleData.crn && scheduleData.term) {
-        existingMatch = existingSchedules.find(
-          (s) =>
-            (s.crn || "") === scheduleData.crn &&
-            (s.term || "") === scheduleData.term,
-        );
-      }
-      if (!existingMatch) {
-        existingMatch = existingSchedules.find(
-          (s) =>
-            (s.courseCode || "") === (scheduleData.courseCode || "") &&
-            normalizeSection(s.section) ===
-            normalizeSection(scheduleData.section) &&
-            (s.term || "") === (scheduleData.term || ""),
-        );
-      }
-      // Final fallback: deterministic composite of course + term + meeting time + room
-      if (!existingMatch) {
-        const incomingComposite = buildCompositeKey(scheduleData);
-        if (incomingComposite) {
-          existingMatch = existingSchedules.find(
-            (s) => buildCompositeKey(s) === incomingComposite,
-          );
-        }
-      }
+      const matchResult = resolveScheduleIdentityMatch(
+        identity.keys,
+        scheduleIdentityIndex,
+      );
+      const existingMatch = matchResult.schedule || null;
 
       if (existingMatch) {
+        scheduleWrite.identityKeys = mergeIdentityKeys(
+          existingMatch.identityKeys,
+          scheduleData.identityKeys,
+        );
+        const resolvedIdentityKey = preferIdentityKey(
+          existingMatch.identityKey,
+          scheduleData.identityKey,
+        );
+        if (resolvedIdentityKey) {
+          scheduleWrite.identityKey = resolvedIdentityKey;
+          scheduleWrite.identitySource = resolvedIdentityKey.split(":")[0];
+        }
         // Upsert: only overwrite with non-empty CSV values; skip if identical
         const { updates, hasChanges } = buildUpsertUpdates(
           existingMatch,
@@ -1541,30 +1542,15 @@ export const processScheduleImport = async (csvData) => {
         results.schedules.push({ ...existingMatch, ...updates });
       } else {
         // Create new schedule with full relational integrity
-        // Use canonical section ID from generateSectionId() for deterministic, unique IDs
-        // Format: {termCode}_{courseCode}_{sectionNumber}
-        // Example: "202610_ID_4433_01"
-        // This ensures the same logical section always gets the same ID
-        const sectionNumber = normalizeSectionNumber(scheduleData.section);
-        const termCode = (
-          scheduleData.termCode ||
-          termCodeFromLabel(scheduleData.term) ||
-          "TERM"
-        )
-          .toString()
-          .trim();
+        const fallbackTerm =
+          scheduleData.termCode || termCodeFromLabel(scheduleData.term) || "TERM";
+        const fallbackId = scheduleData.crn
+          ? `${fallbackTerm}_${scheduleData.crn}`
+          : `${fallbackTerm}_${(scheduleData.courseCode || "COURSE").replace(/\s+/g, "_").toUpperCase()}_${normalizeSectionNumber(scheduleData.section) || "SECTION"}`;
         const scheduleDeterministicId =
-          generateSectionId({
-            termCode,
-            courseCode: scheduleData.courseCode,
-            sectionNumber,
-          }) ||
-          `${termCode}_${(scheduleData.courseCode || "COURSE").replace(/\s+/g, "_").toUpperCase()}_${sectionNumber || "SECTION"}`;
-        const schedRef = doc(
-          db,
-          COLLECTIONS.SCHEDULES,
-          scheduleDeterministicId,
-        );
+          buildScheduleDocId({ primaryKey: scheduleData.identityKey }) ||
+          fallbackId;
+        const schedRef = doc(db, COLLECTIONS.SCHEDULES, scheduleDeterministicId);
         await setDoc(schedRef, scheduleWrite, { merge: true });
         results.created++;
         results.schedules.push({ ...scheduleWrite, id: schedRef.id });
@@ -1755,6 +1741,9 @@ export const parseCLSSCSV = (csvText) => {
       rowData[header] = String(rawValue).replace(/\r/g, "").trim();
     });
     rowData.__rowIndex = i + 1;
+    const rowHashInput = { ...rowData };
+    delete rowHashInput.__rowIndex;
+    rowData.__rowHash = hashRecord(rowHashInput);
 
     const rawSemester = rowData["Semester"] || rowData["Term"] || "";
     if (rawSemester) {

@@ -165,18 +165,19 @@ const getChangeType = (oldValue, newValue) => {
  * Convenience functions for common actions
  */
 
-export const logCreate = (entity, collection, documentId, data, source) => {
+export const logCreate = (entity, collection, documentId, data, source, metadata = {}) => {
   return logChange({
     action: 'CREATE',
     entity,
     collection,
     documentId,
     changes: data,
-    source
+    source,
+    metadata
   });
 };
 
-export const logUpdate = (entity, collection, documentId, changes, originalData, source) => {
+export const logUpdate = (entity, collection, documentId, changes, originalData, source, metadata = {}) => {
   // Calculate detailed field changes
   const fieldChanges = getFieldChanges(originalData, changes);
   
@@ -189,6 +190,7 @@ export const logUpdate = (entity, collection, documentId, changes, originalData,
     originalData,
     source,
     metadata: {
+      ...metadata,
       fieldChanges,
       changedFields: Object.keys(fieldChanges),
       changeCount: Object.keys(fieldChanges).length
@@ -196,14 +198,15 @@ export const logUpdate = (entity, collection, documentId, changes, originalData,
   });
 };
 
-export const logDelete = (entity, collection, documentId, originalData, source) => {
+export const logDelete = (entity, collection, documentId, originalData, source, metadata = {}) => {
   return logChange({
     action: 'DELETE',
     entity,
     collection,
     documentId,
     originalData,
-    source
+    source,
+    metadata
   });
 };
 

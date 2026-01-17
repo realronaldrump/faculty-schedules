@@ -22,6 +22,7 @@ import { useSchedules } from "../../contexts/ScheduleContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { useUI } from "../../contexts/UIContext";
 import { normalizeTermLabel } from "../../utils/termUtils";
+import { hashString } from "../../utils/hashUtils";
 
 const ImportWizard = ({ embedded = false }) => {
   const { selectedSemester, refreshSchedules, refreshTerms, isTermLocked } =
@@ -33,6 +34,8 @@ const ImportWizard = ({ embedded = false }) => {
   const canEditHere = canEdit("tools/import-wizard");
   const [step, setStep] = useState(1);
   const [fileName, setFileName] = useState("");
+  const [fileHash, setFileHash] = useState("");
+  const [fileSize, setFileSize] = useState(0);
   const [rawText, setRawText] = useState("");
   const [csvData, setCsvData] = useState([]);
   const [importType, setImportType] = useState(null); // 'schedule' | 'directory'
@@ -102,10 +105,12 @@ const ImportWizard = ({ embedded = false }) => {
       return;
     }
     setFileName(file.name);
+    setFileSize(file.size || 0);
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = String(e.target?.result || "");
       setRawText(text);
+      setFileHash(hashString(text));
       try {
         if (
           text.includes("CLSS ID") &&
@@ -196,9 +201,15 @@ const ImportWizard = ({ embedded = false }) => {
     setIsProcessing(true);
     try {
       let semester = detectedTerm || selectedSemester;
+      const importMetadata = {
+        fileName,
+        fileHash,
+        fileSize,
+      };
       if (importType === "schedule") {
         const tx = await previewImportChanges(csvData, "schedule", semester, {
           persist: true,
+          importMetadata,
         });
         setPreviewTransaction(tx);
         setShowPreviewModal(true);
@@ -210,6 +221,7 @@ const ImportWizard = ({ embedded = false }) => {
           {
             persist: true,
             includeOfficeRooms: canEditHere,
+            importMetadata,
           },
         );
         setPreviewTransaction(tx);
@@ -306,6 +318,8 @@ const ImportWizard = ({ embedded = false }) => {
     setShowPreviewModal(false);
     setIsCommitting(false);
     setResultsSummary(null);
+    setFileHash("");
+    setFileSize(0);
   };
 
   return (

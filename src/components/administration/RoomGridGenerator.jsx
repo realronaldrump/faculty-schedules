@@ -44,7 +44,7 @@ const RoomGridGenerator = () => {
   const [buildings, setBuildings] = useState({});
   const [selectedBuilding, setSelectedBuilding] = useState("");
   const [selectedRoom, setSelectedRoom] = useState("");
-  const [selectedDayType, setSelectedDayType] = useState("MWF");
+  const [selectedDayType, setSelectedDayType] = useState("WEEK");
   const [semester, setSemester] = useState("");
   const [message, setMessage] = useState({ text: "", type: "" });
   const [scheduleHtml, setScheduleHtml] = useState("");
@@ -53,6 +53,9 @@ const RoomGridGenerator = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingSaved, setIsLoadingSaved] = useState(false);
   const [savedGrids, setSavedGrids] = useState([]);
+  const [multiRoomMode, setMultiRoomMode] = useState(false);
+  const [selectedBuildings, setSelectedBuildings] = useState([]);
+  const [generatedSchedules, setGeneratedSchedules] = useState([]);
 
   // Mode selection: null = wizard, 'auto' = dashboard data, 'csv' = CLSS import
   const [dataMode, setDataMode] = useState(null);
@@ -77,6 +80,7 @@ const RoomGridGenerator = () => {
 
   const printRef = useRef();
   const exportableRef = useRef();
+  const multiExportRef = useRef();
   const fileInputRef = useRef();
 
   const timeSlots = {
@@ -111,12 +115,14 @@ const RoomGridGenerator = () => {
       setAllClassData([]);
       setBuildings({});
       setSelectedBuilding("");
+      setSelectedBuildings([]);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
     }
     setSelectedRoom("");
     setScheduleHtml("");
+    setGeneratedSchedules([]);
     setWeeklyClasses([]);
     setShowExportableWeek(false);
     setMessage({ text: "", type: "" });
@@ -317,6 +323,32 @@ const RoomGridGenerator = () => {
     }
   };
 
+  const handleMultiRoomToggle = (event) => {
+    const checked = event.target.checked;
+    setMultiRoomMode(checked);
+    setGeneratedSchedules([]);
+    setScheduleHtml("");
+    setWeeklyClasses([]);
+    setShowExportableWeek(false);
+    if (checked) {
+      setSelectedBuildings(selectedBuilding ? [selectedBuilding] : []);
+      setSelectedRoom("");
+    } else {
+      setSelectedBuilding(selectedBuildings[0] || selectedBuilding || "");
+      setSelectedBuildings([]);
+    }
+  };
+
+  const handleSelectedBuildingsChange = (event) => {
+    const values = Array.from(event.target.selectedOptions).map(
+      (option) => option.value,
+    );
+    setSelectedBuildings(values);
+    if (values.length === 1) {
+      setSelectedBuilding(values[0]);
+    }
+  };
+
   const handleFileUpload = (file) => {
     if (!file) return;
 
@@ -461,41 +493,30 @@ const RoomGridGenerator = () => {
     }
   };
 
-  const generateSchedule = () => {
-    if (!selectedBuilding || !selectedRoom) {
-      showMessage("Please select a building and a room.");
-      return;
-    }
+  const buildExportName = (building, room, dayType, termLabel) =>
+    [building, room, dayType, termLabel].filter(Boolean).join(" ");
 
-    if (selectedDayType === "WEEK") {
-      generateExportableWeeklySchedule();
-      return;
-    }
+  const escapeHtmlAttribute = (value) =>
+    (value || "").replace(/"/g, "&quot;");
 
-    const dayChars = selectedDayType === "MWF" ? ["M", "W", "F"] : ["T", "R"];
+  const buildTableScheduleHtml = (building, room, dayType) => {
+    const dayChars = dayType === "MWF" ? ["M", "W", "F"] : ["T", "R"];
     const relevantClasses = allClassData.filter((c) => {
       const meetingDays = parseDaysToChars(c.days);
       return (
-        c.building === selectedBuilding &&
-        c.room === selectedRoom &&
+        c.building === building &&
+        c.room === room &&
         meetingDays.some((d) => dayChars.includes(d))
       );
     });
 
-    if (relevantClasses.length === 0) {
-      setScheduleHtml(
-        `<div class="text-center p-8 text-gray-500">No classes found for ${selectedBuilding} ${selectedRoom} on ${selectedDayType} days.</div>`,
-      );
-      return;
-    }
-
     const tableHeader = `
-            <div class="text-2xl font-bold" contenteditable="true">${selectedBuilding.replace(" Bldg", "").toUpperCase()} ${selectedRoom}</div>
-            <div class="text-lg font-medium">${selectedDayType === "MWF" ? "Monday - Wednesday - Friday" : "Tuesday - Thursday"}</div>
+            <div class="text-2xl font-bold" contenteditable="true">${building.replace(" Bldg", "").toUpperCase()} ${room}</div>
+            <div class="text-lg font-medium">${dayType === "MWF" ? "Monday - Wednesday - Friday" : "Tuesday - Thursday"}</div>
             <div class="text-md" contenteditable="true">${semester}</div>
         `;
 
-    const tableBody = timeSlots[selectedDayType]
+    const tableBody = (timeSlots[dayType] || [])
       .map((slot) => {
         const classesInSlot = findClassesInSlot(relevantClasses, slot);
         const classContent =
@@ -505,7 +526,7 @@ const RoomGridGenerator = () => {
                   let daysIndicator = "";
                   const mdays = parseDaysToChars(c.days);
                   const expected =
-                    selectedDayType === "MWF" ? ["M", "W", "F"] : ["T", "R"];
+                    dayType === "MWF" ? ["M", "W", "F"] : ["T", "R"];
                   const isFullPattern =
                     expected.every((d) => mdays.includes(d)) &&
                     mdays.every((d) => expected.includes(d));
@@ -536,8 +557,11 @@ const RoomGridGenerator = () => {
       })
       .join("");
 
+    const exportName = escapeHtmlAttribute(
+      buildExportName(building, room, dayType, semester),
+    );
     const htmlUnsafe = `
-            <div class="schedule-sheet">
+            <div class="schedule-sheet" data-export-name="${exportName}">
                 <table class="schedule-table">
                     <thead>
                         <tr>
@@ -550,9 +574,117 @@ const RoomGridGenerator = () => {
                 </table>
             </div>
         `;
-    setScheduleHtml(
-      DOMPurify.sanitize(htmlUnsafe, { USE_PROFILES: { html: true } }),
+    return {
+      html: DOMPurify.sanitize(htmlUnsafe, { USE_PROFILES: { html: true } }),
+      hasClasses: relevantClasses.length > 0,
+    };
+  };
+
+  const getTargetsForGeneration = () => {
+    if (multiRoomMode) {
+      const buildingList = selectedBuildings.length
+        ? selectedBuildings
+        : selectedBuilding
+          ? [selectedBuilding]
+          : [];
+      const sortedBuildings = Array.from(new Set(buildingList)).sort();
+      return sortedBuildings.flatMap((building) => {
+        const rooms = buildings[building]
+          ? Array.from(buildings[building]).sort((a, b) =>
+              a.localeCompare(b, undefined, { numeric: true }),
+            )
+          : [];
+        return rooms.map((room) => ({ building, room }));
+      });
+    }
+    if (!selectedBuilding || !selectedRoom) return [];
+    return [{ building: selectedBuilding, room: selectedRoom }];
+  };
+
+  const generateSchedule = () => {
+    const targets = getTargetsForGeneration();
+    if (targets.length === 0) {
+      showMessage(
+        multiRoomMode
+          ? "Please select at least one building."
+          : "Please select a building and a room.",
+      );
+      return;
+    }
+
+    if (selectedDayType === "WEEK") {
+      if (multiRoomMode) {
+        const schedules = targets.map(({ building, room }) => ({
+          id: `${building}-${room}-WEEK`,
+          kind: "week",
+          building,
+          room,
+          dayType: "WEEK",
+          semester,
+          classes: allClassData.filter(
+            (c) => c.building === building && c.room === room,
+          ),
+        }));
+        setGeneratedSchedules(schedules);
+        setShowExportableWeek(false);
+        setWeeklyClasses([]);
+        setScheduleHtml("");
+        const buildingCount = new Set(targets.map((t) => t.building)).size;
+        showMessage(
+          `Generated weekly schedules for ${targets.length} rooms across ${buildingCount} building${buildingCount === 1 ? "" : "s"}.`,
+          "success",
+        );
+      } else {
+        setGeneratedSchedules([]);
+        generateExportableWeeklySchedule();
+      }
+      return;
+    }
+
+    if (multiRoomMode) {
+      const schedules = targets.map(({ building, room }) => {
+        const result = buildTableScheduleHtml(building, room, selectedDayType);
+        return {
+          id: `${building}-${room}-${selectedDayType}`,
+          kind: "table",
+          building,
+          room,
+          dayType: selectedDayType,
+          semester,
+          html: result.html,
+        };
+      });
+      setGeneratedSchedules(schedules);
+      setShowExportableWeek(false);
+      setWeeklyClasses([]);
+      setScheduleHtml("");
+      const buildingCount = new Set(targets.map((t) => t.building)).size;
+      showMessage(
+        `Generated ${targets.length} room grids across ${buildingCount} building${buildingCount === 1 ? "" : "s"}.`,
+        "success",
+      );
+      return;
+    }
+
+    const singleResult = buildTableScheduleHtml(
+      selectedBuilding,
+      selectedRoom,
+      selectedDayType,
     );
+    if (!singleResult.hasClasses) {
+      setGeneratedSchedules([]);
+      setShowExportableWeek(false);
+      setWeeklyClasses([]);
+      setScheduleHtml(
+        `<div class="text-center p-8 text-gray-500">No classes found for ${selectedBuilding} ${selectedRoom} on ${selectedDayType} days.</div>`,
+      );
+      return;
+    }
+
+    setGeneratedSchedules([]);
+    setShowExportableWeek(false);
+    setWeeklyClasses([]);
+    setScheduleHtml(singleResult.html);
     showMessage(
       "Schedule generated. Click on fields to edit before printing.",
       "success",
@@ -600,6 +732,7 @@ const RoomGridGenerator = () => {
     if (relevant.length === 0) {
       setWeeklyClasses([]);
       setShowExportableWeek(false);
+      setGeneratedSchedules([]);
       setScheduleHtml(
         `<div class="text-center p-8 text-gray-500">No classes found for ${selectedBuilding} ${selectedRoom}.</div>`,
       );
@@ -609,6 +742,7 @@ const RoomGridGenerator = () => {
     // Set up the classes for the exportable component
     setWeeklyClasses(relevant);
     setShowExportableWeek(true);
+    setGeneratedSchedules([]);
     setScheduleHtml(""); // Clear the old HTML-based schedule
     showMessage(
       "Weekly schedule generated. Click Export to save as PNG.",
@@ -794,30 +928,38 @@ const RoomGridGenerator = () => {
   };
 
   const updateTableSizing = useCallback(() => {
-    const container = printRef.current;
-    if (!container) return;
-    const sheet = container.querySelector(".schedule-sheet");
-    if (!sheet) return;
-    const table = sheet.querySelector(".schedule-table");
-    if (!table) return;
-    const header = table.querySelector("thead");
-    const rows = table.querySelectorAll("tbody tr");
-    if (!header || rows.length === 0) return;
-    const sheetStyles = getComputedStyle(sheet);
-    const paddingTop = parseFloat(sheetStyles.paddingTop) || 0;
-    const paddingBottom = parseFloat(sheetStyles.paddingBottom) || 0;
-    const availableHeight =
-      sheet.clientHeight - paddingTop - paddingBottom - header.offsetHeight;
-    if (availableHeight <= 0) return;
-    const rowHeight = Math.floor(availableHeight / rows.length);
-    sheet.style.setProperty("--rowHeight", `${rowHeight}px`);
+    const containers = [printRef.current, multiExportRef.current].filter(
+      Boolean,
+    );
+    if (containers.length === 0) return;
+    containers.forEach((container) => {
+      const sheets = container.querySelectorAll(".schedule-sheet");
+      sheets.forEach((sheet) => {
+        const table = sheet.querySelector(".schedule-table");
+        if (!table) return;
+        const header = table.querySelector("thead");
+        const rows = table.querySelectorAll("tbody tr");
+        if (!header || rows.length === 0) return;
+        const sheetStyles = getComputedStyle(sheet);
+        const paddingTop = parseFloat(sheetStyles.paddingTop) || 0;
+        const paddingBottom = parseFloat(sheetStyles.paddingBottom) || 0;
+        const availableHeight =
+          sheet.clientHeight - paddingTop - paddingBottom - header.offsetHeight;
+        if (availableHeight <= 0) return;
+        const rowHeight = Math.floor(availableHeight / rows.length);
+        sheet.style.setProperty("--rowHeight", `${rowHeight}px`);
+      });
+    });
   }, []);
 
   // Delegated events for add/delete within rendered HTML
   useEffect(() => {
-    const container = printRef.current;
-    if (!container) return;
+    const containers = [printRef.current, multiExportRef.current].filter(
+      Boolean,
+    );
+    if (containers.length === 0) return;
     const handleClick = (e) => {
+      const root = e.currentTarget;
       let target = e.target;
       // If target is a text node, normalize to its parent element
       if (target && target.nodeType !== 1 && target.parentElement) {
@@ -847,9 +989,9 @@ const RoomGridGenerator = () => {
         const block = actionEl.closest(".class-block");
         if (block) block.remove();
       } else if (action === "add-week-block") {
-        const grid = container.querySelector(".weekly-grid");
+        const grid = root.querySelector(".weekly-grid");
         if (!grid) return;
-        const existing = container.querySelector(".weekly-add-form");
+        const existing = root.querySelector(".weekly-add-form");
         if (existing) {
           existing.remove();
           return;
@@ -893,7 +1035,7 @@ const RoomGridGenerator = () => {
       } else if (action === "submit-week-form") {
         const form = actionEl.closest(".weekly-add-form");
         if (!form) return;
-        const grid = container.querySelector(".weekly-grid");
+        const grid = root.querySelector(".weekly-grid");
         if (!grid) return;
 
         // Get selected days
@@ -958,13 +1100,17 @@ const RoomGridGenerator = () => {
         }
       }
     };
-    container.addEventListener("click", handleClick);
+    containers.forEach((container) =>
+      container.addEventListener("click", handleClick),
+    );
     const resizeId = requestAnimationFrame(updateTableSizing);
     return () => {
       cancelAnimationFrame(resizeId);
-      container.removeEventListener("click", handleClick);
+      containers.forEach((container) =>
+        container.removeEventListener("click", handleClick),
+      );
     };
-  }, [scheduleHtml, updateTableSizing]);
+  }, [scheduleHtml, generatedSchedules, updateTableSizing]);
 
   // Firestore: saved grids
   const fetchSavedGrids = useCallback(async () => {
@@ -1034,6 +1180,11 @@ const RoomGridGenerator = () => {
 
   const loadGrid = (grid) => {
     if (!grid) return;
+    setMultiRoomMode(false);
+    setSelectedBuildings([]);
+    setGeneratedSchedules([]);
+    setShowExportableWeek(false);
+    setWeeklyClasses([]);
     setSelectedBuilding(grid.building || selectedBuilding);
     setSelectedRoom(grid.room || selectedRoom);
     setSelectedDayType(grid.dayType || selectedDayType);
@@ -1102,6 +1253,21 @@ const RoomGridGenerator = () => {
             </option>
           ))
       : [];
+
+  const hasGeneratedSchedules = generatedSchedules.length > 0;
+  const exportTargetRef = hasGeneratedSchedules
+    ? multiExportRef
+    : showExportableWeek
+      ? exportableRef
+      : printRef;
+  const exportTitle = hasGeneratedSchedules
+    ? `Room-Grids-${selectedDayType}-${semester || "Schedule"}`
+    : `${selectedBuilding}-${selectedRoom}-${selectedDayType}-${semester}`;
+  const exportButtonLabel =
+    hasGeneratedSchedules && generatedSchedules.length > 1
+      ? "Export All"
+      : "Export";
+  const exportNeedsSizing = selectedDayType !== "WEEK";
 
   return (
     <div className="page-content">
@@ -1290,19 +1456,57 @@ const RoomGridGenerator = () => {
                       className="block text-sm font-medium text-gray-700 mb-1"
                     >
                       {dataMode === "csv"
-                        ? "3. Select Building"
-                        : "2. Select Building"}
+                        ? `3. Select Building${multiRoomMode ? "(s)" : ""}`
+                        : `2. Select Building${multiRoomMode ? "(s)" : ""}`}
                     </label>
-                    <select
-                      id="buildingSelect"
-                      value={selectedBuilding}
-                      onChange={(e) => setSelectedBuilding(e.target.value)}
-                      className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                      disabled={Object.keys(buildings).length === 0}
-                    >
-                      <option value="">-- Select Building --</option>
-                      {buildingOptions}
-                    </select>
+                    <div className="flex items-center gap-2 mb-2">
+                      <input
+                        id="multiRoomToggle"
+                        type="checkbox"
+                        checked={multiRoomMode}
+                        onChange={handleMultiRoomToggle}
+                        className="h-4 w-4 text-baylor-green border-gray-300 rounded"
+                      />
+                      <label
+                        htmlFor="multiRoomToggle"
+                        className="text-xs text-gray-600"
+                      >
+                        Generate all rooms in selected building(s)
+                      </label>
+                    </div>
+                    {multiRoomMode ? (
+                      <>
+                        <select
+                          id="buildingSelect"
+                          multiple
+                          value={selectedBuildings}
+                          onChange={handleSelectedBuildingsChange}
+                          className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                          disabled={Object.keys(buildings).length === 0}
+                        >
+                          {buildingOptions}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Hold Cmd/Ctrl to select multiple buildings.
+                        </p>
+                      </>
+                    ) : (
+                      <select
+                        id="buildingSelect"
+                        value={selectedBuilding}
+                        onChange={(e) => {
+                          setSelectedBuilding(e.target.value);
+                          setSelectedBuildings(
+                            e.target.value ? [e.target.value] : [],
+                          );
+                        }}
+                        className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        disabled={Object.keys(buildings).length === 0}
+                      >
+                        <option value="">-- Select Building --</option>
+                        {buildingOptions}
+                      </select>
+                    )}
                   </div>
 
                   {/* Room Selection */}
@@ -1311,18 +1515,26 @@ const RoomGridGenerator = () => {
                       htmlFor="roomSelect"
                       className="block text-sm font-medium text-gray-700 mb-1"
                     >
-                      {dataMode === "csv" ? "4. Select Room" : "3. Select Room"}
+                      {dataMode === "csv"
+                        ? "4. Select Room"
+                        : "3. Select Room"}
                     </label>
-                    <select
-                      id="roomSelect"
-                      value={selectedRoom}
-                      onChange={(e) => setSelectedRoom(e.target.value)}
-                      className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                      disabled={!selectedBuilding}
-                    >
-                      <option value="">-- Select Room --</option>
-                      {roomOptions}
-                    </select>
+                    {multiRoomMode ? (
+                      <div className="block w-full p-2 border border-gray-300 rounded-md bg-gray-100 text-gray-600">
+                        All rooms in selected buildings
+                      </div>
+                    ) : (
+                      <select
+                        id="roomSelect"
+                        value={selectedRoom}
+                        onChange={(e) => setSelectedRoom(e.target.value)}
+                        className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        disabled={!selectedBuilding}
+                      >
+                        <option value="">-- Select Room --</option>
+                        {roomOptions}
+                      </select>
+                    )}
                   </div>
 
                   {/* View Type Selection */}
@@ -1360,7 +1572,7 @@ const RoomGridGenerator = () => {
                     <FileText className="w-4 h-4 mr-2" />
                     Generate Schedule
                   </button>
-                  {canEditHere && (
+                  {canEditHere && !multiRoomMode && (
                     <button
                       onClick={saveGrid}
                       disabled={isSaving}
@@ -1444,10 +1656,10 @@ const RoomGridGenerator = () => {
       <ExportModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
-        scheduleTableRef={showExportableWeek ? exportableRef : printRef}
-        title={`${selectedBuilding}-${selectedRoom}-${selectedDayType}-${semester}`}
+        scheduleTableRef={exportTargetRef}
+        title={exportTitle}
         exportScale={3}
-        onExport={showExportableWeek ? undefined : () => updateTableSizing()}
+        onExport={exportNeedsSizing ? () => updateTableSizing() : undefined}
       />
 
       {/* Alert Dialog */}
@@ -1480,20 +1692,49 @@ const RoomGridGenerator = () => {
       <div className="university-card mt-8">
         <div className="university-card-content min-h-[400px]">
           {/* Export button - show for either old HTML schedules or new exportable component */}
-          {(scheduleHtml || showExportableWeek) && (
+          {(scheduleHtml || showExportableWeek || hasGeneratedSchedules) && (
             <div className="flex justify-end mb-4">
               <button
                 onClick={() => setIsExportModalOpen(true)}
                 className="btn-secondary"
               >
                 <Download className="w-4 h-4 mr-2" />
-                Export
+                {exportButtonLabel}
               </button>
             </div>
           )}
           {isProcessing ? (
             <div className="text-center text-gray-500 flex flex-col items-center justify-center h-full">
               <p>Processing file...</p>
+            </div>
+          ) : hasGeneratedSchedules ? (
+            <div
+              ref={multiExportRef}
+              className="flex flex-col items-center gap-6"
+            >
+              {generatedSchedules.map((schedule) =>
+                schedule.kind === "week" ? (
+                  <div key={schedule.id} className="flex justify-center">
+                    <ExportableRoomSchedule
+                      roomName={schedule.room}
+                      buildingName={schedule.building}
+                      semester={schedule.semester}
+                      classes={schedule.classes}
+                      exportName={buildExportName(
+                        schedule.building,
+                        schedule.room,
+                        schedule.dayType,
+                        schedule.semester,
+                      )}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    key={schedule.id}
+                    dangerouslySetInnerHTML={{ __html: schedule.html }}
+                  ></div>
+                ),
+              )}
             </div>
           ) : showExportableWeek ? (
             /* New exportable weekly schedule component */
@@ -1504,6 +1745,12 @@ const RoomGridGenerator = () => {
                 buildingName={selectedBuilding}
                 semester={semester}
                 classes={weeklyClasses}
+                exportName={buildExportName(
+                  selectedBuilding,
+                  selectedRoom,
+                  selectedDayType,
+                  semester,
+                )}
               />
             </div>
           ) : scheduleHtml ? (

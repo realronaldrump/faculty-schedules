@@ -14,7 +14,8 @@ const ExportableRoomSchedule = forwardRef(({
     roomName,
     buildingName,
     semester,
-    classes = []
+    classes = [],
+    exportName
 }, ref) => {
     const days = ['M', 'T', 'W', 'R', 'F'];
     const dayLabels = { M: 'Mon', T: 'Tue', W: 'Wed', R: 'Thu', F: 'Fri' };
@@ -139,6 +140,7 @@ const ExportableRoomSchedule = forwardRef(({
     // Clean up room display
     const displayRoom = roomName || '';
     const displayBuilding = (buildingName || '').replace(' Bldg', '').replace(' Building', '');
+    const resolvedExportName = exportName || [buildingName, roomName, 'WEEK', semester].filter(Boolean).join(' ');
 
     // Baylor brand colors
     const colors = {
@@ -185,6 +187,7 @@ const ExportableRoomSchedule = forwardRef(({
         <div
             ref={ref}
             className="exportable-room-schedule"
+            data-export-name={resolvedExportName}
             style={{
                 width: '7in',
                 height: '5in',

@@ -14,6 +14,15 @@ import { findPersonMatch, makeNameKey, normalizeBaylorId } from './personMatchUt
 import { normalizeTermLabel, termCodeFromLabel, termLabelFromCode } from './termUtils';
 import { getRoomKeyFromRoomRecord, parseRoomLabel, splitRoomLabels } from './roomUtils';
 import { LOCATION_TYPE, parseMultiRoom } from './locationService';
+import { normalizeSectionNumber } from './canonicalSchema';
+import { hashRecord } from './hashUtils';
+import { standardizeCourseCode } from './hygieneCore';
+import {
+  buildScheduleDocId,
+  buildScheduleIdentityIndex,
+  deriveScheduleIdentity,
+  resolveScheduleIdentityMatch
+} from './importIdentityUtils';
 
 // Import transaction model for tracking changes
 export class ImportTransaction {
@@ -45,6 +54,8 @@ export class ImportTransaction {
     this.validation = { errors: [], warnings: [] };
     this.previewSummary = null;
     this.originalData = {}; // Store original data for rollback
+    this.importMetadata = {};
+    this.rowLineage = [];
     this.stats = {
       totalChanges: 0,
       schedulesAdded: 0,
@@ -69,7 +80,8 @@ export class ImportTransaction {
       applied: false,
       groupKey: options.groupKey || null,
       pendingResolution: options.pendingResolution || false,
-      matchIssueId: options.matchIssueId || null
+      matchIssueId: options.matchIssueId || null,
+      importMeta: options.importMeta || null
     };
 
     this.changes[collection][action === 'add' ? 'added' : action === 'modify' ? 'modified' : 'deleted'].push(change);
@@ -94,6 +106,12 @@ export class ImportTransaction {
     this.matchingIssues.push(matchIssue);
     this.lastModified = new Date().toISOString();
     return matchIssue;
+  }
+
+  addRowLineage(entry) {
+    if (!entry || typeof entry !== 'object') return;
+    this.rowLineage.push(entry);
+    this.lastModified = new Date().toISOString();
   }
 
   updateStats() {
@@ -171,6 +189,8 @@ export class ImportTransaction {
       validation: this.validation,
       previewSummary: this.previewSummary,
       originalData: this.originalData,
+      importMetadata: this.importMetadata,
+      rowLineage: this.rowLineage,
       stats: this.stats,
       createdBy: this.createdBy,
       lastModified: this.lastModified
@@ -192,19 +212,32 @@ export class ImportTransaction {
     if (!Array.isArray(transaction.validation.warnings)) {
       transaction.validation.warnings = [];
     }
+    if (!transaction.importMetadata || typeof transaction.importMetadata !== 'object') {
+      transaction.importMetadata = {};
+    }
+    if (!Array.isArray(transaction.rowLineage)) {
+      transaction.rowLineage = [];
+    }
     return transaction;
   }
 }
 
 // Preview import changes without committing to database
 export const previewImportChanges = async (csvData, importType, selectedSemester, options = {}) => {
-  const { persist = true, includeOfficeRooms = true } = options;
+  const { persist = true, includeOfficeRooms = true, importMetadata = {} } = options;
   const normalizedSemester = normalizeTermLabel(selectedSemester || '');
   const transaction = new ImportTransaction(
     importType,
     `${importType} import preview`,
     normalizedSemester || selectedSemester
   );
+  const rows = Array.isArray(csvData) ? csvData : [];
+  const rowHashes = rows.map((row) => row?.__rowHash || hashRecord(row));
+  transaction.importMetadata = {
+    ...importMetadata,
+    rowCount: rows.length,
+    rowHashes
+  };
 
   try {
     let existingSchedulesData = [];
@@ -285,14 +318,8 @@ const deriveNameKeyFromDisplayName = (displayName) => {
 
 const normalizeRoomName = (name) => (name || '').replace(/\s+/g, ' ').trim().toLowerCase();
 
-export const normalizeSectionIdentifier = (sectionField) => {
-  if (!sectionField) return '';
-  const raw = String(sectionField).trim();
-  if (!raw) return '';
-  const cut = raw.split(' ')[0];
-  const idx = cut.indexOf('(');
-  return idx > -1 ? cut.substring(0, idx).trim() : cut.trim();
-};
+export const normalizeSectionIdentifier = (sectionField) =>
+  normalizeSectionNumber(sectionField);
 
 export const extractCrnFromSectionField = (sectionField) => {
   if (!sectionField) return '';
@@ -312,10 +339,16 @@ export const extractAcademicYear = (term) => {
 };
 
 export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
-  const courseCode = row.Course || '';
+  const rowHashInput = { ...(row || {}) };
+  delete rowHashInput.__rowIndex;
+  delete rowHashInput.__rowHash;
+  const rowHash = row?.__rowHash || hashRecord(rowHashInput);
+
+  const courseCode = standardizeCourseCode(row.Course || '');
   const courseTitle = row['Course Title'] || row['Long Title'] || '';
   const section = normalizeSectionIdentifier(row['Section #'] || '');
 
+  const clssId = (row['CLSS ID'] || '').toString().trim();
   const directCrn = (row['CRN'] || '').toString().trim();
   const sectionCrn = extractCrnFromSectionField(row['Section #'] || '');
   const crn = /^\d{5,6}$/.test(directCrn)
@@ -394,6 +427,7 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
     courseCode,
     courseTitle,
     section,
+    clssId,
     crn,
     credits: credits ?? null,
     creditRaw: rawCredits,
@@ -423,7 +457,8 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
     instructionMethod,
     campus: row.Campus || '',
     visibleOnWeb: row['Visible on Web'] || '',
-    specialApproval: row['Special Approval'] || ''
+    specialApproval: row['Special Approval'] || '',
+    rowHash
   };
 };
 
@@ -493,6 +528,117 @@ const normalizeInstructorDisplayName = (instructorRecord, parsedInstructor, fall
   return fallback || '';
 };
 
+const SCHEDULE_IMPORT_IGNORED_FIELDS = new Set([
+  'createdAt',
+  'updatedAt',
+  '__rowIndex',
+  '__rowHash',
+  'rowHash'
+]);
+
+const isEmptyForMerge = (value) => {
+  if (value === null || value === undefined) return true;
+  if (typeof value === 'string') return value.trim() === '';
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === 'object') return Object.keys(value).length === 0;
+  return false;
+};
+
+const deepEqual = (a, b) => {
+  if (a === b) return true;
+  if (typeof a !== typeof b) return false;
+  if (a && b && typeof a === 'object') {
+    try {
+      return JSON.stringify(a) === JSON.stringify(b);
+    } catch (error) {
+      return false;
+    }
+  }
+  return false;
+};
+
+const identityStrength = (key) => {
+  if (!key) return 0;
+  if (key.startsWith('clss:')) return 4;
+  if (key.startsWith('crn:')) return 3;
+  if (key.startsWith('section:')) return 2;
+  if (key.startsWith('composite:')) return 1;
+  return 0;
+};
+
+const mergeIdentityKeys = (existingKeys, incomingKeys) => {
+  const merged = new Set();
+  (Array.isArray(existingKeys) ? existingKeys : []).forEach((key) => {
+    if (key) merged.add(key);
+  });
+  (Array.isArray(incomingKeys) ? incomingKeys : []).forEach((key) => {
+    if (key) merged.add(key);
+  });
+  return Array.from(merged);
+};
+
+const shouldPreferExistingText = (key, existingValue, incomingValue) => {
+  if (key !== 'courseTitle') return false;
+  if (!existingValue || !incomingValue) return false;
+  return String(existingValue).trim().length > String(incomingValue).trim().length;
+};
+
+export const buildScheduleImportUpdates = (existingSchedule, incomingSchedule, options = {}) => {
+  const allowEmptyFields = new Set(options.allowEmptyFields || []);
+  const updates = {};
+  let hasChanges = false;
+
+  Object.keys(incomingSchedule || {}).forEach((key) => {
+    if (SCHEDULE_IMPORT_IGNORED_FIELDS.has(key)) return;
+
+    const incoming = incomingSchedule[key];
+    const existing = existingSchedule[key];
+
+    if (key === 'identityKeys') {
+      const mergedKeys = mergeIdentityKeys(existing, incoming);
+      if (!deepEqual(existing, mergedKeys)) {
+        updates.identityKeys = mergedKeys;
+        hasChanges = true;
+      }
+      return;
+    }
+
+    if (key === 'identityKey') {
+      const incomingStrength = identityStrength(incoming);
+      const existingStrength = identityStrength(existing);
+      if (!incoming) return;
+      if (!existing || incomingStrength >= existingStrength) {
+        if (!deepEqual(existing, incoming)) {
+          updates.identityKey = incoming;
+          hasChanges = true;
+        }
+      }
+      return;
+    }
+
+    if (key === 'identitySource') {
+      const incomingStrength = identityStrength(incomingSchedule.identityKey);
+      const existingStrength = identityStrength(existingSchedule.identityKey);
+      if (existingSchedule.identityKey && incomingStrength < existingStrength) {
+        return;
+      }
+    }
+
+    if (isEmptyForMerge(incoming) && !allowEmptyFields.has(key)) return;
+    if (shouldPreferExistingText(key, existing, incoming)) return;
+    if (!deepEqual(incoming, existing)) {
+      updates[key] = incoming;
+      hasChanges = true;
+    }
+  });
+
+  if (hasChanges) {
+    updates.updatedAt = new Date().toISOString();
+  }
+
+  return { updates, hasChanges };
+};
+
 const previewScheduleChanges = async (
   csvData,
   transaction,
@@ -504,10 +650,9 @@ const previewScheduleChanges = async (
   const { fallbackTerm = '' } = options;
   const roomsMap = new Map();
   const roomsKeyMap = new Map();
-  const schedulesByCrnTerm = new Map();
-  const schedulesByCourseSectionTerm = new Map();
-  const seenScheduleKeys = new Set();
+  const seenIdentityKeys = new Set();
   const pendingMatchMap = new Map();
+  const { index: scheduleIdentityIndex, collisions } = buildScheduleIdentityIndex(existingSchedules);
 
   const ensureValidation = () => {
     if (!transaction.validation || typeof transaction.validation !== 'object') {
@@ -549,18 +694,14 @@ const previewScheduleChanges = async (
     buildRoomNameKeys(room).forEach((key) => roomsMap.set(key, room));
   });
 
-  existingSchedules.forEach((schedule) => {
-    const term = normalizeTermLabel(schedule.term || '');
-    const courseCode = schedule.courseCode || '';
-    const section = normalizeSectionIdentifier(schedule.section || '');
-    const crn = (schedule.crn || '').toString().trim();
-    if (courseCode && section && term) {
-      schedulesByCourseSectionTerm.set(`${courseCode}-${section}-${term}`, schedule);
-    }
-    if (crn && term) {
-      schedulesByCrnTerm.set(`${term}-${crn}`, schedule);
-    }
-  });
+  if (collisions.length > 0) {
+    collisions.forEach((collision) => {
+      addValidation(
+        'warning',
+        `Identity collision for key "${collision.key}" between ${collision.existing?.id || 'unknown'} and ${collision.incoming?.id || 'unknown'}`,
+      );
+    });
+  }
 
   const formatDiffValue = (value) => {
     if (value === undefined || value === null) return '';
@@ -580,41 +721,80 @@ const previewScheduleChanges = async (
     const baseData = extractScheduleRowBaseData(row, fallbackTerm);
     const rowIndex = row.__rowIndex || rowCounter;
     const rowLabel = `Row ${rowIndex}`;
+    const rowLineageBase = {
+      rowIndex,
+      rowHash: baseData.rowHash,
+      courseCode: baseData.courseCode || '',
+      section: baseData.section || '',
+      term: baseData.term || '',
+      termCode: baseData.termCode || '',
+      crn: baseData.crn || '',
+      clssId: baseData.clssId || ''
+    };
 
     if (!baseData.courseCode) {
       addValidation('error', `${rowLabel}: Missing Course`);
+      transaction.addRowLineage({ ...rowLineageBase, action: 'skipped', reason: 'Missing Course' });
       summary.rowsSkipped += 1;
       continue;
     }
     if (!baseData.term && !baseData.termCode) {
       addValidation('error', `${rowLabel}: Missing Semester`);
+      transaction.addRowLineage({ ...rowLineageBase, action: 'skipped', reason: 'Missing Semester' });
       summary.rowsSkipped += 1;
       continue;
     }
     if (!baseData.instructorField) {
       addValidation('error', `${rowLabel}: Missing Instructor`);
+      transaction.addRowLineage({ ...rowLineageBase, action: 'skipped', reason: 'Missing Instructor' });
       summary.rowsSkipped += 1;
       continue;
     }
     if (!baseData.crn || !/^\d{5,6}$/.test(baseData.crn)) {
       addValidation('error', `${rowLabel}: Invalid CRN "${baseData.crn || ''}"`);
+      transaction.addRowLineage({ ...rowLineageBase, action: 'skipped', reason: 'Invalid CRN' });
       summary.rowsSkipped += 1;
       continue;
     }
 
-    const scheduleKey = `${baseData.courseCode}-${baseData.section}-${baseData.term}`;
-    if (seenScheduleKeys.has(scheduleKey)) {
-      addValidation('warning', `${rowLabel}: Duplicate schedule "${scheduleKey}" skipped`);
+    const identity = deriveScheduleIdentity({
+      courseCode: baseData.courseCode,
+      section: baseData.section,
+      term: baseData.term,
+      termCode: baseData.termCode,
+      clssId: baseData.clssId,
+      crn: baseData.crn,
+      meetingPatterns: baseData.meetingPatterns,
+      spaceIds: baseData.spaceIds,
+      roomNames: baseData.roomNames
+    });
+    const identityKey = identity.primaryKey;
+    if (!identityKey) {
+      addValidation('error', `${rowLabel}: Unable to derive identity key`);
+      transaction.addRowLineage({ ...rowLineageBase, action: 'skipped', reason: 'Missing identity key' });
       summary.rowsSkipped += 1;
       continue;
     }
-    seenScheduleKeys.add(scheduleKey);
+    if (seenIdentityKeys.has(identityKey)) {
+      addValidation('warning', `${rowLabel}: Duplicate schedule identity "${identityKey}" skipped`);
+      transaction.addRowLineage({ ...rowLineageBase, action: 'skipped', reason: 'Duplicate identity', identityKey });
+      summary.rowsSkipped += 1;
+      continue;
+    }
+    seenIdentityKeys.add(identityKey);
+
+    const rowLineageIdentity = {
+      ...rowLineageBase,
+      identityKey,
+      identityKeys: identity.keys,
+      identitySource: identity.source
+    };
 
     // Precompute key fields and group key for cascading selection
     const preCourseCode = baseData.courseCode;
     const preSection = baseData.section;
     const preTerm = baseData.term;
-    const groupKey = `sched_${preCourseCode}_${preSection}_${preTerm}`;
+    const groupKey = `sched_${identityKey}`;
 
     // Extract instructor information (exact match only, flag for review otherwise)
     const instructorField = baseData.instructorField;
@@ -791,11 +971,16 @@ const previewScheduleChanges = async (
     const section = preSection;
     const term = preTerm;
 
-    const scheduleLookupKey = `${courseCode}-${section}-${term}`;
-    let existingSchedule = schedulesByCrnTerm.get(`${term}-${baseData.crn}`) || null;
-    if (!existingSchedule) {
-      existingSchedule = schedulesByCourseSectionTerm.get(scheduleLookupKey) || null;
-    }
+    const matchResult = resolveScheduleIdentityMatch(identity.keys, scheduleIdentityIndex);
+    let existingSchedule = matchResult.schedule || null;
+    const importMeta = {
+      rowIndex,
+      rowHash: baseData.rowHash,
+      identityKey,
+      identityKeys: identity.keys,
+      identitySource: identity.source,
+      matchedKey: matchResult.matchedKey || ''
+    };
 
     const finalCrn = baseData.crn;
     const instructorDisplayName = parsedList.length > 1
@@ -817,6 +1002,10 @@ const previewScheduleChanges = async (
       courseTitle: baseData.courseTitle,
       section,
       crn: finalCrn,
+      clssId: baseData.clssId || '',
+      identityKey,
+      identityKeys: identity.keys,
+      identitySource: identity.source,
       credits: baseData.credits ?? null,
       term,
       termCode: baseData.termCode,
@@ -867,13 +1056,19 @@ const previewScheduleChanges = async (
       const allowEmptyFields = (scheduleWrite.locationType === 'no_room' || scheduleWrite.isOnline)
         ? ['roomNames', 'roomName', 'roomIds', 'roomId', 'spaceIds', 'spaceDisplayNames']
         : [];
-      const { updates, hasChanges } = buildUpsertUpdates(existingSchedule, scheduleWrite, { allowEmptyFields });
+      const { updates, hasChanges } = buildScheduleImportUpdates(existingSchedule, scheduleWrite, { allowEmptyFields });
       if (!hasChanges) {
         summary.schedulesUnchanged += 1;
+        transaction.addRowLineage({
+          ...rowLineageIdentity,
+          action: 'unchanged',
+          scheduleId: existingSchedule.id,
+          matchedKey: matchResult.matchedKey || ''
+        });
         continue;
       }
 
-      const changeId = transaction.addChange('schedules', 'modify', updates, existingSchedule, { groupKey });
+      const changeId = transaction.addChange('schedules', 'modify', updates, existingSchedule, { groupKey, importMeta });
       const change = transaction.changes.schedules.modified.find((c) => c.id === changeId);
       if (change) {
         change.diff = Object.entries(updates).map(([key, value]) => ({
@@ -882,16 +1077,29 @@ const previewScheduleChanges = async (
           to: formatDiffValue(value)
         }));
       }
+      transaction.addRowLineage({
+        ...rowLineageIdentity,
+        action: 'update',
+        scheduleId: existingSchedule.id,
+        changeId,
+        matchedKey: matchResult.matchedKey || ''
+      });
       summary.schedulesUpdated += 1;
       continue;
     }
 
-    const scheduleChangeId = transaction.addChange('schedules', 'add', scheduleData, null, { groupKey });
+    const scheduleChangeId = transaction.addChange('schedules', 'add', scheduleData, null, { groupKey, importMeta });
     matchIssuesForSchedule.forEach((issue) => {
       if (!issue) return;
       issue.scheduleChangeIds = Array.isArray(issue.scheduleChangeIds)
         ? Array.from(new Set([...issue.scheduleChangeIds, scheduleChangeId]))
         : [scheduleChangeId];
+    });
+    transaction.addRowLineage({
+      ...rowLineageIdentity,
+      action: 'add',
+      scheduleId: buildScheduleDocId(identity),
+      changeId: scheduleChangeId
     });
     summary.schedulesAdded += 1;
   }
@@ -1168,6 +1376,53 @@ const createBatchWriter = ({ onFlush } = {}) => {
   };
 
   return { add, flush };
+};
+
+const buildImportRunPayload = (transaction) => ({
+  id: transaction.id,
+  type: transaction.type,
+  description: transaction.description,
+  semester: transaction.semester,
+  timestamp: transaction.timestamp,
+  status: transaction.status,
+  stats: transaction.stats,
+  importMetadata: transaction.importMetadata || {},
+  createdBy: transaction.createdBy,
+  lastModified: transaction.lastModified
+});
+
+const sanitizeLineageDocId = (value) => {
+  if (!value) return '';
+  return String(value).replace(/[^A-Za-z0-9_-]+/g, '_');
+};
+
+const persistImportRunTracking = async (transaction) => {
+  const runRef = doc(db, 'importRuns', transaction.id);
+  const runPayload = buildImportRunPayload(transaction);
+  await setDoc(runRef, runPayload, { merge: true });
+
+  if (!Array.isArray(transaction.rowLineage) || transaction.rowLineage.length === 0) {
+    return;
+  }
+
+  const batchWriter = createBatchWriter();
+  const now = new Date().toISOString();
+  for (const entry of transaction.rowLineage) {
+    if (!entry || typeof entry !== 'object') continue;
+    const rowId = sanitizeLineageDocId(entry.rowHash || entry.rowIndex || '');
+    if (!rowId) continue;
+    const docId = `${transaction.id}_${rowId}`;
+    const payload = {
+      importRunId: transaction.id,
+      importType: transaction.type,
+      timestamp: now,
+      ...entry
+    };
+    await batchWriter.add(null, (batch) => {
+      batch.set(doc(db, 'importRowLineage', docId), payload, { merge: true });
+    });
+  }
+  await batchWriter.flush();
 };
 
 // Commit transaction changes to database
@@ -1460,12 +1715,33 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
         delete scheduleData.instructorMatchIssueId;
         delete scheduleData.instructorMatchIssueIds;
 
-        // Deterministic schedule ID: termCode_crn (fallback term_crn)
-        const baseTerm = scheduleData.termCode || scheduleData.term || 'TERM';
-        const scheduleDeterministicId = scheduleData.crn
-          ? `${baseTerm}_${scheduleData.crn}`
-          : `${baseTerm}_${(scheduleData.courseCode || 'COURSE').replace(/[^A-Za-z0-9]+/g, '-')}_${(scheduleData.section || 'SEC').replace(/[^A-Za-z0-9]+/g, '-')}`;
-        const schedRef = doc(db, COLLECTIONS.SCHEDULES, scheduleDeterministicId);
+        const identity = deriveScheduleIdentity({
+          courseCode: scheduleData.courseCode,
+          section: scheduleData.section,
+          term: scheduleData.term,
+          termCode: scheduleData.termCode,
+          clssId: scheduleData.clssId,
+          crn: scheduleData.crn,
+          meetingPatterns: scheduleData.meetingPatterns,
+          spaceIds: scheduleData.spaceIds,
+          roomNames: scheduleData.roomNames
+        });
+        if (!scheduleData.identityKey && identity.primaryKey) {
+          scheduleData.identityKey = identity.primaryKey;
+        }
+        if ((!Array.isArray(scheduleData.identityKeys) || scheduleData.identityKeys.length === 0) && identity.keys.length > 0) {
+          scheduleData.identityKeys = identity.keys;
+        }
+        if (!scheduleData.identitySource && identity.source) {
+          scheduleData.identitySource = identity.source;
+        }
+
+        const fallbackTerm = scheduleData.termCode || scheduleData.term || 'TERM';
+        const fallbackId = scheduleData.crn
+          ? `${fallbackTerm}_${scheduleData.crn}`
+          : `${fallbackTerm}_${(scheduleData.courseCode || 'COURSE').replace(/[^A-Za-z0-9]+/g, '-')}_${(scheduleData.section || 'SEC').replace(/[^A-Za-z0-9]+/g, '-')}`;
+        const scheduleDocId = buildScheduleDocId({ primaryKey: scheduleData.identityKey || identity.primaryKey }) || fallbackId;
+        const schedRef = doc(db, COLLECTIONS.SCHEDULES, scheduleDocId);
         const {
           instructorName: _omitInstructorName,
           roomName: _omitRoomName,
@@ -1529,6 +1805,30 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
     await batchWriter.flush();
 
     transaction.status = 'committed';
+    transaction.lastModified = new Date().toISOString();
+
+    const changeIdToDocId = new Map();
+    changesToApply.forEach((change) => {
+      if (change?.id && change.documentId) {
+        changeIdToDocId.set(change.id, change.documentId);
+      }
+    });
+    if (Array.isArray(transaction.rowLineage)) {
+      transaction.rowLineage = transaction.rowLineage.map((entry) => {
+        if (!entry || typeof entry !== 'object') return entry;
+        if ((!entry.scheduleId || entry.scheduleId === '') && entry.changeId && changeIdToDocId.has(entry.changeId)) {
+          return { ...entry, scheduleId: changeIdToDocId.get(entry.changeId) };
+        }
+        return entry;
+      });
+    }
+
+    try {
+      await persistImportRunTracking(transaction);
+    } catch (error) {
+      console.warn('Import run tracking failed:', error?.message || error);
+    }
+
     await updateTransactionInStorage(transaction);
 
     console.log(`✅ Transaction committed with ${changesToApply.length} changes`);
@@ -1540,6 +1840,11 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
       // Per-change logs (best-effort, non-blocking)
       for (const change of changesToApply) {
         const source = 'importTransactionUtils.js - commitTransaction';
+        const logMetadata = {
+          importRunId: transaction.id,
+          importType: transaction.type,
+          fileHash: transaction.importMetadata?.fileHash || ''
+        };
         if (change.collection === 'schedules') {
           if (change.action === 'add') {
             logCreate(
@@ -1547,7 +1852,8 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               COLLECTIONS.SCHEDULES,
               change.documentId,
               change.newData,
-              source
+              source,
+              logMetadata
             ).catch(() => { });
           } else if (change.action === 'modify') {
             logUpdate(
@@ -1556,7 +1862,8 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               change.documentId,
               change.newData,
               change.originalData,
-              source
+              source,
+              logMetadata
             ).catch(() => { });
           } else if (change.action === 'delete') {
             logDelete(
@@ -1564,7 +1871,8 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               COLLECTIONS.SCHEDULES,
               change.documentId,
               change.originalData,
-              source
+              source,
+              logMetadata
             ).catch(() => { });
           }
         } else if (change.collection === 'people') {
@@ -1574,7 +1882,8 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               COLLECTIONS.PEOPLE,
               change.documentId,
               change.newData,
-              source
+              source,
+              logMetadata
             ).catch(() => { });
           } else if (change.action === 'modify') {
             logUpdate(
@@ -1583,7 +1892,8 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               change.documentId,
               change.newData,
               change.originalData,
-              source
+              source,
+              logMetadata
             ).catch(() => { });
           } else if (change.action === 'delete') {
             logDelete(
@@ -1591,7 +1901,8 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               COLLECTIONS.PEOPLE,
               change.documentId,
               change.originalData,
-              source
+              source,
+              logMetadata
             ).catch(() => { });
           }
         } else if (change.collection === 'rooms') {
@@ -1601,7 +1912,8 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               COLLECTIONS.ROOMS,
               change.documentId,
               change.newData,
-              source
+              source,
+              logMetadata
             ).catch(() => { });
           } else if (change.action === 'modify') {
             logUpdate(
@@ -1610,7 +1922,8 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               change.documentId,
               change.newData,
               change.originalData,
-              source
+              source,
+              logMetadata
             ).catch(() => { });
           } else if (change.action === 'delete') {
             logDelete(
@@ -1618,7 +1931,8 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
               COLLECTIONS.ROOMS,
               change.documentId,
               change.originalData,
-              source
+              source,
+              logMetadata
             ).catch(() => { });
           }
         }
@@ -1629,7 +1943,12 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
         'multiple',
         changesToApply.length,
         'importTransactionUtils.js - commitTransaction',
-        { transactionId: transaction.id, semester: transaction.semester, stats: transaction.stats }
+        {
+          transactionId: transaction.id,
+          semester: transaction.semester,
+          stats: transaction.stats,
+          fileHash: transaction.importMetadata?.fileHash || ''
+        }
       ).catch(() => { });
     } catch (error) {
       void error;

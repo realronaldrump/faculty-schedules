@@ -350,6 +350,15 @@ service cloud.firestore {
       allow read: if userHasAction('data.import') || userHasAction('schedule.import');
       allow write: if userHasAction('data.import') || userHasAction('schedule.import');
     }
+    // Import runs + row lineage (idempotency tracking)
+    match /importRuns/{id} {
+      allow read: if userHasAction('data.import') || userHasAction('schedule.import');
+      allow write: if userHasAction('data.import') || userHasAction('schedule.import');
+    }
+    match /importRowLineage/{id} {
+      allow read: if userHasAction('data.import') || userHasAction('schedule.import');
+      allow write: if userHasAction('data.import') || userHasAction('schedule.import');
+    }
 
     // Dedupe decisions: allow hygiene tooling to persist "not a duplicate" choices
     match /dedupeDecisions/{id} {

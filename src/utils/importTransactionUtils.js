@@ -591,7 +591,14 @@ const SCHEDULE_INTERNAL_UPDATE_FIELDS = new Set([
   'identityKey',
   'identityKeys',
   'identitySource',
-  'updatedAt'
+  'updatedAt',
+  'roomId',
+  'roomIds',
+  'spaceIds',
+  'spaceDisplayNames',
+  'instructorId',
+  'instructorIds',
+  'instructorAssignments'
 ]);
 
 const isEmptyForMerge = (value) => {
@@ -644,8 +651,7 @@ const normalizeMeetingPatternToken = (pattern) => {
   const start = normalizeTime(pattern.startTime || '');
   const end = normalizeTime(pattern.endTime || '');
   const mode = normalizeStringValue(pattern.mode).toLowerCase();
-  const raw = normalizeStringValue(pattern.raw).toLowerCase();
-  return [day, start, end, mode, raw].filter(Boolean).join('|');
+  return [day, start, end, mode].filter(Boolean).join('|');
 };
 
 const areEquivalentScheduleValues = (key, existingValue, incomingValue) => {

@@ -16,7 +16,14 @@ const INTERNAL_SCHEDULE_DIFF_KEYS = new Set([
   'identityKey',
   'identityKeys',
   'identitySource',
-  'updatedAt'
+  'updatedAt',
+  'roomId',
+  'roomIds',
+  'spaceIds',
+  'spaceDisplayNames',
+  'instructorId',
+  'instructorIds',
+  'instructorAssignments'
 ]);
 
 const FIELD_LABELS = {
@@ -364,6 +371,12 @@ const ImportPreviewModal = ({
           .join('\n')
         : '';
 
+      const roomLabels = Array.isArray(data.roomNames) && data.roomNames.length > 0
+        ? data.roomNames.join(', ')
+        : (Array.isArray(data.spaceDisplayNames) && data.spaceDisplayNames.length > 0
+          ? data.spaceDisplayNames.join(', ')
+          : (data.roomName || ''));
+
       return {
         'Course Code': data.courseCode || '',
         'Course Title': data.courseTitle || '',
@@ -380,9 +393,7 @@ const ImportPreviewModal = ({
           : (data.instructorId || ''),
         'Location Type': data.locationType || '',
         'Location Label': data.locationLabel || '',
-        'Room Names': Array.isArray(data.roomNames)
-          ? data.roomNames.join(', ')
-          : (data.roomName || ''),
+        'Room Names': roomLabels,
         'Room IDs': Array.isArray(data.roomIds)
           ? data.roomIds.join(', ')
           : '',
@@ -417,11 +428,11 @@ const ImportPreviewModal = ({
     const internalDiff = meta?.internalDiff || [];
     const internalOnly = meta?.internalOnly || false;
 
-    if (!diff || diff.length === 0) {
+      if (!diff || diff.length === 0) {
       if (internalOnly || internalDiff.length > 0) {
         return (
           <div className="mt-3 text-xs text-gray-600">
-            No visible field changes. Internal identity metadata will be updated automatically.
+            No visible field changes. Internal linking metadata will be updated automatically.
           </div>
         );
       }
@@ -457,7 +468,7 @@ const ImportPreviewModal = ({
         </div>
         {internalDiff.length > 0 && (
           <div className="text-xs text-gray-500 mb-2">
-            Internal identity metadata will also be updated.
+            Internal linking metadata will also be updated.
           </div>
         )}
         <div className="divide-y divide-gray-100">
@@ -547,7 +558,7 @@ const ImportPreviewModal = ({
 
             {stats.internalOnly > 0 && (
               <div className="mt-2 text-xs text-gray-500">
-                Internal updates keep schedule identity metadata in sync and do not change class details.
+                Internal updates keep schedule links and identity metadata in sync and do not change class details.
               </div>
             )}
 
@@ -580,7 +591,7 @@ const ImportPreviewModal = ({
                 </div>
                 {previewSummary.schedulesMetadataOnly > 0 && (
                   <div className="mt-2 text-xs text-gray-500">
-                    {previewSummary.schedulesMetadataOnly} schedule update{previewSummary.schedulesMetadataOnly === 1 ? '' : 's'} are internal identity-only changes.
+                    {previewSummary.schedulesMetadataOnly} schedule update{previewSummary.schedulesMetadataOnly === 1 ? '' : 's'} are internal-only changes.
                   </div>
                 )}
               </div>
@@ -826,6 +837,11 @@ const ImportPreviewModal = ({
 
           {/* Changes List */}
           <div className="p-6">
+            {visibleChanges.length === 0 && internalOnlyChanges.length > 0 && (
+              <div className="text-sm text-gray-600 mb-4">
+                No visible changes detected. Only internal updates will be applied.
+              </div>
+            )}
             {Object.entries(groupedChanges).map(([collection, actions]) => {
               const CollectionIcon = getCollectionIcon(collection);
               const hasChanges = Object.values(actions).some(arr => arr.length > 0);

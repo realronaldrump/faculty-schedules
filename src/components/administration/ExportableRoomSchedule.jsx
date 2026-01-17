@@ -150,7 +150,7 @@ const ExportableRoomSchedule = forwardRef(({
         classBlock: '#c8e6c9',
         classBlockBorder: '#154734',
         lightGray: '#f5f5f5',
-        gridLine: '#e0e0e0',
+        gridLine: '#d1d5db', // Darker for better visibility
         textStrong: '#111827',
         textMuted: '#374151',
         textLight: '#6b7280',
@@ -209,13 +209,17 @@ const ExportableRoomSchedule = forwardRef(({
                 alignItems: 'center',
                 borderBottom: `4px solid ${colors.baylorGold}`,
                 flexShrink: 0,
+                overflow: 'hidden', // Prevent bleed
             }}>
-                <div>
+                <div style={{ flex: 1, minWidth: 0, paddingRight: '10px' }}>
                     <div style={{
-                        fontSize: '22px',
+                        fontSize: '20px', // Slightly smaller to fit more
                         fontWeight: '700',
                         letterSpacing: '0.5px',
-                        lineHeight: '1.1',
+                        lineHeight: '1.2',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
                     }}>
                         {displayBuilding} {displayRoom}
                     </div>
@@ -336,10 +340,10 @@ const ExportableRoomSchedule = forwardRef(({
                                             border: `1px solid ${colors.classBlockBorder}`,
                                             borderLeft: `3px solid ${colors.classBlockBorder}`,
                                             borderRadius: '2px',
-                                            padding: isCompact ? '1px 3px' : '2px 4px',
+                                            padding: isCompact ? '1px 3px' : '3px 4px',
                                             display: 'flex',
                                             flexDirection: 'column',
-                                            justifyContent: 'center',
+                                            justifyContent: 'flex-start', // Top align
                                             overflow: 'hidden',
                                             boxSizing: 'border-box',
                                         }}
@@ -347,7 +351,7 @@ const ExportableRoomSchedule = forwardRef(({
                                         {/* Course code */}
                                         <div style={{
                                             fontSize: isCompact ? '9px' : '10px',
-                                            fontWeight: '700',
+                                            fontWeight: '800', // Bolder
                                             color: colors.baylorGreen,
                                             lineHeight: '1.1',
                                             whiteSpace: 'nowrap',
@@ -357,20 +361,21 @@ const ExportableRoomSchedule = forwardRef(({
                                         }}>
                                             {cls.class}{cls.section ? `.${cls.section}` : ''}
                                         </div>
-                                        {/* Time range - show if block is tall enough */}
-                                        {(cls.endMinutes - cls.startMinutes) >= 45 && (
+                                        {/* Time range - lower threshold for visibility */}
+                                        {(cls.endMinutes - cls.startMinutes) >= 30 && (
                                             <div style={{
                                                 fontSize: '7px',
                                                 color: colors.textMuted,
                                                 textAlign: 'center',
                                                 lineHeight: '1.1',
                                                 marginTop: '1px',
+                                                fontWeight: '500',
                                             }}>
                                                 {formatTime(cls.startMinutes)}-{formatTime(cls.endMinutes)}
                                             </div>
                                         )}
-                                        {/* Instructor - only for longer blocks */}
-                                        {!isCompact && (cls.endMinutes - cls.startMinutes) >= 70 && cls.professor && (
+                                        {/* Instructor - lower threshold for visibility */}
+                                        {!isCompact && (cls.endMinutes - cls.startMinutes) >= 50 && cls.professor && (
                                             <div style={{
                                                 fontSize: '7px',
                                                 color: colors.textLight,
@@ -379,6 +384,7 @@ const ExportableRoomSchedule = forwardRef(({
                                                 whiteSpace: 'nowrap',
                                                 overflow: 'hidden',
                                                 textOverflow: 'ellipsis',
+                                                marginTop: '1px',
                                             }}>
                                                 {cls.professor}
                                             </div>

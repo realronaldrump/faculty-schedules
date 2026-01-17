@@ -241,34 +241,48 @@ const ExportableRoomSchedule = forwardRef(({
                 padding: '8px 8px 6px 8px',
             }}>
                 {/* Time column */}
+                {/* Time column */}
                 <div style={{
                     width: '42px',
                     flexShrink: 0,
                     display: 'flex',
                     flexDirection: 'column',
-                    paddingTop: '24px', // Align with day headers
-                    position: 'relative',
+                    // matched padding of container
                 }}>
-                    {hourLabels.map((minutes, idx) => {
-                        const top = ((minutes - timeRange.start) / totalMinutes) * 100;
-                        return (
-                            <div
-                                key={minutes}
-                                style={{
-                                    position: 'absolute',
-                                    top: `${top}%`,
-                                    right: '4px',
-                                    transform: 'translateY(-50%)',
-                                    fontSize: '9px',
-                                    fontWeight: '600',
-                                    color: colors.baylorGreen,
-                                    whiteSpace: 'nowrap',
-                                }}
-                            >
-                                {formatTime(minutes)}
-                            </div>
-                        );
-                    })}
+                    {/* Header Spacer to match day headers */}
+                    <div style={{
+                        height: '22px', // Approximate height of day headers (padding + text)
+                        marginBottom: '4px', // Gap match
+                        flexShrink: 0,
+                    }} />
+
+                    {/* Time Labels Container */}
+                    <div style={{
+                        flex: 1,
+                        position: 'relative',
+                        // Remove padding top, alignment handled by relative positioning to Spacer
+                    }}>
+                        {hourLabels.map((minutes, idx) => {
+                            const top = ((minutes - timeRange.start) / totalMinutes) * 100;
+                            return (
+                                <div
+                                    key={minutes}
+                                    style={{
+                                        position: 'absolute',
+                                        top: `${top}%`,
+                                        right: '4px',
+                                        transform: 'translateY(-50%)',
+                                        fontSize: '9px',
+                                        fontWeight: '600',
+                                        color: colors.baylorGreen,
+                                        whiteSpace: 'nowrap',
+                                    }}
+                                >
+                                    {formatTime(minutes)}
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
 
                 {/* Days grid */}
@@ -425,6 +439,9 @@ const ExportableRoomSchedule = forwardRef(({
                 flexShrink: 0,
             }}>
                 <span style={{ fontWeight: '500' }}>Baylor University</span>
+                <span style={{ color: colors.textLight, fontSize: '7px' }}>
+                    Generated on {new Date().toLocaleDateString()}
+                </span>
                 <span>Human Sciences & Design</span>
             </div>
         </div>

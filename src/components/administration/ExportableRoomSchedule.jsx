@@ -199,6 +199,18 @@ const ExportableRoomSchedule = forwardRef(({
                 overflow: 'hidden',
             }}
         >
+            <style>{`
+                @media print {
+                    @page {
+                        size: portrait;
+                        margin: 0;
+                    }
+                    body {
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                    }
+                }
+            `}</style>
             {/* Header */}
             <div style={{
                 backgroundColor: colors.baylorGreen,
@@ -340,10 +352,10 @@ const ExportableRoomSchedule = forwardRef(({
                                             border: `1px solid ${colors.classBlockBorder}`,
                                             borderLeft: `3px solid ${colors.classBlockBorder}`,
                                             borderRadius: '2px',
-                                            padding: isCompact ? '1px 3px' : '3px 4px',
+                                            padding: isCompact ? '1px 3px' : '2px 4px',
                                             display: 'flex',
                                             flexDirection: 'column',
-                                            justifyContent: 'flex-start', // Top align
+                                            justifyContent: 'center',
                                             overflow: 'hidden',
                                             boxSizing: 'border-box',
                                         }}

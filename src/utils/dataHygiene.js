@@ -55,6 +55,34 @@ const createBatchWriter = () => {
   return { add, flush };
 };
 
+const identityStrength = (key) => {
+  if (!key) return 0;
+  if (key.startsWith('clss:')) return 4;
+  if (key.startsWith('crn:')) return 3;
+  if (key.startsWith('section:')) return 2;
+  if (key.startsWith('composite:')) return 1;
+  return 0;
+};
+
+const mergeIdentityKeys = (existingKeys, incomingKeys) => {
+  const merged = new Set();
+  (Array.isArray(existingKeys) ? existingKeys : []).forEach((key) => {
+    if (key) merged.add(key);
+  });
+  (Array.isArray(incomingKeys) ? incomingKeys : []).forEach((key) => {
+    if (key) merged.add(key);
+  });
+  return Array.from(merged);
+};
+
+const preferIdentityKey = (existingKey, incomingKey) => {
+  if (!incomingKey) return existingKey || '';
+  if (!existingKey) return incomingKey;
+  return identityStrength(incomingKey) >= identityStrength(existingKey)
+    ? incomingKey
+    : existingKey;
+};
+
 // ---------------------------------------------------------------------------
 // DEDUPE DECISIONS
 // ---------------------------------------------------------------------------

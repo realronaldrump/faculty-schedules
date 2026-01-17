@@ -249,9 +249,11 @@ const ExportableRoomSchedule = forwardRef(({
                     flexDirection: 'column',
                     // matched padding of container
                 }}>
-                    {/* Header Spacer to match day headers */}
+                    {/* Header Spacer to match day headers */
+                        /* Day Header: Line height approx 17px (11px * 1.5) + 8px padding + 3px top border radius adjustment ~ 25px */
+                    }
                     <div style={{
-                        height: '22px', // Approximate height of day headers (padding + text)
+                        height: '25px',
                         marginBottom: '4px', // Gap match
                         flexShrink: 0,
                     }} />
@@ -439,9 +441,6 @@ const ExportableRoomSchedule = forwardRef(({
                 flexShrink: 0,
             }}>
                 <span style={{ fontWeight: '500' }}>Baylor University</span>
-                <span style={{ color: colors.textLight, fontSize: '7px' }}>
-                    Generated on {new Date().toLocaleDateString()}
-                </span>
                 <span>Human Sciences & Design</span>
             </div>
         </div>

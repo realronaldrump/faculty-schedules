@@ -107,6 +107,36 @@ const DepartmentInsights = () => {
     return { hourCounts, latestEndTime, peakHour };
   }, [scheduleData, hourlyUsageDayFilter]);
 
+  const adjunctFacultyCount = useMemo(() => {
+    if (!scheduleData || scheduleData.length === 0) return 0;
+    const adjunctFacultyIds = new Set();
+
+    scheduleData.forEach((item) => {
+      const instructors = Array.isArray(item.instructors)
+        ? item.instructors
+        : [];
+      instructors.forEach((instructor) => {
+        if (!instructor?.isAdjunct) return;
+        if (instructor.id) {
+          adjunctFacultyIds.add(instructor.id);
+          return;
+        }
+        if (instructor.name) {
+          adjunctFacultyIds.add(instructor.name);
+          return;
+        }
+        const fallbackName = `${instructor.firstName || ""} ${
+          instructor.lastName || ""
+        }`.trim();
+        if (fallbackName) {
+          adjunctFacultyIds.add(fallbackName);
+        }
+      });
+    });
+
+    return adjunctFacultyIds.size;
+  }, [scheduleData]);
+
   // Sort faculty workload from the analytics prop
   const sortedFacultyWorkload = useMemo(() => {
     if (!analytics || !analytics.facultyWorkload) return [];
@@ -277,7 +307,18 @@ const DepartmentInsights = () => {
               <p className="text-3xl font-bold text-baylor-green">
                 {analytics.facultyCount}
               </p>
-              <p className="text-sm text-gray-500">Teaching this semester</p>
+              <button
+                className="block text-sm text-gray-500 hover:text-baylor-green transition-colors underline decoration-transparent hover:decoration-baylor-gold/60 underline-offset-4"
+                onClick={() => handleNavigate("people/directory?tab=faculty")}
+              >
+                Teaching this semester
+              </button>
+              <button
+                className="mt-1 block text-sm text-gray-500 hover:text-baylor-green transition-colors underline decoration-transparent hover:decoration-baylor-gold/60 underline-offset-4"
+                onClick={() => handleNavigate("people/directory?tab=adjunct")}
+              >
+                {adjunctFacultyCount} adjunct faculty
+              </button>
             </div>
             <div className="p-3 bg-baylor-green/10 rounded-lg">
               <Users className="w-6 h-6 text-baylor-green" />

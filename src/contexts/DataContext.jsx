@@ -285,6 +285,36 @@ export const DataProvider = ({ children }) => {
     const courses = new Set();
     const daySchedules = { M: 0, T: 0, W: 0, R: 0, F: 0 };
 
+    // Track faculty workload and room utilization
+    const facultyWorkload = {};
+    const roomUtilization = {};
+
+    // Helper to calculate duration in hours
+    const calculateDuration = (startTime, endTime) => {
+      if (!startTime || !endTime) return 0;
+      const parseTimeToMinutes = (timeStr) => {
+        if (!timeStr) return 0;
+        const match = String(timeStr).match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+        if (!match) return 0;
+        let hours = parseInt(match[1], 10);
+        const minutes = parseInt(match[2], 10);
+        const period = match[3];
+        if (period) {
+          if (period.toUpperCase() === 'PM' && hours !== 12) hours += 12;
+          if (period.toUpperCase() === 'AM' && hours === 12) hours = 0;
+        }
+        return hours * 60 + minutes;
+      };
+      const startMinutes = parseTimeToMinutes(startTime);
+      const endMinutes = parseTimeToMinutes(endTime);
+      if (endMinutes > startMinutes) {
+        return (endMinutes - startMinutes) / 60;
+      }
+      return 0;
+    };
+
+    let adjunctTaughtSessions = 0;
+
     scheduleData.forEach(s => {
       const names = Array.isArray(s.instructorNames)
         ? s.instructorNames
@@ -299,6 +329,47 @@ export const DataProvider = ({ children }) => {
       }
       if (s.Course) courses.add(s.Course);
       if (s.Day && daySchedules[s.Day] !== undefined) daySchedules[s.Day]++;
+
+      // Check if any instructor is an adjunct
+      const scheduleInstructors = Array.isArray(s.instructors) ? s.instructors : [];
+      const isAdjunctTaught = scheduleInstructors.some(instructor => instructor?.isAdjunct);
+      if (isAdjunctTaught) {
+        adjunctTaughtSessions++;
+      }
+
+      // Calculate faculty workload
+      const duration = calculateDuration(s['Start Time'], s['End Time']);
+      const displayName = s.Instructor || 'Unassigned';
+      if (displayName && displayName !== 'Unassigned') {
+        if (!facultyWorkload[displayName]) {
+          facultyWorkload[displayName] = { courses: new Set(), totalHours: 0 };
+        }
+        if (s.Course) {
+          facultyWorkload[displayName].courses.add(s.Course);
+        }
+        facultyWorkload[displayName].totalHours += duration;
+      }
+
+      // Calculate room utilization
+      if (roomLabel && lowerRoom !== 'online' && !lowerRoom.includes('no room needed')) {
+        if (!roomUtilization[roomLabel]) {
+          roomUtilization[roomLabel] = { classes: 0, hours: 0, adjunctTaughtClasses: 0 };
+        }
+        roomUtilization[roomLabel].classes++;
+        roomUtilization[roomLabel].hours += duration;
+        if (isAdjunctTaught) {
+          roomUtilization[roomLabel].adjunctTaughtClasses++;
+        }
+      }
+    });
+
+    // Convert faculty workload courses Set to count
+    const facultyWorkloadFinal = {};
+    Object.entries(facultyWorkload).forEach(([name, data]) => {
+      facultyWorkloadFinal[name] = {
+        courses: data.courses.size,
+        totalHours: data.totalHours
+      };
     });
 
     const busiestDay = Object.entries(daySchedules).reduce(
@@ -309,10 +380,12 @@ export const DataProvider = ({ children }) => {
     return {
       facultyCount: instructors.size,
       totalSessions: scheduleData.length,
-      adjunctTaughtSessions: 0, // Simplified for now
+      adjunctTaughtSessions,
       roomsInUse: rooms.size,
       uniqueCourses: courses.size,
-      busiestDay
+      busiestDay,
+      facultyWorkload: facultyWorkloadFinal,
+      roomUtilization
     };
   }, [scheduleData]);
 

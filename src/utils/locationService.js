@@ -124,8 +124,36 @@ export const applyBuildingConfig = (config) => {
   const buildingsByCode = new Map();
   const aliasToBuilding = new Map();
 
+  const validBuildings = [];
+
   buildings.forEach((building) => {
     if (!building || building.isActive === false) return;
+
+    // FIX: Filter out buildings that are actually "No Room" or "Virtual"
+    // This prevents "General Assignment Room" from being treated as a building
+    const displayName = building.displayName || '';
+
+    // Check virtual/no-room patterns
+    // We check directly here to avoid issues with function definition order if detectLocationType isn't hoisted
+    const isVirtual = VIRTUAL_PATTERNS.some(p => p.test(displayName));
+    const isNoRoom = NO_ROOM_PATTERNS.some(p => p.test(displayName));
+
+    if (isVirtual || isNoRoom) {
+      // console.warn(`Filtering out invalid building "${displayName}"`);
+      return;
+    }
+
+    validBuildings.push(building);
+
+    // FIX: Inject Common Aliases
+    // Fix for "Goebel" vs "Goebel Building" duplicates
+    if (displayName === 'Goebel Building') {
+      const aliases = building.aliases || [];
+      // Ensure 'Goebel' is an alias
+      if (!aliases.some(a => a.toLowerCase() === 'goebel')) {
+        building.aliases = [...aliases, 'Goebel'];
+      }
+    }
 
     const id = building.id || building.code;
     if (id) buildingsById.set(id, building);
@@ -143,7 +171,7 @@ export const applyBuildingConfig = (config) => {
 
   buildingConfig = {
     version: config?.version || 1,
-    buildings,
+    buildings: validBuildings,
     buildingsById,
     buildingsByCode,
     aliasToBuilding

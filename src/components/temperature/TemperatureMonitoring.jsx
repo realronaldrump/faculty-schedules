@@ -284,6 +284,7 @@ const TemperatureMonitoring = () => {
 
   const roomsByBuilding = useMemo(() => {
     const grouped = {};
+    const seenByBuilding = {};
     (spacesList || []).forEach((room) => {
       if (room?.isActive === false) return;
       const buildingCode = (room.buildingCode || room.building || "")
@@ -296,7 +297,14 @@ const TemperatureMonitoring = () => {
         buildingCode.toLowerCase() === "off campus"
       )
         return;
-      if (!grouped[buildingCode]) grouped[buildingCode] = [];
+      if (!grouped[buildingCode]) {
+        grouped[buildingCode] = [];
+        seenByBuilding[buildingCode] = new Set();
+      }
+      const roomKey = room.spaceKey || room.id;
+      const seen = seenByBuilding[buildingCode];
+      if (roomKey && seen.has(roomKey)) return;
+      if (roomKey) seen.add(roomKey);
       grouped[buildingCode].push(room);
     });
     Object.keys(grouped).forEach((key) => {

@@ -403,7 +403,8 @@ const TemperatureMonitoring = () => {
   };
 
   const resolveImportRoomLabel = (item, roomKey) => {
-    if (item?.roomName) return item.roomName;
+    const itemKey = item?.spaceKey || item?.roomId || "";
+    if (item?.roomName && itemKey && roomKey === itemKey) return item.roomName;
     if (!roomKey) return "Unassigned";
     return getRoomLabel(roomLookup[roomKey] || { id: roomKey }, spacesByKey);
   };
@@ -2123,7 +2124,6 @@ const TemperatureMonitoring = () => {
           labelNormalized: normalizeMatchText(deviceLabel),
           mapping: mappingPayload,
           updatedAt: serverTimestamp(),
-          createdAt: deviceDocs[deviceId]?.createdAt || serverTimestamp(),
         },
         { merge: true },
       );
@@ -3457,6 +3457,9 @@ const TemperatureMonitoring = () => {
                     File
                   </th>
                   <th className="text-left px-3 py-2 text-gray-600 font-semibold">
+                    Room/Space
+                  </th>
+                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">
                     Rows
                   </th>
                   <th className="text-left px-3 py-2 text-gray-600 font-semibold">
@@ -3469,6 +3472,16 @@ const TemperatureMonitoring = () => {
                   const importDate = item.createdAt?.seconds
                     ? new Date(item.createdAt.seconds * 1000).toLocaleString()
                     : "Unknown";
+                  const mappedRoomKey = resolveImportRoomKey(item);
+                  const selectValue =
+                    importMappingDrafts[item.id] ?? mappedRoomKey ?? "";
+                  const selectLabel = resolveImportRoomLabel(
+                    item,
+                    selectValue || mappedRoomKey,
+                  );
+                  const showMissingRoomOption =
+                    selectValue && !roomKeysForBuilding.has(selectValue);
+                  const isMappingSaving = Boolean(importMappingSaving[item.id]);
                   return (
                     <tr key={item.id}>
                       <td className="px-3 py-2 text-gray-700">{importDate}</td>
@@ -3477,6 +3490,49 @@ const TemperatureMonitoring = () => {
                         title={item.fileName}
                       >
                         {item.fileName || "-"}
+                      </td>
+                      <td className="px-3 py-2 text-gray-700">
+                        {item.deviceId ? (
+                          <select
+                            className="form-input text-xs min-w-[180px]"
+                            value={selectValue}
+                            onChange={(e) =>
+                              handleImportHistoryMappingUpdate(
+                                item,
+                                e.target.value,
+                              )
+                            }
+                            title={selectLabel}
+                            disabled={
+                              roomsLoading ||
+                              isMappingSaving ||
+                              importing ||
+                              deletingImport
+                            }
+                          >
+                            <option value="" disabled>
+                              Select room...
+                            </option>
+                            {showMissingRoomOption && (
+                              <option value={selectValue}>
+                                {`${selectLabel} (inactive)`}
+                              </option>
+                            )}
+                            {roomsForBuilding.map((room) => {
+                              const roomKey = room.spaceKey || room.id;
+                              if (!roomKey) return null;
+                              return (
+                                <option key={roomKey} value={roomKey}>
+                                  {getRoomLabel(room, spacesByKey)}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        ) : (
+                          <span className="text-xs text-gray-500">
+                            {selectLabel}
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-gray-700">
                         {item.rowCount ?? "-"}

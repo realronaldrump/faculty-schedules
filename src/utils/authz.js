@@ -90,7 +90,10 @@ export const canAccessPage = ({ userProfile, rolePermissions, pageId }) => {
       : undefined;
   if (typeof userPerm === "boolean") return userPerm;
 
-  if (!rolePermissions) return false;
+  if (!rolePermissions) {
+    console.warn("[authz] canAccessPage called without rolePermissions");
+    return false;
+  }
   const normalized = normalizeRolePermissions(rolePermissions);
   const roles = normalizeRoleList(userProfile.roles);
   for (const role of roles) {

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { db } from "../../firebase";
+import { db, functions } from "../../firebase";
 import {
   doc,
   getDoc,
@@ -10,10 +10,10 @@ import {
   getDocs,
   query,
   orderBy,
-  deleteDoc,
 } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import { useAuth } from "../../contexts/AuthContext.jsx";
-import { logUpdate, logDelete } from "../../utils/changeLogger";
+import { logUpdate } from "../../utils/changeLogger";
 import {
   Shield,
   Users,
@@ -410,6 +410,7 @@ const AccessControl = () => {
       const snap = await getDoc(uRef);
       const data = snap.data() || {};
       const roles = normalizeRoleList(data.roles);
+      const currentStatus = resolveUserStatus(data);
 
       // Prevent self-demotion from admin
       if (
@@ -422,15 +423,27 @@ const AccessControl = () => {
 
       // Only one role at a time - clicking a role sets it as the only role
       const finalRoles = [role];
-      await updateDoc(uRef, {
+      const payload = {
         roles: finalRoles,
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      if (currentStatus === USER_STATUS.PENDING) {
+        Object.assign(
+          payload,
+          buildStatusPayload(USER_STATUS.ACTIVE, {
+            approvedBy: userProfile?.uid || null,
+          }),
+        );
+        payload.roles = finalRoles;
+      }
+
+      await updateDoc(uRef, payload);
       await logUpdate(
         `User Roles - ${data.email}`,
         "users",
         uid,
-        { roles: finalRoles },
+        payload,
         data,
         "AccessControl.jsx - quickToggleRole",
       );
@@ -478,17 +491,8 @@ const AccessControl = () => {
     if (!deleteTarget) return;
     const uid = deleteTarget.id;
     try {
-      const uRef = doc(db, "users", uid);
-      const snap = await getDoc(uRef);
-      const data = snap.data() || {};
-      await deleteDoc(uRef);
-      await logDelete(
-        `User Profile - ${data.email || uid}`,
-        "users",
-        uid,
-        data,
-        "AccessControl.jsx - confirmDeleteUser",
-      );
+      const deleteUser = httpsCallable(functions, "deleteUser");
+      await deleteUser({ uid });
       await loadData();
       if (selectedUserId === uid) {
         setSelectedUserId("");
@@ -496,7 +500,7 @@ const AccessControl = () => {
         setUserRoles([]);
       }
     } catch (e) {
-      // noop
+      console.error(e);
     } finally {
       setDeleteTarget(null);
     }
@@ -1108,21 +1112,21 @@ const AccessControl = () => {
               <div className="modal-header">
                 <div className="flex items-center gap-2">
                   <Trash2 className="w-5 h-5 text-red-600" />
-                  <h3 className="modal-title">Delete User Profile</h3>
+                  <h3 className="modal-title">Delete User Account</h3>
                 </div>
               </div>
               <div className="modal-body">
                 <p className="text-gray-700 mb-2">
-                  This will remove the user's profile document from Firestore:
+                  This will remove the user's profile and authentication account:
                 </p>
                 <p className="text-gray-900 font-medium bg-gray-100 rounded px-3 py-2">
                   {deleteTarget.email || deleteTarget.id}
                 </p>
                 <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
                   <p className="text-sm text-amber-900">
-                    <strong>Note:</strong> This does not delete the Firebase
-                    Authentication account. If the user signs in again, a new
-                    profile may be created. To block access, use Disable instead.
+                    <strong>Note:</strong> This deletes the Firebase
+                    Authentication account and the Firestore profile. The user
+                    will need to sign up again if access is required later.
                   </p>
                 </div>
               </div>
@@ -1134,7 +1138,7 @@ const AccessControl = () => {
                   Cancel
                 </button>
                 <button className="btn-danger" onClick={confirmDeleteUser}>
-                  Delete Profile
+                  Delete User
                 </button>
               </div>
             </div>

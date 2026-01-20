@@ -10,6 +10,7 @@ import {
 } from "firebase/firestore";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
 import { getStorage } from "firebase/storage";
+import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -34,6 +35,9 @@ export const storage = getStorage(app);
 // Initialize Auth
 export const auth = getAuth(app);
 
+// Initialize Functions
+export const functions = getFunctions(app);
+
 // Development environment setup
 const isDevelopment = import.meta.env.DEV;
 const useEmulators = import.meta.env.VITE_USE_EMULATORS === "true";
@@ -53,6 +57,14 @@ if (isDevelopment && useEmulators) {
     console.log("🔧 Connected to Auth Emulator");
   } catch (error) {
     console.warn("⚠️  Could not connect to Auth Emulator:", error.message);
+  }
+
+  // Connect to Functions emulator
+  try {
+    connectFunctionsEmulator(functions, "localhost", 5001);
+    console.log("🔧 Connected to Functions Emulator");
+  } catch (error) {
+    console.warn("⚠️  Could not connect to Functions Emulator:", error.message);
   }
 }
 

@@ -151,6 +151,7 @@ const TemperatureMonitoring = () => {
   const [importing, setImporting] = useState(false);
   const [mappingOverrides, setMappingOverrides] = useState({});
   const [pendingMappings, setPendingMappings] = useState([]);
+  const [isDragging, setIsDragging] = useState(false);
 
   const [editingPositions, setEditingPositions] = useState(false);
   const [markerDrafts, setMarkerDrafts] = useState({});
@@ -1005,13 +1006,14 @@ const TemperatureMonitoring = () => {
     }, {});
   };
 
-  const handleCsvSelection = async (event) => {
-    const files = Array.from(event.target.files || []);
+  const processFiles = async (files) => {
     if (!selectedBuilding || files.length === 0) return;
-    event.target.value = "";
+
+    // Current behavior: replace list on new selection
     setImportItems([]);
     setPendingMappings([]);
     setMappingOverrides({});
+
     const nextItems = [];
     for (const file of files) {
       try {
@@ -1090,13 +1092,13 @@ const TemperatureMonitoring = () => {
           "";
         const suggestion = existingRoomKey
           ? {
-              roomId: existingRoomKey,
-              confidence: existingDevice.mapping.confidence ?? 1,
-              method:
-                existingDevice.mapping.method ||
-                existingDevice.mapping.matchMethod ||
-                "existing",
-            }
+            roomId: existingRoomKey,
+            confidence: existingDevice.mapping.confidence ?? 1,
+            method:
+              existingDevice.mapping.method ||
+              existingDevice.mapping.matchMethod ||
+              "existing",
+          }
           : suggestRoomMatch(deviceLabel);
         nextItems.push({
           id: uuidv4(),
@@ -1131,6 +1133,37 @@ const TemperatureMonitoring = () => {
     }
     setImportItems(nextItems);
     setPendingMappings(buildPendingMappings(nextItems));
+  };
+
+  const handleCsvSelection = async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+    event.target.value = "";
+    await processFiles(files);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files || []);
+    // Simple filter for CSVs. Note: some systems might not have type set correctly, checking extension is safer for this
+    const csvFiles = files.filter(
+      (f) =>
+        f.name.toLowerCase().endsWith(".csv") || f.type === "text/csv" || f.type === "application/vnd.ms-excel",
+    );
+    if (csvFiles.length > 0) {
+      await processFiles(csvFiles);
+    }
   };
 
   const handleRemoveImportItem = (itemId) => {
@@ -1194,10 +1227,10 @@ const TemperatureMonitoring = () => {
       const status = bestSample ? "ok" : "missing";
       const recomputedUtc = bestSample?.rawLocal
         ? (() => {
-            const parsed = parseLocalTimestamp(bestSample.rawLocal);
-            const utcDate = parsed ? zonedTimeToUtc(parsed, timezone) : null;
-            return utcDate ? Timestamp.fromDate(utcDate) : bestSample.utc;
-          })()
+          const parsed = parseLocalTimestamp(bestSample.rawLocal);
+          const utcDate = parsed ? zonedTimeToUtc(parsed, timezone) : null;
+          return utcDate ? Timestamp.fromDate(utcDate) : bestSample.utc;
+        })()
         : null;
       const payload = {
         buildingCode: buildingCode || "",
@@ -1418,9 +1451,9 @@ const TemperatureMonitoring = () => {
           method: manualOverride
             ? "manual"
             : item.matchMethod ||
-              existingDevice?.mapping?.method ||
-              existingDevice?.mapping?.matchMethod ||
-              "auto",
+            existingDevice?.mapping?.method ||
+            existingDevice?.mapping?.matchMethod ||
+            "auto",
           confidence: manualOverride
             ? 1
             : (item.matchConfidence ??
@@ -1436,7 +1469,7 @@ const TemperatureMonitoring = () => {
           existingRoomKey !== mappingPayload.spaceKey ||
           Boolean(existingMapping.manual) !== Boolean(mappingPayload.manual) ||
           (existingMapping.method || existingMapping.matchMethod || "auto") !==
-            mappingPayload.method;
+          mappingPayload.method;
         const latestLocalChanged =
           newLatestLocal && newLatestLocal !== latestLocal;
         const shouldUpdateDevice =
@@ -1711,7 +1744,7 @@ const TemperatureMonitoring = () => {
         return [
           docData.buildingName || selectedBuildingName || selectedBuilding,
           docData.roomName ||
-            getRoomLabel(roomLookup[roomKey] || { id: roomKey }, spacesByKey),
+          getRoomLabel(roomLookup[roomKey] || { id: roomKey }, spacesByKey),
           docData.dateLocal || "",
           docData.snapshotLabel || "",
           docData.temperatureF ?? "",
@@ -2159,9 +2192,9 @@ const TemperatureMonitoring = () => {
   const renderHistorical = () => {
     const roomSnapshots = historicalRoomId
       ? historicalDocs.filter(
-          (docData) =>
-            (docData.spaceKey || docData.roomId) === historicalRoomId,
-        )
+        (docData) =>
+          (docData.spaceKey || docData.roomId) === historicalRoomId,
+      )
       : [];
 
     const dates = Array.from(
@@ -2334,8 +2367,17 @@ const TemperatureMonitoring = () => {
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="border border-dashed border-baylor-green/40 bg-baylor-green/5 rounded-lg p-5">
-          <div className="flex items-start gap-4">
+        <div
+          className={`border border-dashed rounded-lg p-5 transition-colors ${isDragging
+              ? "border-baylor-green bg-baylor-green/10"
+              : "border-baylor-green/40 bg-baylor-green/5"
+            }`}
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <div className="flex items-start gap-4 pointer-events-none">
             <div className="w-12 h-12 rounded-full bg-white border border-baylor-green/20 flex items-center justify-center">
               <FileUp className="w-5 h-5 text-baylor-green" />
             </div>
@@ -2344,8 +2386,7 @@ const TemperatureMonitoring = () => {
                 Select Govee CSV exports
               </div>
               <div className="text-xs text-gray-500">
-                Upload one or more CSV files. We'll detect timestamps,
-                temperature, and humidity automatically.
+                Drag and drop CSV files here, or click to browse.
               </div>
             </div>
           </div>
@@ -2555,11 +2596,11 @@ const TemperatureMonitoring = () => {
                         Suggested:{" "}
                         {item.suggestedRoomId
                           ? getRoomLabel(
-                              roomLookup[item.suggestedRoomId] || {
-                                id: item.suggestedRoomId,
-                              },
-                              spacesByKey,
-                            )
+                            roomLookup[item.suggestedRoomId] || {
+                              id: item.suggestedRoomId,
+                            },
+                            spacesByKey,
+                          )
                           : "None"}{" "}
                         | Confidence{" "}
                         {Math.round((item.matchConfidence || 0) * 100)}%
@@ -3095,11 +3136,10 @@ const TemperatureMonitoring = () => {
                 <button
                   key={tab.id}
                   onClick={() => setViewMode(tab.id)}
-                  className={`px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${
-                    isActive
+                  className={`px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${isActive
                       ? "bg-white text-baylor-green shadow-sm"
                       : "text-gray-600 hover:text-gray-900"
-                  }`}
+                    }`}
                 >
                   <Icon className="w-4 h-4" />
                   {tab.label}
@@ -3117,11 +3157,10 @@ const TemperatureMonitoring = () => {
                 <button
                   key={tab.id}
                   onClick={() => setViewMode(tab.id)}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition border ${
-                    isActive
+                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition border ${isActive
                       ? "bg-baylor-green text-white border-baylor-green"
                       : "bg-white text-gray-700 border-gray-200 hover:border-baylor-green/50 hover:text-baylor-green"
-                  }`}
+                    }`}
                 >
                   <Icon className="w-4 h-4" />
                   <span className="hidden sm:inline">{tab.label}</span>

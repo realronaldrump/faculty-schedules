@@ -56,11 +56,12 @@ const FacultyContactCard = ({
         return fromCode || raw;
     };
 
-    // Load schedules directly from Firestore when no courses are embedded
+    // Load schedules directly from Firestore for ALL semesters
+    // Always fetch externally for faculty/staff to show complete teaching history,
+    // not just the currently selected semester's courses
     useEffect(() => {
         let cancelled = false;
-        const shouldFetch = personType !== 'student' && contactPerson?.id &&
-            (!Array.isArray(contactPerson.courses) || contactPerson.courses.length === 0);
+        const shouldFetch = personType !== 'student' && contactPerson?.id;
         const load = async () => {
             try {
                 setLoadingSchedules(true);
@@ -101,13 +102,21 @@ const FacultyContactCard = ({
         };
         if (shouldFetch) load();
         return () => { cancelled = true; };
-    }, [contactPerson?.id, contactPerson?.name, contactPerson?.courses, personType]);
+    }, [contactPerson?.id, personType]);
 
-    // Build the source schedules: embedded > fetched
+    // Build the source schedules: prefer externally fetched (all semesters) over embedded (filtered by current semester)
+    // For faculty/staff, always use external schedules to show complete teaching history
     const sourceSchedules = useMemo(() => {
-        if (Array.isArray(contactPerson.courses) && contactPerson.courses.length > 0) return contactPerson.courses;
+        // For non-students, prefer external schedules which contain ALL semesters
+        if (personType !== 'student') {
+            return externalSchedules;
+        }
+        // For students, use embedded courses if available
+        if (Array.isArray(contactPerson.courses) && contactPerson.courses.length > 0) {
+            return contactPerson.courses;
+        }
         return externalSchedules;
-    }, [contactPerson, externalSchedules]);
+    }, [contactPerson.courses, externalSchedules, personType]);
 
     // Normalize, group, and sort courses by term for consistent display
     const normalizedCourses = useMemo(() => {

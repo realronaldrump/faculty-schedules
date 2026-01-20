@@ -259,9 +259,12 @@ export const PERSON_SCHEMA = {
   // Employment
   jobTitle: "",
   department: "",
-  office: "", // Office location string (for display, preserved for auditability)
-  officeSpaceId: "", // Reference to spaces collection (canonical office reference)
+  office: "", // Primary office location string (for display, preserved for auditability)
+  officeSpaceId: "", // Primary reference to spaces collection (canonical office reference)
   officeRoomId: "", // @deprecated - use officeSpaceId
+  // Multiple offices support (array fields)
+  offices: [], // Array of office display strings, e.g., ["Goebel 101", "Jones 205"]
+  officeSpaceIds: [], // Array of space references, e.g., ["GOEBEL:101", "JONES:205"]
 
   // Roles
   roles: [], // ['faculty', 'staff', etc.]

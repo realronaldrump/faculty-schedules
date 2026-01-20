@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
-import { Edit, Save, X, Trash2, Phone, PhoneOff, Building, BuildingIcon } from 'lucide-react';
+import { Edit, Save, X, Trash2, Phone, PhoneOff, Building, BuildingIcon, Plus, Minus } from 'lucide-react';
 import { useDirectoryState, useDirectoryHandlers } from '../hooks';
 import { useData } from '../contexts/DataContext';
 import { DeleteConfirmDialog, UniversalDirectory } from './shared';
@@ -228,60 +228,195 @@ const buildBaseColumns = ({
     )
   };
 
+  // Helper to get offices array from form data
+  const getOfficesArray = (formData) => {
+    if (Array.isArray(formData.offices) && formData.offices.length > 0) {
+      return formData.offices;
+    }
+    return formData.office ? [formData.office] : [];
+  };
+
+  // Helper to update offices in form data
+  const updateOfficesInForm = (formData, setFormData, index, value) => {
+    const currentOffices = getOfficesArray(formData);
+    const newOffices = [...currentOffices];
+    newOffices[index] = value;
+    setFormData(prev => ({
+      ...prev,
+      offices: newOffices,
+      office: newOffices[0] || '' // Keep primary in sync
+    }));
+  };
+
+  // Helper to add a new office
+  const addOffice = (formData, setFormData) => {
+    const currentOffices = getOfficesArray(formData);
+    setFormData(prev => ({
+      ...prev,
+      offices: [...currentOffices, '']
+    }));
+  };
+
+  // Helper to remove an office by index
+  const removeOffice = (formData, setFormData, index) => {
+    const currentOffices = getOfficesArray(formData);
+    const newOffices = currentOffices.filter((_, i) => i !== index);
+    setFormData(prev => ({
+      ...prev,
+      offices: newOffices,
+      office: newOffices[0] || ''
+    }));
+  };
+
   const officeColumn = {
     key: 'office',
     label: 'Office',
-    render: (person) => (
-      <div className="flex items-center gap-2">
-        {person.hasNoOffice ? (
-          <span className="flex items-center gap-1 text-gray-500">
-            <BuildingIcon size={14} className="opacity-50" />
-            No office
-          </span>
-        ) : (
-          person.office || '-'
-        )}
-      </div>
-    ),
-    renderEdit: () => (
-      <div className="flex items-center gap-2">
-        <input
-          name="office"
-          value={editFormData.office || ''}
-          onChange={handleChange}
-          className={getInputClass('office')}
-          placeholder="Building & Room"
-          disabled={editFormData.hasNoOffice}
-        />
-        <button
-          type="button"
-          onClick={toggleEditOfficeState}
-          className={`p-1 rounded transition-colors ${editFormData.hasNoOffice ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`}
-          title={editFormData.hasNoOffice ? 'Has no office' : 'Has office'}
-        >
-          {editFormData.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
-        </button>
-      </div>
-    ),
-    renderCreate: () => (
-      <div className="flex items-center gap-2">
-        <input
-          name="office"
-          value={newRecord.office || ''}
-          onChange={handleCreateChange}
-          className={getInputClass('office')}
-          placeholder="Building & Room"
-          disabled={newRecord.hasNoOffice}
-        />
-        <button
-          type="button"
-          onClick={toggleCreateOfficeState}
-          className={`p-1 rounded transition-colors ${newRecord.hasNoOffice ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`}
-        >
-          {newRecord.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
-        </button>
-      </div>
-    )
+    render: (person) => {
+      if (person.hasNoOffice) {
+        return (
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1 text-gray-500">
+              <BuildingIcon size={14} className="opacity-50" />
+              No office
+            </span>
+          </div>
+        );
+      }
+      // Display multiple offices
+      const offices = Array.isArray(person.offices) && person.offices.length > 0
+        ? person.offices
+        : (person.office ? [person.office] : []);
+      if (offices.length === 0) return <span className="text-gray-400">-</span>;
+      if (offices.length === 1) return <span>{offices[0]}</span>;
+      return (
+        <div className="flex flex-col gap-0.5">
+          {offices.map((office, idx) => (
+            <span key={idx} className={idx === 0 ? 'font-medium' : 'text-gray-600 text-sm'}>
+              {office}{idx === 0 && offices.length > 1 ? ' (primary)' : ''}
+            </span>
+          ))}
+        </div>
+      );
+    },
+    renderEdit: () => {
+      const offices = getOfficesArray(editFormData);
+      const showAddButton = !editFormData.hasNoOffice && offices.length < 3; // Max 3 offices
+
+      return (
+        <div className="flex flex-col gap-2">
+          {offices.map((office, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <input
+                name={`office-${idx}`}
+                value={office || ''}
+                onChange={(e) => updateOfficesInForm(editFormData, setEditFormData, idx, e.target.value)}
+                className={getInputClass('office')}
+                placeholder={idx === 0 ? 'Primary Office' : 'Additional Office'}
+                disabled={editFormData.hasNoOffice}
+              />
+              {idx === 0 ? (
+                <button
+                  type="button"
+                  onClick={toggleEditOfficeState}
+                  className={`p-1 rounded transition-colors ${editFormData.hasNoOffice ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`}
+                  title={editFormData.hasNoOffice ? 'Has no office' : 'Has office'}
+                >
+                  {editFormData.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => removeOffice(editFormData, setEditFormData, idx)}
+                  className="p-1 rounded transition-colors text-red-500 hover:bg-red-100"
+                  title="Remove office"
+                >
+                  <Minus size={16} />
+                </button>
+              )}
+            </div>
+          ))}
+          {showAddButton && (
+            <button
+              type="button"
+              onClick={() => addOffice(editFormData, setEditFormData)}
+              className="flex items-center gap-1 text-xs text-baylor-green hover:text-baylor-green/80 transition-colors"
+            >
+              <Plus size={14} />
+              Add office
+            </button>
+          )}
+        </div>
+      );
+    },
+    renderCreate: () => {
+      const offices = getOfficesArray(newRecord);
+      const showAddButton = !newRecord.hasNoOffice && offices.length < 3;
+
+      return (
+        <div className="flex flex-col gap-2">
+          {offices.length === 0 ? (
+            <div className="flex items-center gap-2">
+              <input
+                name="office"
+                value=""
+                onChange={(e) => updateOfficesInForm(newRecord, setNewRecord, 0, e.target.value)}
+                className={getInputClass('office')}
+                placeholder="Building & Room"
+                disabled={newRecord.hasNoOffice}
+              />
+              <button
+                type="button"
+                onClick={toggleCreateOfficeState}
+                className={`p-1 rounded transition-colors ${newRecord.hasNoOffice ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`}
+              >
+                {newRecord.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
+              </button>
+            </div>
+          ) : (
+            offices.map((office, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <input
+                  name={`office-${idx}`}
+                  value={office || ''}
+                  onChange={(e) => updateOfficesInForm(newRecord, setNewRecord, idx, e.target.value)}
+                  className={getInputClass('office')}
+                  placeholder={idx === 0 ? 'Primary Office' : 'Additional Office'}
+                  disabled={newRecord.hasNoOffice}
+                />
+                {idx === 0 ? (
+                  <button
+                    type="button"
+                    onClick={toggleCreateOfficeState}
+                    className={`p-1 rounded transition-colors ${newRecord.hasNoOffice ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`}
+                  >
+                    {newRecord.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => removeOffice(newRecord, setNewRecord, idx)}
+                    className="p-1 rounded transition-colors text-red-500 hover:bg-red-100"
+                    title="Remove office"
+                  >
+                    <Minus size={16} />
+                  </button>
+                )}
+              </div>
+            ))
+          )}
+          {showAddButton && offices.length > 0 && (
+            <button
+              type="button"
+              onClick={() => addOffice(newRecord, setNewRecord)}
+              className="flex items-center gap-1 text-xs text-baylor-green hover:text-baylor-green/80 transition-colors"
+            >
+              <Plus size={14} />
+              Add office
+            </button>
+          )}
+        </div>
+      );
+    }
   };
 
   return {

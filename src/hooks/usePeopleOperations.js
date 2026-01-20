@@ -233,28 +233,40 @@ const usePeopleOperations = () => {
         updatedAt: new Date().toISOString()
       };
 
-      const nextOffice = (cleanData.office || '').toString().trim();
+      // Handle office fields - sync both singular and array fields
+      const nextOffices = Array.isArray(cleanData.offices) ? cleanData.offices.filter(Boolean) : [];
+      const nextOffice = (cleanData.office || nextOffices[0] || '').toString().trim();
       const nextHasNoOffice = cleanData.hasNoOffice === true || cleanData.isRemote === true;
       const prevOffice = (originalData?.office || '').toString().trim();
       const prevOfficeRoomId = (originalData?.officeRoomId || '').toString().trim();
-      const prevOfficeSpaceId = (originalData?.officeSpaceId || '').toString().trim();
 
-      if (nextHasNoOffice || !nextOffice) {
+      if (nextHasNoOffice || (!nextOffice && nextOffices.length === 0)) {
+        // Clear all office fields
         updateData.officeRoomId = '';
         updateData.officeSpaceId = '';
+        updateData.office = '';
+        updateData.offices = [];
+        updateData.officeSpaceIds = [];
       } else {
-        const officeChanged = prevOffice !== nextOffice;
-        const missingLink = !prevOfficeRoomId && !(cleanData.officeRoomId || '').toString().trim();
-        if (officeChanged || missingLink) {
-          const resolved = await resolveOfficeRoomId(cleanData);
-          if (resolved.officeRoomId) {
-            updateData.officeRoomId = resolved.officeRoomId;
-            updateData.officeSpaceId = resolved.officeSpaceId;
-          } else if (officeChanged) {
-            updateData.officeRoomId = '';
-            updateData.officeSpaceId = '';
-          }
+        // Build arrays from offices field or fall back to singular office
+        const officesToResolve = nextOffices.length > 0 ? nextOffices : (nextOffice ? [nextOffice] : []);
+        const resolvedOffices = [];
+        const resolvedSpaceIds = [];
+
+        for (const officeStr of officesToResolve) {
+          const resolved = await resolveOfficeRoomId({ office: officeStr, hasNoOffice: false });
+          resolvedOffices.push(officeStr);
+          resolvedSpaceIds.push(resolved.officeSpaceId || '');
         }
+
+        // Set array fields
+        updateData.offices = resolvedOffices;
+        updateData.officeSpaceIds = resolvedSpaceIds;
+
+        // Set singular fields to primary (first) office
+        updateData.office = resolvedOffices[0] || '';
+        updateData.officeSpaceId = resolvedSpaceIds[0] || '';
+        updateData.officeRoomId = resolvedSpaceIds[0] || ''; // Legacy field
       }
 
       if (isNewFaculty) {
@@ -348,8 +360,31 @@ const usePeopleOperations = () => {
         Object.entries(staffToUpdate).filter(([_, value]) => value !== undefined)
       );
 
-      const nextOffice = (cleanStaffData.office || '').toString().trim();
+      const nextOffices = Array.isArray(cleanStaffData.offices) ? cleanStaffData.offices.filter(Boolean) : [];
+      const nextOffice = (cleanStaffData.office || nextOffices[0] || '').toString().trim();
       const nextHasNoOffice = cleanStaffData.hasNoOffice === true || cleanStaffData.isRemote === true;
+
+      // Helper to resolve all offices
+      const resolveAllOffices = async () => {
+        if (nextHasNoOffice || (!nextOffice && nextOffices.length === 0)) {
+          return { offices: [], officeSpaceIds: [], office: '', officeSpaceId: '', officeRoomId: '' };
+        }
+        const officesToResolve = nextOffices.length > 0 ? nextOffices : (nextOffice ? [nextOffice] : []);
+        const resolvedOffices = [];
+        const resolvedSpaceIds = [];
+        for (const officeStr of officesToResolve) {
+          const resolved = await resolveOfficeRoomId({ office: officeStr, hasNoOffice: false });
+          resolvedOffices.push(officeStr);
+          resolvedSpaceIds.push(resolved.officeSpaceId || '');
+        }
+        return {
+          offices: resolvedOffices,
+          officeSpaceIds: resolvedSpaceIds,
+          office: resolvedOffices[0] || '',
+          officeSpaceId: resolvedSpaceIds[0] || '',
+          officeRoomId: resolvedSpaceIds[0] || ''
+        };
+      };
 
       if (staffToUpdate.id) {
         originalData = rawPeople.find(p => p.id === staffToUpdate.id) || null;
@@ -359,26 +394,8 @@ const usePeopleOperations = () => {
           updatedAt: new Date().toISOString()
         };
 
-        const prevOffice = (originalData?.office || '').toString().trim();
-        const prevOfficeRoomId = (originalData?.officeRoomId || '').toString().trim();
-
-        if (nextHasNoOffice || !nextOffice) {
-          updateData.officeRoomId = '';
-          updateData.officeSpaceId = '';
-        } else {
-          const officeChanged = prevOffice !== nextOffice;
-          const missingLink = !prevOfficeRoomId && !(cleanStaffData.officeRoomId || '').toString().trim();
-          if (officeChanged || missingLink) {
-            const resolved = await resolveOfficeRoomId(cleanStaffData);
-            if (resolved.officeRoomId) {
-              updateData.officeRoomId = resolved.officeRoomId;
-              updateData.officeSpaceId = resolved.officeSpaceId;
-            } else if (officeChanged) {
-              updateData.officeRoomId = '';
-              updateData.officeSpaceId = '';
-            }
-          }
-        }
+        const officeFields = await resolveAllOffices();
+        Object.assign(updateData, officeFields);
 
         await updateDoc(staffRef, updateData);
         docRef = staffRef;
@@ -399,16 +416,8 @@ const usePeopleOperations = () => {
           updatedAt: new Date().toISOString()
         };
 
-        if (nextHasNoOffice || !nextOffice) {
-          createData.officeRoomId = '';
-          createData.officeSpaceId = '';
-        } else {
-          const resolved = await resolveOfficeRoomId(cleanStaffData);
-          if (resolved.officeRoomId) {
-            createData.officeRoomId = resolved.officeRoomId;
-            createData.officeSpaceId = resolved.officeSpaceId;
-          }
-        }
+        const officeFields = await resolveAllOffices();
+        Object.assign(createData, officeFields);
 
         docRef = await addDoc(collection(db, 'people'), createData);
         action = 'CREATE';

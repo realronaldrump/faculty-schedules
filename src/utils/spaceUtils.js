@@ -140,68 +140,14 @@ export const resolveScheduleSpaces = (schedule, spacesByKey) => {
   };
 };
 
+/**
+ * Resolve a single office location from person data.
+ * Returns the primary office (first in array or legacy field).
+ * For multiple offices, use resolveOfficeLocations instead.
+ */
 export const resolveOfficeLocation = (person, spacesByKey) => {
-  if (!person) {
-    return {
-      spaceKey: '',
-      buildingCode: '',
-      buildingDisplayName: '',
-      spaceNumber: '',
-      displayName: ''
-    };
-  }
-
-  const officeSpaceId = (person.officeSpaceId || '').toString().trim();
-  if (officeSpaceId) {
-    const map = spacesByKey instanceof Map ? spacesByKey : null;
-    const space = map ? map.get(officeSpaceId) : spacesByKey?.[officeSpaceId];
-    if (space) {
-      const normalized = normalizeSpaceRecord(space, space.id);
-      return {
-        spaceKey: normalized.spaceKey || officeSpaceId,
-        buildingCode: normalized.buildingCode || '',
-        buildingDisplayName: normalized.buildingDisplayName || '',
-        spaceNumber: normalized.spaceNumber || '',
-        displayName: normalized.displayName || ''
-      };
-    }
-
-    const parsedKey = parseSpaceKey(officeSpaceId);
-    if (parsedKey?.buildingCode && parsedKey?.spaceNumber) {
-      const displayName = formatSpaceDisplayName({
-        buildingCode: parsedKey.buildingCode,
-        spaceNumber: parsedKey.spaceNumber
-      });
-      return {
-        spaceKey: officeSpaceId,
-        buildingCode: parsedKey.buildingCode,
-        buildingDisplayName: resolveBuildingDisplayName(parsedKey.buildingCode),
-        spaceNumber: normalizeSpaceNumber(parsedKey.spaceNumber),
-        displayName
-      };
-    }
-  }
-
-  const office = (person.office || '').toString().trim();
-  if (office) {
-    const parsed = parseRoomLabel(office);
-    if (parsed?.buildingCode || parsed?.spaceNumber) {
-      const displayName = formatSpaceDisplayName({
-        buildingCode: parsed.buildingCode || parsed?.building?.code || '',
-        buildingDisplayName: parsed?.building?.displayName || '',
-        spaceNumber: parsed.spaceNumber || ''
-      });
-      return {
-        spaceKey: parsed.spaceKey || '',
-        buildingCode: parsed.buildingCode || parsed?.building?.code || '',
-        buildingDisplayName: parsed?.building?.displayName || '',
-        spaceNumber: normalizeSpaceNumber(parsed.spaceNumber || ''),
-        displayName: displayName || parsed.displayName || office
-      };
-    }
-  }
-
-  return {
+  const locations = resolveOfficeLocations(person, spacesByKey);
+  return locations[0] || {
     spaceKey: '',
     buildingCode: '',
     buildingDisplayName: '',
@@ -210,9 +156,97 @@ export const resolveOfficeLocation = (person, spacesByKey) => {
   };
 };
 
+/**
+ * Resolve all office locations for a person.
+ * Supports both new officeSpaceIds array and legacy officeSpaceId string.
+ * @returns {Array} Array of office location objects
+ */
+export const resolveOfficeLocations = (person, spacesByKey) => {
+  if (!person) return [];
+
+  const results = [];
+  const map = spacesByKey instanceof Map ? spacesByKey : null;
+
+  // Helper to resolve a single space ID
+  const resolveOne = (spaceId, officeStr) => {
+    const id = (spaceId || '').toString().trim();
+    if (id) {
+      const space = map ? map.get(id) : spacesByKey?.[id];
+      if (space) {
+        const normalized = normalizeSpaceRecord(space, space.id);
+        return {
+          spaceKey: normalized.spaceKey || id,
+          buildingCode: normalized.buildingCode || '',
+          buildingDisplayName: normalized.buildingDisplayName || '',
+          spaceNumber: normalized.spaceNumber || '',
+          displayName: normalized.displayName || ''
+        };
+      }
+
+      const parsedKey = parseSpaceKey(id);
+      if (parsedKey?.buildingCode && parsedKey?.spaceNumber) {
+        const displayName = formatSpaceDisplayName({
+          buildingCode: parsedKey.buildingCode,
+          spaceNumber: parsedKey.spaceNumber
+        });
+        return {
+          spaceKey: id,
+          buildingCode: parsedKey.buildingCode,
+          buildingDisplayName: resolveBuildingDisplayName(parsedKey.buildingCode),
+          spaceNumber: normalizeSpaceNumber(parsedKey.spaceNumber),
+          displayName
+        };
+      }
+    }
+
+    // Try parsing from office string
+    const office = (officeStr || '').toString().trim();
+    if (office) {
+      const parsed = parseRoomLabel(office);
+      if (parsed?.buildingCode || parsed?.spaceNumber) {
+        const displayName = formatSpaceDisplayName({
+          buildingCode: parsed.buildingCode || parsed?.building?.code || '',
+          buildingDisplayName: parsed?.building?.displayName || '',
+          spaceNumber: parsed.spaceNumber || ''
+        });
+        return {
+          spaceKey: parsed.spaceKey || '',
+          buildingCode: parsed.buildingCode || parsed?.building?.code || '',
+          buildingDisplayName: parsed?.building?.displayName || '',
+          spaceNumber: normalizeSpaceNumber(parsed.spaceNumber || ''),
+          displayName: displayName || parsed.displayName || office
+        };
+      }
+    }
+
+    return null;
+  };
+
+  // First try new array fields
+  const officeSpaceIds = Array.isArray(person.officeSpaceIds) ? person.officeSpaceIds : [];
+  const offices = Array.isArray(person.offices) ? person.offices : [];
+
+  if (officeSpaceIds.length > 0 || offices.length > 0) {
+    const maxLen = Math.max(officeSpaceIds.length, offices.length);
+    for (let i = 0; i < maxLen; i++) {
+      const resolved = resolveOne(officeSpaceIds[i], offices[i]);
+      if (resolved) results.push(resolved);
+    }
+  }
+
+  // Fall back to legacy singular fields if no array data
+  if (results.length === 0) {
+    const resolved = resolveOne(person.officeSpaceId, person.office);
+    if (resolved) results.push(resolved);
+  }
+
+  return results;
+};
+
 export default {
   normalizeSpaceRecord,
   resolveSpaceDisplayName,
   resolveScheduleSpaces,
-  resolveOfficeLocation
+  resolveOfficeLocation,
+  resolveOfficeLocations
 };

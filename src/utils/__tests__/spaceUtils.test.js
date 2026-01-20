@@ -4,6 +4,7 @@ import { setBuildingConfig } from '../buildingUtils';
 import {
   normalizeSpaceRecord,
   resolveOfficeLocation,
+  resolveOfficeLocations,
   resolveScheduleSpaces,
   resolveSpaceDisplayName
 } from '../spaceUtils';
@@ -17,6 +18,11 @@ describe('spaceUtils', () => {
           code: 'GOEBEL',
           displayName: 'Goebel',
           aliases: ['Goebel Building']
+        },
+        {
+          code: 'JONES',
+          displayName: 'Jones',
+          aliases: ['Jones Hall']
         }
       ]
     });
@@ -69,5 +75,63 @@ describe('spaceUtils', () => {
 
     expect(resolved.spaceKey).toBe('GOEBEL:201');
     expect(resolved.displayName).toBe('Goebel 201');
+  });
+
+  // Multiple offices tests
+  describe('resolveOfficeLocations', () => {
+    it('returns an array of office locations from officeSpaceIds', () => {
+      const space1 = normalizeSpaceRecord({ buildingCode: 'GOEBEL', spaceNumber: '101' }, 'GOEBEL:101');
+      const space2 = normalizeSpaceRecord({ buildingCode: 'JONES', spaceNumber: '205' }, 'JONES:205');
+      const spacesByKey = new Map([
+        [space1.spaceKey, space1],
+        [space2.spaceKey, space2]
+      ]);
+
+      const person = {
+        officeSpaceIds: ['GOEBEL:101', 'JONES:205'],
+        offices: ['Goebel 101', 'Jones 205']
+      };
+
+      const result = resolveOfficeLocations(person, spacesByKey);
+      expect(result).toHaveLength(2);
+      expect(result[0].spaceKey).toBe('GOEBEL:101');
+      expect(result[1].spaceKey).toBe('JONES:205');
+    });
+
+    it('falls back to legacy officeSpaceId for old data', () => {
+      const space = normalizeSpaceRecord({ buildingCode: 'GOEBEL', spaceNumber: '101' }, 'GOEBEL:101');
+      const spacesByKey = new Map([[space.spaceKey, space]]);
+
+      const person = {
+        officeSpaceId: 'GOEBEL:101',
+        office: 'Goebel 101'
+      };
+
+      const result = resolveOfficeLocations(person, spacesByKey);
+      expect(result).toHaveLength(1);
+      expect(result[0].spaceKey).toBe('GOEBEL:101');
+    });
+
+    it('returns empty array for person with no office', () => {
+      const result = resolveOfficeLocations({ hasNoOffice: true }, new Map());
+      expect(result).toEqual([]);
+    });
+
+    it('resolveOfficeLocation returns first office for backward compatibility', () => {
+      const space1 = normalizeSpaceRecord({ buildingCode: 'GOEBEL', spaceNumber: '101' }, 'GOEBEL:101');
+      const space2 = normalizeSpaceRecord({ buildingCode: 'JONES', spaceNumber: '205' }, 'JONES:205');
+      const spacesByKey = new Map([
+        [space1.spaceKey, space1],
+        [space2.spaceKey, space2]
+      ]);
+
+      const person = {
+        officeSpaceIds: ['GOEBEL:101', 'JONES:205'],
+        offices: ['Goebel 101', 'Jones 205']
+      };
+
+      const result = resolveOfficeLocation(person, spacesByKey);
+      expect(result.spaceKey).toBe('GOEBEL:101');
+    });
   });
 });

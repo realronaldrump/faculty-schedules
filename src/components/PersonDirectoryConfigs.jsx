@@ -172,15 +172,9 @@ const ADJUNCT_EXPORT_COLUMN_ORDER = [
 const DEFAULT_ADJUNCT_EXPORT_COLUMNS = [
   'name',
   'program',
-  'jobTitle',
   'email',
-  'phone',
-  'office',
   'baylorId',
-  'courseCount',
-  'remote',
-  'tenured',
-  'alsoStaff'
+  'courseList'
 ];
 
 const ADJUNCT_EXPORT_COLUMN_LABELS = buildExportLabelMap(ADJUNCT_EXPORT_COLUMN_DEFS);

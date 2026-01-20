@@ -64,9 +64,72 @@ const AccessControl = () => {
     setPendingPages(unconfigured);
   }, [allPages, rolePermissions]);
 
+  // Friendly page labels for display
+  const PAGE_LABELS = {
+    "dashboard": "Dashboard",
+    "live-view": "Today View",
+    "people/directory": "People Directory",
+    "people/email-lists": "Email Lists",
+    "people/offices": "Office Directory",
+    "people/programs": "Programs & UPDs",
+    "people/baylor-ids": "Baylor IDs",
+    "scheduling/faculty": "Faculty Schedules",
+    "scheduling/rooms": "Room Schedules",
+    "scheduling/student-workers": "Student Workers",
+    "analytics/department-insights": "Department Insights",
+    "data/import-wizard": "Import Wizard",
+    "data/schedule-data": "Schedule Data",
+    "data/crn-tools": "CRN Quality Tools",
+    "help/tutorials": "Tutorials",
+    "help/baylor-systems": "Baylor Systems",
+    "help/acronyms": "Acronyms",
+    "facilities/temperature": "Temperature Monitoring",
+    "admin/access-control": "Access Control",
+    "admin/settings": "App Settings",
+    "admin/recent-changes": "Recent Changes",
+    "admin/data-hygiene": "Data Hygiene",
+  };
+
+  const getPageLabel = (pageId) => PAGE_LABELS[pageId] || pageId;
+
+  // Group pages by section for better organization
   const PAGE_GROUPS = useMemo(() => {
-    const sorted = [...allPages].sort((a, b) => a.localeCompare(b));
-    return [{ name: "All Pages", pages: sorted }];
+    const groups = [
+      { name: "Home", prefix: ["dashboard", "live-view"], pages: [] },
+      { name: "People", prefix: "people/", pages: [] },
+      { name: "Scheduling", prefix: "scheduling/", pages: [] },
+      { name: "Analytics", prefix: "analytics/", pages: [] },
+      { name: "Data Tools", prefix: "data/", pages: [] },
+      { name: "Help & Resources", prefix: "help/", pages: [] },
+      { name: "Facilities", prefix: "facilities/", pages: [] },
+      { name: "Administration", prefix: "admin/", pages: [] },
+    ];
+
+    allPages.forEach((page) => {
+      for (const group of groups) {
+        if (Array.isArray(group.prefix)) {
+          if (group.prefix.includes(page)) {
+            group.pages.push(page);
+            return;
+          }
+        } else if (page.startsWith(group.prefix)) {
+          group.pages.push(page);
+          return;
+        }
+      }
+      // Fallback: add to a catch-all "Other" group
+      let other = groups.find((g) => g.name === "Other");
+      if (!other) {
+        other = { name: "Other", prefix: "", pages: [] };
+        groups.push(other);
+      }
+      other.pages.push(page);
+    });
+
+    // Filter out empty groups and sort pages within each group
+    return groups
+      .filter((g) => g.pages.length > 0)
+      .map((g) => ({ ...g, pages: g.pages.sort((a, b) => a.localeCompare(b)) }));
   }, [allPages]);
 
   const loadData = async () => {
@@ -472,45 +535,48 @@ const AccessControl = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-baylor-green to-baylor-green/80 rounded-lg p-6 text-white">
-        <div className="flex items-center gap-3 mb-2">
-          <Shield className="w-8 h-8" />
-          <h1 className="text-2xl font-bold text-white">Access Control</h1>
+      {/* Header - University Header Pattern */}
+      <div className="university-header rounded-xl p-8">
+        <div className="university-brand">
+          <div className="university-logo">
+            <Shield className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="university-title">Access Control</h1>
+            <p className="university-subtitle">
+              Manage role-based permissions and user access across the application
+            </p>
+          </div>
         </div>
-        <p className="text-white/90">
-          Manage role-based permissions and user access across the application
-        </p>
       </div>
 
-      {/* Main Tabs */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="border-b border-gray-200">
-          <nav className="flex">
-            <button
-              onClick={() => setActiveTab("roles")}
-              className={`flex items-center gap-2 px-6 py-4 font-medium border-b-2 transition-colors ${activeTab === "roles"
-                ? "border-baylor-green text-baylor-green"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                }`}
-            >
-              <Lock className="w-4 h-4" />
-              Role Permissions
-            </button>
-            <button
-              onClick={() => setActiveTab("users")}
-              className={`flex items-center gap-2 px-6 py-4 font-medium border-b-2 transition-colors ${activeTab === "users"
-                ? "border-baylor-green text-baylor-green"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                }`}
-            >
-              <Users className="w-4 h-4" />
-              User Management
-            </button>
-          </nav>
-        </div>
+      {/* Pill-style Tab Navigation */}
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => setActiveTab("roles")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition-colors ${activeTab === "roles"
+            ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
+            : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+            }`}
+        >
+          <Lock className="w-4 h-4" />
+          Role Permissions
+        </button>
+        <button
+          onClick={() => setActiveTab("users")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition-colors ${activeTab === "users"
+            ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
+            : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+            }`}
+        >
+          <Users className="w-4 h-4" />
+          User Management
+        </button>
+      </div>
 
-        <div className="p-6">
+      {/* Main Content */}
+      <div className="university-card">
+        <div className="university-card-content">
           {/* ROLE PERMISSIONS TAB */}
           {activeTab === "roles" && (
             <div className="space-y-6">
@@ -557,7 +623,7 @@ const AccessControl = () => {
                               {group.pages.map((pid) => (
                                 <label key={`${role}-${pid}`} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-white/50 rounded px-2 py-1">
                                   <input type="checkbox" checked={Boolean(((rolePermissions[role] || {}).pages || {})[pid])} onChange={() => toggleRolePage(role, pid)} className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
-                                  <span className="text-gray-700">{pid}</span>
+                                  <span className="text-gray-700">{getPageLabel(pid)}</span>
                                 </label>
                               ))}
                             </div>
@@ -634,9 +700,13 @@ const AccessControl = () => {
                         const status = resolveUserStatus(u);
                         const isDisabled = status === USER_STATUS.DISABLED;
                         const isPending = status === USER_STATUS.PENDING;
+                        const isSelected = selectedUserId === u.id;
 
                         return (
-                          <tr key={u.id} className="hover:bg-gray-50">
+                          <tr key={u.id} className={`transition-colors ${isSelected
+                            ? "bg-baylor-green/5 border-l-2 border-baylor-green"
+                            : "hover:bg-gray-50"
+                            }`}>
                             <td className="px-4 py-3">
                               <button
                                 className="text-baylor-green hover:underline font-medium text-sm"
@@ -999,7 +1069,7 @@ const AccessControl = () => {
                                       : "text-gray-700"
                                   }
                                 >
-                                  {pid}
+                                  {getPageLabel(pid)}
                                   {hasViaRole && (
                                     <span className="ml-1 text-green-600">
                                       ✓

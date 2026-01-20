@@ -84,6 +84,7 @@ const buildBaseColumns = ({
   const programColumn = {
     key: 'program',
     label: 'Program',
+    headerClassName: 'w-[15%]',
     render: (person) => person.program?.name || '-',
     renderEdit: () => (
       <select
@@ -116,6 +117,7 @@ const buildBaseColumns = ({
   const jobTitleColumn = {
     key: 'jobTitle',
     label: 'Job Title',
+    headerClassName: 'w-[15%]',
     render: (person) => person.jobTitle || '-',
     renderEdit: () => (
       <input
@@ -140,6 +142,7 @@ const buildBaseColumns = ({
   const emailColumn = {
     key: 'email',
     label: 'Email',
+    headerClassName: 'w-[15%]',
     render: (person) => person.email || '-',
     renderEdit: () => (
       <div>
@@ -170,6 +173,7 @@ const buildBaseColumns = ({
   const phoneColumn = {
     key: 'phone',
     label: 'Phone',
+    headerClassName: 'w-[120px]',
     render: (person) => (
       <div className="flex items-center gap-2">
         {person.hasNoPhone ? (
@@ -274,6 +278,7 @@ const buildBaseColumns = ({
   const officeColumn = {
     key: 'office',
     label: 'Office',
+    headerClassName: 'w-[150px]',
     render: (person) => {
       if (person.hasNoOffice) {
         return (

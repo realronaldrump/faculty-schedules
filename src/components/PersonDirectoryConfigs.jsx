@@ -311,6 +311,7 @@ const facultyDirectoryConfig = {
       {
         key: 'name',
         label: 'Name',
+        headerClassName: 'w-[20%]',
         render: (faculty) => (
           <div className="text-gray-700 font-medium">
             <div>{faculty.name}</div>
@@ -372,6 +373,7 @@ const facultyDirectoryConfig = {
       {
         key: 'courseCount',
         label: 'Courses',
+        headerClassName: 'w-[100px]',
         render: (faculty) => faculty.courseCount,
         renderEdit: (faculty) => <div className="text-sm text-gray-600">{faculty.courseCount || 0}</div>,
         renderCreate: () => <div className="text-sm text-gray-500 italic">Calculated from courses</div>
@@ -646,6 +648,7 @@ const staffDirectoryConfig = {
       {
         key: 'name',
         label: 'Name',
+        headerClassName: 'w-[20%]',
         render: (staff) => (
           <div className="text-gray-700 font-medium">
             <div>{staff.name}</div>
@@ -892,6 +895,7 @@ const adjunctDirectoryConfig = {
       {
         key: 'name',
         label: 'Name',
+        headerClassName: 'w-[20%]',
         render: (faculty) => (
           <div className="text-gray-700 font-medium">
             <div>{faculty.name}</div>
@@ -953,6 +957,7 @@ const adjunctDirectoryConfig = {
       {
         key: 'courseCount',
         label: 'Courses',
+        headerClassName: 'w-[100px]',
         render: (faculty) => (
           <div className="flex items-center gap-2">
             <span>{faculty.courseCount}</span>

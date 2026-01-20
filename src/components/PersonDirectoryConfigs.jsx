@@ -100,6 +100,65 @@ const exportFacultyCSV = (records = []) => {
   document.body.removeChild(link);
 };
 
+const exportStaffCSV = (records = []) => {
+  const headers = ['Name', 'Job Title', 'Email', 'Phone', 'Office', 'Full Time', 'Also Faculty', 'Remote'];
+  const rows = records.map((staff) => [
+    staff.name || '',
+    staff.jobTitle || '',
+    staff.email || '',
+    staff.hasNoPhone ? 'No phone' : formatPhoneNumber(staff.phone),
+    staff.hasNoOffice ? 'No office' : (staff.office || ''),
+    staff.isFullTime ? 'Yes' : 'No',
+    staff.isAlsoFaculty ? 'Yes' : 'No',
+    staff.isRemote ? 'Yes' : 'No'
+  ]);
+
+  const csvContent = [headers, ...rows]
+    .map((row) => row.map((cell) => `"${cell}"`).join(','))
+    .join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', `staff-directory-export-${new Date().toISOString().split('T')[0]}.csv`);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+const exportAdjunctCSV = (records = []) => {
+  const headers = ['Name', 'Program', 'Job Title', 'Email', 'Phone', 'Office', 'Baylor ID', 'Courses', 'Remote', 'Tenured', 'Also Staff'];
+  const rows = records.map((faculty) => [
+    faculty.name || '',
+    faculty.program?.name || '',
+    faculty.jobTitle || '',
+    faculty.email || '',
+    faculty.hasNoPhone ? 'No phone' : formatPhoneNumber(faculty.phone),
+    faculty.hasNoOffice ? 'No office' : (faculty.office || ''),
+    faculty.baylorId || 'Not assigned',
+    faculty.courseCount || 0,
+    faculty.isRemote ? 'Yes' : 'No',
+    faculty.isTenured ? 'Yes' : 'No',
+    faculty.isAlsoStaff ? 'Yes' : 'No'
+  ]);
+
+  const csvContent = [headers, ...rows]
+    .map((row) => row.map((cell) => `"${cell}"`).join(','))
+    .join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', `adjunct-directory-export-${new Date().toISOString().split('T')[0]}.csv`);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
 const renderHistoryPanel = ({
   changeHistory,
   showHistory,
@@ -642,8 +701,14 @@ const staffDirectoryConfig = {
       baseColumns.office
     ];
   },
-  trailingActions: ({ handlers, state }) => (
+  trailingActions: ({ handlers, state, data }) => (
     <>
+      <button
+        onClick={() => exportStaffCSV(data)}
+        className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+      >
+        <Download size={18} /> Export CSV
+      </button>
       {state.changeHistory.length > 0 && (
         <button
           onClick={() => state.setShowHistory(!state.showHistory)}
@@ -911,8 +976,14 @@ const adjunctDirectoryConfig = {
       Only show adjunct with at least 1 course
     </label>
   ),
-  trailingActions: ({ handlers, state }) => (
+  trailingActions: ({ handlers, state, data }) => (
     <>
+      <button
+        onClick={() => exportAdjunctCSV(data)}
+        className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+      >
+        <Download size={18} /> Export CSV
+      </button>
       {state.changeHistory.length > 0 && (
         <button
           onClick={() => state.setShowHistory(!state.showHistory)}

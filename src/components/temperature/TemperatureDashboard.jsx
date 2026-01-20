@@ -126,6 +126,18 @@ const buildPath = (points, xScale, yScale) => {
     .join(" ");
 };
 
+const isValidTimestamp = (value) =>
+  value instanceof Date && Number.isFinite(value.getTime());
+
+const sanitizeSeriesPoints = (series = []) =>
+  series.map((item) => ({
+    ...item,
+    points: (item.points || []).filter(
+      (point) =>
+        Number.isFinite(point.value) && isValidTimestamp(point.timestamp),
+    ),
+  }));
+
 const TemperatureLineChart = ({
   series,
   height = 320,
@@ -148,8 +160,19 @@ const TemperatureLineChart = ({
     <div className="relative" ref={containerRef} style={{ height }}>
       <AutoSizer disableHeight>
         {({ width }) => {
-          if (!width) return null;
-          const plotWidth = width - plotPadding.left - plotPadding.right;
+          const resolvedWidth =
+            Number.isFinite(width) && width > 0
+              ? width
+              : containerRef.current?.clientWidth || 0;
+          if (!resolvedWidth) {
+            return (
+              <div className="h-full flex items-center justify-center text-sm text-gray-500">
+                Sizing chart...
+              </div>
+            );
+          }
+          const plotWidth =
+            resolvedWidth - plotPadding.left - plotPadding.right;
           const plotHeight = height - plotPadding.top - plotPadding.bottom;
           const allPoints = series.flatMap((item) => item.points || []);
           if (allPoints.length === 0) {
@@ -202,7 +225,7 @@ const TemperatureLineChart = ({
             if (brush) {
               setBrush((prev) => (prev ? { ...prev, currentX: x } : prev));
             }
-            if (x < plotPadding.left || x > width - plotPadding.right) {
+            if (x < plotPadding.left || x > resolvedWidth - plotPadding.right) {
               setHover(null);
               return;
             }
@@ -266,7 +289,7 @@ const TemperatureLineChart = ({
 
           return (
             <svg
-              width={width}
+              width={resolvedWidth}
               height={height}
               className="overflow-visible"
               onPointerMove={handlePointerMove}
@@ -297,7 +320,7 @@ const TemperatureLineChart = ({
                 <g key={`y-${tick}`}>
                   <line
                     x1={plotPadding.left}
-                    x2={width - plotPadding.right}
+                    x2={resolvedWidth - plotPadding.right}
                     y1={yScale(tick)}
                     y2={yScale(tick)}
                     stroke="#E5E7EB"
@@ -428,6 +451,7 @@ const TemperatureDashboard = () => {
   const { loading: authLoading, user } = useAuth();
   const { spacesList = [], spacesByKey } = useData();
   const { showNotification } = useUI();
+  const readingsContainerRef = useRef(null);
 
   const [selectedBuilding, setSelectedBuilding] = useState("");
   const [buildingSettings, setBuildingSettings] = useState(null);
@@ -802,6 +826,10 @@ const TemperatureDashboard = () => {
   const visibleSeries = seriesData.filter((item) =>
     visibleRoomIds.has(item.roomId),
   );
+  const chartSeries = useMemo(
+    () => sanitizeSeriesPoints(visibleSeries),
+    [visibleSeries],
+  );
 
   const statsRows = useMemo(() => {
     return visibleSeries.map((item) => {
@@ -826,7 +854,7 @@ const TemperatureDashboard = () => {
 
   const readings = useMemo(() => {
     const rows = [];
-    visibleSeries.forEach((item) => {
+    chartSeries.forEach((item) => {
       item.points.forEach((point) => {
         rows.push({
           roomId: item.roomId,
@@ -838,7 +866,7 @@ const TemperatureDashboard = () => {
     });
     rows.sort((a, b) => a.timestamp - b.timestamp);
     return rows;
-  }, [visibleSeries]);
+  }, [chartSeries]);
 
   const unitLabel = "°F";
 
@@ -1094,7 +1122,7 @@ const TemperatureDashboard = () => {
                   })}
                 </div>
                 <TemperatureLineChart
-                  series={visibleSeries}
+                  series={chartSeries}
                   height={360}
                   timeZone={timezone}
                   unitLabel={unitLabel}
@@ -1105,7 +1133,7 @@ const TemperatureDashboard = () => {
               </>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {visibleSeries.map((item) => (
+                {chartSeries.map((item) => (
                   <div
                     key={item.roomId}
                     className="border border-gray-200 rounded-lg p-3"
@@ -1205,46 +1233,63 @@ const TemperatureDashboard = () => {
                   No readings for the selected range.
                 </div>
               ) : (
-                <div className="h-64">
+                <div className="h-64" ref={readingsContainerRef}>
                   <AutoSizer>
-                    {({ height, width }) => (
-                      <List
-                        height={height}
-                        width={width}
-                        itemCount={readings.length}
-                        itemSize={36}
-                        itemData={{
-                          rows: readings,
-                          timezone,
-                          selectedPoint,
-                          unitLabel,
-                        }}
-                      >
-                        {({ index, style, data }) => {
-                          const row = data.rows[index];
-                          const isSelected =
-                            selectedPoint?.timestamp?.getTime?.() ===
-                            row.timestamp.getTime();
-                          return (
-                            <div
-                              style={style}
-                              className={`px-3 py-2 flex items-center justify-between text-xs border-b border-gray-100 ${isSelected ? "bg-baylor-green/10" : ""}`}
-                            >
-                              <span className="text-gray-700">
-                                {row.roomName}
-                              </span>
-                              <span className="text-gray-500">
-                                {formatTick(row.timestamp, data.timezone, true)}
-                              </span>
-                              <span className="font-semibold text-gray-900">
-                                {row.value.toFixed(1)}
-                                {data.unitLabel}
-                              </span>
-                            </div>
-                          );
-                        }}
-                      </List>
-                    )}
+                    {({ height, width }) => {
+                      const resolvedHeight =
+                        Number.isFinite(height) && height > 0
+                          ? height
+                          : readingsContainerRef.current?.clientHeight || 0;
+                      const resolvedWidth =
+                        Number.isFinite(width) && width > 0
+                          ? width
+                          : readingsContainerRef.current?.clientWidth || 0;
+                      if (!resolvedHeight || !resolvedWidth) return null;
+                      return (
+                        <List
+                          height={resolvedHeight}
+                          width={resolvedWidth}
+                          itemCount={readings.length}
+                          itemSize={36}
+                          itemData={{
+                            rows: readings,
+                            timezone,
+                            selectedPoint,
+                            unitLabel,
+                          }}
+                        >
+                          {({ index, style, data }) => {
+                            const row = data.rows[index];
+                            const rowTime = row.timestamp?.getTime?.();
+                            const selectedTime =
+                              data.selectedPoint?.timestamp?.getTime?.();
+                            const isSelected =
+                              rowTime != null &&
+                              selectedTime != null &&
+                              rowTime === selectedTime;
+                            return (
+                              <div
+                                style={style}
+                                className={`px-3 py-2 flex items-center justify-between text-xs border-b border-gray-100 ${isSelected ? "bg-baylor-green/10" : ""}`}
+                              >
+                                <span className="text-gray-700">
+                                  {row.roomName}
+                                </span>
+                                <span className="text-gray-500">
+                                  {rowTime != null
+                                    ? formatTick(row.timestamp, data.timezone, true)
+                                    : "—"}
+                                </span>
+                                <span className="font-semibold text-gray-900">
+                                  {row.value.toFixed(1)}
+                                  {data.unitLabel}
+                                </span>
+                              </div>
+                            );
+                          }}
+                        </List>
+                      );
+                    }}
                   </AutoSizer>
                 </div>
               )}

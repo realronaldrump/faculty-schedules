@@ -14,16 +14,208 @@ import FacultyContactCard from './FacultyContactCard';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import { adaptPeopleToStaff } from '../utils/dataAdapter';
 import { formatPhoneNumber, validateDirectoryEntry } from '../utils/directoryUtils';
+import { normalizeTermLabel, termCodeFromLabel } from '../utils/termUtils';
 
 const canUseWindow = typeof window !== 'undefined';
 
-const buildCourseCounts = (records = [], scheduleData = [], filterFn = () => true) => {
+const escapeCSVCell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+
+const buildCSVContent = (headers = [], rows = []) => (
+  [headers, ...rows]
+    .map((row) => row.map(escapeCSVCell).join(','))
+    .join('\n')
+);
+
+const triggerCSVDownload = (csvContent, filename) => {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+const normalizeCourseField = (value) => {
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+};
+
+const formatCourseList = (courses = []) => {
+  if (!Array.isArray(courses) || courses.length === 0) return '';
+  const seen = new Set();
+  const labels = [];
+
+  courses.forEach((course) => {
+    const courseCode = normalizeCourseField(course.courseCode);
+    const section = normalizeCourseField(course.section);
+    const term = normalizeCourseField(course.term);
+    const title = normalizeCourseField(course.courseTitle);
+
+    const codePart = [courseCode, section].filter(Boolean).join('-');
+    const detailParts = [term, title].filter(Boolean);
+    let label = codePart;
+
+    if (!label && detailParts.length > 0) {
+      label = detailParts.join(' - ');
+    } else if (detailParts.length > 0) {
+      label = `${label} (${detailParts.join(' - ')})`;
+    }
+
+    if (!label || seen.has(label)) return;
+    seen.add(label);
+    labels.push(label);
+  });
+
+  return labels.join('; ');
+};
+
+const buildExportLabelMap = (columnDefs = {}) => (
+  Object.keys(columnDefs).reduce((acc, key) => {
+    acc[key] = columnDefs[key].label;
+    return acc;
+  }, {})
+);
+
+const resolveExportColumns = ({
+  selectedKeys = [],
+  defaultKeys = [],
+  columnOrder = [],
+  columnDefs = {}
+} = {}) => {
+  const desiredKeys = Array.isArray(selectedKeys) && selectedKeys.length > 0
+    ? selectedKeys
+    : defaultKeys;
+
+  let orderedKeys = columnOrder.filter((key) => desiredKeys.includes(key) && columnDefs[key]);
+  if (orderedKeys.length === 0 && defaultKeys.length > 0) {
+    orderedKeys = columnOrder.filter((key) => defaultKeys.includes(key) && columnDefs[key]);
+  }
+
+  return orderedKeys.map((key) => ({ key, ...columnDefs[key] }));
+};
+
+const SHARED_EXPORT_COLUMN_DEFS = {
+  name: { label: 'Name', getValue: (person) => person.name || '' },
+  program: { label: 'Program', getValue: (person) => person.program?.name || '' },
+  jobTitle: { label: 'Job Title', getValue: (person) => person.jobTitle || '' },
+  email: { label: 'Email', getValue: (person) => person.email || '' },
+  phone: {
+    label: 'Phone',
+    getValue: (person) => (person.hasNoPhone ? 'No phone' : formatPhoneNumber(person.phone))
+  },
+  office: {
+    label: 'Office',
+    getValue: (person) => (person.hasNoOffice ? 'No office' : (person.office || ''))
+  },
+  baylorId: { label: 'Baylor ID', getValue: (person) => person.baylorId || 'Not assigned' },
+  courseCount: { label: 'Courses', getValue: (person) => person.courseCount || 0 },
+  courseList: { label: 'Courses Taught', getValue: (person) => formatCourseList(person.courses) },
+  remote: { label: 'Remote', getValue: (person) => (person.isRemote ? 'Yes' : 'No') }
+};
+
+const FACULTY_EXPORT_COLUMN_DEFS = {
+  ...SHARED_EXPORT_COLUMN_DEFS
+};
+
+const FACULTY_EXPORT_COLUMN_ORDER = [
+  'name',
+  'program',
+  'jobTitle',
+  'email',
+  'phone',
+  'office',
+  'baylorId',
+  'courseCount',
+  'courseList',
+  'remote'
+];
+
+const DEFAULT_FACULTY_EXPORT_COLUMNS = [
+  'name',
+  'program',
+  'jobTitle',
+  'email',
+  'phone',
+  'office',
+  'baylorId',
+  'courseCount',
+  'remote'
+];
+
+const FACULTY_EXPORT_COLUMN_LABELS = buildExportLabelMap(FACULTY_EXPORT_COLUMN_DEFS);
+
+const ADJUNCT_EXPORT_COLUMN_DEFS = {
+  ...SHARED_EXPORT_COLUMN_DEFS,
+  tenured: { label: 'Tenured', getValue: (person) => (person.isTenured ? 'Yes' : 'No') },
+  alsoStaff: { label: 'Also Staff', getValue: (person) => (person.isAlsoStaff ? 'Yes' : 'No') }
+};
+
+const ADJUNCT_EXPORT_COLUMN_ORDER = [
+  'name',
+  'program',
+  'jobTitle',
+  'email',
+  'phone',
+  'office',
+  'baylorId',
+  'courseCount',
+  'courseList',
+  'remote',
+  'tenured',
+  'alsoStaff'
+];
+
+const DEFAULT_ADJUNCT_EXPORT_COLUMNS = [
+  'name',
+  'program',
+  'jobTitle',
+  'email',
+  'phone',
+  'office',
+  'baylorId',
+  'courseCount',
+  'remote',
+  'tenured',
+  'alsoStaff'
+];
+
+const ADJUNCT_EXPORT_COLUMN_LABELS = buildExportLabelMap(ADJUNCT_EXPORT_COLUMN_DEFS);
+
+const filterSchedulesBySelectedTerm = (scheduleData = [], selectedSemester = '') => {
+  if (!Array.isArray(scheduleData)) return [];
+  if (!selectedSemester) return scheduleData;
+
+  const normalizedSelected = normalizeTermLabel(selectedSemester) || String(selectedSemester).trim();
+  const selectedCode = termCodeFromLabel(normalizedSelected) || termCodeFromLabel(selectedSemester);
+
+  return scheduleData.filter((schedule) => {
+    const scheduleTerm = schedule.term || schedule.Term || schedule.semester || schedule.Semester || '';
+    const normalizedScheduleTerm = normalizeTermLabel(scheduleTerm) || String(scheduleTerm).trim();
+    if (normalizedScheduleTerm && normalizedScheduleTerm === normalizedSelected) return true;
+
+    const scheduleCode =
+      schedule.termCode ||
+      schedule.TermCode ||
+      schedule.semesterCode ||
+      schedule.SemesterCode ||
+      termCodeFromLabel(scheduleTerm);
+    if (selectedCode && scheduleCode && String(scheduleCode) === String(selectedCode)) return true;
+
+    return false;
+  });
+};
+
+const buildCourseCounts = (records = [], scheduleData = [], filterFn = () => true, selectedSemester = '') => {
   if (!Array.isArray(records)) return [];
+  const termSchedules = filterSchedulesBySelectedTerm(scheduleData, selectedSemester);
 
   return records
     .filter(filterFn)
     .map((faculty) => {
-      const facultyCourses = (scheduleData || []).filter((schedule) => {
+      const facultyCourses = termSchedules.filter((schedule) => {
         const scheduleInstructorIds = Array.isArray(schedule.instructorIds)
           ? schedule.instructorIds
           : [];
@@ -61,43 +253,39 @@ const buildCourseCounts = (records = [], scheduleData = [], filterFn = () => tru
 const useFacultyExtras = () => {
   const [showOnlyWithCourses, setShowOnlyWithCourses] = useState(false);
   const [pinUPDsFirst, setPinUPDsFirst] = useState(false);
-  return { showOnlyWithCourses, setShowOnlyWithCourses, pinUPDsFirst, setPinUPDsFirst };
+  const [exportColumns, setExportColumns] = useState(() => [...DEFAULT_FACULTY_EXPORT_COLUMNS]);
+  return {
+    showOnlyWithCourses,
+    setShowOnlyWithCourses,
+    pinUPDsFirst,
+    setPinUPDsFirst,
+    exportColumns,
+    setExportColumns
+  };
 };
 
 const useAdjunctExtras = () => {
   const [showOnlyWithCourses, setShowOnlyWithCourses] = useState(false);
-  return { showOnlyWithCourses, setShowOnlyWithCourses };
+  const [exportColumns, setExportColumns] = useState(() => [...DEFAULT_ADJUNCT_EXPORT_COLUMNS]);
+  return { showOnlyWithCourses, setShowOnlyWithCourses, exportColumns, setExportColumns };
 };
 
 const useNoExtras = () => ({});
 
-const exportFacultyCSV = (records = []) => {
-  const headers = ['Name', 'Program', 'Job Title', 'Email', 'Phone', 'Office', 'Baylor ID', 'Courses', 'Remote'];
-  const rows = records.map((faculty) => [
-    faculty.name || '',
-    faculty.program?.name || '',
-    faculty.jobTitle || '',
-    faculty.email || '',
-    faculty.hasNoPhone ? 'No phone' : formatPhoneNumber(faculty.phone),
-    faculty.hasNoOffice ? 'No office' : (faculty.office || ''),
-    faculty.baylorId || 'Not assigned',
-    faculty.courseCount || 0,
-    faculty.isRemote ? 'Yes' : 'No'
-  ]);
-
-  const csvContent = [headers, ...rows]
-    .map((row) => row.map((cell) => `"${cell}"`).join(','))
-    .join('\n');
-
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  link.setAttribute('href', url);
-  link.setAttribute('download', `faculty-directory-export-${new Date().toISOString().split('T')[0]}.csv`);
-  link.style.visibility = 'hidden';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+const exportFacultyCSV = (records = [], selectedColumns = DEFAULT_FACULTY_EXPORT_COLUMNS) => {
+  const exportColumns = resolveExportColumns({
+    selectedKeys: selectedColumns,
+    defaultKeys: DEFAULT_FACULTY_EXPORT_COLUMNS,
+    columnOrder: FACULTY_EXPORT_COLUMN_ORDER,
+    columnDefs: FACULTY_EXPORT_COLUMN_DEFS
+  });
+  const headers = exportColumns.map((column) => column.label);
+  const rows = records.map((faculty) => exportColumns.map((column) => column.getValue(faculty)));
+  const csvContent = buildCSVContent(headers, rows);
+  triggerCSVDownload(
+    csvContent,
+    `faculty-directory-export-${new Date().toISOString().split('T')[0]}.csv`
+  );
 };
 
 const exportStaffCSV = (records = []) => {
@@ -128,35 +316,20 @@ const exportStaffCSV = (records = []) => {
   document.body.removeChild(link);
 };
 
-const exportAdjunctCSV = (records = []) => {
-  const headers = ['Name', 'Program', 'Job Title', 'Email', 'Phone', 'Office', 'Baylor ID', 'Courses', 'Remote', 'Tenured', 'Also Staff'];
-  const rows = records.map((faculty) => [
-    faculty.name || '',
-    faculty.program?.name || '',
-    faculty.jobTitle || '',
-    faculty.email || '',
-    faculty.hasNoPhone ? 'No phone' : formatPhoneNumber(faculty.phone),
-    faculty.hasNoOffice ? 'No office' : (faculty.office || ''),
-    faculty.baylorId || 'Not assigned',
-    faculty.courseCount || 0,
-    faculty.isRemote ? 'Yes' : 'No',
-    faculty.isTenured ? 'Yes' : 'No',
-    faculty.isAlsoStaff ? 'Yes' : 'No'
-  ]);
-
-  const csvContent = [headers, ...rows]
-    .map((row) => row.map((cell) => `"${cell}"`).join(','))
-    .join('\n');
-
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  link.setAttribute('href', url);
-  link.setAttribute('download', `adjunct-directory-export-${new Date().toISOString().split('T')[0]}.csv`);
-  link.style.visibility = 'hidden';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+const exportAdjunctCSV = (records = [], selectedColumns = DEFAULT_ADJUNCT_EXPORT_COLUMNS) => {
+  const exportColumns = resolveExportColumns({
+    selectedKeys: selectedColumns,
+    defaultKeys: DEFAULT_ADJUNCT_EXPORT_COLUMNS,
+    columnOrder: ADJUNCT_EXPORT_COLUMN_ORDER,
+    columnDefs: ADJUNCT_EXPORT_COLUMN_DEFS
+  });
+  const headers = exportColumns.map((column) => column.label);
+  const rows = records.map((faculty) => exportColumns.map((column) => column.getValue(faculty)));
+  const csvContent = buildCSVContent(headers, rows);
+  triggerCSVDownload(
+    csvContent,
+    `adjunct-directory-export-${new Date().toISOString().split('T')[0]}.csv`
+  );
 };
 
 const renderHistoryPanel = ({
@@ -253,7 +426,12 @@ const facultyDirectoryConfig = {
     };
   },
   useExtraState: useFacultyExtras,
-  deriveData: ({ data, scheduleData }) => buildCourseCounts(data, scheduleData),
+  deriveData: ({ data, scheduleData, selectedSemester }) => buildCourseCounts(
+    data,
+    scheduleData,
+    undefined,
+    selectedSemester
+  ),
   applyFilters: (records, { filters, extraState }) => {
     let filtered = [...records];
 
@@ -301,7 +479,7 @@ const facultyDirectoryConfig = {
   getColumns: ({ baseColumns, renderStatusToggles, editFormData, newRecord, handleChange, handleCreateChange, setEditFormData, setNewRecord }) => {
     const statusToggles = [
       { name: 'isAdjunct', label: 'Adjunct', className: 'flex items-center gap-2 text-xs' },
-      { name: 'isTenured', label: 'Tenured' },
+      { name: 'isTenured', label: 'Tenured', disabled: (formData) => formData?.isAdjunct },
       { name: 'isAlsoStaff', label: 'Also a staff member' },
       { name: 'hasPhD', label: 'Has PhD' },
       { name: 'isRemote', label: 'Remote' }
@@ -401,23 +579,43 @@ const facultyDirectoryConfig = {
       </label>
     </>
   ),
-  trailingActions: ({ handlers, data }) => (
-    <>
-      <button
-        onClick={() => exportFacultyCSV(data)}
-        className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
-      >
-        <Download size={18} /> Export CSV
-      </button>
-      <button
-        onClick={handlers.handleCreate}
-        className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
-        disabled={canUseWindow && window?.appPermissions?.canAddFaculty === false}
-      >
-        <Plus size={18} /> Add Faculty
-      </button>
-    </>
-  ),
+  trailingActions: ({ handlers, data, extraState }) => {
+    const handleExportColumnsChange = (selected) => {
+      if (!Array.isArray(selected) || selected.length === 0) {
+        extraState.setExportColumns([...DEFAULT_FACULTY_EXPORT_COLUMNS]);
+        return;
+      }
+      extraState.setExportColumns(selected);
+    };
+
+    return (
+      <>
+        <div className="min-w-[220px]">
+          <label className="block text-xs font-medium text-gray-600 mb-1">Export columns</label>
+          <MultiSelectDropdown
+            options={FACULTY_EXPORT_COLUMN_ORDER}
+            selected={extraState.exportColumns}
+            onChange={handleExportColumnsChange}
+            placeholder="Choose columns..."
+            displayMap={FACULTY_EXPORT_COLUMN_LABELS}
+          />
+        </div>
+        <button
+          onClick={() => exportFacultyCSV(data, extraState.exportColumns)}
+          className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+        >
+          <Download size={18} /> Export CSV
+        </button>
+        <button
+          onClick={handlers.handleCreate}
+          className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+          disabled={canUseWindow && window?.appPermissions?.canAddFaculty === false}
+        >
+          <Plus size={18} /> Add Faculty
+        </button>
+      </>
+    );
+  },
   filterContent: ({ state, filterOptions }) => (
     <>
       <div>
@@ -855,10 +1053,11 @@ const adjunctDirectoryConfig = {
     isAdjunct: true
   }),
   useExtraState: useAdjunctExtras,
-  deriveData: ({ data, scheduleData }) => buildCourseCounts(
+  deriveData: ({ data, scheduleData, selectedSemester }) => buildCourseCounts(
     data,
     scheduleData,
-    (faculty) => faculty.isAdjunct
+    (faculty) => faculty.isAdjunct,
+    selectedSemester
   ),
   changeTracking: { idKey: 'facultyId', nameKey: 'facultyName' },
   applyFilters: (records, { filters, extraState }) => {
@@ -886,7 +1085,7 @@ const adjunctDirectoryConfig = {
   getColumns: ({ baseColumns, renderStatusToggles, editFormData, newRecord, handleChange, handleCreateChange, setEditFormData, setNewRecord }) => {
     const statusToggles = [
       { name: 'isAdjunct', label: 'Adjunct', className: 'flex items-center gap-2 text-xs' },
-      { name: 'isTenured', label: 'Tenured' },
+      { name: 'isTenured', label: 'Tenured', disabled: (formData) => formData?.isAdjunct },
       { name: 'isAlsoStaff', label: 'Also a staff member' },
       { name: 'isRemote', label: 'Remote' }
     ];
@@ -981,33 +1180,53 @@ const adjunctDirectoryConfig = {
       Only show adjunct with at least 1 course
     </label>
   ),
-  trailingActions: ({ handlers, state, data }) => (
-    <>
-      <button
-        onClick={() => exportAdjunctCSV(data)}
-        className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
-      >
-        <Download size={18} /> Export CSV
-      </button>
-      {state.changeHistory.length > 0 && (
+  trailingActions: ({ handlers, state, data, extraState }) => {
+    const handleExportColumnsChange = (selected) => {
+      if (!Array.isArray(selected) || selected.length === 0) {
+        extraState.setExportColumns([...DEFAULT_ADJUNCT_EXPORT_COLUMNS]);
+        return;
+      }
+      extraState.setExportColumns(selected);
+    };
+
+    return (
+      <>
+        <div className="min-w-[220px]">
+          <label className="block text-xs font-medium text-gray-600 mb-1">Export columns</label>
+          <MultiSelectDropdown
+            options={ADJUNCT_EXPORT_COLUMN_ORDER}
+            selected={extraState.exportColumns}
+            onChange={handleExportColumnsChange}
+            placeholder="Choose columns..."
+            displayMap={ADJUNCT_EXPORT_COLUMN_LABELS}
+          />
+        </div>
         <button
-          onClick={() => state.setShowHistory(!state.showHistory)}
-          className="flex items-center gap-2 px-3 py-2 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 transition-colors"
+          onClick={() => exportAdjunctCSV(data, extraState.exportColumns)}
+          className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
         >
-          <History size={16} />
-          Changes ({state.changeHistory.length})
+          <Download size={18} /> Export CSV
         </button>
-      )}
-      <button
-        onClick={handlers.handleCreate}
-        className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
-        disabled={canUseWindow && window?.appPermissions?.canCreateAdjunct === false}
-      >
-        <Plus size={18} />
-        Add Adjunct
-      </button>
-    </>
-  ),
+        {state.changeHistory.length > 0 && (
+          <button
+            onClick={() => state.setShowHistory(!state.showHistory)}
+            className="flex items-center gap-2 px-3 py-2 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 transition-colors"
+          >
+            <History size={16} />
+            Changes ({state.changeHistory.length})
+          </button>
+        )}
+        <button
+          onClick={handlers.handleCreate}
+          className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+          disabled={canUseWindow && window?.appPermissions?.canCreateAdjunct === false}
+        >
+          <Plus size={18} />
+          Add Adjunct
+        </button>
+      </>
+    );
+  },
   filterContent: ({ state, filterOptions }) => (
     <>
       <div>

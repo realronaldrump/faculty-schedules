@@ -11,6 +11,7 @@ import {
   History,
   Image as ImageIcon,
   LayoutGrid,
+  LineChart,
   Map as MapIcon,
   Pencil,
   Plus,
@@ -79,6 +80,7 @@ import {
 } from "../../utils/temperatureRangeUtils";
 import { emitTemperatureDataRefresh } from "../../utils/temperatureEvents";
 import ConfirmDialog from "../shared/ConfirmDialog";
+import TemperatureTrends from "./TemperatureTrends";
 
 const DEFAULT_TIMEZONE = "America/Chicago";
 const AUTO_MATCH_THRESHOLD = 0.85;
@@ -3558,6 +3560,7 @@ const TemperatureMonitoring = () => {
     { id: "floorplan", label: "Floorplan", icon: MapIcon },
     { id: "daily", label: "Daily", icon: LayoutGrid },
     { id: "historical", label: "Historical", icon: History },
+    { id: "trends", label: "Trends", icon: LineChart },
   ];
 
   // Action tabs
@@ -3572,6 +3575,11 @@ const TemperatureMonitoring = () => {
   const roomsWithData = Object.keys(snapshotLookup).length;
   const coveragePercent =
     roomCount > 0 ? Math.round((roomsWithData / roomCount) * 100) : 0;
+  const showSnapshotControls = viewMode !== "trends";
+  const isSnapshotView =
+    viewMode === "floorplan" ||
+    viewMode === "daily" ||
+    viewMode === "historical";
 
   return (
     <div className="space-y-6 p-6">
@@ -3634,45 +3642,49 @@ const TemperatureMonitoring = () => {
               </div>
             </div>
 
-            {/* Divider */}
-            <div className="hidden lg:block w-px h-10 bg-gray-200" />
+            {showSnapshotControls && (
+              <>
+                {/* Divider */}
+                <div className="hidden lg:block w-px h-10 bg-gray-200" />
 
-            {/* Date Selector */}
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                Date
-              </label>
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-gray-400" />
-                <input
-                  type="date"
-                  className="form-input"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                />
-              </div>
-            </div>
+                {/* Date Selector */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Date
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-gray-400" />
+                    <input
+                      type="date"
+                      className="form-input"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                    />
+                  </div>
+                </div>
 
-            {/* Time Selector */}
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                Snapshot Time
-              </label>
-              <div className="flex items-center gap-2">
-                <Thermometer className="w-4 h-4 text-gray-400" />
-                <select
-                  className="form-select"
-                  value={selectedSnapshotId}
-                  onChange={(e) => setSelectedSnapshotId(e.target.value)}
-                >
-                  {snapshotTimes.map((slot) => (
-                    <option key={slot.id} value={slot.id}>
-                      {slot.label || formatMinutesToLabel(slot.minutes)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+                {/* Time Selector */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Snapshot Time
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Thermometer className="w-4 h-4 text-gray-400" />
+                    <select
+                      className="form-select"
+                      value={selectedSnapshotId}
+                      onChange={(e) => setSelectedSnapshotId(e.target.value)}
+                    >
+                      {snapshotTimes.map((slot) => (
+                        <option key={slot.id} value={slot.id}>
+                          {slot.label || formatMinutesToLabel(slot.minutes)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -3789,7 +3801,7 @@ const TemperatureMonitoring = () => {
           </div>
         )}
 
-      {snapshotLoading && (
+      {snapshotLoading && isSnapshotView && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 text-gray-600">
           Loading snapshot data...
         </div>
@@ -3798,6 +3810,15 @@ const TemperatureMonitoring = () => {
       {!snapshotLoading && viewMode === "floorplan" && renderFloorplan()}
       {!snapshotLoading && viewMode === "daily" && renderDailyTable()}
       {!snapshotLoading && viewMode === "historical" && renderHistorical()}
+      {viewMode === "trends" && (
+        <TemperatureTrends
+          selectedBuilding={selectedBuilding}
+          buildingSettings={buildingSettings}
+          roomsForBuilding={roomsForBuilding}
+          spacesByKey={spacesByKey}
+          deviceDocs={deviceDocs}
+        />
+      )}
       {viewMode === "import" && renderImport()}
       {viewMode === "export" && renderExport()}
       {viewMode === "settings" && renderSettings()}

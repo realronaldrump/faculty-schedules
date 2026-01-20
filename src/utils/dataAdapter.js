@@ -105,6 +105,7 @@ export const adaptPeopleToFaculty = (people, scheduleData = [], programs = []) =
     })
     .map(person => {
       const facultyName = `${person.firstName} ${person.lastName}`.trim();
+      const isAdjunct = person.isAdjunct === true;
 
       // Single source of truth for program: use programId to lookup program
       let program = null;
@@ -140,8 +141,8 @@ export const adaptPeopleToFaculty = (people, scheduleData = [], programs = []) =
         office: person.office,
         department: person.department || 'Human Sciences and Design', // Default department
         programId: person.programId || null, // Reference to programs collection
-        isAdjunct: person.isAdjunct,
-        isTenured: person.isTenured || false,
+        isAdjunct,
+        isTenured: isAdjunct ? false : (person.isTenured || false),
         isAlsoStaff: hasRole('staff'),
         isUPD: person.isUPD || false,
         baylorId: person.baylorId || '', // 9-digit Baylor ID number
@@ -179,6 +180,7 @@ export const adaptPeopleToStaff = (people) => {
       };
 
       const staffName = `${person.firstName || ''} ${person.lastName || ''}`.trim();
+      const isAdjunct = person.isAdjunct === true;
 
       return {
         ...person, // Spread original data first (same pattern as adaptPeopleToFaculty)
@@ -192,7 +194,7 @@ export const adaptPeopleToStaff = (people) => {
         jobTitle: person.jobTitle,
         office: person.office,
         isFullTime: person.isFullTime,
-        isTenured: hasRole('faculty') ? (person.isTenured || false) : false,
+        isTenured: hasRole('faculty') && !isAdjunct ? (person.isTenured || false) : false,
         isAlsoFaculty: hasRole('faculty'),
         hasNoPhone: person.hasNoPhone || false,
         hasNoOffice: person.hasNoOffice || false

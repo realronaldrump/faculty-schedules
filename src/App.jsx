@@ -28,7 +28,6 @@ import CRNQualityTools from "./components/administration/CRNQualityTools";
 import RecentChangesPage from "./components/administration/RecentChangesPage";
 import LiveView from "./components/LiveView";
 import TemperatureMonitoring from "./components/temperature/TemperatureMonitoring";
-import TemperatureDashboard from "./components/temperature/TemperatureDashboard";
 import FacilitiesHub from "./components/facilities/FacilitiesHub";
 import Login from "./components/Login";
 import ProtectedContent from "./components/ProtectedContent.jsx";
@@ -247,12 +246,6 @@ const navigationItems = [
         label: "Temperature",
         path: "facilities/temperature",
         canonicalId: "facilities/temperature",
-      },
-      {
-        id: "temperature-dashboard",
-        label: "Temperature Dashboard",
-        path: "facilities/temperature-dashboard",
-        canonicalId: "facilities/temperature-dashboard",
       },
     ],
   },
@@ -612,12 +605,6 @@ function App() {
         return (
           <ProtectedContent pageId="facilities/temperature">
             <FacilitiesHub initialTab="temperature" />
-          </ProtectedContent>
-        );
-      case "facilities/temperature-dashboard":
-        return (
-          <ProtectedContent pageId="facilities/temperature-dashboard">
-            <TemperatureDashboard />
           </ProtectedContent>
         );
       default:

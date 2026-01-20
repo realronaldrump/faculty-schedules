@@ -209,6 +209,10 @@ export const standardizePerson = (person = {}, options = {}) => {
     }
   });
 
+  if (standardized.isAdjunct) {
+    standardized.isTenured = false;
+  }
+
   if (pruneUnknown) {
     Object.keys(standardized).forEach((key) => {
       if (!Object.prototype.hasOwnProperty.call(DEFAULT_PERSON_SCHEMA, key)) {

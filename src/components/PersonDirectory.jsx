@@ -27,6 +27,12 @@ const renderStatusToggles = ({
   idPrefix
 }) => (
   toggles.map((toggle, index) => {
+    const isHidden = typeof toggle.hidden === 'function' ? toggle.hidden(formData) : toggle.hidden;
+    if (isHidden) return null;
+
+    const isDisabled = typeof toggle.disabled === 'function' ? toggle.disabled(formData) : toggle.disabled;
+    const containerClassName = `${toggle.className || 'flex items-center gap-2 text-xs'}${isDisabled ? ' opacity-60' : ''}`;
+
     const handleToggle = (event) => {
       if (typeof toggle.onToggle === 'function') {
         toggle.onToggle(event, { setFormData, onChange });
@@ -49,14 +55,15 @@ const renderStatusToggles = ({
     };
 
     return (
-      <div key={`${toggle.name}-${index}`} className={toggle.className || 'flex items-center gap-2 text-xs'}>
+      <div key={`${toggle.name}-${index}`} className={containerClassName}>
         <input
           type="checkbox"
           id={`${idPrefix}-${toggle.name}`}
           name={toggle.name}
           checked={!!formData[toggle.name]}
           onChange={handleToggle}
-          className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+          disabled={isDisabled}
+          className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green disabled:cursor-not-allowed"
         />
         <label htmlFor={`${idPrefix}-${toggle.name}`} className="font-normal">
           {toggle.label}
@@ -476,7 +483,7 @@ const getPermissionValue = (permission, record) => {
 
 const ConfiguredPersonDirectory = (props) => {
   const { config } = props;
-  const { spacesByKey } = useData();
+  const { spacesByKey, selectedSemester } = useData();
 
   const {
     config: _config,
@@ -602,10 +609,10 @@ const ConfiguredPersonDirectory = (props) => {
 
   const derivedData = useMemo(() => {
     if (typeof deriveData === 'function') {
-      return deriveData({ data, scheduleData, programs, extraState });
+      return deriveData({ data, scheduleData, programs, extraState, selectedSemester });
     }
     return Array.isArray(data) ? data : [];
-  }, [data, scheduleData, programs, extraState, deriveData]);
+  }, [data, scheduleData, programs, extraState, deriveData, selectedSemester]);
 
   const uniqueDirectoryData = useMemo(() => {
     if (config.dedupe === false) return derivedData;

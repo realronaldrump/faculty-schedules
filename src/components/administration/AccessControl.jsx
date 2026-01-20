@@ -84,7 +84,6 @@ const AccessControl = () => {
     "help/baylor-systems": "Baylor Systems",
     "help/acronyms": "Acronyms",
     "facilities/temperature": "Temperature Monitoring",
-    "facilities/temperature-dashboard": "Temperature Dashboard",
     "admin/access-control": "Access Control",
     "admin/settings": "App Settings",
     "admin/recent-changes": "Recent Changes",

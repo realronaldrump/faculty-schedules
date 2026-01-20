@@ -32,6 +32,31 @@ import { useEmailListPresets } from "../../hooks/useEmailListPresets";
 import { useTutorial } from "../../contexts/TutorialContext";
 import { HelpTooltip, HintBanner } from "../help/Tooltip";
 import { resolveOfficeDetails } from "../../utils/directoryUtils";
+import { normalizeTermLabel, termCodeFromLabel } from "../../utils/termUtils";
+
+const filterSchedulesBySelectedTerm = (scheduleData = [], selectedSemester = "") => {
+  if (!Array.isArray(scheduleData)) return [];
+  if (!selectedSemester) return scheduleData;
+
+  const normalizedSelected = normalizeTermLabel(selectedSemester) || String(selectedSemester).trim();
+  const selectedCode = termCodeFromLabel(normalizedSelected) || termCodeFromLabel(selectedSemester);
+
+  return scheduleData.filter((schedule) => {
+    const scheduleTerm = schedule.term || schedule.Term || schedule.semester || schedule.Semester || "";
+    const normalizedScheduleTerm = normalizeTermLabel(scheduleTerm) || String(scheduleTerm).trim();
+    if (normalizedScheduleTerm && normalizedScheduleTerm === normalizedSelected) return true;
+
+    const scheduleCode =
+      schedule.termCode ||
+      schedule.TermCode ||
+      schedule.semesterCode ||
+      schedule.SemesterCode ||
+      termCodeFromLabel(scheduleTerm);
+    if (selectedCode && scheduleCode && String(scheduleCode) === String(selectedCode)) return true;
+
+    return false;
+  });
+};
 
 const EmailLists = ({ embedded = false }) => {
   const {
@@ -39,6 +64,7 @@ const EmailLists = ({ embedded = false }) => {
     staffData = [],
     studentData = [],
     scheduleData = [],
+    selectedSemester,
     spacesByKey,
     loadPrograms,
   } = useData();
@@ -154,12 +180,13 @@ const EmailLists = ({ embedded = false }) => {
   // Combine faculty and staff data, removing duplicates and calculating course counts
   const combinedDirectoryData = useMemo(() => {
     const allPeople = [];
+    const termSchedules = filterSchedulesBySelectedTerm(scheduleData, selectedSemester);
 
     // Add faculty data with role indicator and course count calculation
     if (facultyData && Array.isArray(facultyData)) {
       facultyData.forEach((person) => {
         // Calculate course count for faculty
-        const facultyCourses = scheduleData.filter((schedule) => {
+        const facultyCourses = termSchedules.filter((schedule) => {
           const scheduleInstructorIds = Array.isArray(schedule.instructorIds)
             ? schedule.instructorIds
             : [];
@@ -263,7 +290,7 @@ const EmailLists = ({ embedded = false }) => {
     });
 
     return Array.from(uniqueMap.values());
-  }, [facultyData, staffData, scheduleData]);
+  }, [facultyData, staffData, scheduleData, selectedSemester]);
 
   // Process Student Data
   const processedStudentData = useMemo(() => {

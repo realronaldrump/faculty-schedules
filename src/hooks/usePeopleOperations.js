@@ -233,6 +233,13 @@ const usePeopleOperations = () => {
         updatedAt: new Date().toISOString()
       };
 
+      const shouldClearTenure =
+        cleanData.isAdjunct === true ||
+        (cleanData.isAdjunct === undefined && originalData?.isAdjunct === true);
+      if (shouldClearTenure) {
+        updateData.isTenured = false;
+      }
+
       // Handle office fields - sync both singular and array fields
       const nextOffices = Array.isArray(cleanData.offices) ? cleanData.offices.filter(Boolean) : [];
       const nextOffice = (cleanData.office || nextOffices[0] || '').toString().trim();

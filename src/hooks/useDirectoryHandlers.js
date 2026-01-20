@@ -1,5 +1,10 @@
 import { useCallback } from 'react';
 
+const enforceAdjunctTenureRule = (record) => {
+    if (!record?.isAdjunct) return record;
+    return { ...record, isTenured: false };
+};
+
 /**
  * Shared handler logic for directory CRUD operations.
  * Provides common handlers used across Faculty, Staff, Adjunct, and Student directories.
@@ -104,11 +109,12 @@ export function useDirectoryHandlers({
             [name]: finalValue
         };
 
-        setEditFormData(newFormData);
+        const nextFormData = enforceAdjunctTenureRule(newFormData);
+        setEditFormData(nextFormData);
 
         // Live validation if errors exist
         if (Object.keys(errors).length > 0) {
-            const newErrors = validate(newFormData);
+            const newErrors = validate(nextFormData);
             setErrors(newErrors);
         }
     }, [editFormData, setEditFormData, errors, validate, setErrors]);
@@ -135,13 +141,17 @@ export function useDirectoryHandlers({
             finalValue = finalValue.replace(/\D/g, '').slice(0, 9);
         }
 
-        setNewRecord(prev => ({
-            ...prev,
-            [name]: finalValue
-        }));
+        setNewRecord(prev => {
+            const nextRecord = enforceAdjunctTenureRule({
+                ...prev,
+                [name]: finalValue
+            });
+            return nextRecord;
+        });
 
         if (Object.keys(errors).length > 0) {
-            const newErrors = validate({ ...newRecord, [name]: finalValue });
+            const nextRecord = enforceAdjunctTenureRule({ ...newRecord, [name]: finalValue });
+            const newErrors = validate(nextRecord);
             setErrors(newErrors);
         }
     }, [newRecord, setNewRecord, errors, validate, setErrors]);

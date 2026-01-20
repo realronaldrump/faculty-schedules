@@ -27,6 +27,18 @@ describe('hygieneCore', () => {
     expect(result.roles).toEqual(['faculty']);
   });
 
+  it('clears tenure when a person is adjunct', () => {
+    const input = {
+      isAdjunct: true,
+      isTenured: true,
+      roles: ['faculty']
+    };
+
+    const result = standardizePerson(input, { updateTimestamp: false });
+    expect(result.isAdjunct).toBe(true);
+    expect(result.isTenured).toBe(false);
+  });
+
   it('detects people duplicates and orders by completeness', () => {
     const people = [
       { id: 'a', firstName: 'Sam', lastName: 'Lee', email: 'sam@example.edu' },

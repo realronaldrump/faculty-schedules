@@ -28,6 +28,7 @@ export const DEFAULT_PERSON_SCHEMA = {
   weeklySchedule: [],
   primaryBuildings: [],
   primaryBuilding: "",
+  semesterSchedules: {},
   // Employment status flags
   isAdjunct: false,
   isFullTime: true,

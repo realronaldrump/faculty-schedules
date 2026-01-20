@@ -514,19 +514,10 @@ const usePeopleOperations = () => {
         Object.entries(studentToUpdate).filter(([_, value]) => value !== undefined)
       );
 
-      // Derive isActive based on endDate
-      let derivedIsActive = cleanStudentData.isActive;
-      try {
-        const endDateStr = cleanStudentData.endDate || null;
-        if (endDateStr) {
-          const end = new Date(`${endDateStr}T23:59:59`);
-          if (!isNaN(end.getTime())) {
-            derivedIsActive = end >= new Date();
-          }
-        }
-      } catch (error) {
-        void error;
-      }
+      const existingStudent = !isNewStudent
+        ? rawPeople.find(p => p.id === studentToUpdate.id) || null
+        : null;
+      const fallbackIsActive = existingStudent?.isActive ?? true;
 
       const updateData = {
         ...cleanStudentData,
@@ -534,7 +525,7 @@ const usePeopleOperations = () => {
         hasNoOffice: true,
         office: '',
         officeRoomId: '',
-        isActive: (cleanStudentData.isActive !== undefined ? cleanStudentData.isActive : (derivedIsActive !== undefined ? derivedIsActive : true)),
+        isActive: (cleanStudentData.isActive !== undefined ? cleanStudentData.isActive : fallbackIsActive),
         updatedAt: new Date().toISOString()
       };
 
@@ -548,7 +539,7 @@ const usePeopleOperations = () => {
           'usePeopleOperations - handleStudentUpdate'
         );
       } else {
-        const originalData = rawPeople.find(p => p.id === studentToUpdate.id) || null;
+        const originalData = existingStudent;
         if (!originalData) {
           console.warn('⚠️ Provided student id not found; creating new student instead');
           const createRef = doc(collection(db, 'people'));

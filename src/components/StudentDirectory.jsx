@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Edit, Save, X, GraduationCap, Mail, Phone, PhoneOff, Clock, Search, Plus, RotateCcw, History, Trash2, Filter, Download, BarChart3, ArrowRight } from 'lucide-react';
 import MultiSelectDropdown from './MultiSelectDropdown';
@@ -8,8 +8,10 @@ import PersonDirectory from './PersonDirectory';
 import SortableHeader from './shared/SortableHeader';
 import {
   calculateWeeklyHoursFromSchedule,
+  buildSemesterKey,
   formatHoursValue,
-  getStudentAssignments
+  getStudentAssignments,
+  getStudentStatusForSemester
 } from '../utils/studentWorkers';
 import { formatPhoneNumber } from '../utils/directoryUtils';
 import { getCanonicalBuildingList } from '../utils/buildingUtils';
@@ -89,7 +91,9 @@ const prepareStudentPayload = (student) => {
         supervisor: trimValue(job.supervisor || ''),
         hourlyRate: trimValue(job.hourlyRate || ''),
         location: locations,
-        weeklySchedule: sanitizeWeeklyEntries(job.weeklySchedule)
+        weeklySchedule: sanitizeWeeklyEntries(job.weeklySchedule),
+        startDate: trimValue(job.startDate || ''),
+        endDate: trimValue(job.endDate || '')
       };
     })
     .filter((job) =>
@@ -134,7 +138,7 @@ const toComparableValue = (value) => {
 
 const StudentDirectory = () => {
   const navigate = useNavigate();
-  const { studentData } = useData();
+  const { studentData, selectedSemester, selectedSemesterMeta } = useData();
   const { handleStudentUpdate, handleStudentDelete } = usePeopleOperations();
   const { showNotification } = useUI();
   const { buildingConfigVersion } = useAppConfig();
@@ -149,6 +153,9 @@ const StudentDirectory = () => {
   const [newStudent, setNewStudent] = useState(createEmptyStudentDraft);
   const [assignmentDrafts, setAssignmentDrafts] = useState([{ day: 'M', start: '', end: '' }]);
   const [assignmentBuildingDrafts, setAssignmentBuildingDrafts] = useState(['']);
+
+  const semesterInfo = useMemo(() => buildSemesterKey(selectedSemester), [selectedSemester]);
+  const semesterLabel = semesterInfo.semesterLabel || selectedSemester || 'Selected semester';
 
   const availableBuildings = useMemo(() => {
     const buildings = new Set(getCanonicalBuildingList());
@@ -183,6 +190,23 @@ const StudentDirectory = () => {
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b));
   }, [availableBuildings, newStudent.jobs]);
+
+  const buildSemesterSchedulePayload = useCallback((payload) => {
+    if (!semesterInfo.semesterKey) return null;
+    const semesterValue = semesterInfo.semesterLabel || selectedSemester || '';
+    return {
+      semester: semesterValue,
+      semesterCode: semesterInfo.semesterCode || '',
+      jobs: Array.isArray(payload.jobs) ? payload.jobs : [],
+      weeklySchedule: Array.isArray(payload.weeklySchedule) ? payload.weeklySchedule : [],
+      primaryBuildings: Array.isArray(payload.primaryBuildings) ? payload.primaryBuildings : [],
+      primaryBuilding: payload.primaryBuilding || (Array.isArray(payload.primaryBuildings) ? payload.primaryBuildings[0] : '') || '',
+      jobTitle: payload.jobTitle || '',
+      supervisor: payload.supervisor || '',
+      hourlyRate: payload.hourlyRate || '',
+      updatedAt: new Date().toISOString()
+    };
+  }, [semesterInfo, selectedSemester]);
 
   const updateAssignmentField = (index, field, value) => {
     setNewStudent((prev) => ({
@@ -397,15 +421,9 @@ const StudentDirectory = () => {
 
       // Status filters: activeOnly and includeEnded
       if (filters.activeOnly) {
-        const now = new Date();
-        const endStr = student.endDate || (Array.isArray(student.jobs) && student.jobs[0]?.endDate) || '';
-        const ended = (() => {
-          if (!endStr) return false;
-          const end = new Date(`${endStr}T23:59:59`);
-          return !isNaN(end.getTime()) && end < now;
-        })();
-        const inactive = student.isActive === false;
-        if ((inactive || ended) && !filters.includeEnded) return false;
+        const semesterStatus = getStudentStatusForSemester(student, selectedSemesterMeta);
+        const isActive = semesterStatus?.isActive;
+        if (!filters.includeEnded && !isActive) return false;
       }
 
       // Job Titles filter (include-only across top-level and job entries)
@@ -485,7 +503,7 @@ const StudentDirectory = () => {
       const comparison = normalizedA.toString().localeCompare(normalizedB.toString());
       return sortConfig.direction === 'ascending' ? comparison : -comparison;
     });
-  }, [studentData, filterText, sortConfig, nameSort, filters]);
+  }, [studentData, filterText, sortConfig, nameSort, filters, selectedSemesterMeta]);
 
   const handleSort = (key) => {
     setSortConfig(prev => ({
@@ -512,7 +530,9 @@ const StudentDirectory = () => {
         supervisor: student.supervisor || '',
         hourlyRate: student.hourlyRate || '',
         location: Array.isArray(student.primaryBuildings) ? student.primaryBuildings : (student.primaryBuilding ? [student.primaryBuilding] : []),
-        weeklySchedule: Array.isArray(student.weeklySchedule) ? [...student.weeklySchedule] : []
+        weeklySchedule: Array.isArray(student.weeklySchedule) ? [...student.weeklySchedule] : [],
+        startDate: '',
+        endDate: ''
       }]
     });
     setErrors({});
@@ -589,7 +609,17 @@ const StudentDirectory = () => {
         newData: { ...editFormData }
       }]);
 
-      await handleStudentUpdate(payload);
+      const scheduleEntry = buildSemesterSchedulePayload(payload);
+      const existingSchedules = (originalStudent?.semesterSchedules || payload.semesterSchedules || {});
+      const baseSchedules = (existingSchedules && typeof existingSchedules === 'object') ? existingSchedules : {};
+      const nextSchedules = scheduleEntry && semesterInfo.semesterKey
+        ? { ...baseSchedules, [semesterInfo.semesterKey]: scheduleEntry }
+        : baseSchedules;
+
+      await handleStudentUpdate({
+        ...payload,
+        semesterSchedules: nextSchedules
+      });
       setEditingId(null);
       setEditFormData({});
       setErrors({});
@@ -629,7 +659,19 @@ const StudentDirectory = () => {
     }
 
     try {
-      await handleStudentUpdate({ ...payload, isActive: payload.isActive !== undefined ? payload.isActive : true });
+      const scheduleEntry = buildSemesterSchedulePayload(payload);
+      const baseSchedules = (payload.semesterSchedules && typeof payload.semesterSchedules === 'object')
+        ? payload.semesterSchedules
+        : {};
+      const nextSchedules = scheduleEntry && semesterInfo.semesterKey
+        ? { ...baseSchedules, [semesterInfo.semesterKey]: scheduleEntry }
+        : baseSchedules;
+
+      await handleStudentUpdate({
+        ...payload,
+        isActive: payload.isActive !== undefined ? payload.isActive : true,
+        semesterSchedules: nextSchedules
+      });
       setIsCreating(false);
       resetCreateState();
       setErrors({});
@@ -908,7 +950,7 @@ const StudentDirectory = () => {
                 checked={filters.activeOnly}
                 onChange={(e) => setFilters(prev => ({ ...prev, activeOnly: e.target.checked }))}
               />
-              Active only
+              Active in semester
             </label>
             <label className="flex items-center gap-2">
               <input
@@ -916,7 +958,7 @@ const StudentDirectory = () => {
                 checked={filters.includeEnded}
                 onChange={(e) => setFilters(prev => ({ ...prev, includeEnded: e.target.checked }))}
               />
-              Include ended
+              Include outside semester
             </label>
           </div>
           <button
@@ -1131,7 +1173,7 @@ const StudentDirectory = () => {
                       Active student worker
                     </label>
                     {newStudent.endDate && (
-                      <span className="text-xs text-gray-500">Automatically inactivates after {new Date(newStudent.endDate).toLocaleDateString()}</span>
+                      <span className="text-xs text-gray-500">Automatically inactivates after {new Date(newStudent.endDate).toLocaleDateString()} unless an assignment end date extends past it.</span>
                     )}
                   </div>
                 </section>
@@ -1140,7 +1182,7 @@ const StudentDirectory = () => {
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                     <div>
                       <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Job Assignments</h5>
-                      <p className="text-sm text-gray-600">List each job along with buildings covered and the weekly schedule.</p>
+                      <p className="text-sm text-gray-600">List each job along with buildings covered and the weekly schedule for {semesterLabel}.</p>
                     </div>
                     <button
                       type="button"
@@ -1213,6 +1255,24 @@ const StudentDirectory = () => {
                                 onChange={(e) => updateAssignmentField(idx, 'hourlyRate', e.target.value)}
                                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
                                 placeholder="12.00"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Assignment Start</label>
+                              <input
+                                type="date"
+                                value={job.startDate || ''}
+                                onChange={(e) => updateAssignmentField(idx, 'startDate', e.target.value)}
+                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Assignment End</label>
+                              <input
+                                type="date"
+                                value={job.endDate || ''}
+                                onChange={(e) => updateAssignmentField(idx, 'endDate', e.target.value)}
+                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
                               />
                             </div>
                             <div>
@@ -1365,6 +1425,7 @@ const StudentDirectory = () => {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredAndSortedData.map((student) => {
+                  const semesterStatus = getStudentStatusForSemester(student, selectedSemesterMeta);
                   return (
                     <tr key={student.id} className="hover:bg-gray-50">
                       {editingId === student.id ? (
@@ -1448,7 +1509,7 @@ const StudentDirectory = () => {
                                     <span className="font-medium">Active Employee</span>
                                   </label>
                                   {editFormData.endDate && (
-                                    <p className="text-xs text-gray-500 mt-1">Will auto-inactivate after end date</p>
+                                    <p className="text-xs text-gray-500 mt-1">Will auto-inactivate after end date unless an assignment extends past it.</p>
                                   )}
                                 </div>
                               </div>
@@ -1461,7 +1522,10 @@ const StudentDirectory = () => {
                                 <h4 className="text-sm font-medium text-gray-900">Job Management</h4>
                                 <button
                                   onClick={() => {
-                                    setEditFormData(prev => ({ ...prev, jobs: [...(prev.jobs || []), { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [] }] }));
+                                    setEditFormData(prev => ({
+                                      ...prev,
+                                      jobs: [...(prev.jobs || []), { jobTitle: '', supervisor: '', hourlyRate: '', location: [], weeklySchedule: [], startDate: '', endDate: '' }]
+                                    }));
                                     setEditJobsDrafts(prev => ([...prev, { day: 'M', start: '', end: '' }]));
                                   }}
                                   className="px-3 py-1 bg-baylor-green text-white text-xs rounded hover:bg-baylor-green/90 transition-colors"
@@ -1469,6 +1533,7 @@ const StudentDirectory = () => {
                                   + Add Job
                                 </button>
                               </div>
+                              <p className="text-xs text-gray-500">Schedules saved for {semesterLabel}.</p>
 
                               {/* Jobs List */}
                               <div className="space-y-3">
@@ -1520,6 +1585,24 @@ const StudentDirectory = () => {
                                           placeholder="0.00"
                                           value={job.hourlyRate || ''}
                                           onChange={e => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j, i) => i === idx ? { ...j, hourlyRate: e.target.value } : j) }))}
+                                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Assignment Start</label>
+                                        <input
+                                          type="date"
+                                          value={job.startDate || ''}
+                                          onChange={e => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j, i) => i === idx ? { ...j, startDate: e.target.value } : j) }))}
+                                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Assignment End</label>
+                                        <input
+                                          type="date"
+                                          value={job.endDate || ''}
+                                          onChange={e => setEditFormData(prev => ({ ...prev, jobs: prev.jobs.map((j, i) => i === idx ? { ...j, endDate: e.target.value } : j) }))}
                                           className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
                                         />
                                       </div>
@@ -1707,8 +1790,17 @@ const StudentDirectory = () => {
                                   {student.endDate && (
                                     <span>End: {new Date(student.endDate).toLocaleDateString()}</span>
                                   )}
-                                  {student.isActive === false && (
-                                    <span className="text-red-600 font-medium">Inactive</span>
+                                  {semesterStatus?.status && semesterStatus.status !== 'Active' && (
+                                    <span
+                                      className={`font-medium ${semesterStatus.status === 'Inactive'
+                                        ? 'text-red-600'
+                                        : semesterStatus.status === 'Ended'
+                                          ? 'text-amber-600'
+                                          : 'text-blue-600'
+                                        }`}
+                                    >
+                                      {semesterStatus.status}
+                                    </span>
                                   )}
                                 </div>
                               </div>

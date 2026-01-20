@@ -6,6 +6,10 @@ import FacultyContactCard from "../FacultyContactCard";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { usePostHog } from "posthog-js/react";
+import {
+  getStudentAssignments,
+  isAssignmentActiveDuringSemester
+} from "../../utils/studentWorkers";
 
 const DAY_ORDER = ["M", "T", "W", "R", "F"];
 const DAY_LABELS = {
@@ -64,7 +68,7 @@ const accentForStudentAndJob = (studentId, jobTitle) => {
 };
 
 const StudentSchedules = ({ embedded = false }) => {
-  const { studentData = [] } = useData();
+  const { studentData = [], selectedSemesterMeta } = useData();
   const { loadPeople } = usePeople();
   const posthog = usePostHog();
   const [selectedBuildings, setSelectedBuildings] = useState([]);
@@ -86,26 +90,13 @@ const StudentSchedules = ({ embedded = false }) => {
   const buildingOptions = useMemo(() => {
     const set = new Set();
     studentData.forEach((s) => {
-      const jobs =
-        Array.isArray(s.jobs) && s.jobs.length > 0
-          ? s.jobs
-          : [
-            {
-              location: Array.isArray(s.primaryBuildings)
-                ? s.primaryBuildings
-                : s.primaryBuilding
-                  ? [s.primaryBuilding]
-                  : [],
-            },
-          ];
-      jobs.forEach((j) => {
-        const buildings = Array.isArray(j.location)
-          ? j.location
-          : j.location
-            ? [j.location]
-            : [];
-        buildings.forEach((b) => {
-          if (b) set.add(b);
+      const assignments = getStudentAssignments(s);
+      assignments.forEach((assignment) => {
+        const buildings = Array.isArray(assignment.buildings)
+          ? assignment.buildings
+          : [];
+        buildings.forEach((building) => {
+          if (building) set.add(building);
         });
       });
     });
@@ -115,12 +106,9 @@ const StudentSchedules = ({ embedded = false }) => {
   const jobTitleOptions = useMemo(() => {
     const set = new Set();
     studentData.forEach((s) => {
-      const jobs =
-        Array.isArray(s.jobs) && s.jobs.length > 0
-          ? s.jobs
-          : [{ jobTitle: s.jobTitle }];
-      jobs.forEach((j) => {
-        if (j?.jobTitle) set.add(j.jobTitle);
+      const assignments = getStudentAssignments(s);
+      assignments.forEach((assignment) => {
+        if (assignment?.jobTitle) set.add(assignment.jobTitle);
       });
     });
     return Array.from(set).sort();
@@ -139,83 +127,61 @@ const StudentSchedules = ({ embedded = false }) => {
   }, [studentData]);
 
   const filteredStudents = useMemo(() => {
-    const isEffectivelyActive = (s) => {
-      if (s && s.isActive === false) return false;
-      const now = new Date();
-      const startStr =
-        s?.startDate || (Array.isArray(s.jobs) && s.jobs[0]?.startDate) || "";
-      const endStr =
-        s?.endDate || (Array.isArray(s.jobs) && s.jobs[0]?.endDate) || "";
-      if (startStr) {
-        const start = new Date(`${startStr}T00:00:00`);
-        if (!isNaN(start.getTime()) && start > now) return false;
-      }
-      if (endStr) {
-        const end = new Date(`${endStr}T23:59:59`);
-        if (!isNaN(end.getTime()) && end < now) return false;
-      }
-      return true;
-    };
+    return studentData
+      .map((student) => {
+        const assignments = getStudentAssignments(student).map((assignment) => ({
+          ...assignment,
+          isActiveDuringSemester: isAssignmentActiveDuringSemester(
+            assignment,
+            student,
+            selectedSemesterMeta
+          )
+        }));
 
-    return studentData.filter((s) => {
-      if (!includeInactive && !isEffectivelyActive(s)) return false;
-      const jobs =
-        Array.isArray(s.jobs) && s.jobs.length > 0
-          ? s.jobs
-          : [
-            {
-              jobTitle: s.jobTitle,
-              location: Array.isArray(s.primaryBuildings)
-                ? s.primaryBuildings
-                : s.primaryBuilding
-                  ? [s.primaryBuilding]
-                  : [],
-              weeklySchedule: Array.isArray(s.weeklySchedule)
-                ? s.weeklySchedule
-                : [],
-            },
-          ];
-
-      // Ensure at least one job has schedule entries
-      const hasAnySchedule = jobs.some(
-        (j) => Array.isArray(j.weeklySchedule) && j.weeklySchedule.length > 0,
-      );
-      if (!hasAnySchedule) return false;
-
-      // Buildings filter: at least one job matches
-      if (selectedBuildings.length > 0) {
-        const matchesBuilding = jobs.some((j) => {
-          const buildings = Array.isArray(j.location)
-            ? j.location
-            : j.location
-              ? [j.location]
-              : [];
-          return buildings.some((b) => selectedBuildings.includes(b));
-        });
-        if (!matchesBuilding) return false;
-      }
-
-      // Job titles filter: at least one job matches
-      if (selectedJobTitles.length > 0) {
-        const matchesTitle = jobs.some(
-          (j) => j?.jobTitle && selectedJobTitles.includes(j.jobTitle),
+        const assignmentsWithSchedule = assignments.filter((assignment) =>
+          Array.isArray(assignment.schedule) && assignment.schedule.length > 0
         );
-        if (!matchesTitle) return false;
-      }
 
-      // Students filter: match any
-      if (selectedStudentIds.length > 0) {
-        if (!selectedStudentIds.includes(s.id)) return false;
-      }
+        const activeAssignments = includeInactive
+          ? assignmentsWithSchedule
+          : assignmentsWithSchedule.filter((assignment) => assignment.isActiveDuringSemester);
 
-      return true;
-    });
+        const filteredAssignments = activeAssignments.filter((assignment) => {
+          if (selectedJobTitles.length > 0) {
+            if (!assignment.jobTitle || !selectedJobTitles.includes(assignment.jobTitle)) {
+              return false;
+            }
+          }
+
+          if (selectedBuildings.length > 0) {
+            const buildings = Array.isArray(assignment.buildings) ? assignment.buildings : [];
+            if (!buildings.some((building) => selectedBuildings.includes(building))) {
+              return false;
+            }
+          }
+
+          return true;
+        });
+
+        if (selectedStudentIds.length > 0 && !selectedStudentIds.includes(student.id)) {
+          return null;
+        }
+
+        if (filteredAssignments.length === 0) return null;
+
+        return {
+          ...student,
+          visibleAssignments: filteredAssignments
+        };
+      })
+      .filter(Boolean);
   }, [
     studentData,
     selectedBuildings,
     selectedJobTitles,
     selectedStudentIds,
     includeInactive,
+    selectedSemesterMeta
   ]);
 
   // Determine time bounds for grid (default 8:00 - 18:00)
@@ -223,12 +189,9 @@ const StudentSchedules = ({ embedded = false }) => {
     let min = 8 * 60;
     let max = 18 * 60;
     filteredStudents.forEach((s) => {
-      const jobs =
-        Array.isArray(s.jobs) && s.jobs.length > 0
-          ? s.jobs
-          : [{ weeklySchedule: s.weeklySchedule }];
-      jobs.forEach((j) => {
-        (j.weeklySchedule || []).forEach((entry) => {
+      const assignments = Array.isArray(s.visibleAssignments) ? s.visibleAssignments : [];
+      assignments.forEach((assignment) => {
+        (assignment.schedule || []).forEach((entry) => {
           const start = minutesSinceStartOfDay(entry.start);
           const end = minutesSinceStartOfDay(entry.end);
           if (!isNaN(start)) min = Math.min(min, start);
@@ -301,41 +264,17 @@ const StudentSchedules = ({ embedded = false }) => {
     // Build map by day
     const temp = { M: [], T: [], W: [], R: [], F: [] };
     filteredStudents.forEach((s) => {
-      const jobs =
-        Array.isArray(s.jobs) && s.jobs.length > 0
-          ? s.jobs
-          : [
-            {
-              jobTitle: s.jobTitle,
-              weeklySchedule: s.weeklySchedule,
-              location: Array.isArray(s.primaryBuildings)
-                ? s.primaryBuildings
-                : s.primaryBuilding
-                  ? [s.primaryBuilding]
-                  : [],
-            },
-          ];
-      jobs.forEach((j) => {
-        // Apply per-job filters
-        const jobTitleMatch =
-          selectedJobTitles.length === 0 ||
-          (j?.jobTitle && selectedJobTitles.includes(j.jobTitle));
-        const buildingMatch =
-          selectedBuildings.length === 0 ||
-          (() => {
-            const locs = Array.isArray(j.location)
-              ? j.location
-              : j.location
-                ? [j.location]
-                : [];
-            return locs.some((b) => selectedBuildings.includes(b));
-          })();
-        if (!jobTitleMatch || !buildingMatch) return;
-
-        (j.weeklySchedule || []).forEach((e) => {
-          if (!e || !e.day) return;
-          if (temp[e.day])
-            temp[e.day].push({ ...e, student: s, jobTitle: j.jobTitle });
+      const assignments = Array.isArray(s.visibleAssignments) ? s.visibleAssignments : [];
+      assignments.forEach((assignment) => {
+        (assignment.schedule || []).forEach((entry) => {
+          if (!entry || !entry.day) return;
+          if (temp[entry.day]) {
+            temp[entry.day].push({
+              ...entry,
+              student: s,
+              jobTitle: assignment.jobTitle
+            });
+          }
         });
       });
     });
@@ -461,7 +400,7 @@ const StudentSchedules = ({ embedded = false }) => {
                 checked={includeInactive}
                 onChange={e => setIncludeInactive(e.target.checked)}
               />
-              Include inactive
+              Include outside semester
             </label>
           </div>
         </div>

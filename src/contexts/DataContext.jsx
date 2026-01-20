@@ -20,6 +20,7 @@ import { fetchRecentChanges } from '../utils/recentChanges';
 import { usePermissions } from '../utils/permissions';
 import { parseCourseCode } from '../utils/courseUtils';
 import { adaptPeopleToFaculty, adaptPeopleToStaff } from '../utils/dataAdapter';
+import { applySemesterSchedule } from '../utils/studentWorkers';
 import { normalizeSpaceRecord, resolveScheduleSpaces } from '../utils/spaceUtils';
 
 // Import new contexts
@@ -46,6 +47,7 @@ export const DataProvider = ({ children }) => {
     selectedSemester,
     setSelectedSemester,
     availableSemesters,
+    selectedTermMeta,
     loading: schedulesLoading
   } = useSchedules();
 
@@ -399,14 +401,23 @@ export const DataProvider = ({ children }) => {
   }, [rawPeople, rawScheduleData, rawPrograms]);
 
   const studentData = useMemo(() => {
-    // Re-use logic or just filter rawPeople if adapter not needed
-    // For now, simpler filter to match previous behavior
-    return rawPeople.filter(person => {
-      if (!person.roles) return false;
-      const roles = Array.isArray(person.roles) ? person.roles : (typeof person.roles === 'object' ? Object.keys(person.roles).filter(k => person.roles[k]) : []);
-      return roles.includes('student');
-    }).map(s => ({ ...s, jobs: s.jobs || [] })); // Basic mapping
-  }, [rawPeople]);
+    return rawPeople
+      .filter(person => {
+        if (!person.roles) return false;
+        const roles = Array.isArray(person.roles)
+          ? person.roles
+          : (typeof person.roles === 'object'
+            ? Object.keys(person.roles).filter(k => person.roles[k])
+            : []);
+        return roles.includes('student');
+      })
+      .map((student) => {
+        const resolved = selectedSemester
+          ? applySemesterSchedule(student, selectedSemester)
+          : student;
+        return { ...resolved, jobs: resolved.jobs || [] };
+      });
+  }, [rawPeople, selectedSemester]);
 
   const loadPrograms = useCallback(async ({ force = false } = {}) => {
     if (programsLoaded && !force) return rawPrograms;
@@ -607,6 +618,7 @@ export const DataProvider = ({ children }) => {
     selectedSemester,
     setSelectedSemester,
     availableSemesters,
+    selectedSemesterMeta: selectedTermMeta,
 
     loading,
     dataError,
@@ -636,7 +648,7 @@ export const DataProvider = ({ children }) => {
     rawScheduleData, rawPeople, allPeople, peopleIndex, rawPrograms, rawCourses,
     scheduleData, facultyData, staffData, studentData,
     analytics, editHistory, recentChanges, roomsData, spacesByKey, spacesList,
-    selectedSemester, availableSemesters,
+    selectedSemester, availableSemesters, selectedTermMeta,
     loading, dataError, loadData,
     loadCourses, loadPrograms, loadRooms, refreshRooms, loadEditHistory, loadRecentChanges,
     programsLoaded, coursesLoaded, coursesLoading, roomsLoaded, roomsLoading, editHistoryLoaded, recentChangesLoaded,

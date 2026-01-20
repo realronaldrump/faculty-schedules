@@ -19,6 +19,7 @@ import MultiSelectDropdown from "../MultiSelectDropdown";
 import {
   formatCurrency,
   formatHoursValue,
+  getAssignmentStatusForSemester,
   getStudentAssignments,
 } from "../../utils/studentWorkers";
 import FacultyContactCard from "../FacultyContactCard";
@@ -62,7 +63,7 @@ const ProgressBar = ({
 
 const StudentWorkerAnalytics = ({ embedded = false }) => {
   const navigate = useNavigate();
-  const { studentData = [] } = useData();
+  const { studentData = [], selectedSemesterMeta } = useData();
   const { loadPeople } = usePeople();
   const [searchText, setSearchText] = useState("");
   const [filters, setFilters] = useState(() => ({ ...DEFAULT_FILTERS }));
@@ -100,27 +101,14 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
     });
   }, [studentData]);
 
-  const parseDate = useCallback((value) => {
-    if (!value) return null;
-    const date = new Date(`${value}T23:59:59`);
-    return Number.isNaN(date.getTime()) ? null : date;
-  }, []);
-
   const decorateAssignments = useMemo(() => {
-    const now = new Date();
     return assignments.map((assignment) => {
       const student = assignment.student || {};
-      const endDate = parseDate(assignment.endDate || student.endDate);
-      const startDate = parseDate(assignment.startDate || student.startDate);
-
-      let status = "Active";
-      if (student.isActive === false) {
-        status = "Inactive";
-      } else if (endDate && endDate < now) {
-        status = "Ended";
-      } else if (startDate && startDate > now) {
-        status = "Upcoming";
-      }
+      const statusInfo = getAssignmentStatusForSemester(
+        assignment,
+        student,
+        selectedSemesterMeta
+      );
 
       const resolvedBuildings =
         assignment.buildings && assignment.buildings.length > 0
@@ -135,12 +123,12 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
 
       return {
         ...assignment,
-        status,
+        status: statusInfo.status,
         resolvedBuildings,
         supervisor,
       };
     });
-  }, [assignments, parseDate]);
+  }, [assignments, selectedSemesterMeta]);
 
   const availableJobTitles = useMemo(() => {
     const titles = new Set();
@@ -221,10 +209,7 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
       }
 
       if (filters.activeOnly) {
-        if (
-          !filters.includeEnded &&
-          (assignment.status === "Ended" || assignment.status === "Inactive")
-        ) {
+        if (!filters.includeEnded && assignment.status !== "Active") {
           return false;
         }
       }
@@ -548,7 +533,7 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
                     }
                     className="w-4 h-4 text-baylor-green rounded focus:ring-baylor-green"
                   />
-                  Active assignments only
+                  Active in semester only
                 </label>
                 <label
                   className={`flex items-center gap-2 cursor-pointer ${filters.activeOnly ? "" : "opacity-60"}`}
@@ -565,7 +550,7 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
                     disabled={!filters.activeOnly}
                     className="w-4 h-4 text-baylor-green rounded focus:ring-baylor-green"
                   />
-                  Include ended assignments
+                  Include assignments outside semester
                 </label>
               </div>
 

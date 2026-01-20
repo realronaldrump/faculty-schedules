@@ -26,6 +26,7 @@ import { usePeople } from "../contexts/PeopleContext";
 import { useAppConfig } from "../contexts/AppConfigContext";
 import { useSchedules } from "../contexts/ScheduleContext";
 import { parseTermDate } from "../utils/termUtils";
+import { isAssignmentActiveOnDate } from "../utils/studentWorkers";
 
 const LiveView = () => {
   const navigate = useNavigate();
@@ -279,11 +280,12 @@ const LiveView = () => {
     const results = [];
 
     studentData.forEach((student) => {
-      if (!student.isActive) return;
+      if (student.isActive === false) return;
 
       // Check jobs array for current shift
       const jobs = student.jobs || [];
       for (const job of jobs) {
+        if (!isAssignmentActiveOnDate(job, student, currentTime)) continue;
         const schedule = job.weeklySchedule || [];
         for (const shift of schedule) {
           if (shift.day !== currentDayCode) continue;
@@ -320,6 +322,7 @@ const LiveView = () => {
 
       // Legacy format
       const weeklySchedule = student.weeklySchedule || [];
+      if (!isAssignmentActiveOnDate({}, student, currentTime)) return;
       for (const shift of weeklySchedule) {
         if (shift.day !== currentDayCode) continue;
 
@@ -351,7 +354,7 @@ const LiveView = () => {
     });
 
     return results;
-  }, [studentData, currentDayCode, currentMinutes, selectedBuilding]);
+  }, [studentData, currentDayCode, currentMinutes, currentTime, selectedBuilding]);
 
   // Real-time statistics (current, not daily)
   const liveStats = useMemo(() => {

@@ -383,6 +383,31 @@ const TemperatureMonitoring = () => {
     return lookup;
   }, [roomsForBuilding]);
 
+  const roomKeysForBuilding = useMemo(() => {
+    return new Set(
+      roomsForBuilding
+        .map((room) => room.spaceKey || room.id)
+        .filter(Boolean),
+    );
+  }, [roomsForBuilding]);
+
+  const resolveImportRoomKey = (item) => {
+    if (!item) return "";
+    return (
+      item.spaceKey ||
+      item.roomId ||
+      deviceDocs[item.deviceId]?.mapping?.spaceKey ||
+      deviceDocs[item.deviceId]?.mapping?.roomId ||
+      ""
+    );
+  };
+
+  const resolveImportRoomLabel = (item, roomKey) => {
+    if (item?.roomName) return item.roomName;
+    if (!roomKey) return "Unassigned";
+    return getRoomLabel(roomLookup[roomKey] || { id: roomKey }, spacesByKey);
+  };
+
   const spaceTypeOptions = useMemo(() => {
     const baseTypes = Object.values(SPACE_TYPE);
     const extraTypes = new Set();

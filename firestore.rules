@@ -10,6 +10,8 @@ service cloud.firestore {
 
     function roleValueIsTruthy(value) {
       return value == true ||
+        (value is int && value != 0) ||
+        (value is float && value != 0) ||
         (value is string && value.size() > 0) ||
         (value is map && value.size() > 0) ||
         (value is list && value.size() > 0);
@@ -110,6 +112,8 @@ service cloud.firestore {
       return isSignedIn() && (
         // Custom claim on the Auth token
         request.auth.token.admin == true ||
+        request.auth.token.admin == "true" ||
+        request.auth.token.admin == 1 ||
         // Check Firestore user profile roles (supports array or map formats)
         userHasAdminRole()
       );

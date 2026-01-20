@@ -175,6 +175,8 @@ const TemperatureMonitoring = () => {
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [deviceDocs, setDeviceDocs] = useState({});
   const [importHistory, setImportHistory] = useState([]);
+  const [importMappingDrafts, setImportMappingDrafts] = useState({});
+  const [importMappingSaving, setImportMappingSaving] = useState({});
 
   const [importItems, setImportItems] = useState([]);
   const [importing, setImporting] = useState(false);

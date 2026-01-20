@@ -1711,6 +1711,28 @@ const TemperatureMonitoring = () => {
         const spaceKey = roomId;
         if (!spaceKey) continue;
         const timezone = buildingSettings.timezone || DEFAULT_TIMEZONE;
+        const manualOverride = Boolean(mappingOverrides[deviceId]);
+        const mappingPayload = {
+          roomId: spaceKey,
+          spaceKey,
+          method: manualOverride
+            ? "manual"
+            : item.matchMethod ||
+              existingDevice?.mapping?.method ||
+              existingDevice?.mapping?.matchMethod ||
+              "auto",
+          confidence: manualOverride
+            ? 1
+            : (item.matchConfidence ??
+              existingDevice?.mapping?.confidence ??
+              1),
+          updatedAt: serverTimestamp(),
+          manual: manualOverride,
+        };
+        const mappedRoomName = getRoomLabel(
+          roomLookup[spaceKey] || { id: spaceKey },
+          spacesByKey,
+        );
 
         await updateImportJob(
           jobId,
@@ -1839,6 +1861,13 @@ const TemperatureMonitoring = () => {
               buildingName: selectedBuildingName || selectedBuilding,
               deviceId,
               deviceLabel,
+              roomId: spaceKey,
+              spaceKey,
+              roomName: mappedRoomName,
+              mappingMethod: mappingPayload.method,
+              mappingConfidence: mappingPayload.confidence,
+              mappingManual: mappingPayload.manual,
+              mappingUpdatedAt: serverTimestamp(),
               fileName: item.fileName,
               fileHash: item.fileHash,
               rowCount: item.rowCount || 0,
@@ -1855,24 +1884,6 @@ const TemperatureMonitoring = () => {
           );
         }
 
-        const manualOverride = Boolean(mappingOverrides[deviceId]);
-        const mappingPayload = {
-          roomId: spaceKey,
-          spaceKey,
-          method: manualOverride
-            ? "manual"
-            : item.matchMethod ||
-            existingDevice?.mapping?.method ||
-            existingDevice?.mapping?.matchMethod ||
-            "auto",
-          confidence: manualOverride
-            ? 1
-            : (item.matchConfidence ??
-              existingDevice?.mapping?.confidence ??
-              1),
-          updatedAt: serverTimestamp(),
-          manual: manualOverride,
-        };
         const existingMapping = existingDevice?.mapping || {};
         const existingRoomKey =
           existingMapping.spaceKey || existingMapping.roomId || "";
@@ -2075,6 +2086,116 @@ const TemperatureMonitoring = () => {
       );
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleImportHistoryMappingUpdate = async (item, nextRoomKey) => {
+    if (!item?.deviceId || !nextRoomKey) return;
+    const currentRoomKey = resolveImportRoomKey(item);
+    if (nextRoomKey === currentRoomKey) return;
+    if (!selectedBuilding) return;
+
+    const deviceId = item.deviceId;
+    const deviceLabel =
+      deviceDocs[deviceId]?.label || item.deviceLabel || deviceId;
+    const roomName = getRoomLabel(
+      roomLookup[nextRoomKey] || { id: nextRoomKey },
+      spacesByKey,
+    );
+    const mappingPayload = {
+      roomId: nextRoomKey,
+      spaceKey: nextRoomKey,
+      method: "manual",
+      confidence: 1,
+      updatedAt: serverTimestamp(),
+      manual: true,
+    };
+
+    setImportMappingDrafts((prev) => ({ ...prev, [item.id]: nextRoomKey }));
+    setImportMappingSaving((prev) => ({ ...prev, [item.id]: true }));
+    try {
+      await setDoc(
+        doc(db, "temperatureDevices", deviceId),
+        {
+          buildingCode: selectedBuilding,
+          buildingName: selectedBuildingName || selectedBuilding,
+          label: deviceLabel,
+          labelNormalized: normalizeMatchText(deviceLabel),
+          mapping: mappingPayload,
+          updatedAt: serverTimestamp(),
+          createdAt: deviceDocs[deviceId]?.createdAt || serverTimestamp(),
+        },
+        { merge: true },
+      );
+      await setDoc(
+        doc(db, "temperatureImports", item.id),
+        {
+          roomId: nextRoomKey,
+          spaceKey: nextRoomKey,
+          roomName,
+          mappingMethod: mappingPayload.method,
+          mappingConfidence: mappingPayload.confidence,
+          mappingManual: mappingPayload.manual,
+          mappingUpdatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+      setDeviceDocs((prev) => ({
+        ...prev,
+        [deviceId]: {
+          ...(prev[deviceId] || {}),
+          id: deviceId,
+          buildingCode: selectedBuilding,
+          buildingName: selectedBuildingName || selectedBuilding,
+          label: deviceLabel,
+          labelNormalized: normalizeMatchText(deviceLabel),
+          mapping: {
+            roomId: nextRoomKey,
+            spaceKey: nextRoomKey,
+            method: mappingPayload.method,
+            confidence: mappingPayload.confidence,
+            manual: mappingPayload.manual,
+          },
+        },
+      }));
+      setImportHistory((prev) =>
+        prev.map((entry) =>
+          entry.id === item.id
+            ? {
+                ...entry,
+                roomId: nextRoomKey,
+                spaceKey: nextRoomKey,
+                roomName,
+                mappingMethod: mappingPayload.method,
+                mappingConfidence: mappingPayload.confidence,
+                mappingManual: mappingPayload.manual,
+              }
+            : entry,
+        ),
+      );
+      showNotification(
+        "success",
+        "Mapping Updated",
+        "Device mapping updated. Recompute snapshots for affected dates if needed.",
+      );
+    } catch (error) {
+      console.error("Failed to update import mapping:", error);
+      showNotification(
+        "error",
+        "Mapping Update Failed",
+        "Unable to update the room assignment.",
+      );
+    } finally {
+      setImportMappingSaving((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+      setImportMappingDrafts((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
     }
   };
 

@@ -43,7 +43,7 @@ import { db, storage } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { useData } from "../../contexts/DataContext.jsx";
 import { useUI } from "../../contexts/UIContext.jsx";
-import { resolveBuildingDisplayName } from "../../utils/locationService";
+import { resolveBuildingDisplayName, SPACE_TYPE } from "../../utils/locationService";
 import { resolveSpaceDisplayName } from "../../utils/spaceUtils";
 import {
   formatMinutesToLabel,
@@ -77,6 +77,8 @@ import {
 import {
   getTemperatureStatus,
   normalizeIdealRange,
+  normalizeIdealRangeByType,
+  resolveIdealRangeForSpaceType,
 } from "../../utils/temperatureRangeUtils";
 import { emitTemperatureDataRefresh } from "../../utils/temperatureEvents";
 import ConfirmDialog from "../shared/ConfirmDialog";
@@ -95,6 +97,7 @@ const buildDefaultSettings = ({ buildingCode, buildingName }) => ({
   timezone: DEFAULT_TIMEZONE,
   idealTempFMin: null,
   idealTempFMax: null,
+  idealTempRangesBySpaceType: {},
   snapshotTimes: DEFAULT_SNAPSHOT_TIMES.map((slot) => ({
     id: uuidv4(),
     ...slot,
@@ -143,6 +146,12 @@ const isValidTimeZone = (timeZone) => {
   } catch (_) {
     return false;
   }
+};
+
+const coerceNumber = (value) => {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 };
 
 const TemperatureMonitoring = () => {
@@ -220,13 +229,19 @@ const TemperatureMonitoring = () => {
     return "No data";
   };
 
-  const idealRange = useMemo(
+  const defaultIdealRange = useMemo(
     () =>
       normalizeIdealRange(
         buildingSettings?.idealTempFMin,
         buildingSettings?.idealTempFMax,
       ),
     [buildingSettings?.idealTempFMin, buildingSettings?.idealTempFMax],
+  );
+
+  const idealRangesByType = useMemo(
+    () =>
+      normalizeIdealRangeByType(buildingSettings?.idealTempRangesBySpaceType),
+    [buildingSettings?.idealTempRangesBySpaceType],
   );
 
   const resolveSnapshotTempF = (snapshot) => {
@@ -238,13 +253,25 @@ const TemperatureMonitoring = () => {
     return null;
   };
 
-  const getTempToneClasses = ({ valueF, missing, variant = "pill" }) => {
+  const resolveIdealRangeForRoom = (room) =>
+    resolveIdealRangeForSpaceType(
+      room?.type,
+      defaultIdealRange,
+      idealRangesByType,
+    );
+
+  const getTempToneClasses = ({
+    valueF,
+    missing,
+    range,
+    variant = "pill",
+  }) => {
     if (missing) {
       return variant === "solid"
         ? "bg-gray-400/90 text-white"
         : "bg-gray-200 text-gray-600";
     }
-    const status = getTemperatureStatus(valueF, idealRange);
+    const status = getTemperatureStatus(valueF, range || defaultIdealRange);
     if (status === "below") {
       return variant === "solid"
         ? "bg-sky-200/90 text-sky-900"
@@ -355,6 +382,24 @@ const TemperatureMonitoring = () => {
     });
     return lookup;
   }, [roomsForBuilding]);
+
+  const spaceTypeOptions = useMemo(() => {
+    const baseTypes = Object.values(SPACE_TYPE);
+    const extraTypes = new Set();
+    roomsForBuilding.forEach((room) => {
+      if (room?.type) extraTypes.add(room.type);
+    });
+    Object.keys(buildingSettings?.idealTempRangesBySpaceType || {}).forEach(
+      (type) => {
+        if (type) extraTypes.add(type);
+      },
+    );
+    const extras = Array.from(extraTypes).filter(
+      (type) => !baseTypes.includes(type),
+    );
+    extras.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    return [...baseTypes, ...extras];
+  }, [roomsForBuilding, buildingSettings?.idealTempRangesBySpaceType]);
 
   const snapshotTimes = buildingSettings?.snapshotTimes || [];
 
@@ -548,6 +593,21 @@ const TemperatureMonitoring = () => {
             Array.isArray(data.snapshotTimes) && data.snapshotTimes.length > 0
               ? data.snapshotTimes
               : defaultTimes;
+          const nextTypeRanges = {};
+          if (
+            data.idealTempRangesBySpaceType &&
+            typeof data.idealTempRangesBySpaceType === "object"
+          ) {
+            Object.entries(data.idealTempRangesBySpaceType).forEach(
+              ([type, range]) => {
+                if (!type || !range || typeof range !== "object") return;
+                const minF = Number.isFinite(range.minF) ? range.minF : null;
+                const maxF = Number.isFinite(range.maxF) ? range.maxF : null;
+                if (minF == null && maxF == null) return;
+                nextTypeRanges[type] = { minF, maxF };
+              },
+            );
+          }
           const nextSettings = {
             ...data,
             buildingCode: selectedBuilding,
@@ -559,6 +619,7 @@ const TemperatureMonitoring = () => {
               Number.isFinite(data.idealTempFMin) ? data.idealTempFMin : null,
             idealTempFMax:
               Number.isFinite(data.idealTempFMax) ? data.idealTempFMax : null,
+            idealTempRangesBySpaceType: nextTypeRanges,
             markers: normalizeMarkerMap(data.markers || {}),
           };
           setBuildingSettings(nextSettings);
@@ -998,6 +1059,27 @@ const TemperatureMonitoring = () => {
     }
   };
 
+  const sanitizeTypeRanges = (rangesByType) => {
+    const cleaned = {};
+    const invalidTypes = [];
+    if (!rangesByType || typeof rangesByType !== "object") {
+      return { cleaned, invalidTypes };
+    }
+    Object.entries(rangesByType).forEach(([type, range]) => {
+      if (!type || !range || typeof range !== "object") return;
+      const minF = coerceNumber(range.minF);
+      const maxF = coerceNumber(range.maxF);
+      if (minF == null && maxF == null) return;
+      const normalized = normalizeIdealRange(minF, maxF);
+      if (!normalized) {
+        invalidTypes.push(type);
+        return;
+      }
+      cleaned[type] = normalized;
+    });
+    return { cleaned, invalidTypes };
+  };
+
   const saveBuildingSettings = async () => {
     if (!selectedBuilding || !buildingSettings) return;
     if (!isValidTimeZone(buildingSettings.timezone || DEFAULT_TIMEZONE)) {
@@ -1008,19 +1090,28 @@ const TemperatureMonitoring = () => {
       );
       return;
     }
-    const range = normalizeIdealRange(
-      buildingSettings.idealTempFMin,
-      buildingSettings.idealTempFMax,
-    );
+    const defaultMin = coerceNumber(buildingSettings.idealTempFMin);
+    const defaultMax = coerceNumber(buildingSettings.idealTempFMax);
+    const range = normalizeIdealRange(defaultMin, defaultMax);
     if (
-      (buildingSettings.idealTempFMin != null ||
-        buildingSettings.idealTempFMax != null) &&
+      (defaultMin != null || defaultMax != null) &&
       !range
     ) {
       showNotification(
         "error",
         "Invalid Ideal Range",
         "Ideal temperature minimum must be less than or equal to the maximum.",
+      );
+      return;
+    }
+    const { cleaned: typeRanges, invalidTypes } = sanitizeTypeRanges(
+      buildingSettings.idealTempRangesBySpaceType,
+    );
+    if (invalidTypes.length > 0) {
+      showNotification(
+        "error",
+        "Invalid Type Range",
+        `Ideal temperature minimum must be less than or equal to the maximum for ${invalidTypes[0]}.`,
       );
       return;
     }
@@ -1033,14 +1124,9 @@ const TemperatureMonitoring = () => {
         buildingCode: selectedBuilding,
         buildingName: selectedBuildingName || selectedBuilding,
         timezone: buildingSettings.timezone || DEFAULT_TIMEZONE,
-        idealTempFMin:
-          Number.isFinite(buildingSettings.idealTempFMin)
-            ? Number(buildingSettings.idealTempFMin)
-            : null,
-        idealTempFMax:
-          Number.isFinite(buildingSettings.idealTempFMax)
-            ? Number(buildingSettings.idealTempFMax)
-            : null,
+        idealTempFMin: defaultMin,
+        idealTempFMax: defaultMax,
+        idealTempRangesBySpaceType: typeRanges,
         snapshotTimes: sortedTimes,
         markers: buildingSettings.markers || {},
         floorplan: buildingSettings.floorplan || null,
@@ -1075,6 +1161,26 @@ const TemperatureMonitoring = () => {
         "Unable to save temperature settings.",
       );
     }
+  };
+
+  const updateTypeRange = (type, updates) => {
+    setBuildingSettings((prev) => {
+      if (!prev) return prev;
+      const prevRanges =
+        prev.idealTempRangesBySpaceType &&
+        typeof prev.idealTempRangesBySpaceType === "object"
+          ? prev.idealTempRangesBySpaceType
+          : {};
+      const current = prevRanges[type] || { minF: null, maxF: null };
+      const nextRange = { ...current, ...updates };
+      const nextRanges = { ...prevRanges };
+      if (nextRange.minF == null && nextRange.maxF == null) {
+        delete nextRanges[type];
+      } else {
+        nextRanges[type] = nextRange;
+      }
+      return { ...prev, idealTempRangesBySpaceType: nextRanges };
+    });
   };
 
   const suggestRoomMatch = (label) => {
@@ -2430,6 +2536,7 @@ const TemperatureMonitoring = () => {
                   const isMissing = !snapshot || snapshot.status === "missing";
                   const tempLabel = formatSnapshotTemp(snapshot);
                   const tempValueF = resolveSnapshotTempF(snapshot);
+                  const roomRange = resolveIdealRangeForRoom(room);
                   const roomNum =
                     room.spaceNumber || room.roomNumber || room.name || "";
                   return (
@@ -2442,6 +2549,7 @@ const TemperatureMonitoring = () => {
                       className={`absolute -translate-x-1/2 -translate-y-1/2 rounded px-2 py-1 text-[10px] font-medium shadow-sm whitespace-nowrap flex flex-col items-center leading-tight ${getTempToneClasses({
                         valueF: tempValueF,
                         missing: isMissing,
+                        range: roomRange,
                         variant: "solid",
                       })}`}
                       style={{
@@ -2581,6 +2689,7 @@ const TemperatureMonitoring = () => {
             {roomsForBuilding.map((room) => {
               const roomKey = room.spaceKey || room.id;
               if (!roomKey) return null;
+              const roomRange = resolveIdealRangeForRoom(room);
               return (
                 <tr key={roomKey}>
                   <td className="px-4 py-2 font-medium text-gray-800">
@@ -2597,6 +2706,7 @@ const TemperatureMonitoring = () => {
                           className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${getTempToneClasses({
                             valueF: tempValueF,
                             missing: isMissing,
+                            range: roomRange,
                             variant: "pill",
                           })}`}
                         >
@@ -2638,6 +2748,11 @@ const TemperatureMonitoring = () => {
     const dates = Array.from(
       new Set(roomSnapshots.map((docData) => docData.dateLocal)),
     ).sort();
+    const historicalRoomRange = resolveIdealRangeForSpaceType(
+      roomLookup[historicalRoomId]?.type,
+      defaultIdealRange,
+      idealRangesByType,
+    );
 
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
@@ -2732,6 +2847,7 @@ const TemperatureMonitoring = () => {
                                 className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${getTempToneClasses({
                                   valueF: tempValueF,
                                   missing: isMissing,
+                                  range: historicalRoomRange,
                                   variant: "pill",
                                 })}`}
                               >
@@ -3407,8 +3523,69 @@ const TemperatureMonitoring = () => {
               />
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              Used to color temperatures above/below the target range.
+              Default range used unless a space type override is defined.
             </p>
+          </div>
+
+          <div>
+            <label className="form-label">Space Type Ranges (°F)</label>
+            <p className="text-xs text-gray-500 mt-1">
+              Optional overrides by space type; leave blank to use the building
+              default.
+            </p>
+            <div className="space-y-2 mt-3">
+              {spaceTypeOptions.map((type) => {
+                const range =
+                  buildingSettings?.idealTempRangesBySpaceType?.[type] || {};
+                const hasOverride =
+                  range.minF != null || range.maxF != null;
+                return (
+                  <div key={type} className="flex items-center gap-2">
+                    <div className="w-24 text-xs font-semibold text-gray-600">
+                      {type}
+                    </div>
+                    <input
+                      type="number"
+                      className="form-input w-24"
+                      value={range.minF ?? ""}
+                      onChange={(e) =>
+                        updateTypeRange(type, {
+                          minF:
+                            e.target.value === "" ? null : Number(e.target.value),
+                        })
+                      }
+                      placeholder="Min"
+                    />
+                    <span className="text-gray-500 text-xs">to</span>
+                    <input
+                      type="number"
+                      className="form-input w-24"
+                      value={range.maxF ?? ""}
+                      onChange={(e) =>
+                        updateTypeRange(type, {
+                          maxF:
+                            e.target.value === "" ? null : Number(e.target.value),
+                        })
+                      }
+                      placeholder="Max"
+                    />
+                    {hasOverride ? (
+                      <button
+                        type="button"
+                        className="text-xs text-gray-500 hover:text-gray-700"
+                        onClick={() =>
+                          updateTypeRange(type, { minF: null, maxF: null })
+                        }
+                      >
+                        Clear
+                      </button>
+                    ) : (
+                      <span className="text-xs text-gray-400">Default</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <div>

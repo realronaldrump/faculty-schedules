@@ -16,6 +16,8 @@ import { fetchTemperatureSeries } from "../../utils/temperatureDataService";
 import {
   getTemperatureStatus,
   normalizeIdealRange,
+  normalizeIdealRangeByType,
+  resolveIdealRangeForSpaceType,
 } from "../../utils/temperatureRangeUtils";
 import { subscribeTemperatureDataRefresh } from "../../utils/temperatureEvents";
 import {
@@ -137,12 +139,19 @@ const resolveRoomLabel = (room, spacesByKey) => {
   );
 };
 
+const areRangesEqual = (left, right) => {
+  if (!left && !right) return true;
+  if (!left || !right) return false;
+  return left.minF === right.minF && left.maxF === right.maxF;
+};
+
 const TemperatureLineChart = ({
   series,
   height = 320,
   timeZone,
   unitLabel,
   idealRange,
+  idealRangesByRoomId,
   onBrush,
   onPointSelect,
   compact = false,
@@ -150,6 +159,18 @@ const TemperatureLineChart = ({
   const containerRef = useRef(null);
   const [hover, setHover] = useState(null);
   const [brush, setBrush] = useState(null);
+  const resolveRangeForRoom = (roomId) => {
+    if (idealRangesByRoomId instanceof Map && idealRangesByRoomId.has(roomId)) {
+      return idealRangesByRoomId.get(roomId);
+    }
+    if (
+      idealRangesByRoomId &&
+      Object.prototype.hasOwnProperty.call(idealRangesByRoomId, roomId)
+    ) {
+      return idealRangesByRoomId[roomId];
+    }
+    return idealRange || null;
+  };
 
   const plotPadding = compact
     ? { top: 12, right: 12, bottom: 24, left: 36 }
@@ -157,8 +178,9 @@ const TemperatureLineChart = ({
 
   return (
     <div className="relative" ref={containerRef} style={{ height }}>
-      <AutoSizer disableHeight>
-        {({ width }) => {
+      <AutoSizer
+        disableHeight
+        renderProp={({ width }) => {
           const resolvedWidth =
             Number.isFinite(width) && width > 0
               ? width
@@ -408,7 +430,7 @@ const TemperatureLineChart = ({
             </svg>
           );
         }}
-      </AutoSizer>
+      />
 
       {hover && (
         <div
@@ -425,18 +447,19 @@ const TemperatureLineChart = ({
                 className="flex items-center justify-between gap-3"
               >
                 <span className="text-gray-600">{value.roomName}</span>
-                <span
-                  className={`px-2 py-1 rounded-full text-xs font-semibold ${(() => {
-                    const status = getTemperatureStatus(value.value, idealRange);
+                  <span
+                    className={`px-2 py-1 rounded-full text-xs font-semibold ${(() => {
+                    const range = resolveRangeForRoom(value.roomId);
+                    const status = getTemperatureStatus(value.value, range);
                     if (status === "below") return "bg-sky-100 text-sky-800";
                     if (status === "above") return "bg-rose-100 text-rose-800";
                     return "bg-gray-900 text-white";
                   })()}`}
-                >
-                  {value.value.toFixed(1)}
-                  {unitLabel}
-                </span>
-              </div>
+                  >
+                    {value.value.toFixed(1)}
+                    {unitLabel}
+                  </span>
+                </div>
             ))}
           </div>
         </div>
@@ -473,9 +496,18 @@ const TemperatureTrends = ({
   const [refreshKey, setRefreshKey] = useState(0);
 
   const timezone = buildingSettings?.timezone || DEFAULT_TIMEZONE;
-  const idealRange = normalizeIdealRange(
-    buildingSettings?.idealTempFMin,
-    buildingSettings?.idealTempFMax,
+  const defaultIdealRange = useMemo(
+    () =>
+      normalizeIdealRange(
+        buildingSettings?.idealTempFMin,
+        buildingSettings?.idealTempFMax,
+      ),
+    [buildingSettings?.idealTempFMin, buildingSettings?.idealTempFMax],
+  );
+  const idealRangesByType = useMemo(
+    () =>
+      normalizeIdealRangeByType(buildingSettings?.idealTempRangesBySpaceType),
+    [buildingSettings?.idealTempRangesBySpaceType],
   );
 
   const roomNameMap = useMemo(() => {
@@ -487,6 +519,23 @@ const TemperatureTrends = ({
     });
     return map;
   }, [roomsForBuilding, spacesByKey]);
+
+  const idealRangeByRoomId = useMemo(() => {
+    const map = new Map();
+    roomsForBuilding.forEach((room) => {
+      const roomId = room.spaceKey || room.id;
+      if (!roomId) return;
+      map.set(
+        roomId,
+        resolveIdealRangeForSpaceType(
+          room?.type,
+          defaultIdealRange,
+          idealRangesByType,
+        ),
+      );
+    });
+    return map;
+  }, [roomsForBuilding, defaultIdealRange, idealRangesByType]);
 
   useEffect(() => {
     setSelectedRoomIds([]);
@@ -644,6 +693,21 @@ const TemperatureTrends = ({
     () => sanitizeSeriesPoints(visibleSeries),
     [visibleSeries],
   );
+  const overlayIdealRange = useMemo(() => {
+    if (chartSeries.length === 0) return null;
+    let sharedRange = null;
+    for (const item of chartSeries) {
+      const nextRange = idealRangeByRoomId.has(item.roomId)
+        ? idealRangeByRoomId.get(item.roomId)
+        : defaultIdealRange;
+      if (sharedRange == null) {
+        sharedRange = nextRange;
+        continue;
+      }
+      if (!areRangesEqual(sharedRange, nextRange)) return null;
+    }
+    return sharedRange;
+  }, [chartSeries, idealRangeByRoomId, defaultIdealRange]);
 
   const statsRows = useMemo(() => {
     return visibleSeries.map((item) => {
@@ -904,37 +968,44 @@ const TemperatureTrends = ({
                 height={360}
                 timeZone={timezone}
                 unitLabel={unitLabel}
-                idealRange={idealRange}
+                idealRange={overlayIdealRange}
+                idealRangesByRoomId={idealRangeByRoomId}
                 onBrush={handleBrush}
                 onPointSelect={setSelectedPoint}
               />
             </>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {chartSeries.map((item) => (
-                <div
-                  key={item.roomId}
-                  className="border border-gray-200 rounded-lg p-3"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-sm font-semibold text-gray-900">
-                      {item.roomName}
+              {chartSeries.map((item) => {
+                const roomRange = idealRangeByRoomId.has(item.roomId)
+                  ? idealRangeByRoomId.get(item.roomId)
+                  : defaultIdealRange;
+                return (
+                  <div
+                    key={item.roomId}
+                    className="border border-gray-200 rounded-lg p-3"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm font-semibold text-gray-900">
+                        {item.roomName}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {item.points[item.points.length - 1]?.value?.toFixed(1)}
+                        {unitLabel}
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-500">
-                      {item.points[item.points.length - 1]?.value?.toFixed(1)}
-                      {unitLabel}
-                    </div>
+                    <TemperatureLineChart
+                      series={[item]}
+                      height={160}
+                      timeZone={timezone}
+                      unitLabel={unitLabel}
+                      idealRange={roomRange}
+                      idealRangesByRoomId={idealRangeByRoomId}
+                      compact
+                    />
                   </div>
-                  <TemperatureLineChart
-                    series={[item]}
-                    height={160}
-                    timeZone={timezone}
-                    unitLabel={unitLabel}
-                    idealRange={idealRange}
-                    compact
-                  />
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -967,7 +1038,10 @@ const TemperatureTrends = ({
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {statsRows.map((row) => {
-                    const status = getTemperatureStatus(row.latest, idealRange);
+                    const range = idealRangeByRoomId.has(row.roomId)
+                      ? idealRangeByRoomId.get(row.roomId)
+                      : defaultIdealRange;
+                    const status = getTemperatureStatus(row.latest, range);
                     const tone =
                       status === "below"
                         ? "text-sky-700 bg-sky-50"
@@ -1014,8 +1088,8 @@ const TemperatureTrends = ({
               </div>
             ) : (
               <div className="h-64" ref={readingsContainerRef}>
-                <AutoSizer>
-                  {({ height, width }) => {
+                <AutoSizer
+                  renderProp={({ height, width }) => {
                     const resolvedHeight =
                       Number.isFinite(height) && height > 0
                         ? height
@@ -1070,7 +1144,7 @@ const TemperatureTrends = ({
                       </List>
                     );
                   }}
-                </AutoSizer>
+                />
               </div>
             )}
           </div>

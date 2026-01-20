@@ -8,11 +8,18 @@ service cloud.firestore {
     function accessControlDoc() { return /databases/$(database)/documents/settings/accessControl; }
     function hasUserProfile() { return isSignedIn() && exists(userDoc()); }
 
+    function roleValueIsTruthy(value) {
+      return value == true ||
+        (value is string && value.size() > 0) ||
+        (value is map && value.size() > 0) ||
+        (value is list && value.size() > 0);
+    }
+
     // Check user's Firestore profile for a role (supports list/map/string formats)
     function userHasRole(role) {
       return hasUserProfile() && (
         (get(userDoc()).data.roles is list && role in get(userDoc()).data.roles) ||
-        (get(userDoc()).data.roles is map && get(userDoc()).data.roles[role] == true) ||
+        (get(userDoc()).data.roles is map && roleValueIsTruthy(get(userDoc()).data.roles[role])) ||
         (get(userDoc()).data.roles is string && get(userDoc()).data.roles == role)
       );
     }

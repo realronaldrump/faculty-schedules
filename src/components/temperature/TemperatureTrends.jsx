@@ -447,19 +447,19 @@ const TemperatureLineChart = ({
                 className="flex items-center justify-between gap-3"
               >
                 <span className="text-gray-600">{value.roomName}</span>
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-semibold ${(() => {
+                <span
+                  className={`px-2 py-1 rounded-full text-xs font-semibold ${(() => {
                     const range = resolveRangeForRoom(value.roomId);
                     const status = getTemperatureStatus(value.value, range);
                     if (status === "below") return "bg-sky-100 text-sky-800";
                     if (status === "above") return "bg-rose-100 text-rose-800";
                     return "bg-gray-900 text-white";
                   })()}`}
-                  >
-                    {value.value.toFixed(1)}
-                    {unitLabel}
-                  </span>
-                </div>
+                >
+                  {value.value.toFixed(1)}
+                  {unitLabel}
+                </span>
+              </div>
             ))}
           </div>
         </div>
@@ -604,6 +604,10 @@ const TemperatureTrends = ({
         });
       } catch (error) {
         console.error("Temperature query failed:", error);
+        // Log the full error to see if it contains an index URL
+        if (error.code === 'failed-precondition' || error.message.includes('index')) {
+          console.error("Potential missing index. Check console for link or run 'firebase deploy --only firestore:indexes'");
+        }
         setDataError("Unable to load temperature data for this range.");
       } finally {
         setDataLoading(false);

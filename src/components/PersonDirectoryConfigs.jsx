@@ -8,7 +8,8 @@ import {
   RotateCcw,
   UserCog,
   Users,
-  Wifi
+  Wifi,
+  X
 } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
 import MultiSelectDropdown from './MultiSelectDropdown';
@@ -184,6 +185,152 @@ const DEFAULT_ADJUNCT_EXPORT_COLUMNS = [
 
 const ADJUNCT_EXPORT_COLUMN_LABELS = buildExportLabelMap(ADJUNCT_EXPORT_COLUMN_DEFS);
 
+const ExportColumnsModal = ({
+  isOpen,
+  title,
+  description,
+  columnOrder = [],
+  columnLabels = {},
+  selectedColumns = [],
+  defaultColumns = [],
+  onSelectionChange,
+  onClose,
+  onExport
+}) => {
+  if (!isOpen) return null;
+
+  const normalizedSelection = Array.isArray(selectedColumns) ? selectedColumns : [];
+  const orderedSelection = columnOrder.filter((key) => normalizedSelection.includes(key));
+  const canExport = orderedSelection.length > 0;
+
+  const handleToggle = (key) => {
+    const nextSelection = orderedSelection.includes(key)
+      ? orderedSelection.filter((item) => item !== key)
+      : [...orderedSelection, key];
+    if (typeof onSelectionChange === 'function') {
+      onSelectionChange(nextSelection);
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (typeof onSelectionChange === 'function') {
+      onSelectionChange([...columnOrder]);
+    }
+  };
+
+  const handleClearAll = () => {
+    if (typeof onSelectionChange === 'function') {
+      onSelectionChange([]);
+    }
+  };
+
+  const handleResetDefaults = () => {
+    if (typeof onSelectionChange === 'function') {
+      onSelectionChange(columnOrder.filter((key) => defaultColumns.includes(key)));
+    }
+  };
+
+  const handleClose = () => {
+    if (orderedSelection.length === 0 && defaultColumns.length > 0 && typeof onSelectionChange === 'function') {
+      onSelectionChange(columnOrder.filter((key) => defaultColumns.includes(key)));
+    }
+    if (typeof onClose === 'function') {
+      onClose();
+    }
+  };
+
+  const handleExport = () => {
+    if (!canExport) return;
+    if (typeof onExport === 'function') {
+      onExport();
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={handleClose}>
+      <div className="modal-content max-w-3xl" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header flex items-center justify-between">
+          <h3 className="modal-title">{title}</h3>
+          <button
+            type="button"
+            onClick={handleClose}
+            className="text-gray-500 hover:text-gray-700"
+            aria-label="Close"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        <div className="modal-body">
+          {description && (
+            <p className="text-sm text-gray-600 mb-4">{description}</p>
+          )}
+          <div className="max-h-64 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {columnOrder.map((key) => (
+              <label key={key} className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={orderedSelection.includes(key)}
+                  onChange={() => handleToggle(key)}
+                  className="h-4 w-4 text-baylor-green focus:ring-baylor-green border-gray-300 rounded"
+                />
+                <span>{columnLabels[key] || key}</span>
+              </label>
+            ))}
+          </div>
+          {!canExport && (
+            <p className="text-sm text-red-600 mt-3">Select at least one column to export.</p>
+          )}
+        </div>
+        <div className="modal-footer">
+          <div className="w-full flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
+              >
+                Select All
+              </button>
+              <button
+                type="button"
+                onClick={handleClearAll}
+                className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
+              >
+                Clear All
+              </button>
+              <button
+                type="button"
+                onClick={handleResetDefaults}
+                className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
+              >
+                Reset Defaults
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={!canExport}
+                className={`px-4 py-2 rounded-lg text-sm flex items-center gap-2 ${canExport ? 'bg-baylor-green text-white hover:bg-baylor-green/90' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+              >
+                <Download size={16} />
+                Export CSV
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const filterSchedulesBySelectedTerm = (scheduleData = [], selectedSemester = '') => {
   if (!Array.isArray(scheduleData)) return [];
   if (!selectedSemester) return scheduleData;
@@ -254,20 +401,31 @@ const useFacultyExtras = () => {
   const [showOnlyWithCourses, setShowOnlyWithCourses] = useState(false);
   const [pinUPDsFirst, setPinUPDsFirst] = useState(false);
   const [exportColumns, setExportColumns] = useState(() => [...DEFAULT_FACULTY_EXPORT_COLUMNS]);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   return {
     showOnlyWithCourses,
     setShowOnlyWithCourses,
     pinUPDsFirst,
     setPinUPDsFirst,
     exportColumns,
-    setExportColumns
+    setExportColumns,
+    exportModalOpen,
+    setExportModalOpen
   };
 };
 
 const useAdjunctExtras = () => {
   const [showOnlyWithCourses, setShowOnlyWithCourses] = useState(false);
   const [exportColumns, setExportColumns] = useState(() => [...DEFAULT_ADJUNCT_EXPORT_COLUMNS]);
-  return { showOnlyWithCourses, setShowOnlyWithCourses, exportColumns, setExportColumns };
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  return {
+    showOnlyWithCourses,
+    setShowOnlyWithCourses,
+    exportColumns,
+    setExportColumns,
+    exportModalOpen,
+    setExportModalOpen
+  };
 };
 
 const useNoExtras = () => ({});
@@ -580,28 +738,22 @@ const facultyDirectoryConfig = {
     </>
   ),
   trailingActions: ({ handlers, data, extraState }) => {
-    const handleExportColumnsChange = (selected) => {
-      if (!Array.isArray(selected) || selected.length === 0) {
+    const openExportModal = () => {
+      if (!Array.isArray(extraState.exportColumns) || extraState.exportColumns.length === 0) {
         extraState.setExportColumns([...DEFAULT_FACULTY_EXPORT_COLUMNS]);
-        return;
       }
-      extraState.setExportColumns(selected);
+      extraState.setExportModalOpen(true);
+    };
+
+    const handleExport = () => {
+      exportFacultyCSV(data, extraState.exportColumns);
+      extraState.setExportModalOpen(false);
     };
 
     return (
       <>
-        <div className="min-w-[220px]">
-          <label className="block text-xs font-medium text-gray-600 mb-1">Export columns</label>
-          <MultiSelectDropdown
-            options={FACULTY_EXPORT_COLUMN_ORDER}
-            selected={extraState.exportColumns}
-            onChange={handleExportColumnsChange}
-            placeholder="Choose columns..."
-            displayMap={FACULTY_EXPORT_COLUMN_LABELS}
-          />
-        </div>
         <button
-          onClick={() => exportFacultyCSV(data, extraState.exportColumns)}
+          onClick={openExportModal}
           className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
         >
           <Download size={18} /> Export CSV
@@ -613,6 +765,18 @@ const facultyDirectoryConfig = {
         >
           <Plus size={18} /> Add Faculty
         </button>
+        <ExportColumnsModal
+          isOpen={extraState.exportModalOpen}
+          title="Export Faculty CSV"
+          description="Select the columns to include in your faculty export."
+          columnOrder={FACULTY_EXPORT_COLUMN_ORDER}
+          columnLabels={FACULTY_EXPORT_COLUMN_LABELS}
+          selectedColumns={extraState.exportColumns}
+          defaultColumns={DEFAULT_FACULTY_EXPORT_COLUMNS}
+          onSelectionChange={extraState.setExportColumns}
+          onClose={() => extraState.setExportModalOpen(false)}
+          onExport={handleExport}
+        />
       </>
     );
   },
@@ -1181,28 +1345,22 @@ const adjunctDirectoryConfig = {
     </label>
   ),
   trailingActions: ({ handlers, state, data, extraState }) => {
-    const handleExportColumnsChange = (selected) => {
-      if (!Array.isArray(selected) || selected.length === 0) {
+    const openExportModal = () => {
+      if (!Array.isArray(extraState.exportColumns) || extraState.exportColumns.length === 0) {
         extraState.setExportColumns([...DEFAULT_ADJUNCT_EXPORT_COLUMNS]);
-        return;
       }
-      extraState.setExportColumns(selected);
+      extraState.setExportModalOpen(true);
+    };
+
+    const handleExport = () => {
+      exportAdjunctCSV(data, extraState.exportColumns);
+      extraState.setExportModalOpen(false);
     };
 
     return (
       <>
-        <div className="min-w-[220px]">
-          <label className="block text-xs font-medium text-gray-600 mb-1">Export columns</label>
-          <MultiSelectDropdown
-            options={ADJUNCT_EXPORT_COLUMN_ORDER}
-            selected={extraState.exportColumns}
-            onChange={handleExportColumnsChange}
-            placeholder="Choose columns..."
-            displayMap={ADJUNCT_EXPORT_COLUMN_LABELS}
-          />
-        </div>
         <button
-          onClick={() => exportAdjunctCSV(data, extraState.exportColumns)}
+          onClick={openExportModal}
           className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
         >
           <Download size={18} /> Export CSV
@@ -1224,6 +1382,18 @@ const adjunctDirectoryConfig = {
           <Plus size={18} />
           Add Adjunct
         </button>
+        <ExportColumnsModal
+          isOpen={extraState.exportModalOpen}
+          title="Export Adjunct CSV"
+          description="Select the columns to include in your adjunct export."
+          columnOrder={ADJUNCT_EXPORT_COLUMN_ORDER}
+          columnLabels={ADJUNCT_EXPORT_COLUMN_LABELS}
+          selectedColumns={extraState.exportColumns}
+          defaultColumns={DEFAULT_ADJUNCT_EXPORT_COLUMNS}
+          onSelectionChange={extraState.setExportColumns}
+          onClose={() => extraState.setExportModalOpen(false)}
+          onExport={handleExport}
+        />
       </>
     );
   },

@@ -68,7 +68,9 @@ const renderStatusToggles = ({
 const buildBaseColumns = ({
   programs,
   editFormData,
+  setEditFormData,
   newRecord,
+  setNewRecord,
   errors,
   handleChange,
   handleCreateChange,
@@ -687,7 +689,9 @@ const ConfiguredPersonDirectory = (props) => {
   const baseColumns = useMemo(() => buildBaseColumns({
     programs,
     editFormData,
+    setEditFormData,
     newRecord,
+    setNewRecord,
     errors,
     handleChange,
     handleCreateChange,
@@ -699,7 +703,9 @@ const ConfiguredPersonDirectory = (props) => {
   }), [
     programs,
     editFormData,
+    setEditFormData,
     newRecord,
+    setNewRecord,
     errors,
     handleChange,
     handleCreateChange,

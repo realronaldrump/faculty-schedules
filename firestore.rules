@@ -321,6 +321,14 @@ service cloud.firestore {
       allow read: if canReadAppData();
       allow write: if canWrite();
     }
+    match /temperatureImportJobs/{id} {
+      allow read: if canReadAppData();
+      allow write: if canWrite();
+    }
+    match /temperatureRoomAggregates/{id} {
+      allow read: if canReadAppData();
+      allow write: if canWrite();
+    }
 
     // Acronyms collection: granular permissions
     match /baylorAcronyms/{id} {

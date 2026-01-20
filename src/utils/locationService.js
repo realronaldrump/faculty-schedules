@@ -574,7 +574,7 @@ export const parseMultiRoom = (value) => {
  * @returns {string} Space key (e.g., "GOEBEL:101")
  */
 export const buildSpaceKey = (buildingCode, spaceNumber) => {
-  const code = (buildingCode || '').toString().toUpperCase().trim();
+  const code = (buildingCode || '').toString().toUpperCase().trim().replace(/\s+/g, '_');
   const number = normalizeSpaceNumber(spaceNumber);
   if (!code || !number) return '';
   return `${code}:${number}`;

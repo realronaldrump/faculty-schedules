@@ -1,6 +1,42 @@
 {
   "indexes": [
     {
+      "collectionGroup": "temperatureDeviceReadings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "buildingCode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "deviceId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dateLocal",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "temperatureRoomAggregates",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "buildingCode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "roomId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dateLocal",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "dedupeDecisions",
       "queryScope": "COLLECTION",
       "fields": [

@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
-import { Edit, Save, X, Trash2, Phone, PhoneOff, Building, BuildingIcon, Plus, Minus } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Edit, Save, X, Trash2, Phone, PhoneOff, Building, BuildingIcon, Plus, Minus, ExternalLink } from 'lucide-react';
 import { useDirectoryState, useDirectoryHandlers } from '../hooks';
 import { useData } from '../contexts/DataContext';
 import { DeleteConfirmDialog, UniversalDirectory } from './shared';
@@ -337,16 +338,26 @@ const buildBaseColumns = ({
               )}
             </div>
           ))}
-          {showAddButton && (
-            <button
-              type="button"
-              onClick={() => addOffice(editFormData, setEditFormData)}
-              className="flex items-center gap-1 text-xs text-baylor-green hover:text-baylor-green/80 transition-colors"
+          <div className="flex items-center gap-3">
+            {showAddButton && (
+              <button
+                type="button"
+                onClick={() => addOffice(editFormData, setEditFormData)}
+                className="flex items-center gap-1 text-xs text-baylor-green hover:text-baylor-green/80 transition-colors"
+              >
+                <Plus size={14} />
+                Add office
+              </button>
+            )}
+            <Link
+              to="/facilities/spaces"
+              className="flex items-center gap-1 text-xs text-gray-500 hover:text-baylor-green transition-colors"
+              title="Manage all spaces"
             >
-              <Plus size={14} />
-              Add office
-            </button>
-          )}
+              <ExternalLink size={12} />
+              Manage Spaces
+            </Link>
+          </div>
         </div>
       );
     },

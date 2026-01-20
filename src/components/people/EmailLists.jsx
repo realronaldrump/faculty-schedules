@@ -40,6 +40,7 @@ const EmailLists = ({ embedded = false }) => {
     studentData = [],
     scheduleData = [],
     spacesByKey,
+    loadPrograms,
   } = useData();
   const { loadPeople } = usePeople();
   const { isAdmin, user } = useAuth();
@@ -108,7 +109,8 @@ const EmailLists = ({ embedded = false }) => {
 
   useEffect(() => {
     loadPeople();
-  }, [loadPeople]);
+    loadPrograms();
+  }, [loadPeople, loadPrograms]);
 
   // Reset page to expected state when starting tutorial
   const resetForTutorial = () => {

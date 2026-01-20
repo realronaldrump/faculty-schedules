@@ -1,6 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
-
-vi.mock('../../firebase', () => ({ db: {} }));
+import { describe, expect, it } from 'vitest';
 
 const {
   standardizePerson,

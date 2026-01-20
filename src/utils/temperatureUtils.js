@@ -119,6 +119,10 @@ export const toSnapshotDocId = (buildingName = '', roomId = '', dateLocal = '', 
   return `${toBuildingKey(buildingName)}__${roomId}__${dateLocal}__${snapshotId}`;
 };
 
+export const toRoomAggregateDocId = (buildingName = '', roomId = '', dateLocal = '') => {
+  return `${toBuildingKey(buildingName)}__${roomId}__${dateLocal}`;
+};
+
 const simpleHash = (value) => {
   let hash = 0;
   for (let i = 0; i < value.length; i += 1) {

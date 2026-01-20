@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { Link } from "react-router-dom";
 import {
   MapPin,
   Calendar,
@@ -11,6 +12,7 @@ import {
   ArrowUpDown,
   Play,
   Info,
+  Settings2,
 } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
 import WeekView from "./WeekView";
@@ -688,25 +690,35 @@ const RoomSchedules = ({ embedded = false }) => {
             View classroom usage and availability across the department
           </p>
         </div>
-        <button
-          onClick={() => {
-            // Reset page to default state before starting tutorial
-            setSelectedDate(new Date());
-            setViewMode("timeline");
-            setSelectedRoom("");
-            setSelectedBuilding("");
-            setShowOnlyInUse(false);
-            setDensity("comfortable");
-            setSortBy("room");
-            setWeekViewMode("all");
-            startTutorial("room-schedules");
-          }}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm text-baylor-green border border-baylor-green rounded-lg hover:bg-baylor-green/5 transition-colors"
-          title="Learn how to use Room Schedules"
-        >
-          <Play className="w-4 h-4" />
-          Tutorial
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/facilities/spaces"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            title="Manage spaces and rooms"
+          >
+            <Settings2 className="w-4 h-4" />
+            Manage Spaces
+          </Link>
+          <button
+            onClick={() => {
+              // Reset page to default state before starting tutorial
+              setSelectedDate(new Date());
+              setViewMode("timeline");
+              setSelectedRoom("");
+              setSelectedBuilding("");
+              setShowOnlyInUse(false);
+              setDensity("comfortable");
+              setSortBy("room");
+              setWeekViewMode("all");
+              startTutorial("room-schedules");
+            }}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm text-baylor-green border border-baylor-green rounded-lg hover:bg-baylor-green/5 transition-colors"
+            title="Learn how to use Room Schedules"
+          >
+            <Play className="w-4 h-4" />
+            Tutorial
+          </button>
+        </div>
       </div>
 
       {/* Controls */}

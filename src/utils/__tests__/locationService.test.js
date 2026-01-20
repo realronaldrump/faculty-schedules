@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { LOCATION_TYPE, parseMultiRoom, splitMultiRoom } from '../locationService';
+import { LOCATION_TYPE, parseMultiRoom, splitMultiRoom, buildSpaceKey } from '../locationService';
 
 describe('locationService multi-room parsing', () => {
+  it('builds valid space key even if building code has spaces', () => {
+    const key = buildSpaceKey('GOEBEL BUILDING', '120');
+    expect(key).toBe('GOEBEL_BUILDING:120');
+  });
   it('splits slash-delimited room numbers with shared prefix', () => {
     expect(splitMultiRoom('FCS 211/213')).toEqual(['FCS 211', 'FCS 213']);
   });

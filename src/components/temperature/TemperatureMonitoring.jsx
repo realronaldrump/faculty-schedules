@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   Calendar,
@@ -12,6 +13,7 @@ import {
   LayoutGrid,
   Map as MapIcon,
   Pencil,
+  Plus,
   Save,
   Thermometer,
   Trash2,
@@ -25,6 +27,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   query,
   setDoc,
   updateDoc,
@@ -55,6 +58,7 @@ import {
   normalizeRoomNumber,
   parseDeviceLabelFromFilename,
   parseLocalTimestamp,
+  toRoomAggregateDocId,
   toBuildingKey,
   toDateKey,
   toDeviceDayId,
@@ -62,6 +66,18 @@ import {
   toSnapshotDocId,
   zonedTimeToUtc,
 } from "../../utils/temperatureUtils";
+import {
+  buildHourlyAggregates,
+} from "../../utils/temperatureAggregation";
+import {
+  calculateImportProgress,
+  formatElapsed,
+} from "../../utils/temperatureImportProgress";
+import {
+  getTemperatureStatus,
+  normalizeIdealRange,
+} from "../../utils/temperatureRangeUtils";
+import { emitTemperatureDataRefresh } from "../../utils/temperatureEvents";
 import ConfirmDialog from "../shared/ConfirmDialog";
 
 const DEFAULT_TIMEZONE = "America/Chicago";
@@ -75,6 +91,8 @@ const buildDefaultSettings = ({ buildingCode, buildingName }) => ({
   buildingCode,
   buildingName,
   timezone: DEFAULT_TIMEZONE,
+  idealTempFMin: null,
+  idealTempFMax: null,
   snapshotTimes: DEFAULT_SNAPSHOT_TIMES.map((slot) => ({
     id: uuidv4(),
     ...slot,
@@ -152,6 +170,13 @@ const TemperatureMonitoring = () => {
   const [mappingOverrides, setMappingOverrides] = useState({});
   const [pendingMappings, setPendingMappings] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [importJobId, setImportJobId] = useState(null);
+  const [importJob, setImportJob] = useState(null);
+  const [importTick, setImportTick] = useState(0);
+  const importProgressRef = useRef({
+    lastUpdate: 0,
+    lastRows: 0,
+  });
 
   const [editingPositions, setEditingPositions] = useState(false);
   const [markerDrafts, setMarkerDrafts] = useState({});
@@ -181,6 +206,8 @@ const TemperatureMonitoring = () => {
     useState(false);
   const [deleteImportId, setDeleteImportId] = useState(null);
   const [deletingImport, setDeletingImport] = useState(false);
+  const [importHistoryRefresh, setImportHistoryRefresh] = useState(0);
+  const [snapshotRefreshKey, setSnapshotRefreshKey] = useState(0);
 
   const formatSnapshotTemp = (snapshot) => {
     if (!snapshot || snapshot.status === "missing") return "No data";
@@ -189,6 +216,46 @@ const TemperatureMonitoring = () => {
     if (snapshot.temperatureC != null)
       return `${Math.round(snapshot.temperatureC)} C`;
     return "No data";
+  };
+
+  const idealRange = useMemo(
+    () =>
+      normalizeIdealRange(
+        buildingSettings?.idealTempFMin,
+        buildingSettings?.idealTempFMax,
+      ),
+    [buildingSettings?.idealTempFMin, buildingSettings?.idealTempFMax],
+  );
+
+  const resolveSnapshotTempF = (snapshot) => {
+    if (!snapshot) return null;
+    if (Number.isFinite(snapshot.temperatureF)) return snapshot.temperatureF;
+    if (Number.isFinite(snapshot.temperatureC)) {
+      return (snapshot.temperatureC * 9) / 5 + 32;
+    }
+    return null;
+  };
+
+  const getTempToneClasses = ({ valueF, missing, variant = "pill" }) => {
+    if (missing) {
+      return variant === "solid"
+        ? "bg-gray-400/90 text-white"
+        : "bg-gray-200 text-gray-600";
+    }
+    const status = getTemperatureStatus(valueF, idealRange);
+    if (status === "below") {
+      return variant === "solid"
+        ? "bg-sky-200/90 text-sky-900"
+        : "bg-sky-100 text-sky-800";
+    }
+    if (status === "above") {
+      return variant === "solid"
+        ? "bg-rose-200/90 text-rose-900"
+        : "bg-rose-100 text-rose-800";
+    }
+    return variant === "solid"
+      ? "bg-baylor-green/90 text-white"
+      : "bg-baylor-green/10 text-baylor-green";
   };
 
   const normalizeMarkerMap = (markers = {}) => {
@@ -327,6 +394,32 @@ const TemperatureMonitoring = () => {
     return summary;
   }, [importItems]);
 
+  const activeImportJob =
+    importJob && importJob.buildingCode === selectedBuilding ? importJob : null;
+  const importProgress = calculateImportProgress({
+    processedRows: activeImportJob?.processedRows || 0,
+    totalRows: activeImportJob?.totalRows || 0,
+    processedFiles: activeImportJob?.processedFiles || 0,
+    totalFiles: activeImportJob?.totalFiles || 0,
+  });
+  const importStartedAt = activeImportJob?.startedAt?.toDate
+    ? activeImportJob.startedAt.toDate()
+    : activeImportJob?.startedAt instanceof Date
+      ? activeImportJob.startedAt
+      : null;
+  const importFinishedAt = activeImportJob?.finishedAt?.toDate
+    ? activeImportJob.finishedAt.toDate()
+    : activeImportJob?.finishedAt instanceof Date
+      ? activeImportJob.finishedAt
+      : null;
+  const importElapsed = importStartedAt
+    ? formatElapsed(
+      (activeImportJob?.status === "running"
+        ? importTick || Date.now()
+        : importFinishedAt?.getTime() || Date.now()) - importStartedAt.getTime(),
+    )
+    : null;
+
   // Load hidden buildings
   useEffect(() => {
     const fetchHidden = async () => {
@@ -384,6 +477,43 @@ const TemperatureMonitoring = () => {
   }, [selectedBuilding]);
 
   useEffect(() => {
+    if (!selectedBuilding) return;
+    const storedJobId = localStorage.getItem(
+      `temperatureImportJob:${selectedBuilding}`,
+    );
+    setImportJobId(storedJobId || null);
+  }, [selectedBuilding]);
+
+  useEffect(() => {
+    if (!importJobId) {
+      setImportJob(null);
+      return;
+    }
+    const unsubscribe = onSnapshot(
+      doc(db, "temperatureImportJobs", importJobId),
+      (snap) => {
+        if (!snap.exists()) {
+          setImportJob(null);
+          return;
+        }
+        setImportJob({ id: snap.id, ...snap.data() });
+      },
+      (error) => {
+        console.error("Import job subscription failed:", error);
+      },
+    );
+    return () => unsubscribe();
+  }, [importJobId]);
+
+  useEffect(() => {
+    if (!importJob?.startedAt || importJob.status !== "running") return;
+    const interval = setInterval(() => {
+      setImportTick(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [importJob?.startedAt, importJob?.status]);
+
+  useEffect(() => {
     if (authLoading || !user) return;
     if (!selectedBuilding) return;
     let active = true;
@@ -415,6 +545,10 @@ const TemperatureMonitoring = () => {
             snapshotTimes: [...nextTimes].sort(
               (a, b) => (a.minutes || 0) - (b.minutes || 0),
             ),
+            idealTempFMin:
+              Number.isFinite(data.idealTempFMin) ? data.idealTempFMin : null,
+            idealTempFMax:
+              Number.isFinite(data.idealTempFMax) ? data.idealTempFMax : null,
             markers: normalizeMarkerMap(data.markers || {}),
           };
           setBuildingSettings(nextSettings);
@@ -474,7 +608,7 @@ const TemperatureMonitoring = () => {
     return () => {
       active = false;
     };
-  }, [selectedBuilding, showNotification, authLoading, user]);
+  }, [selectedBuilding, showNotification, authLoading, user, importHistoryRefresh]);
 
   useEffect(() => {
     if (!selectedDate && buildingSettings?.timezone) {
@@ -560,7 +694,14 @@ const TemperatureMonitoring = () => {
     return () => {
       active = false;
     };
-  }, [selectedBuilding, selectedDate, showNotification, authLoading, user]);
+  }, [
+    selectedBuilding,
+    selectedDate,
+    showNotification,
+    authLoading,
+    user,
+    snapshotRefreshKey,
+  ]);
 
   useEffect(() => {
     if (!selectedBuilding) return;
@@ -857,6 +998,22 @@ const TemperatureMonitoring = () => {
       );
       return;
     }
+    const range = normalizeIdealRange(
+      buildingSettings.idealTempFMin,
+      buildingSettings.idealTempFMax,
+    );
+    if (
+      (buildingSettings.idealTempFMin != null ||
+        buildingSettings.idealTempFMax != null) &&
+      !range
+    ) {
+      showNotification(
+        "error",
+        "Invalid Ideal Range",
+        "Ideal temperature minimum must be less than or equal to the maximum.",
+      );
+      return;
+    }
     try {
       const buildingKey = toBuildingKey(selectedBuilding);
       const sortedTimes = [...(buildingSettings.snapshotTimes || [])].sort(
@@ -866,6 +1023,14 @@ const TemperatureMonitoring = () => {
         buildingCode: selectedBuilding,
         buildingName: selectedBuildingName || selectedBuilding,
         timezone: buildingSettings.timezone || DEFAULT_TIMEZONE,
+        idealTempFMin:
+          Number.isFinite(buildingSettings.idealTempFMin)
+            ? Number(buildingSettings.idealTempFMin)
+            : null,
+        idealTempFMax:
+          Number.isFinite(buildingSettings.idealTempFMax)
+            ? Number(buildingSettings.idealTempFMax)
+            : null,
         snapshotTimes: sortedTimes,
         markers: buildingSettings.markers || {},
         floorplan: buildingSettings.floorplan || null,
@@ -1183,6 +1348,57 @@ const TemperatureMonitoring = () => {
     setMappingOverrides({});
   };
 
+  const createImportJob = async ({ totalFiles, totalRows }) => {
+    if (!selectedBuilding) return null;
+    const jobId = uuidv4();
+    importProgressRef.current = { lastUpdate: 0, lastRows: 0 };
+    await setDoc(
+      doc(db, "temperatureImportJobs", jobId),
+      {
+        buildingCode: selectedBuilding,
+        buildingName: selectedBuildingName || selectedBuilding,
+        status: "running",
+        stage: "Preparing",
+        totalFiles,
+        processedFiles: 0,
+        totalRows,
+        processedRows: 0,
+        processedReadings: 0,
+        conflictCount: 0,
+        currentFile: null,
+        createdBy: user?.uid || null,
+        startedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+    localStorage.setItem(`temperatureImportJob:${selectedBuilding}`, jobId);
+    setImportJobId(jobId);
+    return jobId;
+  };
+
+  const updateImportJob = async (jobId, updates, { force = false } = {}) => {
+    if (!jobId) return;
+    const now = Date.now();
+    const lastUpdate = importProgressRef.current.lastUpdate || 0;
+    const lastRows = importProgressRef.current.lastRows || 0;
+    const nextRows =
+      updates.processedRows != null ? updates.processedRows : lastRows;
+    if (!force && now - lastUpdate < 1500 && nextRows - lastRows < 250) {
+      return;
+    }
+    importProgressRef.current.lastUpdate = now;
+    importProgressRef.current.lastRows = nextRows;
+    try {
+      await updateDoc(doc(db, "temperatureImportJobs", jobId), {
+        ...updates,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error("Failed to update import job:", error);
+    }
+  };
+
   const recomputeSnapshotsForDay = async ({
     buildingCode,
     buildingName,
@@ -1297,13 +1513,48 @@ const TemperatureMonitoring = () => {
       );
       return;
     }
+    const importQueue = importItems.filter(
+      (item) =>
+        !item.duplicate &&
+        (item.errorCount ?? 0) === 0 &&
+        item.deviceId &&
+        Array.isArray(item.samples) &&
+        item.samples.length > 0,
+    );
+    if (importQueue.length === 0) {
+      showNotification(
+        "error",
+        "Nothing to Import",
+        "No valid files are ready for import.",
+      );
+      return;
+    }
     setImporting(true);
+    const totalFiles = importQueue.length;
+    const totalRows = importQueue.reduce(
+      (sum, item) => sum + (item.samples?.length || 0),
+      0,
+    );
+    let jobId = null;
     const deviceCache = { ...deviceDocs };
     let totalNewReadings = 0;
     let totalConflicts = 0;
+    let processedFiles = 0;
+    let processedRows = 0;
     try {
-      for (const item of importItems) {
-        if (item.duplicate) continue;
+      jobId = await createImportJob({ totalFiles, totalRows });
+      await updateImportJob(
+        jobId,
+        {
+          stage: "Writing readings",
+          processedFiles,
+          processedRows,
+          totalFiles,
+          totalRows,
+        },
+        { force: true },
+      );
+      for (const item of importQueue) {
         if (!item.deviceId || !item.samples || item.samples.length === 0)
           continue;
         const deviceId = item.deviceId;
@@ -1320,6 +1571,17 @@ const TemperatureMonitoring = () => {
         if (!spaceKey) continue;
         const timezone = buildingSettings.timezone || DEFAULT_TIMEZONE;
 
+        await updateImportJob(
+          jobId,
+          {
+            stage: "Writing readings",
+            currentFile: item.fileName || deviceLabel,
+            processedFiles,
+            processedRows,
+          },
+          { force: true },
+        );
+
         const samplesByDate = {};
         let newLatestLocal = latestLocal;
         let newLatestUtc = existingDevice?.latestUtc || null;
@@ -1329,7 +1591,15 @@ const TemperatureMonitoring = () => {
             ? newLatestUtc
             : null;
         item.samples.forEach((sample) => {
+          processedRows += 1;
           if (latestLocal && sample.localTimestamp <= latestLocal) return;
+          if (processedRows % 500 === 0) {
+            void updateImportJob(jobId, {
+              processedFiles,
+              processedRows,
+              stage: "Writing readings",
+            });
+          }
           if (sample.localTimestamp > newLatestLocal)
             newLatestLocal = sample.localTimestamp;
           const utcDate = zonedTimeToUtc(sample.parts, timezone);
@@ -1508,7 +1778,60 @@ const TemperatureMonitoring = () => {
           };
         }
 
+        if (updatedDates.size > 0) {
+          await updateImportJob(
+            jobId,
+            {
+              stage: "Aggregating",
+              processedFiles,
+              processedRows,
+            },
+            { force: true },
+          );
+          for (const dateKey of updatedDates) {
+            const samples = daySamplesCache[dateKey] || {};
+            const aggregates = buildHourlyAggregates(samples);
+            const aggregateId = toRoomAggregateDocId(
+              selectedBuilding,
+              spaceKey,
+              dateKey,
+            );
+            await setDoc(
+              doc(db, "temperatureRoomAggregates", aggregateId),
+              {
+                buildingCode: selectedBuilding,
+                buildingName: selectedBuildingName || selectedBuilding,
+                roomId: spaceKey,
+                spaceKey,
+                roomName: getRoomLabel(
+                  roomLookup[spaceKey] || { id: spaceKey },
+                  spacesByKey,
+                ),
+                dateLocal: dateKey,
+                timezone,
+                hourly: aggregates.hourly,
+                daily: aggregates.daily,
+                sampleCount: aggregates.sampleCount,
+                sourceDeviceId: deviceId,
+                sourceDeviceLabel: deviceLabel,
+                updatedAt: serverTimestamp(),
+                createdAt: serverTimestamp(),
+              },
+              { merge: true },
+            );
+          }
+        }
+
         if (updatedDates.size > 0 && snapshotTimes.length > 0) {
+          await updateImportJob(
+            jobId,
+            {
+              stage: "Updating snapshots",
+              processedFiles,
+              processedRows,
+            },
+            { force: true },
+          );
           for (const dateKey of updatedDates) {
             const samples = daySamplesCache[dateKey] || {};
             await recomputeSnapshotsForDay({
@@ -1524,7 +1847,42 @@ const TemperatureMonitoring = () => {
             });
           }
         }
+
+        processedFiles += 1;
+        await updateImportJob(
+          jobId,
+          {
+            processedFiles,
+            processedRows,
+            currentFile: null,
+            stage: "Writing readings",
+          },
+          { force: true },
+        );
       }
+      await updateImportJob(
+        jobId,
+        {
+          stage: "Finalizing",
+          processedFiles,
+          processedRows,
+        },
+        { force: true },
+      );
+      await updateImportJob(
+        jobId,
+        {
+          status: "completed",
+          stage: "Completed",
+          processedFiles,
+          processedRows,
+          processedReadings: totalNewReadings,
+          conflictCount: totalConflicts,
+          finishedAt: serverTimestamp(),
+          currentFile: null,
+        },
+        { force: true },
+      );
       setDeviceDocs(deviceCache);
       if (totalNewReadings === 0) {
         showNotification(
@@ -1544,8 +1902,31 @@ const TemperatureMonitoring = () => {
       setImportItems([]);
       setPendingMappings([]);
       setMappingOverrides({});
+      setImportHistoryRefresh((prev) => prev + 1);
+      setSnapshotRefreshKey((prev) => prev + 1);
+      emitTemperatureDataRefresh({
+        buildingCode: selectedBuilding,
+        updatedAt: new Date().toISOString(),
+      });
     } catch (error) {
       console.error("Import error:", error);
+      if (jobId) {
+        const details = [];
+        if (error?.message) details.push(error.message);
+        if (error?.code) details.push(`Code: ${error.code}`);
+        await updateImportJob(
+          jobId,
+          {
+            status: "failed",
+            stage: "Failed",
+            errorSummary: error?.message || "Import failed",
+            errorDetails: details,
+            finishedAt: serverTimestamp(),
+            currentFile: null,
+          },
+          { force: true },
+        );
+      }
       showNotification(
         "error",
         "Import Failed",
@@ -1612,6 +1993,35 @@ const TemperatureMonitoring = () => {
           deviceId: data.deviceId,
           deviceLabel: device?.label || data.deviceId,
         });
+        const aggregates = buildHourlyAggregates(samples);
+        const aggregateId = toRoomAggregateDocId(
+          selectedBuilding,
+          roomId,
+          data.dateLocal,
+        );
+        await setDoc(
+          doc(db, "temperatureRoomAggregates", aggregateId),
+          {
+            buildingCode: selectedBuilding,
+            buildingName: selectedBuildingName || selectedBuilding,
+            roomId,
+            spaceKey: roomId,
+            roomName: getRoomLabel(
+              roomLookup[roomId] || { id: roomId },
+              spacesByKey,
+            ),
+            dateLocal: data.dateLocal,
+            timezone: buildingSettings?.timezone || DEFAULT_TIMEZONE,
+            hourly: aggregates.hourly,
+            daily: aggregates.daily,
+            sampleCount: aggregates.sampleCount,
+            sourceDeviceId: data.deviceId,
+            sourceDeviceLabel: device?.label || data.deviceId,
+            updatedAt: serverTimestamp(),
+            createdAt: serverTimestamp(),
+          },
+          { merge: true },
+        );
       }
       showNotification(
         "success",
@@ -2009,9 +2419,9 @@ const TemperatureMonitoring = () => {
                     snapshotLookup[roomKey]?.[selectedSnapshotId];
                   const isMissing = !snapshot || snapshot.status === "missing";
                   const tempLabel = formatSnapshotTemp(snapshot);
+                  const tempValueF = resolveSnapshotTempF(snapshot);
                   const roomNum =
                     room.spaceNumber || room.roomNumber || room.name || "";
-                  // Compact display: just room number, temp in smaller text below
                   return (
                     <button
                       key={roomKey}
@@ -2019,17 +2429,23 @@ const TemperatureMonitoring = () => {
                       onPointerDown={(event) =>
                         handleMarkerPointerDown(roomKey, event)
                       }
-                      className={`absolute -translate-x-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-[10px] font-medium shadow-sm whitespace-nowrap ${isMissing ? "bg-gray-400/90 text-white" : "bg-baylor-green/90 text-white"}`}
+                      className={`absolute -translate-x-1/2 -translate-y-1/2 rounded px-2 py-1 text-[10px] font-medium shadow-sm whitespace-nowrap flex flex-col items-center leading-tight ${getTempToneClasses({
+                        valueF: tempValueF,
+                        missing: isMissing,
+                        variant: "solid",
+                      })}`}
                       style={{
                         left: `${marker.xPct}%`,
                         top: `${marker.yPct}%`,
                       }}
                       title={`${getRoomLabel(room, spacesByKey)} - ${tempLabel}`}
                     >
-                      <span>{roomNum}</span>
-                      {!isMissing && snapshot?.temperatureF != null && (
-                        <span className="ml-1 opacity-90">
-                          {Math.round(snapshot.temperatureF)}°
+                      <span className="text-[9px] uppercase tracking-wide">
+                        {roomNum || getRoomLabel(room, spacesByKey)}
+                      </span>
+                      {!isMissing && Number.isFinite(tempValueF) && (
+                        <span className="text-[12px] font-semibold">
+                          {Math.round(tempValueF)}°
                         </span>
                       )}
                     </button>
@@ -2084,6 +2500,13 @@ const TemperatureMonitoring = () => {
                     Timezone: {buildingSettings?.timezone || DEFAULT_TIMEZONE}
                   </div>
                 </div>
+                <Link
+                  to="/facilities/spaces"
+                  className="mt-3 inline-flex items-center gap-1.5 text-xs text-baylor-green hover:text-baylor-green/80 transition-colors"
+                >
+                  <Plus size={12} />
+                  Add or manage rooms
+                </Link>
               </div>
               <div className="bg-white border border-gray-200 rounded-lg p-4">
                 <h3 className="text-sm font-semibold text-gray-900 mb-2">
@@ -2157,10 +2580,15 @@ const TemperatureMonitoring = () => {
                     const snapshot = snapshotLookup[roomKey]?.[slot.id];
                     const isMissing =
                       !snapshot || snapshot.status === "missing";
+                    const tempValueF = resolveSnapshotTempF(snapshot);
                     return (
                       <td key={slot.id} className="px-4 py-2">
                         <span
-                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${isMissing ? "bg-gray-200 text-gray-600" : "bg-baylor-green/10 text-baylor-green"}`}
+                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${getTempToneClasses({
+                            valueF: tempValueF,
+                            missing: isMissing,
+                            variant: "pill",
+                          })}`}
                         >
                           {formatSnapshotTemp(snapshot)}
                         </span>
@@ -2287,10 +2715,15 @@ const TemperatureMonitoring = () => {
                           );
                           const isMissing =
                             !snapshot || snapshot.status === "missing";
+                          const tempValueF = resolveSnapshotTempF(snapshot);
                           return (
                             <td key={slot.id} className="px-4 py-2">
                               <span
-                                className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${isMissing ? "bg-gray-200 text-gray-600" : "bg-baylor-green/10 text-baylor-green"}`}
+                                className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${getTempToneClasses({
+                                  valueF: tempValueF,
+                                  missing: isMissing,
+                                  variant: "pill",
+                                })}`}
                               >
                                 {formatSnapshotTemp(snapshot)}
                               </span>
@@ -2458,6 +2891,90 @@ const TemperatureMonitoring = () => {
           </div>
         </div>
       </div>
+
+      {activeImportJob && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">
+                Import Progress
+              </h3>
+              <p className="text-xs text-gray-500">
+                {activeImportJob.stage || "Preparing"}
+              </p>
+            </div>
+            <span
+              className={`text-xs font-semibold px-2 py-1 rounded-full ${activeImportJob.status === "failed"
+                  ? "bg-rose-100 text-rose-700"
+                  : activeImportJob.status === "completed"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-baylor-green/10 text-baylor-green"
+                }`}
+            >
+              {activeImportJob.status || "running"}
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            <div className="h-2 w-full rounded-full bg-gray-200 overflow-hidden">
+              {importProgress.percent != null ? (
+                <div
+                  className="h-full bg-baylor-green transition-all"
+                  style={{ width: `${Math.max(2, importProgress.percent)}%` }}
+                />
+              ) : (
+                <div className="h-full w-1/3 bg-baylor-green/60 animate-pulse" />
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-4 text-xs text-gray-600">
+              <div>
+                Files: {activeImportJob.processedFiles || 0}/
+                {activeImportJob.totalFiles || 0}
+              </div>
+              <div>
+                Rows: {activeImportJob.processedRows || 0}
+                {activeImportJob.totalRows
+                  ? `/${activeImportJob.totalRows}`
+                  : " (estimating…)"}
+              </div>
+              {importElapsed && <div>Elapsed: {importElapsed}</div>}
+            </div>
+            {activeImportJob.currentFile && (
+              <div className="text-xs text-gray-500">
+                Current: {activeImportJob.currentFile}
+              </div>
+            )}
+            {(activeImportJob.processedReadings != null ||
+              activeImportJob.conflictCount != null) && (
+                <div className="text-xs text-gray-600 flex flex-wrap gap-3">
+                  {activeImportJob.processedReadings != null && (
+                    <span>
+                      New readings: {activeImportJob.processedReadings}
+                    </span>
+                  )}
+                  {activeImportJob.conflictCount != null && (
+                    <span>Conflicts: {activeImportJob.conflictCount}</span>
+                  )}
+                </div>
+              )}
+            {activeImportJob.status === "failed" && (
+              <details className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-3">
+                <summary className="cursor-pointer font-semibold">
+                  {activeImportJob.errorSummary || "Import failed"}
+                </summary>
+                {Array.isArray(activeImportJob.errorDetails) &&
+                  activeImportJob.errorDetails.length > 0 && (
+                    <ul className="mt-2 space-y-1 text-rose-700">
+                      {activeImportJob.errorDetails.map((detail, index) => (
+                        <li key={`${detail}-${index}`}>{detail}</li>
+                      ))}
+                    </ul>
+                  )}
+              </details>
+            )}
+          </div>
+        </div>
+      )}
 
       {importItems.length === 0 ? (
         <div className="border-2 border-dashed border-gray-200 rounded-xl p-10 text-center bg-gray-50/50">
@@ -2647,7 +3164,7 @@ const TemperatureMonitoring = () => {
               onClick={handleImport}
               disabled={importing || hasUnresolvedMappings}
             >
-              {importing ? "Importing..." : "Import Now"}
+              {importing ? "Import in progress" : "Import Now"}
             </button>
           </div>
         </div>
@@ -2847,6 +3364,40 @@ const TemperatureMonitoring = () => {
             />
             <p className="text-xs text-gray-500 mt-1">
               Default: {DEFAULT_TIMEZONE}
+            </p>
+          </div>
+
+          <div>
+            <label className="form-label">Ideal Temperature Range (°F)</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                className="form-input w-28"
+                value={buildingSettings?.idealTempFMin ?? ""}
+                onChange={(e) =>
+                  setBuildingSettings((prev) => ({
+                    ...prev,
+                    idealTempFMin: e.target.value === "" ? null : Number(e.target.value),
+                  }))
+                }
+                placeholder="Min"
+              />
+              <span className="text-gray-500 text-sm">to</span>
+              <input
+                type="number"
+                className="form-input w-28"
+                value={buildingSettings?.idealTempFMax ?? ""}
+                onChange={(e) =>
+                  setBuildingSettings((prev) => ({
+                    ...prev,
+                    idealTempFMax: e.target.value === "" ? null : Number(e.target.value),
+                  }))
+                }
+                placeholder="Max"
+              />
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Used to color temperatures above/below the target range.
             </p>
           </div>
 

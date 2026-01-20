@@ -93,6 +93,13 @@ const buildRawSeries = ({
   };
 };
 
+const isPermissionError = (error) => {
+  const code = error?.code;
+  if (code === "permission-denied" || code === "unauthenticated") return true;
+  if (typeof error?.message !== "string") return false;
+  return error.message.toLowerCase().includes("permission");
+};
+
 export const fetchTemperatureSeries = async ({
   db,
   buildingCode,
@@ -171,16 +178,37 @@ export const fetchTemperatureSeries = async ({
 
   const roomChunks = chunkArray(roomIds, 10);
   const aggregateDocs = [];
-  for (const chunk of roomChunks) {
-    const q = query(
-      collection(db, "temperatureRoomAggregates"),
-      where("buildingCode", "==", buildingCode),
-      where("roomId", "in", chunk),
-      where("dateLocal", ">=", startLocal),
-      where("dateLocal", "<=", endLocal),
-    );
-    const snap = await getDocs(q);
-    snap.docs.forEach((docSnap) => aggregateDocs.push(docSnap.data()));
+  try {
+    for (const chunk of roomChunks) {
+      const q = query(
+        collection(db, "temperatureRoomAggregates"),
+        where("buildingCode", "==", buildingCode),
+        where("roomId", "in", chunk),
+        where("dateLocal", ">=", startLocal),
+        where("dateLocal", "<=", endLocal),
+      );
+      const snap = await getDocs(q);
+      snap.docs.forEach((docSnap) => aggregateDocs.push(docSnap.data()));
+    }
+  } catch (error) {
+    if (isPermissionError(error)) {
+      console.warn(
+        "Temperature aggregates unavailable; falling back to raw readings.",
+        error,
+      );
+      return fetchTemperatureSeries({
+        db,
+        buildingCode,
+        roomIds,
+        start,
+        end,
+        timezone,
+        deviceDocs,
+        granularity: TEMPERATURE_GRANULARITY.RAW,
+        unit,
+      });
+    }
+    throw error;
   }
 
   const series = buildAggregateSeries({

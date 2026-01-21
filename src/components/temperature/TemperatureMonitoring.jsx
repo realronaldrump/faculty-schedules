@@ -282,8 +282,8 @@ const TemperatureMonitoring = () => {
     }
     if (status === "above") {
       return variant === "solid"
-        ? "bg-rose-200/90 text-rose-900"
-        : "bg-rose-100 text-rose-800";
+        ? "bg-red-200/90 text-red-900"
+        : "bg-red-100 text-red-800";
     }
     return variant === "solid"
       ? "bg-baylor-green/90 text-white"

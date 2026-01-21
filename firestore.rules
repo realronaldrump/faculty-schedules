@@ -125,7 +125,7 @@ service cloud.firestore {
     }
 
     function canReadAppData() {
-      return isAdmin() || userIsActive();
+      return isAdmin() || userIsActive() || userIsPending();
     }
 
     function termIsLocked(termCode) {
@@ -311,34 +311,27 @@ service cloud.firestore {
       allow delete: if isAdmin() || userHasAction('room.delete');
     }
 
-    // Temperature monitoring collections: admin writes, signed-in reads
+    // Temperature monitoring collections: all authenticated users can read/write
     match /temperatureBuildingSettings/{id} {
-      allow read: if canReadAppData();
-      allow write: if canWrite();
+      allow read, write: if canReadAppData();
     }
     match /temperatureDevices/{id} {
-      allow read: if canReadAppData();
-      allow write: if canWrite();
+      allow read, write: if canReadAppData();
     }
     match /temperatureDeviceReadings/{id} {
-      allow read: if canReadAppData();
-      allow write: if canWrite();
+      allow read, write: if canReadAppData();
     }
     match /temperatureRoomSnapshots/{id} {
-      allow read: if canReadAppData();
-      allow write: if canWrite();
+      allow read, write: if canReadAppData();
     }
     match /temperatureImports/{id} {
-      allow read: if canReadAppData();
-      allow write: if canWrite();
+      allow read, write: if canReadAppData();
     }
     match /temperatureImportJobs/{id} {
-      allow read: if canReadAppData();
-      allow write: if canWrite();
+      allow read, write: if canReadAppData();
     }
     match /temperatureRoomAggregates/{id} {
-      allow read: if canReadAppData();
-      allow write: if canWrite();
+      allow read, write: if canReadAppData();
     }
 
     // Acronyms collection: granular permissions

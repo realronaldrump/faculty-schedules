@@ -1028,6 +1028,60 @@ const TemperatureMonitoring = () => {
     if (!deleteImportId) return;
     setDeletingImport(true);
     try {
+      // Find the import record from history to get metadata for deletion
+      const importItem = importHistory.find((item) => item.id === deleteImportId);
+
+      if (importItem) {
+        const { deviceId, spaceKey, buildingCode, dateRange } = importItem;
+        const startDate = dateRange?.start ? dateRange.start.split(" ")[0] : null;
+        const endDate = dateRange?.end ? dateRange.end.split(" ")[0] : null;
+
+        // Delete device readings for this device within the date range
+        if (deviceId && startDate && endDate) {
+          const readingsQuery = query(
+            collection(db, "temperatureDeviceReadings"),
+            where("deviceId", "==", deviceId),
+            where("dateLocal", ">=", startDate),
+            where("dateLocal", "<=", endDate),
+          );
+          const readingsSnap = await getDocs(readingsQuery);
+          for (const docSnap of readingsSnap.docs) {
+            await deleteDoc(docSnap.ref);
+          }
+        }
+
+        // Delete room aggregates for this room within the date range
+        if (spaceKey && buildingCode && startDate && endDate) {
+          const aggregatesQuery = query(
+            collection(db, "temperatureRoomAggregates"),
+            where("buildingCode", "==", buildingCode),
+            where("roomId", "==", spaceKey),
+            where("dateLocal", ">=", startDate),
+            where("dateLocal", "<=", endDate),
+          );
+          const aggregatesSnap = await getDocs(aggregatesQuery);
+          for (const docSnap of aggregatesSnap.docs) {
+            await deleteDoc(docSnap.ref);
+          }
+        }
+
+        // Delete room snapshots for this room within the date range
+        if (spaceKey && buildingCode && startDate && endDate) {
+          const snapshotsQuery = query(
+            collection(db, "temperatureRoomSnapshots"),
+            where("buildingCode", "==", buildingCode),
+            where("roomId", "==", spaceKey),
+            where("dateLocal", ">=", startDate),
+            where("dateLocal", "<=", endDate),
+          );
+          const snapshotsSnap = await getDocs(snapshotsQuery);
+          for (const docSnap of snapshotsSnap.docs) {
+            await deleteDoc(docSnap.ref);
+          }
+        }
+      }
+
+      // Delete the import record itself
       await deleteDoc(doc(db, "temperatureImports", deleteImportId));
       setImportHistory((prev) =>
         prev.filter((item) => item.id !== deleteImportId),
@@ -1035,14 +1089,14 @@ const TemperatureMonitoring = () => {
       showNotification(
         "success",
         "Import Deleted",
-        "The import record has been removed.",
+        "The import and all associated temperature data have been removed.",
       );
     } catch (error) {
       console.error("Error deleting import:", error);
       showNotification(
         "error",
         "Delete Failed",
-        "Unable to delete import record.",
+        "Unable to delete import and temperature data.",
       );
     } finally {
       setDeleteImportId(null);

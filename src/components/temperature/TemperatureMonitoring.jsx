@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import Papa from "papaparse";
+import JSZip from "jszip";
 import { v4 as uuidv4 } from "uuid";
 import {
   Timestamp,
@@ -1196,7 +1197,7 @@ const TemperatureMonitoring = () => {
       if (!prev) return prev;
       const prevRanges =
         prev.idealTempRangesBySpaceType &&
-        typeof prev.idealTempRangesBySpaceType === "object"
+          typeof prev.idealTempRangesBySpaceType === "object"
           ? prev.idealTempRangesBySpaceType
           : {};
       const current = prevRanges[type] || { minF: null, maxF: null };
@@ -1444,11 +1445,55 @@ const TemperatureMonitoring = () => {
     setPendingMappings(buildPendingMappings(nextItems));
   };
 
+  const extractCsvsFromZip = async (zipFile) => {
+    const zip = await JSZip.loadAsync(zipFile);
+    const csvFiles = [];
+    const filePromises = [];
+    zip.forEach((relativePath, zipEntry) => {
+      if (zipEntry.dir) return;
+      if (!relativePath.toLowerCase().endsWith(".csv")) return;
+      filePromises.push(
+        zipEntry.async("blob").then((blob) => {
+          const fileName = relativePath.split("/").pop() || relativePath;
+          const file = new File([blob], fileName, { type: "text/csv" });
+          csvFiles.push(file);
+        }),
+      );
+    });
+    await Promise.all(filePromises);
+    return csvFiles;
+  };
+
+  const expandFilesToCsvs = async (files) => {
+    const allCsvs = [];
+    for (const file of files) {
+      const lowerName = file.name.toLowerCase();
+      if (lowerName.endsWith(".zip")) {
+        try {
+          const extracted = await extractCsvsFromZip(file);
+          allCsvs.push(...extracted);
+        } catch (error) {
+          console.error("Failed to extract ZIP:", file.name, error);
+        }
+      } else if (
+        lowerName.endsWith(".csv") ||
+        file.type === "text/csv" ||
+        file.type === "application/vnd.ms-excel"
+      ) {
+        allCsvs.push(file);
+      }
+    }
+    return allCsvs;
+  };
+
   const handleCsvSelection = async (event) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
     event.target.value = "";
-    await processFiles(files);
+    const csvFiles = await expandFilesToCsvs(files);
+    if (csvFiles.length > 0) {
+      await processFiles(csvFiles);
+    }
   };
 
   const handleDragOver = (e) => {
@@ -1465,11 +1510,7 @@ const TemperatureMonitoring = () => {
     e.preventDefault();
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files || []);
-    // Simple filter for CSVs. Note: some systems might not have type set correctly, checking extension is safer for this
-    const csvFiles = files.filter(
-      (f) =>
-        f.name.toLowerCase().endsWith(".csv") || f.type === "text/csv" || f.type === "application/vnd.ms-excel",
-    );
+    const csvFiles = await expandFilesToCsvs(files);
     if (csvFiles.length > 0) {
       await processFiles(csvFiles);
     }
@@ -1721,9 +1762,9 @@ const TemperatureMonitoring = () => {
           method: manualOverride
             ? "manual"
             : item.matchMethod ||
-              existingDevice?.mapping?.method ||
-              existingDevice?.mapping?.matchMethod ||
-              "auto",
+            existingDevice?.mapping?.method ||
+            existingDevice?.mapping?.matchMethod ||
+            "auto",
           confidence: manualOverride
             ? 1
             : (item.matchConfidence ??
@@ -1749,16 +1790,25 @@ const TemperatureMonitoring = () => {
         );
 
         const samplesByDate = {};
+        const earliestLocal = existingDevice?.earliestLocalTimestamp || "";
         let newLatestLocal = latestLocal;
+        let newEarliestLocal = earliestLocal;
         let newLatestUtc = existingDevice?.latestUtc || null;
         let newLatestUtcDate = newLatestUtc?.toDate
           ? newLatestUtc.toDate()
           : newLatestUtc instanceof Date
             ? newLatestUtc
             : null;
+        let newEarliestUtc = existingDevice?.earliestUtc || null;
+        let newEarliestUtcDate = newEarliestUtc?.toDate
+          ? newEarliestUtc.toDate()
+          : newEarliestUtc instanceof Date
+            ? newEarliestUtc
+            : null;
         item.samples.forEach((sample) => {
           processedRows += 1;
-          if (latestLocal && sample.localTimestamp <= latestLocal) return;
+          // Note: duplicate detection happens per-minute at lines 1801-1812
+          // which allows backfill of old data while still preventing duplicates
           if (processedRows % 500 === 0) {
             void updateImportJob(jobId, {
               processedFiles,
@@ -1768,10 +1818,16 @@ const TemperatureMonitoring = () => {
           }
           if (sample.localTimestamp > newLatestLocal)
             newLatestLocal = sample.localTimestamp;
+          if (!newEarliestLocal || sample.localTimestamp < newEarliestLocal)
+            newEarliestLocal = sample.localTimestamp;
           const utcDate = zonedTimeToUtc(sample.parts, timezone);
           if (utcDate && (!newLatestUtcDate || utcDate > newLatestUtcDate)) {
             newLatestUtcDate = utcDate;
             newLatestUtc = Timestamp.fromDate(utcDate);
+          }
+          if (utcDate && (!newEarliestUtcDate || utcDate < newEarliestUtcDate)) {
+            newEarliestUtcDate = utcDate;
+            newEarliestUtc = Timestamp.fromDate(utcDate);
           }
           const dateKey = toDateKey(sample.parts);
           const minuteKey = String(getMinutesSinceMidnight(sample.parts));
@@ -1897,8 +1953,10 @@ const TemperatureMonitoring = () => {
           mappingPayload.method;
         const latestLocalChanged =
           newLatestLocal && newLatestLocal !== latestLocal;
+        const earliestLocalChanged =
+          newEarliestLocal && newEarliestLocal !== earliestLocal;
         const shouldUpdateDevice =
-          deviceNewReadings > 0 || mappingChanged || latestLocalChanged;
+          deviceNewReadings > 0 || mappingChanged || latestLocalChanged || earliestLocalChanged;
         if (shouldUpdateDevice) {
           await setDoc(
             doc(db, "temperatureDevices", deviceId),
@@ -1910,6 +1968,8 @@ const TemperatureMonitoring = () => {
               mapping: mappingPayload,
               latestLocalTimestamp: newLatestLocal || latestLocal || null,
               latestUtc: newLatestUtc || existingDevice?.latestUtc || null,
+              earliestLocalTimestamp: newEarliestLocal || earliestLocal || null,
+              earliestUtc: newEarliestUtc || existingDevice?.earliestUtc || null,
               lastImportedAt:
                 deviceNewReadings > 0
                   ? serverTimestamp()
@@ -1930,6 +1990,8 @@ const TemperatureMonitoring = () => {
             mapping: mappingPayload,
             latestLocalTimestamp: newLatestLocal || latestLocal || null,
             latestUtc: newLatestUtc || existingDevice?.latestUtc || null,
+            earliestLocalTimestamp: newEarliestLocal || earliestLocal || null,
+            earliestUtc: newEarliestUtc || existingDevice?.earliestUtc || null,
           };
         }
 
@@ -2164,14 +2226,14 @@ const TemperatureMonitoring = () => {
         prev.map((entry) =>
           entry.id === item.id
             ? {
-                ...entry,
-                roomId: nextRoomKey,
-                spaceKey: nextRoomKey,
-                roomName,
-                mappingMethod: mappingPayload.method,
-                mappingConfidence: mappingPayload.confidence,
-                mappingManual: mappingPayload.manual,
-              }
+              ...entry,
+              roomId: nextRoomKey,
+              spaceKey: nextRoomKey,
+              roomName,
+              mappingMethod: mappingPayload.method,
+              mappingConfidence: mappingPayload.confidence,
+              mappingManual: mappingPayload.manual,
+            }
             : entry,
         ),
       );
@@ -3067,7 +3129,7 @@ const TemperatureMonitoring = () => {
       <input
         id="temperature-import-csvs"
         type="file"
-        accept=".csv"
+        accept=".csv,.zip"
         multiple
         className="hidden"
         onChange={handleCsvSelection}
@@ -3076,8 +3138,8 @@ const TemperatureMonitoring = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div
           className={`border border-dashed rounded-lg p-5 transition-colors ${isDragging
-              ? "border-baylor-green bg-baylor-green/10"
-              : "border-baylor-green/40 bg-baylor-green/5"
+            ? "border-baylor-green bg-baylor-green/10"
+            : "border-baylor-green/40 bg-baylor-green/5"
             }`}
           onDragOver={handleDragOver}
           onDragEnter={handleDragOver}
@@ -3179,10 +3241,10 @@ const TemperatureMonitoring = () => {
             </div>
             <span
               className={`text-xs font-semibold px-2 py-1 rounded-full ${activeImportJob.status === "failed"
-                  ? "bg-rose-100 text-rose-700"
-                  : activeImportJob.status === "completed"
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-baylor-green/10 text-baylor-green"
+                ? "bg-rose-100 text-rose-700"
+                : activeImportJob.status === "completed"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-baylor-green/10 text-baylor-green"
                 }`}
             >
               {activeImportJob.status || "running"}
@@ -4089,8 +4151,8 @@ const TemperatureMonitoring = () => {
                   key={tab.id}
                   onClick={() => setViewMode(tab.id)}
                   className={`px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${isActive
-                      ? "bg-white text-baylor-green shadow-sm"
-                      : "text-gray-600 hover:text-gray-900"
+                    ? "bg-white text-baylor-green shadow-sm"
+                    : "text-gray-600 hover:text-gray-900"
                     }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -4110,8 +4172,8 @@ const TemperatureMonitoring = () => {
                   key={tab.id}
                   onClick={() => setViewMode(tab.id)}
                   className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition border ${isActive
-                      ? "bg-baylor-green text-white border-baylor-green"
-                      : "bg-white text-gray-700 border-gray-200 hover:border-baylor-green/50 hover:text-baylor-green"
+                    ? "bg-baylor-green text-white border-baylor-green"
+                    : "bg-white text-gray-700 border-gray-200 hover:border-baylor-green/50 hover:text-baylor-green"
                     }`}
                 >
                   <Icon className="w-4 h-4" />

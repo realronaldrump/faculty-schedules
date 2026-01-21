@@ -294,20 +294,21 @@ service cloud.firestore {
     }
 
     // Rooms collection: granular permissions
+    // Admins have FULL access without validation; non-admins must pass validation
     match /rooms/{id} {
       allow read: if canReadAppData();
-      allow create: if (isAdmin() ||
-        userHasAction('room.create') ||
-        userHasAction('data.import') ||
-        userHasAction('schedule.import')) &&
-        isValidSpaceRecord(request.resource.data) &&
-        id == request.resource.data.spaceKey;
-      allow update: if (isAdmin() ||
-        userHasAction('room.edit') ||
-        userHasAction('data.import') ||
-        userHasAction('schedule.import')) &&
-        (isValidSpaceRecord(request.resource.data) ||
-          (isLegacySpaceRecord(resource.data) && onlyUpdatesSpaceStatus()));
+      allow create: if isAdmin() ||
+        ((userHasAction('room.create') ||
+          userHasAction('data.import') ||
+          userHasAction('schedule.import')) &&
+          isValidSpaceRecord(request.resource.data) &&
+          id == request.resource.data.spaceKey);
+      allow update: if isAdmin() ||
+        ((userHasAction('room.edit') ||
+          userHasAction('data.import') ||
+          userHasAction('schedule.import')) &&
+          (isValidSpaceRecord(request.resource.data) ||
+            (isLegacySpaceRecord(resource.data) && onlyUpdatesSpaceStatus())));
       allow delete: if isAdmin() || userHasAction('room.delete');
     }
 

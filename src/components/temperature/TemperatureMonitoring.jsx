@@ -3152,10 +3152,10 @@ const TemperatureMonitoring = () => {
             </div>
             <div>
               <div className="text-sm font-semibold text-gray-900">
-                Select Govee CSV exports
+                Select Govee CSV exports or ZIP files
               </div>
               <div className="text-xs text-gray-500">
-                Drag and drop CSV files here, or click to browse.
+                Drag and drop files here, or click to browse. You can remove unwanted files after extraction.
               </div>
             </div>
           </div>
@@ -3164,7 +3164,7 @@ const TemperatureMonitoring = () => {
               htmlFor="temperature-import-csvs"
               className="btn-secondary cursor-pointer inline-flex items-center"
             >
-              <FileUp className="w-4 h-4 mr-2" /> Choose CSVs
+              <FileUp className="w-4 h-4 mr-2" /> Choose Files
             </label>
             {importItems.length > 0 && (
               <span className="text-xs text-gray-500">
@@ -3408,12 +3408,12 @@ const TemperatureMonitoring = () => {
                       <td className="px-4 py-2 text-gray-700">
                         <button
                           type="button"
-                          className="btn-ghost flex items-center gap-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
                           onClick={() => handleRemoveImportItem(item.id)}
                           disabled={importing}
                           aria-label={`Remove ${item.fileName}`}
                         >
-                          <X className="w-3 h-3" />
+                          <Trash2 className="w-3 h-3" />
                           Remove
                         </button>
                       </td>
@@ -3431,8 +3431,7 @@ const TemperatureMonitoring = () => {
                   Device → Room Mapping
                 </h3>
                 <p className="text-xs text-gray-500">
-                  Review and correct room assignments before importing. Changes
-                  will be saved for future imports.
+                  Review and correct room assignments before importing. Multiple files from the same device will share a mapping. Changes are saved for future imports.
                 </p>
               </div>
               <div className="space-y-2">

@@ -437,7 +437,7 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
         <div className="flex items-center gap-3">
           <button
             onClick={() =>
-              handleNavigate("people/people-directory?tab=student")
+              handleNavigate("people/directory?tab=student")
             }
             className="px-4 py-2 rounded-lg border border-baylor-green/40 text-baylor-green hover:bg-baylor-green/10 transition-colors font-medium"
           >
@@ -663,11 +663,10 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
             <div className="flex border-b border-gray-200">
               <button
                 onClick={() => setActiveTab("overview")}
-                className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${
-                  activeTab === "overview"
+                className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${activeTab === "overview"
                     ? "text-baylor-green bg-baylor-green/5"
                     : "text-gray-600 hover:text-baylor-green hover:bg-gray-50"
-                }`}
+                  }`}
               >
                 <LayoutGrid size={18} />
                 Overview
@@ -677,11 +676,10 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
               </button>
               <button
                 onClick={() => setActiveTab("assignments")}
-                className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${
-                  activeTab === "assignments"
+                className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${activeTab === "assignments"
                     ? "text-baylor-green bg-baylor-green/5"
                     : "text-gray-600 hover:text-baylor-green hover:bg-gray-50"
-                }`}
+                  }`}
               >
                 <List size={18} />
                 Assignments
@@ -879,15 +877,14 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
                               </td>
                               <td className="px-4 py-3 text-sm">
                                 <span
-                                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                    assignment.status === "Active"
+                                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${assignment.status === "Active"
                                       ? "bg-green-100 text-green-800"
                                       : assignment.status === "Upcoming"
                                         ? "bg-blue-100 text-blue-800"
                                         : assignment.status === "Ended"
                                           ? "bg-gray-100 text-gray-700"
                                           : "bg-yellow-100 text-yellow-800"
-                                  }`}
+                                    }`}
                                 >
                                   {assignment.status}
                                 </span>

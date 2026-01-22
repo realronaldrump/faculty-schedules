@@ -30,8 +30,8 @@ const ImportWizard = ({ embedded = false }) => {
   const { loadPeople } = usePeople();
   const { showNotification } = useUI();
   const { canImport, canEdit } = usePermissions();
-  const canImportHere = canImport("tools/import-wizard");
-  const canEditHere = canEdit("tools/import-wizard");
+  const canImportHere = canImport("data/import-wizard");
+  const canEditHere = canEdit("data/import-wizard");
   const [step, setStep] = useState(1);
   const [fileName, setFileName] = useState("");
   const [fileHash, setFileHash] = useState("");

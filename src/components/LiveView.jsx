@@ -661,7 +661,7 @@ const LiveView = () => {
                   </div>
                   <button
                     onClick={() =>
-                      handleNavigate("scheduling/student-schedules")
+                      handleNavigate("scheduling/student-workers")
                     }
                     className="text-sm text-baylor-green hover:text-baylor-gold flex items-center gap-1"
                   >
@@ -729,7 +729,7 @@ const LiveView = () => {
           {/* Quick Links */}
           <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
             <button
-              onClick={() => handleNavigate("scheduling/faculty-schedules")}
+              onClick={() => handleNavigate("scheduling/faculty")}
               className="university-card group cursor-pointer hover:shadow-md transition-all"
             >
               <div className="university-card-content flex items-center gap-3">
@@ -741,7 +741,7 @@ const LiveView = () => {
               </div>
             </button>
             <button
-              onClick={() => handleNavigate("scheduling/room-schedules")}
+              onClick={() => handleNavigate("scheduling/rooms")}
               className="university-card group cursor-pointer hover:shadow-md transition-all"
             >
               <div className="university-card-content flex items-center gap-3">
@@ -753,7 +753,7 @@ const LiveView = () => {
               </div>
             </button>
             <button
-              onClick={() => handleNavigate("scheduling/student-schedules")}
+              onClick={() => handleNavigate("scheduling/student-workers")}
               className="university-card group cursor-pointer hover:shadow-md transition-all"
             >
               <div className="university-card-content flex items-center gap-3">
@@ -765,7 +765,7 @@ const LiveView = () => {
               </div>
             </button>
             <button
-              onClick={() => handleNavigate("people/people-directory")}
+              onClick={() => handleNavigate("people/directory")}
               className="university-card group cursor-pointer hover:shadow-md transition-all"
             >
               <div className="university-card-content flex items-center gap-3">

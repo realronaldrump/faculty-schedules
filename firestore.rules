@@ -107,6 +107,82 @@ service cloud.firestore {
         ));
     }
 
+    // Direct user page grants (supports wildcard)
+    function userHasDirectPage(pageId) {
+      return hasUserProfile() &&
+        get(userDoc()).data.permissions is map &&
+        (
+          get(userDoc()).data.permissions[pageId] == true ||
+          get(userDoc()).data.permissions['*'] == true
+        );
+    }
+
+    function userHasDirectPageDeny(pageId) {
+      return hasUserProfile() &&
+        get(userDoc()).data.permissions is map &&
+        (
+          (pageId in get(userDoc()).data.permissions &&
+            get(userDoc()).data.permissions[pageId] == false) ||
+          ('*' in get(userDoc()).data.permissions &&
+            get(userDoc()).data.permissions['*'] == false)
+        );
+    }
+
+    // User overrides (new schema) for page grants
+    function userHasOverridePage(pageId) {
+      return hasUserProfile() &&
+        get(userDoc()).data.overrides is map &&
+        get(userDoc()).data.overrides.pages is map &&
+        (
+          get(userDoc()).data.overrides.pages[pageId] == true ||
+          get(userDoc()).data.overrides.pages['*'] == true
+        );
+    }
+
+    function userHasOverridePageDeny(pageId) {
+      return hasUserProfile() &&
+        get(userDoc()).data.overrides is map &&
+        get(userDoc()).data.overrides.pages is map &&
+        (
+          (pageId in get(userDoc()).data.overrides.pages &&
+            get(userDoc()).data.overrides.pages[pageId] == false) ||
+          ('*' in get(userDoc()).data.overrides.pages &&
+            get(userDoc()).data.overrides.pages['*'] == false)
+        );
+    }
+
+    // Role-based page grants from settings/accessControl (supports wildcard)
+    function roleHasPage(role, pageId) {
+      return exists(accessControlDoc()) &&
+        get(accessControlDoc()).data.rolePermissions is map &&
+        get(accessControlDoc()).data.rolePermissions[role] is map &&
+        get(accessControlDoc()).data.rolePermissions[role].pages is map &&
+        (
+          get(accessControlDoc()).data.rolePermissions[role].pages[pageId] == true ||
+          get(accessControlDoc()).data.rolePermissions[role].pages['*'] == true
+        );
+    }
+
+    function userHasRolePage(pageId) {
+      return hasUserProfile() && (
+        (userHasRole('admin') && roleHasPage('admin', pageId)) ||
+        (userHasRole('staff') && roleHasPage('staff', pageId)) ||
+        (userHasRole('faculty') && roleHasPage('faculty', pageId))
+      );
+    }
+
+    // Check if user has a specific page permission (direct, override, or role-based)
+    function userHasPage(pageId) {
+      return isAdmin() ||
+        (userIsActive() && (
+          !userHasDirectPageDeny(pageId) &&
+          !userHasOverridePageDeny(pageId) &&
+          (userHasDirectPage(pageId) ||
+            userHasOverridePage(pageId) ||
+            userHasRolePage(pageId))
+        ));
+    }
+
     // Treat someone as admin if they have a custom claim or admin role
     function isAdmin() {
       return isSignedIn() && (
@@ -126,6 +202,58 @@ service cloud.firestore {
 
     function canReadAppData() {
       return isAdmin() || userIsActive() || userIsPending();
+    }
+
+    function canManagePeople() {
+      return userHasPage('people/directory') ||
+        userHasPage('data/import-wizard');
+    }
+
+    function canManagePrograms() {
+      return userHasPage('people/programs') ||
+        userHasPage('data/import-wizard');
+    }
+
+    function canManageSchedules() {
+      return userHasPage('data/schedule-data') ||
+        userHasPage('data/import-wizard');
+    }
+
+    function canManageCourses() {
+      return userHasPage('data/schedule-data') ||
+        userHasPage('data/import-wizard');
+    }
+
+    function canManageDepartments() {
+      return userHasPage('data/schedule-data') ||
+        userHasPage('data/import-wizard');
+    }
+
+    function canManageTerms() {
+      return userHasPage('admin/settings') ||
+        userHasPage('data/import-wizard');
+    }
+
+    function canManageRooms() {
+      return userHasPage('facilities/spaces') ||
+        userHasPage('people/directory') ||
+        userHasPage('data/import-wizard');
+    }
+
+    function canManageAcronyms() {
+      return userHasPage('help/acronyms');
+    }
+
+    function canManageRoomGrids() {
+      return userHasPage('scheduling/rooms');
+    }
+
+    function canManageImports() {
+      return userHasPage('data/import-wizard');
+    }
+
+    function canManageDataHygiene() {
+      return userHasPage('admin/data-hygiene');
     }
 
     function termIsLocked(termCode) {
@@ -217,80 +345,56 @@ service cloud.firestore {
     match /people/{id} {
       allow read: if canReadAppData();
 
-      // Create operations - check specific action permissions
-      allow create: if isAdmin() ||
-        userHasAction('directory.faculty.create') ||
-        userHasAction('directory.staff.create') ||
-        userHasAction('directory.adjunct.create') ||
-        userHasAction('directory.student.create') ||
-        userHasAction('data.import') ||
-        userHasAction('schedule.import');
+      // Create operations - allow users with people directory access (or import wizard)
+      allow create: if canManagePeople();
 
-      // Update operations - check specific action permissions
-      allow update: if isAdmin() ||
-        userHasAction('directory.faculty.edit') ||
-        userHasAction('directory.staff.edit') ||
-        userHasAction('directory.adjunct.edit') ||
-        userHasAction('directory.student.edit') ||
-        userHasAction('crn.update') ||
-        userHasAction('missing.data.update') ||
-        userHasAction('data.import') ||
-        userHasAction('schedule.import');
+      // Update operations - allow users with people directory access (or import wizard)
+      allow update: if canManagePeople();
 
-      // Delete operations - check specific action permissions
-      allow delete: if isAdmin() ||
-        userHasAction('directory.faculty.delete') ||
-        userHasAction('directory.staff.delete') ||
-        userHasAction('directory.adjunct.delete') ||
-        userHasAction('directory.student.delete');
+      // Delete operations - allow users with people directory access (or import wizard)
+      allow delete: if canManagePeople();
     }
     // Schedules collection: granular permissions
     match /schedules/{id} {
       allow read: if canReadAppData();
-      allow create: if isAdmin() ||
-        ((userHasAction('schedule.create') || userHasAction('schedule.import')) &&
-          canWriteScheduleTerm(request.resource.data.termCode));
-      allow update: if isAdmin() ||
-        ((userHasAction('schedule.edit') ||
-          userHasAction('schedule.bulk.edit') ||
-          userHasAction('schedule.import')) && canWriteScheduleTerm(request.resource.data.termCode));
-      allow delete: if isAdmin() ||
-        (userHasAction('schedule.delete') && canWriteScheduleTerm(resource.data.termCode));
+      allow create: if canManageSchedules() &&
+        canWriteScheduleTerm(request.resource.data.termCode);
+      allow update: if canManageSchedules() &&
+        canWriteScheduleTerm(request.resource.data.termCode);
+      allow delete: if canManageSchedules() &&
+        canWriteScheduleTerm(resource.data.termCode);
     }
 
     // Programs collection: granular permissions
     match /programs/{id} {
       allow read: if canReadAppData();
-      allow create: if isAdmin() || userHasAction('program.create');
-      allow update: if isAdmin() ||
-        userHasAction('program.edit') ||
-        userHasAction('program.upd.assign') ||
-        userHasAction('program.upd.remove');
-      allow delete: if isAdmin() || userHasAction('program.delete');
+      allow create: if canManagePrograms();
+      allow update: if canManagePrograms();
+      allow delete: if canManagePrograms();
     }
 
     // Departments collection: granular permissions
     match /departments/{id} {
       allow read: if canReadAppData();
-      allow create: if isAdmin() || userHasAction('department.create');
-      allow update: if isAdmin() || userHasAction('department.edit');
-      allow delete: if isAdmin() || userHasAction('department.delete');
+      allow create: if canManageDepartments();
+      allow update: if canManageDepartments();
+      allow delete: if canManageDepartments();
     }
 
     // Courses collection: granular permissions
     match /courses/{id} {
       allow read: if canReadAppData();
-      allow create: if isAdmin() || userHasAction('course.create');
-      allow update: if isAdmin() || userHasAction('course.edit');
-      allow delete: if isAdmin() || userHasAction('course.delete');
+      allow create: if canManageCourses();
+      allow update: if canManageCourses();
+      allow delete: if canManageCourses();
     }
 
     // Terms collection: granular permissions
     match /terms/{id} {
       allow read: if canReadAppData();
-      allow create: if isAdmin() || userHasAction('term.create') || userHasAction('schedule.import');
-      allow update: if isAdmin() || userHasAction('term.edit') || userHasAction('schedule.import');
-      allow delete: if isAdmin() || userHasAction('term.delete');
+      allow create: if canManageTerms();
+      allow update: if canManageTerms();
+      allow delete: if canManageTerms();
     }
 
     // Rooms collection: granular permissions
@@ -298,18 +402,14 @@ service cloud.firestore {
     match /rooms/{id} {
       allow read: if canReadAppData();
       allow create: if isAdmin() ||
-        ((userHasAction('room.create') ||
-          userHasAction('data.import') ||
-          userHasAction('schedule.import')) &&
+        (canManageRooms() &&
           isValidSpaceRecord(request.resource.data) &&
           id == request.resource.data.spaceKey);
       allow update: if isAdmin() ||
-        ((userHasAction('room.edit') ||
-          userHasAction('data.import') ||
-          userHasAction('schedule.import')) &&
+        (canManageRooms() &&
           (isValidSpaceRecord(request.resource.data) ||
             (isLegacySpaceRecord(resource.data) && onlyUpdatesSpaceStatus())));
-      allow delete: if isAdmin() || userHasAction('room.delete');
+      allow delete: if canManageRooms();
     }
 
     // Temperature monitoring collections: all authenticated users can read/write
@@ -338,9 +438,9 @@ service cloud.firestore {
     // Acronyms collection: granular permissions
     match /baylorAcronyms/{id} {
       allow read: if canReadAppData();
-      allow create: if isAdmin() || userHasAction('acronym.create');
-      allow update: if isAdmin() || userHasAction('acronym.edit');
-      allow delete: if isAdmin() || userHasAction('acronym.delete');
+      allow create: if canManageAcronyms();
+      allow update: if canManageAcronyms();
+      allow delete: if canManageAcronyms();
     }
 
     // Change logs
@@ -360,31 +460,31 @@ service cloud.firestore {
 
     // Import transactions (for preview, commit summary, and rollback)
     match /importTransactions/{id} {
-      allow read: if userHasAction('data.import') || userHasAction('schedule.import');
-      allow write: if userHasAction('data.import') || userHasAction('schedule.import');
+      allow read: if canManageImports();
+      allow write: if canManageImports();
     }
     // Import runs + row lineage (idempotency tracking)
     match /importRuns/{id} {
-      allow read: if userHasAction('data.import') || userHasAction('schedule.import');
-      allow write: if userHasAction('data.import') || userHasAction('schedule.import');
+      allow read: if canManageImports();
+      allow write: if canManageImports();
     }
     match /importRowLineage/{id} {
-      allow read: if userHasAction('data.import') || userHasAction('schedule.import');
-      allow write: if userHasAction('data.import') || userHasAction('schedule.import');
+      allow read: if canManageImports();
+      allow write: if canManageImports();
     }
 
     // Dedupe decisions: allow hygiene tooling to persist "not a duplicate" choices
     match /dedupeDecisions/{id} {
       allow read: if canReadAppData();
-      allow write: if isAdmin() || userHasAction('data.hygiene') || userHasAction('data.deduplication');
+      allow write: if canManageDataHygiene();
     }
 
-    // Room grids: allow non-admin writes if the user has explicit action grants
+    // Room grids: allow writes for users who can access room scheduling tools
     match /roomGrids/{id} {
       allow read: if canReadAppData();
-      allow create: if isAdmin() || userHasAction('roomGrids.save');
-      allow update: if isAdmin() || userHasAction('roomGrids.edit') || userHasAction('roomGrids.delete');
-      allow delete: if isAdmin() || userHasAction('roomGrids.delete');
+      allow create: if canManageRoomGrids();
+      allow update: if canManageRoomGrids();
+      allow delete: if canManageRoomGrids();
     }
 
     // Email List Presets: shared presets that any signed-in user can create/edit

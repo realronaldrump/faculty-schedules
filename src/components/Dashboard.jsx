@@ -132,9 +132,9 @@ const Dashboard = () => {
             <p className="text-gray-600 mb-8 max-w-md mx-auto leading-relaxed">
               Once schedule data is available you&apos;ll see tailored quick links here.
             </p>
-            {hasAccess('tools/import-wizard') ? (
+            {hasAccess('data/import-wizard') ? (
               <button
-                onClick={() => handleNavigate('tools/import-wizard')}
+                onClick={() => handleNavigate('data/import-wizard')}
                 className="btn-primary"
               >
                 <FileText className="w-4 h-4 mr-2 inline-block" />

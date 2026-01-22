@@ -152,7 +152,7 @@ export const TUTORIALS = {
       "Learn how to view room schedules, utilization, and availability.",
     estimatedTime: "3 min",
     category: "Scheduling",
-    targetPage: "scheduling/room-schedules?tab=browse",
+    targetPage: "scheduling/rooms?tab=browse",
     steps: [
       {
         id: "welcome",
@@ -264,7 +264,7 @@ export const TUTORIALS = {
       "Learn how to browse, search, and manage faculty, staff, and student workers in the directory.",
     estimatedTime: "3 min",
     category: "People Management",
-    targetPage: "people/people-directory?tab=directory",
+    targetPage: "people/directory?tab=directory",
     steps: [
       {
         id: "welcome",

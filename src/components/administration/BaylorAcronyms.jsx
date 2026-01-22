@@ -23,7 +23,7 @@ import { useUI } from "../../contexts/UIContext";
 const BaylorAcronyms = () => {
   const { showNotification } = useUI();
   const { canEdit } = usePermissions();
-  const canEditHere = canEdit("resources/baylor-acronyms");
+  const canEditHere = canEdit("help/acronyms");
   const [acronyms, setAcronyms] = useState([]);
   const [categories, setCategories] = useState([]);
   const [newAcronym, setNewAcronym] = useState({

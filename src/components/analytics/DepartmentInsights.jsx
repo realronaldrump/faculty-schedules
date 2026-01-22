@@ -244,7 +244,7 @@ const DepartmentInsights = () => {
             Import schedule data to view department analytics and insights
           </p>
           <button
-            onClick={() => handleNavigate("tools/import-wizard")}
+            onClick={() => handleNavigate("data/import-wizard")}
             className="px-6 py-3 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors font-medium"
           >
             Import Schedule Data
@@ -284,7 +284,7 @@ const DepartmentInsights = () => {
                 schedule. Please verify any critical information with the
                 department and official University{" "}
                 <button
-                  onClick={() => handleNavigate("resources/baylor-systems")}
+                  onClick={() => handleNavigate("help/baylor-systems")}
                   className="text-baylor-gold hover:text-baylor-green underline transition-colors"
                 >
                   systems

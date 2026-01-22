@@ -13,7 +13,7 @@ import { useSchedules } from "../../contexts/ScheduleContext";
 const CRNQualityTools = () => {
   const { showNotification } = useUI();
   const { canEdit } = usePermissions();
-  const canEditHere = canEdit("tools/crn-tools");
+  const canEditHere = canEdit("data/crn-tools");
   const { selectedSemester, termOptions, getTermByLabel } = useSchedules();
   const [analysis, setAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);

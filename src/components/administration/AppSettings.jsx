@@ -49,7 +49,7 @@ const AppSettings = () => {
   const [mergeTargetTerm, setMergeTargetTerm] = useState('');
   const [showHelpPanel, setShowHelpPanel] = useState(false);
 
-  const isAdmin = canAccess && canAccess('administration/app-settings');
+  const isAdmin = canAccess && canAccess('admin/settings');
 
   // Initialize season mappings from termConfig
   useEffect(() => {

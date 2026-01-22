@@ -38,7 +38,7 @@ const ProgramManagement = ({ embedded = false }) => {
   const { handleProgramCreate, handleFacultyUpdate } = usePeopleOperations();
   const { showNotification } = useUI();
   const { canEdit } = usePermissions();
-  const canEditHere = canEdit("analytics/program-management");
+  const canEditHere = canEdit("people/programs");
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [editingUPD, setEditingUPD] = useState(null);
   const [selectedProgram, setSelectedProgram] = useState("all");

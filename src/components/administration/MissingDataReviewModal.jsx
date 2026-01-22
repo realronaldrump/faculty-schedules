@@ -188,7 +188,7 @@ const MissingDataReviewModal = ({
   };
 
   const { canEdit } = usePermissions();
-  const canEditHere = canEdit("tools/data-hygiene");
+  const canEditHere = canEdit("admin/data-hygiene");
 
   const saveRecord = async () => {
     if (!canEditHere) {

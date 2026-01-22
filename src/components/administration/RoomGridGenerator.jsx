@@ -39,7 +39,7 @@ import { useSchedules } from "../../contexts/ScheduleContext";
 
 const RoomGridGenerator = () => {
   const { canEdit } = usePermissions();
-  const canEditHere = canEdit("tools/room-grid-generator");
+  const canEditHere = canEdit("scheduling/rooms");
   const {
     availableSemesters = [],
     selectedSemester,

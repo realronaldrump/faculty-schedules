@@ -38,6 +38,7 @@ const categoryIcons = {
   Administration: Settings,
   Resources: Building,
   "Data Management": Database,
+  Facilities: Building,
 };
 
 // Tutorial card component
@@ -46,11 +47,10 @@ const TutorialCard = ({ tutorial, isCompleted, onStart }) => {
 
   return (
     <div
-      className={`bg-white rounded-xl border-2 transition-all duration-200 hover:shadow-lg ${
-        isCompleted
+      className={`bg-white rounded-xl border-2 transition-all duration-200 hover:shadow-lg ${isCompleted
           ? "border-green-200 bg-green-50/30"
           : "border-gray-200 hover:border-baylor-green/50"
-      }`}
+        }`}
     >
       <div className="p-6">
         {/* Header */}
@@ -100,11 +100,10 @@ const TutorialCard = ({ tutorial, isCompleted, onStart }) => {
         {/* Action button */}
         <button
           onClick={() => onStart(tutorial.id)}
-          className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors ${
-            isCompleted
+          className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors ${isCompleted
               ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
               : "bg-baylor-green text-white hover:bg-baylor-green/90"
-          }`}
+            }`}
         >
           <Play className="w-4 h-4" />
           {isCompleted ? "Review Tutorial" : "Start Tutorial"}

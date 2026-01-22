@@ -2975,7 +2975,7 @@ const TemperatureMonitoring = () => {
   };
 
   const renderDailyTable = () => (
-    <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+    <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4" data-tutorial="daily-table">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">
@@ -3227,7 +3227,7 @@ const TemperatureMonitoring = () => {
   };
 
   const renderImport = () => (
-    <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
+    <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6" data-tutorial="import-section">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Bulk Import</h2>
@@ -3849,7 +3849,7 @@ const TemperatureMonitoring = () => {
   );
 
   const renderSettings = () => (
-    <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
+    <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6" data-tutorial="settings-section">
       <div>
         <h2 className="text-lg font-semibold text-gray-900">
           Temperature Settings
@@ -4169,7 +4169,7 @@ const TemperatureMonitoring = () => {
         <div className="p-4 border-b border-gray-100">
           <div className="flex flex-col lg:flex-row lg:items-center gap-4">
             {/* Building Selector - More Prominent */}
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0" data-tutorial="building-selector">
               <label className="block text-xs font-medium text-gray-500 mb-1">
                 Building
               </label>
@@ -4218,7 +4218,7 @@ const TemperatureMonitoring = () => {
                 <div className="hidden lg:block w-px h-10 bg-gray-200" />
 
                 {/* Date Selector */}
-                <div>
+                <div data-tutorial="date-selector">
                   <label className="block text-xs font-medium text-gray-500 mb-1">
                     Date
                   </label>
@@ -4234,7 +4234,7 @@ const TemperatureMonitoring = () => {
                 </div>
 
                 {/* Time Selector */}
-                <div>
+                <div data-tutorial="snapshot-time-selector">
                   <label className="block text-xs font-medium text-gray-500 mb-1">
                     Snapshot Time
                   </label>
@@ -4261,7 +4261,7 @@ const TemperatureMonitoring = () => {
         {/* Tab Navigation - Split into Data Views and Admin Actions */}
         <div className="p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           {/* Data View Tabs */}
-          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg" data-tutorial="data-view-tabs">
             {dataViewTabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = viewMode === tab.id;
@@ -4282,7 +4282,7 @@ const TemperatureMonitoring = () => {
           </div>
 
           {/* Action tabs */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" data-tutorial="action-tabs">
             {actionTabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = viewMode === tab.id;
@@ -4310,7 +4310,7 @@ const TemperatureMonitoring = () => {
         (viewMode === "floorplan" ||
           viewMode === "daily" ||
           viewMode === "historical") && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-tutorial="quick-stats">
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-baylor-green/10 flex items-center justify-center">

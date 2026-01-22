@@ -323,6 +323,129 @@ export const TUTORIALS = {
       },
     ],
   },
+  "temperature-monitoring": {
+    id: "temperature-monitoring",
+    title: "Temperature Monitoring Tutorial",
+    description:
+      "Learn how to view temperature data, import sensor readings, and configure temperature settings for buildings.",
+    estimatedTime: "4 min",
+    category: "Facilities",
+    targetPage: "facilities/temperature",
+    steps: [
+      {
+        id: "welcome",
+        title: "Welcome to Temperature Monitoring",
+        content:
+          "This tool helps you track room temperatures across buildings using Govee sensor data. You can view daily snapshots, analyze trends, import sensor readings, and configure ideal temperature ranges.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+      {
+        id: "building-selector",
+        title: "Select a Building",
+        content:
+          "Use the building selector to choose which building's temperature data you want to view. The selected building determines which rooms and sensors are displayed.",
+        target: '[data-tutorial="building-selector"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "date-selector",
+        title: "Choose a Date",
+        content:
+          "Select a date to view temperature snapshots for that day. The system captures readings at configured snapshot times (typically morning and afternoon).",
+        target: '[data-tutorial="date-selector"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "snapshot-time",
+        title: "Snapshot Time",
+        content:
+          "Choose which snapshot time to view. Buildings typically have two snapshot times: 8:30 AM and 4:30 PM. You can configure these in Settings.",
+        target: '[data-tutorial="snapshot-time-selector"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "quick-stats",
+        title: "Quick Stats Overview",
+        content:
+          "These cards show at-a-glance metrics: total rooms in the building, rooms with temperature data, coverage percentage, and the building's timezone.",
+        target: '[data-tutorial="quick-stats"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "data-views",
+        title: "Data View Modes",
+        content:
+          "Switch between different views: Floorplan shows temperatures on a building map, Daily shows a table of all rooms, Historical tracks data over time, and Trends displays charts and analytics.",
+        target: '[data-tutorial="data-view-tabs"]',
+        position: "bottom",
+        action: "Try clicking a different view mode",
+        actionType: "click",
+      },
+      {
+        id: "action-tabs",
+        title: "Admin Actions",
+        content:
+          "These buttons access administrative functions: Import to upload sensor data, Export to download temperature records, and Settings to configure temperature ranges and snapshot times.",
+        target: '[data-tutorial="action-tabs"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "daily-table",
+        title: "Daily Snapshot Table",
+        content:
+          "This table shows temperature readings for each room at the configured snapshot times. Color coding indicates temperature status: green for ideal range, blue for too cold, and red for too hot.",
+        target: '[data-tutorial="daily-table"]',
+        position: "top",
+        action: null,
+        requiresViewMode: "daily",
+      },
+      {
+        id: "temperature-colors",
+        title: "Temperature Color Coding",
+        content:
+          "Temperature readings are color-coded for quick scanning: Green means within the ideal range (typically 68-72°F), Blue means below ideal (too cold), Red means above ideal (too hot), and Gray means no data available.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+      {
+        id: "import-section",
+        title: "Importing Data",
+        content:
+          "The Import section lets you upload Govee CSV exports. Simply drag files here or click to browse. The system auto-maps devices to rooms based on device labels, and you can correct any mappings before importing.",
+        target: '[data-tutorial="import-section"]',
+        position: "top",
+        action: null,
+        requiresViewMode: "import",
+      },
+      {
+        id: "settings-section",
+        title: "Temperature Settings",
+        content:
+          "In Settings, you can configure the building timezone, set ideal temperature ranges (with optional overrides per space type), manage snapshot times, and recompute historical data if needed.",
+        target: '[data-tutorial="settings-section"]',
+        position: "top",
+        action: null,
+        requiresViewMode: "settings",
+      },
+      {
+        id: "complete",
+        title: "You're Ready!",
+        content:
+          "You now know how to use Temperature Monitoring. Start by selecting a building and date to view snapshots, use Import to add new sensor data, and configure ideal ranges in Settings.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+    ],
+  },
 };
 
 // Help hints that appear throughout the app

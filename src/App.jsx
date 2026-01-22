@@ -18,6 +18,7 @@ import RoomsHub from "./components/scheduling/RoomsHub.jsx";
 import StudentWorkersHub from "./components/scheduling/StudentWorkersHub.jsx";
 import PeopleHub from "./components/people/PeopleHub.jsx";
 import DepartmentInsights from "./components/analytics/DepartmentInsights.jsx";
+import StudentWorkerAnalytics from "./components/analytics/StudentWorkerAnalytics.jsx";
 import CourseManagement from "./components/analytics/CourseManagement";
 import ImportWizard from "./components/administration/ImportWizard";
 import AppSettings from "./components/administration/AppSettings";
@@ -159,6 +160,15 @@ const navigationItems = [
         label: "Department Insights",
         path: "analytics/department-insights",
         canonicalId: "analytics/department-insights",
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
+      },
+      {
+        id: "student-worker-analytics",
+        label: "Student Worker Analytics",
+        path: "analytics/student-worker-analytics",
+        canonicalId: "analytics/student-worker-analytics",
         permissions: {
           hideFromRoles: ["faculty"],
         },
@@ -525,6 +535,12 @@ function App() {
             <DepartmentInsights />
           </ProtectedContent>
         );
+      case "analytics/student-worker-analytics":
+        return (
+          <ProtectedContent pageId="analytics/student-worker-analytics">
+            <StudentWorkerAnalytics />
+          </ProtectedContent>
+        );
       // Data Tools
       case "data/schedule-data":
         return (
@@ -782,8 +798,8 @@ function App() {
                               setShowSemesterDropdown(false);
                             }}
                             className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${semester === selectedSemester
-                                ? "bg-baylor-green/5 text-baylor-green font-medium"
-                                : "text-gray-900"
+                              ? "bg-baylor-green/5 text-baylor-green font-medium"
+                              : "text-gray-900"
                               }`}
                           >
                             <span className="flex items-center justify-between">
@@ -824,8 +840,8 @@ function App() {
                       key={child.id}
                       onClick={() => handleNavigate(child.path)}
                       className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${currentPage === child.path
-                          ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
-                          : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                        ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
+                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
                         }`}
                     >
                       {child.label}

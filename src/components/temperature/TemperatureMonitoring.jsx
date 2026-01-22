@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Calendar,
   CheckCircle2,
+  Copy,
   Download,
   Eye,
   EyeOff,
@@ -2917,6 +2918,62 @@ const TemperatureMonitoring = () => {
     );
   };
 
+  const handleGrabReadings = async () => {
+    if (!roomsForBuilding.length || !snapshotTimes.length) return;
+
+    const buildingName =
+      resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
+    const lines = [`Temperature Readings - ${buildingName} - ${selectedDate}`];
+    lines.push("");
+
+    roomsForBuilding.forEach((room) => {
+      const roomKey = room.spaceKey || room.id;
+      if (!roomKey) return;
+
+      const readings = [];
+      snapshotTimes.forEach((slot) => {
+        const snapshot = snapshotLookup[roomKey]?.[slot.id];
+        const isMissing = !snapshot || snapshot.status === "missing";
+
+        if (!isMissing) {
+          const tempF = resolveSnapshotTempF(snapshot);
+          if (tempF != null) {
+            readings.push(
+              `${Math.round(tempF)}°F (${slot.label || formatMinutesToLabel(slot.minutes)})`,
+            );
+          }
+        }
+      });
+
+      if (readings.length > 0) {
+        const roomName = getRoomLabel(room, spacesByKey);
+        lines.push(`${roomName}: ${readings.join(" | ")}`);
+      }
+    });
+
+    if (lines.length <= 2) {
+      showNotification(
+        "info",
+        "No Readings",
+        "No temperature data found to copy for this date.",
+      );
+      return;
+    }
+
+    const textToCopy = lines.join("\n");
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      showNotification(
+        "success",
+        "Copied",
+        "Temperature readings copied to clipboard.",
+      );
+    } catch (err) {
+      console.error("Failed to copy:", err);
+      showNotification("error", "Copy Failed", "Could not copy to clipboard.");
+    }
+  };
+
   const renderDailyTable = () => (
     <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -2928,8 +2985,17 @@ const TemperatureMonitoring = () => {
             Date: {selectedDate || "Select a date"}
           </p>
         </div>
-        <div className="text-sm text-gray-600">
-          {snapshotTimes.length} snapshot times
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleGrabReadings}
+            className="p-1.5 hover:bg-gray-100 rounded-md text-gray-600 transition-colors"
+            title="Grab readings to clipboard"
+          >
+            <Copy className="w-5 h-5" />
+          </button>
+          <div className="text-sm text-gray-600">
+            {snapshotTimes.length} snapshot times
+          </div>
         </div>
       </div>
       <div className="overflow-x-auto">

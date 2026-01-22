@@ -1501,21 +1501,41 @@ const TemperatureMonitoring = () => {
   };
 
   const extractCsvsFromZip = async (zipFile) => {
-    const zip = await JSZip.loadAsync(zipFile);
     const csvFiles = [];
-    const filePromises = [];
-    zip.forEach((relativePath, zipEntry) => {
-      if (zipEntry.dir) return;
-      if (!relativePath.toLowerCase().endsWith(".csv")) return;
-      filePromises.push(
-        zipEntry.async("blob").then((blob) => {
-          const fileName = relativePath.split("/").pop() || relativePath;
-          const file = new File([blob], fileName, { type: "text/csv" });
-          csvFiles.push(file);
-        }),
-      );
-    });
-    await Promise.all(filePromises);
+
+    const extractFromZip = async (source) => {
+      const zip = await JSZip.loadAsync(source);
+      const filePromises = [];
+
+      zip.forEach((relativePath, zipEntry) => {
+        if (zipEntry.dir) return;
+        const lowerPath = relativePath.toLowerCase();
+        if (lowerPath.endsWith(".csv")) {
+          filePromises.push(
+            zipEntry.async("blob").then((blob) => {
+              const fileName = relativePath.split("/").pop() || relativePath;
+              const file = new File([blob], fileName, { type: "text/csv" });
+              csvFiles.push(file);
+            }),
+          );
+          return;
+        }
+        if (lowerPath.endsWith(".zip")) {
+          filePromises.push(
+            zipEntry
+              .async("arraybuffer")
+              .then((buffer) => extractFromZip(buffer))
+              .catch((error) => {
+                console.error("Failed to extract nested ZIP:", relativePath, error);
+              }),
+          );
+        }
+      });
+
+      await Promise.all(filePromises);
+    };
+
+    await extractFromZip(zipFile);
     return csvFiles;
   };
 
@@ -3438,17 +3458,17 @@ const TemperatureMonitoring = () => {
             <FileUp className="w-7 h-7 text-baylor-green" />
           </div>
           <p className="text-base font-medium text-gray-900 mb-1">
-            No CSV files selected
+            No files selected
           </p>
           <p className="text-sm text-gray-500 mb-4">
-            Choose one or more Govee CSV exports to import temperature data.
+            Choose one or more Govee CSV or ZIP exports to import temperature data.
           </p>
           <label
             htmlFor="temperature-import-csvs"
             className="btn-primary cursor-pointer inline-flex items-center gap-2"
           >
             <FileUp className="w-4 h-4" />
-            Select CSV Files
+            Select CSV or ZIP Files
           </label>
         </div>
       ) : (

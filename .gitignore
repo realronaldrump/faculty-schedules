@@ -35,3 +35,4 @@ firebase-service-account.json
 *service-account*.json
 
 .env.local
+.codex/config.toml

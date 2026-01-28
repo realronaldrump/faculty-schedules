@@ -369,6 +369,100 @@ const deriveNameKeyFromDisplayName = (displayName) => {
 
 const normalizeRoomName = (name) => (name || '').replace(/\s+/g, ' ').trim().toLowerCase();
 
+const normalizeNumericField = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number.parseInt(String(value).replace(/[^0-9-]/g, ''), 10);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+const normalizeBaylorIdForBackfill = (value) => {
+  const normalized = normalizeBaylorId(value);
+  return normalized.length === 9 ? normalized : '';
+};
+
+const mergeExternalIds = (base = {}, updates = {}) => {
+  const next = { ...(base && typeof base === 'object' ? base : {}) };
+  Object.entries(updates).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return;
+    if (!next[key]) {
+      next[key] = value;
+    }
+  });
+  return next;
+};
+
+const buildPersonBackfillUpdates = (existingPerson, parsedInstructor) => {
+  if (!existingPerson || !parsedInstructor) return { updates: {}, diff: [] };
+  const updates = {};
+  const diff = [];
+  const firstName = (parsedInstructor.firstName || '').trim();
+  const lastName = (parsedInstructor.lastName || '').trim();
+  const rawId = parsedInstructor.id ? String(parsedInstructor.id).trim() : '';
+  const baylorId = normalizeBaylorIdForBackfill(rawId);
+
+  if (!existingPerson.firstName && firstName) {
+    updates.firstName = firstName;
+    diff.push({ key: 'firstName', from: existingPerson.firstName || '', to: firstName });
+  }
+  if (!existingPerson.lastName && lastName) {
+    updates.lastName = lastName;
+    diff.push({ key: 'lastName', from: existingPerson.lastName || '', to: lastName });
+  }
+  if ((!existingPerson.name || !String(existingPerson.name).trim()) && (firstName || lastName)) {
+    const name = `${firstName} ${lastName}`.trim();
+    if (name) {
+      updates.name = name;
+      diff.push({ key: 'name', from: existingPerson.name || '', to: name });
+    }
+  }
+  if (!existingPerson.baylorId && baylorId) {
+    updates.baylorId = baylorId;
+    diff.push({ key: 'baylorId', from: existingPerson.baylorId || '', to: baylorId });
+  }
+
+  const externalUpdates = {};
+  if (rawId && !(existingPerson.externalIds && existingPerson.externalIds.clssInstructorId)) {
+    externalUpdates.clssInstructorId = rawId;
+  }
+  if (baylorId && !(existingPerson.externalIds && existingPerson.externalIds.baylorId)) {
+    externalUpdates.baylorId = baylorId;
+  }
+  if (Object.keys(externalUpdates).length > 0) {
+    const mergedExternal = mergeExternalIds(existingPerson.externalIds, externalUpdates);
+    updates.externalIds = mergedExternal;
+    diff.push({ key: 'externalIds', from: existingPerson.externalIds || {}, to: mergedExternal });
+  }
+
+  return { updates, diff };
+};
+
+const buildRoomBackfillUpdates = (existingRoom, parsedRoom) => {
+  if (!existingRoom || !parsedRoom) return { updates: {}, diff: [] };
+  const updates = {};
+  const diff = [];
+
+  const setIfMissing = (key, value) => {
+    if (value === undefined || value === null || value === '') return;
+    const current = existingRoom[key];
+    if (current === undefined || current === null || String(current).trim() === '') {
+      updates[key] = value;
+      diff.push({ key, from: current || '', to: value });
+    }
+  };
+
+  setIfMissing('spaceKey', parsedRoom.spaceKey);
+  setIfMissing('roomKey', parsedRoom.roomKey);
+  setIfMissing('buildingCode', parsedRoom.buildingCode);
+  setIfMissing('buildingDisplayName', parsedRoom.building);
+  setIfMissing('building', parsedRoom.building);
+  setIfMissing('spaceNumber', parsedRoom.spaceNumber);
+  setIfMissing('roomNumber', parsedRoom.spaceNumber);
+  setIfMissing('displayName', parsedRoom.displayName);
+  setIfMissing('name', parsedRoom.displayName);
+
+  return { updates, diff };
+};
+
 export const normalizeSectionIdentifier = (sectionField) =>
   normalizeSectionNumber(sectionField);
 
@@ -407,7 +501,7 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
     : (/^\d{5,6}$/.test(sectionCrn) ? sectionCrn : '');
 
   const rawCredits = row['Credit Hrs'] ?? row['Credit Hrs Min'] ?? row['Credit Hrs Max'] ?? null;
-  const catalogNumber = (row['Catalog Number'] || '').toString().trim();
+  const catalogNumber = (row['Catalog Number'] || '').toString().trim().toUpperCase();
   const parsedCourse = parseCourseCode(courseCode || '');
   const catalogForCredits = catalogNumber || parsedCourse?.catalogNumber || '';
   const derivedCredits = deriveCreditsFromCatalogNumber(catalogForCredits, rawCredits);
@@ -415,6 +509,19 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
     ? null
     : Number.parseFloat(rawCredits);
   const credits = derivedCredits ?? (Number.isNaN(numericFallback) ? null : numericFallback) ?? (parsedCourse?.credits ?? null);
+  const parsedProgram = parsedCourse?.error ? '' : (parsedCourse?.program || '');
+  const subjectCode = (row['Subject Code'] || '').toString().trim().toUpperCase() || parsedProgram;
+  const program = parsedProgram || subjectCode;
+  const departmentCode = (row['Department Code'] || '').toString().trim().toUpperCase();
+  const courseLevel = Number.isFinite(parsedCourse?.level) ? parsedCourse.level : 0;
+  const enrollment = normalizeNumericField(row['Enrollment']);
+  const maxEnrollment = normalizeNumericField(row['Maximum Enrollment']);
+  const waitCap = normalizeNumericField(row['Wait Cap']);
+  const waitTotal = normalizeNumericField(row['Wait Total']);
+  const openSeats = normalizeNumericField(row['Open Seats']);
+  const waitAvailable = normalizeNumericField(row['Wait Available']);
+  const reservedSeats = normalizeNumericField(row['Reserved Seats']);
+  const reservedSeatsEnrollment = normalizeNumericField(row['Reserved Seats - Enrollment']);
 
   const rawTerm = row.Semester || row.Term || fallbackTerm || '';
   const normalizedTerm = normalizeTermLabel(rawTerm);
@@ -482,6 +589,11 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
     crn,
     credits: credits ?? null,
     creditRaw: rawCredits,
+    subjectCode,
+    catalogNumber,
+    program,
+    departmentCode,
+    courseLevel,
     term,
     termCode,
     academicYear,
@@ -499,9 +611,14 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
     locationType,
     locationLabel,
     isOnline: inferredIsOnline,
-    subjectCode: row['Subject Code'] || '',
-    catalogNumber,
-    departmentCode: row['Department Code'] || '',
+    enrollment,
+    maxEnrollment,
+    waitCap,
+    waitTotal,
+    openSeats,
+    waitAvailable,
+    reservedSeats,
+    reservedSeatsEnrollment,
     scheduleType: row['Schedule Type'] || 'Class Instruction',
     status: row.Status || 'Active',
     partOfTerm: row['Part of Semester'] || row['Part of Term'] || '',
@@ -808,6 +925,9 @@ const previewScheduleChanges = async (
   const roomsKeyMap = new Map();
   const seenIdentityKeys = new Set();
   const pendingMatchMap = new Map();
+  const pendingPersonUpdates = new Map();
+  const pendingRoomUpdates = new Map();
+  const createdRoomIds = new Set();
   const { index: scheduleIdentityIndex, collisions } = buildScheduleIdentityIndex(existingSchedules);
   const summarizeIdentityCollisions = (items = []) => {
     const byType = {};
@@ -848,6 +968,46 @@ const previewScheduleChanges = async (
     ensureValidation();
     const bucket = type === 'error' ? 'errors' : 'warnings';
     transaction.validation[bucket].push(message);
+  };
+
+  const applyPersonUpdates = (person, updates) => {
+    if (!updates || Object.keys(updates).length === 0) return person;
+    const merged = { ...person, ...updates };
+    if (updates.externalIds) {
+      merged.externalIds = mergeExternalIds(person.externalIds, updates.externalIds);
+    }
+    return merged;
+  };
+
+  const queuePersonBackfill = (person, parsedInstructor) => {
+    if (!person?.id || !parsedInstructor) return;
+    const pending = pendingPersonUpdates.get(person.id);
+    const basePerson = pending ? applyPersonUpdates(person, pending.updates) : person;
+    const { updates, diff } = buildPersonBackfillUpdates(basePerson, parsedInstructor);
+    if (!updates || Object.keys(updates).length === 0) return;
+    const mergedUpdates = pending ? { ...pending.updates, ...updates } : updates;
+    if (pending?.updates?.externalIds && updates.externalIds) {
+      mergedUpdates.externalIds = mergeExternalIds(pending.updates.externalIds, updates.externalIds);
+    }
+    const mergedDiff = pending ? [...pending.diff, ...diff] : diff;
+    pendingPersonUpdates.set(person.id, { person, updates: mergedUpdates, diff: mergedDiff });
+  };
+
+  const applyRoomUpdates = (room, updates) => {
+    if (!updates || Object.keys(updates).length === 0) return room;
+    return { ...room, ...updates };
+  };
+
+  const queueRoomBackfill = (room, parsedRoom) => {
+    if (!room?.id || !parsedRoom) return;
+    if (createdRoomIds.has(room.id)) return;
+    const pending = pendingRoomUpdates.get(room.id);
+    const baseRoom = pending ? applyRoomUpdates(room, pending.updates) : room;
+    const { updates, diff } = buildRoomBackfillUpdates(baseRoom, parsedRoom);
+    if (!updates || Object.keys(updates).length === 0) return;
+    const mergedUpdates = pending ? { ...pending.updates, ...updates } : updates;
+    const mergedDiff = pending ? [...pending.diff, ...diff] : diff;
+    pendingRoomUpdates.set(room.id, { room, updates: mergedUpdates, diff: mergedDiff });
   };
 
   const summary = {
@@ -1071,6 +1231,7 @@ const previewScheduleChanges = async (
         const personId = matchResult.person.id;
         instructorIds.add(personId);
         instructorPeople.set(personId, matchResult.person);
+        queuePersonBackfill(matchResult.person, parsed);
         instructorAssignments.push({
           personId,
           isPrimary: parsed?.isPrimary || false,
@@ -1148,6 +1309,7 @@ const previewScheduleChanges = async (
           });
           transaction.addChange('rooms', 'add', newRoom, null, { groupKey });
           const placeholder = { id: roomKey, ...newRoom };
+          createdRoomIds.add(placeholder.id);
           roomsKeyMap.set(roomKey, placeholder);
           if (spaceKey) roomsKeyMap.set(spaceKey, placeholder);
           buildRoomNameKeys(placeholder).forEach((key) => roomsMap.set(key, placeholder));
@@ -1155,6 +1317,7 @@ const previewScheduleChanges = async (
         }
 
         if (room?.id) {
+          queueRoomBackfill(room, parsed);
           if (!resolvedRoomIds.includes(room.id)) {
             resolvedRoomIds.push(room.id);
           }
@@ -1198,6 +1361,11 @@ const previewScheduleChanges = async (
     const scheduleData = {
       courseCode,
       courseTitle: baseData.courseTitle,
+      subjectCode: baseData.subjectCode || '',
+      catalogNumber: baseData.catalogNumber || '',
+      departmentCode: baseData.departmentCode || '',
+      program: baseData.program || '',
+      courseLevel: baseData.courseLevel || 0,
       section,
       crn: finalCrn,
       clssId: baseData.clssId || '',
@@ -1205,6 +1373,14 @@ const previewScheduleChanges = async (
       identityKeys: identity.keys,
       identitySource: identity.source,
       credits: baseData.credits ?? null,
+      enrollment: baseData.enrollment ?? null,
+      maxEnrollment: baseData.maxEnrollment ?? null,
+      waitCap: baseData.waitCap ?? null,
+      waitTotal: baseData.waitTotal ?? null,
+      openSeats: baseData.openSeats ?? null,
+      waitAvailable: baseData.waitAvailable ?? null,
+      reservedSeats: baseData.reservedSeats ?? null,
+      reservedSeatsEnrollment: baseData.reservedSeatsEnrollment ?? null,
       term,
       termCode: baseData.termCode,
       academicYear: baseData.academicYear,
@@ -1310,6 +1486,26 @@ const previewScheduleChanges = async (
     });
     summary.schedulesAdded += 1;
   }
+
+  pendingPersonUpdates.forEach(({ person, updates, diff }) => {
+    if (!updates || Object.keys(updates).length === 0) return;
+    const payload = { ...updates, updatedAt: new Date().toISOString() };
+    const changeId = transaction.addChange('people', 'modify', payload, person, { groupKey: `person_${person.id}` });
+    const change = transaction.changes.people.modified.find((c) => c.id === changeId);
+    if (change && diff && diff.length > 0) {
+      change.diff = diff;
+    }
+  });
+
+  pendingRoomUpdates.forEach(({ room, updates, diff }) => {
+    if (!updates || Object.keys(updates).length === 0) return;
+    const payload = { ...updates, updatedAt: new Date().toISOString() };
+    const changeId = transaction.addChange('rooms', 'modify', payload, room, { groupKey: `room_${room.id}` });
+    const change = transaction.changes.rooms.modified.find((c) => c.id === changeId);
+    if (change && diff && diff.length > 0) {
+      change.diff = diff;
+    }
+  });
 
   summary.peopleAdded = transaction.changes.people.added.length;
   summary.roomsAdded = transaction.changes.rooms.added.length;
@@ -1968,41 +2164,41 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
         });
         change.documentId = schedRef.id;
 
-      } else if (change.collection !== 'people' && change.collection !== 'rooms') {
-        // Handle other types of changes (modify, delete)
-        if (change.action === 'modify') {
-          // Apply only selected fields if provided
-          let updates = change.newData;
-          const selectedKeys = selectedFieldMap && selectedFieldMap[change.id];
-          if (selectedKeys && Array.isArray(selectedKeys) && selectedKeys.length > 0) {
-            updates = {};
-            selectedKeys.forEach((key) => {
-              const val = getValueByPath(change.newData, key);
-              if (val !== undefined) {
-                updates[key] = val;
-              }
-            });
-            if (change.collection === 'schedules') {
-              Object.keys(change.newData || {})
-                .filter((key) => SCHEDULE_INTERNAL_UPDATE_FIELDS.has(key))
-                .forEach((key) => {
-                  const val = getValueByPath(change.newData, key);
-                  if (val !== undefined) {
-                    updates[key] = val;
-                  }
-                });
+      } else if (change.action === 'modify') {
+        // Apply only selected fields if provided
+        let updates = change.newData;
+        const selectedKeys = selectedFieldMap && selectedFieldMap[change.id];
+        if (selectedKeys && Array.isArray(selectedKeys) && selectedKeys.length > 0) {
+          updates = {};
+          selectedKeys.forEach((key) => {
+            const val = getValueByPath(change.newData, key);
+            if (val !== undefined) {
+              updates[key] = val;
             }
+          });
+          if (change.collection === 'schedules') {
+            Object.keys(change.newData || {})
+              .filter((key) => SCHEDULE_INTERNAL_UPDATE_FIELDS.has(key))
+              .forEach((key) => {
+                const val = getValueByPath(change.newData, key);
+                if (val !== undefined) {
+                  updates[key] = val;
+                }
+              });
           }
-          await batchWriter.add(change, (batch) => {
-            batch.update(doc(db, change.collection, change.originalData.id), updates);
-          });
-          change.documentId = change.originalData.id;
-        } else if (change.action === 'delete') {
-          await batchWriter.add(change, (batch) => {
-            batch.delete(doc(db, change.collection, change.originalData.id));
-          });
-          change.documentId = change.originalData.id;
+          if (change.newData?.updatedAt !== undefined && updates.updatedAt === undefined) {
+            updates.updatedAt = change.newData.updatedAt;
+          }
         }
+        await batchWriter.add(change, (batch) => {
+          batch.update(doc(db, change.collection, change.originalData.id), updates);
+        });
+        change.documentId = change.originalData.id;
+      } else if (change.action === 'delete') {
+        await batchWriter.add(change, (batch) => {
+          batch.delete(doc(db, change.collection, change.originalData.id));
+        });
+        change.documentId = change.originalData.id;
       }
     }
 

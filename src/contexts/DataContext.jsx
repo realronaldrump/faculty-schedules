@@ -18,7 +18,7 @@ import { fetchPrograms, getInstructorDisplayName, UNASSIGNED } from '../utils/da
 import { autoMigrateIfNeeded } from '../utils/importTransactionMigration';
 import { fetchRecentChanges } from '../utils/recentChanges';
 import { usePermissions } from '../utils/permissions';
-import { parseCourseCode } from '../utils/courseUtils';
+import { buildCourseSectionKey, parseCourseCode } from '../utils/courseUtils';
 import { adaptPeopleToFaculty, adaptPeopleToStaff } from '../utils/dataAdapter';
 import { applySemesterSchedule } from '../utils/studentWorkers';
 import { normalizeSpaceRecord, resolveScheduleSpaces } from '../utils/spaceUtils';
@@ -329,7 +329,8 @@ export const DataProvider = ({ children }) => {
       if (roomLabel && lowerRoom !== 'online' && !lowerRoom.includes('no room needed')) {
         rooms.add(roomLabel);
       }
-      if (s.Course) courses.add(s.Course);
+      const courseKey = buildCourseSectionKey(s);
+      if (courseKey) courses.add(courseKey);
       if (s.Day && daySchedules[s.Day] !== undefined) daySchedules[s.Day]++;
 
       // Check if any instructor is an adjunct
@@ -346,8 +347,9 @@ export const DataProvider = ({ children }) => {
         if (!facultyWorkload[displayName]) {
           facultyWorkload[displayName] = { courses: new Set(), totalHours: 0 };
         }
-        if (s.Course) {
-          facultyWorkload[displayName].courses.add(s.Course);
+        const workloadCourseKey = buildCourseSectionKey(s);
+        if (workloadCourseKey) {
+          facultyWorkload[displayName].courses.add(workloadCourseKey);
         }
         facultyWorkload[displayName].totalHours += duration;
       }

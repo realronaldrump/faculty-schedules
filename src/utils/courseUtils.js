@@ -114,3 +114,30 @@ export const parseCourseCode = (courseCode) => {
     original: courseCode,
   };
 };
+
+/**
+ * Build a stable identity key for a course section across terms.
+ * Prefer course code + section, and include term when available to avoid collisions.
+ *
+ * @param {object} course Course-like object (schedule, row, etc.)
+ * @returns {string} Stable identity key or empty string when insufficient data.
+ */
+export const buildCourseSectionKey = (course = {}) => {
+  const normalize = (value) => (value === null || value === undefined ? '' : String(value).trim());
+  const courseCode = normalize(course.courseCode || course.Course || course.course || '');
+  const section = normalize(course.section || course.Section || '');
+  const term = normalize(course.term || course.Term || course.semester || course.Semester || '');
+  const termCode = normalize(course.termCode || course.TermCode || course.semesterCode || course.SemesterCode || '');
+  const keyParts = [courseCode, section].filter(Boolean);
+  if (keyParts.length > 0) {
+    const termValue = term || termCode;
+    if (termValue) {
+      keyParts.push(termValue);
+    }
+  }
+
+  if (keyParts.length > 0) return keyParts.join('::');
+
+  const crn = normalize(course.crn || course.CRN || '');
+  return crn ? `CRN::${crn}` : '';
+};

@@ -17,7 +17,7 @@ import {
 import MultiSelectDropdown from "../MultiSelectDropdown";
 import FacultyContactCard from "../FacultyContactCard";
 import { formatChangeForDisplay } from "../../utils/recentChanges";
-import { parseCourseCode } from "../../utils/courseUtils";
+import { buildCourseSectionKey, parseCourseCode } from "../../utils/courseUtils";
 import { parseTime } from "../../utils/timeUtils";
 import { getBuildingFromRoom } from "../../utils/buildingUtils";
 import { useData } from "../../contexts/DataContext";
@@ -1124,9 +1124,15 @@ const CourseManagement = ({ embedded = false }) => {
   const courseStats = useMemo(() => {
     const stats = {
       totalSessions: scheduleData.length,
-      uniqueCourses: new Set(
-        scheduleData.filter((s) => s && s.Course).map((s) => s.Course),
-      ).size,
+      uniqueCourses: (() => {
+        const courseKeys = new Set();
+        scheduleData.forEach((schedule) => {
+          const key = buildCourseSectionKey(schedule);
+          if (!key) return;
+          courseKeys.add(key);
+        });
+        return courseKeys.size;
+      })(),
       uniqueInstructors: new Set(
         scheduleData.flatMap((s) => {
           if (!s) return [];

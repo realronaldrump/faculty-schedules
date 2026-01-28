@@ -15,6 +15,7 @@ import FacultyContactCard from './FacultyContactCard';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import { adaptPeopleToStaff } from '../utils/dataAdapter';
 import { formatPhoneNumber, validateDirectoryEntry } from '../utils/directoryUtils';
+import { buildCourseSectionKey } from '../utils/courseUtils';
 import { normalizeTermLabel, termCodeFromLabel } from '../utils/termUtils';
 
 const canUseWindow = typeof window !== 'undefined';
@@ -44,19 +45,6 @@ const normalizeCourseField = (value) => {
   return String(value).trim();
 };
 
-const buildCourseIdentityKey = (schedule = {}) => {
-  const courseCode = normalizeCourseField(schedule.courseCode || schedule.Course || '');
-  const section = normalizeCourseField(schedule.section || schedule.Section || '');
-  const term = normalizeCourseField(
-    schedule.term || schedule.Term || schedule.semester || schedule.Semester || ''
-  );
-  const termCode = normalizeCourseField(
-    schedule.termCode || schedule.TermCode || schedule.semesterCode || schedule.SemesterCode || ''
-  );
-  const keyParts = [courseCode, section, term || termCode].filter(Boolean);
-
-  return keyParts.length > 0 ? keyParts.join('::') : '';
-};
 
 const formatCourseList = (courses = []) => {
   if (!Array.isArray(courses) || courses.length === 0) return '';
@@ -389,7 +377,7 @@ const buildCourseCounts = (records = [], scheduleData = [], filterFn = () => tru
 
       const uniqueCourseKeys = new Set();
       facultyCourses.forEach((schedule) => {
-        const key = buildCourseIdentityKey(schedule);
+        const key = buildCourseSectionKey(schedule);
         if (!key) return;
         uniqueCourseKeys.add(key);
       });

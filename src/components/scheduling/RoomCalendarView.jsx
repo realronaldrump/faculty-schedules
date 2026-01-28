@@ -3,6 +3,7 @@ import { MapPin, Download, Printer, Clock, Calendar } from 'lucide-react';
 import CourseDetailModal from './CourseDetailModal';
 import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
 import { getBuildingFromRoom } from '../../utils/buildingUtils';
+import { buildCourseSectionKey } from '../../utils/courseUtils';
 
 const RoomCalendarView = ({
     scheduleData,
@@ -264,7 +265,13 @@ const RoomCalendarView = ({
             return sum;
         }, 0);
         const uniqueInstructors = new Set(allSessions.flatMap(getInstructorNames)).size;
-        const uniqueCourses = new Set(allSessions.map(s => s.Course).filter(Boolean)).size;
+        const courseKeys = new Set();
+        allSessions.forEach((session) => {
+            const key = buildCourseSectionKey(session);
+            if (!key) return;
+            courseKeys.add(key);
+        });
+        const uniqueCourses = courseKeys.size;
 
         return { totalSessions, totalHours, uniqueInstructors, uniqueCourses };
     }, [allSessions]);

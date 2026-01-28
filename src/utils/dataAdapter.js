@@ -16,6 +16,7 @@
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { parseTime } from './timeUtils';
+import { buildCourseSectionKey } from './courseUtils';
 import { buildPeopleIndex } from './peopleUtils';
 
 // ==================== CONSTANTS ====================
@@ -264,8 +265,9 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
   const processedSessions = new Set();
 
   for (const schedule of schedulesWithInstructors) {
+    const courseKey = buildCourseSectionKey(schedule) || schedule.courseCode || '';
     for (const pattern of schedule.meetingPatterns || []) {
-      const sessionKey = `${schedule.instructorId}-${schedule.courseCode}-${pattern.day}-${pattern.startTime}-${pattern.endTime}`;
+      const sessionKey = `${schedule.instructorId}-${courseKey}-${pattern.day}-${pattern.startTime}-${pattern.endTime}`;
 
       if (!processedSessions.has(sessionKey)) {
         processedSessions.add(sessionKey);
@@ -281,7 +283,9 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
             };
           }
 
-          facultyWorkload[instructorName].courseSet.add(schedule.courseCode);
+          if (courseKey) {
+            facultyWorkload[instructorName].courseSet.add(courseKey);
+          }
 
           // Calculate duration
           const duration = calculateDuration(pattern.startTime, pattern.endTime);
@@ -332,7 +336,13 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
     const instructor = s.instructorId ? peopleMap.get(s.instructorId) : null;
     return instructor?.isAdjunct;
   }).length;
-  const uniqueCourses = [...new Set(schedulesWithInstructors.map(s => s.courseCode))].length;
+  const uniqueCourseKeys = new Set();
+  schedulesWithInstructors.forEach((schedule) => {
+    const key = buildCourseSectionKey(schedule);
+    if (!key) return;
+    uniqueCourseKeys.add(key);
+  });
+  const uniqueCourses = uniqueCourseKeys.size;
 
   const busiestDay = Object.entries(dayStats).reduce(
     (max, [day, count]) => count > max.count ? { day, count } : max,

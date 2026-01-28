@@ -32,6 +32,7 @@ import { useEmailListPresets } from "../../hooks/useEmailListPresets";
 import { useTutorial } from "../../contexts/TutorialContext";
 import { HelpTooltip, HintBanner } from "../help/Tooltip";
 import { resolveOfficeDetails } from "../../utils/directoryUtils";
+import { buildCourseSectionKey } from "../../utils/courseUtils";
 import { normalizeTermLabel, termCodeFromLabel } from "../../utils/termUtils";
 
 const filterSchedulesBySelectedTerm = (scheduleData = [], selectedSemester = "") => {
@@ -56,25 +57,6 @@ const filterSchedulesBySelectedTerm = (scheduleData = [], selectedSemester = "")
 
     return false;
   });
-};
-
-const normalizeCourseField = (value) => {
-  if (value === null || value === undefined) return "";
-  return String(value).trim();
-};
-
-const buildCourseIdentityKey = (schedule = {}) => {
-  const courseCode = normalizeCourseField(schedule.courseCode || schedule.Course || "");
-  const section = normalizeCourseField(schedule.section || schedule.Section || "");
-  const term = normalizeCourseField(
-    schedule.term || schedule.Term || schedule.semester || schedule.Semester || "",
-  );
-  const termCode = normalizeCourseField(
-    schedule.termCode || schedule.TermCode || schedule.semesterCode || schedule.SemesterCode || "",
-  );
-  const keyParts = [courseCode, section, term || termCode].filter(Boolean);
-
-  return keyParts.length > 0 ? keyParts.join("::") : "";
 };
 
 const EmailLists = ({ embedded = false }) => {
@@ -230,7 +212,7 @@ const EmailLists = ({ embedded = false }) => {
 
         const uniqueCourseKeys = new Set();
         facultyCourses.forEach((schedule) => {
-          const key = buildCourseIdentityKey(schedule);
+          const key = buildCourseSectionKey(schedule);
           if (!key) return;
           uniqueCourseKeys.add(key);
         });

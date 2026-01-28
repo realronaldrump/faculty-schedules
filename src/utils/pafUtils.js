@@ -53,14 +53,16 @@ export const formatCourseForPAF = (course) => {
     course.courseTitle || course["Course Title"] || course.Title || "";
   const credits =
     course.credits ?? course.Credits ?? course["Credits (parsed)"] ?? null;
-  const maxEnrollment = course.maxEnrollment ?? null;
+  const maxEnrollment =
+    course.maxEnrollment ??
+    course["Maximum Enrollment"] ??
+    course.maximumEnrollment ??
+    course.MaxEnrollment ??
+    null;
 
   const details = [];
-  if (credits !== null && credits !== undefined && credits !== "") {
-    details.push(`${credits} cr`);
-  }
   if (maxEnrollment !== null && maxEnrollment !== undefined && maxEnrollment !== "") {
-    details.push(`${maxEnrollment} max`);
+    details.push(`${maxEnrollment} max enrollment`);
   }
   const detailsLabel = details.length > 0 ? ` (${details.join(", ")})` : "";
   const headerParts = [];

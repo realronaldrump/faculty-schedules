@@ -57,7 +57,7 @@ const PAFWorkflow = ({ embedded = false }) => {
       });
   }, [directoryData]);
 
-  // Build a map of instructorId -> courses for current term
+  // Build a map of instructorId -> courses for current semester
   const coursesByInstructorId = useMemo(() => {
     const map = new Map();
     if (!Array.isArray(scheduleData)) return map;
@@ -87,7 +87,7 @@ const PAFWorkflow = ({ embedded = false }) => {
     return map;
   }, [scheduleData]);
 
-  // Adjuncts with their courses for this term
+  // Adjuncts with their courses for this semester
   const adjunctsWithCourses = useMemo(() => {
     return adjuncts.map((adjunct) => {
       const courses = coursesByInstructorId.get(adjunct.id) || [];
@@ -116,7 +116,7 @@ const PAFWorkflow = ({ embedded = false }) => {
     });
   }, [adjunctsWithCourses, searchText]);
 
-  // Adjuncts with at least one course this term
+  // Adjuncts with at least one course this semester
   const adjunctsWithCoursesThisTerm = useMemo(() => {
     return filteredAdjuncts.filter((a) => a.courseCount > 0);
   }, [filteredAdjuncts]);
@@ -244,7 +244,7 @@ const PAFWorkflow = ({ embedded = false }) => {
             <p className="text-sm text-gray-500 mt-1">
               {adjunctsWithCoursesThisTerm.length} adjunct
               {adjunctsWithCoursesThisTerm.length !== 1 ? "s" : ""} with courses
-              this term
+              this semester
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -290,7 +290,7 @@ const PAFWorkflow = ({ embedded = false }) => {
               </h3>
               <p className="mt-1 text-sm text-gray-500">
                 {filteredAdjuncts.length > 0
-                  ? "No adjuncts match your search and have courses this term."
+                  ? "No adjuncts match your search and have courses this semester."
                   : `No adjuncts have courses assigned for ${selectedSemester}.`}
               </p>
             </div>
@@ -324,7 +324,7 @@ const PAFWorkflow = ({ embedded = false }) => {
                           </div>
                           <div className="text-sm text-gray-500">
                             {adjunct.courseCount} course
-                            {adjunct.courseCount !== 1 ? "s" : ""} this term
+                            {adjunct.courseCount !== 1 ? "s" : ""} this semester
                           </div>
                         </div>
                       </div>

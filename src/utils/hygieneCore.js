@@ -38,6 +38,7 @@ export const DEFAULT_PERSON_SCHEMA = {
   programId: null,
   // Identity helpers
   baylorId: "",
+  ignitePersonNumber: "",
   externalIds: {
     clssInstructorId: null,
     baylorId: null,

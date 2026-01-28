@@ -144,7 +144,8 @@ const Sidebar = ({
               {pinnedPages.map((pageId) => {
                 const item = findNavItem(pageId);
                 if (!item) return null;
-                if (!canAccess(item.path) || shouldHideForRole(item))
+                const pinAccessId = item.accessId || item.path;
+                if (!canAccess(pinAccessId) || shouldHideForRole(item))
                   return null;
                 const Icon = item.icon || User;
                 return (
@@ -173,12 +174,15 @@ const Sidebar = ({
             const itemIsActive = isActive(item.path || item.id);
             const visibleChildren = hasChildren
               ? (item.children || []).filter(
-                (child) => canAccess(child.path) && !shouldHideForRole(child),
+                (child) =>
+                  canAccess(child.accessId || child.path) &&
+                  !shouldHideForRole(child),
               )
               : [];
             const sectionAllowed = hasChildren
               ? visibleChildren.length > 0
-              : canAccess(item.path || item.id) && !shouldHideForRole(item);
+              : canAccess(item.accessId || item.path || item.id) &&
+                !shouldHideForRole(item);
 
             if (!sectionAllowed) {
               return null;

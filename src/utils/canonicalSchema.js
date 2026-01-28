@@ -248,6 +248,7 @@ export const PERSON_SCHEMA = {
   // Identity fields (any of these can identify a person)
   clssInstructorId: "", // From CLSS system
   baylorId: "", // 9-digit Baylor ID
+  ignitePersonNumber: "", // Ignite system person number
   email: "", // Primary email
 
   // Name
@@ -431,6 +432,7 @@ export const VALIDATION_RULES = {
       email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
       phone: /^\d{10}$/, // After normalization
       baylorId: /^\d{9}$/, // 9-digit number
+      ignitePersonNumber: /^\d+$/, // Numeric only
     },
   },
   room: {

@@ -7,8 +7,9 @@ export function registerNavigationPages(navigationItems = []) {
   try {
     const collect = (items) => {
       items.forEach((item) => {
-        if (item.path) {
-          registeredPageIds.add(item.path);
+        const pageId = item.accessId || item.path;
+        if (pageId) {
+          registeredPageIds.add(pageId);
         }
         if (Array.isArray(item.children)) {
           collect(item.children);
@@ -26,5 +27,4 @@ export function registerNavigationPages(navigationItems = []) {
 export function getAllRegisteredPageIds() {
   return Array.from(registeredPageIds);
 }
-
 

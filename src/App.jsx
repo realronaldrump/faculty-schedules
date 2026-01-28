@@ -17,6 +17,7 @@ import FacultyHub from "./components/scheduling/FacultyHub.jsx";
 import RoomsHub from "./components/scheduling/RoomsHub.jsx";
 import StudentWorkersHub from "./components/scheduling/StudentWorkersHub.jsx";
 import PeopleHub from "./components/people/PeopleHub.jsx";
+import PAFWorkflow from "./components/people/PAFWorkflow.jsx";
 import DepartmentInsights from "./components/analytics/DepartmentInsights.jsx";
 import StudentWorkerAnalytics from "./components/analytics/StudentWorkerAnalytics.jsx";
 import CourseManagement from "./components/analytics/CourseManagement";
@@ -57,6 +58,7 @@ import {
   Shield,
   BarChart3,
   Building,
+  ClipboardList,
 } from "lucide-react";
 
 // ==================== NAVIGATION CONFIGURATION ====================
@@ -119,6 +121,20 @@ const navigationItems = [
           // Inherit from parent or specify if needed. 
           // BaylorIDManager checks permissions internally ("people/baylor-id-manager")
         },
+      },
+    ],
+  },
+  {
+    id: "workflows",
+    label: "Workflows",
+    icon: ClipboardList,
+    children: [
+      {
+        id: "paf-workflow",
+        label: "PAF Workflow",
+        path: "workflows/paf",
+        canonicalId: "workflows/paf",
+        accessId: "people/directory",
       },
     ],
   },
@@ -526,6 +542,13 @@ function App() {
         return (
           <ProtectedContent pageId={currentPage}>
             <PeopleHub />
+          </ProtectedContent>
+        );
+      case "workflows/paf":
+      case "people/paf-workflow":
+        return (
+          <ProtectedContent pageId="people/directory">
+            <PAFWorkflow />
           </ProtectedContent>
         );
       // Analytics

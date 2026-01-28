@@ -58,6 +58,25 @@ const filterSchedulesBySelectedTerm = (scheduleData = [], selectedSemester = "")
   });
 };
 
+const normalizeCourseField = (value) => {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+};
+
+const buildCourseIdentityKey = (schedule = {}) => {
+  const courseCode = normalizeCourseField(schedule.courseCode || schedule.Course || "");
+  const section = normalizeCourseField(schedule.section || schedule.Section || "");
+  const term = normalizeCourseField(
+    schedule.term || schedule.Term || schedule.semester || schedule.Semester || "",
+  );
+  const termCode = normalizeCourseField(
+    schedule.termCode || schedule.TermCode || schedule.semesterCode || schedule.SemesterCode || "",
+  );
+  const keyParts = [courseCode, section, term || termCode].filter(Boolean);
+
+  return keyParts.length > 0 ? keyParts.join("::") : "";
+};
+
 const EmailLists = ({ embedded = false }) => {
   const {
     facultyData = [],
@@ -209,20 +228,18 @@ const EmailLists = ({ embedded = false }) => {
           return fallbackNames.includes(person.name);
         });
 
-        // Get unique courses (by course code)
-        const uniqueCourses = [
-          ...new Set(
-            facultyCourses.map(
-              (schedule) => schedule.courseCode || schedule.Course || "",
-            ),
-          ),
-        ].filter((courseCode) => courseCode.trim() !== "");
+        const uniqueCourseKeys = new Set();
+        facultyCourses.forEach((schedule) => {
+          const key = buildCourseIdentityKey(schedule);
+          if (!key) return;
+          uniqueCourseKeys.add(key);
+        });
 
         allPeople.push({
           ...person,
           role: "Faculty",
           roleType: "faculty",
-          courseCount: uniqueCourses.length,
+          courseCount: uniqueCourseKeys.size,
           courses: facultyCourses.map((schedule) => ({
             courseCode: schedule.courseCode || schedule.Course || "",
             courseTitle: schedule.courseTitle || schedule["Course Title"] || "",

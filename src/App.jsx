@@ -20,7 +20,7 @@ import PeopleHub from "./components/people/PeopleHub.jsx";
 import PAFWorkflow from "./components/people/PAFWorkflow.jsx";
 import DepartmentInsights from "./components/analytics/DepartmentInsights.jsx";
 import StudentWorkerAnalytics from "./components/analytics/StudentWorkerAnalytics.jsx";
-import CourseManagement from "./components/analytics/CourseManagement";
+import { CoursesHub, CourseManagement } from "./components/courses";
 import ImportWizard from "./components/administration/ImportWizard";
 import AppSettings from "./components/administration/AppSettings";
 import DataHygieneManager from "./components/administration/DataHygieneManager";
@@ -139,6 +139,26 @@ const navigationItems = [
     ],
   },
   {
+    id: "courses",
+    label: "Courses",
+    icon: GraduationCap,
+    children: [
+      {
+        id: "course-browser",
+        label: "Browse",
+        path: "courses/browse",
+        canonicalId: "courses/browse",
+      },
+      {
+        id: "course-manage",
+        label: "Manage",
+        path: "courses/manage",
+        canonicalId: "courses/manage",
+        permissions: { hideFromRoles: ["faculty"] },
+      },
+    ],
+  },
+  {
     id: "scheduling",
     label: "Scheduling",
     icon: Calendar,
@@ -192,24 +212,15 @@ const navigationItems = [
     ],
   },
   {
-    id: "data-tools",
-    label: "Data Tools",
+    id: "admin-tools",
+    label: "Admin Tools",
     icon: Database,
     children: [
       {
         id: "smart-import",
         label: "Import Wizard",
-        path: "data/import-wizard",
-        canonicalId: "data/import-wizard",
-        permissions: {
-          hideFromRoles: ["faculty"],
-        },
-      },
-      {
-        id: "course-management",
-        label: "Schedule Data",
-        path: "data/schedule-data",
-        canonicalId: "data/schedule-data",
+        path: "admin-tools/import-wizard",
+        canonicalId: "admin-tools/import-wizard",
         permissions: {
           hideFromRoles: ["faculty"],
         },
@@ -217,8 +228,8 @@ const navigationItems = [
       {
         id: "crn-tools",
         label: "CRN Quality Tools",
-        path: "data/crn-tools",
-        canonicalId: "data/crn-tools",
+        path: "admin-tools/crn-tools",
+        canonicalId: "admin-tools/crn-tools",
         permissions: {
           hideFromRoles: ["faculty"],
         },
@@ -551,6 +562,14 @@ function App() {
             <PAFWorkflow />
           </ProtectedContent>
         );
+      // Courses Hub
+      case "courses/browse":
+      case "courses/manage":
+        return (
+          <ProtectedContent pageId={currentPage}>
+            <CoursesHub />
+          </ProtectedContent>
+        );
       // Analytics
       case "analytics/department-insights":
         return (
@@ -564,25 +583,29 @@ function App() {
             <StudentWorkerAnalytics />
           </ProtectedContent>
         );
-      // Data Tools
-      case "data/schedule-data":
+      // Admin Tools
+      case "admin-tools/import-wizard":
         return (
-          <ProtectedContent pageId="data/schedule-data">
-            <CourseManagement />
-          </ProtectedContent>
-        );
-      case "data/import-wizard":
-        return (
-          <ProtectedContent pageId="data/import-wizard">
+          <ProtectedContent pageId="admin-tools/import-wizard">
             <ImportWizard />
           </ProtectedContent>
         );
-      case "data/crn-tools":
+      case "admin-tools/crn-tools":
         return (
-          <ProtectedContent pageId="data/crn-tools">
+          <ProtectedContent pageId="admin-tools/crn-tools">
             <CRNQualityTools />
           </ProtectedContent>
         );
+      // Legacy redirects for old Data Tools paths
+      case "data/schedule-data":
+        navigate("/courses/manage", { replace: true });
+        return null;
+      case "data/import-wizard":
+        navigate("/admin-tools/import-wizard", { replace: true });
+        return null;
+      case "data/crn-tools":
+        navigate("/admin-tools/crn-tools", { replace: true });
+        return null;
       // Help & Resources
       case "help/tutorials":
         return (

@@ -1210,11 +1210,29 @@ const adjunctDirectoryConfig = {
     isRemote: false
   }),
   validate: validateDirectoryEntry,
-  preparePayload: (data) => ({
-    ...data,
-    phone: (data.phone || '').replace(/\D/g, ''),
-    isAdjunct: true
-  }),
+  preparePayload: (data) => {
+    const originalRoles = data.roles;
+    let updatedRoles;
+    if (Array.isArray(originalRoles)) {
+      updatedRoles = originalRoles.filter((role) => role !== 'faculty' && role !== 'staff');
+      updatedRoles.push('faculty');
+      if (data.isAlsoStaff) updatedRoles.push('staff');
+    } else {
+      updatedRoles = {
+        ...(typeof originalRoles === 'object' && originalRoles !== null ? originalRoles : {}),
+        faculty: true,
+        staff: data.isAlsoStaff || false
+      };
+    }
+
+    return {
+      ...data,
+      phone: (data.phone || '').replace(/\D/g, ''),
+      roles: updatedRoles,
+      isAdjunct: true,
+      isTenured: false
+    };
+  },
   useExtraState: useAdjunctExtras,
   deriveData: ({ data, scheduleData, selectedSemester }) => buildCourseCounts(
     data,

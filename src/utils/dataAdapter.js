@@ -96,16 +96,15 @@ export const adaptPeopleToFaculty = (people, scheduleData = [], programs = []) =
 
   return normalizedPeople
     .filter(person => {
-      // Handle both array and object formats for roles
-      if (Array.isArray(person.roles)) {
-        return person.roles.includes('faculty');
-      } else if (typeof person.roles === 'object' && person.roles !== null) {
-        return person.roles.faculty === true;
-      }
-      return false;
+      const hasFacultyRole = Array.isArray(person.roles)
+        ? person.roles.includes('faculty')
+        : (typeof person.roles === 'object' && person.roles !== null
+          ? person.roles.faculty === true
+          : false);
+      return hasFacultyRole || person.isAdjunct === true || person.isUPD === true;
     })
     .map(person => {
-      const facultyName = `${person.firstName} ${person.lastName}`.trim();
+      const facultyName = `${person.firstName} ${person.lastName}`.trim() || person.name || '';
       const isAdjunct = person.isAdjunct === true;
 
       // Single source of truth for program: use programId to lookup program
@@ -180,7 +179,7 @@ export const adaptPeopleToStaff = (people) => {
         return false;
       };
 
-      const staffName = `${person.firstName || ''} ${person.lastName || ''}`.trim();
+      const staffName = `${person.firstName || ''} ${person.lastName || ''}`.trim() || person.name || '';
       const isAdjunct = person.isAdjunct === true;
 
       return {
@@ -402,7 +401,8 @@ export const getFullName = (person) => {
 export const getInstructorDisplayName = (person) => {
   if (!person) return UNASSIGNED;
   const name = `${person.firstName || ''} ${person.lastName || ''}`.trim();
-  return name || UNASSIGNED;
+  const fallback = (person.name || '').trim();
+  return name || fallback || UNASSIGNED;
 };
 
 /**

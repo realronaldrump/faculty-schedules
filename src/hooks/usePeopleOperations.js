@@ -14,6 +14,7 @@ import { usePeople } from '../contexts/PeopleContext';
 import { useUI } from '../contexts/UIContext';
 import { getProgramNameKey, isReservedProgramName, normalizeProgramName } from '../utils/programUtils';
 import { deletePersonSafely } from '../utils/dataHygiene';
+import { parseFullName } from '../utils/nameUtils';
 // Use centralized location service
 import {
   parseRoomLabel,
@@ -45,6 +46,38 @@ const usePeopleOperations = () => {
   const { loadPeople } = usePeople();
 
   const { showNotification } = useUI();
+
+  const normalizeNameFields = useCallback((personData) => {
+    if (!personData || typeof personData !== 'object') return personData;
+    const next = { ...personData };
+    const fullName = (next.name || '').trim();
+    const firstName = (next.firstName || '').trim();
+    const lastName = (next.lastName || '').trim();
+
+    if (!firstName && !lastName && fullName) {
+      if (fullName.includes(',')) {
+        const [lastPart, firstPartRaw] = fullName.split(',', 2);
+        const last = (lastPart || '').trim();
+        const first = (firstPartRaw || '').trim().split(/\s+/)[0] || '';
+        if (first || last) {
+          next.firstName = first;
+          next.lastName = last;
+        }
+      } else {
+        const parsed = parseFullName(fullName);
+        if (parsed.firstName || parsed.lastName) {
+          next.firstName = parsed.firstName;
+          next.lastName = parsed.lastName;
+        }
+      }
+    }
+
+    if (!fullName && (firstName || lastName)) {
+      next.name = `${firstName} ${lastName}`.trim();
+    }
+
+    return next;
+  }, []);
 
   const resolveOfficeSpaceId = useCallback(async (personData, { allowCreate = true } = {}) => {
     const office = (personData?.office || '').toString().trim();
@@ -192,23 +225,24 @@ const usePeopleOperations = () => {
         );
       };
       const cleanData = cleanDataRecursively(facultyToUpdate);
+      const normalizedData = normalizeNameFields(cleanData);
 
       const updateData = {
-        ...cleanData,
+        ...normalizedData,
         updatedAt: new Date().toISOString()
       };
 
       const shouldClearTenure =
-        cleanData.isAdjunct === true ||
-        (cleanData.isAdjunct === undefined && originalData?.isAdjunct === true);
+        normalizedData.isAdjunct === true ||
+        (normalizedData.isAdjunct === undefined && originalData?.isAdjunct === true);
       if (shouldClearTenure) {
         updateData.isTenured = false;
       }
 
       // Handle office fields - sync both singular and array fields
-      const nextOffices = Array.isArray(cleanData.offices) ? cleanData.offices.filter(Boolean) : [];
-      const nextOffice = (cleanData.office || nextOffices[0] || '').toString().trim();
-      const nextHasNoOffice = cleanData.hasNoOffice === true || cleanData.isRemote === true;
+      const nextOffices = Array.isArray(normalizedData.offices) ? normalizedData.offices.filter(Boolean) : [];
+      const nextOffice = (normalizedData.office || nextOffices[0] || '').toString().trim();
+      const nextHasNoOffice = normalizedData.hasNoOffice === true || normalizedData.isRemote === true;
 
       if (nextHasNoOffice || (!nextOffice && nextOffices.length === 0)) {
         // Clear all office fields
@@ -273,7 +307,7 @@ const usePeopleOperations = () => {
         : 'Failed to update faculty member. Please try again.';
       showNotification('error', 'Operation Failed', errorMessage);
     }
-  }, [loadPeople, canCreateFaculty, canEditFaculty, showNotification, resolveOfficeSpaceId]);
+  }, [loadPeople, canCreateFaculty, canEditFaculty, showNotification, resolveOfficeSpaceId, normalizeNameFields]);
 
   // Handle faculty delete
   const handleFacultyDelete = useCallback(async (facultyToDelete) => {
@@ -324,13 +358,14 @@ const usePeopleOperations = () => {
       let action;
       let originalData = null;
 
-      const cleanStaffData = Object.fromEntries(
-        Object.entries(staffToUpdate).filter(([_, value]) => value !== undefined)
-      );
+    const cleanStaffData = Object.fromEntries(
+      Object.entries(staffToUpdate).filter(([_, value]) => value !== undefined)
+    );
+    const normalizedStaffData = normalizeNameFields(cleanStaffData);
 
-      const nextOffices = Array.isArray(cleanStaffData.offices) ? cleanStaffData.offices.filter(Boolean) : [];
-      const nextOffice = (cleanStaffData.office || nextOffices[0] || '').toString().trim();
-      const nextHasNoOffice = cleanStaffData.hasNoOffice === true || cleanStaffData.isRemote === true;
+      const nextOffices = Array.isArray(normalizedStaffData.offices) ? normalizedStaffData.offices.filter(Boolean) : [];
+      const nextOffice = (normalizedStaffData.office || nextOffices[0] || '').toString().trim();
+      const nextHasNoOffice = normalizedStaffData.hasNoOffice === true || normalizedStaffData.isRemote === true;
 
       // Helper to resolve all offices
       const resolveAllOffices = async () => {
@@ -357,7 +392,7 @@ const usePeopleOperations = () => {
         originalData = rawPeople.find(p => p.id === staffToUpdate.id) || null;
         const staffRef = doc(db, 'people', staffToUpdate.id);
         const updateData = {
-          ...cleanStaffData,
+          ...normalizedStaffData,
           updatedAt: new Date().toISOString()
         };
 
@@ -378,7 +413,7 @@ const usePeopleOperations = () => {
         );
       } else {
         const createData = {
-          ...cleanStaffData,
+          ...normalizedStaffData,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
@@ -410,7 +445,7 @@ const usePeopleOperations = () => {
       console.error('❌ Error updating staff:', error);
       showNotification('error', 'Operation Failed', 'Failed to save staff member. Please try again.');
     }
-  }, [rawPeople, loadPeople, canCreateStaff, canEditStaff, showNotification, resolveOfficeSpaceId]);
+  }, [rawPeople, loadPeople, canCreateStaff, canEditStaff, showNotification, resolveOfficeSpaceId, normalizeNameFields]);
 
   // Handle staff delete
   const handleStaffDelete = useCallback(async (staffToDelete) => {
@@ -473,6 +508,7 @@ const usePeopleOperations = () => {
       const cleanStudentData = Object.fromEntries(
         Object.entries(studentToUpdate).filter(([_, value]) => value !== undefined)
       );
+      const normalizedStudentData = normalizeNameFields(cleanStudentData);
 
       const existingStudent = !isNewStudent
         ? rawPeople.find(p => p.id === studentToUpdate.id) || null
@@ -480,14 +516,14 @@ const usePeopleOperations = () => {
       const fallbackIsActive = existingStudent?.isActive ?? true;
 
       const updateData = {
-        ...cleanStudentData,
+        ...normalizedStudentData,
         roles: ['student'],
         hasNoOffice: true,
         office: '',
         officeSpaceId: '',
         officeSpaceIds: [],
         offices: [],
-        isActive: (cleanStudentData.isActive !== undefined ? cleanStudentData.isActive : fallbackIsActive),
+        isActive: (normalizedStudentData.isActive !== undefined ? normalizedStudentData.isActive : fallbackIsActive),
         updatedAt: new Date().toISOString()
       };
 
@@ -547,7 +583,7 @@ const usePeopleOperations = () => {
         showNotification('error', 'Operation Failed', !studentToUpdate.id ? 'Failed to add student worker. Please try again.' : `Failed to update student worker. ${friendly}`);
       }
     }
-  }, [rawPeople, loadPeople, canCreateStudent, canEditStudent, showNotification]);
+  }, [rawPeople, loadPeople, canCreateStudent, canEditStudent, showNotification, normalizeNameFields]);
 
   // Handle student delete
   const handleStudentDelete = useCallback(async (studentToDelete) => {

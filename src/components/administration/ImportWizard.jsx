@@ -292,6 +292,9 @@ const ImportWizard = ({ embedded = false }) => {
       if (importType === "schedule") {
         await refreshSchedules();
         await refreshTerms?.();
+        if (stats.peopleAdded > 0 || stats.peopleModified > 0) {
+          await loadPeople({ force: true });
+        }
       } else {
         await loadPeople({ force: true });
       }

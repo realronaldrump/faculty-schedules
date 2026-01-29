@@ -1274,7 +1274,10 @@ export const processScheduleImport = async (csvData) => {
 
         // Log any parse errors
         if (parsed.errors?.length > 0) {
-          console.warn(`⚠️ Room parsing warnings for "${normalizedRoomLabel}":`, parsed.errors);
+          console.warn(
+            `⚠️ Room parsing warnings for "${normalizedSpaceLabel}":`,
+            parsed.errors,
+          );
         }
       }
 

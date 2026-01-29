@@ -61,17 +61,17 @@ export const formatCourseForPAF = (course) => {
     course.MaxEnrollment ??
     null;
 
-  const details = [];
-  if (maxEnrollment !== null && maxEnrollment !== undefined && maxEnrollment !== "") {
-    details.push(`${maxEnrollment} max enrollment`);
-  }
-  const detailsLabel = details.length > 0 ? ` (${details.join(", ")})` : "";
   const headerParts = [];
   if (courseCode) headerParts.push(courseCode);
   if (sectionNumber) headerParts.push(sectionNumber);
   const header = headerParts.join("-").trim();
   const titlePart = courseTitle ? ` ${courseTitle}` : "";
-  const displayLine = `${header}${titlePart}${detailsLabel}`.trim();
+  const courseLine = `${header}${titlePart}`.trim();
+  const maxEnrollmentValue =
+    maxEnrollment !== null && maxEnrollment !== undefined && `${maxEnrollment}`.trim() !== ""
+      ? `${maxEnrollment}`.trim()
+      : "";
+  const displayLine = courseLine;
 
   return {
     courseCode,
@@ -79,6 +79,8 @@ export const formatCourseForPAF = (course) => {
     courseTitle,
     credits,
     maxEnrollment,
+    maxEnrollmentValue,
+    courseLine,
     displayLine,
     copyLine: displayLine,
   };

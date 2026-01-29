@@ -485,20 +485,38 @@ const PAFWorkflow = ({ embedded = false }) => {
                             {adjunct.courses.map((course, idx) => {
                               const formattedCourse = formatCourseForPAF(course);
                               if (!formattedCourse) return null;
-                              const displayLine = formattedCourse.displayLine;
+                              const courseLine = formattedCourse.courseLine || formattedCourse.displayLine;
+                              const maxEnrollmentValue = formattedCourse.maxEnrollmentValue;
                               return (
                                 <div
                                   key={`${adjunct.id}-course-${idx}`}
-                                  className="flex items-center gap-2 text-sm"
+                                  className="flex flex-wrap items-center gap-3 text-sm"
                                 >
-                                  <span className="font-mono text-gray-800 flex-1">
-                                    {displayLine}
-                                  </span>
-                                  <CopyButton
-                                    text={displayLine}
-                                    fieldKey={`course-${adjunct.id}-${idx}`}
-                                    label="course"
-                                  />
+                                  <div className="flex min-w-0 items-center gap-2 flex-1">
+                                    <span className="font-mono text-gray-800 truncate">
+                                      {courseLine || "-"}
+                                    </span>
+                                    {courseLine && (
+                                      <CopyButton
+                                        text={courseLine}
+                                        fieldKey={`course-${adjunct.id}-${idx}`}
+                                        label="course"
+                                      />
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-gray-500">Max Enroll:</span>
+                                    <span className="font-mono text-gray-800">
+                                      {maxEnrollmentValue || "-"}
+                                    </span>
+                                    {maxEnrollmentValue && (
+                                      <CopyButton
+                                        text={maxEnrollmentValue}
+                                        fieldKey={`max-enrollment-${adjunct.id}-${idx}`}
+                                        label="max enrollment"
+                                      />
+                                    )}
+                                  </div>
                                 </div>
                               );
                             })}

@@ -706,6 +706,7 @@ const CourseManagement = ({ embedded = false }) => {
     const groupedMap = {};
     data.forEach((item) => {
       if (!item) return;
+      const baseScheduleId = item._originalId || item.id;
       const instructorKey =
         Array.isArray(item.instructorNames) && item.instructorNames.length > 0
           ? item.instructorNames.join(" / ")
@@ -715,11 +716,13 @@ const CourseManagement = ({ embedded = false }) => {
         groupedMap[key] = {
           ...item,
           _daySet: new Set(item.Day ? [item.Day] : []),
-          _originalIds: [item.id],
+          _originalIds: new Set(baseScheduleId ? [baseScheduleId] : []),
         };
       } else if (item.Day) {
         groupedMap[key]._daySet.add(item.Day);
-        groupedMap[key]._originalIds.push(item.id);
+        if (baseScheduleId) groupedMap[key]._originalIds.add(baseScheduleId);
+      } else if (baseScheduleId) {
+        groupedMap[key]._originalIds.add(baseScheduleId);
       }
     });
     data = Object.values(groupedMap).map((entry, index) => {
@@ -727,11 +730,12 @@ const CourseManagement = ({ embedded = false }) => {
         .sort((a, b) => dayOrderMap[a] - dayOrderMap[b])
         .join("");
       const { _daySet, _originalIds, ...rest } = entry;
+      const originalIds = Array.from(_originalIds || []);
       // Generate unique ID for grouped entries to prevent duplicate key warnings
       const uniqueId =
-        _originalIds.length > 1
-          ? `grouped::${index}::${_originalIds.join("::")}`
-          : _originalIds[0];
+        originalIds.length > 1
+          ? `grouped::${index}::${originalIds.join("::")}`
+          : (originalIds[0] || entry.id);
       return { ...rest, Day: dayPattern, id: uniqueId };
     });
 

@@ -6,6 +6,7 @@ import {
   areSameSectionIdentity,
   areSamePersonIdentity,
 } from "./canonicalSchema";
+import { resolveBuildingDisplayName } from "./locationService";
 
 // ---------------------------------------------------------------------------
 // CANONICAL PERSON SHAPE
@@ -105,12 +106,64 @@ const normalizeRoles = (roles) => {
   return [];
 };
 
+const normalizeBuildingLabel = (value) => {
+  if (!value) return "";
+  const trimmed = normalizeString(value);
+  if (!trimmed) return "";
+  const resolved = resolveBuildingDisplayName(trimmed);
+  return normalizeString(resolved) || trimmed;
+};
+
 const normalizeBuildings = (value) => {
-  if (Array.isArray(value)) {
-    return value.map((b) => normalizeString(b)).filter(Boolean);
+  const list = Array.isArray(value) ? value : value ? [value] : [];
+  const normalized = list
+    .map((b) => normalizeBuildingLabel(b))
+    .filter(Boolean);
+  return Array.from(new Set(normalized));
+};
+
+const normalizeJobLocations = (location) => normalizeBuildings(location);
+
+const normalizeStudentJobs = (jobs) => {
+  if (!Array.isArray(jobs)) return jobs;
+  return jobs.map((job) => {
+    if (!job || typeof job !== "object") return job;
+    return {
+      ...job,
+      location: normalizeJobLocations(job.location),
+    };
+  });
+};
+
+const normalizeSemesterSchedules = (semesterSchedules) => {
+  if (!semesterSchedules || typeof semesterSchedules !== "object") {
+    return semesterSchedules;
   }
-  if (value) return [normalizeString(value)];
-  return [];
+  const entries = Object.entries(semesterSchedules);
+  if (entries.length === 0) return semesterSchedules;
+  return Object.fromEntries(
+    entries.map(([key, entry]) => {
+      if (!entry || typeof entry !== "object") return [key, entry];
+      const primaryBuildings = normalizeBuildings(
+        Array.isArray(entry.primaryBuildings) && entry.primaryBuildings.length > 0
+          ? entry.primaryBuildings
+          : entry.primaryBuilding,
+      );
+      const primaryBuilding =
+        normalizeBuildingLabel(entry.primaryBuilding) || primaryBuildings[0] || "";
+      return [
+        key,
+        {
+          ...entry,
+          jobs: Array.isArray(entry.jobs)
+            ? normalizeStudentJobs(entry.jobs)
+            : entry.jobs,
+          primaryBuildings,
+          primaryBuilding,
+        },
+      ];
+    }),
+  );
 };
 
 const normalizeExternalIds = (externalIds, { email, baylorId } = {}) => {
@@ -167,6 +220,12 @@ export const standardizePerson = (person = {}, options = {}) => {
       ? source.primaryBuildings
       : source.primaryBuilding,
   );
+  const normalizedJobs = normalizeStudentJobs(source.jobs);
+  const normalizedSemesterSchedules = normalizeSemesterSchedules(
+    source.semesterSchedules,
+  );
+  const primaryBuilding =
+    normalizeBuildingLabel(source.primaryBuilding) || primaryBuildings[0] || "";
 
   const standardized = {
     ...source,
@@ -182,9 +241,10 @@ export const standardizePerson = (person = {}, options = {}) => {
     department: normalizeString(source.department),
     office: normalizeString(source.office),
     roles: normalizeRoles(source.roles),
+    jobs: normalizedJobs,
     primaryBuildings,
-    primaryBuilding:
-      normalizeString(source.primaryBuilding) || primaryBuildings[0] || "",
+    primaryBuilding,
+    semesterSchedules: normalizedSemesterSchedules,
     weeklySchedule: Array.isArray(source.weeklySchedule)
       ? source.weeklySchedule
       : [],

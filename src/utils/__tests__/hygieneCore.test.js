@@ -8,6 +8,7 @@ const {
   detectRoomDuplicates,
   mergePeopleData
 } = await import('../hygieneCore');
+const { applyBuildingConfig } = await import('../locationService');
 
 describe('hygieneCore', () => {
   it('standardizes basic person fields and parses names', () => {
@@ -37,6 +38,36 @@ describe('hygieneCore', () => {
     const result = standardizePerson(input, { updateTimestamp: false });
     expect(result.isAdjunct).toBe(true);
     expect(result.isTenured).toBe(false);
+  });
+
+  it('normalizes student building names using building config', () => {
+    applyBuildingConfig({
+      version: 1,
+      buildings: [
+        { code: 'GOEBEL', displayName: 'Goebel Building', aliases: ['Goebel'] }
+      ]
+    });
+
+    const input = {
+      roles: ['student'],
+      primaryBuildings: ['Goebel', 'Goebel Building'],
+      primaryBuilding: 'Goebel',
+      jobs: [{ location: ['Goebel'] }],
+      semesterSchedules: {
+        'Spring 2026': {
+          primaryBuilding: 'Goebel',
+          jobs: [{ location: ['Goebel'] }],
+          weeklySchedule: []
+        }
+      }
+    };
+
+    const result = standardizePerson(input, { updateTimestamp: false });
+    expect(result.primaryBuildings).toEqual(['Goebel Building']);
+    expect(result.primaryBuilding).toBe('Goebel Building');
+    expect(result.jobs[0].location).toEqual(['Goebel Building']);
+    expect(result.semesterSchedules['Spring 2026'].primaryBuilding).toBe('Goebel Building');
+    expect(result.semesterSchedules['Spring 2026'].jobs[0].location).toEqual(['Goebel Building']);
   });
 
   it('detects people duplicates and orders by completeness', () => {

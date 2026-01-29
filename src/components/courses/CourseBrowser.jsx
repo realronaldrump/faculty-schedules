@@ -146,6 +146,7 @@ const CourseBrowser = ({ embedded = false }) => {
           ...item,
           _daySet: new Set(item.Day ? [item.Day] : []),
           _originalIds: new Set(baseScheduleId ? [baseScheduleId] : []),
+          _groupKey: key,
         };
       } else if (item.Day) {
         groupedMap[key]._daySet.add(item.Day);
@@ -158,12 +159,13 @@ const CourseBrowser = ({ embedded = false }) => {
       const dayPattern = Array.from(entry._daySet)
         .sort((a, b) => dayOrderMap[a] - dayOrderMap[b])
         .join("");
-      const { _daySet, _originalIds, ...rest } = entry;
+      const { _daySet, _originalIds, _groupKey, ...rest } = entry;
       const originalIds = Array.from(_originalIds || []);
+      const uniqueIdBase = _groupKey || entry.id || index;
       const uniqueId =
         originalIds.length > 1
-          ? `grouped::${index}::${originalIds.join("::")}`
-          : originalIds[0] || entry.id;
+          ? `grouped::${uniqueIdBase}::${originalIds.join("::")}`
+          : `grouped::${uniqueIdBase}::${originalIds[0] || "single"}`;
       return { ...rest, Day: dayPattern, id: uniqueId };
     });
   }, [scheduleData]);

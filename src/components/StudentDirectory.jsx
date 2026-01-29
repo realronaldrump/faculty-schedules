@@ -173,23 +173,18 @@ const StudentDirectory = () => {
 
   const availableBuildings = useMemo(() => {
     const buildings = new Set(getCanonicalBuildingList());
+    const addBuildings = (value) => {
+      normalizeBuildingList(value).forEach((b) => buildings.add(b));
+    };
     (studentData || []).forEach((student) => {
       if (Array.isArray(student.primaryBuildings)) {
-        student.primaryBuildings.forEach((b) => {
-          if (b) buildings.add(b);
-        });
+        addBuildings(student.primaryBuildings);
       } else if (student.primaryBuilding) {
-        buildings.add(student.primaryBuilding);
+        addBuildings(student.primaryBuilding);
       }
       if (Array.isArray(student.jobs)) {
         student.jobs.forEach((job) => {
-          if (Array.isArray(job.location)) {
-            job.location.forEach((b) => {
-              if (b) buildings.add(b);
-            });
-          } else if (job.location) {
-            buildings.add(job.location);
-          }
+          addBuildings(job.location);
         });
       }
     });
@@ -198,7 +193,7 @@ const StudentDirectory = () => {
 
   const assignmentBuildingOptions = useMemo(() => {
     const existingSelections = (newStudent.jobs || []).flatMap((job) =>
-      Array.isArray(job.location) ? job.location.filter(Boolean) : []
+      normalizeBuildingList(job.location)
     );
     return Array.from(new Set([...(availableBuildings || []), ...existingSelections]))
       .filter(Boolean)
@@ -236,8 +231,9 @@ const StudentDirectory = () => {
 
   const updateAssignmentLocations = (index, locations) => {
     setNewStudent((prev) => {
+      const normalizedLocations = normalizeBuildingList(locations);
       const nextJobs = prev.jobs.map((job, jobIndex) =>
-        jobIndex === index ? { ...job, location: locations } : job
+        jobIndex === index ? { ...job, location: normalizedLocations } : job
       );
       return {
         ...prev,
@@ -262,7 +258,7 @@ const StudentDirectory = () => {
   };
 
   const addCustomLocation = (index) => {
-    const value = (assignmentBuildingDrafts[index] || '').trim();
+    const value = normalizeBuildingLabel(assignmentBuildingDrafts[index] || '');
     if (!value) return;
     setAssignmentBuildingDrafts((prev) =>
       prev.map((draft, draftIndex) => (draftIndex === index ? '' : draft))
@@ -454,19 +450,22 @@ const StudentDirectory = () => {
       // Buildings filter (include-only across primaryBuildings/primaryBuilding and job locations)
       if ((filters.buildings || []).length > 0) {
         const bldgSet = new Set();
+        const addStudentBuildings = (value) => {
+          normalizeBuildingList(value).forEach((b) => bldgSet.add(b));
+        };
         if (Array.isArray(student.primaryBuildings)) {
-          student.primaryBuildings.forEach(b => { if (b) bldgSet.add(b); });
+          addStudentBuildings(student.primaryBuildings);
         } else if (student.primaryBuilding) {
-          bldgSet.add(student.primaryBuilding);
+          addStudentBuildings(student.primaryBuilding);
         }
         if (Array.isArray(student.jobs)) {
           student.jobs.forEach(j => {
-            if (Array.isArray(j.location)) j.location.forEach(b => { if (b) bldgSet.add(b); });
-            else if (j.location) bldgSet.add(j.location);
+            addStudentBuildings(j?.location);
           });
         }
-        const studentBuildings = Array.from(bldgSet);
-        if (!studentBuildings.some(b => filters.buildings.includes(b))) return false;
+        const studentBuildings = normalizeBuildingList(Array.from(bldgSet));
+        const normalizedFilterBuildings = normalizeBuildingList(filters.buildings);
+        if (!studentBuildings.some(b => normalizedFilterBuildings.includes(b))) return false;
       }
 
       return true;
@@ -538,12 +537,19 @@ const StudentDirectory = () => {
     setEditFormData({
       ...student,
       weeklySchedule: Array.isArray(student.weeklySchedule) ? [...student.weeklySchedule] : [],
-      primaryBuildings: Array.isArray(student.primaryBuildings) ? [...student.primaryBuildings] : (student.primaryBuilding ? [student.primaryBuilding] : []),
-      jobs: Array.isArray(student.jobs) && student.jobs.length > 0 ? student.jobs : [{
+      primaryBuildings: Array.isArray(student.primaryBuildings)
+        ? normalizeBuildingList(student.primaryBuildings)
+        : normalizeBuildingList(student.primaryBuilding),
+      jobs: Array.isArray(student.jobs) && student.jobs.length > 0 ? student.jobs.map((job) => ({
+        ...job,
+        location: normalizeBuildingList(job?.location)
+      })) : [{
         jobTitle: student.jobTitle || '',
         supervisor: student.supervisor || '',
         hourlyRate: student.hourlyRate || '',
-        location: Array.isArray(student.primaryBuildings) ? student.primaryBuildings : (student.primaryBuilding ? [student.primaryBuilding] : []),
+        location: Array.isArray(student.primaryBuildings)
+          ? normalizeBuildingList(student.primaryBuildings)
+          : normalizeBuildingList(student.primaryBuilding),
         weeklySchedule: Array.isArray(student.weeklySchedule) ? [...student.weeklySchedule] : [],
         startDate: '',
         endDate: ''

@@ -36,3 +36,4 @@ firebase-service-account.json
 
 .env.local
 .codex/config.toml
+data-samples/CLSSExportSpring2026.csv

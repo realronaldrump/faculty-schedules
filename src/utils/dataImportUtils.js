@@ -143,6 +143,12 @@ export const createPersonModel = (rawData) => {
 /**
  * Schedule Model with ID-based references
  */
+const normalizeNumericField = (value) => {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = Number.parseInt(String(value).replace(/[^0-9-]/g, ""), 10);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
 export const createScheduleModel = (rawData) => {
   const toTrimmedString = (value) =>
     value === undefined || value === null ? "" : String(value).trim();
@@ -150,6 +156,12 @@ export const createScheduleModel = (rawData) => {
   const normalizedTermCode = termCodeFromLabel(
     rawData.termCode || normalizedTerm,
   );
+  const enrollmentValue = rawData.enrollment ?? rawData.Enrollment;
+  const maxEnrollmentValue =
+    rawData.maxEnrollment ??
+    rawData.maximumEnrollment ??
+    rawData["Maximum Enrollment"] ??
+    rawData.MaxEnrollment;
   const instructorAssignments = Array.isArray(rawData.instructorAssignments)
     ? rawData.instructorAssignments
     : [];
@@ -177,6 +189,8 @@ export const createScheduleModel = (rawData) => {
     courseLevel: rawData.courseLevel || 0,
     section: (rawData.section || "").trim(),
     crn: rawData.crn || "", // Add CRN field
+    enrollment: normalizeNumericField(enrollmentValue),
+    maxEnrollment: normalizeNumericField(maxEnrollmentValue),
     meetingPatterns: Array.isArray(rawData.meetingPatterns)
       ? rawData.meetingPatterns
       : [],
@@ -1051,6 +1065,8 @@ export const processScheduleImport = async (csvData) => {
       const creditsFromCsv = row["Credit Hrs"] || row["Credit Hrs Min"];
       const scheduleType = row["Schedule Type"] || "Class Instruction";
       const status = row["Status"] || "Active";
+      const enrollment = normalizeNumericField(row["Enrollment"]);
+      const maxEnrollment = normalizeNumericField(row["Maximum Enrollment"]);
 
       if (!courseCode || !instructorField) {
         results.skipped++;
@@ -1441,6 +1457,8 @@ export const processScheduleImport = async (csvData) => {
         section,
         clssId: row["CLSS ID"] || "",
         crn, // Pass CRN to the model
+        enrollment,
+        maxEnrollment,
         meetingPatterns,
         // Multi-room fields (new canonical format)
         spaceIds,

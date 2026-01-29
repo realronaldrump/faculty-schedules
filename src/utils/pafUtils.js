@@ -55,6 +55,7 @@ export const formatCourseForPAF = (course) => {
     course.credits ?? course.Credits ?? course["Credits (parsed)"] ?? null;
   const maxEnrollment =
     course.maxEnrollment ??
+    course.max_enrollment ??
     course["Maximum Enrollment"] ??
     course.maximumEnrollment ??
     course.MaxEnrollment ??

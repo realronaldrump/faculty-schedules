@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { parseCLSSCSV, parseInstructorFieldList } from '../dataImportUtils';
+import { createScheduleModel, parseCLSSCSV, parseInstructorFieldList } from '../dataImportUtils';
 import { extractScheduleRowBaseData } from '../importTransactionUtils';
 
 const csvPath = path.resolve(process.cwd(), 'data-samples/CLSSspring2026import.csv');
@@ -33,6 +33,19 @@ describe('dataImportUtils CLSS parsing', () => {
     expect(base.isOnline).toBe(true);
     expect(base.locationType).toBe('no_room');
     expect(base.locationLabel).toBe('Online');
+  });
+
+  it('preserves max enrollment on schedule model', () => {
+    const schedule = createScheduleModel({
+      courseCode: 'ADM 1300',
+      section: '01',
+      term: 'Spring 2026',
+      enrollment: '12',
+      maxEnrollment: '25'
+    });
+
+    expect(schedule.enrollment).toBe(12);
+    expect(schedule.maxEnrollment).toBe(25);
   });
 
   it('parses multiple instructors and staff records', () => {

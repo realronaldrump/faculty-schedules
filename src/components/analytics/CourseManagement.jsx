@@ -1992,10 +1992,6 @@ const CourseManagement = ({ embedded = false }) => {
                 <DataTableHeader columnKey="End Time" label="End Time" />
                 <DataTableHeader columnKey="Room" label="Room" />
                 <DataTableHeader columnKey="Credits" label="Credits" />
-                <DataTableHeader
-                  columnKey="Schedule Type"
-                  label="Schedule Type"
-                />
                 <DataTableHeader columnKey="Status" label="Status" />
                 <DataTableHeader columnKey="isOnline" label="Online" />
                 <DataTableHeader columnKey="onlineMode" label="Online Mode" />
@@ -2153,21 +2149,6 @@ const CourseManagement = ({ embedded = false }) => {
                         </td>
                         <td className="p-1">
                           <select
-                            name="Schedule Type"
-                            value={editFormData["Schedule Type"] || ""}
-                            onChange={handleEditFormChange}
-                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
-                          >
-                            <option value="">Select Schedule Type</option>
-                            {uniqueScheduleTypes.map((type) => (
-                              <option key={type} value={type}>
-                                {type}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="p-1">
-                          <select
                             name="Status"
                             value={editFormData.Status || ""}
                             onChange={handleEditFormChange}
@@ -2284,9 +2265,6 @@ const CourseManagement = ({ embedded = false }) => {
                         <td className="px-4 py-3 text-gray-700">{row.Room}</td>
                         <td className="px-4 py-3 text-gray-700">
                           {row.Credits}
-                        </td>
-                        <td className="px-4 py-3 text-gray-700">
-                          {row["Schedule Type"]}
                         </td>
                         <td className="px-4 py-3 text-gray-700">
                           {row.Status}

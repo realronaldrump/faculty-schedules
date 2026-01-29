@@ -1798,31 +1798,8 @@ const CourseManagement = ({ embedded = false }) => {
                 </div>
               </div>
 
-              {/* Schedule Type and Status Filters */}
+              {/* Status Filter */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Schedule Type
-                  </label>
-                  <select
-                    value={filters.scheduleType}
-                    onChange={(e) =>
-                      setFilters((prev) => ({
-                        ...prev,
-                        scheduleType: e.target.value,
-                      }))
-                    }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                  >
-                    <option value="all">All Schedule Types</option>
-                    {uniqueScheduleTypes.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Status

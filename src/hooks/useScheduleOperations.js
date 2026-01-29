@@ -18,6 +18,7 @@ import { useUI } from '../contexts/UIContext';
 import { useAuth } from '../contexts/AuthContext';
 import { normalizeTermLabel, termCodeFromLabel } from '../utils/termUtils';
 import { parseMultiRoom, buildSpaceKey } from '../utils/locationService';
+import { getMaxEnrollment } from '../utils/enrollmentUtils';
 
 const useScheduleOperations = () => {
   const {
@@ -257,6 +258,9 @@ const useScheduleOperations = () => {
         spaceDisplayNames = referenceSchedule?.spaceDisplayNames || [];
       }
 
+      const resolvedMaxEnrollment =
+        getMaxEnrollment(updatedRow) ?? getMaxEnrollment(referenceSchedule);
+
       const updateData = {
         courseCode: courseCode,
         courseTitle: updatedRow['Course Title'] || (referenceSchedule?.courseTitle || ''),
@@ -270,6 +274,7 @@ const useScheduleOperations = () => {
         term: normalizedTerm || (updatedRow.Term || (referenceSchedule?.term || '')),
         termCode: resolvedTermCode || '',
         credits: computedCredits,
+        maxEnrollment: resolvedMaxEnrollment ?? null,
         scheduleType: scheduleTypeValue,
         instructionMethod: updatedRow['Instruction Method'] || updatedRow['Inst. Method'] || referenceSchedule?.instructionMethod || '',
         status: updatedRow.Status || (referenceSchedule?.status || 'Active'),

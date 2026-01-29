@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from "react";
-import { Search, Filter, ChevronsUpDown } from "lucide-react";
+import { Search, Filter, ChevronsUpDown, Download } from "lucide-react";
 import MultiSelectDropdown from "../MultiSelectDropdown";
 import FacultyContactCard from "../FacultyContactCard";
 import CourseDetailModal from "../scheduling/CourseDetailModal";
 import { parseCourseCode } from "../../utils/courseUtils";
 import { parseTime } from "../../utils/timeUtils";
 import { getBuildingDisplay } from "../../utils/locationService";
+import { getMaxEnrollment } from "../../utils/enrollmentUtils";
 import { useData } from "../../contexts/DataContext";
 import { useAppConfig } from "../../contexts/AppConfigContext";
 
@@ -19,6 +20,8 @@ const CourseBrowser = ({ embedded = false }) => {
     room: [],
     program: [],
     searchTerm: "",
+    maxEnrollmentMin: "",
+    maxEnrollmentMax: "",
   });
 
   const [sortConfig, setSortConfig] = useState({
@@ -116,9 +119,58 @@ const CourseBrowser = ({ embedded = false }) => {
 
   const DAYS = ["M", "T", "W", "R", "F"];
 
+  const normalizeEnrollmentInput = (value) => {
+    if (value === null || value === undefined || value === "") return null;
+    const parsed = Number.parseInt(String(value), 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const getMaxEnrollmentDisplay = (item) => {
+    const value = getMaxEnrollment(item);
+    return value === null ? "—" : value;
+  };
+
+  const groupedScheduleData = useMemo(() => {
+    const dayOrderMap = { M: 1, T: 2, W: 3, R: 4, F: 5 };
+    const groupedMap = {};
+    scheduleData.forEach((item) => {
+      if (!item) return;
+      const baseScheduleId = item._originalId || item.id;
+      const instructorKey =
+        Array.isArray(item.instructorNames) && item.instructorNames.length > 0
+          ? item.instructorNames.join(" / ")
+          : item.Instructor || "";
+      const key = `${item.Course}|${item.Section}|${item.Term}|${item.CRN}|${instructorKey}|${item["Start Time"]}|${item["End Time"]}|${item.Room || ""}`;
+      if (!groupedMap[key]) {
+        groupedMap[key] = {
+          ...item,
+          _daySet: new Set(item.Day ? [item.Day] : []),
+          _originalIds: new Set(baseScheduleId ? [baseScheduleId] : []),
+        };
+      } else if (item.Day) {
+        groupedMap[key]._daySet.add(item.Day);
+        if (baseScheduleId) groupedMap[key]._originalIds.add(baseScheduleId);
+      } else if (baseScheduleId) {
+        groupedMap[key]._originalIds.add(baseScheduleId);
+      }
+    });
+    return Object.values(groupedMap).map((entry, index) => {
+      const dayPattern = Array.from(entry._daySet)
+        .sort((a, b) => dayOrderMap[a] - dayOrderMap[b])
+        .join("");
+      const { _daySet, _originalIds, ...rest } = entry;
+      const originalIds = Array.from(_originalIds || []);
+      const uniqueId =
+        originalIds.length > 1
+          ? `grouped::${index}::${originalIds.join("::")}`
+          : originalIds[0] || entry.id;
+      return { ...rest, Day: dayPattern, id: uniqueId };
+    });
+  }, [scheduleData]);
+
   // Filter and sort data
   const filteredData = useMemo(() => {
-    let data = [...scheduleData];
+    let data = [...groupedScheduleData];
 
     // Search filter
     if (filters.searchTerm) {
@@ -178,8 +230,20 @@ const CourseBrowser = ({ embedded = false }) => {
       });
     }
 
+    const minMaxEnrollment = normalizeEnrollmentInput(filters.maxEnrollmentMin);
+    const maxMaxEnrollment = normalizeEnrollmentInput(filters.maxEnrollmentMax);
+    if (minMaxEnrollment !== null || maxMaxEnrollment !== null) {
+      data = data.filter((item) => {
+        const value = getMaxEnrollment(item);
+        if (value === null) return false;
+        if (minMaxEnrollment !== null && value < minMaxEnrollment) return false;
+        if (maxMaxEnrollment !== null && value > maxMaxEnrollment) return false;
+        return true;
+      });
+    }
+
     return data;
-  }, [scheduleData, filters]);
+  }, [groupedScheduleData, filters]);
 
   // Sort data
   const sortedData = useMemo(() => {
@@ -197,6 +261,11 @@ const CourseBrowser = ({ embedded = false }) => {
       } else if (sortConfig.key === "Time") {
         aVal = parseTime(a?.["Start Time"]);
         bVal = parseTime(b?.["Start Time"]);
+        if (aVal === null) aVal = 9999;
+        if (bVal === null) bVal = 9999;
+      } else if (sortConfig.key === "Max Enrollment") {
+        aVal = getMaxEnrollment(a);
+        bVal = getMaxEnrollment(b);
         if (aVal === null) aVal = 9999;
         if (bVal === null) bVal = 9999;
       } else {
@@ -231,6 +300,8 @@ const CourseBrowser = ({ embedded = false }) => {
       room: [],
       program: [],
       searchTerm: "",
+      maxEnrollmentMin: "",
+      maxEnrollmentMax: "",
     });
   };
 
@@ -239,7 +310,55 @@ const CourseBrowser = ({ embedded = false }) => {
     filters.day.length > 0 ||
     filters.room.length > 0 ||
     filters.program.length > 0 ||
-    filters.searchTerm;
+    filters.searchTerm ||
+    filters.maxEnrollmentMin ||
+    filters.maxEnrollmentMax;
+
+  const handleDownloadCSV = () => {
+    const headers = [
+      "Course",
+      "Section",
+      "Title",
+      "Instructor",
+      "Days",
+      "Time",
+      "Room",
+      "Max Enrollment",
+    ];
+    const rows = sortedData.map((item) => {
+      const instructorDisplay = Array.isArray(item.instructorNames)
+        ? item.instructorNames.join(", ")
+        : item.Instructor || "";
+      const startTime = item["Start Time"] || "";
+      const endTime = item["End Time"] || "";
+      const timeDisplay =
+        startTime && endTime
+          ? `${startTime} - ${endTime}`
+          : startTime || endTime || "";
+      return [
+        item.Course || "",
+        item.Section || "",
+        item.Title || item["Course Title"] || "",
+        instructorDisplay,
+        item.Day || "",
+        timeDisplay,
+        item.Room || "",
+        getMaxEnrollment(item) ?? "",
+      ];
+    });
+    const escapeCell = (value) =>
+      `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map(escapeCell).join(","))
+      .join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `course-browse-${new Date().toISOString().split("T")[0]}.csv`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  };
 
   const handleShowContactCard = (facultyIdOrName, displayName) => {
     const faculty = facultyData.find(
@@ -335,24 +454,63 @@ const CourseBrowser = ({ embedded = false }) => {
               }
               placeholder="All Programs"
             />
+            <div className="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-1.5 bg-white">
+              <span className="text-xs text-gray-500 whitespace-nowrap">
+                Max Enroll
+              </span>
+              <input
+                type="number"
+                min="0"
+                value={filters.maxEnrollmentMin}
+                onChange={(e) =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    maxEnrollmentMin: e.target.value,
+                  }))
+                }
+                className="w-16 text-sm text-gray-700 focus:outline-none"
+                placeholder="Min"
+              />
+              <span className="text-gray-300">–</span>
+              <input
+                type="number"
+                min="0"
+                value={filters.maxEnrollmentMax}
+                onChange={(e) =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    maxEnrollmentMax: e.target.value,
+                  }))
+                }
+                className="w-16 text-sm text-gray-700 focus:outline-none"
+                placeholder="Max"
+              />
+            </div>
           </div>
         </div>
 
         {/* Active Filters Summary */}
-        {hasActiveFilters && (
-          <div className="mt-3 flex items-center gap-2 text-sm">
-            <Filter size={14} className="text-gray-500" />
-            <span className="text-gray-600">
-              Showing {sortedData.length} of {scheduleData.length} courses
-            </span>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          {hasActiveFilters && <Filter size={14} className="text-gray-500" />}
+          <span className="text-gray-600">
+            Showing {sortedData.length} of {groupedScheduleData.length} courses
+          </span>
+          {hasActiveFilters && (
             <button
               onClick={clearFilters}
               className="text-baylor-green hover:underline ml-2"
             >
               Clear filters
             </button>
-          </div>
-        )}
+          )}
+          <button
+            onClick={handleDownloadCSV}
+            className="ml-auto flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            <Download size={14} />
+            Export CSV
+          </button>
+        </div>
       </div>
 
       {/* Course Table */}
@@ -368,13 +526,14 @@ const CourseBrowser = ({ embedded = false }) => {
                 <SortableHeader label="Days" sortKey="Day" />
                 <SortableHeader label="Time" sortKey="Time" />
                 <SortableHeader label="Room" sortKey="Room" />
+                <SortableHeader label="Max Enrollment" sortKey="Max Enrollment" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {sortedData.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-8 text-center text-gray-500"
                   >
                     {hasActiveFilters
@@ -421,6 +580,9 @@ const CourseBrowser = ({ embedded = false }) => {
                       </td>
                       <td className="px-4 py-3 text-gray-700">
                         {item.Room || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700">
+                        {getMaxEnrollmentDisplay(item)}
                       </td>
                     </tr>
                   );

@@ -14,7 +14,7 @@ import {
   getStudentStatusForSemester
 } from '../utils/studentWorkers';
 import { formatPhoneNumber } from '../utils/directoryUtils';
-import { getCanonicalBuildingList } from '../utils/locationService';
+import { getCanonicalBuildingList, normalizeBuildingName } from '../utils/locationService';
 import { useData } from '../contexts/DataContext';
 import { usePeopleOperations } from '../hooks';
 import { useUI } from '../contexts/UIContext';
@@ -53,16 +53,28 @@ const createEmptyStudentDraft = () => ({
   jobs: [createEmptyAssignment()]
 });
 
+const trimValue = (value) => (typeof value === 'string' ? value.trim() : value);
+
+const normalizeBuildingLabel = (value) => {
+  const trimmed = trimValue(value) || '';
+  const normalized = normalizeBuildingName(trimmed);
+  return (normalized || trimmed || '').trim();
+};
+
+const normalizeBuildingList = (value) => {
+  const list = Array.isArray(value) ? value : (value ? [value] : []);
+  const normalized = list
+    .map((item) => normalizeBuildingLabel(item))
+    .filter(Boolean);
+  return Array.from(new Set(normalized));
+};
+
 const deriveBuildingsFromJobs = (jobs) =>
   Array.from(
     new Set(
-      (jobs || []).flatMap((job) =>
-        Array.isArray(job.location) ? job.location.filter(Boolean) : []
-      )
+      (jobs || []).flatMap((job) => normalizeBuildingList(job?.location))
     )
   );
-
-const trimValue = (value) => (typeof value === 'string' ? value.trim() : value);
 
 const sanitizeWeeklyEntries = (entries) => {
   if (!Array.isArray(entries)) return [];
@@ -82,10 +94,7 @@ const prepareStudentPayload = (student) => {
   const normalizedJobs = jobsArray
     .map((job) => {
       if (!job) return createEmptyAssignment();
-      const rawLocations = Array.isArray(job.location)
-        ? job.location
-        : (job.location ? [job.location] : []);
-      const locations = Array.from(new Set(rawLocations.map((loc) => trimValue(loc)).filter(Boolean)));
+      const locations = normalizeBuildingList(job.location);
       return {
         jobTitle: trimValue(job.jobTitle || ''),
         supervisor: trimValue(job.supervisor || ''),
@@ -106,12 +115,16 @@ const prepareStudentPayload = (student) => {
 
   const aggregatedWeeklySchedule = normalizedJobs.flatMap((job) => job.weeklySchedule);
   const aggregatedBuildings = Array.from(new Set(normalizedJobs.flatMap((job) => job.location)));
-  const fallbackBuildings = Array.isArray(student.primaryBuildings)
-    ? student.primaryBuildings.map((b) => trimValue(b)).filter(Boolean)
-    : (student.primaryBuilding ? [trimValue(student.primaryBuilding)] : []);
+  const fallbackBuildings = normalizeBuildingList(
+    Array.isArray(student.primaryBuildings) && student.primaryBuildings.length > 0
+      ? student.primaryBuildings
+      : student.primaryBuilding
+  );
   const fallbackWeekly = sanitizeWeeklyEntries(student.weeklySchedule);
 
   const primaryJob = normalizedJobs[0] || {};
+  const primaryBuildings = aggregatedBuildings.length > 0 ? aggregatedBuildings : fallbackBuildings;
+  const primaryBuilding = primaryBuildings[0] || normalizeBuildingLabel(student.primaryBuilding);
 
   return {
     ...student,
@@ -120,7 +133,8 @@ const prepareStudentPayload = (student) => {
     phone: student.hasNoPhone ? '' : trimValue(student.phone || ''),
     jobs: normalizedJobs,
     weeklySchedule: aggregatedWeeklySchedule.length > 0 ? aggregatedWeeklySchedule : fallbackWeekly,
-    primaryBuildings: aggregatedBuildings.length > 0 ? aggregatedBuildings : fallbackBuildings,
+    primaryBuildings,
+    primaryBuilding,
     jobTitle: primaryJob.jobTitle || trimValue(student.jobTitle || ''),
     supervisor: primaryJob.supervisor || trimValue(student.supervisor || ''),
     hourlyRate: primaryJob.hourlyRate || trimValue(student.hourlyRate || ''),

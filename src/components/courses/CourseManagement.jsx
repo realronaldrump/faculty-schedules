@@ -20,11 +20,22 @@ import { formatChangeForDisplay } from "../../utils/recentChanges";
 import { buildCourseSectionKey, parseCourseCode } from "../../utils/courseUtils";
 import { parseTime } from "../../utils/timeUtils";
 import { getBuildingDisplay } from "../../utils/locationService";
+import { getMaxEnrollment } from "../../utils/enrollmentUtils";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { useScheduleOperations, usePeopleOperations } from "../../hooks";
 import { useUI } from "../../contexts/UIContext";
 import { useAppConfig } from "../../contexts/AppConfigContext";
+
+const MAX_ENROLLMENT_EXPORT_KEY = "Max Enrollment";
+const MAX_ENROLLMENT_FIELD_KEYS = new Set([
+  "maxEnrollment",
+  "maximumEnrollment",
+  "Maximum Enrollment",
+  "MaxEnrollment",
+  "max_enrollment",
+  "Max Enrollment",
+]);
 
 const CourseManagement = ({ embedded = false }) => {
   const {
@@ -61,6 +72,8 @@ const CourseManagement = ({ embedded = false }) => {
     credits: "all", // 'all', '1', '2', '3', '4+'
     timeOfDay: "all", // 'all', 'morning', 'afternoon', 'evening'
     status: "all", // 'all', 'Active', 'Cancelled', etc.
+    maxEnrollmentMin: "",
+    maxEnrollmentMax: "",
   });
 
   const [activeFilterPreset, setActiveFilterPreset] = useState("");
@@ -258,9 +271,13 @@ const CourseManagement = ({ embedded = false }) => {
         if (!k.startsWith("_")) allKeys.add(k);
       });
     });
-    return Array.from(allKeys)
-      .filter((field) => field !== "Schedule Type")
+    const fields = Array.from(allKeys)
+      .filter(
+        (field) => field !== "Schedule Type" && !MAX_ENROLLMENT_FIELD_KEYS.has(field),
+      )
       .sort();
+    fields.push(MAX_ENROLLMENT_EXPORT_KEY);
+    return fields;
   }, [scheduleData]);
 
   // Sync selected fields when modal opens
@@ -331,6 +348,8 @@ const CourseManagement = ({ embedded = false }) => {
         credits: "all",
         timeOfDay: "all",
         status: "all",
+        maxEnrollmentMin: "",
+        maxEnrollmentMax: "",
       },
     },
     "adjunct-courses": {
@@ -348,6 +367,8 @@ const CourseManagement = ({ embedded = false }) => {
         credits: "all",
         timeOfDay: "all",
         status: "all",
+        maxEnrollmentMin: "",
+        maxEnrollmentMax: "",
       },
     },
     "active-courses": {
@@ -365,6 +386,8 @@ const CourseManagement = ({ embedded = false }) => {
         credits: "all",
         timeOfDay: "all",
         status: "Active",
+        maxEnrollmentMin: "",
+        maxEnrollmentMax: "",
       },
     },
     "morning-classes": {
@@ -382,6 +405,8 @@ const CourseManagement = ({ embedded = false }) => {
         credits: "all",
         timeOfDay: "morning",
         status: "all",
+        maxEnrollmentMin: "",
+        maxEnrollmentMax: "",
       },
     },
     "high-credit": {
@@ -399,6 +424,8 @@ const CourseManagement = ({ embedded = false }) => {
         credits: "4+",
         timeOfDay: "all",
         status: "all",
+        maxEnrollmentMin: "",
+        maxEnrollmentMax: "",
       },
     },
   };
@@ -409,6 +436,17 @@ const CourseManagement = ({ embedded = false }) => {
     W: "Wednesday",
     R: "Thursday",
     F: "Friday",
+  };
+
+  const normalizeEnrollmentInput = (value) => {
+    if (value === null || value === undefined || value === "") return null;
+    const parsed = Number.parseInt(String(value), 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const getMaxEnrollmentDisplay = (item) => {
+    const value = getMaxEnrollment(item);
+    return value === null ? "—" : value;
   };
 
   // Helper function to get time of day
@@ -674,6 +712,18 @@ const CourseManagement = ({ embedded = false }) => {
       });
     }
 
+    const minMaxEnrollment = normalizeEnrollmentInput(filters.maxEnrollmentMin);
+    const maxMaxEnrollment = normalizeEnrollmentInput(filters.maxEnrollmentMax);
+    if (minMaxEnrollment !== null || maxMaxEnrollment !== null) {
+      data = data.filter((item) => {
+        const value = getMaxEnrollment(item);
+        if (value === null) return false;
+        if (minMaxEnrollment !== null && value < minMaxEnrollment) return false;
+        if (maxMaxEnrollment !== null && value > maxMaxEnrollment) return false;
+        return true;
+      });
+    }
+
     // Group by course, section, term, instructor, room, and time to collapse multi-day sessions into a single row
     const dayOrderMap = { M: 1, T: 2, W: 3, R: 4, F: 5 };
     const groupedMap = {};
@@ -720,6 +770,11 @@ const CourseManagement = ({ embedded = false }) => {
         let aValue = a[sortConfig.key];
         let bValue = b[sortConfig.key];
 
+        if (sortConfig.key === "maxEnrollment") {
+          aValue = getMaxEnrollment(a);
+          bValue = getMaxEnrollment(b);
+        }
+
         // Handle null/undefined values
         if (aValue == null && bValue == null) return 0;
         if (aValue == null)
@@ -733,7 +788,11 @@ const CourseManagement = ({ embedded = false }) => {
           bValue = parseTime(bValue) || 0;
         }
         // Special handling for numeric fields
-        else if (sortConfig.key === "CRN" || sortConfig.key === "Credits") {
+        else if (
+          sortConfig.key === "CRN" ||
+          sortConfig.key === "Credits" ||
+          sortConfig.key === "maxEnrollment"
+        ) {
           aValue = parseInt(aValue) || 0;
           bValue = parseInt(bValue) || 0;
         }
@@ -812,6 +871,7 @@ const CourseManagement = ({ embedded = false }) => {
     setEditFormData({
       ...row,
       Credits: metadata.credits !== "" ? metadata.credits : (row.Credits ?? ""),
+      maxEnrollment: getMaxEnrollment(row) ?? row.maxEnrollment ?? "",
       Program: metadata.program || row.Program || "",
       program: metadata.program || row.program || "",
       subjectCode: metadata.program || row.subjectCode || "",
@@ -999,6 +1059,8 @@ const CourseManagement = ({ embedded = false }) => {
       credits: "all",
       timeOfDay: "all",
       status: "all",
+      maxEnrollmentMin: "",
+      maxEnrollmentMax: "",
     };
     setFilters(clearedFilters);
     setActiveFilterPreset("");
@@ -1018,6 +1080,7 @@ const CourseManagement = ({ embedded = false }) => {
     Term: "Semester",
     "Term Code": "Semester Code",
     "Part of Term": "Part of Semester",
+    [MAX_ENROLLMENT_EXPORT_KEY]: "Max Enrollment",
   };
   const getExportFieldLabel = (field) => exportFieldLabels[field] || field;
 
@@ -1030,13 +1093,20 @@ const CourseManagement = ({ embedded = false }) => {
       return;
     }
     const headers = selectedExportFields.map(getExportFieldLabel);
+    const resolveExportValue = (row, field) => {
+      if (field === MAX_ENROLLMENT_EXPORT_KEY) {
+        return getMaxEnrollment(row) ?? "";
+      }
+      const val =
+        row && row[field] !== undefined && row[field] !== null
+          ? row[field]
+          : "";
+      return val;
+    };
     const rows = filteredAndSortedData.map((row) =>
       selectedExportFields
         .map((field) => {
-          const val =
-            row && row[field] !== undefined && row[field] !== null
-              ? row[field]
-              : "";
+          const val = resolveExportValue(row, field);
           return `"${String(val).replace(/"/g, '""')}"`;
         })
         .join(","),
@@ -1069,6 +1139,8 @@ const CourseManagement = ({ embedded = false }) => {
     if (filters.timeOfDay !== "all") count++;
     if (filters.status !== "all") count++;
     if (filters.searchTerm) count++;
+    if (filters.maxEnrollmentMin) count++;
+    if (filters.maxEnrollmentMax) count++;
     return count;
   }, [filters]);
 
@@ -1484,6 +1556,20 @@ const CourseManagement = ({ embedded = false }) => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Max Enrollment
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  name="maxEnrollment"
+                  value={newCourseData.maxEnrollment || ""}
+                  onChange={handleNewCourseChange}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
+                  placeholder="Optional"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Schedule Type
                 </label>
                 <select
@@ -1823,6 +1909,46 @@ const CourseManagement = ({ embedded = false }) => {
                   </select>
                 </div>
               </div>
+
+              {/* Max Enrollment */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Max Enrollment (Min)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={filters.maxEnrollmentMin}
+                    onChange={(e) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        maxEnrollmentMin: e.target.value,
+                      }))
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                    placeholder="Any"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Max Enrollment (Max)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={filters.maxEnrollmentMax}
+                    onChange={(e) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        maxEnrollmentMax: e.target.value,
+                      }))
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                    placeholder="Any"
+                  />
+                </div>
+              </div>
             </div>
           )}
 
@@ -1940,6 +2066,10 @@ const CourseManagement = ({ embedded = false }) => {
                 <DataTableHeader columnKey="End Time" label="End Time" />
                 <DataTableHeader columnKey="Room" label="Room" />
                 <DataTableHeader columnKey="Credits" label="Credits" />
+                <DataTableHeader
+                  columnKey="maxEnrollment"
+                  label="Max Enrollment"
+                />
                 <DataTableHeader columnKey="Status" label="Status" />
                 <DataTableHeader columnKey="isOnline" label="Online" />
                 <DataTableHeader columnKey="onlineMode" label="Online Mode" />
@@ -2096,6 +2226,17 @@ const CourseManagement = ({ embedded = false }) => {
                           </p>
                         </td>
                         <td className="p-1">
+                          <input
+                            type="number"
+                            min="0"
+                            name="maxEnrollment"
+                            value={editFormData.maxEnrollment ?? ""}
+                            onChange={handleEditFormChange}
+                            className="w-full p-1 border border-baylor-gold rounded bg-baylor-gold/10 focus:ring-baylor-green focus:border-baylor-green text-sm"
+                            placeholder="Max"
+                          />
+                        </td>
+                        <td className="p-1">
                           <select
                             name="Status"
                             value={editFormData.Status || ""}
@@ -2215,6 +2356,9 @@ const CourseManagement = ({ embedded = false }) => {
                           {row.Credits}
                         </td>
                         <td className="px-4 py-3 text-gray-700">
+                          {getMaxEnrollmentDisplay(row)}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">
                           {row.Status}
                         </td>
                         <td className="px-4 py-3 text-gray-700">
@@ -2254,7 +2398,7 @@ const CourseManagement = ({ embedded = false }) => {
               ) : (
                 <tr>
                   <td
-                    colSpan="15"
+                    colSpan="16"
                     className="px-4 py-8 text-center text-gray-500"
                   >
                     {scheduleData.length === 0 ? (

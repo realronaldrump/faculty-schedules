@@ -60,7 +60,6 @@ const CourseManagement = ({ embedded = false }) => {
     tenured: "all", // 'all', 'include', 'exclude'
     credits: "all", // 'all', '1', '2', '3', '4+'
     timeOfDay: "all", // 'all', 'morning', 'afternoon', 'evening'
-    scheduleType: "all", // 'all', 'Class Instruction', 'Lab', etc.
     status: "all", // 'all', 'Active', 'Cancelled', etc.
   });
 
@@ -238,18 +237,6 @@ const CourseManagement = ({ embedded = false }) => {
     [scheduleData],
   );
 
-  const uniqueScheduleTypes = useMemo(
-    () =>
-      [
-        ...new Set(
-          scheduleData
-            .filter((item) => item && item["Schedule Type"])
-            .map((item) => item["Schedule Type"]),
-        ),
-      ].sort(),
-    [scheduleData],
-  );
-
   const uniqueStatuses = useMemo(
     () =>
       [
@@ -271,7 +258,9 @@ const CourseManagement = ({ embedded = false }) => {
         if (!k.startsWith("_")) allKeys.add(k);
       });
     });
-    return Array.from(allKeys).sort();
+    return Array.from(allKeys)
+      .filter((field) => field !== "Schedule Type")
+      .sort();
   }, [scheduleData]);
 
   // Sync selected fields when modal opens
@@ -341,7 +330,6 @@ const CourseManagement = ({ embedded = false }) => {
         tenured: "all",
         credits: "all",
         timeOfDay: "all",
-        scheduleType: "all",
         status: "all",
       },
     },
@@ -359,7 +347,6 @@ const CourseManagement = ({ embedded = false }) => {
         tenured: "all",
         credits: "all",
         timeOfDay: "all",
-        scheduleType: "all",
         status: "all",
       },
     },
@@ -377,7 +364,6 @@ const CourseManagement = ({ embedded = false }) => {
         tenured: "all",
         credits: "all",
         timeOfDay: "all",
-        scheduleType: "all",
         status: "Active",
       },
     },
@@ -395,7 +381,6 @@ const CourseManagement = ({ embedded = false }) => {
         tenured: "all",
         credits: "all",
         timeOfDay: "morning",
-        scheduleType: "all",
         status: "all",
       },
     },
@@ -413,7 +398,6 @@ const CourseManagement = ({ embedded = false }) => {
         tenured: "all",
         credits: "4+",
         timeOfDay: "all",
-        scheduleType: "all",
         status: "all",
       },
     },
@@ -512,17 +496,6 @@ const CourseManagement = ({ embedded = false }) => {
         (item) =>
           item && item.Section && filters.sections.includes(item.Section),
       );
-    }
-
-    // Apply schedule type filter
-    if (filters.scheduleType && filters.scheduleType !== "all") {
-      data = data.filter((item) => {
-        return (
-          item &&
-          item["Schedule Type"] &&
-          item["Schedule Type"] === filters.scheduleType
-        );
-      });
     }
 
     // Apply status filter
@@ -1025,7 +998,6 @@ const CourseManagement = ({ embedded = false }) => {
       tenured: "all",
       credits: "all",
       timeOfDay: "all",
-      scheduleType: "all",
       status: "all",
     };
     setFilters(clearedFilters);
@@ -1095,7 +1067,6 @@ const CourseManagement = ({ embedded = false }) => {
     if (filters.tenured !== "all") count++;
     if (filters.credits !== "all") count++;
     if (filters.timeOfDay !== "all") count++;
-    if (filters.scheduleType !== "all") count++;
     if (filters.status !== "all") count++;
     if (filters.searchTerm) count++;
     return count;

@@ -2004,11 +2004,20 @@ const CourseManagement = ({ embedded = false }) => {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredAndSortedData.length > 0 ? (
-                filteredAndSortedData.map((row) => (
-                  <tr
-                    key={`${row.id}|${row.CRN || ""}|${row.Term || ""}|${row.Section || ""}`}
-                    className="hover:bg-gray-50"
-                  >
+                filteredAndSortedData.map((row) => {
+                  const isAsynchronous =
+                    String(row.onlineMode || "").trim().toLowerCase() ===
+                    "asynchronous";
+                  const startTimeDisplay =
+                    row["Start Time"] || (isAsynchronous ? "-" : "");
+                  const endTimeDisplay =
+                    row["End Time"] || (isAsynchronous ? "-" : "");
+
+                  return (
+                    <tr
+                      key={`${row.id}|${row.CRN || ""}|${row.Term || ""}|${row.Section || ""}`}
+                      className="hover:bg-gray-50"
+                    >
                     {editingRowId === row.id ? (
                       <>
                         <td className="p-1">
@@ -2267,10 +2276,10 @@ const CourseManagement = ({ embedded = false }) => {
                           )}
                         </td>
                         <td className="px-4 py-3 text-gray-700">
-                          {row["Start Time"]}
+                          {startTimeDisplay}
                         </td>
                         <td className="px-4 py-3 text-gray-700">
-                          {row["End Time"]}
+                          {endTimeDisplay}
                         </td>
                         <td className="px-4 py-3 text-gray-700">{row.Room}</td>
                         <td className="px-4 py-3 text-gray-700">
@@ -2313,8 +2322,9 @@ const CourseManagement = ({ embedded = false }) => {
                         </td>
                       </>
                     )}
-                  </tr>
-                ))
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
                   <td

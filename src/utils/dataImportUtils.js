@@ -1016,7 +1016,8 @@ export const processScheduleImport = async (csvData) => {
       // Extract key fields
       const instructorField = row["Instructor"] || "";
       const courseCode = row["Course"] || "";
-      const courseTitle = row["Course Title"] || row["Long Title"] || "";
+      const courseTitle =
+        row["Course Title"] || row["Long Title"] || row["Title/Topic"] || "";
       const section = normalizeSection(row["Section #"] || "");
       const crn = row["CRN"] || ""; // Extract CRN field
       const meetingPattern = row["Meeting Pattern"] || "";
@@ -1451,12 +1452,9 @@ export const processScheduleImport = async (csvData) => {
       // Parse cross-listings from CSV text (store related CRNs if present)
       const crossListCrns = parseCrossListCrns(row);
 
-      // Omit redundant display fields from writes; keep on read via joins
-      const {
-        instructorName: _omitInstructorName,
-        courseTitle: _omitCourseTitle,
-        ...scheduleWrite
-      } = scheduleData;
+      // Keep courseTitle for schedule data views; omit instructor display name.
+      const { instructorName: _omitInstructorName, ...scheduleWrite } =
+        scheduleData;
       if (crossListCrns && crossListCrns.length > 0) {
         scheduleWrite.crossListCrns = Array.from(new Set(crossListCrns));
       }

@@ -492,7 +492,7 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
   const rowHash = row?.__rowHash || hashRecord(rowHashInput);
 
   const courseCode = standardizeCourseCode(row.Course || '');
-  const courseTitle = row['Course Title'] || row['Long Title'] || '';
+  const courseTitle = row['Course Title'] || row['Long Title'] || row['Title/Topic'] || '';
   const section = normalizeSectionIdentifier(row['Section #'] || '');
 
   const clssId = (row['CLSS ID'] || '').toString().trim();
@@ -1395,7 +1395,6 @@ const previewScheduleChanges = async (
 
     const {
       instructorName: _omitInstructorName,
-      courseTitle: _omitCourseTitle,
       instructorMatchIssueIds: _omitMatchIssueIds,
       ...scheduleWrite
     } = standardizedScheduleData;
@@ -2070,7 +2069,6 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
         const schedRef = doc(db, COLLECTIONS.SCHEDULES, scheduleDocId);
         const {
           instructorName: _omitInstructorName,
-          courseTitle: _omitCourseTitle,
           ...scheduleWrite
         } = scheduleData;
         await batchWriter.add(change, (batch) => {

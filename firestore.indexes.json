@@ -27,7 +27,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "roomId",
+          "fieldPath": "spaceKey",
           "order": "ASCENDING"
         },
         {

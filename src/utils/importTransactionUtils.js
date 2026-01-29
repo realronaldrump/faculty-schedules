@@ -12,8 +12,14 @@ import { parseCourseCode, deriveCreditsFromCatalogNumber } from './courseUtils';
 import { parseMeetingPatterns, normalizeTime } from './meetingPatternUtils';
 import { findPersonMatch, makeNameKey, normalizeBaylorId } from './personMatchUtils';
 import { normalizeTermLabel, termCodeFromLabel, termLabelFromCode } from './termUtils';
-import { getRoomKeyFromRoomRecord, parseRoomLabel, splitRoomLabels } from './roomUtils';
-import { LOCATION_TYPE, parseMultiRoom } from './locationService';
+import {
+  LOCATION_TYPE,
+  parseMultiRoom,
+  parseRoomLabel,
+  splitMultiRoom,
+  buildSpaceKey,
+  normalizeSpaceNumber
+} from './locationService';
 import { normalizeSectionNumber } from './canonicalSchema';
 import { hashRecord } from './hashUtils';
 import { standardizeCourseCode } from './hygieneCore';
@@ -451,14 +457,10 @@ const buildRoomBackfillUpdates = (existingRoom, parsedRoom) => {
   };
 
   setIfMissing('spaceKey', parsedRoom.spaceKey);
-  setIfMissing('roomKey', parsedRoom.roomKey);
   setIfMissing('buildingCode', parsedRoom.buildingCode);
-  setIfMissing('buildingDisplayName', parsedRoom.building);
-  setIfMissing('building', parsedRoom.building);
+  setIfMissing('buildingDisplayName', parsedRoom.building?.displayName || '');
   setIfMissing('spaceNumber', parsedRoom.spaceNumber);
-  setIfMissing('roomNumber', parsedRoom.spaceNumber);
   setIfMissing('displayName', parsedRoom.displayName);
-  setIfMissing('name', parsedRoom.displayName);
 
   return { updates, diff };
 };
@@ -555,16 +557,16 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
   const parsedRoomNames = Array.isArray(parsedRooms.displayNames)
     ? parsedRooms.displayNames
     : [];
-  const roomNames = parsedRoomNames.length > 0
+  const locationNames = parsedRoomNames.length > 0
     ? parsedRoomNames
-    : (roomRaw ? splitRoomLabels(roomRaw) : []);
+    : (roomRaw ? splitMultiRoom(roomRaw) : []);
   const inferredIsOnline =
     parsedRooms.locationType === LOCATION_TYPE.VIRTUAL ||
     roomRaw.toUpperCase().includes('ONLINE') ||
     instructionMethod.toLowerCase().includes('online');
   const isPhysical =
     parsedRooms.locationType === LOCATION_TYPE.PHYSICAL ||
-    (parsedRooms.locationType === LOCATION_TYPE.UNKNOWN && roomNames.length > 0);
+    (parsedRooms.locationType === LOCATION_TYPE.UNKNOWN && locationNames.length > 0);
   const locationType = isPhysical ? 'room' : 'no_room';
   const locationLabel = inferredIsOnline
     ? 'Online'
@@ -573,7 +575,7 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
       : '');
   const filteredRoomNames = locationType === 'no_room'
     ? []
-    : roomNames;
+    : locationNames;
   const spaceIds = locationType === 'no_room'
     ? []
     : Array.from(new Set(parsedRooms.spaceKeys || []));
@@ -605,7 +607,6 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
     meetingPatternRaw,
     meetingPatterns,
     roomRaw,
-    roomNames: filteredRoomNames,
     spaceIds,
     spaceDisplayNames,
     locationType,
@@ -666,7 +667,7 @@ export const projectSchedulePreviewRow = (row, fallbackTerm = '') => {
     'Instruction Method': base.instructionMethod,
     'Campus': base.campus,
     'Rooms (raw)': base.roomRaw,
-    'Rooms (parsed)': base.roomNames.join('; '),
+    'Rooms (parsed)': Array.isArray(base.spaceDisplayNames) ? base.spaceDisplayNames.join('; ') : '',
     'Meeting Pattern (raw)': base.meetingPatternRaw,
     'Meeting Pattern (parsed)': meetingSummary,
     'Visible on Web': base.visibleOnWeb,
@@ -676,7 +677,7 @@ export const projectSchedulePreviewRow = (row, fallbackTerm = '') => {
 
 const buildRoomNameKeys = (roomData) => {
   const keys = new Set();
-  const candidates = [roomData.name, roomData.displayName];
+  const candidates = [roomData.displayName];
   candidates.forEach((candidate) => {
     const key = normalizeRoomName(candidate);
     if (key) keys.add(key);
@@ -709,8 +710,6 @@ const SCHEDULE_INTERNAL_UPDATE_FIELDS = new Set([
   'identityKeys',
   'identitySource',
   'updatedAt',
-  'roomId',
-  'roomIds',
   'spaceIds',
   'spaceDisplayNames',
   'instructorId',
@@ -772,13 +771,13 @@ const normalizeMeetingPatternToken = (pattern) => {
 };
 
 const areEquivalentScheduleValues = (key, existingValue, incomingValue) => {
-  if (key === 'roomNames' || key === 'spaceDisplayNames') {
+  if (key === 'spaceDisplayNames') {
     const existing = normalizeListValues(existingValue, normalizeRoomToken);
     const incoming = normalizeListValues(incomingValue, normalizeRoomToken);
     return deepEqual(existing, incoming);
   }
 
-  if (key === 'roomIds' || key === 'spaceIds' || key === 'instructorIds' || key === 'crossListCrns') {
+  if (key === 'spaceIds' || key === 'instructorIds' || key === 'crossListCrns') {
     const existing = normalizeListValues(existingValue, normalizeIdToken);
     const incoming = normalizeListValues(incomingValue, normalizeIdToken);
     return deepEqual(existing, incoming);
@@ -1020,15 +1019,9 @@ const previewScheduleChanges = async (
   };
 
   existingRooms.forEach((room) => {
-    const roomKey = getRoomKeyFromRoomRecord(room);
-    if (roomKey && !roomsKeyMap.has(roomKey)) {
-      roomsKeyMap.set(roomKey, room);
-    }
-    if (room?.spaceKey && !roomsKeyMap.has(room.spaceKey)) {
-      roomsKeyMap.set(room.spaceKey, room);
-    }
-    if (room?.roomKey && !roomsKeyMap.has(room.roomKey)) {
-      roomsKeyMap.set(room.roomKey, room);
+    const spaceKey = room?.spaceKey || '';
+    if (spaceKey && !roomsKeyMap.has(spaceKey)) {
+      roomsKeyMap.set(spaceKey, room);
     }
     buildRoomNameKeys(room).forEach((key) => roomsMap.set(key, room));
   });
@@ -1124,7 +1117,7 @@ const previewScheduleChanges = async (
       crn: baseData.crn,
       meetingPatterns: baseData.meetingPatterns,
       spaceIds: baseData.spaceIds,
-      roomNames: baseData.roomNames
+      spaceDisplayNames: baseData.spaceDisplayNames
     });
     const identityKey = identity.primaryKey;
     if (!identityKey) {
@@ -1266,41 +1259,34 @@ const previewScheduleChanges = async (
     const primaryInstructor = instructorId ? instructorPeople.get(instructorId) : null;
 
     // Extract room information (support simultaneous multi-rooms)
-    const splitRooms = Array.isArray(baseData.roomNames) ? baseData.roomNames : [];
-    const resolvedRoomIds = [];
+    const splitRooms = Array.isArray(baseData.spaceDisplayNames) ? baseData.spaceDisplayNames : [];
     const resolvedSpaceKeys = [];
-    let primaryRoomId = null;
     if (splitRooms.length > 0) {
       for (const singleRoom of splitRooms) {
         const nameKey = normalizeRoomName(singleRoom);
         if (!nameKey) continue;
 
         const parsed = parseRoomLabel(singleRoom);
-        const spaceKey = parsed?.spaceKey || '';
-        const roomKey = spaceKey || parsed?.roomKey || '';
+        const buildingCode = (parsed?.buildingCode || parsed?.building?.code || '').toString().trim().toUpperCase();
+        const spaceNumber = normalizeSpaceNumber(parsed?.spaceNumber || '');
+        const spaceKey = parsed?.spaceKey || (buildingCode && spaceNumber ? buildSpaceKey(buildingCode, spaceNumber) : '');
         if (spaceKey) resolvedSpaceKeys.push(spaceKey);
 
-        let room = roomKey ? roomsKeyMap.get(roomKey) : null;
+        let room = spaceKey ? roomsKeyMap.get(spaceKey) : null;
         if (!room) {
           room = roomsMap.get(nameKey) || null;
         }
 
-        if (!room && roomKey) {
+        if (!room && spaceKey) {
           const now = new Date().toISOString();
-          const buildingCode = parsed?.buildingCode || (spaceKey ? spaceKey.split(':')[0] : '');
-          const spaceNumber = parsed?.spaceNumber || parsed?.roomNumber || '';
-          const buildingDisplayName = parsed?.building || buildingCode || '';
+          const buildingDisplayName = parsed?.building?.displayName || buildingCode || '';
           const displayName = parsed?.displayName || singleRoom;
           const newRoom = standardizeImportedRoom({
             spaceKey: spaceKey || '',
             spaceNumber,
             buildingCode,
             buildingDisplayName,
-            name: displayName,
             displayName,
-            building: buildingDisplayName,
-            roomNumber: spaceNumber,
-            roomKey: parsed?.roomKey || '',
             capacity: null,
             type: 'Classroom',
             isActive: true,
@@ -1308,22 +1294,15 @@ const previewScheduleChanges = async (
             updatedAt: now
           });
           transaction.addChange('rooms', 'add', newRoom, null, { groupKey });
-          const placeholder = { id: roomKey, ...newRoom };
+          const placeholder = { id: spaceKey, ...newRoom };
           createdRoomIds.add(placeholder.id);
-          roomsKeyMap.set(roomKey, placeholder);
-          if (spaceKey) roomsKeyMap.set(spaceKey, placeholder);
+          roomsKeyMap.set(spaceKey, placeholder);
           buildRoomNameKeys(placeholder).forEach((key) => roomsMap.set(key, placeholder));
           room = placeholder;
         }
 
         if (room?.id) {
           queueRoomBackfill(room, parsed);
-          if (!resolvedRoomIds.includes(room.id)) {
-            resolvedRoomIds.push(room.id);
-          }
-          if (!primaryRoomId) {
-            primaryRoomId = room.id;
-          }
         }
       }
     }
@@ -1350,7 +1329,6 @@ const previewScheduleChanges = async (
     const instructorMatchIssueIds = instructorAssignments
       .map((assignment) => assignment.matchIssueId)
       .filter(Boolean);
-    const uniqueRoomIds = Array.from(new Set(resolvedRoomIds));
     const uniqueSpaceIds = baseData.locationType === 'no_room'
       ? []
       : Array.from(new Set([...(baseData.spaceIds || []), ...resolvedSpaceKeys]));
@@ -1394,10 +1372,6 @@ const previewScheduleChanges = async (
       // Multi-room fields
       spaceIds: uniqueSpaceIds,
       spaceDisplayNames,
-      roomIds: uniqueRoomIds,
-      roomId: primaryRoomId || uniqueRoomIds[0] || null,
-      roomNames: baseData.locationType === 'no_room' ? [] : splitRooms,
-      roomName: baseData.locationType === 'no_room' ? '' : (splitRooms[0] || ''),
       meetingPatterns: baseData.meetingPatterns,
       scheduleType: baseData.scheduleType,
       instructionMethod: baseData.instructionMethod || '',
@@ -1421,7 +1395,6 @@ const previewScheduleChanges = async (
 
     const {
       instructorName: _omitInstructorName,
-      roomName: _omitRoomName,
       courseTitle: _omitCourseTitle,
       instructorMatchIssueIds: _omitMatchIssueIds,
       ...scheduleWrite
@@ -1429,7 +1402,7 @@ const previewScheduleChanges = async (
 
     if (existingSchedule) {
       const allowEmptyFields = (scheduleWrite.locationType === 'no_room' || scheduleWrite.isOnline)
-        ? ['roomNames', 'roomName', 'roomIds', 'roomId', 'spaceIds', 'spaceDisplayNames']
+        ? ['spaceIds', 'spaceDisplayNames']
         : [];
       const { updates, hasChanges } = buildScheduleImportUpdates(existingSchedule, scheduleWrite, { allowEmptyFields });
       if (!hasChanges) {
@@ -1521,9 +1494,9 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
   const { includeOfficeRooms = true } = options;
 
   existingRooms.forEach((room) => {
-    const roomKey = getRoomKeyFromRoomRecord(room);
-    if (roomKey && !roomsKeyMap.has(roomKey)) {
-      roomsKeyMap.set(roomKey, room);
+    const spaceKey = room?.spaceKey || '';
+    if (spaceKey && !roomsKeyMap.has(spaceKey)) {
+      roomsKeyMap.set(spaceKey, room);
     }
     buildRoomNameKeys(room).forEach((key) => roomsMap.set(key, room));
   });
@@ -1537,21 +1510,16 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
 
     const officeRaw = row['Office'] || row['Office Location'] || '';
     const parsedOffice = parseRoomLabel(officeRaw);
-    const officeRoomKey = parsedOffice?.roomKey || '';
     const officeSpaceKey = parsedOffice?.spaceKey || '';
     const officeBuildingCode = parsedOffice?.buildingCode || (officeSpaceKey ? officeSpaceKey.split(':')[0] : '');
-    const officeSpaceNumber = parsedOffice?.spaceNumber || parsedOffice?.roomNumber || '';
-    const officeBuildingName = parsedOffice?.building || officeBuildingCode || '';
+    const officeSpaceNumber = parsedOffice?.spaceNumber || '';
+    const officeBuildingName = parsedOffice?.building?.displayName || officeBuildingCode || '';
     const officeDisplayName = parsedOffice?.displayName || officeRaw;
     const officeNameKey = normalizeRoomName(officeRaw);
     let existingOfficeRoom = officeSpaceKey ? roomsKeyMap.get(officeSpaceKey) : null;
-    if (!existingOfficeRoom && officeRoomKey) {
-      existingOfficeRoom = roomsKeyMap.get(officeRoomKey) || null;
-    }
     if (!existingOfficeRoom && officeNameKey) {
       existingOfficeRoom = roomsMap.get(officeNameKey) || null;
     }
-    const officeRoomId = existingOfficeRoom?.id || (includeOfficeRooms ? officeSpaceKey : '') || '';
     const officeSpaceId = officeSpaceKey || '';
 
     const basePersonData = {
@@ -1562,7 +1530,6 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
       phone: row['Phone'] || row['Business Phone'] || row['Home Phone'] || '',
       office: officeRaw,
       officeSpaceId,
-      officeRoomId,
       isActive: true
     };
     const normalizedPerson = standardizeImportedPerson(basePersonData, { updateTimestamp: false });
@@ -1572,7 +1539,6 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
     const phone = normalizedPerson.phone || '';
     const office = normalizedPerson.office || '';
     const normalizedOfficeSpaceId = normalizedPerson.officeSpaceId || '';
-    const normalizedOfficeRoomId = normalizedPerson.officeRoomId || '';
     const nameKey = makeNameKey(firstName, lastName);
     const emailKey = email.toLowerCase();
     const personData = standardizeImportedPerson(basePersonData);
@@ -1590,11 +1556,7 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
           spaceNumber: officeSpaceNumber,
           buildingCode: officeBuildingCode,
           buildingDisplayName: officeBuildingName,
-          name: officeDisplayName,
           displayName: officeDisplayName,
-          building: officeBuildingName,
-          roomNumber: officeSpaceNumber,
-          roomKey: officeRoomKey,
           capacity: null,
           type: 'Office',
           isActive: true,
@@ -1628,10 +1590,6 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
         updates.officeSpaceId = normalizedOfficeSpaceId;
         diff.push({ key: 'officeSpaceId', from: existingPerson.officeSpaceId || '', to: normalizedOfficeSpaceId });
       }
-      if (normalizedOfficeRoomId && existingPerson.officeRoomId !== normalizedOfficeRoomId) {
-        updates.officeRoomId = normalizedOfficeRoomId;
-        diff.push({ key: 'officeRoomId', from: existingPerson.officeRoomId || '', to: normalizedOfficeRoomId });
-      }
       if (diff.length > 0) {
         const changeId = transaction.addChange('people', 'modify', updates, existingPerson, { groupKey });
         // Attach diff for UI consumption
@@ -1655,18 +1613,14 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
           candidates: matchResult?.candidates || []
         });
 
-        if (includeOfficeRooms && officeRoomKey && !existingOfficeRoom && !roomsKeyMap.has(officeRoomKey)) {
+        if (includeOfficeRooms && officeSpaceKey && !existingOfficeRoom && !roomsKeyMap.has(officeSpaceKey)) {
           const now = new Date().toISOString();
           const newRoom = standardizeImportedRoom({
             spaceKey: officeSpaceKey,
             spaceNumber: officeSpaceNumber,
             buildingCode: officeBuildingCode,
             buildingDisplayName: officeBuildingName,
-            name: officeDisplayName,
             displayName: officeDisplayName,
-            building: officeBuildingName,
-            roomNumber: officeSpaceNumber,
-            roomKey: officeRoomKey,
             capacity: null,
             type: 'Office',
             isActive: true,
@@ -1674,8 +1628,8 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
             updatedAt: now
           });
           transaction.addChange('rooms', 'add', newRoom, null, { groupKey });
-          const placeholder = { id: officeRoomKey, ...newRoom };
-          roomsKeyMap.set(officeRoomKey, placeholder);
+          const placeholder = { id: officeSpaceKey, ...newRoom };
+          roomsKeyMap.set(officeSpaceKey, placeholder);
           buildRoomNameKeys(placeholder).forEach((key) => roomsMap.set(key, placeholder));
         }
 
@@ -1707,11 +1661,7 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
           const groupKey = `dir_${matchKey}`;
           const now = new Date().toISOString();
           const newRoom = standardizeImportedRoom({
-            name: parsedOffice.displayName,
             displayName: parsedOffice.displayName,
-            building: parsedOffice.building,
-            roomNumber: parsedOffice.roomNumber,
-            roomKey: officeRoomKey,
             spaceKey: officeSpaceKey,
             spaceNumber: officeSpaceNumber,
             buildingCode: officeBuildingCode,
@@ -1901,7 +1851,6 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
       setIfDifferent('phone', proposedPerson?.phone, (val) => String(val).replace(/\D/g, ''));
       setIfDifferent('office', proposedPerson?.office, (val) => String(val).trim());
       setIfDifferent('officeSpaceId', proposedPerson?.officeSpaceId, (val) => String(val).trim());
-      setIfDifferent('officeRoomId', proposedPerson?.officeRoomId, (val) => String(val).trim());
     }
 
     if (Object.keys(updates).length > 0) {
@@ -1987,7 +1936,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
         }
 
       } else if (change.collection === 'rooms' && change.action === 'add') {
-        const preferredId = (change.newData?.spaceKey || change.newData?.roomKey || '').toString().trim();
+        const preferredId = (change.newData?.spaceKey || '').toString().trim();
         const docRef = preferredId
           ? doc(db, COLLECTIONS.ROOMS, preferredId)
           : doc(collection(db, COLLECTIONS.ROOMS));
@@ -2047,30 +1996,6 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
           }
         });
 
-        // Fallback for legacy single-instructor data
-        if (resolvedAssignments.length === 0 && scheduleData.instructorName) {
-          let resolvedInstructorId = scheduleData.instructorId || null;
-          const baylorKey = normalizeBaylorId(scheduleData.instructorBaylorId);
-          if (!resolvedInstructorId && baylorKey && newPeopleIdsByBaylorId.has(baylorKey)) {
-            resolvedInstructorId = newPeopleIdsByBaylorId.get(baylorKey);
-            console.log(`🔗 Linked schedule to instructor (Baylor ID): ${baylorKey} -> ${resolvedInstructorId}`);
-          }
-          if (!resolvedInstructorId) {
-            const nameKey = deriveNameKeyFromDisplayName(scheduleData.instructorName);
-            if (nameKey && newPeopleIdsByName.has(nameKey)) {
-              resolvedInstructorId = newPeopleIdsByName.get(nameKey);
-              console.log(`🔗 Linked schedule to instructor: ${nameKey} -> ${resolvedInstructorId}`);
-            }
-          }
-          if (resolvedInstructorId) {
-            resolvedAssignments.push({
-              personId: resolvedInstructorId,
-              isPrimary: true,
-              percentage: 100
-            });
-          }
-        }
-
         if (resolvedAssignments.length > 0 && !resolvedAssignments.some((a) => a.isPrimary)) {
           resolvedAssignments[0].isPrimary = true;
         }
@@ -2081,30 +2006,20 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
         scheduleData.instructorIds = Array.from(instructorIdSet);
         scheduleData.instructorAssignments = resolvedAssignments;
 
-        // Update room ID if this references a newly created room
-        const roomNames = Array.isArray(scheduleData.roomNames) ? scheduleData.roomNames : [];
-        const resolvedRoomIds = new Set(scheduleData.roomIds || []);
+        // Update space IDs if this references a newly created room
+        const locationNames = Array.isArray(scheduleData.spaceDisplayNames) ? scheduleData.spaceDisplayNames : [];
+        const resolvedSpaceIds = new Set(scheduleData.spaceIds || []);
 
-        roomNames.forEach((roomName) => {
-          const roomKey = normalizeRoomName(roomName);
+        locationNames.forEach((locationName) => {
+          const roomKey = normalizeRoomName(locationName);
           if (roomKey && newRoomIdsByName.has(roomKey)) {
-            resolvedRoomIds.add(newRoomIdsByName.get(roomKey));
+            resolvedSpaceIds.add(newRoomIdsByName.get(roomKey));
           }
         });
 
-        if (scheduleData.roomName) {
-          const primaryRoomKey = normalizeRoomName(scheduleData.roomName);
-          if (primaryRoomKey && newRoomIdsByName.has(primaryRoomKey)) {
-            resolvedRoomIds.add(newRoomIdsByName.get(primaryRoomKey));
-          }
-        }
-
-        const uniqueResolvedRoomIds = Array.from(resolvedRoomIds);
-        if (uniqueResolvedRoomIds.length > 0) {
-          scheduleData.roomIds = uniqueResolvedRoomIds;
-          if (!scheduleData.roomId) {
-            scheduleData.roomId = uniqueResolvedRoomIds[0];
-          }
+        const uniqueResolvedSpaceIds = Array.from(resolvedSpaceIds);
+        if (uniqueResolvedSpaceIds.length > 0) {
+          scheduleData.spaceIds = uniqueResolvedSpaceIds;
         }
 
         const normalizedTerm = normalizeTermLabel(scheduleData.term || '');
@@ -2135,7 +2050,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
           crn: scheduleData.crn,
           meetingPatterns: scheduleData.meetingPatterns,
           spaceIds: scheduleData.spaceIds,
-          roomNames: scheduleData.roomNames
+          spaceDisplayNames: scheduleData.spaceDisplayNames
         });
         if (!scheduleData.identityKey && identity.primaryKey) {
           scheduleData.identityKey = identity.primaryKey;
@@ -2155,7 +2070,6 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
         const schedRef = doc(db, COLLECTIONS.SCHEDULES, scheduleDocId);
         const {
           instructorName: _omitInstructorName,
-          roomName: _omitRoomName,
           courseTitle: _omitCourseTitle,
           ...scheduleWrite
         } = scheduleData;
@@ -2626,15 +2540,13 @@ export const findOrphanedImportedData = async (semesterFilter = null) => {
 
       if (!isInSelectedTerm) {
         if (data.instructorId) usedPeopleOutsideTerm.add(data.instructorId);
-        if (data.roomId) usedRoomsOutsideTerm.add(data.roomId);
-        if (Array.isArray(data.roomIds)) {
-          data.roomIds.forEach((rid) => rid && usedRoomsOutsideTerm.add(rid));
+        if (Array.isArray(data.spaceIds)) {
+          data.spaceIds.forEach((sid) => sid && usedRoomsOutsideTerm.add(sid));
         }
       } else {
         if (data.instructorId) usedPeopleInSelectedTerm.add(data.instructorId);
-        if (data.roomId) usedRoomsInSelectedTerm.add(data.roomId);
-        if (Array.isArray(data.roomIds)) {
-          data.roomIds.forEach((rid) => rid && usedRoomsInSelectedTerm.add(rid));
+        if (Array.isArray(data.spaceIds)) {
+          data.spaceIds.forEach((sid) => sid && usedRoomsInSelectedTerm.add(sid));
         }
       }
     });

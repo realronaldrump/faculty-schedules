@@ -11,16 +11,15 @@
   - Unified model for classrooms, offices, labs, etc.
   - Document ID for new writes: `spaceKey` in format `BUILDING_CODE:SPACE_NUMBER`.
   - Required fields: `spaceKey`, `buildingCode`, `buildingDisplayName`, `spaceNumber`.
-  - Legacy fields retained for compatibility: `building`, `roomNumber`, `name`, `displayName`.
+  - Optional display fields: `name`, `displayName`.
   - Soft delete via `isActive=false`.
 
 - Schedule (schedules collection)
   - Canonical location references: `spaceIds` (array of spaceKey) and `spaceDisplayNames`.
-  - Legacy fields (`roomIds`, `roomNames`, `roomId`, `roomName`) remain for backward compatibility.
 
 - Person (people collection)
   - Canonical office reference: `officeSpaceId` (spaceKey).
-  - Legacy field `officeRoomId` retained for compatibility.
+  - Multiple offices: `officeSpaceIds` + `offices`.
 
 - Temperature monitoring
   - Building queries use `buildingCode`.
@@ -70,7 +69,7 @@
 ## Integrity Enforcement
 
 - Firestore rules require `spaceKey`, `buildingCode`, and `spaceNumber` on new space writes.
-- Legacy records can only be soft-deactivated without full canonical fields.
+- Records missing canonical fields should be updated or soft-deactivated.
 
 ## Tests
 

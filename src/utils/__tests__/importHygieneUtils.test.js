@@ -14,8 +14,7 @@ describe('importHygieneUtils', () => {
       email: 'JANE.DOE@EXAMPLE.EDU',
       phone: '(123) 456-7890',
       office: '  Old Main 101 ',
-      officeSpaceId: '  MAIN:101 ',
-      officeRoomId: '  MAIN:101 '
+      officeSpaceId: '  MAIN:101 '
     }, { updateTimestamp: false });
 
     expect(result.firstName).toBe('Jane');
@@ -25,7 +24,6 @@ describe('importHygieneUtils', () => {
     expect(result.phone).toBe('1234567890');
     expect(result.office).toBe('Old Main 101');
     expect(result.officeSpaceId).toBe('MAIN:101');
-    expect(result.officeRoomId).toBe('MAIN:101');
     expect(result.externalIds?.emails || []).toContain('jane.doe@example.edu');
   });
 
@@ -34,7 +32,8 @@ describe('importHygieneUtils', () => {
       courseCode: 'adm1300',
       section: '01 ',
       term: 'spring 2026',
-      roomName: 'Online',
+      spaceDisplayNames: ['Online'],
+      isOnline: true,
       instructorId: 'p1'
     });
 
@@ -42,23 +41,25 @@ describe('importHygieneUtils', () => {
     expect(result.section).toBe('01');
     expect(result.term).toBe('Spring 2026');
     expect(result.locationType).toBe('no_room');
-    expect(result.roomNames).toEqual([]);
+    expect(result.spaceDisplayNames).toEqual([]);
     expect(result.instructorIds).toEqual(['p1']);
   });
 
   it('standardizes imported rooms', () => {
     const result = standardizeImportedRoom({
-      name: '  Goebel 101 ',
       displayName: '  Goebel 101  ',
-      building: ' Goebel ',
-      roomNumber: ' 101 ',
+      buildingDisplayName: ' Goebel ',
+      buildingCode: ' goebel ',
+      spaceNumber: ' 101 ',
+      spaceKey: '  GOEBEL:101 ',
       type: ''
     });
 
-    expect(result.name).toBe('Goebel 101');
     expect(result.displayName).toBe('Goebel 101');
-    expect(result.building).toBe('Goebel');
-    expect(result.roomNumber).toBe('101');
+    expect(result.buildingDisplayName).toBe('Goebel');
+    expect(result.buildingCode).toBe('GOEBEL');
+    expect(result.spaceNumber).toBe('101');
+    expect(result.spaceKey).toBe('GOEBEL:101');
     expect(result.type).toBe('Classroom');
     expect(result.updatedAt).toBeTruthy();
   });

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { setBuildingConfig } from '../buildingUtils';
+import { applyBuildingConfig } from '../locationService';
 import {
   normalizeSpaceRecord,
   resolveOfficeLocation,
@@ -11,7 +11,7 @@ import {
 
 describe('spaceUtils', () => {
   beforeEach(() => {
-    setBuildingConfig({
+    applyBuildingConfig({
       version: 1,
       buildings: [
         {
@@ -98,7 +98,7 @@ describe('spaceUtils', () => {
       expect(result[1].spaceKey).toBe('JONES:205');
     });
 
-    it('falls back to legacy officeSpaceId for old data', () => {
+    it('supports singular officeSpaceId', () => {
       const space = normalizeSpaceRecord({ buildingCode: 'GOEBEL', spaceNumber: '101' }, 'GOEBEL:101');
       const spacesByKey = new Map([[space.spaceKey, space]]);
 
@@ -117,7 +117,7 @@ describe('spaceUtils', () => {
       expect(result).toEqual([]);
     });
 
-    it('resolveOfficeLocation returns first office for backward compatibility', () => {
+    it('resolveOfficeLocation returns first office', () => {
       const space1 = normalizeSpaceRecord({ buildingCode: 'GOEBEL', spaceNumber: '101' }, 'GOEBEL:101');
       const space2 = normalizeSpaceRecord({ buildingCode: 'JONES', spaceNumber: '205' }, 'JONES:205');
       const spacesByKey = new Map([

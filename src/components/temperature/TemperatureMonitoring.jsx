@@ -121,7 +121,7 @@ const sortRooms = (a, b) => {
   );
 };
 
-const getRoomLabel = (room, spacesByKey) => {
+const getSpaceLabel = (room, spacesByKey) => {
   if (!room) return "Unknown";
   const key = room.spaceKey || room.id || "";
   const resolved = key ? resolveSpaceDisplayName(key, spacesByKey) : "";
@@ -195,21 +195,21 @@ const TemperatureMonitoring = () => {
 
   const [editingPositions, setEditingPositions] = useState(false);
   const [markerDrafts, setMarkerDrafts] = useState({});
-  const [activePlacementRoomId, setActivePlacementRoomId] = useState("");
+  const [activePlacementSpaceKey, setActivePlacementSpaceKey] = useState("");
 
   const [newSnapshotTime, setNewSnapshotTime] = useState("");
   const [newSnapshotTolerance, setNewSnapshotTolerance] = useState(15);
 
   const [historicalStart, setHistoricalStart] = useState("");
   const [historicalEnd, setHistoricalEnd] = useState("");
-  const [historicalRoomId, setHistoricalRoomId] = useState("");
+  const [historicalSpaceKey, setHistoricalSpaceKey] = useState("");
   const [historicalDocs, setHistoricalDocs] = useState([]);
   const [historicalLoading, setHistoricalLoading] = useState(false);
   const [buildingIsHidden, setBuildingIsHidden] = useState(false);
 
   const [exportStart, setExportStart] = useState("");
   const [exportEnd, setExportEnd] = useState("");
-  const [exportRoomIds, setExportRoomIds] = useState([]);
+  const [exportSpaceKeys, setExportSpaceKeys] = useState([]);
   const [exportSnapshotIds, setExportSnapshotIds] = useState([]);
   const [exporting, setExporting] = useState(false);
 
@@ -332,10 +332,10 @@ const TemperatureMonitoring = () => {
         grouped[buildingCode] = [];
         seenByBuilding[buildingCode] = new Set();
       }
-      const roomKey = room.spaceKey || room.id;
+      const spaceKey = room.spaceKey || room.id;
       const seen = seenByBuilding[buildingCode];
-      if (roomKey && seen.has(roomKey)) return;
-      if (roomKey) seen.add(roomKey);
+      if (spaceKey && seen.has(spaceKey)) return;
+      if (spaceKey) seen.add(spaceKey);
       grouped[buildingCode].push(room);
     });
     Object.keys(grouped).forEach((key) => {
@@ -387,7 +387,7 @@ const TemperatureMonitoring = () => {
     return lookup;
   }, [roomsForBuilding]);
 
-  const roomKeysForBuilding = useMemo(() => {
+  const spaceKeysForBuilding = useMemo(() => {
     return new Set(
       roomsForBuilding
         .map((room) => room.spaceKey || room.id)
@@ -395,22 +395,20 @@ const TemperatureMonitoring = () => {
     );
   }, [roomsForBuilding]);
 
-  const resolveImportRoomKey = (item) => {
+  const resolveImportSpaceKey = (item) => {
     if (!item) return "";
     return (
       item.spaceKey ||
-      item.roomId ||
       deviceDocs[item.deviceId]?.mapping?.spaceKey ||
-      deviceDocs[item.deviceId]?.mapping?.roomId ||
       ""
     );
   };
 
-  const resolveImportRoomLabel = (item, roomKey) => {
-    const itemKey = item?.spaceKey || item?.roomId || "";
-    if (item?.roomName && itemKey && roomKey === itemKey) return item.roomName;
-    if (!roomKey) return "Unassigned";
-    return getRoomLabel(roomLookup[roomKey] || { id: roomKey }, spacesByKey);
+  const resolveImportSpaceLabel = (item, spaceKey) => {
+    const itemKey = item?.spaceKey || "";
+    if (item?.spaceLabel && itemKey && spaceKey === itemKey) return item.spaceLabel;
+    if (!spaceKey) return "Unassigned";
+    return getSpaceLabel(roomLookup[spaceKey] || { id: spaceKey }, spacesByKey);
   };
 
   const spaceTypeOptions = useMemo(() => {
@@ -436,17 +434,17 @@ const TemperatureMonitoring = () => {
   const snapshotLookup = useMemo(() => {
     const map = {};
     snapshotDocs.forEach((docData) => {
-      const roomId = docData.spaceKey || docData.roomId;
-      if (!roomId) return;
-      if (!map[roomId]) map[roomId] = {};
-      map[roomId][docData.snapshotTimeId] = docData;
+      const spaceKey = docData.spaceKey;
+      if (!spaceKey) return;
+      if (!map[spaceKey]) map[spaceKey] = {};
+      map[spaceKey][docData.snapshotTimeId] = docData;
     });
     return map;
   }, [snapshotDocs]);
 
   const hasUnresolvedMappings = useMemo(() => {
     return pendingMappings.some(
-      (item) => !mappingOverrides[item.deviceId] && !item.suggestedRoomId,
+      (item) => !mappingOverrides[item.deviceId] && !item.suggestedSpaceKey,
     );
   }, [pendingMappings, mappingOverrides]);
 
@@ -555,9 +553,9 @@ const TemperatureMonitoring = () => {
     setImportItems([]);
     setPendingMappings([]);
     setMappingOverrides({});
-    setExportRoomIds([]);
+    setExportSpaceKeys([]);
     setExportSnapshotIds([]);
-    setHistoricalRoomId("");
+    setHistoricalSpaceKey("");
     setHistoricalDocs([]);
   }, [selectedBuilding]);
 
@@ -827,22 +825,22 @@ const TemperatureMonitoring = () => {
     recomputeEnd,
   ]);
 
-  const updateMarkerDraft = (roomId, xPct, yPct) => {
+  const updateMarkerDraft = (spaceKey, xPct, yPct) => {
     setMarkerDrafts((prev) => ({
       ...prev,
-      [roomId]: {
+      [spaceKey]: {
         xPct: Math.max(0, Math.min(100, xPct)),
         yPct: Math.max(0, Math.min(100, yPct)),
       },
     }));
   };
 
-  const handleMarkerPointerDown = (roomId, event) => {
+  const handleMarkerPointerDown = (spaceKey, event) => {
     if (!editingPositions || !mapRef.current) return;
     event.preventDefault();
     const rect = mapRef.current.getBoundingClientRect();
     dragStateRef.current = {
-      roomId,
+      spaceKey,
       rect,
     };
     window.addEventListener("pointermove", handlePointerMove);
@@ -852,10 +850,10 @@ const TemperatureMonitoring = () => {
   const handlePointerMove = (event) => {
     const state = dragStateRef.current;
     if (!state || !mapRef.current) return;
-    const { rect, roomId } = state;
+    const { rect, spaceKey } = state;
     const xPct = ((event.clientX - rect.left) / rect.width) * 100;
     const yPct = ((event.clientY - rect.top) / rect.height) * 100;
-    updateMarkerDraft(roomId, xPct, yPct);
+    updateMarkerDraft(spaceKey, xPct, yPct);
   };
 
   const handlePointerUp = () => {
@@ -865,24 +863,24 @@ const TemperatureMonitoring = () => {
   };
 
   const handleMapClick = (event) => {
-    if (!editingPositions || !activePlacementRoomId || !mapRef.current) return;
+    if (!editingPositions || !activePlacementSpaceKey || !mapRef.current) return;
     const rect = mapRef.current.getBoundingClientRect();
     const xPct = ((event.clientX - rect.left) / rect.width) * 100;
     const yPct = ((event.clientY - rect.top) / rect.height) * 100;
-    updateMarkerDraft(activePlacementRoomId, xPct, yPct);
-    setActivePlacementRoomId("");
+    updateMarkerDraft(activePlacementSpaceKey, xPct, yPct);
+    setActivePlacementSpaceKey("");
   };
 
   const startEditingPositions = () => {
     setEditingPositions(true);
     setMarkerDrafts(buildingSettings?.markers || {});
-    setActivePlacementRoomId("");
+    setActivePlacementSpaceKey("");
   };
 
   const cancelEditingPositions = () => {
     setEditingPositions(false);
     setMarkerDrafts({});
-    setActivePlacementRoomId("");
+    setActivePlacementSpaceKey("");
   };
 
   const saveMarkerPositions = async () => {
@@ -1056,7 +1054,7 @@ const TemperatureMonitoring = () => {
           const aggregatesQuery = query(
             collection(db, "temperatureRoomAggregates"),
             where("buildingCode", "==", buildingCode),
-            where("roomId", "==", spaceKey),
+            where("spaceKey", "==", spaceKey),
             where("dateLocal", ">=", startDate),
             where("dateLocal", "<=", endDate),
           );
@@ -1071,7 +1069,7 @@ const TemperatureMonitoring = () => {
           const snapshotsQuery = query(
             collection(db, "temperatureRoomSnapshots"),
             where("buildingCode", "==", buildingCode),
-            where("roomId", "==", spaceKey),
+            where("spaceKey", "==", spaceKey),
             where("dateLocal", ">=", startDate),
             where("dateLocal", "<=", endDate),
           );
@@ -1270,7 +1268,7 @@ const TemperatureMonitoring = () => {
   const suggestRoomMatch = (label) => {
     const roomsList = roomsForBuilding;
     if (!label || roomsList.length === 0) {
-      return { roomId: "", confidence: 0, method: "none" };
+      return { spaceKey: "", confidence: 0, method: "none" };
     }
     const labelNormalized = normalizeMatchText(label);
     const labelTokens = extractRoomTokens(label).map(normalizeRoomNumber);
@@ -1279,7 +1277,7 @@ const TemperatureMonitoring = () => {
       const roomNumber = normalizeRoomNumber(
         room.spaceNumber || room.roomNumber || "",
       );
-      const roomLabel = normalizeMatchText(getRoomLabel(room, spacesByKey));
+      const spaceLabel = normalizeMatchText(getSpaceLabel(room, spacesByKey));
       let score = 0;
       let method = "";
       if (roomNumber && labelTokens.includes(roomNumber)) {
@@ -1299,7 +1297,7 @@ const TemperatureMonitoring = () => {
           method = method || "room_number_text";
         }
       }
-      if (!score && roomLabel && labelNormalized.includes(roomLabel)) {
+      if (!score && spaceLabel && labelNormalized.includes(spaceLabel)) {
         score = 0.8;
         method = "label_match";
       }
@@ -1310,11 +1308,11 @@ const TemperatureMonitoring = () => {
         best.tied = true;
       }
     });
-    if (!best) return { roomId: "", confidence: 0, method: "none" };
+    if (!best) return { spaceKey: "", confidence: 0, method: "none" };
     let confidence = best.score;
     if (best.tied) confidence = Math.min(confidence, 0.65);
     return {
-      roomId: best.room.spaceKey || best.room.id,
+      spaceKey: best.room.spaceKey || best.room.id,
       confidence,
       method: best.method,
     };
@@ -1355,7 +1353,7 @@ const TemperatureMonitoring = () => {
       .map((item) => ({
         deviceId: item.deviceId,
         deviceLabel: item.deviceLabel,
-        suggestedRoomId: item.suggestedRoomId,
+        suggestedSpaceKey: item.suggestedSpaceKey,
         matchConfidence: item.matchConfidence,
         matchMethod: item.matchMethod,
       }));
@@ -1451,13 +1449,10 @@ const TemperatureMonitoring = () => {
         const deviceLabel = parseDeviceLabelFromFilename(file.name);
         const deviceId = toDeviceId(selectedBuilding, deviceLabel);
         const existingDevice = deviceDocs[deviceId];
-        const existingRoomKey =
-          existingDevice?.mapping?.spaceKey ||
-          existingDevice?.mapping?.roomId ||
-          "";
-        const suggestion = existingRoomKey
+        const existingSpaceKey = existingDevice?.mapping?.spaceKey || "";
+        const suggestion = existingSpaceKey
           ? {
-            roomId: existingRoomKey,
+            spaceKey: existingSpaceKey,
             confidence: existingDevice.mapping.confidence ?? 1,
             method:
               existingDevice.mapping.method ||
@@ -1480,7 +1475,7 @@ const TemperatureMonitoring = () => {
           minTimestamp,
           maxTimestamp,
           samples,
-          suggestedRoomId: suggestion.roomId,
+          suggestedSpaceKey: suggestion.spaceKey,
           matchConfidence: suggestion.confidence,
           matchMethod: suggestion.method,
         });
@@ -1662,7 +1657,6 @@ const TemperatureMonitoring = () => {
   const recomputeSnapshotsForDay = async ({
     buildingCode,
     buildingName,
-    roomId,
     spaceKey,
     dateLocal,
     samples,
@@ -1691,10 +1685,10 @@ const TemperatureMonitoring = () => {
         if (bestSample) break;
       }
       const stableBuilding = buildingCode || buildingName || "";
-      const stableRoom = spaceKey || roomId;
+      const stableSpaceKey = spaceKey || "";
       const snapshotId = toSnapshotDocId(
         stableBuilding,
-        stableRoom,
+        stableSpaceKey,
         dateLocal,
         snapshot.id,
       );
@@ -1711,10 +1705,9 @@ const TemperatureMonitoring = () => {
       const payload = {
         buildingCode: buildingCode || "",
         buildingName: buildingName || buildingCode || "",
-        roomId: stableRoom,
-        spaceKey: stableRoom,
-        roomName: getRoomLabel(
-          roomLookup[stableRoom] || { id: stableRoom },
+        spaceKey: stableSpaceKey,
+        spaceLabel: getSpaceLabel(
+          roomLookup[stableSpaceKey] || { id: stableSpaceKey },
           spacesByKey,
         ),
         dateLocal,
@@ -1763,7 +1756,7 @@ const TemperatureMonitoring = () => {
     }
     const unresolved = pendingMappings.filter((item) => {
       const override = mappingOverrides[item.deviceId];
-      return !override && !item.suggestedRoomId;
+      return !override && !item.suggestedSpaceKey;
     });
     if (unresolved.length > 0) {
       showNotification(
@@ -1821,18 +1814,15 @@ const TemperatureMonitoring = () => {
         const deviceLabel = item.deviceLabel || deviceId;
         const existingDevice = deviceCache[deviceId];
         const latestLocal = existingDevice?.latestLocalTimestamp || "";
-        const roomId =
+        const spaceKey =
           mappingOverrides[deviceId] ||
-          item.suggestedRoomId ||
+          item.suggestedSpaceKey ||
           existingDevice?.mapping?.spaceKey ||
-          existingDevice?.mapping?.roomId ||
           "";
-        const spaceKey = roomId;
         if (!spaceKey) continue;
         const timezone = buildingSettings.timezone || DEFAULT_TIMEZONE;
         const manualOverride = Boolean(mappingOverrides[deviceId]);
         const mappingPayload = {
-          roomId: spaceKey,
           spaceKey,
           method: manualOverride
             ? "manual"
@@ -1848,7 +1838,7 @@ const TemperatureMonitoring = () => {
           updatedAt: serverTimestamp(),
           manual: manualOverride,
         };
-        const mappedRoomName = getRoomLabel(
+        const mappedSpaceLabel = getSpaceLabel(
           roomLookup[spaceKey] || { id: spaceKey },
           spacesByKey,
         );
@@ -1995,9 +1985,8 @@ const TemperatureMonitoring = () => {
               buildingName: selectedBuildingName || selectedBuilding,
               deviceId,
               deviceLabel,
-              roomId: spaceKey,
               spaceKey,
-              roomName: mappedRoomName,
+              spaceLabel: mappedSpaceLabel,
               mappingMethod: mappingPayload.method,
               mappingConfidence: mappingPayload.confidence,
               mappingManual: mappingPayload.manual,
@@ -2019,10 +2008,9 @@ const TemperatureMonitoring = () => {
         }
 
         const existingMapping = existingDevice?.mapping || {};
-        const existingRoomKey =
-          existingMapping.spaceKey || existingMapping.roomId || "";
+        const existingSpaceKey = existingMapping.spaceKey || "";
         const mappingChanged =
-          existingRoomKey !== mappingPayload.spaceKey ||
+          existingSpaceKey !== mappingPayload.spaceKey ||
           Boolean(existingMapping.manual) !== Boolean(mappingPayload.manual) ||
           (existingMapping.method || existingMapping.matchMethod || "auto") !==
           mappingPayload.method;
@@ -2093,9 +2081,8 @@ const TemperatureMonitoring = () => {
               {
                 buildingCode: selectedBuilding,
                 buildingName: selectedBuildingName || selectedBuilding,
-                roomId: spaceKey,
                 spaceKey,
-                roomName: getRoomLabel(
+                spaceLabel: getSpaceLabel(
                   roomLookup[spaceKey] || { id: spaceKey },
                   spacesByKey,
                 ),
@@ -2129,7 +2116,6 @@ const TemperatureMonitoring = () => {
             await recomputeSnapshotsForDay({
               buildingCode: selectedBuilding,
               buildingName: selectedBuildingName || selectedBuilding,
-              roomId: spaceKey,
               spaceKey,
               dateLocal: dateKey,
               samples,
@@ -2229,29 +2215,28 @@ const TemperatureMonitoring = () => {
     }
   };
 
-  const handleImportHistoryMappingUpdate = async (item, nextRoomKey) => {
-    if (!item?.deviceId || !nextRoomKey) return;
-    const currentRoomKey = resolveImportRoomKey(item);
-    if (nextRoomKey === currentRoomKey) return;
+  const handleImportHistoryMappingUpdate = async (item, nextSpaceKey) => {
+    if (!item?.deviceId || !nextSpaceKey) return;
+    const currentSpaceKey = resolveImportSpaceKey(item);
+    if (nextSpaceKey === currentSpaceKey) return;
     if (!selectedBuilding) return;
 
     const deviceId = item.deviceId;
     const deviceLabel =
       deviceDocs[deviceId]?.label || item.deviceLabel || deviceId;
-    const roomName = getRoomLabel(
-      roomLookup[nextRoomKey] || { id: nextRoomKey },
+    const spaceLabel = getSpaceLabel(
+      roomLookup[nextSpaceKey] || { id: nextSpaceKey },
       spacesByKey,
     );
     const mappingPayload = {
-      roomId: nextRoomKey,
-      spaceKey: nextRoomKey,
+      spaceKey: nextSpaceKey,
       method: "manual",
       confidence: 1,
       updatedAt: serverTimestamp(),
       manual: true,
     };
 
-    setImportMappingDrafts((prev) => ({ ...prev, [item.id]: nextRoomKey }));
+    setImportMappingDrafts((prev) => ({ ...prev, [item.id]: nextSpaceKey }));
     setImportMappingSaving((prev) => ({ ...prev, [item.id]: true }));
     try {
       await setDoc(
@@ -2269,9 +2254,8 @@ const TemperatureMonitoring = () => {
       await setDoc(
         doc(db, "temperatureImports", item.id),
         {
-          roomId: nextRoomKey,
-          spaceKey: nextRoomKey,
-          roomName,
+          spaceKey: nextSpaceKey,
+          spaceLabel,
           mappingMethod: mappingPayload.method,
           mappingConfidence: mappingPayload.confidence,
           mappingManual: mappingPayload.manual,
@@ -2289,8 +2273,7 @@ const TemperatureMonitoring = () => {
           label: deviceLabel,
           labelNormalized: normalizeMatchText(deviceLabel),
           mapping: {
-            roomId: nextRoomKey,
-            spaceKey: nextRoomKey,
+            spaceKey: nextSpaceKey,
             method: mappingPayload.method,
             confidence: mappingPayload.confidence,
             manual: mappingPayload.manual,
@@ -2302,9 +2285,8 @@ const TemperatureMonitoring = () => {
           entry.id === item.id
             ? {
               ...entry,
-              roomId: nextRoomKey,
-              spaceKey: nextRoomKey,
-              roomName,
+              spaceKey: nextSpaceKey,
+              spaceLabel,
               mappingMethod: mappingPayload.method,
               mappingConfidence: mappingPayload.confidence,
               mappingManual: mappingPayload.manual,
@@ -2380,14 +2362,13 @@ const TemperatureMonitoring = () => {
       for (const docSnap of snap.docs) {
         const data = docSnap.data();
         const device = deviceDocs[data.deviceId];
-        const roomId = device?.mapping?.spaceKey || device?.mapping?.roomId;
-        if (!roomId) continue;
+        const spaceKey = device?.mapping?.spaceKey;
+        if (!spaceKey) continue;
         const samples = data.samples || {};
         await recomputeSnapshotsForDay({
           buildingCode: selectedBuilding,
           buildingName: selectedBuildingName || selectedBuilding,
-          roomId,
-          spaceKey: roomId,
+          spaceKey,
           dateLocal: data.dateLocal,
           samples,
           timezone: buildingSettings?.timezone || DEFAULT_TIMEZONE,
@@ -2397,7 +2378,7 @@ const TemperatureMonitoring = () => {
         const aggregates = buildHourlyAggregates(samples);
         const aggregateId = toRoomAggregateDocId(
           selectedBuilding,
-          roomId,
+          spaceKey,
           data.dateLocal,
         );
         await setDoc(
@@ -2405,10 +2386,9 @@ const TemperatureMonitoring = () => {
           {
             buildingCode: selectedBuilding,
             buildingName: selectedBuildingName || selectedBuilding,
-            roomId,
-            spaceKey: roomId,
-            roomName: getRoomLabel(
-              roomLookup[roomId] || { id: roomId },
+            spaceKey,
+            spaceLabel: getSpaceLabel(
+              roomLookup[spaceKey] || { id: spaceKey },
               spacesByKey,
             ),
             dateLocal: data.dateLocal,
@@ -2525,8 +2505,8 @@ const TemperatureMonitoring = () => {
         ...docSnap.data(),
       }));
       const filtered = docs.filter((docData) => {
-        const roomKey = docData.spaceKey || docData.roomId;
-        if (exportRoomIds.length > 0 && !exportRoomIds.includes(roomKey))
+        const spaceKey = docData.spaceKey;
+        if (exportSpaceKeys.length > 0 && !exportSpaceKeys.includes(spaceKey))
           return false;
         if (
           exportSnapshotIds.length > 0 &&
@@ -2551,11 +2531,11 @@ const TemperatureMonitoring = () => {
         "Device Label",
       ];
       const rows = filtered.map((docData) => {
-        const roomKey = docData.spaceKey || docData.roomId;
+        const spaceKey = docData.spaceKey;
         return [
           docData.buildingName || selectedBuildingName || selectedBuilding,
-          docData.roomName ||
-          getRoomLabel(roomLookup[roomKey] || { id: roomKey }, spacesByKey),
+          docData.spaceLabel ||
+          getSpaceLabel(roomLookup[spaceKey] || { id: spaceKey }, spacesByKey),
           docData.dateLocal || "",
           docData.snapshotLabel || "",
           docData.temperatureF ?? "",
@@ -2634,22 +2614,21 @@ const TemperatureMonitoring = () => {
       snap.docs.forEach((docSnap) => {
         const data = docSnap.data();
         const device = deviceDocs[data.deviceId] || {};
-        const roomId =
-          device?.mapping?.spaceKey || device?.mapping?.roomId || "";
+        const spaceKey = device?.mapping?.spaceKey || "";
         if (
-          exportRoomIds.length > 0 &&
-          roomId &&
-          !exportRoomIds.includes(roomId)
+          exportSpaceKeys.length > 0 &&
+          spaceKey &&
+          !exportSpaceKeys.includes(spaceKey)
         )
           return;
-        const roomName = roomId
-          ? getRoomLabel(roomLookup[roomId] || { id: roomId }, spacesByKey)
+        const spaceLabel = spaceKey
+          ? getSpaceLabel(roomLookup[spaceKey] || { id: spaceKey }, spacesByKey)
           : "";
         const samples = data.samples || {};
         Object.values(samples).forEach((sample) => {
           rows.push([
             buildingName || selectedBuilding,
-            roomName,
+            spaceLabel,
             device.label || data.deviceId,
             sample.rawLocal || "",
             buildingSettings?.timezone || DEFAULT_TIMEZONE,
@@ -2701,9 +2680,9 @@ const TemperatureMonitoring = () => {
     ? markerDrafts
     : buildingSettings?.markers || {};
   const missingMarkers = roomsForBuilding.filter((room) => {
-    const roomKey = room.spaceKey || room.id;
-    if (!roomKey) return false;
-    return !markerMap[roomKey];
+    const spaceKey = room.spaceKey || room.id;
+    if (!spaceKey) return false;
+    return !markerMap[spaceKey];
   });
 
   const currentSnapshotLabel =
@@ -2812,12 +2791,12 @@ const TemperatureMonitoring = () => {
                   className="w-full h-auto block"
                 />
                 {roomsForBuilding.map((room) => {
-                  const roomKey = room.spaceKey || room.id;
-                  if (!roomKey) return null;
-                  const marker = markerMap[roomKey];
+                  const spaceKey = room.spaceKey || room.id;
+                  if (!spaceKey) return null;
+                  const marker = markerMap[spaceKey];
                   if (!marker) return null;
                   const snapshot =
-                    snapshotLookup[roomKey]?.[selectedSnapshotId];
+                    snapshotLookup[spaceKey]?.[selectedSnapshotId];
                   const isMissing = !snapshot || snapshot.status === "missing";
                   const tempLabel = formatSnapshotTemp(snapshot);
                   const tempValueF = resolveSnapshotTempF(snapshot);
@@ -2826,10 +2805,10 @@ const TemperatureMonitoring = () => {
                     room.spaceNumber || room.roomNumber || room.name || "";
                   return (
                     <button
-                      key={roomKey}
+                      key={spaceKey}
                       type="button"
                       onPointerDown={(event) =>
-                        handleMarkerPointerDown(roomKey, event)
+                        handleMarkerPointerDown(spaceKey, event)
                       }
                       className={`absolute -translate-x-1/2 -translate-y-1/2 rounded px-2 py-1 text-[10px] font-medium shadow-sm whitespace-nowrap flex flex-col items-center leading-tight ${getTempToneClasses({
                         valueF: tempValueF,
@@ -2841,10 +2820,10 @@ const TemperatureMonitoring = () => {
                         left: `${marker.xPct}%`,
                         top: `${marker.yPct}%`,
                       }}
-                      title={`${getRoomLabel(room, spacesByKey)} - ${tempLabel}`}
+                      title={`${getSpaceLabel(room, spacesByKey)} - ${tempLabel}`}
                     >
                       <span className="text-[9px] uppercase tracking-wide">
-                        {roomNum || getRoomLabel(room, spacesByKey)}
+                        {roomNum || getSpaceLabel(room, spacesByKey)}
                       </span>
                       {!isMissing && Number.isFinite(tempValueF) && (
                         <span className="text-[12px] font-semibold">
@@ -2874,15 +2853,15 @@ const TemperatureMonitoring = () => {
                       </div>
                     ) : (
                       missingMarkers.map((room) => {
-                        const roomKey = room.spaceKey || room.id;
-                        if (!roomKey) return null;
+                        const spaceKey = room.spaceKey || room.id;
+                        if (!spaceKey) return null;
                         return (
                           <button
-                            key={roomKey}
-                            className={`w-full text-left px-3 py-2 rounded-md border text-xs ${activePlacementRoomId === roomKey ? "border-baylor-green bg-baylor-green/10" : "border-gray-200 hover:border-baylor-green/50"}`}
-                            onClick={() => setActivePlacementRoomId(roomKey)}
+                            key={spaceKey}
+                            className={`w-full text-left px-3 py-2 rounded-md border text-xs ${activePlacementSpaceKey === spaceKey ? "border-baylor-green bg-baylor-green/10" : "border-gray-200 hover:border-baylor-green/50"}`}
+                            onClick={() => setActivePlacementSpaceKey(spaceKey)}
                           >
-                            {getRoomLabel(room, spacesByKey)}
+                            {getSpaceLabel(room, spacesByKey)}
                           </button>
                         );
                       })
@@ -2918,15 +2897,15 @@ const TemperatureMonitoring = () => {
                 <div className="text-xs text-gray-600 max-h-40 overflow-y-auto space-y-1">
                   {roomsForBuilding
                     .filter((room) => {
-                      const roomKey = room.spaceKey || room.id;
-                      const snapshot = roomKey
-                        ? snapshotLookup[roomKey]?.[selectedSnapshotId]
+                      const spaceKey = room.spaceKey || room.id;
+                      const snapshot = spaceKey
+                        ? snapshotLookup[spaceKey]?.[selectedSnapshotId]
                         : null;
                       return !snapshot || snapshot.status === "missing";
                     })
                     .map((room) => (
                       <div key={room.spaceKey || room.id}>
-                        {getRoomLabel(room, spacesByKey)}
+                        {getSpaceLabel(room, spacesByKey)}
                       </div>
                     ))}
                 </div>
@@ -2947,12 +2926,12 @@ const TemperatureMonitoring = () => {
     lines.push("");
 
     roomsForBuilding.forEach((room) => {
-      const roomKey = room.spaceKey || room.id;
-      if (!roomKey) return;
+      const spaceKey = room.spaceKey || room.id;
+      if (!spaceKey) return;
 
       const readings = [];
       snapshotTimes.forEach((slot) => {
-        const snapshot = snapshotLookup[roomKey]?.[slot.id];
+        const snapshot = snapshotLookup[spaceKey]?.[slot.id];
         const isMissing = !snapshot || snapshot.status === "missing";
 
         if (!isMissing) {
@@ -2966,8 +2945,8 @@ const TemperatureMonitoring = () => {
       });
 
       if (readings.length > 0) {
-        const roomName = getRoomLabel(room, spacesByKey);
-        lines.push(`${roomName}: ${readings.join(" | ")}`);
+        const spaceLabel = getSpaceLabel(room, spacesByKey);
+        lines.push(`${spaceLabel}: ${readings.join(" | ")}`);
       }
     });
 
@@ -3037,16 +3016,16 @@ const TemperatureMonitoring = () => {
           </thead>
           <tbody className="divide-y divide-gray-200">
             {roomsForBuilding.map((room) => {
-              const roomKey = room.spaceKey || room.id;
-              if (!roomKey) return null;
+              const spaceKey = room.spaceKey || room.id;
+              if (!spaceKey) return null;
               const roomRange = resolveIdealRangeForRoom(room);
               return (
-                <tr key={roomKey}>
+                <tr key={spaceKey}>
                   <td className="px-4 py-2 font-medium text-gray-800">
-                    {getRoomLabel(room, spacesByKey)}
+                    {getSpaceLabel(room, spacesByKey)}
                   </td>
                   {snapshotTimes.map((slot) => {
-                    const snapshot = snapshotLookup[roomKey]?.[slot.id];
+                    const snapshot = snapshotLookup[spaceKey]?.[slot.id];
                     const isMissing =
                       !snapshot || snapshot.status === "missing";
                     const tempValueF = resolveSnapshotTempF(snapshot);
@@ -3078,20 +3057,19 @@ const TemperatureMonitoring = () => {
     const counts = {};
     historicalDocs.forEach((docData) => {
       if (docData.status !== "missing") return;
-      const roomKey = docData.spaceKey || docData.roomId;
-      if (!roomKey) return;
-      counts[roomKey] = (counts[roomKey] || 0) + 1;
+      const spaceKey = docData.spaceKey;
+      if (!spaceKey) return;
+      counts[spaceKey] = (counts[spaceKey] || 0) + 1;
     });
     return Object.entries(counts)
-      .map(([roomId, count]) => ({ roomId, count }))
+      .map(([spaceKey, count]) => ({ spaceKey, count }))
       .sort((a, b) => b.count - a.count);
   }, [historicalDocs]);
 
   const renderHistorical = () => {
-    const roomSnapshots = historicalRoomId
+    const roomSnapshots = historicalSpaceKey
       ? historicalDocs.filter(
-        (docData) =>
-          (docData.spaceKey || docData.roomId) === historicalRoomId,
+        (docData) => docData.spaceKey === historicalSpaceKey,
       )
       : [];
 
@@ -3099,7 +3077,7 @@ const TemperatureMonitoring = () => {
       new Set(roomSnapshots.map((docData) => docData.dateLocal)),
     ).sort();
     const historicalRoomRange = resolveIdealRangeForSpaceType(
-      roomLookup[historicalRoomId]?.type,
+      roomLookup[historicalSpaceKey]?.type,
       defaultIdealRange,
       idealRangesByType,
     );
@@ -3144,21 +3122,21 @@ const TemperatureMonitoring = () => {
             <label className="form-label">Room</label>
             <select
               className="form-input"
-              value={historicalRoomId}
-              onChange={(e) => setHistoricalRoomId(e.target.value)}
+              value={historicalSpaceKey}
+              onChange={(e) => setHistoricalSpaceKey(e.target.value)}
             >
               <option value="">Select a room...</option>
               {roomsForBuilding.map((room) => {
-                const roomKey = room.spaceKey || room.id;
-                if (!roomKey) return null;
+                const spaceKey = room.spaceKey || room.id;
+                if (!spaceKey) return null;
                 return (
-                  <option key={roomKey} value={roomKey}>
-                    {getRoomLabel(room, spacesByKey)}
+                  <option key={spaceKey} value={spaceKey}>
+                    {getSpaceLabel(room, spacesByKey)}
                   </option>
                 );
               })}
             </select>
-            {historicalRoomId && (
+            {historicalSpaceKey && (
               <div className="mt-4 overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead className="bg-gray-50">
@@ -3226,12 +3204,12 @@ const TemperatureMonitoring = () => {
               <div className="space-y-2 text-xs text-gray-600">
                 {missingCounts.slice(0, 8).map((item) => (
                   <div
-                    key={item.roomId}
+                    key={item.spaceKey}
                     className="flex items-center justify-between"
                   >
                     <span>
-                      {getRoomLabel(
-                        roomLookup[item.roomId] || { id: item.roomId },
+                      {getSpaceLabel(
+                        roomLookup[item.spaceKey] || { id: item.spaceKey },
                         spacesByKey,
                       )}
                     </span>
@@ -3586,10 +3564,10 @@ const TemperatureMonitoring = () => {
                       </div>
                       <div className="text-xs text-gray-500">
                         Suggested:{" "}
-                        {item.suggestedRoomId
-                          ? getRoomLabel(
-                            roomLookup[item.suggestedRoomId] || {
-                              id: item.suggestedRoomId,
+                        {item.suggestedSpaceKey
+                          ? getSpaceLabel(
+                            roomLookup[item.suggestedSpaceKey] || {
+                              id: item.suggestedSpaceKey,
                             },
                             spacesByKey,
                           )
@@ -3602,7 +3580,7 @@ const TemperatureMonitoring = () => {
                       className="form-input md:max-w-xs"
                       value={
                         mappingOverrides[item.deviceId] ||
-                        item.suggestedRoomId ||
+                        item.suggestedSpaceKey ||
                         ""
                       }
                       onChange={(e) =>
@@ -3614,11 +3592,11 @@ const TemperatureMonitoring = () => {
                     >
                       <option value="">Select room...</option>
                       {roomsForBuilding.map((room) => {
-                        const roomKey = room.spaceKey || room.id;
-                        if (!roomKey) return null;
+                        const spaceKey = room.spaceKey || room.id;
+                        if (!spaceKey) return null;
                         return (
-                          <option key={roomKey} value={roomKey}>
-                            {getRoomLabel(room, spacesByKey)}
+                          <option key={spaceKey} value={spaceKey}>
+                            {getSpaceLabel(room, spacesByKey)}
                           </option>
                         );
                       })}
@@ -3675,15 +3653,15 @@ const TemperatureMonitoring = () => {
                   const importDate = item.createdAt?.seconds
                     ? new Date(item.createdAt.seconds * 1000).toLocaleString()
                     : "Unknown";
-                  const mappedRoomKey = resolveImportRoomKey(item);
+                  const mappedSpaceKey = resolveImportSpaceKey(item);
                   const selectValue =
-                    importMappingDrafts[item.id] ?? mappedRoomKey ?? "";
-                  const selectLabel = resolveImportRoomLabel(
+                    importMappingDrafts[item.id] ?? mappedSpaceKey ?? "";
+                  const selectLabel = resolveImportSpaceLabel(
                     item,
-                    selectValue || mappedRoomKey,
+                    selectValue || mappedSpaceKey,
                   );
                   const showMissingRoomOption =
-                    selectValue && !roomKeysForBuilding.has(selectValue);
+                    selectValue && !spaceKeysForBuilding.has(selectValue);
                   const isMappingSaving = Boolean(importMappingSaving[item.id]);
                   return (
                     <tr key={item.id}>
@@ -3722,11 +3700,11 @@ const TemperatureMonitoring = () => {
                               </option>
                             )}
                             {roomsForBuilding.map((room) => {
-                              const roomKey = room.spaceKey || room.id;
-                              if (!roomKey) return null;
+                              const spaceKey = room.spaceKey || room.id;
+                              if (!spaceKey) return null;
                               return (
-                                <option key={roomKey} value={roomKey}>
-                                  {getRoomLabel(room, spacesByKey)}
+                                <option key={spaceKey} value={spaceKey}>
+                                  {getSpaceLabel(room, spacesByKey)}
                                 </option>
                               );
                             })}
@@ -3790,19 +3768,19 @@ const TemperatureMonitoring = () => {
           <select
             className="form-input"
             multiple
-            value={exportRoomIds}
+            value={exportSpaceKeys}
             onChange={(e) =>
-              setExportRoomIds(
+              setExportSpaceKeys(
                 Array.from(e.target.selectedOptions).map((opt) => opt.value),
               )
             }
           >
             {roomsForBuilding.map((room) => {
-              const roomKey = room.spaceKey || room.id;
-              if (!roomKey) return null;
+              const spaceKey = room.spaceKey || room.id;
+              if (!spaceKey) return null;
               return (
-                <option key={roomKey} value={roomKey}>
-                  {getRoomLabel(room, spacesByKey)}
+                <option key={spaceKey} value={spaceKey}>
+                  {getSpaceLabel(room, spacesByKey)}
                 </option>
               );
             })}

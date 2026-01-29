@@ -15,7 +15,6 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useCall
 import { db } from '../firebase';
 import { collection, getDocs, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { fetchPrograms, getInstructorDisplayName, UNASSIGNED } from '../utils/dataAdapter';
-import { autoMigrateIfNeeded } from '../utils/importTransactionMigration';
 import { fetchRecentChanges } from '../utils/recentChanges';
 import { usePermissions } from '../utils/permissions';
 import { buildCourseSectionKey, parseCourseCode } from '../utils/courseUtils';
@@ -72,13 +71,6 @@ export const DataProvider = ({ children }) => {
 
   // Permissions
   const permissions = usePermissions();
-
-  // One-time migration check
-  useEffect(() => {
-    autoMigrateIfNeeded().catch((error) => {
-      console.error('Auto-migration failed:', error);
-    });
-  }, []);
 
   // Combined Loading State
   const loading = localLoading || peopleLoading || schedulesLoading;
@@ -206,8 +198,7 @@ export const DataProvider = ({ children }) => {
       const getRoomDisplay = (s) => {
         const resolved = resolveScheduleSpaces(s, spacesByKey);
         if (resolved.display) return resolved.display;
-        if (Array.isArray(s.roomNames)) return s.roomNames.join('; ');
-        return s.roomName || '';
+        return '';
       };
 
       const courseCode = schedule.courseCode || schedule.Course || '';
@@ -393,7 +384,7 @@ export const DataProvider = ({ children }) => {
     };
   }, [scheduleData]);
 
-  // Adapters with Cross-Linking (This preserves 'Fat' objects for legacy views)
+  // Adapters with Cross-Linking (preserves rich objects for UI views)
   const facultyData = useMemo(() => {
     return adaptPeopleToFaculty(rawPeople, rawScheduleData, rawPrograms);
   }, [rawPeople, rawScheduleData, rawPrograms]);

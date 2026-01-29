@@ -11,7 +11,7 @@ import React, { forwardRef, useMemo } from 'react';
  * - Professional appearance: Baylor brand compliant
  */
 const ExportableRoomSchedule = forwardRef(({
-    roomName,
+    spaceLabel,
     buildingName,
     semester,
     classes = [],
@@ -138,9 +138,9 @@ const ExportableRoomSchedule = forwardRef(({
     }, [timeRange]);
 
     // Clean up room display
-    const displayRoom = roomName || '';
+    const displayRoom = spaceLabel || '';
     const displayBuilding = (buildingName || '').replace(' Bldg', '').replace(' Building', '');
-    const resolvedExportName = exportName || [buildingName, roomName, 'WEEK', semester].filter(Boolean).join(' ');
+    const resolvedExportName = exportName || [buildingName, spaceLabel, 'WEEK', semester].filter(Boolean).join(' ');
 
     // Baylor brand colors
     const colors = {

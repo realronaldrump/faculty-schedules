@@ -115,12 +115,12 @@ export const toDeviceDayId = (deviceId = '', dateLocal = '') => {
   return `${deviceId}__${dateLocal}`;
 };
 
-export const toSnapshotDocId = (buildingName = '', roomId = '', dateLocal = '', snapshotId = '') => {
-  return `${toBuildingKey(buildingName)}__${roomId}__${dateLocal}__${snapshotId}`;
+export const toSnapshotDocId = (buildingName = '', spaceKey = '', dateLocal = '', snapshotId = '') => {
+  return `${toBuildingKey(buildingName)}__${spaceKey}__${dateLocal}__${snapshotId}`;
 };
 
-export const toRoomAggregateDocId = (buildingName = '', roomId = '', dateLocal = '') => {
-  return `${toBuildingKey(buildingName)}__${roomId}__${dateLocal}`;
+export const toRoomAggregateDocId = (buildingName = '', spaceKey = '', dateLocal = '') => {
+  return `${toBuildingKey(buildingName)}__${spaceKey}__${dateLocal}`;
 };
 
 const simpleHash = (value) => {

@@ -19,7 +19,7 @@ import FacultyContactCard from "../FacultyContactCard";
 import { formatChangeForDisplay } from "../../utils/recentChanges";
 import { buildCourseSectionKey, parseCourseCode } from "../../utils/courseUtils";
 import { parseTime } from "../../utils/timeUtils";
-import { getBuildingFromRoom } from "../../utils/buildingUtils";
+import { getBuildingDisplay } from "../../utils/locationService";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { useScheduleOperations, usePeopleOperations } from "../../hooks";
@@ -96,15 +96,15 @@ const CourseManagement = ({ embedded = false }) => {
     };
   };
 
-  const extractBuildingNameFromRoom = (roomName) => {
-    if (!roomName || typeof roomName !== "string") {
+  const extractBuildingNameFromLocation = (locationLabel) => {
+    if (!locationLabel || typeof locationLabel !== "string") {
       return "Other";
     }
-    const lowered = roomName.toLowerCase();
+    const lowered = locationLabel.toLowerCase();
     if (lowered.includes("no room needed")) {
       return "No Room Needed";
     }
-    const building = getBuildingFromRoom(roomName);
+    const building = getBuildingDisplay(locationLabel);
     return building || "Other";
   };
 
@@ -146,9 +146,9 @@ const CourseManagement = ({ embedded = false }) => {
     return new Map((facultyData || []).map((faculty) => [faculty.id, faculty]));
   }, [facultyData]);
 
-  // Process recent changes to show schedule-related changes in the legacy format
+  // Process recent changes to show schedule-related changes in display format
   const processedChanges = useMemo(() => {
-    // Filter for schedule-related changes and convert to legacy format
+    // Filter for schedule-related changes and convert to display format
     const scheduleChanges = recentChanges
       .filter((change) => change.collection === "schedules")
       .map((change) => {
@@ -173,7 +173,7 @@ const CourseManagement = ({ embedded = false }) => {
         };
       });
 
-    // Combine with legacy editHistory for backward compatibility
+    // Combine with editHistory for compatibility
     return [...scheduleChanges, ...(editHistory || [])];
   }, [recentChanges, editHistory]);
 
@@ -308,7 +308,7 @@ const CourseManagement = ({ embedded = false }) => {
           .filter(Boolean);
         if (rooms.length > 0) {
           rooms.forEach((room) => {
-            const buildingName = extractBuildingNameFromRoom(room);
+            const buildingName = extractBuildingNameFromLocation(room);
             if (buildingName) {
               buildings.add(buildingName);
             }
@@ -589,7 +589,7 @@ const CourseManagement = ({ embedded = false }) => {
         }
 
         const normalizedBuildings = rooms.map((room) =>
-          extractBuildingNameFromRoom(room).toUpperCase(),
+          extractBuildingNameFromLocation(room).toUpperCase(),
         );
 
         const includeMatch =

@@ -8,7 +8,7 @@
  * - StudentDirectory
  */
 
-import { getBuildingFromRoom } from './buildingUtils';
+import { getBuildingDisplay } from './locationService';
 import { resolveOfficeLocation } from './spaceUtils';
 
 /**
@@ -38,7 +38,7 @@ export const extractBuildingName = (officeLocation) => {
         return 'No Building';
     }
 
-    const building = getBuildingFromRoom(officeLocation);
+    const building = getBuildingDisplay(officeLocation);
     if (!building || !building.trim()) return 'No Building';
     return building;
 };

@@ -5,9 +5,9 @@
  *
  * Key principles:
  * 1. Names are ALWAYS resolved via ID lookups (no string fallbacks)
- * 2. If instructorId is missing, display "Unassigned" not legacy string names
+ * 2. If instructorId is missing, display "Unassigned" not cached string names
  * 3. Programs are resolved via programId, not string matching
- * 4. Rooms are resolved via roomId, not string parsing
+ * 4. Spaces are resolved via spaceIds, not string parsing
  *
  * This prevents data inconsistencies where cached string names diverge from
  * the actual person/room records.
@@ -294,10 +294,10 @@ export const generateAnalyticsFromNormalizedData = (schedulesWithInstructors, pe
 
         // Room utilization
         // Multi-room aware utilization
-        const roomNamesArr = Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0
-          ? schedule.roomNames
-          : (schedule.roomName ? [schedule.roomName] : []);
-        roomNamesArr
+        const spaceLabels = Array.isArray(schedule.spaceDisplayNames) && schedule.spaceDisplayNames.length > 0
+          ? schedule.spaceDisplayNames
+          : [];
+        spaceLabels
           .filter(rn => rn && rn.toLowerCase() !== 'online')
           .forEach((rn) => {
             if (!roomUtilization[rn]) {
@@ -431,7 +431,7 @@ export const resolveInstructorName = (schedule, peopleMap) => {
  * @param {Map|Object} roomsMap - Map of room ID to room object
  * @returns {string} The room display name or "TBA"
  */
-export const resolveRoomName = (schedule, roomsMap, spacesByKey = null) => {
+export const resolveLocationDisplay = (schedule, roomsMap, spacesByKey = null) => {
   if (schedule?.locationType === 'no_room' || schedule?.isOnline) {
     return schedule?.locationLabel || 'No Room Needed';
   }
@@ -452,31 +452,6 @@ export const resolveRoomName = (schedule, roomsMap, spacesByKey = null) => {
 
   if (Array.isArray(schedule?.spaceDisplayNames) && schedule.spaceDisplayNames.length > 0) {
     return schedule.spaceDisplayNames.join('; ');
-  }
-
-  // Try roomIds array first (multi-room support)
-  if (Array.isArray(schedule?.roomIds) && schedule.roomIds.length > 0) {
-    const roomNames = schedule.roomIds
-      .map(id => {
-        const room = roomsMap instanceof Map ? roomsMap.get(id) : roomsMap[id];
-        return room ? (room.displayName || room.name) : null;
-      })
-      .filter(Boolean);
-
-    if (roomNames.length > 0) {
-      return roomNames.join('; ');
-    }
-  }
-
-  // Try single roomId
-  if (schedule?.roomId) {
-    const room = roomsMap instanceof Map
-      ? roomsMap.get(schedule.roomId)
-      : roomsMap[schedule.roomId];
-
-    if (room) {
-      return room.displayName || room.name || UNKNOWN_ROOM;
-    }
   }
 
   return UNKNOWN_ROOM;
@@ -514,7 +489,7 @@ export const enrichScheduleForDisplay = (schedule, peopleMap, roomsMap, programs
     });
   }
 
-  const roomName = resolveRoomName(schedule, roomsMap, spaceMap);
+  const locationDisplay = resolveLocationDisplay(schedule, roomsMap, spaceMap);
 
   // Resolve program from instructor if available
   let programName = UNKNOWN_PROGRAM;
@@ -529,7 +504,7 @@ export const enrichScheduleForDisplay = (schedule, peopleMap, roomsMap, programs
     ...schedule,
     // Resolved display fields
     instructorName,
-    roomName,
+    locationDisplay,
     programName,
     // Include full instructor object for detailed views
     instructor,
@@ -537,8 +512,7 @@ export const enrichScheduleForDisplay = (schedule, peopleMap, roomsMap, programs
     _hasValidInstructor: !!instructor,
     _hasValidRoom: schedule.locationType === 'no_room' ||
       schedule.isOnline ||
-      (Array.isArray(schedule.spaceIds) && schedule.spaceIds.length > 0) ||
-      (schedule.roomId && roomsMap.has(schedule.roomId))
+      (Array.isArray(schedule.spaceIds) && schedule.spaceIds.length > 0)
   };
 };
 
@@ -578,7 +552,7 @@ export default {
   getFullName,
   getInstructorDisplayName,
   resolveInstructorName,
-  resolveRoomName,
+  resolveLocationDisplay,
   enrichScheduleForDisplay,
   // Migration helpers
   isNormalizedDataAvailable

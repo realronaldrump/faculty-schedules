@@ -14,7 +14,7 @@ import {
   getStudentStatusForSemester
 } from '../utils/studentWorkers';
 import { formatPhoneNumber } from '../utils/directoryUtils';
-import { getCanonicalBuildingList } from '../utils/buildingUtils';
+import { getCanonicalBuildingList } from '../utils/locationService';
 import { useData } from '../contexts/DataContext';
 import { usePeopleOperations } from '../hooks';
 import { useUI } from '../contexts/UIContext';
@@ -381,7 +381,7 @@ const StudentDirectory = () => {
   const availableJobTitles = useMemo(() => {
     const set = new Set();
     studentData.forEach(student => {
-      // include top-level for legacy
+      // include top-level fallback
       if (student.jobTitle) set.add(student.jobTitle);
       // include each job title
       if (Array.isArray(student.jobs)) {

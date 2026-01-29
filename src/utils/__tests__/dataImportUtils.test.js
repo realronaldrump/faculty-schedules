@@ -21,7 +21,7 @@ describe('dataImportUtils CLSS parsing', () => {
     expect(base.term).toBe('Spring 2026');
     expect(base.termCode).toBe('202610');
     expect(base.section).toMatch(/^[A-Z0-9]+$/i);
-    expect(base.roomNames.length).toBeGreaterThan(0);
+    expect(base.spaceDisplayNames.length).toBeGreaterThan(0);
   });
 
   it('marks online rows as roomless with Online label', () => {

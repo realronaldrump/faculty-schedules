@@ -19,12 +19,12 @@ const chunkArray = (items, size) => {
   return chunks;
 };
 
-const buildDeviceRoomMap = (deviceDocs = {}) => {
+const buildDeviceSpaceMap = (deviceDocs = {}) => {
   const map = new Map();
   Object.values(deviceDocs).forEach((device) => {
-    const roomId = device?.mapping?.spaceKey || device?.mapping?.roomId;
-    if (!roomId || !device?.id) return;
-    map.set(device.id, roomId);
+    const spaceKey = device?.mapping?.spaceKey;
+    if (!spaceKey || !device?.id) return;
+    map.set(device.id, spaceKey);
   });
   return map;
 };
@@ -43,24 +43,24 @@ const mergePoint = (store, timestampMs, value) => {
 
 const buildRawSeries = ({
   readingsDocs = [],
-  deviceRoomMap,
-  roomLabelMap,
+  deviceSpaceMap,
+  spaceLabelMap,
   start,
   end,
   unit,
 }) => {
-  const roomPointMaps = new Map();
+  const spacePointMaps = new Map();
   let lastUpdated = null;
 
   readingsDocs.forEach((docData) => {
     const deviceId = docData.deviceId;
-    const roomId = deviceRoomMap.get(deviceId);
-    if (!roomId) return;
+    const spaceKey = deviceSpaceMap.get(deviceId);
+    if (!spaceKey) return;
     const samples = docData.samples || {};
-    if (!roomPointMaps.has(roomId)) {
-      roomPointMaps.set(roomId, new Map());
+    if (!spacePointMaps.has(spaceKey)) {
+      spacePointMaps.set(spaceKey, new Map());
     }
-    const roomStore = roomPointMaps.get(roomId);
+    const spaceStore = spacePointMaps.get(spaceKey);
     Object.values(samples).forEach((sample) => {
       const utc = sample?.utc?.toDate ? sample.utc.toDate() : sample?.utc;
       if (!(utc instanceof Date)) return;
@@ -68,13 +68,13 @@ const buildRawSeries = ({
       const value = unit === "C" ? sample.temperatureC : sample.temperatureF;
       if (!Number.isFinite(value)) return;
       const timestampMs = utc.getTime();
-      mergePoint(roomStore, timestampMs, value);
+      mergePoint(spaceStore, timestampMs, value);
       if (!lastUpdated || utc > lastUpdated) lastUpdated = utc;
     });
   });
 
   return {
-    series: Array.from(roomPointMaps.entries()).map(([roomId, store]) => {
+    series: Array.from(spacePointMaps.entries()).map(([spaceKey, store]) => {
       const points = Array.from(store.entries()).map(([timestampMs, entry]) => ({
         timestamp: new Date(timestampMs),
         value: entry.sum / entry.count,
@@ -84,8 +84,8 @@ const buildRawSeries = ({
       }));
       points.sort((a, b) => a.timestamp - b.timestamp);
       return {
-        roomId,
-        roomName: roomLabelMap.get(roomId) || roomId,
+        spaceKey,
+        spaceLabel: spaceLabelMap.get(spaceKey) || spaceKey,
         points,
       };
     }),
@@ -103,7 +103,7 @@ const isPermissionError = (error) => {
 export const fetchTemperatureSeries = async ({
   db,
   buildingCode,
-  roomIds = [],
+  spaceKeys = [],
   start,
   end,
   timezone,
@@ -111,7 +111,7 @@ export const fetchTemperatureSeries = async ({
   granularity = "auto",
   unit = "F",
 }) => {
-  if (!db || !buildingCode || roomIds.length === 0 || !start || !end) {
+  if (!db || !buildingCode || spaceKeys.length === 0 || !start || !end) {
     return {
       series: [],
       granularity: resolveTemperatureGranularity({ start, end, requested: granularity }),
@@ -128,20 +128,20 @@ export const fetchTemperatureSeries = async ({
 
   const startLocal = formatDateInTimeZone(start, timezone);
   const endLocal = formatDateInTimeZone(end, timezone);
-  const roomLabelMap = new Map();
+  const spaceLabelMap = new Map();
 
   if (resolvedGranularity === TEMPERATURE_GRANULARITY.RAW) {
-    const deviceRoomMap = buildDeviceRoomMap(deviceDocs);
-    const roomIdSet = new Set(roomIds);
+    const deviceSpaceMap = buildDeviceSpaceMap(deviceDocs);
+    const spaceKeySet = new Set(spaceKeys);
     Object.values(deviceDocs).forEach((device) => {
-      const roomId = device?.mapping?.spaceKey || device?.mapping?.roomId;
-      if (!roomId || !roomIdSet.has(roomId)) return;
-      roomLabelMap.set(roomId, device?.mapping?.roomName || device?.label || roomId);
+      const spaceKey = device?.mapping?.spaceKey;
+      if (!spaceKey || !spaceKeySet.has(spaceKey)) return;
+      spaceLabelMap.set(spaceKey, device?.mapping?.spaceLabel || device?.label || spaceKey);
     });
     const deviceIds = Array.from(
       new Set(
-        Array.from(deviceRoomMap.entries())
-          .filter(([, roomId]) => roomIdSet.has(roomId))
+        Array.from(deviceSpaceMap.entries())
+          .filter(([, spaceKey]) => spaceKeySet.has(spaceKey))
           .map(([deviceId]) => deviceId),
       ),
     );
@@ -162,8 +162,8 @@ export const fetchTemperatureSeries = async ({
     }
     const { series, lastUpdated } = buildRawSeries({
       readingsDocs,
-      deviceRoomMap,
-      roomLabelMap,
+      deviceSpaceMap,
+      spaceLabelMap,
       start,
       end,
       unit,
@@ -176,14 +176,14 @@ export const fetchTemperatureSeries = async ({
     };
   }
 
-  const roomChunks = chunkArray(roomIds, 10);
+  const spaceChunks = chunkArray(spaceKeys, 10);
   const aggregateDocs = [];
   try {
-    for (const chunk of roomChunks) {
+    for (const chunk of spaceChunks) {
       const q = query(
         collection(db, "temperatureRoomAggregates"),
         where("buildingCode", "==", buildingCode),
-        where("roomId", "in", chunk),
+        where("spaceKey", "in", chunk),
         where("dateLocal", ">=", startLocal),
         where("dateLocal", "<=", endLocal),
       );
@@ -199,7 +199,7 @@ export const fetchTemperatureSeries = async ({
       return fetchTemperatureSeries({
         db,
         buildingCode,
-        roomIds,
+        spaceKeys,
         start,
         end,
         timezone,

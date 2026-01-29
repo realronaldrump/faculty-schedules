@@ -26,7 +26,6 @@ import { useAuth } from "../../contexts/AuthContext";
 import { db, COLLECTIONS } from "../../firebase";
 
 const EXCEPTIONS_STORAGE_KEY = "tools.outlook-export.term-exceptions";
-const LEGACY_STORAGE_KEY = "tools.outlook-export.term-configs";
 const EXCEPTIONS_DOC_ID = "rooms";
 
 const dayMetadata = {
@@ -209,23 +208,20 @@ const extractRoomNames = (schedule) => {
       splitRoomString(value).forEach((room) => rooms.add(room));
       return;
     }
-    const display = value?.displayName || value?.name;
+    const display = value?.displayName;
     if (display) {
       splitRoomString(display).forEach((room) => rooms.add(room));
     }
   };
 
-  if (Array.isArray(schedule?.roomNames)) {
-    schedule.roomNames.forEach(addRoom);
+  if (Array.isArray(schedule?.spaceDisplayNames)) {
+    schedule.spaceDisplayNames.forEach(addRoom);
   }
   if (Array.isArray(schedule?.rooms)) {
     schedule.rooms.forEach(addRoom);
   }
   if (schedule?.room) {
     addRoom(schedule.room);
-  }
-  if (schedule?.roomName) {
-    addRoom(schedule.roomName);
   }
   if (schedule?.Room) {
     splitRoomString(schedule.Room).forEach((room) => rooms.add(room));
@@ -304,23 +300,6 @@ const OutlookRoomExport = () => {
           setTermExceptions(parsed);
           setExceptionsLoaded(true);
           return;
-        }
-      }
-      const legacyStored = window.localStorage.getItem(LEGACY_STORAGE_KEY);
-      if (legacyStored) {
-        const parsedLegacy = JSON.parse(legacyStored);
-        if (parsedLegacy && typeof parsedLegacy === "object") {
-          const migrated = {};
-          Object.entries(parsedLegacy).forEach(([term, config]) => {
-            if (config && Array.isArray(config.exceptions)) {
-              migrated[term] = config.exceptions;
-            }
-          });
-          if (Object.keys(migrated).length > 0) {
-            setTermExceptions(migrated);
-            setExceptionsLoaded(true);
-            return;
-          }
         }
       }
     } catch (error) {
@@ -744,8 +723,8 @@ const OutlookRoomExport = () => {
     let eventCount = 0;
 
     schedulesForTerm.forEach((schedule) => {
-      const roomNames = extractRoomNames(schedule).map((name) => name.trim());
-      if (!roomNames.includes(room)) {
+      const spaceLabels = extractRoomNames(schedule).map((name) => name.trim());
+      if (!spaceLabels.includes(room)) {
         return;
       }
       const patterns = getMeetingPatterns(schedule);

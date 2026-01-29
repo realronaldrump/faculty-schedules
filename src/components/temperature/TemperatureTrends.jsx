@@ -124,7 +124,7 @@ const sanitizeSeriesPoints = (series = []) =>
     ),
   }));
 
-const resolveRoomLabel = (room, spacesByKey) => {
+const resolveSpaceLabel = (room, spacesByKey) => {
   if (!room) return "Unknown";
   const key = room.spaceKey || room.id || "";
   const resolved =
@@ -151,7 +151,7 @@ const TemperatureLineChart = ({
   timeZone,
   unitLabel,
   idealRange,
-  idealRangesByRoomId,
+  idealRangesBySpaceKey,
   onBrush,
   onPointSelect,
   compact = false,
@@ -159,15 +159,15 @@ const TemperatureLineChart = ({
   const containerRef = useRef(null);
   const [hover, setHover] = useState(null);
   const [brush, setBrush] = useState(null);
-  const resolveRangeForRoom = (roomId) => {
-    if (idealRangesByRoomId instanceof Map && idealRangesByRoomId.has(roomId)) {
-      return idealRangesByRoomId.get(roomId);
+  const resolveRangeForRoom = (spaceKey) => {
+    if (idealRangesBySpaceKey instanceof Map && idealRangesBySpaceKey.has(spaceKey)) {
+      return idealRangesBySpaceKey.get(spaceKey);
     }
     if (
-      idealRangesByRoomId &&
-      Object.prototype.hasOwnProperty.call(idealRangesByRoomId, roomId)
+      idealRangesBySpaceKey &&
+      Object.prototype.hasOwnProperty.call(idealRangesBySpaceKey, spaceKey)
     ) {
-      return idealRangesByRoomId[roomId];
+      return idealRangesBySpaceKey[spaceKey];
     }
     return idealRange || null;
   };
@@ -258,8 +258,8 @@ const TemperatureLineChart = ({
                 }
                 const closest = points[low] || points[points.length - 1];
                 return {
-                  roomId: item.roomId,
-                  roomName: item.roomName,
+                  spaceKey: item.spaceKey,
+                  spaceLabel: item.spaceLabel,
                   value: closest.value,
                   timestamp: closest.timestamp,
                   color: item.color,
@@ -387,7 +387,7 @@ const TemperatureLineChart = ({
 
               {series.map((item) => (
                 <path
-                  key={item.roomId}
+                  key={item.spaceKey}
                   d={buildPath(item.points, xScale, yScale)}
                   fill="none"
                   stroke={item.color}
@@ -407,7 +407,7 @@ const TemperatureLineChart = ({
                   />
                   {hover.values.map((value) => (
                     <circle
-                      key={`${value.roomId}-${value.timestamp.toISOString()}`}
+                      key={`${value.spaceKey}-${value.timestamp.toISOString()}`}
                       cx={xScale(value.timestamp.getTime())}
                       cy={yScale(value.value)}
                       r={3}
@@ -443,13 +443,13 @@ const TemperatureLineChart = ({
           <div className="space-y-1">
             {hover.values.map((value) => (
               <div
-                key={`${value.roomId}-tooltip`}
+                key={`${value.spaceKey}-tooltip`}
                 className="flex items-center justify-between gap-3"
               >
-                <span className="text-gray-600">{value.roomName}</span>
+                <span className="text-gray-600">{value.spaceLabel}</span>
                 <span
                   className={`px-2 py-1 rounded-full text-xs font-semibold ${(() => {
-                    const range = resolveRangeForRoom(value.roomId);
+                    const range = resolveRangeForRoom(value.spaceKey);
                     const status = getTemperatureStatus(value.value, range);
                     if (status === "below") return "bg-sky-100 text-sky-800";
                     if (status === "above") return "bg-rose-100 text-rose-800";
@@ -483,8 +483,8 @@ const TemperatureTrends = ({
   const [rangePreset, setRangePreset] = useState("24h");
 
   const [roomSearch, setRoomSearch] = useState("");
-  const [selectedRoomIds, setSelectedRoomIds] = useState([]);
-  const [visibleRoomIds, setVisibleRoomIds] = useState(new Set());
+  const [selectedSpaceKeys, setSelectedSpaceKeys] = useState([]);
+  const [visibleSpaceKeys, setVisibleSpaceKeys] = useState(new Set());
   const [compareMode, setCompareMode] = useState("overlay");
 
   const [seriesData, setSeriesData] = useState([]);
@@ -510,23 +510,23 @@ const TemperatureTrends = ({
     [buildingSettings?.idealTempRangesBySpaceType],
   );
 
-  const roomNameMap = useMemo(() => {
+  const spaceLabelMap = useMemo(() => {
     const map = new Map();
     roomsForBuilding.forEach((room) => {
-      const roomId = room.spaceKey || room.id;
-      if (!roomId) return;
-      map.set(roomId, resolveRoomLabel(room, spacesByKey));
+      const spaceKey = room.spaceKey || room.id;
+      if (!spaceKey) return;
+      map.set(spaceKey, resolveSpaceLabel(room, spacesByKey));
     });
     return map;
   }, [roomsForBuilding, spacesByKey]);
 
-  const idealRangeByRoomId = useMemo(() => {
+  const idealRangeBySpaceKey = useMemo(() => {
     const map = new Map();
     roomsForBuilding.forEach((room) => {
-      const roomId = room.spaceKey || room.id;
-      if (!roomId) return;
+      const spaceKey = room.spaceKey || room.id;
+      if (!spaceKey) return;
       map.set(
-        roomId,
+        spaceKey,
         resolveIdealRangeForSpaceType(
           room?.type,
           defaultIdealRange,
@@ -538,8 +538,8 @@ const TemperatureTrends = ({
   }, [roomsForBuilding, defaultIdealRange, idealRangesByType]);
 
   useEffect(() => {
-    setSelectedRoomIds([]);
-    setVisibleRoomIds(new Set());
+    setSelectedSpaceKeys([]);
+    setVisibleSpaceKeys(new Set());
     setSeriesData([]);
     setSelectedPoint(null);
   }, [selectedBuilding]);
@@ -564,7 +564,7 @@ const TemperatureTrends = ({
 
   useEffect(() => {
     const runFetch = async () => {
-      if (!selectedBuilding || selectedRoomIds.length === 0) {
+      if (!selectedBuilding || selectedSpaceKeys.length === 0) {
         setSeriesData([]);
         return;
       }
@@ -579,7 +579,7 @@ const TemperatureTrends = ({
         const result = await fetchTemperatureSeries({
           db,
           buildingCode: selectedBuilding,
-          roomIds: selectedRoomIds,
+          spaceKeys: selectedSpaceKeys,
           start: rangeStart,
           end: rangeEnd,
           timezone,
@@ -589,14 +589,14 @@ const TemperatureTrends = ({
         });
         const seriesWithColors = result.series.map((item, index) => ({
           ...item,
-          roomName: roomNameMap.get(item.roomId) || item.roomName,
+          spaceLabel: spaceLabelMap.get(item.spaceKey) || item.spaceLabel,
           color: getSeriesColor(index),
           points: downsamplePoints(item.points || [], MAX_POINTS),
         }));
         setSeriesData(seriesWithColors);
         setLastUpdated(result.lastUpdated);
-        setVisibleRoomIds((prev) => {
-          const allIds = seriesWithColors.map((item) => item.roomId);
+        setVisibleSpaceKeys((prev) => {
+          const allIds = seriesWithColors.map((item) => item.spaceKey);
           if (!prev || prev.size === 0) return new Set(allIds);
           const next = new Set(allIds.filter((id) => prev.has(id)));
           if (next.size === 0) return new Set(allIds);
@@ -616,30 +616,30 @@ const TemperatureTrends = ({
     runFetch();
   }, [
     selectedBuilding,
-    selectedRoomIds,
+    selectedSpaceKeys,
     rangeStart,
     rangeEnd,
     timezone,
     deviceDocs,
     granularity,
     refreshKey,
-    roomNameMap,
+    spaceLabelMap,
   ]);
 
   const filteredRooms = useMemo(() => {
     const search = normalizeMatchText(roomSearch);
     if (!search) return roomsForBuilding;
     return roomsForBuilding.filter((room) =>
-      normalizeMatchText(resolveRoomLabel(room, spacesByKey)).includes(search),
+      normalizeMatchText(resolveSpaceLabel(room, spacesByKey)).includes(search),
     );
   }, [roomsForBuilding, roomSearch, spacesByKey]);
 
-  const toggleRoom = (roomId) => {
-    setSelectedRoomIds((prev) => {
-      if (prev.includes(roomId)) {
-        return prev.filter((id) => id !== roomId);
+  const toggleRoom = (spaceKey) => {
+    setSelectedSpaceKeys((prev) => {
+      if (prev.includes(spaceKey)) {
+        return prev.filter((id) => id !== spaceKey);
       }
-      return [...prev, roomId];
+      return [...prev, spaceKey];
     });
   };
 
@@ -647,18 +647,18 @@ const TemperatureTrends = ({
     const allIds = roomsForBuilding
       .map((room) => room.spaceKey || room.id)
       .filter(Boolean);
-    setSelectedRoomIds(allIds);
+    setSelectedSpaceKeys(allIds);
   };
 
   const clearRooms = () => {
-    setSelectedRoomIds([]);
+    setSelectedSpaceKeys([]);
   };
 
-  const toggleSeriesVisibility = (roomId) => {
-    setVisibleRoomIds((prev) => {
+  const toggleSeriesVisibility = (spaceKey) => {
+    setVisibleSpaceKeys((prev) => {
       const next = new Set(prev);
-      if (next.has(roomId)) next.delete(roomId);
-      else next.add(roomId);
+      if (next.has(spaceKey)) next.delete(spaceKey);
+      else next.add(spaceKey);
       return next;
     });
   };
@@ -691,7 +691,7 @@ const TemperatureTrends = ({
   };
 
   const visibleSeries = seriesData.filter((item) =>
-    visibleRoomIds.has(item.roomId),
+    visibleSpaceKeys.has(item.spaceKey),
   );
   const chartSeries = useMemo(
     () => sanitizeSeriesPoints(visibleSeries),
@@ -701,8 +701,8 @@ const TemperatureTrends = ({
     if (chartSeries.length === 0) return null;
     let sharedRange = null;
     for (const item of chartSeries) {
-      const nextRange = idealRangeByRoomId.has(item.roomId)
-        ? idealRangeByRoomId.get(item.roomId)
+      const nextRange = idealRangeBySpaceKey.has(item.spaceKey)
+        ? idealRangeBySpaceKey.get(item.spaceKey)
         : defaultIdealRange;
       if (sharedRange == null) {
         sharedRange = nextRange;
@@ -711,7 +711,7 @@ const TemperatureTrends = ({
       if (!areRangesEqual(sharedRange, nextRange)) return null;
     }
     return sharedRange;
-  }, [chartSeries, idealRangeByRoomId, defaultIdealRange]);
+  }, [chartSeries, idealRangeBySpaceKey, defaultIdealRange]);
 
   const statsRows = useMemo(() => {
     return visibleSeries.map((item) => {
@@ -724,8 +724,8 @@ const TemperatureTrends = ({
           ? values.reduce((sum, v) => sum + v, 0) / values.length
           : null;
       return {
-        roomId: item.roomId,
-        roomName: item.roomName,
+        spaceKey: item.spaceKey,
+        spaceLabel: item.spaceLabel,
         latest,
         min,
         max,
@@ -739,8 +739,8 @@ const TemperatureTrends = ({
     chartSeries.forEach((item) => {
       item.points.forEach((point) => {
         rows.push({
-          roomId: item.roomId,
-          roomName: item.roomName,
+          spaceKey: item.spaceKey,
+          spaceLabel: item.spaceLabel,
           timestamp: point.timestamp,
           value: point.value,
         });
@@ -851,21 +851,21 @@ const TemperatureTrends = ({
                 <div className="p-3 text-xs text-gray-500">No rooms found.</div>
               ) : (
                 filteredRooms.map((room) => {
-                  const roomId = room.spaceKey || room.id;
-                  if (!roomId) return null;
-                  const checked = selectedRoomIds.includes(roomId);
+                  const spaceKey = room.spaceKey || room.id;
+                  if (!spaceKey) return null;
+                  const checked = selectedSpaceKeys.includes(spaceKey);
                   return (
                     <label
-                      key={roomId}
+                      key={spaceKey}
                       className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
                     >
                       <input
                         type="checkbox"
                         className="w-4 h-4 text-baylor-green border-gray-300 rounded focus:ring-baylor-green"
                         checked={checked}
-                        onChange={() => toggleRoom(roomId)}
+                        onChange={() => toggleRoom(spaceKey)}
                       />
-                      <span>{resolveRoomLabel(room, spacesByKey)}</span>
+                      <span>{resolveSpaceLabel(room, spacesByKey)}</span>
                     </label>
                   );
                 })
@@ -948,21 +948,21 @@ const TemperatureTrends = ({
             <>
               <div className="flex flex-wrap gap-2 mb-3">
                 {seriesData.map((item) => {
-                  const active = visibleRoomIds.has(item.roomId);
+                  const active = visibleSpaceKeys.has(item.spaceKey);
                   return (
                     <button
-                      key={item.roomId}
+                      key={item.spaceKey}
                       className={`px-3 py-1.5 rounded-full text-xs font-semibold border flex items-center gap-2 ${active
                         ? "bg-gray-900 text-white border-gray-900"
                         : "bg-white text-gray-500 border-gray-200"
                         }`}
-                      onClick={() => toggleSeriesVisibility(item.roomId)}
+                      onClick={() => toggleSeriesVisibility(item.spaceKey)}
                     >
                       <span
                         className="w-2.5 h-2.5 rounded-full"
                         style={{ backgroundColor: item.color }}
                       />
-                      {item.roomName}
+                      {item.spaceLabel}
                     </button>
                   );
                 })}
@@ -973,7 +973,7 @@ const TemperatureTrends = ({
                 timeZone={timezone}
                 unitLabel={unitLabel}
                 idealRange={overlayIdealRange}
-                idealRangesByRoomId={idealRangeByRoomId}
+                idealRangesBySpaceKey={idealRangeBySpaceKey}
                 onBrush={handleBrush}
                 onPointSelect={setSelectedPoint}
               />
@@ -981,17 +981,17 @@ const TemperatureTrends = ({
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {chartSeries.map((item) => {
-                const roomRange = idealRangeByRoomId.has(item.roomId)
-                  ? idealRangeByRoomId.get(item.roomId)
+                const roomRange = idealRangeBySpaceKey.has(item.spaceKey)
+                  ? idealRangeBySpaceKey.get(item.spaceKey)
                   : defaultIdealRange;
                 return (
                   <div
-                    key={item.roomId}
+                    key={item.spaceKey}
                     className="border border-gray-200 rounded-lg p-3"
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-sm font-semibold text-gray-900">
-                        {item.roomName}
+                        {item.spaceLabel}
                       </div>
                       <div className="text-xs text-gray-500">
                         {item.points[item.points.length - 1]?.value?.toFixed(1)}
@@ -1004,7 +1004,7 @@ const TemperatureTrends = ({
                       timeZone={timezone}
                       unitLabel={unitLabel}
                       idealRange={roomRange}
-                      idealRangesByRoomId={idealRangeByRoomId}
+                      idealRangesBySpaceKey={idealRangeBySpaceKey}
                       compact
                     />
                   </div>
@@ -1042,8 +1042,8 @@ const TemperatureTrends = ({
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {statsRows.map((row) => {
-                    const range = idealRangeByRoomId.has(row.roomId)
-                      ? idealRangeByRoomId.get(row.roomId)
+                    const range = idealRangeBySpaceKey.has(row.spaceKey)
+                      ? idealRangeBySpaceKey.get(row.spaceKey)
                       : defaultIdealRange;
                     const status = getTemperatureStatus(row.latest, range);
                     const tone =
@@ -1053,9 +1053,9 @@ const TemperatureTrends = ({
                           ? "text-rose-700 bg-rose-50"
                           : "text-baylor-green bg-baylor-green/10";
                     return (
-                      <tr key={row.roomId}>
+                      <tr key={row.spaceKey}>
                         <td className="px-3 py-2 text-gray-700">
-                          {row.roomName}
+                          {row.spaceLabel}
                         </td>
                         <td className="px-3 py-2">
                           <span
@@ -1131,7 +1131,7 @@ const TemperatureTrends = ({
                               className={`px-3 py-2 flex items-center justify-between text-xs border-b border-gray-100 ${isSelected ? "bg-baylor-green/10" : ""}`}
                             >
                               <span className="text-gray-700">
-                                {row.roomName}
+                                {row.spaceLabel}
                               </span>
                               <span className="text-gray-500">
                                 {rowTime != null

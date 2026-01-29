@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
 import { parseTime, formatMinutesToTime } from "../../utils/timeUtils";
+import { getLocationDisplay } from "../../utils/locationService";
 import { useData } from "../../contexts/DataContext";
 import { useSchedules } from "../../contexts/ScheduleContext";
 import { usePeople } from "../../contexts/PeopleContext";
@@ -103,18 +104,7 @@ const IndividualAvailability = ({ embedded = false }) => {
                 start: parseTime(pattern.startTime),
                 end: parseTime(pattern.endTime),
                 course: item.courseCode,
-                room: (() => {
-                  if (item.locationType === "no_room" || item.isOnline) {
-                    return item.locationLabel || "No Room Needed";
-                  }
-                  const names =
-                    Array.isArray(item.roomNames) && item.roomNames.length > 0
-                      ? item.roomNames
-                      : [
-                          item.room ? item.room.displayName : item.roomName,
-                        ].filter(Boolean);
-                  return names.join("; ");
-                })(),
+                room: getLocationDisplay(item) || item.Room || "",
                 title: item.courseTitle,
               }));
           }

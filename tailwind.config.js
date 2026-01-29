@@ -51,7 +51,7 @@ export default {
         'brand-blue': '#003F5C', // Accent blue (limited use)
         'brand-neutral': '#383838',
 
-        // Map common non-brand utilities to brand-approved colors to unify legacy usage
+        // Map common non-brand utilities to brand-approved colors to unify existing usage
         // Blue → Baylor Green scale (so text-blue-600, bg-blue-50, etc. are on-brand)
         blue: {
           50: '#f0f8f4',

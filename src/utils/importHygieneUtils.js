@@ -15,9 +15,6 @@ export const standardizeImportedPerson = (person = {}, options = {}) => {
   if (Object.prototype.hasOwnProperty.call(person, 'officeSpaceId')) {
     base.officeSpaceId = normalizeOfficeId(person.officeSpaceId);
   }
-  if (Object.prototype.hasOwnProperty.call(person, 'officeRoomId')) {
-    base.officeRoomId = normalizeOfficeId(person.officeRoomId);
-  }
   return standardizePerson(base, { updateTimestamp });
 };
 

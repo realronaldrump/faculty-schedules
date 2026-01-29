@@ -23,8 +23,8 @@ export const normalizeSpaceRecord = (space = {}, docId = '') => {
 
   let spaceKey = (base.spaceKey || '').toString().trim();
   let buildingCode = (base.buildingCode || '').toString().trim().toUpperCase();
-  let spaceNumber = (base.spaceNumber || base.roomNumber || '').toString().trim();
-  let buildingDisplayName = (base.buildingDisplayName || base.building || '').toString().trim();
+  let spaceNumber = (base.spaceNumber || '').toString().trim();
+  let buildingDisplayName = (base.buildingDisplayName || '').toString().trim();
 
   if (spaceKey && (!buildingCode || !spaceNumber)) {
     const parsedKey = parseSpaceKey(spaceKey);
@@ -41,8 +41,8 @@ export const normalizeSpaceRecord = (space = {}, docId = '') => {
     }
   }
 
-  if ((!buildingCode || !buildingDisplayName) && (base.building || base.buildingDisplayName)) {
-    const resolved = resolveBuilding(base.building || base.buildingDisplayName || '');
+  if ((!buildingCode || !buildingDisplayName) && base.buildingDisplayName) {
+    const resolved = resolveBuilding(base.buildingDisplayName || '');
     if (!buildingCode && resolved?.code) buildingCode = resolved.code.toUpperCase();
     if (!buildingDisplayName && resolved?.displayName) buildingDisplayName = resolved.displayName;
   }
@@ -57,7 +57,6 @@ export const normalizeSpaceRecord = (space = {}, docId = '') => {
     ? resolvedFromConfig
     : (buildingDisplayName || resolvedFromConfig || buildingCode);
   const displayName = base.displayName
-    || base.name
     || formatSpaceDisplayName({
       buildingCode,
       buildingDisplayName: resolvedBuildingName,
@@ -71,10 +70,7 @@ export const normalizeSpaceRecord = (space = {}, docId = '') => {
     buildingCode,
     buildingDisplayName: resolvedBuildingName || '',
     spaceNumber: normalizedNumber || '',
-    displayName,
-    name: base.name || displayName || '',
-    roomNumber: base.roomNumber || normalizedNumber || '',
-    building: base.building || resolvedBuildingName || buildingCode || ''
+    displayName
   };
 };
 
@@ -116,9 +112,7 @@ export const resolveScheduleSpaces = (schedule, spacesByKey) => {
 
   const fallbackNames = Array.isArray(schedule.spaceDisplayNames) && schedule.spaceDisplayNames.length > 0
     ? schedule.spaceDisplayNames
-    : (Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0
-      ? schedule.roomNames
-      : (schedule.roomName ? [schedule.roomName] : []));
+    : [];
 
   let displayNames = resolvedNames.length > 0 ? resolvedNames : fallbackNames;
 
@@ -142,7 +136,7 @@ export const resolveScheduleSpaces = (schedule, spacesByKey) => {
 
 /**
  * Resolve a single office location from person data.
- * Returns the primary office (first in array or legacy field).
+ * Returns the primary office (first in array).
  * For multiple offices, use resolveOfficeLocations instead.
  */
 export const resolveOfficeLocation = (person, spacesByKey) => {
@@ -158,7 +152,7 @@ export const resolveOfficeLocation = (person, spacesByKey) => {
 
 /**
  * Resolve all office locations for a person.
- * Supports both new officeSpaceIds array and legacy officeSpaceId string.
+ * Supports both officeSpaceIds array and officeSpaceId string.
  * @returns {Array} Array of office location objects
  */
 export const resolveOfficeLocations = (person, spacesByKey) => {
@@ -234,7 +228,7 @@ export const resolveOfficeLocations = (person, spacesByKey) => {
     }
   }
 
-  // Fall back to legacy singular fields if no array data
+  // Fall back to singular office fields if no array data
   if (results.length === 0) {
     const resolved = resolveOne(person.officeSpaceId, person.office);
     if (resolved) results.push(resolved);

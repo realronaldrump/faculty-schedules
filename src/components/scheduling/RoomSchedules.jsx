@@ -19,9 +19,9 @@ import WeekView from "./WeekView";
 import RoomCalendarView from "./RoomCalendarView";
 import CourseDetailModal from "./CourseDetailModal";
 import {
-  getBuildingFromRoom,
+  getBuildingDisplay,
   getCanonicalBuildingList,
-} from "../../utils/buildingUtils";
+} from "../../utils/locationService";
 import { parseTime, formatMinutesToTime } from "../../utils/timeUtils";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
@@ -86,7 +86,7 @@ const RoomSchedules = ({ embedded = false }) => {
   };
   const dayOrder = ["M", "T", "W", "R", "F"];
 
-  // getBuildingFromRoom is imported from buildingUtils
+  // getBuildingDisplay is imported from locationService
 
   // Normalize a meeting pattern string to ordered unique chars (e.g., "WFM" -> "MWF")
   const normalizePattern = (patternStr) => {
@@ -124,7 +124,7 @@ const RoomSchedules = ({ embedded = false }) => {
   const buildingOptions = useMemo(() => {
     const buildings = new Set(getCanonicalBuildingList());
     uniqueRooms.forEach((room) => {
-      const b = getBuildingFromRoom(room);
+      const b = getBuildingDisplay(room);
       if (b && b !== "Online" && b !== "Off Campus") buildings.add(b);
     });
     return Array.from(buildings).sort((a, b) =>
@@ -138,7 +138,7 @@ const RoomSchedules = ({ embedded = false }) => {
       return uniqueRooms;
     }
     return uniqueRooms.filter(
-      (room) => getBuildingFromRoom(room) === selectedBuilding,
+      (room) => getBuildingDisplay(room) === selectedBuilding,
     );
   }, [uniqueRooms, selectedBuilding]);
 
@@ -268,7 +268,7 @@ const RoomSchedules = ({ embedded = false }) => {
       roomOverride ||
       item.__room ||
       ((item.Room || "").split(";")[0] || "").trim();
-    const building = getBuildingFromRoom(room);
+    const building = getBuildingDisplay(room);
     setSelectedCourseForModal({ item, pattern, room, building });
   };
 
@@ -438,7 +438,7 @@ const RoomSchedules = ({ embedded = false }) => {
     window.print();
   };
 
-  // legacy ICS export removed (use OutlookRoomExport tool)
+  // ICS export removed (use OutlookRoomExport tool)
 
   // Timeline view component
   const TimelineView = () => {

@@ -200,37 +200,34 @@ const useScheduleOperations = () => {
       const scheduleTypeValue = updatedRow['Schedule Type'] || (referenceSchedule?.scheduleType || 'Class Instruction');
       const roomInput = Array.isArray(updatedRow.Rooms)
         ? updatedRow.Rooms
-        : (updatedRow.Room || (referenceSchedule?.roomName || ''));
-      const roomNames = Array.isArray(roomInput)
+        : (updatedRow.Room || (Array.isArray(referenceSchedule?.spaceDisplayNames)
+          ? referenceSchedule.spaceDisplayNames.join('; ')
+          : ''));
+      const locationNames = Array.isArray(roomInput)
         ? roomInput.map(name => String(name || '').trim()).filter(Boolean)
         : String(roomInput || '')
           .split(';')
           .map(name => name.trim())
           .filter(Boolean);
-      const hasRoomlessLabel = roomNames.some((name) => {
+      const hasRoomlessLabel = locationNames.some((name) => {
         const upper = name.toUpperCase();
         return upper === 'NO ROOM NEEDED' || upper.includes('ONLINE');
       });
       const treatAsNoRoom = isOnlineFlag || hasRoomlessLabel || /independent/i.test(String(scheduleTypeValue));
       const filteredRoomNames = treatAsNoRoom
         ? []
-        : roomNames.filter((name) => {
+        : locationNames.filter((name) => {
           const upper = name.toUpperCase();
           return upper !== 'NO ROOM NEEDED' && !upper.includes('ONLINE');
         });
-      const existingRoomNames = Array.isArray(referenceSchedule?.roomNames)
-        ? referenceSchedule.roomNames
-        : (referenceSchedule?.roomName ? [referenceSchedule.roomName] : []);
-      const normalizedExisting = existingRoomNames.map((name) => String(name || '').toLowerCase()).sort();
+      const existingDisplayNames = Array.isArray(referenceSchedule?.spaceDisplayNames)
+        ? referenceSchedule.spaceDisplayNames
+        : [];
+      const normalizedExisting = existingDisplayNames.map((name) => String(name || '').toLowerCase()).sort();
       const normalizedNext = filteredRoomNames.map((name) => String(name || '').toLowerCase()).sort();
       const roomsMatch = normalizedExisting.length > 0
         && normalizedExisting.length === normalizedNext.length
         && normalizedExisting.every((value, idx) => value === normalizedNext[idx]);
-      const existingRoomIds = Array.isArray(referenceSchedule?.roomIds)
-        ? referenceSchedule.roomIds
-        : (referenceSchedule?.roomId ? [referenceSchedule.roomId] : []);
-      const roomIds = treatAsNoRoom ? [] : (roomsMatch ? existingRoomIds : []);
-      const roomId = roomIds[0] || null;
 
       // Compute spaceIds and spaceDisplayNames from room names using locationService
       let spaceIds = [];
@@ -281,10 +278,6 @@ const useScheduleOperations = () => {
         instructorAssignments,
         locationType: treatAsNoRoom ? 'no_room' : 'room',
         locationLabel: treatAsNoRoom ? 'No Room Needed' : '',
-        roomIds,
-        roomId,
-        roomNames: spaceDisplayNames.length > 0 ? spaceDisplayNames : filteredRoomNames,
-        roomName: treatAsNoRoom ? '' : (spaceDisplayNames[0] || filteredRoomNames[0] || ''),
         // New canonical location fields
         spaceIds,
         spaceDisplayNames,

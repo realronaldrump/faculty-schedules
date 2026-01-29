@@ -1,6 +1,6 @@
 import {
   standardizeCourseCode,
-  standardizeRoomName,
+  standardizeSpaceLabel,
   standardizeTerm,
 } from "./hygieneCore";
 import { normalizeSectionNumber, generateSectionId } from "./canonicalSchema";
@@ -106,7 +106,7 @@ const buildMeetingPatternKey = (patterns = []) => {
     .join("~");
 };
 
-const buildRoomKey = ({ spaceIds = [], roomNames = [] } = {}) => {
+const buildRoomKey = ({ spaceIds = [], spaceDisplayNames = [] } = {}) => {
   const normalizedSpaceIds = Array.isArray(spaceIds)
     ? spaceIds.map(normalizeKeyPart).filter(Boolean)
     : [];
@@ -114,9 +114,9 @@ const buildRoomKey = ({ spaceIds = [], roomNames = [] } = {}) => {
     return normalizedSpaceIds.sort().join("|");
   }
 
-  const names = Array.isArray(roomNames) ? roomNames : [roomNames];
+  const names = Array.isArray(spaceDisplayNames) ? spaceDisplayNames : [spaceDisplayNames];
   const normalizedNames = names
-    .map((name) => standardizeRoomName(name))
+    .map((name) => standardizeSpaceLabel(name))
     .map((name) => normalizeString(name).toLowerCase())
     .filter(Boolean)
     .sort();
@@ -129,12 +129,12 @@ const buildCompositeKey = ({
   termKey,
   meetingPatterns,
   spaceIds,
-  roomNames,
+  spaceDisplayNames,
 }) => {
   const courseKey = normalizeKeyPart(normalizeCourseCode(courseCode)).toUpperCase();
   const termPart = normalizeKeyPart(termKey);
   const meetingKey = normalizeKeyPart(buildMeetingPatternKey(meetingPatterns));
-  const roomKey = normalizeKeyPart(buildRoomKey({ spaceIds, roomNames }));
+  const roomKey = normalizeKeyPart(buildRoomKey({ spaceIds, spaceDisplayNames }));
 
   if (!courseKey || !termPart || !meetingKey || !roomKey) return "";
   return `composite:${courseKey}:${termPart}:${meetingKey}:${roomKey}`;
@@ -150,7 +150,7 @@ export const deriveScheduleIdentity = ({
   crn,
   meetingPatterns,
   spaceIds,
-  roomNames,
+  spaceDisplayNames,
 } = {}) => {
   const normalizedCourseCode = normalizeCourseCode(courseCode);
   const normalizedSection = normalizeSectionNumber(section || sectionNumber);
@@ -186,7 +186,7 @@ export const deriveScheduleIdentity = ({
     termKey,
     meetingPatterns,
     spaceIds,
-    roomNames,
+    spaceDisplayNames,
   });
   if (compositeKey) {
     identityKeys.push(compositeKey);
@@ -213,13 +213,6 @@ export const deriveScheduleIdentity = ({
 };
 
 export const deriveScheduleIdentityFromSchedule = (schedule = {}) => {
-  const roomNames =
-    (Array.isArray(schedule.spaceDisplayNames) &&
-      schedule.spaceDisplayNames.length > 0 &&
-      schedule.spaceDisplayNames) ||
-    (Array.isArray(schedule.roomNames) && schedule.roomNames) ||
-    (schedule.roomName ? [schedule.roomName] : []);
-
   return deriveScheduleIdentity({
     courseCode: schedule.courseCode || schedule.Course || "",
     section: schedule.section || schedule.sectionNumber || "",
@@ -235,7 +228,7 @@ export const deriveScheduleIdentityFromSchedule = (schedule = {}) => {
       ? schedule.meetingPatterns
       : [],
     spaceIds: Array.isArray(schedule.spaceIds) ? schedule.spaceIds : [],
-    roomNames,
+    spaceDisplayNames: Array.isArray(schedule.spaceDisplayNames) ? schedule.spaceDisplayNames : [],
   });
 };
 

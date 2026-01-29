@@ -5,8 +5,8 @@ import { useAuth } from './AuthContext';
 import {
   DEFAULT_BUILDING_CONFIG,
   normalizeBuildingConfig,
-  setBuildingConfig as applyBuildingConfig
-} from '../utils/buildingUtils';
+  applyBuildingConfig
+} from '../utils/locationService';
 import {
   DEFAULT_TERM_CONFIG,
   normalizeTermConfig,

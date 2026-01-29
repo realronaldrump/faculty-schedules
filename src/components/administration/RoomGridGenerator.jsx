@@ -34,7 +34,7 @@ import { logCreate, logDelete } from "../../utils/changeLogger";
 import { ConfirmationDialog } from "../CustomAlert";
 import { usePermissions } from "../../utils/permissions";
 import { fetchSchedulesByTerm } from "../../utils/dataImportUtils";
-import { getBuildingFromRoom } from "../../utils/buildingUtils";
+import { getBuildingDisplay } from "../../utils/locationService";
 import { useSchedules } from "../../contexts/ScheduleContext";
 
 const RoomGridGenerator = () => {
@@ -190,16 +190,17 @@ const RoomGridGenerator = () => {
       // Transform each schedule to the format expected by the grid generator
       const items = semesterSchedules.flatMap((schedule) => {
         // Skip schedules without rooms or meeting patterns
-        const roomNames =
-          schedule.roomNames || (schedule.roomName ? [schedule.roomName] : []);
+        const spaceLabels = Array.isArray(schedule.spaceDisplayNames)
+          ? schedule.spaceDisplayNames
+          : [];
         const meetingPatterns = schedule.meetingPatterns || [];
 
-        if (roomNames.length === 0 || meetingPatterns.length === 0) {
+        if (spaceLabels.length === 0 || meetingPatterns.length === 0) {
           return [];
         }
 
         // Skip online/no room schedules
-        const firstRoom = roomNames[0] || "";
+        const firstRoom = spaceLabels[0] || "";
         if (
           firstRoom.toLowerCase().includes("online") ||
           firstRoom.toLowerCase().includes("no room") ||
@@ -218,9 +219,9 @@ const RoomGridGenerator = () => {
             : "Staff");
 
         // Create entries for each room/pattern combination
-        return roomNames.flatMap((roomString) => {
+        return spaceLabels.flatMap((roomString) => {
           // Use centralized building utility for consistent naming
-          const buildingName = getBuildingFromRoom(roomString);
+          const buildingName = getBuildingDisplay(roomString);
 
           // Extract room number (last word that contains digits)
           let roomNumber = "N/A";
@@ -1752,7 +1753,7 @@ const RoomGridGenerator = () => {
                 schedule.kind === "week" ? (
                   <div key={schedule.id} className="flex justify-center">
                     <ExportableRoomSchedule
-                      roomName={schedule.room}
+                      spaceLabel={schedule.room}
                       buildingName={schedule.building}
                       semester={schedule.semester}
                       classes={schedule.classes}
@@ -1777,7 +1778,7 @@ const RoomGridGenerator = () => {
             <div style={{ display: "flex", justifyContent: "center" }}>
               <ExportableRoomSchedule
                 ref={exportableRef}
-                roomName={selectedRoom}
+                spaceLabel={selectedRoom}
                 buildingName={selectedBuilding}
                 semester={semester}
                 classes={weeklyClasses}

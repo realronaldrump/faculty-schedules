@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { MapPin, Download, Printer } from 'lucide-react';
 import CourseDetailModal from './CourseDetailModal';
 import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
-import { getBuildingFromRoom } from '../../utils/buildingUtils';
+import { getBuildingDisplay } from '../../utils/locationService';
 import { useAppConfig } from '../../contexts/AppConfigContext';
 
 const WeekView = ({
@@ -150,7 +150,7 @@ const WeekView = ({
     if (!item) return;
     const pattern = item.__pattern || normalizePattern(getMeetingPattern(item.Course, item['Start Time'], item['End Time']) || item.Day || '');
     const room = item.__room || ((item.Room || '').split(';')[0] || '').trim();
-    const building = getBuildingFromRoom(room);
+    const building = getBuildingDisplay(room);
     setSelectedCourse({ item, pattern, room, building });
   };
 
@@ -227,7 +227,7 @@ const WeekView = ({
   const roomsByBuilding = useMemo(() => {
     const groups = {};
     Object.keys(weeklyRoomSchedules).forEach(room => {
-      const building = getBuildingFromRoom(room);
+      const building = getBuildingDisplay(room);
       if (!groups[building]) groups[building] = [];
       groups[building].push(room);
     });
@@ -248,7 +248,7 @@ const WeekView = ({
     // Ensure stable room lists per building even if empty
     const allRoomsByBuilding = {};
     roomsToShow.forEach(room => {
-      const b = getBuildingFromRoom(room);
+      const b = getBuildingDisplay(room);
       if (!allRoomsByBuilding[b]) allRoomsByBuilding[b] = new Set();
       allRoomsByBuilding[b].add(room);
     });
@@ -271,7 +271,7 @@ const WeekView = ({
         if (seen.has(key)) return; // already placed for this room (avoid one-per-day duplicates)
         seen.add(key);
 
-        const building = getBuildingFromRoom(room);
+        const building = getBuildingDisplay(room);
         if (!result[building]) result[building] = { MWF: {}, TR: {} };
         if (!result[building][bucket][room]) result[building][bucket][room] = [];
         // stash normalized meeting pattern for rendering

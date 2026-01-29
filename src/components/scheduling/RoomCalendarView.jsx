@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { MapPin, Download, Printer, Clock, Calendar } from 'lucide-react';
 import CourseDetailModal from './CourseDetailModal';
 import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
-import { getBuildingFromRoom } from '../../utils/buildingUtils';
+import { getBuildingDisplay } from '../../utils/locationService';
 import { buildCourseSectionKey } from '../../utils/courseUtils';
 
 const RoomCalendarView = ({
@@ -167,7 +167,7 @@ const RoomCalendarView = ({
         if (!item) return;
         const pattern = normalizePattern(getMeetingPattern(item.Course, item['Start Time'], item['End Time']) || item.Day || '');
         const room = selectedRoom;
-        const building = getBuildingFromRoom(room);
+        const building = getBuildingDisplay(room);
         setSelectedCourse({ item, pattern, room, building });
     };
 

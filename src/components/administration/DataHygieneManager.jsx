@@ -528,13 +528,15 @@ const DuplicateComparisonCard = ({
           { key: "courseTitle", label: "Title" },
           { key: "instructorId", label: "Instructor ID" },
           { key: "instructorName", label: "Instructor Name" },
-          { key: "roomName", label: "Room" },
+          { key: "spaceDisplayNames", label: "Location" },
         ];
       case "rooms":
         return [
-          { key: "displayName", label: "Name", fallback: "name" },
-          { key: "building", label: "Building", icon: Building },
-          { key: "roomNumber", label: "Room #" },
+          { key: "displayName", label: "Name" },
+          { key: "buildingDisplayName", label: "Building", icon: Building },
+          { key: "buildingCode", label: "Building Code" },
+          { key: "spaceNumber", label: "Room #" },
+          { key: "spaceKey", label: "Space Key" },
           { key: "type", label: "Type" },
           { key: "capacity", label: "Capacity" },
         ];
@@ -744,7 +746,7 @@ const DataHygieneManager = () => {
   // Professional modal states
   const [showMissingDataModal, setShowMissingDataModal] = useState(false);
   const [missingDataType, setMissingDataType] = useState("email");
-  // removed: legacy deduplication modal state
+  // removed: deduplication modal state
 
   // Link person modal states
   const [showLinkPersonModal, setShowLinkPersonModal] = useState(false);
@@ -1076,22 +1078,16 @@ const DataHygieneManager = () => {
   };
 
   // Link schedule to room (single selection for now)
-  const handleLinkRoom = async (roomId, roomObj) => {
+  const handleLinkRoom = async (spaceKey, spaceObj) => {
     if (!scheduleToLinkRoom) return;
     try {
       const scheduleRef = doc(db, "schedules", scheduleToLinkRoom.id);
-      const normalizedRoom = normalizeSpaceRecord(roomObj || {}, roomId);
-      const displayName = normalizedRoom.displayName || roomObj?.displayName || roomObj?.name || "";
-      const spaceKey = normalizedRoom.spaceKey || "";
+      const normalizedRoom = normalizeSpaceRecord(spaceObj || {}, spaceKey);
+      const displayName = normalizedRoom.displayName || spaceObj?.displayName || "";
+      const resolvedSpaceKey = normalizedRoom.spaceKey || spaceKey || "";
       await updateDoc(scheduleRef, {
-        roomId: roomId,
-        roomIds: [roomId],
-        roomName: displayName,
-        roomNames: [displayName],
-        ...(spaceKey ? {
-          spaceIds: [spaceKey],
-          spaceDisplayNames: [displayName]
-        } : {}),
+        ...(resolvedSpaceKey ? { spaceIds: [resolvedSpaceKey] } : {}),
+        spaceDisplayNames: [displayName],
         updatedAt: new Date().toISOString(),
       });
 
@@ -1100,14 +1096,8 @@ const DataHygieneManager = () => {
         "schedules",
         scheduleToLinkRoom.id,
         {
-          roomId,
-          roomIds: [roomId],
-          roomName: displayName,
-          roomNames: [displayName],
-          ...(spaceKey ? {
-            spaceIds: [spaceKey],
-            spaceDisplayNames: [displayName]
-          } : {})
+          ...(resolvedSpaceKey ? { spaceIds: [resolvedSpaceKey] } : {}),
+          spaceDisplayNames: [displayName]
         },
         scheduleToLinkRoom,
         "DataHygieneManager.jsx - handleLinkRoom",
@@ -1413,7 +1403,7 @@ const DataHygieneManager = () => {
             Refresh Analysis
           </button>
 
-          {/* legacy header buttons removed to focus on wizard */}
+          {/* header buttons removed to focus on wizard */}
         </div>
       </div>
 
@@ -1951,13 +1941,6 @@ const DataHygieneManager = () => {
                     </h4>
                   </div>
                   <div className="p-4 space-y-3">
-                    {locationPreview.people.hasOfficeRoom.length > 0 && (
-                      <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                        <p className="font-medium text-blue-800">
-                          {locationPreview.people.hasOfficeRoom.length} people with officeRoomId need officeSpaceId
-                        </p>
-                      </div>
-                    )}
                     {locationPreview.people.missingOfficeSpaceId.length > 0 && (
                       <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
                         <p className="font-medium text-yellow-800">
@@ -1965,7 +1948,7 @@ const DataHygieneManager = () => {
                         </p>
                       </div>
                     )}
-                    {locationPreview.people.hasOfficeRoom.length === 0 && locationPreview.people.missingOfficeSpaceId.length === 0 && (
+                    {locationPreview.people.missingOfficeSpaceId.length === 0 && (
                       <div className="text-green-700 flex items-center gap-2">
                         <CheckCircle size={16} />
                         All people with offices have officeSpaceId

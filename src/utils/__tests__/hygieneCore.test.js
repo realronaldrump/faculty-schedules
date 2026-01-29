@@ -88,22 +88,23 @@ describe('hygieneCore', () => {
       courseCode: 'ADM 1300',
       section: '01',
       term: 'Spring 2026',
-      roomName: 'Online',
+      spaceDisplayNames: ['Online'],
+      isOnline: true,
       instructorId: 'p1'
     };
 
     const result = standardizeSchedule(input);
     expect(result.locationType).toBe('no_room');
     expect(result.locationLabel).toBe('No Room Needed');
-    expect(result.roomNames).toEqual([]);
+    expect(result.spaceDisplayNames).toEqual([]);
     expect(result.instructorIds).toEqual(['p1']);
     expect(result.instructorAssignments[0].personId).toBe('p1');
   });
 
   it('detects room duplicates', () => {
     const rooms = [
-      { id: 'r1', name: 'Goebel 101', building: 'Goebel', roomNumber: '101' },
-      { id: 'r2', displayName: 'Goebel 101', building: 'Goebel', roomNumber: '101' }
+      { id: 'r1', displayName: 'Goebel 101', spaceKey: 'GOEBEL:101' },
+      { id: 'r2', displayName: 'Goebel 101', spaceKey: 'GOEBEL:101' }
     ];
 
     const duplicates = detectRoomDuplicates(rooms);

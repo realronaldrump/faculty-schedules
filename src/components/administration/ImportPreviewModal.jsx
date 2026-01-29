@@ -17,8 +17,6 @@ const INTERNAL_SCHEDULE_DIFF_KEYS = new Set([
   'identityKeys',
   'identitySource',
   'updatedAt',
-  'roomId',
-  'roomIds',
   'spaceIds',
   'spaceDisplayNames',
   'instructorId',
@@ -39,10 +37,8 @@ const FIELD_LABELS = {
   instructorBaylorId: 'Instructor Baylor ID',
   instructorIds: 'Instructor IDs',
   instructorAssignments: 'Instructor Assignments',
-  roomNames: 'Rooms',
-  roomIds: 'Room IDs',
   spaceIds: 'Space IDs',
-  spaceDisplayNames: 'Room Labels',
+  spaceDisplayNames: 'Locations',
   locationType: 'Location Type',
   locationLabel: 'Location',
   scheduleType: 'Schedule Type',
@@ -351,7 +347,7 @@ const ImportPreviewModal = ({
       const last = data.lastName || '';
       return `${first} ${last}`.trim() || 'Person';
     } else if (change.collection === 'rooms') {
-      return data.displayName || data.name || 'Room';
+      return data.displayName || 'Room';
     }
     return 'Unknown';
   };
@@ -371,11 +367,9 @@ const ImportPreviewModal = ({
           .join('\n')
         : '';
 
-      const roomLabels = Array.isArray(data.roomNames) && data.roomNames.length > 0
-        ? data.roomNames.join(', ')
-        : (Array.isArray(data.spaceDisplayNames) && data.spaceDisplayNames.length > 0
-          ? data.spaceDisplayNames.join(', ')
-          : (data.roomName || ''));
+      const roomLabels = Array.isArray(data.spaceDisplayNames) && data.spaceDisplayNames.length > 0
+        ? data.spaceDisplayNames.join(', ')
+        : '';
 
       return {
         'Course Code': data.courseCode || '',
@@ -393,9 +387,9 @@ const ImportPreviewModal = ({
           : (data.instructorId || ''),
         'Location Type': data.locationType || '',
         'Location Label': data.locationLabel || '',
-        'Room Names': roomLabels,
-        'Room IDs': Array.isArray(data.roomIds)
-          ? data.roomIds.join(', ')
+        'Locations': roomLabels,
+        'Space IDs': Array.isArray(data.spaceIds)
+          ? data.spaceIds.join(', ')
           : '',
         'Schedule Type': data.scheduleType || '',
         'Status': data.status || '',

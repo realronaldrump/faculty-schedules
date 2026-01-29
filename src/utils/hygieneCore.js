@@ -92,9 +92,9 @@ export const standardizeTerm = (term) => {
   return normalizeTermLabel(clean) || clean;
 };
 
-export const standardizeRoomName = (roomName) => {
-  if (!roomName) return "";
-  return String(roomName).trim();
+export const standardizeSpaceLabel = (spaceLabel) => {
+  if (!spaceLabel) return "";
+  return String(spaceLabel).trim();
 };
 
 const normalizeRoles = (roles) => {
@@ -256,18 +256,14 @@ export const standardizeSchedule = (schedule = {}) => {
       );
     };
 
-    const baseRoomNames = Array.isArray(schedule.roomNames)
-      ? schedule.roomNames.map(standardizeRoomName).filter(Boolean)
-      : schedule.roomName
-        ? [standardizeRoomName(schedule.roomName)]
-        : [];
-    const baseRoomName = standardizeRoomName(schedule.roomName);
+    const baseSpaceDisplayNames = Array.isArray(schedule.spaceDisplayNames)
+      ? schedule.spaceDisplayNames.map(standardizeSpaceLabel).filter(Boolean)
+      : [];
     const hasRoomlessLabel =
-      normalizeRoomlessLabel(baseRoomName) ||
-      baseRoomNames.some((name) => normalizeRoomlessLabel(name));
+      baseSpaceDisplayNames.some((name) => normalizeRoomlessLabel(name));
     const locationType =
       schedule.locationType === "no_room" ||
-      (schedule.isOnline && baseRoomNames.length === 0 && !baseRoomName) ||
+      schedule.isOnline ||
       hasRoomlessLabel
         ? "no_room"
         : "room";
@@ -275,11 +271,13 @@ export const standardizeSchedule = (schedule = {}) => {
       locationType === "no_room"
         ? normalizeString(schedule.locationLabel) || "No Room Needed"
         : normalizeString(schedule.locationLabel);
-    const roomNames =
+    const spaceDisplayNames =
       locationType === "no_room"
         ? []
-        : baseRoomNames.filter((name) => !normalizeRoomlessLabel(name));
-    const roomName = locationType === "no_room" ? "" : baseRoomName;
+        : baseSpaceDisplayNames.filter((name) => !normalizeRoomlessLabel(name));
+    const spaceIds = locationType === "no_room"
+      ? []
+      : (Array.isArray(schedule.spaceIds) ? schedule.spaceIds.filter(Boolean) : []);
 
     const baseAssignments = Array.isArray(schedule.instructorAssignments)
       ? schedule.instructorAssignments
@@ -316,8 +314,8 @@ export const standardizeSchedule = (schedule = {}) => {
       schedule.instructorId || primaryAssignment?.personId || "";
 
     return {
-      roomNames,
-      roomName,
+      spaceIds,
+      spaceDisplayNames,
       locationType,
       locationLabel,
       instructorAssignments,
@@ -330,10 +328,11 @@ export const standardizeSchedule = (schedule = {}) => {
 
 export const standardizeRoom = (room = {}) => ({
   ...room,
-  name: normalizeString(room.name),
   displayName: normalizeString(room.displayName),
-  building: normalizeString(room.building),
-  roomNumber: normalizeString(room.roomNumber),
+  buildingCode: normalizeString(room.buildingCode).toUpperCase(),
+  buildingDisplayName: normalizeString(room.buildingDisplayName),
+  spaceNumber: normalizeString(room.spaceNumber),
+  spaceKey: normalizeString(room.spaceKey),
   type: normalizeString(room.type || "Classroom"),
   updatedAt: new Date().toISOString(),
 });
@@ -393,9 +392,8 @@ const scoreScheduleCompleteness = (schedule = {}) => {
     "instructorName",
     "courseTitle",
     "meetingPatterns",
-    "roomIds",
-    "roomNames",
-    "roomName",
+    "spaceIds",
+    "spaceDisplayNames",
   ];
 
   return fields.reduce((score, key) => {
@@ -411,7 +409,7 @@ const scoreScheduleCompleteness = (schedule = {}) => {
 };
 
 const scoreRoomCompleteness = (room = {}) => {
-  const fields = ["name", "displayName", "building", "roomNumber", "capacity"];
+  const fields = ["displayName", "buildingCode", "buildingDisplayName", "spaceNumber", "spaceKey", "capacity"];
   return fields.reduce((score, key) => {
     const value = room[key];
     if (typeof value === "string")
@@ -782,11 +780,9 @@ export const detectScheduleDuplicates = (schedules = [], options = {}) => {
   };
 
   const toRoomKey = (s) => {
-    const names = Array.isArray(s?.roomNames)
-      ? s.roomNames
-      : s?.roomName
-        ? [s.roomName]
-        : [];
+    const names = Array.isArray(s?.spaceDisplayNames)
+      ? s.spaceDisplayNames
+      : [];
     if (!names || names.length === 0) return "";
     const cleaned = names
       .map((n) => normalizeString(n).toLowerCase())
@@ -929,34 +925,32 @@ export const detectRoomDuplicates = (rooms = [], options = {}) => {
   };
 
   rooms.forEach((room) => {
-    if (room.name || room.displayName) {
-      const roomName = normalizeString(
-        room.name || room.displayName,
-      ).toLowerCase();
-      if (roomMap.has(roomName)) {
-        addDuplicate(roomMap.get(roomName), room, {
+    if (room.displayName) {
+      const spaceLabel = normalizeString(room.displayName).toLowerCase();
+      if (roomMap.has(spaceLabel)) {
+        addDuplicate(roomMap.get(spaceLabel), room, {
           type: "room_name",
           confidence: 1.0,
           reason: "Identical room name",
         });
       } else {
-        roomMap.set(roomName, room);
+        roomMap.set(spaceLabel, room);
       }
     }
 
-    if (room.building && room.roomNumber) {
-      const buildingRoomKey = `${normalizeString(room.building).toLowerCase()}-${normalizeString(room.roomNumber)}`;
-      if (roomMap.has(buildingRoomKey)) {
-        const existing = roomMap.get(buildingRoomKey);
+    if (room.spaceKey) {
+      const spaceKey = normalizeString(room.spaceKey).toUpperCase();
+      if (roomMap.has(spaceKey)) {
+        const existing = roomMap.get(spaceKey);
         if (existing.id !== room.id) {
           addDuplicate(existing, room, {
-            type: "building_room",
+            type: "space_key",
             confidence: 0.95,
-            reason: "Same building and room number",
+            reason: "Same space key",
           });
         }
       } else {
-        roomMap.set(buildingRoomKey, room);
+        roomMap.set(spaceKey, room);
       }
     }
   });
@@ -1012,7 +1006,6 @@ export const detectCrossCollectionIssues = (
     }
   });
 
-  const roomIds = new Set(rooms.map((r) => r.id));
   const spaceKeys = new Set(
     rooms
       .map((r) => r.spaceKey)
@@ -1023,33 +1016,13 @@ export const detectCrossCollectionIssues = (
     const spaceIds = Array.isArray(schedule.spaceIds)
       ? schedule.spaceIds.filter(Boolean)
       : [];
-    if (spaceIds.length > 0) {
-      spaceIds.forEach((spaceKey) => {
-        if (spaceKey && !spaceKeys.has(spaceKey)) {
-          issues.push({
-            type: "orphaned_space",
-            severity: "medium",
-            record: schedule,
-            reason: "Schedule references non-existent space",
-            fix: "link_to_existing_room",
-          });
-        }
-      });
-      return;
-    }
-
-    const ids = Array.isArray(schedule.roomIds)
-      ? schedule.roomIds
-      : schedule.roomId
-        ? [schedule.roomId]
-        : [];
-    ids.forEach((rid) => {
-      if (rid && !roomIds.has(rid)) {
+    spaceIds.forEach((spaceKey) => {
+      if (spaceKey && !spaceKeys.has(spaceKey)) {
         issues.push({
-          type: "orphaned_room",
+          type: "orphaned_space",
           severity: "medium",
           record: schedule,
-          reason: "Schedule references non-existent room",
+          reason: "Schedule references non-existent space",
           fix: "link_to_existing_room",
         });
       }
@@ -1273,12 +1246,8 @@ export const mergeScheduleData = (primary, secondary) => {
     merged.instructorIds = combinedInstructorIds;
   }
 
-  merged.roomIds = mergeArrayValues(primary.roomIds, secondary.roomIds);
-  merged.roomNames = mergeArrayValues(primary.roomNames, secondary.roomNames);
-  if (merged.roomIds && merged.roomIds.length > 0)
-    merged.roomId = merged.roomIds[0];
-  if (merged.roomNames && merged.roomNames.length > 0)
-    merged.roomName = merged.roomNames[0];
+  merged.spaceIds = mergeArrayValues(primary.spaceIds, secondary.spaceIds);
+  merged.spaceDisplayNames = mergeArrayValues(primary.spaceDisplayNames, secondary.spaceDisplayNames);
 
   const normalized = standardizeSchedule(merged);
   normalized.updatedAt = new Date().toISOString();

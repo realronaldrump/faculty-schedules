@@ -15,11 +15,12 @@ import {
   X,
 } from "lucide-react";
 import {
-  getBuildingFromRoom,
+  getBuildingDisplay,
   normalizeBuildingName,
   getCanonicalBuildingList,
   buildingMatches,
-} from "../utils/buildingUtils";
+  getLocationDisplay,
+} from "../utils/locationService";
 import { formatMinutesToTime } from "../utils/timeUtils";
 import { useData } from "../contexts/DataContext";
 import { usePeople } from "../contexts/PeopleContext";
@@ -96,7 +97,7 @@ const LiveView = () => {
   const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
   const currentDayCode = getCurrentDayCode();
 
-  // getBuildingFromRoom is imported from buildingUtils
+  // getBuildingDisplay is imported from locationService
 
   // Helper to check if schedule meets on a given day
   const scheduleMeetsOnDay = (schedule, dayCode) => {
@@ -125,13 +126,7 @@ const LiveView = () => {
 
   // Helper to get room from schedule
   const getScheduleRoom = (schedule) => {
-    if (schedule.locationType === "no_room" || schedule.isOnline) {
-      return schedule.locationLabel || "No Room Needed";
-    }
-    if (Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0) {
-      return schedule.roomNames.join("; ");
-    }
-    return schedule.Room || schedule.room || schedule.roomName || "";
+    return getLocationDisplay(schedule) || schedule.Room || "";
   };
 
   const getCourseCode = (schedule) =>
@@ -194,7 +189,7 @@ const LiveView = () => {
     // Also add any non-canonical buildings found in schedule data
     todaySchedules.forEach((s) => {
       const room = getScheduleRoom(s);
-      const building = getBuildingFromRoom(room);
+      const building = getBuildingDisplay(room);
       if (building && building !== "Online" && building !== "Off Campus") {
         buildings.add(building);
       }
@@ -235,7 +230,7 @@ const LiveView = () => {
     if (selectedBuilding) {
       classes = classes.filter((s) => {
         const room = getScheduleRoom(s);
-        return getBuildingFromRoom(room) === selectedBuilding;
+        return getBuildingDisplay(room) === selectedBuilding;
       });
     }
 
@@ -259,7 +254,7 @@ const LiveView = () => {
     if (selectedBuilding) {
       classes = classes.filter((s) => {
         const room = getScheduleRoom(s);
-        return getBuildingFromRoom(room) === selectedBuilding;
+        return getBuildingDisplay(room) === selectedBuilding;
       });
     }
 

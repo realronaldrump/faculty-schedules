@@ -87,30 +87,6 @@ export const extractCrnFromSection = (sectionField) => {
 };
 
 /**
- * Generate a deterministic room ID.
- * Format: {building}_{roomNumber} (normalized, lowercase, underscores)
- * @deprecated Use generateSpaceId instead
- */
-export const generateRoomId = ({ building, roomNumber, displayName }) => {
-  if (building && roomNumber) {
-    const normalizedBuilding = building
-      .toString()
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, "_");
-    const normalizedNumber = roomNumber.toString().trim();
-    return `${normalizedBuilding}_${normalizedNumber}`;
-  }
-
-  // Fallback: use display name
-  if (displayName) {
-    return displayName.toString().trim().toLowerCase().replace(/\s+/g, "_");
-  }
-
-  return null;
-};
-
-/**
  * Generate a deterministic space ID from building and space number.
  * Uses the canonical spaceKey format: "BUILDING_CODE:SPACE_NUMBER"
  *
@@ -199,10 +175,6 @@ export const SECTION_SCHEMA = {
   // Room/Space assignments (supports multiple rooms)
   spaceIds: [], // References to spaces collection (canonical spaceKeys)
   spaceDisplayNames: [], // Denormalized display names for quick access
-  roomIds: [], // @deprecated - use spaceIds
-  roomNames: [], // @deprecated - use spaceDisplayNames
-  roomId: null, // @deprecated - use spaceIds[0]
-  roomName: "", // @deprecated - use spaceDisplayNames[0]
 
   // Meeting patterns
   meetingPatterns: [], // Array of { day, startTime, endTime, startDate?, endDate? }
@@ -262,7 +234,6 @@ export const PERSON_SCHEMA = {
   department: "",
   office: "", // Primary office location string (for display, preserved for auditability)
   officeSpaceId: "", // Primary reference to spaces collection (canonical office reference)
-  officeRoomId: "", // @deprecated - use officeSpaceId
   // Multiple offices support (array fields)
   offices: [], // Array of office display strings, e.g., ["Goebel 101", "Jones 205"]
   officeSpaceIds: [], // Array of space references, e.g., ["GOEBEL:101", "JONES:205"]
@@ -293,35 +264,6 @@ export const PERSON_SCHEMA = {
   // Merge tracking
   mergedInto: null, // If merged, ID of primary record
   mergeStatus: null, // 'complete', 'in_progress', 'pending_cleanup'
-};
-
-/**
- * Canonical Room Schema
- * @deprecated Use SPACE_SCHEMA instead. Rooms are now unified as "Spaces".
- */
-export const ROOM_SCHEMA = {
-  // Identity (building + room number)
-  building: "", // e.g., "Goebel Building"
-  roomNumber: "", // e.g., "101"
-
-  // Display
-  displayName: "", // e.g., "Goebel Building 101"
-  name: "", // Legacy field, same as displayName
-
-  // Derived key for matching
-  roomKey: "", // e.g., "goebel_building_101"
-
-  // Properties
-  capacity: null,
-  type: "Classroom", // Classroom, Lab, Studio, Office, etc.
-  equipment: [],
-
-  // Status
-  isActive: true,
-
-  // Timestamps
-  createdAt: "",
-  updatedAt: "",
 };
 
 // ============================================================================
@@ -399,12 +341,6 @@ export const SPACE_SCHEMA = {
   // Status
   isActive: true,
 
-  // Legacy compatibility fields (will be removed after migration)
-  name: "",             // @deprecated - use displayName
-  roomNumber: "",       // @deprecated - use spaceNumber
-  roomKey: "",          // @deprecated - use spaceKey
-  building: "",         // @deprecated - use buildingDisplayName
-
   // Timestamps
   createdAt: "",
   updatedAt: ""
@@ -434,10 +370,6 @@ export const VALIDATION_RULES = {
       baylorId: /^\d{9}$/, // 9-digit number
       ignitePersonNumber: /^\d+$/, // Numeric only
     },
-  },
-  room: {
-    required: ["building", "roomNumber"],
-    formats: {},
   },
   building: {
     required: ["code", "displayName"],
@@ -494,7 +426,7 @@ export const validateSection = (section) => {
 
   const isRoomless = section.locationType === "no_room";
   if (
-    (!section.roomIds || section.roomIds.length === 0) &&
+    (!section.spaceIds || section.spaceIds.length === 0) &&
     !section.isOnline &&
     !isRoomless &&
     section.status === "Active"
@@ -698,17 +630,6 @@ export const areSamePersonIdentity = (person1, person2) => {
 };
 
 /**
- * Determine if two rooms represent the same physical location.
- * @deprecated Use areSameSpaceIdentity instead
- */
-export const areSameRoomIdentity = (room1, room2) => {
-  const id1 = generateRoomId(room1);
-  const id2 = generateRoomId(room2);
-
-  return id1 && id2 && id1 === id2;
-};
-
-/**
  * Determine if two spaces represent the same physical location.
  *
  * Two spaces are the same if they have the same spaceKey.
@@ -808,9 +729,14 @@ export const mergeSections = (primary, secondary) => {
   merged.instructorIds = Array.from(combinedInstructorIds).filter(Boolean);
 
   // Merge arrays (combine and deduplicate)
-  if (secondary.roomIds && secondary.roomIds.length > 0) {
-    merged.roomIds = [
-      ...new Set([...(merged.roomIds || []), ...secondary.roomIds]),
+  if (secondary.spaceIds && secondary.spaceIds.length > 0) {
+    merged.spaceIds = [
+      ...new Set([...(merged.spaceIds || []), ...secondary.spaceIds]),
+    ];
+  }
+  if (secondary.spaceDisplayNames && secondary.spaceDisplayNames.length > 0) {
+    merged.spaceDisplayNames = [
+      ...new Set([...(merged.spaceDisplayNames || []), ...secondary.spaceDisplayNames]),
     ];
   }
 
@@ -865,7 +791,7 @@ export const mergePersons = (primary, secondary) => {
     "jobTitle",
     "department",
     "office",
-    "officeRoomId",
+    "officeSpaceId",
     "programId",
     "baylorId",
     "clssInstructorId",
@@ -884,6 +810,22 @@ export const mergePersons = (primary, secondary) => {
   // Merge roles (combine and deduplicate)
   if (secondary.roles && secondary.roles.length > 0) {
     merged.roles = [...new Set([...(merged.roles || []), ...secondary.roles])];
+  }
+
+  if (Array.isArray(secondary.officeSpaceIds) && secondary.officeSpaceIds.length > 0) {
+    merged.officeSpaceIds = Array.from(
+      new Set([...(merged.officeSpaceIds || []), ...secondary.officeSpaceIds].filter(Boolean)),
+    );
+  }
+
+  if (Array.isArray(secondary.offices) && secondary.offices.length > 0) {
+    merged.offices = Array.from(
+      new Set([...(merged.offices || []), ...secondary.offices].filter(Boolean)),
+    );
+  }
+
+  if (!merged.officeSpaceId && Array.isArray(merged.officeSpaceIds) && merged.officeSpaceIds.length > 0) {
+    merged.officeSpaceId = merged.officeSpaceIds[0];
   }
 
   // Merge additional emails
@@ -920,7 +862,6 @@ export default {
   generateSectionId,
   normalizeSectionNumber,
   extractCrnFromSection,
-  generateRoomId,
   generateSpaceId,
   generateBuildingId,
   generatePersonId,
@@ -928,7 +869,6 @@ export default {
   // Schemas
   SECTION_SCHEMA,
   PERSON_SCHEMA,
-  ROOM_SCHEMA,
   BUILDING_SCHEMA,
   SPACE_SCHEMA,
 
@@ -942,7 +882,6 @@ export default {
   // Identity Comparison
   areSameSectionIdentity,
   areSamePersonIdentity,
-  areSameRoomIdentity,
   areSameSpaceIdentity,
   areSameBuildingIdentity,
 

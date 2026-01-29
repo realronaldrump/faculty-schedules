@@ -12,7 +12,20 @@ import { collection, getDocs, query, where, doc, getDoc, updateDoc, deleteDoc, w
 import { db } from '../firebase';
 import { logUpdate, logStandardization, logMerge, logBulkUpdate } from './changeLogger';
 import { normalizedSchema } from './normalizedSchema';
-import { getRoomKeyFromRoomRecord, parseRoomLabel } from './roomUtils';
+import {
+  parseRoomLabel,
+  parseMultiRoom,
+  splitMultiRoom,
+  buildSpaceKey,
+  validateSpaceKey,
+  detectLocationType,
+  formatSpaceDisplayName,
+  normalizeSpaceNumber,
+  resolveBuilding,
+  resolveBuildingDisplayName,
+  LOCATION_TYPE,
+  SPACE_TYPE
+} from './locationService';
 import { isStudentWorker } from './peopleUtils';
 import { deriveScheduleIdentityFromSchedule } from './importIdentityUtils';
 import {
@@ -658,29 +671,29 @@ export const mergeRoomRecords = async (duplicateGroup) => {
 
   const schedulesSnapshot = await getDocs(collection(db, 'schedules'));
   let schedulesUpdated = 0;
-  const primaryName = mergedData.displayName || mergedData.name || '';
+  const primaryName = mergedData.displayName || '';
+  const primaryKey = primary.spaceKey || primary.id;
+  const secondaryKey = secondary.spaceKey || secondary.id;
 
   for (const scheduleDoc of schedulesSnapshot.docs) {
     const s = scheduleDoc.data();
-    const currentIds = Array.isArray(s.roomIds) ? s.roomIds : (s.roomId ? [s.roomId] : []);
-    if (!currentIds.includes(secondary.id)) continue;
+    const currentIds = Array.isArray(s.spaceIds) ? s.spaceIds : [];
+    if (!currentIds.includes(secondaryKey)) continue;
 
-    const nextIds = Array.from(new Set(currentIds.map((id) => (id === secondary.id ? primary.id : id))));
-    const currentNames = Array.isArray(s.roomNames) ? s.roomNames : (s.roomName ? [s.roomName] : []);
+    const nextIds = Array.from(new Set(currentIds.map((id) => (id === secondaryKey ? primaryKey : id))));
+    const currentNames = Array.isArray(s.spaceDisplayNames) ? s.spaceDisplayNames : [];
     const nextNames = currentNames.map((name, idx) => {
       const currentId = currentIds[idx];
-      return currentId === secondary.id ? primaryName : name;
+      return currentId === secondaryKey ? primaryName : name;
     });
 
-    const roomNameFallback = primaryName || nextNames[0] || s.roomName || '';
-    const normalizedNames = nextNames.length > 0 ? nextNames : (roomNameFallback ? [roomNameFallback] : []);
+    const nameFallback = primaryName || nextNames[0] || '';
+    const normalizedNames = nextNames.length > 0 ? nextNames : (nameFallback ? [nameFallback] : []);
 
     await batchWriter.add((batch) => {
       batch.update(doc(db, 'schedules', scheduleDoc.id), {
-        roomIds: nextIds,
-        roomId: nextIds[0] || null,
-        roomNames: normalizedNames,
-        roomName: normalizedNames[0] || roomNameFallback,
+        spaceIds: nextIds,
+        spaceDisplayNames: normalizedNames,
         updatedAt: new Date().toISOString()
       });
     });
@@ -861,19 +874,15 @@ export const backfillOfficeRooms = async () => {
   };
   roomsSnapshot.docs.forEach((docSnap) => {
     const room = { id: docSnap.id, ...docSnap.data() };
-    const parsed = parseRoomLabel(room.displayName || room.name || '');
+    const parsed = parseRoomLabel(room.displayName || '');
     const spaceKey = room.spaceKey || parsed?.spaceKey || '';
     addRoomToIndex(spaceKey, room);
-    const legacyKey = getRoomKeyFromRoomRecord(room);
-    if (legacyKey && legacyKey !== spaceKey) {
-      addRoomToIndex(legacyKey, room);
-    }
   });
 
-  // First: ensure every room has spaceKey/roomKey/roomNumber when parseable
+  // First: ensure every room has spaceKey/spaceNumber when parseable
   for (const docSnap of roomsSnapshot.docs) {
     const room = { id: docSnap.id, ...docSnap.data() };
-    const parsed = parseRoomLabel(room.displayName || room.name || '');
+    const parsed = parseRoomLabel(room.displayName || '');
     if (!parsed?.spaceKey) continue;
 
     const updates = {};
@@ -887,11 +896,7 @@ export const backfillOfficeRooms = async () => {
     if (!room.spaceNumber && spaceNumber) updates.spaceNumber = spaceNumber;
     if (!room.buildingCode && buildingCode) updates.buildingCode = buildingCode;
     if (!room.buildingDisplayName && buildingDisplayName) updates.buildingDisplayName = buildingDisplayName;
-    if (!room.roomNumber && spaceNumber) updates.roomNumber = spaceNumber;
-    if (!room.building && buildingDisplayName) updates.building = buildingDisplayName;
-    if (!room.roomKey && parsed.roomKey) updates.roomKey = parsed.roomKey;
     if (!room.displayName && parsed.displayName) updates.displayName = parsed.displayName;
-    if (!room.name && parsed.displayName) updates.name = parsed.displayName;
     if (!room.buildingId && resolvedBuilding?.id) updates.buildingId = resolvedBuilding.id;
 
     if (Object.keys(updates).length > 0) {
@@ -902,10 +907,6 @@ export const backfillOfficeRooms = async () => {
       const merged = { ...room, ...updates };
       const spaceKey = merged.spaceKey || parsed.spaceKey;
       addRoomToIndex(spaceKey, { id: docSnap.id, ...merged });
-      const legacyKey = getRoomKeyFromRoomRecord(merged);
-      if (legacyKey && legacyKey !== spaceKey) {
-        addRoomToIndex(legacyKey, { id: docSnap.id, ...merged });
-      }
     }
   }
 
@@ -916,9 +917,8 @@ export const backfillOfficeRooms = async () => {
     const hasNoOffice = person.hasNoOffice === true || person.isRemote === true || isStudentWorker(person);
 
     if (hasNoOffice || !office) {
-      if (person.officeRoomId || person.officeSpaceId) {
+      if (person.officeSpaceId) {
         await batchWriter.add((batch) => batch.update(personSnap.ref, {
-          officeRoomId: '',
           officeSpaceId: '',
           updatedAt: new Date().toISOString()
         }));
@@ -935,9 +935,8 @@ export const backfillOfficeRooms = async () => {
       continue;
     }
 
-    const existingRoom = roomsByKey.get(parsed.spaceKey) || (parsed.roomKey ? roomsByKey.get(parsed.roomKey) : null);
+    const existingRoom = roomsByKey.get(parsed.spaceKey);
     const officeSpaceId = parsed.spaceKey;
-    const officeRoomId = existingRoom?.id || parsed.spaceKey;
 
     if (!existingRoom) {
       const now = new Date().toISOString();
@@ -954,11 +953,7 @@ export const backfillOfficeRooms = async () => {
         spaceNumber
       }) || office;
       const newRoom = {
-        name: displayName,
         displayName: displayName,
-        building: buildingDisplayName,
-        roomNumber: spaceNumber,
-        roomKey: parsed.roomKey,
         spaceKey: parsed.spaceKey,
         spaceNumber,
         buildingCode,
@@ -973,9 +968,6 @@ export const backfillOfficeRooms = async () => {
       try {
         await batchWriter.add((batch) => batch.set(doc(db, 'rooms', parsed.spaceKey), newRoom, { merge: true }));
         addRoomToIndex(parsed.spaceKey, { id: parsed.spaceKey, ...newRoom });
-        if (parsed.roomKey && parsed.roomKey !== parsed.spaceKey) {
-          addRoomToIndex(parsed.roomKey, { id: parsed.spaceKey, ...newRoom });
-        }
         stats.roomsCreated += 1;
       } catch (error) {
         stats.errors.push(`Room create failed (${parsed.displayName}): ${error.message}`);
@@ -983,9 +975,8 @@ export const backfillOfficeRooms = async () => {
       }
     }
 
-    if ((person.officeRoomId || '') !== officeRoomId || (person.officeSpaceId || '') !== officeSpaceId) {
+    if ((person.officeSpaceId || '') !== officeSpaceId) {
       await batchWriter.add((batch) => batch.update(personSnap.ref, {
-        officeRoomId,
         officeSpaceId,
         updatedAt: new Date().toISOString()
       }));
@@ -1036,19 +1027,15 @@ export const previewOfficeRoomBackfill = async () => {
   };
   roomsSnapshot.docs.forEach((docSnap) => {
     const room = { id: docSnap.id, ...docSnap.data() };
-    const parsed = parseRoomLabel(room.displayName || room.name || '');
+    const parsed = parseRoomLabel(room.displayName || '');
     const spaceKey = room.spaceKey || parsed?.spaceKey || '';
     addRoomToIndex(spaceKey, room);
-    const legacyKey = getRoomKeyFromRoomRecord(room);
-    if (legacyKey && legacyKey !== spaceKey) {
-      addRoomToIndex(legacyKey, room);
-    }
   });
 
-  // First: ensure every room has spaceKey/roomKey/roomNumber when parseable
+  // First: ensure every room has spaceKey/spaceNumber when parseable
   for (const docSnap of roomsSnapshot.docs) {
     const room = { id: docSnap.id, ...docSnap.data() };
-    const parsed = parseRoomLabel(room.displayName || room.name || '');
+    const parsed = parseRoomLabel(room.displayName || '');
     if (!parsed?.spaceKey) continue;
 
     const updates = {};
@@ -1062,11 +1049,7 @@ export const previewOfficeRoomBackfill = async () => {
     if (!room.spaceNumber && spaceNumber) updates.spaceNumber = spaceNumber;
     if (!room.buildingCode && buildingCode) updates.buildingCode = buildingCode;
     if (!room.buildingDisplayName && buildingDisplayName) updates.buildingDisplayName = buildingDisplayName;
-    if (!room.roomNumber && spaceNumber) updates.roomNumber = spaceNumber;
-    if (!room.building && buildingDisplayName) updates.building = buildingDisplayName;
-    if (!room.roomKey && parsed.roomKey) updates.roomKey = parsed.roomKey;
     if (!room.displayName && parsed.displayName) updates.displayName = parsed.displayName;
-    if (!room.name && parsed.displayName) updates.name = parsed.displayName;
     if (!room.buildingId && resolvedBuilding?.id) updates.buildingId = resolvedBuilding.id;
 
     if (Object.keys(updates).length === 0) continue;
@@ -1077,17 +1060,13 @@ export const previewOfficeRoomBackfill = async () => {
       collection: 'rooms',
       action: 'merge',
       documentId: docSnap.id,
-      label: `Room: backfill metadata · ${parsed.displayName || room.displayName || room.name || docSnap.id}`,
+      label: `Room: backfill metadata · ${parsed.displayName || room.displayName || docSnap.id}`,
       before: {
         spaceKey: room.spaceKey || '',
         spaceNumber: room.spaceNumber || '',
         buildingCode: room.buildingCode || '',
         buildingDisplayName: room.buildingDisplayName || '',
-        roomKey: room.roomKey || '',
-        roomNumber: room.roomNumber || '',
-        building: room.building || '',
-        displayName: room.displayName || '',
-        name: room.name || ''
+        displayName: room.displayName || ''
       },
       data: updates
     });
@@ -1096,10 +1075,6 @@ export const previewOfficeRoomBackfill = async () => {
     const merged = { ...room, ...updates };
     const spaceKey = merged.spaceKey || parsed.spaceKey;
     addRoomToIndex(spaceKey, { id: docSnap.id, ...merged });
-    const legacyKey = getRoomKeyFromRoomRecord(merged);
-    if (legacyKey && legacyKey !== spaceKey) {
-      addRoomToIndex(legacyKey, { id: docSnap.id, ...merged });
-    }
   }
 
   // Second: create/link office rooms from people
@@ -1111,22 +1086,20 @@ export const previewOfficeRoomBackfill = async () => {
     const hasNoOffice = person.hasNoOffice === true || person.isRemote === true || isStudentWorker(person);
 
     if (hasNoOffice || !office) {
-      if (person.officeRoomId || person.officeSpaceId) {
+      if (person.officeSpaceId) {
         plan.changes.push({
-          id: `people:${personSnap.id}:officeRoomId:clear`,
+          id: `people:${personSnap.id}:officeSpaceId:clear`,
           collection: 'people',
           action: 'update',
           documentId: personSnap.id,
           label: `Person: clear office location · ${(person.firstName || '')} ${(person.lastName || '')}`.trim(),
           before: {
             office: person.office || '',
-            officeRoomId: person.officeRoomId || '',
             officeSpaceId: person.officeSpaceId || '',
             hasNoOffice: person.hasNoOffice === true,
             isRemote: person.isRemote === true
           },
           data: {
-            officeRoomId: '',
             officeSpaceId: ''
           }
         });
@@ -1144,9 +1117,8 @@ export const previewOfficeRoomBackfill = async () => {
       continue;
     }
 
-    const existingRoom = roomsByKey.get(parsed.spaceKey) || (parsed.roomKey ? roomsByKey.get(parsed.roomKey) : null);
+    const existingRoom = roomsByKey.get(parsed.spaceKey);
     const officeSpaceId = parsed.spaceKey;
-    const officeRoomId = existingRoom?.id || parsed.spaceKey;
 
     const dependsOn = [];
     if (!existingRoom) {
@@ -1167,11 +1139,7 @@ export const previewOfficeRoomBackfill = async () => {
           spaceNumber
         }) || office;
         const newRoom = {
-          name: displayName,
           displayName: displayName,
-          building: buildingDisplayName,
-          roomNumber: spaceNumber,
-          roomKey: parsed.roomKey,
           spaceKey: parsed.spaceKey,
           spaceNumber,
           buildingCode,
@@ -1199,22 +1167,20 @@ export const previewOfficeRoomBackfill = async () => {
       dependsOn.push(createId);
     }
 
-    if ((person.officeRoomId || '') !== officeRoomId || (person.officeSpaceId || '') !== officeSpaceId) {
+    if ((person.officeSpaceId || '') !== officeSpaceId) {
       plan.changes.push({
-        id: `people:${personSnap.id}:officeRoomId:set`,
+        id: `people:${personSnap.id}:officeSpaceId:set`,
         collection: 'people',
         action: 'update',
         documentId: personSnap.id,
         label: `Person: set office location · ${(person.firstName || '')} ${(person.lastName || '')}`.trim(),
         before: {
           office: person.office || '',
-          officeRoomId: person.officeRoomId || '',
           officeSpaceId: person.officeSpaceId || '',
           hasNoOffice: person.hasNoOffice === true,
           isRemote: person.isRemote === true
         },
         data: {
-          officeRoomId,
           officeSpaceId
         },
         ...(dependsOn.length > 0 ? { dependsOn } : {})
@@ -1866,8 +1832,8 @@ export const previewStandardizationPlan = async ({ limitPerType = 200 } = {}) =>
       'courseCode',
       'section',
       'crn',
-      'roomNames',
-      'roomName',
+      'spaceIds',
+      'spaceDisplayNames',
       'locationType',
       'locationLabel',
       'instructorIds',
@@ -1892,11 +1858,11 @@ export const previewStandardizationPlan = async ({ limitPerType = 200 } = {}) =>
     const original = docSnap.data() || {};
     const standardized = standardizeRoom({ ...original, id: docSnap.id });
     const diffs = diffFields(original, standardized, [
-      'name',
       'displayName',
-      'building',
-      'roomNumber',
-      'roomKey',
+      'buildingCode',
+      'buildingDisplayName',
+      'spaceNumber',
+      'spaceKey',
       'type'
     ]);
     if (diffs.length > 0) {
@@ -2118,21 +2084,6 @@ export const applyScheduleIdentityBackfill = async (changes = []) => {
 // LOCATION MIGRATION UTILITIES
 // ============================================================================
 
-import {
-  parseRoomLabel as parseRoomLabelFromService,
-  parseMultiRoom,
-  splitMultiRoom,
-  buildSpaceKey,
-  validateSpaceKey,
-  detectLocationType,
-  formatSpaceDisplayName,
-  normalizeSpaceNumber,
-  resolveBuilding,
-  resolveBuildingDisplayName,
-  LOCATION_TYPE,
-  SPACE_TYPE
-} from './locationService';
-
 /**
  * Preview location migration - identifies rooms needing split/normalization
  * and schedules/people needing spaceId backfill
@@ -2143,7 +2094,7 @@ export const previewLocationMigration = async () => {
       multiRoom: [],      // Rooms with combined strings that need splitting
       missingSpaceKey: [], // Rooms without spaceKey field
       invalidSpaceKey: [], // Rooms with invalid spaceKey format
-      toSeedFromSchedules: [], // Rooms that will be created from schedule roomNames
+      toSeedFromSchedules: [], // Rooms that will be created from schedule spaceDisplayNames
       toSeedFromPeople: [],    // Offices that will be created from people office fields
       total: 0
     },
@@ -2154,7 +2105,6 @@ export const previewLocationMigration = async () => {
     },
     people: {
       missingOfficeSpaceId: [], // People without officeSpaceId
-      hasOfficeRoom: [],        // People with officeRoomId but no officeSpaceId
       total: 0
     }
   };
@@ -2174,14 +2124,14 @@ export const previewLocationMigration = async () => {
       }
       
       // Check for combined multi-room strings in name/displayName
-      const displayName = room.displayName || room.name || '';
+      const displayName = room.displayName || '';
       const parts = splitMultiRoom(displayName);
       if (parts.length > 1) {
         preview.rooms.multiRoom.push({
           id: room.id,
           currentName: displayName,
           parsedParts: parts,
-          building: room.building || room.buildingCode
+          building: room.buildingDisplayName || room.buildingCode || ''
         });
       }
       
@@ -2190,8 +2140,8 @@ export const previewLocationMigration = async () => {
         preview.rooms.missingSpaceKey.push({
           id: room.id,
           name: displayName,
-          building: room.building || room.buildingCode,
-          roomNumber: room.roomNumber || room.spaceNumber
+          building: room.buildingDisplayName || room.buildingCode || '',
+          roomNumber: room.spaceNumber || ''
         });
       } else {
         const validation = validateSpaceKey(room.spaceKey);
@@ -2213,8 +2163,10 @@ export const previewLocationMigration = async () => {
     
     for (const docSnap of schedulesSnap.docs) {
       const schedule = { id: docSnap.id, ...docSnap.data() };
-      const roomName = schedule.roomName || schedule.room || '';
-      const locationType = detectLocationType(roomName);
+      const roomLabel = Array.isArray(schedule.spaceDisplayNames) && schedule.spaceDisplayNames.length > 0
+        ? schedule.spaceDisplayNames.join('; ')
+        : '';
+      const locationType = schedule.locationType || detectLocationType(roomLabel);
       const isPhysical = locationType === LOCATION_TYPE.PHYSICAL;
       
       // Check for missing spaceIds array
@@ -2224,24 +2176,23 @@ export const previewLocationMigration = async () => {
           preview.schedules.hasVirtualLocation.push({
             id: schedule.id,
             courseCode: schedule.courseCode,
-            room: roomName,
+            room: roomLabel,
             locationType
           });
-        } else if (roomName) {
+        } else if (roomLabel) {
           preview.schedules.missingSpaceIds.push({
             id: schedule.id,
             courseCode: schedule.courseCode,
             courseTitle: schedule.courseTitle,
-            room: roomName,
-            roomIds: schedule.roomIds,
+            room: roomLabel,
             term: schedule.term
           });
         }
       }
       
       // Check if we need to seed rooms from this schedule
-      if (roomName && isPhysical) {
-        const parsedResult = parseMultiRoom(roomName);
+      if (roomLabel && isPhysical) {
+        const parsedResult = parseMultiRoom(roomLabel);
         const parsedRooms = parsedResult?.rooms || [];
         
         for (const parsed of parsedRooms) {
@@ -2283,14 +2234,7 @@ export const previewLocationMigration = async () => {
       
       // Check for missing officeSpaceId
       if (!person.officeSpaceId) {
-        if (person.officeRoomId) {
-          preview.people.hasOfficeRoom.push({
-            id: person.id,
-            name: `${person.firstName || ''} ${person.lastName || ''}`.trim(),
-            officeRoomId: person.officeRoomId,
-            office: person.office
-          });
-        } else if (person.office) {
+        if (person.office) {
           preview.people.missingOfficeSpaceId.push({
             id: person.id,
             name: `${person.firstName || ''} ${person.lastName || ''}`.trim(),
@@ -2299,7 +2243,7 @@ export const previewLocationMigration = async () => {
           
           // Check if we need to seed this office
           if (detectLocationType(person.office) === LOCATION_TYPE.PHYSICAL) {
-            const parsed = parseRoomLabelFromService(person.office);
+            const parsed = parseRoomLabel(person.office);
             const buildingCode = (parsed?.buildingCode || parsed?.building?.code || '').toString().trim().toUpperCase();
             const spaceNumber = normalizeSpaceNumber(parsed?.spaceNumber || '');
             
@@ -2341,7 +2285,7 @@ export const previewLocationMigration = async () => {
  * @param {Object} options - Migration options
  * @param {boolean} options.splitMultiRooms - Split combined room strings into separate docs
  * @param {boolean} options.backfillSpaceKeys - Add spaceKey to rooms missing it
- * @param {boolean} options.seedRoomsFromSchedules - Create room records from schedule roomName fields
+ * @param {boolean} options.seedRoomsFromSchedules - Create room records from schedule spaceDisplayNames
  * @param {boolean} options.seedRoomsFromPeople - Create room records from people office fields
  * @param {boolean} options.backfillScheduleSpaceIds - Add spaceIds to schedules
  * @param {boolean} options.backfillPeopleOfficeSpaceIds - Add officeSpaceId to people
@@ -2374,14 +2318,14 @@ export const applyLocationMigration = async (options = {}) => {
       
       for (const docSnap of roomsSnap.docs) {
         const room = docSnap.data();
-        const displayName = room.displayName || room.name || '';
+        const displayName = room.displayName || '';
         const parts = splitMultiRoom(displayName);
         
         if (parts.length > 1) {
           // This is a combined room - create individual records
           for (const part of parts) {
             try {
-              const parsed = parseRoomLabelFromService(part);
+              const parsed = parseRoomLabel(part);
               const buildingCode = (parsed?.buildingCode || parsed?.building?.code || '').toString().trim().toUpperCase();
               const spaceNumber = normalizeSpaceNumber(parsed?.spaceNumber || '');
               if (buildingCode && spaceNumber) {
@@ -2449,18 +2393,17 @@ export const applyLocationMigration = async (options = {}) => {
         const room = docSnap.data();
         
         if (!room.spaceKey && room.isActive !== false) {
-          const displayName = room.displayName || room.name || '';
-          const parsed = parseRoomLabelFromService(displayName);
+          const displayName = room.displayName || '';
+          const parsed = parseRoomLabel(displayName);
           
           const buildingCode = (parsed?.buildingCode || parsed?.building?.code || room.buildingCode || '').toString().trim().toUpperCase();
-          const spaceNumber = normalizeSpaceNumber(parsed?.spaceNumber || room.spaceNumber || room.roomNumber || '');
+          const spaceNumber = normalizeSpaceNumber(parsed?.spaceNumber || room.spaceNumber || '');
           if (buildingCode && spaceNumber) {
             const spaceKey = buildSpaceKey(buildingCode, spaceNumber);
-            const resolvedBuilding = resolveBuilding(buildingCode) || resolveBuilding(parsed?.building?.displayName || room.building || '');
+            const resolvedBuilding = resolveBuilding(buildingCode) || resolveBuilding(parsed?.building?.displayName || room.buildingDisplayName || '');
             const buildingDisplayName = parsed?.building?.displayName
               || resolvedBuilding?.displayName
               || resolveBuildingDisplayName(buildingCode)
-              || room.building
               || buildingCode;
             const formattedDisplayName = formatSpaceDisplayName({
               buildingCode,
@@ -2475,11 +2418,8 @@ export const applyLocationMigration = async (options = {}) => {
                 buildingCode,
                 buildingDisplayName,
                 buildingId: resolvedBuilding?.id || '',
-                roomNumber: room.roomNumber || spaceNumber,
-                building: room.building || buildingDisplayName,
-                ...(room.displayName || room.name ? {} : {
-                  displayName: formattedDisplayName,
-                  name: formattedDisplayName
+                ...(room.displayName ? {} : {
+                  displayName: formattedDisplayName
                 }),
                 updatedAt: new Date().toISOString()
               });
@@ -2490,7 +2430,7 @@ export const applyLocationMigration = async (options = {}) => {
       }
     }
 
-    // 3. Seed room records from schedules' roomName fields
+    // 3. Seed room records from schedules' spaceDisplayNames
     if (seedRoomsFromSchedules) {
       // Get existing room spaceKeys to avoid duplicates
       const existingRoomsSnap = await getDocs(collection(db, 'rooms'));
@@ -2505,11 +2445,13 @@ export const applyLocationMigration = async (options = {}) => {
       
       for (const docSnap of schedulesSnap.docs) {
         const schedule = docSnap.data();
-        const roomName = schedule.roomName || schedule.room || '';
+        const locationLabel = Array.isArray(schedule.spaceDisplayNames)
+          ? schedule.spaceDisplayNames.join('; ')
+          : '';
         
-        if (!roomName || detectLocationType(roomName) !== LOCATION_TYPE.PHYSICAL) continue;
+        if (!locationLabel || detectLocationType(locationLabel) !== LOCATION_TYPE.PHYSICAL) continue;
         
-        const parsedResult = parseMultiRoom(roomName);
+        const parsedResult = parseMultiRoom(locationLabel);
         const parsedRooms = parsedResult?.rooms || [];
         
         for (const parsed of parsedRooms) {
@@ -2541,9 +2483,6 @@ export const applyLocationMigration = async (options = {}) => {
             buildingId: resolvedBuilding?.id || '',
             type: SPACE_TYPE.Classroom,
             isActive: true,
-            building: buildingDisplayName,
-            roomNumber: spaceNumber,
-            name: displayName,
             displayName: displayName,
             createdAt: new Date().toISOString(),
             createdBy: 'location-migration-seed'
@@ -2586,7 +2525,7 @@ export const applyLocationMigration = async (options = {}) => {
         
         if (!office || detectLocationType(office) !== LOCATION_TYPE.PHYSICAL) continue;
         
-        const parsed = parseRoomLabelFromService(office);
+        const parsed = parseRoomLabel(office);
         const buildingCode = (parsed?.buildingCode || parsed?.building?.code || '').toString().trim().toUpperCase();
         const spaceNumber = normalizeSpaceNumber(parsed?.spaceNumber || '');
         
@@ -2615,9 +2554,6 @@ export const applyLocationMigration = async (options = {}) => {
           buildingId: resolvedBuilding?.id || '',
           type: SPACE_TYPE.Office,
           isActive: true,
-          building: buildingDisplayName,
-          roomNumber: spaceNumber,
-          name: displayName,
           displayName: displayName,
           createdAt: new Date().toISOString(),
           createdBy: 'location-migration-seed'
@@ -2648,12 +2584,12 @@ export const applyLocationMigration = async (options = {}) => {
         const schedule = docSnap.data();
         
         if (!schedule.spaceIds || schedule.spaceIds.length === 0) {
-          const roomName = schedule.roomName
-            || schedule.room
-            || (Array.isArray(schedule.roomNames) ? schedule.roomNames.join('; ') : '');
+          const locationLabel = Array.isArray(schedule.spaceDisplayNames)
+            ? schedule.spaceDisplayNames.join('; ')
+            : '';
           
-          if (roomName && detectLocationType(roomName) === LOCATION_TYPE.PHYSICAL) {
-            const parsedResult = parseMultiRoom(roomName);
+          if (locationLabel && detectLocationType(locationLabel) === LOCATION_TYPE.PHYSICAL) {
+            const parsedResult = parseMultiRoom(locationLabel);
             const spaceIds = [];
             const spaceDisplayNames = [];
             
@@ -2684,8 +2620,6 @@ export const applyLocationMigration = async (options = {}) => {
                 batch.update(docSnap.ref, {
                   spaceIds: uniqueSpaceIds,
                   spaceDisplayNames: uniqueDisplayNames,
-                  roomNames: uniqueDisplayNames,
-                  roomName: uniqueDisplayNames[0] || schedule.roomName || '',
                   updatedAt: new Date().toISOString()
                 });
               });
@@ -2698,16 +2632,6 @@ export const applyLocationMigration = async (options = {}) => {
 
     // 6. Backfill officeSpaceId on people
     if (backfillPeopleOfficeSpaceIds) {
-      const roomsSnap = await getDocs(collection(db, 'rooms'));
-      const spaceKeyToId = new Map();
-      
-      for (const docSnap of roomsSnap.docs) {
-        const room = docSnap.data();
-        if (room.spaceKey) {
-          spaceKeyToId.set(room.spaceKey, docSnap.id);
-        }
-      }
-      
       const peopleSnap = await getDocs(collection(db, 'people'));
       
       for (const docSnap of peopleSnap.docs) {
@@ -2715,21 +2639,17 @@ export const applyLocationMigration = async (options = {}) => {
         
         if (!person.officeSpaceId && person.office) {
           if (detectLocationType(person.office) !== LOCATION_TYPE.PHYSICAL) continue;
-          const parsed = parseRoomLabelFromService(person.office);
+          const parsed = parseRoomLabel(person.office);
           const buildingCode = (parsed?.buildingCode || parsed?.building?.code || '').toString().trim().toUpperCase();
           const spaceNumber = normalizeSpaceNumber(parsed?.spaceNumber || '');
           
           if (buildingCode && spaceNumber) {
             const spaceKey = buildSpaceKey(buildingCode, spaceNumber);
             const officeSpaceId = spaceKey;
-            const legacyRoomId = spaceKeyToId.get(spaceKey) || '';
             const updates = {
               officeSpaceId,
               updatedAt: new Date().toISOString()
             };
-            if (!person.officeRoomId && legacyRoomId) {
-              updates.officeRoomId = legacyRoomId;
-            }
             
             await batchWriter.add((batch) => {
               batch.update(docSnap.ref, updates);
@@ -2786,7 +2706,7 @@ export const getLocationHealthStats = async () => {
       if (room.spaceKey) stats.rooms.withSpaceKey++;
       else stats.rooms.withoutSpaceKey++;
       
-      const displayName = room.displayName || room.name || '';
+      const displayName = room.displayName || '';
       if (splitMultiRoom(displayName).length > 1) stats.rooms.multiRoom++;
     }
 
@@ -2798,8 +2718,10 @@ export const getLocationHealthStats = async () => {
       const schedule = docSnap.data();
       if (schedule.spaceIds?.length > 0) stats.schedules.withSpaceIds++;
       else {
-        const roomName = schedule.roomName || schedule.room || '';
-        if (detectLocationType(roomName) !== LOCATION_TYPE.PHYSICAL) stats.schedules.virtual++;
+        const roomLabel = Array.isArray(schedule.spaceDisplayNames) && schedule.spaceDisplayNames.length > 0
+          ? schedule.spaceDisplayNames.join('; ')
+          : '';
+        if (detectLocationType(roomLabel) !== LOCATION_TYPE.PHYSICAL) stats.schedules.virtual++;
         else stats.schedules.withoutSpaceIds++;
       }
     }
@@ -2842,5 +2764,5 @@ export {
   standardizePhone,
   standardizeCourseCode,
   standardizeTerm,
-  standardizeRoomName
+  standardizeSpaceLabel
 } from './hygieneCore';

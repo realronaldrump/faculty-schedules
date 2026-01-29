@@ -22,7 +22,7 @@ describe("importIdentityUtils", () => {
       clssId: "2962",
       crn: "39316",
       meetingPatterns,
-      roomNames: ["Mary Gibbs Jones (FCS) 213"],
+      spaceDisplayNames: ["Mary Gibbs Jones (FCS) 213"],
     });
 
     expect(identity.primaryKey).toBe("clss:202610:2962");
@@ -42,7 +42,7 @@ describe("importIdentityUtils", () => {
       clssId: "2962",
       crn: "39316",
       meetingPatterns,
-      roomNames: ["Mary Gibbs Jones (FCS) 213"],
+      spaceDisplayNames: ["Mary Gibbs Jones (FCS) 213"],
     });
 
     const standardized = standardizeSchedule({
@@ -53,7 +53,7 @@ describe("importIdentityUtils", () => {
       clssId: "2962",
       crn: "39316",
       meetingPatterns,
-      roomName: "Mary Gibbs Jones (FCS) 213",
+      spaceDisplayNames: ["Mary Gibbs Jones (FCS) 213"],
     });
 
     const normalizedIdentity = deriveScheduleIdentityFromSchedule(standardized);
@@ -131,7 +131,7 @@ describe("importIdentityUtils", () => {
       termCode: "202610",
       clssId: "2962",
       crn: "39316",
-      roomNames: ["Mary Gibbs Jones (FCS) 213"],
+      spaceDisplayNames: ["Mary Gibbs Jones (FCS) 213"],
     });
     const edited = deriveScheduleIdentity({
       courseCode: "adm 1300",
@@ -140,7 +140,7 @@ describe("importIdentityUtils", () => {
       termCode: "202610",
       clssId: "2962",
       crn: "39316",
-      roomNames: ["MARY GIBBS JONES (FCS) 213"],
+      spaceDisplayNames: ["MARY GIBBS JONES (FCS) 213"],
     });
 
     expect(edited.primaryKey).toBe(base.primaryKey);

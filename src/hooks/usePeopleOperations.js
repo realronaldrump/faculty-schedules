@@ -46,14 +46,14 @@ const usePeopleOperations = () => {
 
   const { showNotification } = useUI();
 
-  const resolveOfficeRoomId = useCallback(async (personData, { allowCreate = true } = {}) => {
+  const resolveOfficeSpaceId = useCallback(async (personData, { allowCreate = true } = {}) => {
     const office = (personData?.office || '').toString().trim();
     const hasNoOffice = personData?.hasNoOffice === true || personData?.isRemote === true;
 
-    if (hasNoOffice || !office) return { officeRoomId: '', officeSpaceId: '' };
+    if (hasNoOffice || !office) return { officeSpaceId: '' };
 
     const parsed = parseRoomLabel(office);
-    if (!parsed?.spaceKey) return { officeRoomId: '', officeSpaceId: '' };
+    if (!parsed?.spaceKey) return { officeSpaceId: '' };
 
     const now = new Date().toISOString();
     const spaceKey = parsed.spaceKey;
@@ -69,7 +69,7 @@ const usePeopleOperations = () => {
     if (spacesByKey instanceof Map) {
       const existing = spacesByKey.get(spaceKey);
       if (existing) {
-        return { officeRoomId: existing.id || spaceKey, officeSpaceId: spaceKey };
+        return { officeSpaceId: spaceKey };
       }
     }
 
@@ -84,52 +84,21 @@ const usePeopleOperations = () => {
         // Update with new fields if we have edit permission
         if (typeof canEditRoom === 'function' && canEditRoom()) {
           setDoc(doc(db, COLLECTIONS.ROOMS, docId), {
-            building: buildingDisplayName || buildingCode,
             buildingCode,
             buildingDisplayName: buildingDisplayName || buildingCode,
-            roomNumber: spaceNumber,
             spaceNumber,
             spaceKey,
             displayName,
-            name: displayName,
             updatedAt: now
           }, { merge: true }).catch(() => null);
         }
-        return { officeRoomId: docId, officeSpaceId: spaceKey };
+        return { officeSpaceId: spaceKey };
       }
     } catch (error) {
       void error;
     }
 
-    // 2) Legacy rooms with `roomKey` field but non-deterministic document IDs
-    try {
-      const legacyKey = spaceKey.replace(':', '_').toLowerCase();
-      const byKeySnap = await getDocs(query(
-        collection(db, COLLECTIONS.ROOMS),
-        where('roomKey', '==', legacyKey)
-      ));
-      if (!byKeySnap.empty) {
-        const docId = byKeySnap.docs[0].id;
-        if (typeof canEditRoom === 'function' && canEditRoom()) {
-          setDoc(doc(db, COLLECTIONS.ROOMS, docId), {
-            building: buildingDisplayName || buildingCode,
-            buildingCode,
-            buildingDisplayName: buildingDisplayName || buildingCode,
-            roomNumber: spaceNumber,
-            spaceNumber,
-            spaceKey,
-            displayName,
-            name: displayName,
-            updatedAt: now
-          }, { merge: true }).catch(() => null);
-        }
-        return { officeRoomId: docId, officeSpaceId: spaceKey };
-      }
-    } catch (error) {
-      void error;
-    }
-
-    // 3) Building-only query (avoids composite index) + local match on room number
+    // 2) Building-only query (avoids composite index) + local match on space number
     try {
       const byBuildingSnap = await getDocs(query(
         collection(db, COLLECTIONS.ROOMS),
@@ -141,28 +110,24 @@ const usePeopleOperations = () => {
         const data = docSnap.data() || {};
         if (data.spaceKey && data.spaceKey === spaceKey) return true;
         const candidateNumber = normalizeSpaceNumber(
-          data.spaceNumber || data.roomNumber || extractSpaceNumber(data.displayName || data.name || '')
+          data.spaceNumber || extractSpaceNumber(data.displayName || '')
         );
         return candidateNumber && candidateNumber === targetNumber;
       });
 
       if (matchDoc) {
-        return { officeRoomId: matchDoc.id, officeSpaceId: spaceKey };
+        return { officeSpaceId: spaceKey };
       }
     } catch (error) {
       void error;
     }
 
     const canCreate = typeof canCreateRoom === 'function' ? canCreateRoom() : false;
-    if (!allowCreate || !canCreate) return { officeRoomId: '', officeSpaceId: '' };
+    if (!allowCreate || !canCreate) return { officeSpaceId: '' };
 
-    // Create new room with both legacy and new fields
+    // Create new room
     const newRoom = {
-      name: displayName,
       displayName: displayName,
-      // Legacy fields
-      building: buildingDisplayName || buildingCode,
-      roomNumber: spaceNumber,
       // New canonical fields
       spaceKey,
       spaceNumber,
@@ -179,10 +144,10 @@ const usePeopleOperations = () => {
 
     try {
       await setDoc(doc(db, COLLECTIONS.ROOMS, spaceKey), newRoom, { merge: true });
-      return { officeRoomId: spaceKey, officeSpaceId: spaceKey };
+      return { officeSpaceId: spaceKey };
     } catch (error) {
       console.warn('Unable to create office room record:', error);
-      return { officeRoomId: '', officeSpaceId: '' };
+      return { officeSpaceId: '' };
     }
   }, [canCreateRoom, canEditRoom]);
 
@@ -244,12 +209,9 @@ const usePeopleOperations = () => {
       const nextOffices = Array.isArray(cleanData.offices) ? cleanData.offices.filter(Boolean) : [];
       const nextOffice = (cleanData.office || nextOffices[0] || '').toString().trim();
       const nextHasNoOffice = cleanData.hasNoOffice === true || cleanData.isRemote === true;
-      const prevOffice = (originalData?.office || '').toString().trim();
-      const prevOfficeRoomId = (originalData?.officeRoomId || '').toString().trim();
 
       if (nextHasNoOffice || (!nextOffice && nextOffices.length === 0)) {
         // Clear all office fields
-        updateData.officeRoomId = '';
         updateData.officeSpaceId = '';
         updateData.office = '';
         updateData.offices = [];
@@ -261,7 +223,7 @@ const usePeopleOperations = () => {
         const resolvedSpaceIds = [];
 
         for (const officeStr of officesToResolve) {
-          const resolved = await resolveOfficeRoomId({ office: officeStr, hasNoOffice: false });
+          const resolved = await resolveOfficeSpaceId({ office: officeStr, hasNoOffice: false });
           resolvedOffices.push(officeStr);
           resolvedSpaceIds.push(resolved.officeSpaceId || '');
         }
@@ -273,7 +235,6 @@ const usePeopleOperations = () => {
         // Set singular fields to primary (first) office
         updateData.office = resolvedOffices[0] || '';
         updateData.officeSpaceId = resolvedSpaceIds[0] || '';
-        updateData.officeRoomId = resolvedSpaceIds[0] || ''; // Legacy field
       }
 
       if (isNewFaculty) {
@@ -312,7 +273,7 @@ const usePeopleOperations = () => {
         : 'Failed to update faculty member. Please try again.';
       showNotification('error', 'Operation Failed', errorMessage);
     }
-  }, [loadPeople, canCreateFaculty, canEditFaculty, showNotification, resolveOfficeRoomId]);
+  }, [loadPeople, canCreateFaculty, canEditFaculty, showNotification, resolveOfficeSpaceId]);
 
   // Handle faculty delete
   const handleFacultyDelete = useCallback(async (facultyToDelete) => {
@@ -374,13 +335,13 @@ const usePeopleOperations = () => {
       // Helper to resolve all offices
       const resolveAllOffices = async () => {
         if (nextHasNoOffice || (!nextOffice && nextOffices.length === 0)) {
-          return { offices: [], officeSpaceIds: [], office: '', officeSpaceId: '', officeRoomId: '' };
+          return { offices: [], officeSpaceIds: [], office: '', officeSpaceId: '' };
         }
         const officesToResolve = nextOffices.length > 0 ? nextOffices : (nextOffice ? [nextOffice] : []);
         const resolvedOffices = [];
         const resolvedSpaceIds = [];
         for (const officeStr of officesToResolve) {
-          const resolved = await resolveOfficeRoomId({ office: officeStr, hasNoOffice: false });
+          const resolved = await resolveOfficeSpaceId({ office: officeStr, hasNoOffice: false });
           resolvedOffices.push(officeStr);
           resolvedSpaceIds.push(resolved.officeSpaceId || '');
         }
@@ -388,8 +349,7 @@ const usePeopleOperations = () => {
           offices: resolvedOffices,
           officeSpaceIds: resolvedSpaceIds,
           office: resolvedOffices[0] || '',
-          officeSpaceId: resolvedSpaceIds[0] || '',
-          officeRoomId: resolvedSpaceIds[0] || ''
+          officeSpaceId: resolvedSpaceIds[0] || ''
         };
       };
 
@@ -450,7 +410,7 @@ const usePeopleOperations = () => {
       console.error('❌ Error updating staff:', error);
       showNotification('error', 'Operation Failed', 'Failed to save staff member. Please try again.');
     }
-  }, [rawPeople, loadPeople, canCreateStaff, canEditStaff, showNotification, resolveOfficeRoomId]);
+  }, [rawPeople, loadPeople, canCreateStaff, canEditStaff, showNotification, resolveOfficeSpaceId]);
 
   // Handle staff delete
   const handleStaffDelete = useCallback(async (staffToDelete) => {
@@ -524,7 +484,9 @@ const usePeopleOperations = () => {
         roles: ['student'],
         hasNoOffice: true,
         office: '',
-        officeRoomId: '',
+        officeSpaceId: '',
+        officeSpaceIds: [],
+        offices: [],
         isActive: (cleanStudentData.isActive !== undefined ? cleanStudentData.isActive : fallbackIsActive),
         updatedAt: new Date().toISOString()
       };

@@ -97,31 +97,12 @@ const SpaceManagement = () => {
 
     // Check schedules for room usage
     (scheduleData || []).forEach(schedule => {
-      const rooms = schedule.spaceIds || schedule.roomIds || [];
-      const roomNames = schedule.roomNames || (schedule.Room ? schedule.Room.split(';').map(r => r.trim()) : []);
+      const rooms = Array.isArray(schedule.spaceIds) ? schedule.spaceIds : [];
 
-      // Use spaceIds if available
       rooms.forEach(spaceKey => {
         if (!spaceKey) return;
         if (!usage[spaceKey]) usage[spaceKey] = { scheduled: 0, offices: 0, temperature: false };
         usage[spaceKey].scheduled++;
-      });
-
-      // Also track by room name for legacy data
-      roomNames.forEach(roomName => {
-        if (!roomName) return;
-        // Try to find matching space
-        const spaces = Array.isArray(spacesList) ? spacesList : Object.values(roomsData || {});
-        const match = spaces.find(s =>
-          s.displayName === roomName ||
-          s.name === roomName ||
-          `${s.buildingDisplayName || s.building} ${s.spaceNumber || s.roomNumber}` === roomName
-        );
-        if (match) {
-          const key = match.spaceKey || match.id;
-          if (!usage[key]) usage[key] = { scheduled: 0, offices: 0, temperature: false };
-          usage[key].scheduled++;
-        }
       });
     });
 

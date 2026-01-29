@@ -83,18 +83,18 @@ export const buildAggregateSeries = ({
   timezone,
   unit = "F",
 }) => {
-  const byRoom = new Map();
+  const bySpace = new Map();
   aggregates.forEach((doc) => {
-    const roomId = doc.roomId || doc.spaceKey || "unknown";
-    if (!byRoom.has(roomId)) {
-      byRoom.set(roomId, {
-        roomId,
-        roomName: doc.roomName || doc.roomLabel || roomId,
+    const spaceKey = doc.spaceKey || "unknown";
+    if (!bySpace.has(spaceKey)) {
+      bySpace.set(spaceKey, {
+        spaceKey,
+        spaceLabel: doc.spaceLabel || doc.spaceDisplayName || spaceKey,
         points: [],
         updatedAt: doc.updatedAt || null,
       });
     }
-    const entry = byRoom.get(roomId);
+    const entry = bySpace.get(spaceKey);
     const docUpdatedAt = doc.updatedAt?.toDate
       ? doc.updatedAt.toDate()
       : doc.updatedAt;
@@ -146,7 +146,7 @@ export const buildAggregateSeries = ({
     });
   });
 
-  return Array.from(byRoom.values()).map((series) => ({
+  return Array.from(bySpace.values()).map((series) => ({
     ...series,
     points: series.points.sort((a, b) => a.timestamp - b.timestamp),
   }));

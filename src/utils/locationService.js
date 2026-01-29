@@ -43,6 +43,11 @@ export const SPACE_TYPE = Object.freeze({
   OTHER: 'Other'
 });
 
+export const DEFAULT_BUILDING_CONFIG = {
+  version: 1,
+  buildings: []
+};
+
 /**
  * Patterns that indicate virtual/no-room locations
  */
@@ -178,6 +183,38 @@ export const applyBuildingConfig = (config) => {
   };
 };
 
+const normalizeBuilding = (building) => {
+  if (!building || typeof building !== 'object') return null;
+  const rawCode = typeof building.code === 'string' ? building.code.trim() : '';
+  const code = rawCode ? rawCode.toUpperCase() : '';
+  const displayName = typeof building.displayName === 'string' ? building.displayName.trim() : '';
+  const aliases = Array.isArray(building.aliases)
+    ? building.aliases.map((alias) => (alias || '').toString().trim()).filter(Boolean)
+    : [];
+  const isActive = building.isActive !== false;
+  const idSource = code || displayName;
+  const id = idSource ? slugify(idSource).toLowerCase() : '';
+  if (!code && !displayName) return null;
+  return {
+    id,
+    code,
+    displayName: displayName || code,
+    aliases,
+    isActive,
+    campus: building.campus || '',
+    address: building.address || ''
+  };
+};
+
+export const normalizeBuildingConfig = (raw = {}) => {
+  const buildings = Array.isArray(raw.buildings) ? raw.buildings : [];
+  const normalized = buildings.map(normalizeBuilding).filter(Boolean);
+  return {
+    version: raw.version || DEFAULT_BUILDING_CONFIG.version,
+    buildings: normalized
+  };
+};
+
 /**
  * Get current building configuration
  */
@@ -215,6 +252,25 @@ export const slugify = (value) => {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
+};
+
+export const normalizeBuildings = (buildings) => {
+  if (!Array.isArray(buildings)) return [];
+  const normalized = new Set();
+  buildings.forEach((b) => {
+    const n = normalizeBuildingName(b);
+    if (n && n !== 'Online' && n !== 'Off Campus') {
+      normalized.add(n);
+    }
+  });
+  return Array.from(normalized).sort();
+};
+
+export const buildingMatches = (buildingName, filterBuilding) => {
+  if (!filterBuilding) return true;
+  const normalizedName = normalizeBuildingName(buildingName);
+  const normalizedFilter = normalizeBuildingName(filterBuilding);
+  return normalizedName === normalizedFilter;
 };
 
 /**
@@ -716,16 +772,6 @@ export const getLocationDisplay = (schedule) => {
     return schedule.spaceDisplayNames.join('; ');
   }
 
-  // Legacy: Check for roomNames array
-  if (Array.isArray(schedule.roomNames) && schedule.roomNames.length > 0) {
-    return schedule.roomNames.join('; ');
-  }
-
-  // Legacy: Check for single roomName
-  if (schedule.roomName) {
-    return schedule.roomName;
-  }
-
   return '';
 };
 
@@ -758,16 +804,8 @@ export const validateScheduleLocation = (data) => {
   if (locationType === 'room' || locationType === 'physical') {
     // Should have space references
     const hasSpaces = Array.isArray(data.spaceIds) && data.spaceIds.length > 0;
-    const hasRooms = Array.isArray(data.roomIds) && data.roomIds.length > 0;
-    const hasRoomNames = Array.isArray(data.roomNames) && data.roomNames.length > 0;
-    const hasRoomName = Boolean(data.roomName);
-
-    if (!hasSpaces && !hasRooms) {
-      if (hasRoomNames || hasRoomName) {
-        warnings.push('Location has room names but no resolved space/room IDs');
-      } else {
-        warnings.push('Physical location schedule has no room assignment');
-      }
+    if (!hasSpaces) {
+      warnings.push('Physical location schedule has no space IDs assigned');
     }
   }
 
@@ -795,7 +833,7 @@ export const validatePersonOffice = (data) => {
   const warnings = [];
 
   const hasOffice = Boolean(data.office);
-  const hasOfficeSpaceId = Boolean(data.officeSpaceId || data.officeRoomId);
+  const hasOfficeSpaceId = Boolean(data.officeSpaceId);
   const hasNoOffice = data.hasNoOffice === true || data.isRemote === true;
 
   if (hasNoOffice && hasOffice) {
@@ -823,6 +861,8 @@ export default {
   SPACE_TYPE,
 
   // Configuration
+  DEFAULT_BUILDING_CONFIG,
+  normalizeBuildingConfig,
   applyBuildingConfig,
   getBuildingConfig,
   getActiveBuildings,
@@ -852,6 +892,8 @@ export default {
   resolveBuilding,
   normalizeBuildingName,
   resolveBuildingDisplayName,
+  normalizeBuildings,
+  buildingMatches,
 
   // Display
   getLocationDisplay,

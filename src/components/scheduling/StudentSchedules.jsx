@@ -168,8 +168,8 @@ const StudentSchedules = ({ embedded = false }) => {
         const activeAssignments = includeInactive
           ? assignmentsWithSchedule
           : assignmentsWithSchedule.filter(
-              (assignment) => assignment.isActiveDuringSemester,
-            );
+            (assignment) => assignment.isActiveDuringSemester,
+          );
 
         const filteredAssignments = activeAssignments.filter((assignment) => {
           if (selectedJobTitles.length > 0) {
@@ -427,9 +427,17 @@ const StudentSchedules = ({ embedded = false }) => {
 
       {/* Collapsible Filters Section */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        <button
+        <div
+          role="button"
+          tabIndex={0}
           onClick={() => setFiltersExpanded(!filtersExpanded)}
-          className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setFiltersExpanded(!filtersExpanded);
+            }
+          }}
+          className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-inset focus:ring-baylor-green/20"
         >
           <div className="flex items-center gap-3">
             <div className="p-2 bg-baylor-green/10 rounded-lg">
@@ -464,7 +472,7 @@ const StudentSchedules = ({ embedded = false }) => {
               <ChevronDown size={20} className="text-gray-500" />
             )}
           </div>
-        </button>
+        </div>
 
         {filtersExpanded && (
           <div className="px-5 pb-5 pt-2 border-t border-gray-100 space-y-4 animate-fade-in">
@@ -475,22 +483,20 @@ const StudentSchedules = ({ embedded = false }) => {
                 <div className="flex rounded-md border">
                   <button
                     onClick={() => setViewMode("calendar")}
-                    className={`px-3 py-1.5 text-xs rounded-l-md flex items-center gap-1 ${
-                      viewMode === "calendar"
+                    className={`px-3 py-1.5 text-xs rounded-l-md flex items-center gap-1 ${viewMode === "calendar"
                         ? "bg-baylor-green text-white"
                         : "bg-white text-gray-700 hover:bg-gray-50"
-                    }`}
+                      }`}
                   >
                     <Calendar size={14} />
                     Calendar
                   </button>
                   <button
                     onClick={() => setViewMode("list")}
-                    className={`px-3 py-1.5 text-xs rounded-r-md flex items-center gap-1 ${
-                      viewMode === "list"
+                    className={`px-3 py-1.5 text-xs rounded-r-md flex items-center gap-1 ${viewMode === "list"
                         ? "bg-baylor-green text-white"
                         : "bg-white text-gray-700 hover:bg-gray-50"
-                    }`}
+                      }`}
                   >
                     <List size={14} />
                     List
@@ -616,11 +622,10 @@ const StudentSchedules = ({ embedded = false }) => {
         <div className="flex border-b border-gray-200">
           <button
             onClick={() => setActiveTab("calendar")}
-            className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${
-              activeTab === "calendar"
+            className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${activeTab === "calendar"
                 ? "text-baylor-green bg-baylor-green/5"
                 : "text-gray-600 hover:text-baylor-green hover:bg-gray-50"
-            }`}
+              }`}
           >
             <Calendar size={18} />
             Weekly Calendar
@@ -630,11 +635,10 @@ const StudentSchedules = ({ embedded = false }) => {
           </button>
           <button
             onClick={() => setActiveTab("building")}
-            className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${
-              activeTab === "building"
+            className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${activeTab === "building"
                 ? "text-baylor-green bg-baylor-green/5"
                 : "text-gray-600 hover:text-baylor-green hover:bg-gray-50"
-            }`}
+              }`}
           >
             <Building size={18} />
             By Building
@@ -647,11 +651,10 @@ const StudentSchedules = ({ embedded = false }) => {
           </button>
           <button
             onClick={() => setActiveTab("list")}
-            className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${
-              activeTab === "list"
+            className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${activeTab === "list"
                 ? "text-baylor-green bg-baylor-green/5"
                 : "text-gray-600 hover:text-baylor-green hover:bg-gray-50"
-            }`}
+              }`}
           >
             <Grid size={18} />
             All Schedules
@@ -965,7 +968,7 @@ const StudentSchedules = ({ embedded = false }) => {
                               </span>
                               <span className="text-xs text-gray-500">
                                 {Array.isArray(assignment.buildings) &&
-                                assignment.buildings.length > 0
+                                  assignment.buildings.length > 0
                                   ? assignment.buildings.join(", ")
                                   : "No building"}
                               </span>

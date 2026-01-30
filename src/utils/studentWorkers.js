@@ -37,6 +37,7 @@ export const getStudentAssignments = (student) => {
     : [{
         jobTitle: student.jobTitle || '',
         supervisor: student.supervisor || '',
+        supervisorId: student.supervisorId || '',
         hourlyRate: student.hourlyRate,
         location: fallbackBuildings,
         weeklySchedule: fallbackSchedule,
@@ -61,6 +62,7 @@ export const getStudentAssignments = (student) => {
       ...job,
       jobTitle: job.jobTitle || student.jobTitle || `Assignment ${index + 1}`,
       supervisor: job.supervisor || student.supervisor || '',
+      supervisorId: job.supervisorId || student.supervisorId || '',
       schedule,
       buildings,
       hourlyRateNumber,
@@ -296,6 +298,7 @@ const summarizeJobs = (jobs) => {
     primaryBuilding: primaryBuildings[0] || '',
     jobTitle: primaryJob.jobTitle || '',
     supervisor: primaryJob.supervisor || '',
+    supervisorId: primaryJob.supervisorId || '',
     hourlyRate: primaryJob.hourlyRate || ''
   };
 };
@@ -318,6 +321,7 @@ export const applySemesterSchedule = (student, semesterLabel) => {
       primaryBuilding: '',
       jobTitle: '',
       supervisor: '',
+      supervisorId: '',
       hourlyRate: ''
     };
   }
@@ -337,6 +341,7 @@ export const applySemesterSchedule = (student, semesterLabel) => {
     primaryBuilding: scheduleEntry.primaryBuilding || summary.primaryBuilding,
     jobTitle: scheduleEntry.jobTitle || summary.jobTitle,
     supervisor: scheduleEntry.supervisor || summary.supervisor,
+    supervisorId: scheduleEntry.supervisorId || summary.supervisorId,
     hourlyRate: scheduleEntry.hourlyRate || summary.hourlyRate
   };
 };

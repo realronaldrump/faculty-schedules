@@ -178,14 +178,14 @@ function Login({ onLogin }) {
               <p className="university-subtitle text-center">Human Sciences & Design</p>
             </div>
           </div>
-          
+
           <div className="university-card-content">
             <div className="text-center">
               <h2 className="text-2xl font-bold text-baylor-green mb-2">
                 Faculty System Access
               </h2>
               <p className="text-gray-600 mb-6">
-                Secure login required for faculty schedule management
+                Secure login required for Davis's Big Beautiful Dashboard
               </p>
             </div>
 

@@ -25,6 +25,11 @@ import {
 import FacultyContactCard from "../FacultyContactCard";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
+import {
+  buildSupervisorIndex,
+  resolveSupervisorId,
+  resolveSupervisorLabel,
+} from "../../utils/supervisorUtils";
 
 const DEFAULT_FILTERS = {
   jobTitles: [],
@@ -63,7 +68,8 @@ const ProgressBar = ({
 
 const StudentWorkerAnalytics = ({ embedded = false }) => {
   const navigate = useNavigate();
-  const { studentData = [], selectedSemesterMeta } = useData();
+  const { studentData = [], selectedSemesterMeta, rawPeople, peopleIndex } =
+    useData();
   const { loadPeople } = usePeople();
   const [searchText, setSearchText] = useState("");
   const [filters, setFilters] = useState(() => ({ ...DEFAULT_FILTERS }));
@@ -87,6 +93,11 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
   useEffect(() => {
     loadPeople();
   }, [loadPeople]);
+
+  const supervisorIndex = useMemo(
+    () => buildSupervisorIndex(rawPeople || []),
+    [rawPeople],
+  );
 
   const assignments = useMemo(() => {
     if (!Array.isArray(studentData)) return [];
@@ -119,16 +130,27 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
               ? [student.primaryBuilding]
               : [];
 
-      const supervisor = assignment.supervisor || student.supervisor || "";
+      const supervisorId = resolveSupervisorId({
+        supervisorId: assignment.supervisorId || student.supervisorId,
+        supervisorName: assignment.supervisor || student.supervisor,
+        supervisorIndex,
+      });
+      const supervisorName = resolveSupervisorLabel({
+        supervisorId,
+        supervisorName: assignment.supervisor || student.supervisor,
+        peopleIndex,
+        supervisorIndex,
+      });
 
       return {
         ...assignment,
         status: statusInfo.status,
         resolvedBuildings,
-        supervisor,
+        supervisorId,
+        supervisorName,
       };
     });
-  }, [assignments, selectedSemesterMeta]);
+  }, [assignments, selectedSemesterMeta, supervisorIndex, peopleIndex]);
 
   const availableJobTitles = useMemo(() => {
     const titles = new Set();
@@ -150,8 +172,8 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
 
   const availableSupervisors = useMemo(() => {
     const supervisors = new Set();
-    decorateAssignments.forEach(({ supervisor }) => {
-      if (supervisor) supervisors.add(supervisor);
+    decorateAssignments.forEach(({ supervisorName }) => {
+      if (supervisorName) supervisors.add(supervisorName);
     });
     return Array.from(supervisors).sort();
   }, [decorateAssignments]);
@@ -168,7 +190,7 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
           student.name,
           student.email,
           assignment.jobTitle,
-          assignment.supervisor,
+          assignment.supervisorName,
           assignment.resolvedBuildings.join(" "),
         ]
           .filter(Boolean)
@@ -191,8 +213,8 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
 
       if (filters.supervisors.length > 0) {
         if (
-          !assignment.supervisor ||
-          !filters.supervisors.includes(assignment.supervisor)
+          !assignment.supervisorName ||
+          !filters.supervisors.includes(assignment.supervisorName)
         ) {
           return false;
         }
@@ -279,7 +301,7 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
   const supervisorBreakdown = useMemo(() => {
     const map = new Map();
     filteredAssignments.forEach((assignment) => {
-      const key = assignment.supervisor || "Unassigned";
+      const key = assignment.supervisorName || "Unassigned";
       const existing = map.get(key) || { hours: 0, pay: 0, count: 0 };
       existing.hours += assignment.weeklyHours || 0;
       existing.pay += assignment.weeklyPay || 0;
@@ -306,8 +328,8 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
           valueB = b.jobTitle || "";
           break;
         case "supervisor":
-          valueA = a.supervisor || "";
-          valueB = b.supervisor || "";
+          valueA = a.supervisorName || "";
+          valueB = b.supervisorName || "";
           break;
         case "weeklyHours":
           valueA = a.weeklyHours || 0;
@@ -859,7 +881,7 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
                                 {assignment.jobTitle || "Unassigned"}
                               </td>
                               <td className="px-4 py-3 text-sm text-gray-700">
-                                {assignment.supervisor || "—"}
+                                {assignment.supervisorName || "—"}
                               </td>
                               <td className="px-4 py-3 text-sm text-gray-700 max-w-[150px] truncate">
                                 {buildingsDisplay}

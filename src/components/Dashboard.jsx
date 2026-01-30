@@ -120,7 +120,7 @@ const Dashboard = () => {
         {/* University System Header */}
         <div className="page-header">
           <h1 className="page-title">Dashboard</h1>
-          <p className="page-subtitle">Faculty Schedule Management System</p>
+          <p className="page-subtitle">Davis's Big Beautiful Dashboard</p>
         </div>
 
         <div className="university-card">

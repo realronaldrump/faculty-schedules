@@ -40,7 +40,7 @@ const StudentEditModal = ({
   onClose,
   onDelete,
   availableBuildings = [],
-  existingSupervisors = [],
+  supervisorOptions = [],
   existingJobTitles = [],
   semesterLabel = "",
 }) => {
@@ -243,7 +243,7 @@ const StudentEditModal = ({
             onCancel={() => setEditingJobIndex(null)}
             onRemove={() => removeJob(idx)}
             availableBuildings={availableBuildings}
-            existingSupervisors={existingSupervisors}
+            supervisorOptions={supervisorOptions}
             existingJobTitles={existingJobTitles}
           />
         ))}
@@ -253,6 +253,7 @@ const StudentEditModal = ({
             job={{
               jobTitle: "",
               supervisor: "",
+              supervisorId: "",
               hourlyRate: "",
               buildings: [],
               weeklySchedule: [],
@@ -265,7 +266,7 @@ const StudentEditModal = ({
             }}
             onCancel={() => setAddingJob(false)}
             availableBuildings={availableBuildings}
-            existingSupervisors={existingSupervisors}
+            supervisorOptions={supervisorOptions}
             existingJobTitles={existingJobTitles}
           />
         )}

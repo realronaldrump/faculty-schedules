@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Building,
   Clock,
@@ -13,6 +13,7 @@ import {
 import VisualScheduleBuilder from "./VisualScheduleBuilder";
 import BuildingSelector from "./BuildingSelector";
 import SuggestionInput from "./SuggestionInput";
+import SupervisorSelect from "./SupervisorSelect";
 
 /**
  * JobCard - Visual card for displaying and editing job assignments
@@ -34,6 +35,7 @@ const DAYS = {
 const EMPTY_JOB = {
   jobTitle: "",
   supervisor: "",
+  supervisorId: "",
   hourlyRate: "",
   buildings: [],
   weeklySchedule: [],
@@ -50,13 +52,23 @@ const JobCard = ({
   onRemove,
   onChange,
   availableBuildings = [],
-  existingSupervisors = [],
+  supervisorOptions = [],
   existingJobTitles = [],
   showActions = true,
   compact = false,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [draft, setDraft] = useState(job || EMPTY_JOB);
+
+  const supervisorLabel = useMemo(() => {
+    if (job?.supervisorId) {
+      const match = supervisorOptions.find(
+        (option) => option.id === job.supervisorId,
+      );
+      if (match?.label) return match.label;
+    }
+    return job?.supervisor || "";
+  }, [job, supervisorOptions]);
 
   useEffect(() => {
     if (isEditing) {
@@ -135,13 +147,24 @@ const JobCard = ({
               placeholder="e.g., Front Desk Assistant"
               helperText="Choose an existing title or add a new one."
             />
-            <SuggestionInput
+            <SupervisorSelect
               label="Supervisor"
-              value={draft.supervisor}
-              onChange={(value) => setDraft({ ...draft, supervisor: value })}
-              options={existingSupervisors}
-              placeholder="Supervisor name"
-              helperText="Select from existing supervisors or add a new one."
+              value={draft.supervisorId}
+              onChange={(value) => {
+                const selected = supervisorOptions.find((option) => option.id === value);
+                const nextSupervisor = value
+                  ? (selected?.label || draft.supervisor || "")
+                  : "";
+                setDraft({
+                  ...draft,
+                  supervisorId: value,
+                  supervisor: nextSupervisor,
+                });
+              }}
+              options={supervisorOptions}
+              placeholder="Select supervisor"
+              helperText="Choose from faculty and staff in the directory."
+              fallbackLabel={draft.supervisor}
             />
           </div>
 
@@ -272,10 +295,10 @@ const JobCard = ({
           <div
             className={`flex flex-wrap items-center gap-x-4 gap-y-1 ${compact ? "text-xs" : "text-sm"} text-gray-600`}
           >
-            {job?.supervisor && (
+            {supervisorLabel && (
               <span className="flex items-center gap-1">
                 <User size={compact ? 12 : 14} className="text-gray-400" />
-                {job.supervisor}
+                {supervisorLabel}
               </span>
             )}
             {job?.hourlyRate && (

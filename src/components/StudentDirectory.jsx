@@ -44,6 +44,11 @@ import {
 } from "../utils/studentScheduleUtils";
 import { formatPhoneNumber } from "../utils/directoryUtils";
 import {
+  buildSupervisorIndex,
+  resolveSupervisorId,
+  resolveSupervisorLabel,
+} from "../utils/supervisorUtils";
+import {
   getCanonicalBuildingList,
   normalizeBuildingName,
 } from "../utils/locationService";
@@ -71,8 +76,36 @@ const normalizeBuildingList = (value) => {
 const sanitizeWeeklyEntries = (entries) =>
   sortWeeklySchedule(normalizeStudentWeeklySchedule(entries));
 
-const prepareStudentPayload = (student) => {
+const prepareStudentPayload = (
+  student,
+  { supervisorIndex = null, peopleIndex = null } = {},
+) => {
   if (!student) return {};
+
+  const resolveSupervisorIdFor = (candidateId, candidateName) =>
+    resolveSupervisorId({
+      supervisorId: candidateId,
+      supervisorName: candidateName,
+      supervisorIndex,
+    });
+
+  const resolveSupervisorNameFor = (supervisorId, fallbackName) =>
+    resolveSupervisorLabel({
+      supervisorId,
+      supervisorName: fallbackName,
+      peopleIndex,
+      supervisorIndex,
+    });
+
+  const fallbackSupervisorName = trimValue(student.supervisor || "");
+  const fallbackSupervisorId = resolveSupervisorIdFor(
+    student.supervisorId,
+    fallbackSupervisorName,
+  );
+  const resolvedSupervisorName = resolveSupervisorNameFor(
+    fallbackSupervisorId,
+    fallbackSupervisorName,
+  );
 
   const jobsArray = Array.isArray(student.jobs) ? student.jobs : [];
   const normalizedJobs = jobsArray
@@ -83,9 +116,19 @@ const prepareStudentPayload = (student) => {
           ? job.buildings
           : job.location;
       const locations = normalizeBuildingList(buildingSource);
+      const fallbackJobSupervisor = trimValue(job.supervisor || "");
+      const resolvedJobSupervisorId = resolveSupervisorIdFor(
+        job.supervisorId,
+        fallbackJobSupervisor,
+      );
+      const resolvedJobSupervisor = resolveSupervisorNameFor(
+        resolvedJobSupervisorId,
+        fallbackJobSupervisor,
+      );
       return {
         jobTitle: trimValue(job.jobTitle || ""),
-        supervisor: trimValue(job.supervisor || ""),
+        supervisor: resolvedJobSupervisor,
+        supervisorId: resolvedJobSupervisorId,
         hourlyRate: trimValue(job.hourlyRate || ""),
         location: locations,
         buildings: locations, // Keep both for compatibility
@@ -134,7 +177,10 @@ const prepareStudentPayload = (student) => {
     jobTitle: hasJobs ? primaryJob.jobTitle || "" : trimValue(student.jobTitle || ""),
     supervisor: hasJobs
       ? primaryJob.supervisor || ""
-      : trimValue(student.supervisor || ""),
+      : resolvedSupervisorName,
+    supervisorId: hasJobs
+      ? primaryJob.supervisorId || ""
+      : fallbackSupervisorId,
     hourlyRate: hasJobs
       ? primaryJob.hourlyRate || ""
       : trimValue(student.hourlyRate || ""),
@@ -161,7 +207,13 @@ const toComparableValue = (value) => {
  */
 const StudentDirectory = () => {
   const navigate = useNavigate();
-  const { studentData, selectedSemester, selectedSemesterMeta } = useData();
+  const {
+    studentData,
+    selectedSemester,
+    selectedSemesterMeta,
+    rawPeople,
+    peopleIndex,
+  } = useData();
   const { handleStudentUpdate, handleStudentDelete } = usePeopleOperations();
   const { showNotification } = useUI();
   const { buildingConfigVersion } = useAppConfig();
@@ -218,19 +270,56 @@ const StudentDirectory = () => {
     return Array.from(buildings).filter(Boolean).sort();
   }, [studentData, buildingConfigVersion]);
 
+  const supervisorIndex = useMemo(
+    () => buildSupervisorIndex(rawPeople || []),
+    [rawPeople],
+  );
+  const supervisorOptions = supervisorIndex.options || [];
+
+  const resolveSupervisorName = useCallback(
+    (supervisorId, fallbackName) =>
+      resolveSupervisorLabel({
+        supervisorId,
+        supervisorName: fallbackName,
+        peopleIndex,
+        supervisorIndex,
+      }),
+    [peopleIndex, supervisorIndex],
+  );
+
+  const getStudentSupervisorNames = useCallback(
+    (student) => {
+      const names = new Set();
+      if (!student) return [];
+      const baseName = resolveSupervisorName(
+        student.supervisorId,
+        student.supervisor,
+      );
+      if (baseName) names.add(baseName);
+      if (Array.isArray(student.jobs)) {
+        student.jobs.forEach((job) => {
+          const resolved = resolveSupervisorName(
+            job?.supervisorId || student.supervisorId,
+            job?.supervisor || student.supervisor,
+          );
+          if (resolved) names.add(resolved);
+        });
+      }
+      return Array.from(names);
+    },
+    [resolveSupervisorName],
+  );
+
   // Get available supervisors and job titles
   const availableSupervisors = useMemo(() => {
     const supervisors = new Set();
     studentData.forEach((student) => {
-      if (student.supervisor) supervisors.add(student.supervisor);
-      if (Array.isArray(student.jobs)) {
-        student.jobs.forEach((j) => {
-          if (j?.supervisor) supervisors.add(j.supervisor);
-        });
-      }
+      getStudentSupervisorNames(student).forEach((name) =>
+        supervisors.add(name),
+      );
     });
     return Array.from(supervisors).sort();
-  }, [studentData]);
+  }, [studentData, getStudentSupervisorNames]);
 
   const availableJobTitles = useMemo(() => {
     const titles = new Set();
@@ -250,19 +339,28 @@ const StudentDirectory = () => {
     let filtered = studentData.filter((student) => {
       if (!student) return false;
 
+      const supervisorNames = getStudentSupervisorNames(student);
+
       // Text filter
       if (filterText) {
         const searchText = filterText.toLowerCase();
         const matchesText =
           student.name?.toLowerCase().includes(searchText) ||
           student.email?.toLowerCase().includes(searchText) ||
-          student.supervisor?.toLowerCase().includes(searchText) ||
+          supervisorNames.some((name) =>
+            name.toLowerCase().includes(searchText),
+          ) ||
           student.jobTitle?.toLowerCase().includes(searchText) ||
           (Array.isArray(student.jobs) &&
             student.jobs.some(
               (j) =>
                 (j?.jobTitle || "").toLowerCase().includes(searchText) ||
-                (j?.supervisor || "").toLowerCase().includes(searchText),
+                resolveSupervisorName(
+                  j?.supervisorId || student.supervisorId,
+                  j?.supervisor || student.supervisor,
+                )
+                  .toLowerCase()
+                  .includes(searchText),
             ));
         if (!matchesText) return false;
       }
@@ -308,6 +406,26 @@ const StudentDirectory = () => {
           !studentBuildings.some((b) => normalizedFilterBuildings.includes(b))
         )
           return false;
+      }
+
+      // Supervisors filter
+      if (filters.supervisors?.include?.length > 0) {
+        if (
+          !supervisorNames.some((name) =>
+            filters.supervisors.include.includes(name),
+          )
+        ) {
+          return false;
+        }
+      }
+      if (filters.supervisors?.exclude?.length > 0) {
+        if (
+          supervisorNames.some((name) =>
+            filters.supervisors.exclude.includes(name),
+          )
+        ) {
+          return false;
+        }
       }
 
       return true;
@@ -357,6 +475,8 @@ const StudentDirectory = () => {
     nameSort,
     filters,
     selectedSemesterMeta,
+    getStudentSupervisorNames,
+    resolveSupervisorName,
   ]);
 
   const handleSort = (key) => {
@@ -376,7 +496,10 @@ const StudentDirectory = () => {
   // Save handlers with undo tracking
   const handleCreateStudent = async (studentData) => {
     try {
-      const payload = prepareStudentPayload(studentData);
+      const payload = prepareStudentPayload(studentData, {
+        supervisorIndex,
+        peopleIndex,
+      });
 
       // Add semester schedule if applicable
       const scheduleEntry = {
@@ -388,6 +511,7 @@ const StudentDirectory = () => {
         primaryBuilding: payload.primaryBuilding,
         jobTitle: payload.jobTitle,
         supervisor: payload.supervisor,
+        supervisorId: payload.supervisorId,
         hourlyRate: payload.hourlyRate,
         updatedAt: new Date().toISOString(),
       };
@@ -417,7 +541,10 @@ const StudentDirectory = () => {
         studentData.find((student) => student.id === updatedStudent.id) ||
         updatedStudent;
       const originalSnapshot = JSON.parse(JSON.stringify(originalStudent));
-      const payload = prepareStudentPayload(updatedStudent);
+      const payload = prepareStudentPayload(updatedStudent, {
+        supervisorIndex,
+        peopleIndex,
+      });
 
       // Track change for undo
       setChangeHistory((prev) => [
@@ -441,6 +568,7 @@ const StudentDirectory = () => {
         primaryBuilding: payload.primaryBuilding,
         jobTitle: payload.jobTitle,
         supervisor: payload.supervisor,
+        supervisorId: payload.supervisorId,
         hourlyRate: payload.hourlyRate,
         updatedAt: new Date().toISOString(),
       };
@@ -562,11 +690,15 @@ const StudentDirectory = () => {
       }
 
       assignments.forEach((assignment) => {
+        const supervisorName = resolveSupervisorName(
+          assignment.supervisorId || student.supervisorId,
+          assignment.supervisor || student.supervisor,
+        );
         rows.push([
           "Student Worker",
           student.name || "",
           assignment.jobTitle || "",
-          assignment.supervisor || "",
+          supervisorName || "",
           student.email || "",
           student.hasNoPhone ? "No Phone" : formatPhoneNumber(student.phone),
           (assignment.buildings || []).join("; "),
@@ -886,17 +1018,16 @@ const StudentDirectory = () => {
               </label>
               <select
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                value=""
+                value={filters.supervisors.include?.[0] || ""}
                 onChange={(e) => {
-                  if (e.target.value) {
-                    setFilters((prev) => ({
-                      ...prev,
-                      supervisors: {
-                        ...prev.supervisors,
-                        include: [e.target.value],
-                      },
-                    }));
-                  }
+                  const value = e.target.value;
+                  setFilters((prev) => ({
+                    ...prev,
+                    supervisors: {
+                      ...prev.supervisors,
+                      include: value ? [value] : [],
+                    },
+                  }));
                 }}
               >
                 <option value="">All Supervisors</option>
@@ -1064,7 +1195,7 @@ const StudentDirectory = () => {
             onSave={handleCreateStudent}
             onCancel={() => setIsWizardOpen(false)}
             availableBuildings={availableBuildings}
-            existingSupervisors={availableSupervisors}
+            supervisorOptions={supervisorOptions}
             existingJobTitles={availableJobTitles}
             semesterLabel={semesterLabel}
           />
@@ -1079,7 +1210,7 @@ const StudentDirectory = () => {
           onClose={() => setEditingStudent(null)}
           onDelete={handleStudentDelete}
           availableBuildings={availableBuildings}
-          existingSupervisors={availableSupervisors}
+          supervisorOptions={supervisorOptions}
           existingJobTitles={availableJobTitles}
           semesterLabel={semesterLabel}
         />

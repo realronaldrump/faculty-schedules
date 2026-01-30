@@ -1,7 +1,7 @@
 {
   "name": "HSD Dashboard",
   "short_name": "HSD",
-  "description": "Baylor University Human Sciences & Design Faculty Schedule Management System",
+  "description": "Baylor University Human Sciences & Design Big Beautiful Dashboard",
   "icons": [
     {
       "src": "/assets/icon-192.png",
@@ -18,4 +18,4 @@
   "display": "standalone",
   "theme_color": "#154734",
   "background_color": "#154734"
-} 
+}

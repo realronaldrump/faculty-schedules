@@ -38,7 +38,7 @@ const StudentAddWizard = ({
   onSave,
   onCancel,
   availableBuildings = [],
-  existingSupervisors = [],
+  supervisorOptions = [],
   existingJobTitles = [],
   semesterLabel = "",
 }) => {
@@ -55,6 +55,21 @@ const StudentAddWizard = ({
   });
   const [errors, setErrors] = useState({});
   const [editingJobIndex, setEditingJobIndex] = useState(null);
+
+  const supervisorLabelById = useMemo(() => {
+    return new Map(
+      (supervisorOptions || [])
+        .filter((option) => option?.id && option?.label)
+        .map((option) => [option.id, option.label]),
+    );
+  }, [supervisorOptions]);
+
+  const resolveSupervisorLabel = (job) => {
+    if (job?.supervisorId && supervisorLabelById.has(job.supervisorId)) {
+      return supervisorLabelById.get(job.supervisorId);
+    }
+    return job?.supervisor || "No supervisor";
+  };
 
   // Validation for each step
   const validateStep = (stepIndex) => {
@@ -355,7 +370,7 @@ const StudentAddWizard = ({
             onCancel={() => setEditingJobIndex(null)}
             onRemove={() => removeJob(idx)}
             availableBuildings={availableBuildings}
-            existingSupervisors={existingSupervisors}
+            supervisorOptions={supervisorOptions}
             existingJobTitles={existingJobTitles}
           />
         ))}
@@ -388,6 +403,7 @@ const StudentAddWizard = ({
             job={{
               jobTitle: "",
               supervisor: "",
+              supervisorId: "",
               hourlyRate: "",
               buildings: [],
               weeklySchedule: [],
@@ -398,7 +414,7 @@ const StudentAddWizard = ({
             onSave={addJob}
             onCancel={() => setEditingJobIndex(null)}
             availableBuildings={availableBuildings}
-            existingSupervisors={existingSupervisors}
+            supervisorOptions={supervisorOptions}
             existingJobTitles={existingJobTitles}
           />
         </div>
@@ -499,7 +515,7 @@ const StudentAddWizard = ({
               >
                 <p className="font-medium">{job.jobTitle}</p>
                 <p className="text-gray-600">
-                  {job.supervisor || "No supervisor"} • $
+                  {resolveSupervisorLabel(job)} • $
                   {job.hourlyRate || "0.00"}/hr
                 </p>
                 <p className="text-gray-500 text-xs">

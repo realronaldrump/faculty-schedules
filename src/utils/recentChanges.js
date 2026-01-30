@@ -243,6 +243,7 @@ const getFieldDisplayNames = () => {
     'program': 'Program',
     'department': 'Department',
     'supervisor': 'Supervisor',
+    'supervisorId': 'Supervisor (linked)',
     'startDate': 'Start Date',
     'hourlyRate': 'Hourly Rate',
     'workSchedule': 'Work Schedule',

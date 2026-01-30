@@ -21,6 +21,7 @@ export const DEFAULT_PERSON_SCHEMA = {
   phone: "",
   jobTitle: "",
   supervisor: "",
+  supervisorId: "",
   hourlyRate: "",
   department: "",
   office: "",
@@ -130,6 +131,8 @@ const normalizeStudentJobs = (jobs) => {
     if (!job || typeof job !== "object") return job;
     return {
       ...job,
+      supervisor: normalizeString(job.supervisor),
+      supervisorId: normalizeString(job.supervisorId),
       location: normalizeJobLocations(job.location),
     };
   });
@@ -237,6 +240,7 @@ export const standardizePerson = (person = {}, options = {}) => {
     phone,
     jobTitle: normalizeString(source.jobTitle),
     supervisor: normalizeString(source.supervisor),
+    supervisorId: normalizeString(source.supervisorId),
     hourlyRate: normalizeString(source.hourlyRate),
     department: normalizeString(source.department),
     office: normalizeString(source.office),
@@ -417,6 +421,7 @@ const scorePersonCompleteness = (person = {}) => {
     "phone",
     "jobTitle",
     "supervisor",
+    "supervisorId",
     "hourlyRate",
     "department",
     "office",

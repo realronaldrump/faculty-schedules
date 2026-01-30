@@ -182,7 +182,7 @@ const Sidebar = ({
             const sectionAllowed = hasChildren
               ? visibleChildren.length > 0
               : canAccess(item.accessId || item.path || item.id) &&
-                !shouldHideForRole(item);
+              !shouldHideForRole(item);
 
             if (!sectionAllowed) {
               return null;
@@ -209,8 +209,8 @@ const Sidebar = ({
                     <Icon
                       size={20}
                       className={`flex-shrink-0 ${itemIsActive
-                          ? "text-white"
-                          : "text-gray-500 group-hover:text-baylor-green"
+                        ? "text-white"
+                        : "text-gray-500 group-hover:text-baylor-green"
                         }`}
                     />
                     {!collapsed && (
@@ -245,8 +245,8 @@ const Sidebar = ({
                               onNavigate(child.path);
                             }}
                             className={`nav-sub-item w-full text-left ${isCurrentPage(child.path)
-                                ? "nav-sub-item-active"
-                                : "nav-sub-item-inactive"
+                              ? "nav-sub-item-active"
+                              : "nav-sub-item-inactive"
                               }`}
                           >
                             <span className="text-sm font-['DM_Sans']">
@@ -288,7 +288,7 @@ const Sidebar = ({
               Human Sciences & Design
             </div>
             <div className="text-xs text-gray-400 mt-2 font-['DM_Sans']">
-              Faculty Schedule Management System
+              Davis's Big Beautiful Dashboard
             </div>
           </div>
         ) : (

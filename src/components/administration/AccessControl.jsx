@@ -675,30 +675,31 @@ const AccessControl = () => {
                 </div>
 
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                  <div className="overflow-x-auto">
+                    <table className="university-table min-w-full">
+                      <thead>
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        <th className="table-header-cell">
                           User
                         </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        <th className="table-header-cell">
                           Roles
                         </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        <th className="table-header-cell">
                           Status
                         </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        <th className="table-header-cell">
                           Last Login
                         </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        <th className="table-header-cell">
                           Date Created
                         </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        <th className="table-header-cell">
                           Actions
                         </th>
                       </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                      </thead>
+                      <tbody>
                       {filteredUsers.map((u) => {
                         const roles = normalizeRoleList(u.roles);
                         const status = resolveUserStatus(u);
@@ -707,10 +708,13 @@ const AccessControl = () => {
                         const isSelected = selectedUserId === u.id;
 
                         return (
-                          <tr key={u.id} className={`transition-colors ${isSelected
-                            ? "bg-baylor-green/5 border-l-2 border-baylor-green"
-                            : "hover:bg-gray-50"
-                            }`}>
+                          <tr
+                            key={u.id}
+                            className={`transition-colors ${isSelected
+                              ? "bg-baylor-green/5 border-l-2 border-baylor-green"
+                              : ""
+                              }`}
+                          >
                             <td className="px-4 py-3">
                               <button
                                 className="text-baylor-green hover:underline font-medium text-sm"
@@ -802,8 +806,9 @@ const AccessControl = () => {
                           </tr>
                         );
                       })}
-                    </tbody>
-                  </table>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
 

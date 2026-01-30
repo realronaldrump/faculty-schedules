@@ -1873,34 +1873,34 @@ const RoomGridGenerator = () => {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full text-sm" role="table">
+                <table className="university-table min-w-full" role="table">
                   <thead>
-                    <tr className="text-left text-gray-600">
-                      <th className="py-2 pr-4" scope="col">Title</th>
-                      <th className="py-2 pr-4" scope="col">Building</th>
-                      <th className="py-2 pr-4" scope="col">Room</th>
-                      <th className="py-2 pr-4" scope="col">Pattern</th>
-                      <th className="py-2 pr-4" scope="col">Semester</th>
-                      <th className="py-2 pr-4" scope="col">Created</th>
-                      <th className="py-2" scope="col">Actions</th>
+                    <tr>
+                      <th className="table-header-cell" scope="col">Title</th>
+                      <th className="table-header-cell" scope="col">Building</th>
+                      <th className="table-header-cell" scope="col">Room</th>
+                      <th className="table-header-cell" scope="col">Pattern</th>
+                      <th className="table-header-cell" scope="col">Semester</th>
+                      <th className="table-header-cell" scope="col">Created</th>
+                      <th className="table-header-cell" scope="col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {savedGrids.map((g) => (
-                      <tr key={g.id} className="border-t border-gray-200 hover:bg-gray-50">
-                        <td className="py-2 pr-4 font-medium">{g.title}</td>
-                        <td className="py-2 pr-4">{g.building}</td>
-                        <td className="py-2 pr-4">{g.room}</td>
-                        <td className="py-2 pr-4">
+                      <tr key={g.id}>
+                        <td className="table-cell font-medium">{g.title}</td>
+                        <td className="table-cell">{g.building}</td>
+                        <td className="table-cell">{g.room}</td>
+                        <td className="table-cell">
                           {g.dayType === "WEEK" ? "Full Week" : g.dayType === "MWF" ? "Mon/Wed/Fri" : "Tue/Thu"}
                         </td>
-                        <td className="py-2 pr-4">{g.semester}</td>
-                        <td className="py-2 pr-4 text-gray-600">
+                        <td className="table-cell">{g.semester}</td>
+                        <td className="table-cell text-gray-600">
                           {g.createdAt
                             ? new Date(g.createdAt).toLocaleDateString()
                             : "Unknown"}
                         </td>
-                        <td className="py-2 space-x-2">
+                        <td className="table-cell space-x-2">
                           <button
                             onClick={() => loadGrid(g)}
                             className="btn-secondary text-sm py-1 px-3"

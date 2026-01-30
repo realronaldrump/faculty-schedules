@@ -290,29 +290,29 @@ const BaylorIDManager = ({ embedded = false }) => {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="university-table">
               <thead>
-                <tr className="bg-baylor-green/5">
-                  <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">
+                <tr>
+                  <th className="table-header-cell">
                     Name
                   </th>
-                  <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">
+                  <th className="table-header-cell">
                     Roles
                   </th>
-                  <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">
+                  <th className="table-header-cell">
                     Baylor ID
                   </th>
-                  <th className="px-4 py-3"></th>
+                  <th className="table-header-cell" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody>
                 {filtered.map((person) => {
                   const roles = getDisplayRoleLabels(person);
                   const isEditing = editingId === person.id;
                   const hasId =
                     person.baylorId && person.baylorId.trim() !== "";
                   return (
-                    <tr key={person.id} className="hover:bg-gray-50">
+                    <tr key={person.id}>
                       <td className="px-4 py-3">
                         <div
                           className="text-gray-900 font-medium cursor-pointer hover:text-baylor-green"

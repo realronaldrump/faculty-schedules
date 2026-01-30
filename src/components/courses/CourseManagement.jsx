@@ -1147,9 +1147,9 @@ const CourseManagement = ({ embedded = false }) => {
   const DataTableHeader = ({ columnKey, label }) => {
     const isSorted = sortConfig.key === columnKey;
     return (
-      <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">
+      <th className="table-header-cell">
         <button
-          className="flex items-center gap-1"
+          className="flex items-center gap-1 hover:text-baylor-green/80 transition-colors"
           onClick={() => handleSort(columnKey)}
         >
           {label}
@@ -2048,9 +2048,9 @@ const CourseManagement = ({ embedded = false }) => {
         <div className="overflow-x-auto">
           <table
             key={`table-${filteredAndSortedData.length}-${JSON.stringify(sortConfig)}`}
-            className="w-full text-sm"
+            className="university-table"
           >
-            <thead className="bg-baylor-green/5">
+            <thead>
               <tr>
                 <DataTableHeader columnKey="Instructor" label="Instructor" />
                 <DataTableHeader columnKey="Course" label="Course" />
@@ -2073,10 +2073,10 @@ const CourseManagement = ({ embedded = false }) => {
                 <DataTableHeader columnKey="Status" label="Status" />
                 <DataTableHeader columnKey="isOnline" label="Online" />
                 <DataTableHeader columnKey="onlineMode" label="Online Mode" />
-                <th className="px-4 py-3 text-center">Actions</th>
+                <th className="table-header-cell text-center">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody>
               {filteredAndSortedData.length > 0 ? (
                 filteredAndSortedData.map((row) => {
                   const isAsynchronous =
@@ -2090,7 +2090,7 @@ const CourseManagement = ({ embedded = false }) => {
                   return (
                     <tr
                       key={`${row.id}|${row.CRN || ""}|${row.Term || ""}|${row.Section || ""}`}
-                      className="hover:bg-gray-50"
+                      className="transition-colors"
                     >
                     {editingRowId === row.id ? (
                       <>

@@ -17,12 +17,12 @@ const Row = ({ index, style, data: itemData }) => {
     return (
         <div
             style={style}
-            className={`flex items-center border-b border-gray-200 hover:bg-gray-50 transition-colors ${isEditing ? 'bg-baylor-gold/5' : 'bg-white'}`}
+            className={`flex items-center border-b border-gray-100 hover:bg-gray-50/50 transition-colors ${isEditing ? 'bg-baylor-gold/5' : 'bg-white'}`}
         >
             {columns.map((col) => (
                 <div
                     key={col.key}
-                    className={`px-4 py-4 flex-1 min-w-0 overflow-hidden text-sm text-gray-900 ${col.className || ''} ${onRowClick && !isEditing ? 'cursor-pointer' : ''}`}
+                    className={`table-cell flex-1 min-w-0 overflow-hidden text-gray-900 ${col.className || ''} ${onRowClick && !isEditing ? 'cursor-pointer' : ''}`}
                     onClick={() => {
                         if (onRowClick && !isEditing) {
                             onRowClick(record);
@@ -36,7 +36,7 @@ const Row = ({ index, style, data: itemData }) => {
                 </div>
             ))}
             {renderActions && (
-                <div className="px-4 py-4 w-32 text-right flex-none flex items-center justify-end gap-1">
+                <div className="table-cell w-32 text-right flex-none flex items-center justify-end gap-1">
                     {renderActions(record, isEditing)}
                 </div>
             )}
@@ -73,7 +73,7 @@ const PeopleDataTable = ({
     return (
         <div className="w-full bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col h-[75vh] min-h-[500px] shadow-sm">
             {/* Header */}
-            <div className="flex bg-baylor-green/5 border-b border-gray-200 shrink-0">
+            <div className="flex bg-gray-50 border-b border-gray-200 shrink-0">
                 {columns.map((col) => (
                     <SortableHeader
                         as="div"
@@ -86,7 +86,7 @@ const PeopleDataTable = ({
                     />
                 ))}
                 {renderActions && (
-                    <div className="px-4 py-3 w-32 flex-none font-serif font-semibold text-baylor-green">Actions</div>
+                    <div className="table-header-cell w-32 flex-none text-right">Actions</div>
                 )}
             </div>
 

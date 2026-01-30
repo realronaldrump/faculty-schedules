@@ -1020,27 +1020,27 @@ const TemperatureTrends = ({
               Room Stats
             </h3>
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50">
+              <table className="university-table min-w-full">
+                <thead>
                   <tr>
-                    <th className="text-left px-3 py-2 text-gray-500 font-semibold">
+                    <th className="table-header-cell">
                       Room
                     </th>
-                    <th className="text-left px-3 py-2 text-gray-500 font-semibold">
+                    <th className="table-header-cell">
                       Latest
                     </th>
-                    <th className="text-left px-3 py-2 text-gray-500 font-semibold">
+                    <th className="table-header-cell">
                       Min
                     </th>
-                    <th className="text-left px-3 py-2 text-gray-500 font-semibold">
+                    <th className="table-header-cell">
                       Max
                     </th>
-                    <th className="text-left px-3 py-2 text-gray-500 font-semibold">
+                    <th className="table-header-cell">
                       Avg
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody>
                   {statsRows.map((row) => {
                     const range = idealRangeBySpaceKey.has(row.spaceKey)
                       ? idealRangeBySpaceKey.get(row.spaceKey)
@@ -1054,10 +1054,10 @@ const TemperatureTrends = ({
                           : "text-baylor-green bg-baylor-green/10";
                     return (
                       <tr key={row.spaceKey}>
-                        <td className="px-3 py-2 text-gray-700">
+                        <td className="table-cell text-gray-700">
                           {row.spaceLabel}
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="table-cell">
                           <span
                             className={`px-2 py-1 rounded-full text-xs font-semibold ${tone}`}
                           >
@@ -1065,13 +1065,13 @@ const TemperatureTrends = ({
                             {unitLabel}
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-gray-600">
+                        <td className="table-cell text-gray-600">
                           {row.min != null ? row.min.toFixed(1) : "—"}
                         </td>
-                        <td className="px-3 py-2 text-gray-600">
+                        <td className="table-cell text-gray-600">
                           {row.max != null ? row.max.toFixed(1) : "—"}
                         </td>
-                        <td className="px-3 py-2 text-gray-600">
+                        <td className="table-cell text-gray-600">
                           {row.avg != null ? row.avg.toFixed(1) : "—"}
                         </td>
                       </tr>

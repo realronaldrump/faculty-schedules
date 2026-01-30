@@ -106,28 +106,28 @@ const ImprovedStudentTable = ({
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-baylor-green text-white">
+        <table className="university-table">
+          <thead>
             <tr>
-              <th className="px-4 py-3 text-left text-sm font-medium">
+              <th className="table-header-cell">
                 Student
               </th>
-              <th className="px-4 py-3 text-left text-sm font-medium">
+              <th className="table-header-cell">
                 Status
               </th>
-              <th className="px-4 py-3 text-left text-sm font-medium">Jobs</th>
-              <th className="px-4 py-3 text-left text-sm font-medium">
+              <th className="table-header-cell">Jobs</th>
+              <th className="table-header-cell">
                 Contact
               </th>
-              <th className="px-4 py-3 text-left text-sm font-medium">
+              <th className="table-header-cell">
                 Hours/Week
               </th>
-              <th className="px-4 py-3 text-right text-sm font-medium">
+              <th className="table-header-cell text-right">
                 Actions
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody>
             {students.map((student) => {
               const isExpanded = expandedIds.has(student.id);
               const status = getStudentStatus(student, semesterMeta);
@@ -142,7 +142,7 @@ const ImprovedStudentTable = ({
               return (
                 <React.Fragment key={student.id}>
                   {/* Main Row */}
-                  <tr className="hover:bg-gray-50 transition-colors">
+                  <tr className="transition-colors">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-baylor-green/10 flex items-center justify-center flex-shrink-0">

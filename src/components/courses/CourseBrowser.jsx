@@ -375,7 +375,7 @@ const CourseBrowser = ({ embedded = false }) => {
 
   const SortableHeader = ({ label, sortKey }) => (
     <th
-      className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+      className="table-header-cell cursor-pointer select-none hover:text-baylor-green/80 transition-colors"
       onClick={() => handleSort(sortKey)}
     >
       <div className="flex items-center gap-1">
@@ -518,8 +518,8 @@ const CourseBrowser = ({ embedded = false }) => {
       {/* Course Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
+          <table className="university-table">
+            <thead>
               <tr>
                 <SortableHeader label="Course" sortKey="Course" />
                 <SortableHeader label="Section" sortKey="Section" />
@@ -531,7 +531,7 @@ const CourseBrowser = ({ embedded = false }) => {
                 <SortableHeader label="Max Enrollment" sortKey="Max Enrollment" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody>
               {sortedData.length === 0 ? (
                 <tr>
                   <td
@@ -559,7 +559,7 @@ const CourseBrowser = ({ embedded = false }) => {
                   return (
                     <tr
                       key={item.id || `${item.Course}-${item.Section}-${index}`}
-                      className="hover:bg-gray-50 cursor-pointer transition-colors"
+                      className="cursor-pointer transition-colors"
                       onClick={() => setSelectedCourse(item)}
                     >
                       <td className="px-4 py-3 font-medium text-baylor-green">

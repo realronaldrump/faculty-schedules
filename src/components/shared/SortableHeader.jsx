@@ -26,7 +26,7 @@ const SortableHeader = ({
         : <ArrowUpDown size={14} className="opacity-30" />;
 
     return (
-        <Component className={`px-4 py-3 text-left font-serif font-semibold text-baylor-green ${className}`}>
+        <Component className={`table-header-cell ${className}`}>
             <button
                 className="flex items-center gap-2 hover:text-baylor-green/80 transition-colors"
                 onClick={() => onSort(columnKey)}

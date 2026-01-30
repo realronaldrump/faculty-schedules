@@ -378,18 +378,18 @@ const BaylorAcronyms = () => {
             {category}
           </h2>
           <div className="overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-200">
-            <table className="min-w-full">
-              <thead className="bg-gray-50">
+            <table className="university-table min-w-full">
+              <thead>
                 <tr>
-                  <th className="th-style text-left w-1/6">Acronym</th>
-                  <th className="th-style text-left w-1/4">Stands For</th>
-                  <th className="th-style text-left w-1/3">
+                  <th className="table-header-cell w-1/6">Acronym</th>
+                  <th className="table-header-cell w-1/4">Stands For</th>
+                  <th className="table-header-cell w-1/3">
                     Description/Context
                   </th>
-                  <th className="th-style w-auto text-right pr-6">Actions</th>
+                  <th className="table-header-cell text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody>
                 {acronyms
                   .filter((a) => a.category === category)
                   .map((acronym) => (

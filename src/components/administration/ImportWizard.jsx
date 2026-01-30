@@ -459,13 +459,13 @@ const ImportWizard = ({ embedded = false }) => {
                 Data Preview (all rows)
               </div>
               <div className="overflow-x-auto">
-                <table className="min-w-full text-xs">
+                <table className="university-table university-table--compact min-w-full">
                   <thead>
-                    <tr className="border-b">
+                    <tr>
                       {previewHeaders.map((h) => (
                         <th
                           key={h}
-                          className="text-left py-2 px-3 font-medium text-gray-700 align-top"
+                          className="table-header-cell align-top"
                         >
                           {h}
                         </th>
@@ -474,7 +474,7 @@ const ImportWizard = ({ embedded = false }) => {
                   </thead>
                   <tbody>
                     {parsedPreviewRows.map((row, idx) => (
-                      <tr key={idx} className="border-b border-gray-100">
+                      <tr key={idx}>
                         {previewHeaders.map((header) => {
                           const value = row[header];
                           const display =
@@ -484,7 +484,7 @@ const ImportWizard = ({ embedded = false }) => {
                           return (
                             <td
                               key={header}
-                              className="py-2 px-3 text-gray-800 whitespace-pre-wrap break-words align-top"
+                              className="table-cell text-gray-800 whitespace-pre-wrap break-words align-top"
                             >
                               {display}
                             </td>

@@ -376,39 +376,39 @@ const BuildingDirectory = ({ embedded = false }) => {
                   {isExpanded && (
                     <div className="border-t border-gray-200">
                       <div className="overflow-x-auto">
-                        <table className="min-w-full">
-                          <thead className="bg-gray-50">
+                        <table className="university-table min-w-full">
+                          <thead>
                             <tr>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="table-header-cell">
                                 Room
                               </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="table-header-cell">
                                 Name & Role
                               </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="table-header-cell">
                                 Position
                               </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="table-header-cell">
                                 Contact
                               </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="table-header-cell">
                                 Actions
                               </th>
                             </tr>
                           </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
+                          <tbody>
                             {building.people.map((person) => {
                               // Ensure a unique key by combining id and roleType (faculty/staff)
                               const rowKey = `${person.id}-${person.roleType}`;
                               return (
                                 <tr
                                   key={rowKey}
-                                  className="hover:bg-gray-50 cursor-pointer"
+                                  className="cursor-pointer"
                                   onClick={() =>
                                     setSelectedPersonForCard(person)
                                   }
                                 >
-                                  <td className="px-4 py-3 whitespace-nowrap">
+                                  <td className="table-cell whitespace-nowrap">
                                     <div className="flex items-center gap-2">
                                       <MapPin
                                         size={14}
@@ -425,7 +425,7 @@ const BuildingDirectory = ({ embedded = false }) => {
                                     )}
                                   </td>
 
-                                  <td className="px-4 py-3 whitespace-nowrap">
+                                  <td className="table-cell whitespace-nowrap">
                                     <div>
                                       <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
                                         {person.name}
@@ -449,7 +449,7 @@ const BuildingDirectory = ({ embedded = false }) => {
                                     </div>
                                   </td>
 
-                                  <td className="px-4 py-3 whitespace-nowrap">
+                                  <td className="table-cell whitespace-nowrap">
                                     <div className="text-sm text-gray-900">
                                       {person.jobTitle || "-"}
                                     </div>
@@ -473,7 +473,7 @@ const BuildingDirectory = ({ embedded = false }) => {
                                     </div>
                                   </td>
 
-                                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                                  <td className="table-cell whitespace-nowrap text-gray-500">
                                     <div className="space-y-1">
                                       {person.email && (
                                         <div className="flex items-center gap-1">
@@ -502,7 +502,7 @@ const BuildingDirectory = ({ embedded = false }) => {
                                     </div>
                                   </td>
 
-                                  <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
+                                  <td className="table-cell whitespace-nowrap font-medium">
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();

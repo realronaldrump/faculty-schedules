@@ -1045,30 +1045,30 @@ const OutlookRoomExport = () => {
             </div>
 
             <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="university-table min-w-full">
+                <thead>
                   <tr>
                     <th
                       scope="col"
-                      className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500"
+                      className="table-header-cell"
                     >
                       Date
                     </th>
                     <th
                       scope="col"
-                      className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500"
+                      className="table-header-cell"
                     >
                       Label
                     </th>
-                    <th scope="col" className="px-4 py-2" />
+                    <th scope="col" className="table-header-cell" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 bg-white">
+                <tbody>
                   {(activeTermConfig.exceptions || []).length === 0 && (
                     <tr>
                       <td
                         colSpan={3}
-                        className="px-4 py-4 text-sm text-gray-500 text-center"
+                        className="table-cell text-gray-500 text-center"
                       >
                         No exception dates added yet.
                       </td>
@@ -1077,19 +1077,19 @@ const OutlookRoomExport = () => {
                   {(activeTermConfig.exceptions || []).map(
                     (exception, index) => (
                       <tr key={`${exception.date}-${exception.label}-${index}`}>
-                        <td className="px-4 py-2 text-sm text-gray-800">
+                        <td className="table-cell text-gray-800">
                           {exception.date
                             ? new Date(
                                 `${exception.date}T00:00:00`,
                               ).toLocaleDateString()
                             : ""}
                         </td>
-                        <td className="px-4 py-2 text-sm text-gray-700">
+                        <td className="table-cell text-gray-700">
                           {exception.label || (
                             <span className="text-gray-400">(no label)</span>
                           )}
                         </td>
-                        <td className="px-4 py-2 text-right">
+                        <td className="table-cell text-right">
                           <button
                             type="button"
                             onClick={() => removeException(index)}

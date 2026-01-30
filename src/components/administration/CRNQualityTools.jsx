@@ -323,27 +323,27 @@ const CRNQualityTools = () => {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                  <table className="university-table min-w-full">
+                    <thead>
                       <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        <th className="table-header-cell">
                           Semester
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        <th className="table-header-cell">
                           Course
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        <th className="table-header-cell">
                           Section
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        <th className="table-header-cell">
                           CRN
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        <th className="table-header-cell">
                           Actions
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody>
                       {group.records.map((rec) => {
                         const row = (schedules || []).find(
                           (s) => s.id === rec.id,
@@ -363,16 +363,16 @@ const CRNQualityTools = () => {
                           : row.crn || "";
                         return (
                           <tr key={row.id}>
-                            <td className="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">
+                            <td className="table-cell text-gray-700 whitespace-nowrap">
                               {row.term}
                             </td>
-                            <td className="px-4 py-2 text-sm text-gray-900 whitespace-nowrap font-medium">
+                            <td className="table-cell text-gray-900 whitespace-nowrap font-medium">
                               {row.courseCode}
                             </td>
-                            <td className="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">
+                            <td className="table-cell text-gray-700 whitespace-nowrap">
                               {row.section}
                             </td>
-                            <td className="px-4 py-2 text-sm text-gray-900 whitespace-nowrap">
+                            <td className="table-cell text-gray-900 whitespace-nowrap">
                               {isEditing ? (
                                 <input
                                   type="text"
@@ -388,7 +388,7 @@ const CRNQualityTools = () => {
                                 <span className="font-semibold">{row.crn}</span>
                               )}
                             </td>
-                            <td className="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">
+                            <td className="table-cell text-gray-700 whitespace-nowrap">
                               {isEditing ? (
                                 <div className="flex items-center gap-2">
                                   {canEditHere && (
@@ -526,30 +526,30 @@ const CRNQualityTools = () => {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="university-table min-w-full">
+              <thead>
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  <th className="table-header-cell">
                     Semester
                   </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  <th className="table-header-cell">
                     Course
                   </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  <th className="table-header-cell">
                     Section
                   </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  <th className="table-header-cell">
                     CRN
                   </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  <th className="table-header-cell">
                     Instructor
                   </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  <th className="table-header-cell">
                     Program
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody>
                 {filteredSchedules.map((row) => {
                   const effectiveCrn = (row.crn || row.CRN || "").toString();
                   const isMissing = !effectiveCrn.trim();
@@ -560,17 +560,17 @@ const CRNQualityTools = () => {
                       key={row.id}
                       className={isMissing ? "bg-red-50/40" : ""}
                     >
-                      <td className="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">
+                      <td className="table-cell text-gray-700 whitespace-nowrap">
                         {row.term}
                       </td>
-                      <td className="px-4 py-2 text-sm text-gray-900 whitespace-nowrap font-medium">
+                      <td className="table-cell text-gray-900 whitespace-nowrap font-medium">
                         {row.courseCode}
                       </td>
-                      <td className="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">
+                      <td className="table-cell text-gray-700 whitespace-nowrap">
                         {row.section}
                       </td>
                       <td
-                        className={`px-4 py-2 text-sm whitespace-nowrap ${isMissing ? "text-red-700" : "text-gray-900"}`}
+                        className={`table-cell whitespace-nowrap ${isMissing ? "text-red-700" : "text-gray-900"}`}
                       >
                         {isMissing ? (
                           <div className="flex items-center gap-2">
@@ -596,10 +596,10 @@ const CRNQualityTools = () => {
                           <span className="font-semibold">{effectiveCrn}</span>
                         )}
                       </td>
-                      <td className="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">
+                      <td className="table-cell text-gray-700 whitespace-nowrap">
                         {row.instructorName || "Staff"}
                       </td>
-                      <td className="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">
+                      <td className="table-cell text-gray-700 whitespace-nowrap">
                         {programName}
                       </td>
                     </tr>

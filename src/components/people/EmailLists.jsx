@@ -1600,10 +1600,10 @@ const EmailLists = ({ embedded = false }) => {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="university-table min-w-full">
+                <thead>
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left">
+                    <th scope="col" className="table-header-cell w-12">
                       <input
                         type="checkbox"
                         checked={isAllSelected}
@@ -1614,10 +1614,7 @@ const EmailLists = ({ embedded = false }) => {
                         className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                       />
                     </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
+                    <th scope="col" className="table-header-cell">
                       <button
                         className="flex items-center gap-2"
                         onClick={() => handleSort("name")}
@@ -1632,10 +1629,7 @@ const EmailLists = ({ embedded = false }) => {
                         </span>
                       </button>
                     </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
+                    <th scope="col" className="table-header-cell">
                       <button
                         className="flex items-center gap-2"
                         onClick={() => handleSort("role")}
@@ -1650,10 +1644,7 @@ const EmailLists = ({ embedded = false }) => {
                         </span>
                       </button>
                     </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
+                    <th scope="col" className="table-header-cell">
                       <button
                         className="flex items-center gap-2"
                         onClick={() => handleSort("status")}
@@ -1670,10 +1661,10 @@ const EmailLists = ({ embedded = false }) => {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody>
                   {filteredData.map((person) => (
-                    <tr key={person.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
+                    <tr key={person.id}>
+                      <td className="table-cell whitespace-nowrap">
                         <input
                           type="checkbox"
                           checked={selectedPeople.includes(person.id)}
@@ -1681,7 +1672,7 @@ const EmailLists = ({ embedded = false }) => {
                           className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                         />
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="table-cell whitespace-nowrap">
                         <button
                           onClick={() => setSelectedFacultyForCard(person)}
                           className="font-medium text-gray-900 hover:text-baylor-green text-left hover:underline"
@@ -1692,7 +1683,7 @@ const EmailLists = ({ embedded = false }) => {
                           {person.email || "No email"}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="table-cell whitespace-nowrap">
                         <div className="text-sm text-gray-900">
                           {person.jobTitle || "No title"}
                         </div>
@@ -1700,7 +1691,7 @@ const EmailLists = ({ embedded = false }) => {
                           {person.program?.name || "No program"}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="table-cell whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <span
                             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -2038,15 +2029,15 @@ const EmailLists = ({ embedded = false }) => {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="university-table min-w-full">
+                <thead>
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left">
+                    <th scope="col" className="table-header-cell">
                       Selected
                     </th>
                     <th
                       scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer"
+                      className="table-header-cell cursor-pointer"
                       onClick={() => handleStudentSort("name")}
                     >
                       Name{" "}
@@ -2055,24 +2046,18 @@ const EmailLists = ({ embedded = false }) => {
                           ? "▲"
                           : "▼")}
                     </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                    >
+                    <th scope="col" className="table-header-cell">
                       Job Titles
                     </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
-                    >
+                    <th scope="col" className="table-header-cell">
                       Buildings
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody>
                   {filteredStudentData.map((student) => (
-                    <tr key={student.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
+                    <tr key={student.id}>
+                      <td className="table-cell whitespace-nowrap">
                         <input
                           type="checkbox"
                           checked={selectedStudents.includes(student.id)}
@@ -2080,7 +2065,7 @@ const EmailLists = ({ embedded = false }) => {
                           className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                         />
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="table-cell">
                         <div className="font-medium text-gray-900">
                           {student.name}
                         </div>
@@ -2088,10 +2073,10 @@ const EmailLists = ({ embedded = false }) => {
                           {student.email}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
+                      <td className="table-cell text-gray-500">
                         {student.allJobTitles.join(", ") || "-"}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
+                      <td className="table-cell text-gray-500">
                         {student.buildings.map((b) => (
                           <span
                             key={b}

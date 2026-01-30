@@ -211,9 +211,9 @@ const DepartmentInsights = () => {
       <ArrowUpDown size={14} className="inline-block text-gray-400" />
     );
     return (
-      <th className="px-4 py-3 text-left text-sm font-serif font-semibold text-baylor-green">
+      <th className="table-header-cell">
         <button
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 hover:text-baylor-green/80 transition-colors"
           onClick={() => onSort(sortKey)}
         >
           {label}
@@ -465,8 +465,8 @@ const DepartmentInsights = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-baylor-green/5">
+          <table className="university-table">
+            <thead>
               <tr>
                 <SortableHeader
                   label="Professor"
@@ -486,12 +486,12 @@ const DepartmentInsights = () => {
                   currentSort={facultySort}
                   onSort={handleFacultySort}
                 />
-                <th className="px-4 py-3 text-left text-sm font-serif font-semibold text-baylor-green">
+                <th className="table-header-cell">
                   Load Status
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-baylor-green/10">
+            <tbody>
               {sortedFacultyWorkload.map(([instructor, data]) => {
                 const loadStatus =
                   data.totalHours >= 12
@@ -508,7 +508,7 @@ const DepartmentInsights = () => {
                 return (
                   <tr
                     key={instructor}
-                    className="hover:bg-baylor-green/5 transition-colors"
+                    className="transition-colors"
                   >
                     <td className="px-4 py-3 text-sm text-baylor-green font-medium">
                       <button

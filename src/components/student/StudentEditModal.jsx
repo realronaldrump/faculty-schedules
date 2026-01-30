@@ -400,24 +400,24 @@ const StudentEditModal = ({
       <div className="mt-6">
         <h4 className="font-medium text-gray-900 mb-3">Job Breakdown</h4>
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
+          <table className="university-table">
+            <thead>
               <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">
+                <th className="table-header-cell">
                   Job Title
                 </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">
+                <th className="table-header-cell">
                   Rate
                 </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">
+                <th className="table-header-cell">
                   Hours/Week
                 </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">
+                <th className="table-header-cell">
                   Weekly Pay
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody>
               {(formData.jobs || []).map((job, idx) => {
                 const hours = (job.weeklySchedule || []).reduce(
                   (sum, entry) => {
@@ -435,14 +435,14 @@ const StudentEditModal = ({
 
                 return (
                   <tr key={idx}>
-                    <td className="px-4 py-3 font-medium">
+                    <td className="table-cell font-medium">
                       {job.jobTitle || "Untitled Job"}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="table-cell">
                       ${job.hourlyRate || "0.00"}/hr
                     </td>
-                    <td className="px-4 py-3">{hours.toFixed(1)} hrs</td>
-                    <td className="px-4 py-3 font-medium">${pay.toFixed(2)}</td>
+                    <td className="table-cell">{hours.toFixed(1)} hrs</td>
+                    <td className="table-cell font-medium">${pay.toFixed(2)}</td>
                   </tr>
                 );
               })}

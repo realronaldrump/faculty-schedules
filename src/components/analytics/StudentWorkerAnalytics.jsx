@@ -413,9 +413,9 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
     );
 
     return (
-      <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green">
+      <th className="table-header-cell">
         <button
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 hover:text-baylor-green/80 transition-colors"
           onClick={() => handleSort(columnKey)}
         >
           {label}
@@ -825,8 +825,8 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
                   </div>
 
                   <div className="overflow-x-auto -mx-6">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                    <table className="university-table min-w-full">
+                      <thead>
                         <tr>
                           <SortableHeader label="Student" columnKey="student" />
                           <SortableHeader
@@ -837,7 +837,7 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
                             label="Supervisor"
                             columnKey="supervisor"
                           />
-                          <th className="px-4 py-3 text-left text-sm font-serif font-semibold text-baylor-green">
+                          <th className="table-header-cell">
                             Buildings
                           </th>
                           <SortableHeader
@@ -855,7 +855,7 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
                           <SortableHeader label="Status" columnKey="status" />
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-100">
+                      <tbody>
                         {sortedAssignments.map((assignment) => {
                           const { student } = assignment;
                           const buildingsDisplay =
@@ -866,7 +866,7 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
                           return (
                             <tr
                               key={assignment.id}
-                              className="hover:bg-baylor-green/5 cursor-pointer transition-colors"
+                              className="cursor-pointer transition-colors"
                               onClick={() => handleStudentClick(student)}
                             >
                               <td className="px-4 py-3 text-sm">

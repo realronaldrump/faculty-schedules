@@ -276,7 +276,16 @@
 
   /* Professional Tables */
   .university-table {
-    @apply w-full border-collapse bg-white rounded-lg overflow-hidden shadow-sm border border-gray-200;
+    @apply w-full border-collapse bg-white text-sm;
+  }
+
+  .table-header-cell {
+    @apply px-4 py-3 text-left text-sm font-semibold text-baylor-green;
+    font-family: "calluna", Georgia, serif;
+  }
+
+  .table-cell {
+    @apply px-4 py-3 text-sm text-gray-900 align-top;
   }
 
   .university-table thead {
@@ -284,12 +293,16 @@
   }
 
   .university-table th {
-    @apply px-6 py-4 text-left text-sm font-semibold text-baylor-green uppercase tracking-wide;
+    @apply px-4 py-3 text-left text-sm font-semibold text-baylor-green;
     font-family: "calluna", Georgia, serif;
   }
 
   .university-table td {
-    @apply px-6 py-4 text-sm text-gray-900 border-b border-gray-100;
+    @apply px-4 py-3 text-sm text-gray-900 border-b border-gray-100 align-top;
+  }
+
+  .university-table tbody tr {
+    @apply transition-colors;
   }
 
   .university-table tbody tr:hover {
@@ -298,6 +311,15 @@
 
   .university-table tbody tr:last-child td {
     @apply border-b-0;
+  }
+
+  .university-table--compact {
+    @apply text-xs;
+  }
+
+  .university-table--compact th,
+  .university-table--compact td {
+    @apply px-3 py-2 text-xs;
   }
 
   /* Navigation Components */
@@ -781,8 +803,15 @@
   }
   
   .university-table th,
-  .university-table td {
+  .university-table td,
+  .table-header-cell,
+  .table-cell {
     @apply px-3 py-2;
+  }
+
+  .table-header-cell,
+  .table-cell {
+    @apply text-xs;
   }
   
   .page-title {

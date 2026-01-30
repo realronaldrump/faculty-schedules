@@ -21,9 +21,9 @@ const DirectoryTable = ({
 }) => {
     return (
         <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="university-table">
                 <thead>
-                    <tr className="bg-baylor-green/5">
+                    <tr>
                         {columns.map((col) => (
                             <SortableHeader
                                 key={col.key}
@@ -35,13 +35,13 @@ const DirectoryTable = ({
                             />
                         ))}
                         {renderActions && (
-                            <th className="px-4 py-3 text-left font-serif font-semibold text-baylor-green whitespace-nowrap">
+                            <th className="table-header-cell whitespace-nowrap text-right">
                                 Actions
                             </th>
                         )}
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody>
                     {/* Create row at top if present */}
                     {createRow && (
                         <tr className="bg-baylor-gold/5">
@@ -63,7 +63,7 @@ const DirectoryTable = ({
                             return (
                                 <tr
                                     key={rowId}
-                                    className={`hover:bg-gray-50 ${isEditing ? 'bg-baylor-gold/5' : ''}`}
+                                    className={`${isEditing ? 'bg-baylor-gold/5' : ''} transition-colors`}
                                 >
                                     {columns.map((col) => (
                                         <td

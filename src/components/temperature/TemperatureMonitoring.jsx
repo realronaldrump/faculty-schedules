@@ -3017,30 +3017,30 @@ const TemperatureMonitoring = () => {
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-50">
+        <table className="university-table min-w-full">
+          <thead>
             <tr>
-              <th className="text-left px-4 py-2 text-gray-600 font-semibold">
+              <th className="table-header-cell">
                 Room
               </th>
               {snapshotTimes.map((slot) => (
                 <th
                   key={slot.id}
-                  className="text-left px-4 py-2 text-gray-600 font-semibold"
+                  className="table-header-cell"
                 >
                   {slot.label || formatMinutesToLabel(slot.minutes)}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody>
             {roomsForBuilding.map((room) => {
               const spaceKey = room.spaceKey || room.id;
               if (!spaceKey) return null;
               const roomRange = resolveIdealRangeForRoom(room);
               return (
                 <tr key={spaceKey}>
-                  <td className="px-4 py-2 font-medium text-gray-800">
+                  <td className="table-cell font-medium text-gray-800">
                     {getSpaceLabel(room, spacesByKey)}
                   </td>
                   {snapshotTimes.map((slot) => {
@@ -3049,7 +3049,7 @@ const TemperatureMonitoring = () => {
                       !snapshot || snapshot.status === "missing";
                     const tempValueF = resolveSnapshotTempF(snapshot);
                     return (
-                      <td key={slot.id} className="px-4 py-2">
+                      <td key={slot.id} className="table-cell">
                         <span
                           className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${getTempToneClasses({
                             valueF: tempValueF,
@@ -3157,26 +3157,26 @@ const TemperatureMonitoring = () => {
             </select>
             {historicalSpaceKey && (
               <div className="mt-4 overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-gray-50">
+                <table className="university-table min-w-full">
+                  <thead>
                     <tr>
-                      <th className="text-left px-4 py-2 text-gray-600 font-semibold">
+                      <th className="table-header-cell">
                         Date
                       </th>
                       {snapshotTimes.map((slot) => (
                         <th
                           key={slot.id}
-                          className="text-left px-4 py-2 text-gray-600 font-semibold"
+                          className="table-header-cell"
                         >
                           {slot.label || formatMinutesToLabel(slot.minutes)}
                         </th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody>
                     {dates.map((dateKey) => (
                       <tr key={dateKey}>
-                        <td className="px-4 py-2 font-medium text-gray-800">
+                        <td className="table-cell font-medium text-gray-800">
                           {dateKey}
                         </td>
                         {snapshotTimes.map((slot) => {
@@ -3189,7 +3189,7 @@ const TemperatureMonitoring = () => {
                             !snapshot || snapshot.status === "missing";
                           const tempValueF = resolveSnapshotTempF(snapshot);
                           return (
-                            <td key={slot.id} className="px-4 py-2">
+                            <td key={slot.id} className="table-cell">
                               <span
                                 className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${getTempToneClasses({
                                   valueF: tempValueF,
@@ -3479,30 +3479,30 @@ const TemperatureMonitoring = () => {
             </span>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50">
+            <table className="university-table min-w-full">
+              <thead>
                 <tr>
-                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">
+                  <th className="table-header-cell">
                     File
                   </th>
-                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">
+                  <th className="table-header-cell">
                     Device
                   </th>
-                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">
+                  <th className="table-header-cell">
                     Rows
                   </th>
-                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">
+                  <th className="table-header-cell">
                     Date Range
                   </th>
-                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">
+                  <th className="table-header-cell">
                     Status
                   </th>
-                  <th className="text-left px-4 py-2 text-gray-600 font-semibold">
+                  <th className="table-header-cell">
                     Action
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody>
                 {importItems.map((item) => {
                   const rowTotal = item.rowCount ?? 0;
                   const parsedRows = item.parsedCount ?? 0;
@@ -3514,19 +3514,19 @@ const TemperatureMonitoring = () => {
                         : "-";
                   return (
                     <tr key={item.id}>
-                      <td className="px-4 py-2 font-medium text-gray-800">
+                      <td className="table-cell font-medium text-gray-800">
                         {item.fileName}
                       </td>
-                      <td className="px-4 py-2 text-gray-700">
+                      <td className="table-cell text-gray-700">
                         {item.deviceLabel || "-"}
                       </td>
-                      <td className="px-4 py-2 text-gray-700">{rowsLabel}</td>
-                      <td className="px-4 py-2 text-gray-700">
+                      <td className="table-cell text-gray-700">{rowsLabel}</td>
+                      <td className="table-cell text-gray-700">
                         {item.minTimestamp && item.maxTimestamp
                           ? `${item.minTimestamp} -> ${item.maxTimestamp}`
                           : "-"}
                       </td>
-                      <td className="px-4 py-2 text-gray-700">
+                      <td className="table-cell text-gray-700">
                         {item.duplicate ? (
                           <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-2 py-1 text-xs text-gray-600">
                             <AlertTriangle className="w-3 h-3" /> Duplicate
@@ -3542,7 +3542,7 @@ const TemperatureMonitoring = () => {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-2 text-gray-700">
+                      <td className="table-cell text-gray-700">
                         <button
                           type="button"
                           className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
@@ -3647,27 +3647,27 @@ const TemperatureMonitoring = () => {
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
           <h3 className="text-sm font-semibold text-gray-900">Past Imports</h3>
           <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-100">
+            <table className="university-table min-w-full">
+              <thead>
                 <tr>
-                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">
+                  <th className="table-header-cell">
                     Date
                   </th>
-                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">
+                  <th className="table-header-cell">
                     File
                   </th>
-                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">
+                  <th className="table-header-cell">
                     Room/Space
                   </th>
-                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">
+                  <th className="table-header-cell">
                     Rows
                   </th>
-                  <th className="text-left px-3 py-2 text-gray-600 font-semibold">
+                  <th className="table-header-cell">
                     Action
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody>
                 {importHistory.map((item) => {
                   const importDate = item.createdAt?.seconds
                     ? new Date(item.createdAt.seconds * 1000).toLocaleString()
@@ -3684,14 +3684,14 @@ const TemperatureMonitoring = () => {
                   const isMappingSaving = Boolean(importMappingSaving[item.id]);
                   return (
                     <tr key={item.id}>
-                      <td className="px-3 py-2 text-gray-700">{importDate}</td>
+                      <td className="table-cell text-gray-700">{importDate}</td>
                       <td
-                        className="px-3 py-2 text-gray-700 truncate max-w-[200px]"
+                        className="table-cell text-gray-700 truncate max-w-[200px]"
                         title={item.fileName}
                       >
                         {item.fileName || "-"}
                       </td>
-                      <td className="px-3 py-2 text-gray-700">
+                      <td className="table-cell text-gray-700">
                         {item.deviceId ? (
                           <select
                             className="form-input text-xs min-w-[180px]"
@@ -3734,10 +3734,10 @@ const TemperatureMonitoring = () => {
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-gray-700">
+                      <td className="table-cell text-gray-700">
                         {item.rowCount ?? "-"}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="table-cell">
                         <button
                           className="text-red-600 hover:text-red-800 text-xs font-medium flex items-center gap-1"
                           onClick={() => setDeleteImportId(item.id)}

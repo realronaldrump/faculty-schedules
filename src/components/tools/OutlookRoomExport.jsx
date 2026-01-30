@@ -21,7 +21,6 @@ import {
   normalizeTermLabel,
   sortTerms,
 } from "../../utils/termUtils";
-import { usePostHog } from "posthog-js/react";
 import { useAuth } from "../../contexts/AuthContext";
 import { db, COLLECTIONS } from "../../firebase";
 
@@ -257,7 +256,6 @@ const OutlookRoomExport = () => {
   const { showNotification } = useUI();
   const { termConfig, termConfigVersion } = useAppConfig();
   const { canAccess } = useAuth();
-  const posthog = usePostHog();
   const [termExceptions, setTermExceptions] = useState({});
   const [exceptionsLoaded, setExceptionsLoaded] = useState(false);
   const [selectedTerm, setSelectedTerm] = useState("");
@@ -777,19 +775,6 @@ const OutlookRoomExport = () => {
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
-        if (totalEvents > 0) {
-          try {
-            posthog?.capture("export", {
-              export_format: "ICS",
-              data_type: "Outlook room calendars (zip)",
-              record_count: totalEvents,
-              export_mode: "zip",
-              term: selectedTerm,
-            });
-          } catch (error) {
-            console.warn(error);
-          }
-        }
         showNotification?.(
           "success",
           "ZIP ready",
@@ -812,19 +797,6 @@ const OutlookRoomExport = () => {
           document.body.removeChild(link);
           window.URL.revokeObjectURL(url);
         });
-        if (totalEvents > 0) {
-          try {
-            posthog?.capture("export", {
-              export_format: "ICS",
-              data_type: "Outlook room calendars",
-              record_count: totalEvents,
-              export_mode: "ics",
-              term: selectedTerm,
-            });
-          } catch (error) {
-            console.warn(error);
-          }
-        }
         showNotification?.(
           "success",
           "Download complete",

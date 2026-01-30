@@ -2,11 +2,8 @@ import React, {
   createContext,
   useContext,
   useEffect,
-  useMemo,
-  useRef,
   useState,
 } from "react";
-import { usePostHog } from "posthog-js/react";
 import { auth, db } from "../firebase";
 import {
   onAuthStateChanged,
@@ -46,8 +43,6 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [loadedProfile, setLoadedProfile] = useState(false);
   const [loadedAccess, setLoadedAccess] = useState(false);
-  const posthog = usePostHog();
-  const lastIdentifiedRef = useRef(null);
 
   // Removed insecure .env based admin check. Admin access is now strictly role-based.
 
@@ -235,34 +230,6 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     setLoading(!(loadedProfile && loadedAccess));
   }, [loadedProfile, loadedAccess]);
-
-  useEffect(() => {
-    if (!posthog) return;
-    const currentId = user?.uid || null;
-    if (!currentId) {
-      if (lastIdentifiedRef.current) {
-        posthog.reset();
-        lastIdentifiedRef.current = null;
-      }
-      return;
-    }
-
-    if (lastIdentifiedRef.current && lastIdentifiedRef.current !== currentId) {
-      posthog.reset();
-    }
-
-    const role = normalizeRoleList(userProfile?.roles)[0] || "unknown";
-    const status = resolveUserStatus(userProfile) || "unknown";
-    posthog.identify(currentId, {
-      email: user?.email || null,
-      display_name:
-        user?.displayName ||
-        (user?.email ? user.email.split("@")[0] : undefined),
-      role,
-      status,
-    });
-    lastIdentifiedRef.current = currentId;
-  }, [posthog, user, userProfile]);
 
   const signIn = async (email, password) => {
     const cred = await signInWithEmailAndPassword(auth, email, password);

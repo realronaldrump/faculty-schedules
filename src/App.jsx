@@ -397,17 +397,6 @@ function App() {
     registerNavigationPages(navigationItems);
   }, []);
 
-  useEffect(() => {
-    const canonicalId = getCanonicalPageId();
-    if (canonicalId) {
-      try {
-        window?.posthog?.register({ canonical_page: canonicalId });
-      } catch (error) {
-        // Ignore analytics failures
-      }
-    }
-  }, [currentPage]);
-
   // Check authentication on mount
   useEffect(() => {
     const authStatus = localStorage.getItem("isAuthenticated");

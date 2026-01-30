@@ -360,24 +360,23 @@ const StudentSchedules = ({ embedded = false }) => {
               ) : (
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                   {/* Header */}
-                  <div className="grid grid-cols-[60px_repeat(5,1fr)] bg-baylor-green text-white">
-                    <div className="p-2 text-xs font-medium text-center border-r border-baylor-green-dark">Time</div>
+                  <div className="grid grid-cols-[50px_repeat(5,1fr)] bg-baylor-green text-white">
+                    <div className="py-2 text-xs font-medium text-center border-r border-baylor-green/50"></div>
                     {DAY_ORDER.map((day) => (
-                      <div key={day} className="p-2 text-center border-r border-baylor-green-dark last:border-r-0">
+                      <div key={day} className="py-2 text-center border-r border-baylor-green/50 last:border-r-0">
                         <div className="font-bold text-sm">{DAY_LABELS[day]}</div>
-                        <div className="text-xs text-baylor-gold">{layoutByDay[day].length} shifts</div>
                       </div>
                     ))}
                   </div>
 
                   {/* Grid Body */}
-                  <div className="grid grid-cols-[60px_repeat(5,1fr)]">
+                  <div className="grid grid-cols-[50px_repeat(5,1fr)]">
                     {/* Time Column */}
                     <div className="border-r border-gray-200 bg-gray-50">
                       {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
                         <div
                           key={i}
-                          className="border-b border-gray-100 text-xs text-gray-500 text-right pr-2 flex items-start justify-end"
+                          className="border-b border-gray-100 text-[11px] text-gray-500 text-right pr-1 flex items-start justify-end"
                           style={{ height: `${HOUR_HEIGHT}px` }}
                         >
                           <span className="mt-[-0.5em]">{formatTime((START_HOUR + i) * 60)}</span>
@@ -386,8 +385,18 @@ const StudentSchedules = ({ embedded = false }) => {
                     </div>
 
                     {/* Day Columns */}
-                    {DAY_ORDER.map((day) => (
-                      <div key={day} className="relative border-r border-gray-200 last:border-r-0" style={{ height: `${totalHeight}px` }}>
+                    {DAY_ORDER.map((day, dayIndex) => {
+                      // Alternate between subtle green and gold backgrounds
+                      const bgColor = dayIndex % 2 === 0
+                        ? "rgba(21, 71, 52, 0.03)"  // very light baylor green
+                        : "rgba(255, 184, 28, 0.04)"; // very light baylor gold
+
+                      return (
+                      <div
+                        key={day}
+                        className="relative border-r border-gray-200 last:border-r-0"
+                        style={{ height: `${totalHeight}px`, backgroundColor: bgColor }}
+                      >
                         {/* Hour grid lines */}
                         {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
                           <div key={i} className="absolute left-0 right-0 border-b border-gray-100" style={{ top: `${i * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }} />
@@ -396,10 +405,10 @@ const StudentSchedules = ({ embedded = false }) => {
                         {/* Events */}
                         {layoutByDay[day].map((event, idx) => {
                           const top = ((event.startMinutes - START_HOUR * 60) / 60) * HOUR_HEIGHT;
-                          const height = Math.max(((event.endMinutes - event.startMinutes) / 60) * HOUR_HEIGHT, 24);
+                          const height = Math.max(((event.endMinutes - event.startMinutes) / 60) * HOUR_HEIGHT, 28);
                           const color = getColorForKey(event.colorKey);
-                          const width = `calc(${100 / event.totalColumns}% - 4px)`;
-                          const left = `calc(${(event.column / event.totalColumns) * 100}% + 2px)`;
+                          const widthPercent = 100 / event.totalColumns;
+                          const leftPercent = (event.column / event.totalColumns) * 100;
 
                           return (
                             <div
@@ -408,26 +417,27 @@ const StudentSchedules = ({ embedded = false }) => {
                               style={{
                                 top: `${top}px`,
                                 height: `${height}px`,
-                                width,
-                                left,
+                                width: `calc(${widthPercent}% - 3px)`,
+                                left: `calc(${leftPercent}% + 1px)`,
                                 backgroundColor: color.bg,
                                 borderLeft: `3px solid ${color.border}`,
                               }}
                               onClick={() => setSelectedStudentForCard(event.student)}
                               title={`${event.student.name}\n${formatTime(event.startMinutes)} - ${formatTime(event.endMinutes)}\n${event.assignment.jobTitle || ""}`}
                             >
-                              <div className="p-1 h-full flex flex-col justify-center">
-                                <div className="font-semibold text-xs truncate" style={{ color: color.text }}>{event.student.name}</div>
-                                <div className="text-[10px] text-gray-600 truncate">{formatTimeCompact(event.startMinutes)}-{formatTimeCompact(event.endMinutes)}</div>
-                                {height > 40 && event.assignment.jobTitle && (
-                                  <div className="text-[10px] text-gray-500 truncate">{event.assignment.jobTitle}</div>
+                              <div className="px-1.5 py-0.5 h-full flex flex-col justify-center overflow-hidden">
+                                <div className="font-semibold text-xs leading-tight" style={{ color: color.text }}>{event.student.name}</div>
+                                <div className="text-[10px] text-gray-600 leading-tight">{formatTimeCompact(event.startMinutes)}-{formatTimeCompact(event.endMinutes)}</div>
+                                {height > 44 && event.assignment.jobTitle && (
+                                  <div className="text-[10px] text-gray-500 leading-tight truncate">{event.assignment.jobTitle}</div>
                                 )}
                               </div>
                             </div>
                           );
                         })}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

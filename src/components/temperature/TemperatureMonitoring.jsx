@@ -150,6 +150,21 @@ const isValidTimeZone = (timeZone) => {
   }
 };
 
+const formatTimezoneLabel = (timeZone) => {
+  const resolved = isValidTimeZone(timeZone) ? timeZone : DEFAULT_TIMEZONE;
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: resolved,
+      timeZoneName: "long",
+    }).formatToParts(new Date());
+    const namePart = parts.find((part) => part.type === "timeZoneName");
+    if (!namePart || !namePart.value) return resolved;
+    return namePart.value.replace(/\s+(Standard|Daylight)\s+Time$/, " Time");
+  } catch (_) {
+    return resolved;
+  }
+};
+
 const coerceNumber = (value) => {
   if (value == null || value === "") return null;
   const number = Number(value);
@@ -223,6 +238,10 @@ const TemperatureMonitoring = () => {
   const [deletingImport, setDeletingImport] = useState(false);
   const [importHistoryRefresh, setImportHistoryRefresh] = useState(0);
   const [snapshotRefreshKey, setSnapshotRefreshKey] = useState(0);
+
+  const timezoneLabel = formatTimezoneLabel(
+    buildingSettings?.timezone || DEFAULT_TIMEZONE,
+  );
 
   const formatSnapshotTemp = (snapshot) => {
     if (!snapshot || snapshot.status === "missing") return "No data";
@@ -2879,7 +2898,7 @@ const TemperatureMonitoring = () => {
                     {Object.keys(snapshotLookup).length} rooms with data
                   </div>
                   <div>
-                    Timezone: {buildingSettings?.timezone || DEFAULT_TIMEZONE}
+                    Timezone: {timezoneLabel}
                   </div>
                 </div>
                 <Link
@@ -4359,8 +4378,7 @@ const TemperatureMonitoring = () => {
                 </div>
                 <div>
                   <div className="text-sm font-semibold text-gray-900">
-                    {buildingSettings?.timezone?.replace("America/", "") ||
-                      "Chicago"}
+                    {timezoneLabel}
                   </div>
                   <div className="text-xs text-gray-500">Timezone</div>
                 </div>

@@ -1,20 +1,19 @@
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import React, { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import {
-  Download,
   Calendar,
   List,
-  Grid,
-  ZoomIn,
-  ZoomOut,
-  ChevronDown,
-  ChevronUp,
   Building,
   Filter,
+  ChevronDown,
+  ChevronUp,
+  Users,
+  Clock,
+  Briefcase,
+  X,
+  Printer,
 } from "lucide-react";
 import MultiSelectDropdown from "../MultiSelectDropdown";
-import ExportModal from "../administration/ExportModal";
 import FacultyContactCard from "../FacultyContactCard";
-import BuildingScheduleView from "./BuildingScheduleView";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import {
@@ -31,91 +30,111 @@ const DAY_LABELS = {
   F: "Friday",
 };
 
-// Layout tuning for readability and export quality
-const TIME_COLUMN_WIDTH = 104;
-const BASE_PX_PER_HOUR = 56;
-const MAX_PX_PER_HOUR = 220;
-const MIN_EVENT_HEIGHT_PX = 44;
+// Calendar grid configuration - 8 AM to 5 PM business hours
+const START_HOUR = 8;
+const END_HOUR = 17;
+const HOUR_HEIGHT = 48; // pixels per hour - fits 9 hours in ~432px
 
-function minutesSinceStartOfDay(timeStr) {
+function parseTimeToMinutes(timeStr) {
   if (!timeStr) return 0;
   const [hh, mm] = timeStr.split(":").map((v) => parseInt(v, 10));
   return hh * 60 + (mm || 0);
 }
 
-function formatTimeLabel(minutes) {
+function formatTime(minutes) {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   const ampm = h >= 12 ? "PM" : "AM";
   const hr12 = ((h + 11) % 12) + 1;
+  if (m === 0) return `${hr12} ${ampm}`;
   return `${hr12}:${m.toString().padStart(2, "0")} ${ampm}`;
 }
 
-// Brand-aligned accent mapping
-const ACCENTS = [
-  { border: "#154734", bg: "rgba(21, 71, 52, 0.08)" },
-  { border: "#1F7A1F", bg: "rgba(31, 122, 31, 0.07)" },
-  { border: "#B68B00", bg: "rgba(182, 139, 0, 0.12)" },
-  { border: "#0E6E6E", bg: "rgba(14, 110, 110, 0.08)" },
-  { border: "#3F4C5A", bg: "rgba(63, 76, 90, 0.08)" },
+function formatTimeCompact(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const ampm = h >= 12 ? "p" : "a";
+  const hr12 = ((h + 11) % 12) + 1;
+  if (m === 0) return `${hr12}${ampm}`;
+  return `${hr12}:${m.toString().padStart(2, "0")}${ampm}`;
+}
+
+// Consistent colors using Tailwind classes
+const COLORS = [
+  { bg: "rgba(21, 71, 52, 0.1)", border: "#154734", text: "#154734" },
+  { bg: "rgba(37, 99, 235, 0.1)", border: "#2563eb", text: "#1e40af" },
+  { bg: "rgba(234, 88, 12, 0.1)", border: "#ea580c", text: "#c2410c" },
+  { bg: "rgba(147, 51, 234, 0.1)", border: "#9333ea", text: "#7e22ce" },
+  { bg: "rgba(13, 148, 136, 0.1)", border: "#0d9488", text: "#0f766e" },
+  { bg: "rgba(202, 138, 4, 0.1)", border: "#ca8a04", text: "#a16207" },
+  { bg: "rgba(219, 39, 119, 0.1)", border: "#db2777", text: "#be185d" },
+  { bg: "rgba(71, 85, 105, 0.1)", border: "#475569", text: "#334155" },
 ];
 
-const accentForString = (str) => {
-  const key = String(str || "accent");
+function getColorForKey(key) {
+  if (!key) return COLORS[0];
   let hash = 0;
-  for (let i = 0; i < key.length; i++)
+  for (let i = 0; i < key.length; i++) {
     hash = key.charCodeAt(i) + ((hash << 5) - hash);
-  const idx = Math.abs(hash) % ACCENTS.length;
-  return ACCENTS[idx];
-};
+  }
+  return COLORS[Math.abs(hash) % COLORS.length];
+}
 
-const accentForStudentAndJob = (studentId, jobTitle) => {
-  const combinedKey = `${studentId || "unknown"}|${jobTitle || "no-title"}`;
-  return accentForString(combinedKey);
-};
+// Layout algorithm for overlapping events in a day
+function layoutEventsForDay(events) {
+  if (events.length === 0) return [];
+
+  const sorted = [...events].sort((a, b) => {
+    if (a.startMinutes !== b.startMinutes) return a.startMinutes - b.startMinutes;
+    return (b.endMinutes - b.startMinutes) - (a.endMinutes - a.startMinutes);
+  });
+
+  const columns = [];
+  const placements = [];
+
+  sorted.forEach((event) => {
+    let placed = -1;
+    for (let col = 0; col < columns.length; col++) {
+      if (columns[col] <= event.startMinutes) {
+        placed = col;
+        columns[col] = event.endMinutes;
+        break;
+      }
+    }
+    if (placed === -1) {
+      placed = columns.length;
+      columns.push(event.endMinutes);
+    }
+    placements.push({ ...event, column: placed });
+  });
+
+  const totalColumns = columns.length;
+  return placements.map((e) => ({ ...e, totalColumns }));
+}
 
 const StudentSchedules = ({ embedded = false }) => {
   const { studentData = [], selectedSemesterMeta } = useData();
   const { loadPeople } = usePeople();
 
-  // Filters
   const [selectedBuildings, setSelectedBuildings] = useState([]);
   const [selectedJobTitles, setSelectedJobTitles] = useState([]);
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
-  const [dayView, setDayView] = useState("All");
   const [includeInactive, setIncludeInactive] = useState(false);
-
-  // View state
   const [activeTab, setActiveTab] = useState("calendar");
-  const [viewMode, setViewMode] = useState("calendar");
-  const [zoom, setZoom] = useState(1);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
-
-  // Modals
-  const [showExportModal, setShowExportModal] = useState(false);
   const [selectedStudentForCard, setSelectedStudentForCard] = useState(null);
 
-  // Refs
   const calendarRef = useRef(null);
-  const listRef = useRef(null);
-  const buildingRef = useRef(null);
 
   useEffect(() => {
     loadPeople();
   }, [loadPeople]);
 
-  // Get filter options
   const buildingOptions = useMemo(() => {
     const set = new Set();
     studentData.forEach((s) => {
-      const assignments = getStudentAssignments(s);
-      assignments.forEach((assignment) => {
-        const buildings = Array.isArray(assignment.buildings)
-          ? assignment.buildings
-          : [];
-        buildings.forEach((building) => {
-          if (building) set.add(building);
-        });
+      getStudentAssignments(s).forEach((a) => {
+        (a.buildings || []).forEach((b) => b && set.add(b));
       });
     });
     return Array.from(set).sort();
@@ -124,17 +143,14 @@ const StudentSchedules = ({ embedded = false }) => {
   const jobTitleOptions = useMemo(() => {
     const set = new Set();
     studentData.forEach((s) => {
-      const assignments = getStudentAssignments(s);
-      assignments.forEach((assignment) => {
-        if (assignment?.jobTitle) set.add(assignment.jobTitle);
+      getStudentAssignments(s).forEach((a) => {
+        if (a?.jobTitle) set.add(a.jobTitle);
       });
     });
     return Array.from(set).sort();
   }, [studentData]);
 
-  const studentIdOptions = useMemo(() => {
-    return studentData.map((s) => s.id).filter(Boolean);
-  }, [studentData]);
+  const studentIdOptions = useMemo(() => studentData.map((s) => s.id).filter(Boolean), [studentData]);
 
   const studentIdToNameMap = useMemo(() => {
     const map = {};
@@ -144,471 +160,146 @@ const StudentSchedules = ({ embedded = false }) => {
     return map;
   }, [studentData]);
 
-  // Filter students
   const filteredStudents = useMemo(() => {
     return studentData
       .map((student) => {
-        const assignments = getStudentAssignments(student).map(
-          (assignment) => ({
-            ...assignment,
-            isActiveDuringSemester: isAssignmentActiveDuringSemester(
-              assignment,
-              student,
-              selectedSemesterMeta,
-            ),
-          }),
-        );
+        const assignments = getStudentAssignments(student).map((assignment) => ({
+          ...assignment,
+          isActiveDuringSemester: isAssignmentActiveDuringSemester(assignment, student, selectedSemesterMeta),
+        }));
 
-        const assignmentsWithSchedule = assignments.filter(
-          (assignment) =>
-            Array.isArray(assignment.schedule) &&
-            assignment.schedule.length > 0,
-        );
-
-        const activeAssignments = includeInactive
-          ? assignmentsWithSchedule
-          : assignmentsWithSchedule.filter(
-            (assignment) => assignment.isActiveDuringSemester,
-          );
-
-        const filteredAssignments = activeAssignments.filter((assignment) => {
-          if (selectedJobTitles.length > 0) {
-            if (
-              !assignment.jobTitle ||
-              !selectedJobTitles.includes(assignment.jobTitle)
-            ) {
-              return false;
-            }
-          }
-
-          if (selectedBuildings.length > 0) {
-            const buildings = Array.isArray(assignment.buildings)
-              ? assignment.buildings
-              : [];
-            if (
-              !buildings.some((building) =>
-                selectedBuildings.includes(building),
-              )
-            ) {
-              return false;
-            }
-          }
-
-          return true;
-        });
-
-        if (
-          selectedStudentIds.length > 0 &&
-          !selectedStudentIds.includes(student.id)
-        ) {
-          return null;
+        let filtered = assignments.filter((a) => Array.isArray(a.schedule) && a.schedule.length > 0);
+        if (!includeInactive) filtered = filtered.filter((a) => a.isActiveDuringSemester);
+        if (selectedJobTitles.length > 0) filtered = filtered.filter((a) => selectedJobTitles.includes(a.jobTitle));
+        if (selectedBuildings.length > 0) {
+          filtered = filtered.filter((a) => (a.buildings || []).some((b) => selectedBuildings.includes(b)));
         }
+        if (selectedStudentIds.length > 0 && !selectedStudentIds.includes(student.id)) return null;
+        if (filtered.length === 0) return null;
 
-        if (filteredAssignments.length === 0) return null;
-
-        return {
-          ...student,
-          visibleAssignments: filteredAssignments,
-        };
+        return { ...student, visibleAssignments: filtered };
       })
       .filter(Boolean);
-  }, [
-    studentData,
-    selectedBuildings,
-    selectedJobTitles,
-    selectedStudentIds,
-    includeInactive,
-    selectedSemesterMeta,
-  ]);
+  }, [studentData, selectedBuildings, selectedJobTitles, selectedStudentIds, includeInactive, selectedSemesterMeta]);
 
-  // Calendar calculations
-  const { minStart, maxEnd } = useMemo(() => {
-    let min = 8 * 60;
-    let max = 18 * 60;
-    filteredStudents.forEach((s) => {
-      const assignments = Array.isArray(s.visibleAssignments)
-        ? s.visibleAssignments
-        : [];
-      assignments.forEach((assignment) => {
+  const eventsByDay = useMemo(() => {
+    const byDay = { M: [], T: [], W: [], R: [], F: [] };
+    filteredStudents.forEach((student) => {
+      (student.visibleAssignments || []).forEach((assignment) => {
         (assignment.schedule || []).forEach((entry) => {
-          const start = minutesSinceStartOfDay(entry.start);
-          const end = minutesSinceStartOfDay(entry.end);
-          if (!isNaN(start)) min = Math.min(min, start);
-          if (!isNaN(end)) max = Math.max(max, end);
+          if (!entry?.day || !DAY_ORDER.includes(entry.day)) return;
+          const start = parseTimeToMinutes(entry.start);
+          const end = parseTimeToMinutes(entry.end);
+          if (start >= end) return;
+          byDay[entry.day].push({
+            student,
+            assignment,
+            entry,
+            startMinutes: start,
+            endMinutes: end,
+            colorKey: `${student.id}-${assignment.jobTitle}`,
+          });
         });
       });
     });
-    min = Math.max(6 * 60, Math.min(min, 9 * 60));
-    max = Math.min(22 * 60, Math.max(max, 17 * 60));
-    return { minStart: min, maxEnd: max };
+    return byDay;
   }, [filteredStudents]);
 
-  const totalMinutes = Math.max(60, maxEnd - minStart);
+  const layoutByDay = useMemo(() => {
+    const layout = {};
+    DAY_ORDER.forEach((day) => {
+      layout[day] = layoutEventsForDay(eventsByDay[day]);
+    });
+    return layout;
+  }, [eventsByDay]);
 
-  const entriesByDayWithLayout = useMemo(() => {
-    const layoutMap = { M: [], T: [], W: [], R: [], F: [] };
-
-    const layoutDay = (entries) => {
-      const sorted = [...entries].sort(
-        (a, b) =>
-          minutesSinceStartOfDay(a.start) - minutesSinceStartOfDay(b.start),
-      );
-      const results = [];
-      let groupItems = [];
-      let groupEndMax = -Infinity;
-      let colEndTimes = [];
-      let maxCols = 0;
-
-      const finalizeGroup = () => {
-        groupItems.forEach((item) =>
-          results.push({ ...item, columns: Math.max(1, maxCols) }),
-        );
-        groupItems = [];
-        groupEndMax = -Infinity;
-        colEndTimes = [];
-        maxCols = 0;
-      };
-
-      sorted.forEach((entry) => {
-        const start = minutesSinceStartOfDay(entry.start);
-        const end = minutesSinceStartOfDay(entry.end);
-        if (groupItems.length > 0 && start >= groupEndMax) {
-          finalizeGroup();
-        }
-
-        let assignedCol = -1;
-        for (let i = 0; i < colEndTimes.length; i++) {
-          if (colEndTimes[i] <= start) {
-            assignedCol = i;
-            break;
-          }
-        }
-        if (assignedCol === -1) {
-          assignedCol = colEndTimes.length;
-          colEndTimes.push(end);
-        } else {
-          colEndTimes[assignedCol] = end;
-        }
-        maxCols = Math.max(maxCols, colEndTimes.length);
-        groupEndMax = Math.max(groupEndMax, end);
-        groupItems.push({ entry, start, end, col: assignedCol });
-      });
-
-      if (groupItems.length > 0) finalizeGroup();
-      return results;
-    };
-
-    const temp = { M: [], T: [], W: [], R: [], F: [] };
+  const stats = useMemo(() => {
+    const students = new Set();
+    const jobs = new Set();
+    let shifts = 0;
     filteredStudents.forEach((s) => {
-      const assignments = Array.isArray(s.visibleAssignments)
-        ? s.visibleAssignments
-        : [];
-      assignments.forEach((assignment) => {
-        (assignment.schedule || []).forEach((entry) => {
-          if (!entry || !entry.day) return;
-          if (temp[entry.day]) {
-            temp[entry.day].push({
-              ...entry,
-              student: s,
-              jobTitle: assignment.jobTitle,
-            });
-          }
-        });
+      students.add(s.id);
+      s.visibleAssignments.forEach((a) => {
+        if (a.jobTitle) jobs.add(a.jobTitle);
+        shifts += (a.schedule || []).length;
       });
     });
-
-    Object.keys(temp).forEach((day) => {
-      layoutMap[day] = layoutDay(temp[day]);
-    });
-
-    return layoutMap;
+    return { students: students.size, jobs: jobs.size, shifts };
   }, [filteredStudents]);
 
-  const pixelsPerHour = useMemo(() => {
-    let minDuration = Infinity;
-    const days = dayView === "All" ? DAY_ORDER : [dayView];
-    days.forEach((d) => {
-      (entriesByDayWithLayout[d] || []).forEach((item) => {
-        const duration = Math.max(1, item.end - item.start);
-        if (duration < minDuration) minDuration = duration;
-      });
-    });
+  const activeFilterCount = [selectedBuildings, selectedJobTitles, selectedStudentIds].filter((a) => a.length > 0).length + (includeInactive ? 1 : 0);
 
-    if (!isFinite(minDuration)) return BASE_PX_PER_HOUR;
+  const handleExportPDF = useCallback(() => window.print(), []);
 
-    const required = Math.ceil(
-      (MIN_EVENT_HEIGHT_PX * 60) / Math.max(15, minDuration),
-    );
-    return Math.min(MAX_PX_PER_HOUR, Math.max(BASE_PX_PER_HOUR, required));
-  }, [entriesByDayWithLayout, dayView]);
-
-  const calendarPxPerHour = useMemo(() => {
-    const scaled = Math.round(pixelsPerHour * zoom);
-    return Math.min(
-      MAX_PX_PER_HOUR * 2,
-      Math.max(Math.floor(BASE_PX_PER_HOUR / 2), scaled),
-    );
-  }, [pixelsPerHour, zoom]);
-
-  const visibleDays = dayView === "All" ? DAY_ORDER : [dayView];
-
-  const gridTemplateColumns = useMemo(() => {
-    const maxOverlapsByDay = {};
-    visibleDays.forEach((day) => {
-      const items = entriesByDayWithLayout[day] || [];
-      let max = 0;
-      items.forEach((item) => {
-        if (item.columns > max) max = item.columns;
-      });
-      maxOverlapsByDay[day] = max;
-    });
-
-    const minWidthPerCol = 60;
-    const minDayWidth = 180;
-    const widths = visibleDays.map((day) => {
-      const overlaps = maxOverlapsByDay[day] || 1;
-      const required = Math.max(minDayWidth, overlaps * minWidthPerCol);
-      return `minmax(${required}px, 1fr)`;
-    });
-
-    return `${TIME_COLUMN_WIDTH}px ${widths.join(" ")}`;
-  }, [entriesByDayWithLayout, visibleDays]);
-
-  const handleScheduleClick = (student) => {
-    setSelectedStudentForCard(student);
-  };
-
-  // Active filter count
-  const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (selectedBuildings.length > 0) count++;
-    if (selectedJobTitles.length > 0) count++;
-    if (selectedStudentIds.length > 0) count++;
-    if (dayView !== "All") count++;
-    if (includeInactive) count++;
-    return count;
-  }, [
-    selectedBuildings,
-    selectedJobTitles,
-    selectedStudentIds,
-    dayView,
-    includeInactive,
-  ]);
-
-  // Get appropriate ref for export based on active tab
-  const getExportRef = () => {
-    switch (activeTab) {
-      case "calendar":
-        return viewMode === "calendar" ? calendarRef : listRef;
-      case "building":
-        return buildingRef;
-      default:
-        return calendarRef;
-    }
-  };
+  const totalHeight = (END_HOUR - START_HOUR) * HOUR_HEIGHT;
 
   return (
     <div className="space-y-4">
-      {/* Page Header */}
       <div>
         {embedded ? (
-          <h2 className="text-xl font-semibold text-gray-900 mb-1">
-            Student Worker Schedules
-          </h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-1">Student Worker Schedules</h2>
         ) : (
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Student Worker Schedules
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Student Worker Schedules</h1>
         )}
-        <p className="text-gray-600">
-          Review student worker assignments and availability
-        </p>
+        <p className="text-gray-600">Review student worker assignments and availability</p>
       </div>
 
-      {/* Collapsible Filters Section */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      {/* Filters */}
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden print:hidden">
         <div
           role="button"
           tabIndex={0}
           onClick={() => setFiltersExpanded(!filtersExpanded)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              setFiltersExpanded(!filtersExpanded);
-            }
-          }}
-          className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-inset focus:ring-baylor-green/20"
+          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setFiltersExpanded(!filtersExpanded)}
+          className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 cursor-pointer"
         >
           <div className="flex items-center gap-3">
             <div className="p-2 bg-baylor-green/10 rounded-lg">
               <Filter size={18} className="text-baylor-green" />
             </div>
-            <div className="text-left">
-              <span className="font-semibold text-gray-800">
-                Filters & Search
+            <span className="font-semibold text-gray-800">Filters & Search</span>
+            {activeFilterCount > 0 && (
+              <span className="px-2 py-0.5 bg-baylor-gold/20 text-baylor-green text-xs font-medium rounded-full">
+                {activeFilterCount} active
               </span>
-              {activeFilterCount > 0 && (
-                <span className="ml-2 px-2 py-0.5 bg-baylor-gold/20 text-baylor-green text-xs font-medium rounded-full">
-                  {activeFilterCount} active
-                </span>
-              )}
-            </div>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowExportModal(true);
-              }}
+              onClick={(e) => { e.stopPropagation(); handleExportPDF(); }}
               className="inline-flex items-center px-3 py-2 text-sm font-medium text-baylor-green bg-white border border-baylor-green rounded-lg hover:bg-baylor-green hover:text-white transition-colors"
-              title="Export schedule"
             >
-              <Download className="w-4 h-4 mr-2" />
-              Export
+              <Printer className="w-4 h-4 mr-2" />
+              Print
             </button>
-            {filtersExpanded ? (
-              <ChevronUp size={20} className="text-gray-500" />
-            ) : (
-              <ChevronDown size={20} className="text-gray-500" />
-            )}
+            {filtersExpanded ? <ChevronUp size={20} className="text-gray-500" /> : <ChevronDown size={20} className="text-gray-500" />}
           </div>
         </div>
 
         {filtersExpanded && (
-          <div className="px-5 pb-5 pt-2 border-t border-gray-100 space-y-4 animate-fade-in">
-            {/* View Mode Toggle */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">Display Mode:</span>
-                <div className="flex rounded-md border">
-                  <button
-                    onClick={() => setViewMode("calendar")}
-                    className={`px-3 py-1.5 text-xs rounded-l-md flex items-center gap-1 ${viewMode === "calendar"
-                        ? "bg-baylor-green text-white"
-                        : "bg-white text-gray-700 hover:bg-gray-50"
-                      }`}
-                  >
-                    <Calendar size={14} />
-                    Calendar
-                  </button>
-                  <button
-                    onClick={() => setViewMode("list")}
-                    className={`px-3 py-1.5 text-xs rounded-r-md flex items-center gap-1 ${viewMode === "list"
-                        ? "bg-baylor-green text-white"
-                        : "bg-white text-gray-700 hover:bg-gray-50"
-                      }`}
-                  >
-                    <List size={14} />
-                    List
-                  </button>
-                </div>
-                {viewMode === "calendar" && (
-                  <div className="ml-2 inline-flex items-center gap-1">
-                    <button
-                      onClick={() =>
-                        setZoom((z) =>
-                          Math.min(2.5, Math.round((z + 0.1) * 10) / 10),
-                        )
-                      }
-                      className="p-1.5 text-xs border rounded hover:bg-gray-50 text-gray-700"
-                      title="Zoom in"
-                    >
-                      <ZoomIn size={14} />
-                    </button>
-                    <button
-                      onClick={() =>
-                        setZoom((z) =>
-                          Math.max(0.5, Math.round((z - 0.1) * 10) / 10),
-                        )
-                      }
-                      className="p-1.5 text-xs border rounded hover:bg-gray-50 text-gray-700"
-                      title="Zoom out"
-                    >
-                      <ZoomOut size={14} />
-                    </button>
-                    <span className="text-xs text-gray-600 ml-1">
-                      {Math.round(zoom * 100)}%
-                    </span>
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">Day View:</span>
-                <select
-                  className="border rounded-md px-3 py-1.5 text-sm"
-                  value={dayView}
-                  onChange={(e) => setDayView(e.target.value)}
-                >
-                  <option value="All">All Days</option>
-                  {DAY_ORDER.map((d) => (
-                    <option key={d} value={d}>
-                      {DAY_LABELS[d]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Filter Grid */}
+          <div className="px-5 pb-5 pt-2 border-t border-gray-100 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className="block text-xs text-gray-600 mb-1">
-                  Buildings
-                </label>
-                <MultiSelectDropdown
-                  options={buildingOptions}
-                  selected={selectedBuildings}
-                  onChange={setSelectedBuildings}
-                  placeholder="All Buildings"
-                />
+                <label className="block text-xs text-gray-600 mb-1">Buildings</label>
+                <MultiSelectDropdown options={buildingOptions} selected={selectedBuildings} onChange={setSelectedBuildings} placeholder="All Buildings" />
               </div>
               <div>
-                <label className="block text-xs text-gray-600 mb-1">
-                  Job Titles
-                </label>
-                <MultiSelectDropdown
-                  options={jobTitleOptions}
-                  selected={selectedJobTitles}
-                  onChange={setSelectedJobTitles}
-                  placeholder="All Job Titles"
-                />
+                <label className="block text-xs text-gray-600 mb-1">Job Titles</label>
+                <MultiSelectDropdown options={jobTitleOptions} selected={selectedJobTitles} onChange={setSelectedJobTitles} placeholder="All Job Titles" />
               </div>
               <div className="sm:col-span-2">
-                <label className="block text-xs text-gray-600 mb-1">
-                  Students
-                </label>
-                <MultiSelectDropdown
-                  options={studentIdOptions}
-                  selected={selectedStudentIds}
-                  onChange={setSelectedStudentIds}
-                  placeholder="All Students"
-                  displayMap={studentIdToNameMap}
-                />
+                <label className="block text-xs text-gray-600 mb-1">Students</label>
+                <MultiSelectDropdown options={studentIdOptions} selected={selectedStudentIds} onChange={setSelectedStudentIds} placeholder="All Students" displayMap={studentIdToNameMap} />
               </div>
             </div>
-
-            {/* Additional Options */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-gray-100">
-              <div className="flex items-center gap-4 text-sm text-gray-700">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={includeInactive}
-                    onChange={(e) => setIncludeInactive(e.target.checked)}
-                    className="w-4 h-4 text-baylor-green rounded focus:ring-baylor-green"
-                  />
-                  Include assignments outside semester
-                </label>
-              </div>
+            <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input type="checkbox" checked={includeInactive} onChange={(e) => setIncludeInactive(e.target.checked)} className="w-4 h-4 text-baylor-green rounded" />
+                Include assignments outside semester
+              </label>
               <button
-                onClick={() => {
-                  setSelectedBuildings([]);
-                  setSelectedJobTitles([]);
-                  setSelectedStudentIds([]);
-                  setDayView("All");
-                  setIncludeInactive(false);
-                }}
-                className="px-4 py-2 text-sm text-baylor-green font-medium rounded-lg border border-baylor-green/30 hover:bg-baylor-green/10 transition-colors"
+                onClick={() => { setSelectedBuildings([]); setSelectedJobTitles([]); setSelectedStudentIds([]); setIncludeInactive(false); }}
+                className="px-4 py-2 text-sm text-baylor-green font-medium rounded-lg border border-baylor-green/30 hover:bg-baylor-green/10"
               >
                 Reset all filters
               </button>
@@ -617,379 +308,192 @@ const StudentSchedules = ({ embedded = false }) => {
         )}
       </div>
 
-      {/* Main Tab Navigation */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="flex border-b border-gray-200">
+      {/* Main Content */}
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden print:border-0 print:shadow-none">
+        <div className="flex border-b border-gray-200 print:hidden">
           <button
             onClick={() => setActiveTab("calendar")}
-            className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${activeTab === "calendar"
-                ? "text-baylor-green bg-baylor-green/5"
-                : "text-gray-600 hover:text-baylor-green hover:bg-gray-50"
-              }`}
+            className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold relative ${activeTab === "calendar" ? "text-baylor-green bg-baylor-green/5" : "text-gray-600 hover:text-baylor-green hover:bg-gray-50"}`}
           >
             <Calendar size={18} />
             Weekly Calendar
-            {activeTab === "calendar" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-baylor-gold" />
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab("building")}
-            className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${activeTab === "building"
-                ? "text-baylor-green bg-baylor-green/5"
-                : "text-gray-600 hover:text-baylor-green hover:bg-gray-50"
-              }`}
-          >
-            <Building size={18} />
-            By Building
-            <span className="ml-1 px-2 py-0.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
-              Print
-            </span>
-            {activeTab === "building" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-baylor-gold" />
-            )}
+            {activeTab === "calendar" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-baylor-gold" />}
           </button>
           <button
             onClick={() => setActiveTab("list")}
-            className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${activeTab === "list"
-                ? "text-baylor-green bg-baylor-green/5"
-                : "text-gray-600 hover:text-baylor-green hover:bg-gray-50"
-              }`}
+            className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold relative ${activeTab === "list" ? "text-baylor-green bg-baylor-green/5" : "text-gray-600 hover:text-baylor-green hover:bg-gray-50"}`}
           >
-            <Grid size={18} />
-            All Schedules
-            {activeTab === "list" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-baylor-gold" />
-            )}
+            <List size={18} />
+            Student List
+            {activeTab === "list" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-baylor-gold" />}
           </button>
         </div>
 
-        {/* Tab Content */}
-        <div className="p-6">
+        <div className="flex items-center gap-6 px-6 py-3 bg-gray-50 border-b border-gray-200 text-sm">
+          <div className="flex items-center gap-2 text-gray-600">
+            <Users size={16} className="text-baylor-green" />
+            <strong className="text-gray-900">{stats.students}</strong> Students
+          </div>
+          <div className="flex items-center gap-2 text-gray-600">
+            <Briefcase size={16} className="text-baylor-green" />
+            <strong className="text-gray-900">{stats.jobs}</strong> Job Types
+          </div>
+          <div className="flex items-center gap-2 text-gray-600">
+            <Clock size={16} className="text-baylor-green" />
+            <strong className="text-gray-900">{stats.shifts}</strong> Shifts/Week
+          </div>
+        </div>
+
+        <div className="p-4" ref={calendarRef}>
           {activeTab === "calendar" && (
             <>
-              {viewMode === "calendar" ? (
-                <div
-                  className="flex flex-col h-[calc(100vh-280px)] min-h-[400px] overflow-hidden"
-                  ref={calendarRef}
-                >
-                  {/* Calendar Header */}
-                  <div
-                    className="grid gap-x-2 min-w-max mb-2 flex-shrink-0"
-                    style={{
-                      gridTemplateColumns: `minmax(80px, 0.5fr) repeat(${visibleDays.length}, minmax(120px, 1fr))`,
-                    }}
-                  >
-                    <div></div>
-                    {visibleDays.map((d) => (
-                      <div
-                        key={d}
-                        className="text-center text-sm font-serif font-semibold text-baylor-green py-2 bg-gray-50 rounded"
-                      >
-                        {DAY_LABELS[d]}
+              {filteredStudents.length === 0 ? (
+                <div className="text-center py-12">
+                  <Calendar size={48} className="mx-auto text-gray-300 mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-700 mb-2">No Schedules Found</h3>
+                  <p className="text-gray-500">Adjust filters to view student schedules.</p>
+                </div>
+              ) : (
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  {/* Header */}
+                  <div className="grid grid-cols-[60px_repeat(5,1fr)] bg-baylor-green text-white">
+                    <div className="p-2 text-xs font-medium text-center border-r border-baylor-green-dark">Time</div>
+                    {DAY_ORDER.map((day) => (
+                      <div key={day} className="p-2 text-center border-r border-baylor-green-dark last:border-r-0">
+                        <div className="font-bold text-sm">{DAY_LABELS[day]}</div>
+                        <div className="text-xs text-baylor-gold">{layoutByDay[day].length} shifts</div>
                       </div>
                     ))}
                   </div>
 
-                  {/* Calendar Grid - fills remaining space */}
-                  <div className="flex-1 overflow-auto">
-                    <div
-                      className="grid gap-x-2 min-w-max h-full"
-                      style={{
-                        gridTemplateColumns: `minmax(80px, 0.5fr) repeat(${visibleDays.length}, minmax(120px, 1fr))`,
-                      }}
-                    >
-                      {/* Time scale */}
-                      <div className="relative h-full">
-                        {Array.from({
-                          length: Math.floor(totalMinutes / 60) + 1,
-                        }).map((_, i) => {
-                          const m = minStart + i * 60;
-                          const top = ((i * 60) / totalMinutes) * 100;
+                  {/* Grid Body */}
+                  <div className="grid grid-cols-[60px_repeat(5,1fr)]">
+                    {/* Time Column */}
+                    <div className="border-r border-gray-200 bg-gray-50">
+                      {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
+                        <div
+                          key={i}
+                          className="border-b border-gray-100 text-xs text-gray-500 text-right pr-2 flex items-start justify-end"
+                          style={{ height: `${HOUR_HEIGHT}px` }}
+                        >
+                          <span className="mt-[-0.5em]">{formatTime((START_HOUR + i) * 60)}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Day Columns */}
+                    {DAY_ORDER.map((day) => (
+                      <div key={day} className="relative border-r border-gray-200 last:border-r-0" style={{ height: `${totalHeight}px` }}>
+                        {/* Hour grid lines */}
+                        {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
+                          <div key={i} className="absolute left-0 right-0 border-b border-gray-100" style={{ top: `${i * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }} />
+                        ))}
+
+                        {/* Events */}
+                        {layoutByDay[day].map((event, idx) => {
+                          const top = ((event.startMinutes - START_HOUR * 60) / 60) * HOUR_HEIGHT;
+                          const height = Math.max(((event.endMinutes - event.startMinutes) / 60) * HOUR_HEIGHT, 24);
+                          const color = getColorForKey(event.colorKey);
+                          const width = `calc(${100 / event.totalColumns}% - 4px)`;
+                          const left = `calc(${(event.column / event.totalColumns) * 100}% + 2px)`;
+
                           return (
                             <div
-                              key={i}
-                              className="absolute left-0 right-0 flex items-center"
+                              key={`${event.student.id}-${idx}`}
+                              className="absolute rounded shadow-sm cursor-pointer hover:shadow-md hover:z-20 transition-shadow overflow-hidden"
                               style={{
-                                top: `${top}%`,
-                                transform: "translateY(-50%)",
+                                top: `${top}px`,
+                                height: `${height}px`,
+                                width,
+                                left,
+                                backgroundColor: color.bg,
+                                borderLeft: `3px solid ${color.border}`,
                               }}
+                              onClick={() => setSelectedStudentForCard(event.student)}
+                              title={`${event.student.name}\n${formatTime(event.startMinutes)} - ${formatTime(event.endMinutes)}\n${event.assignment.jobTitle || ""}`}
                             >
-                              <div className="text-xs text-gray-600 w-full pr-2 text-right font-medium">
-                                {formatTimeLabel(m)}
+                              <div className="p-1 h-full flex flex-col justify-center">
+                                <div className="font-semibold text-xs truncate" style={{ color: color.text }}>{event.student.name}</div>
+                                <div className="text-[10px] text-gray-600 truncate">{formatTimeCompact(event.startMinutes)}-{formatTimeCompact(event.endMinutes)}</div>
+                                {height > 40 && event.assignment.jobTitle && (
+                                  <div className="text-[10px] text-gray-500 truncate">{event.assignment.jobTitle}</div>
+                                )}
                               </div>
                             </div>
                           );
                         })}
                       </div>
-
-                      {/* Day columns */}
-                      {visibleDays.map((d) => (
-                        <div
-                          key={d}
-                          className="relative border-l border-gray-200 bg-white h-full"
-                        >
-                          {/* Hour lines */}
-                          {Array.from({
-                            length: Math.floor(totalMinutes / 60) + 1,
-                          }).map((_, i) => {
-                            const top = ((i * 60) / totalMinutes) * 100;
-                            return (
-                              <div
-                                key={i}
-                                className="absolute left-0 right-0 border-t border-gray-100"
-                                style={{ top: `${top}%` }}
-                              />
-                            );
-                          })}
-
-                          {/* Half-hour lines */}
-                          {Array.from({
-                            length: Math.floor(totalMinutes / 30),
-                          }).map((_, i) => {
-                            const minutes = (i + 1) * 30;
-                            if (minutes % 60 === 0) return null;
-                            const top = (minutes / totalMinutes) * 100;
-                            return (
-                              <div
-                                key={`half-${i}`}
-                                className="absolute left-0 right-0 border-t border-gray-100 border-dashed"
-                                style={{
-                                  top: `${top}%`,
-                                  opacity: 0.5,
-                                }}
-                              />
-                            );
-                          })}
-
-                          {/* Schedule Entries */}
-                          {(entriesByDayWithLayout[d] || []).map(
-                            (item, idx) => {
-                              const { entry, start, end, col, columns } = item;
-                              const top =
-                                ((start - minStart) / totalMinutes) * 100;
-                              const height = Math.max(
-                                3,
-                                ((end - start) / totalMinutes) * 100,
-                              );
-                              const durationMinutes = end - start;
-                              const accent = accentForStudentAndJob(
-                                entry.student.id,
-                                entry.jobTitle,
-                              );
-                              const gap = 4;
-                              const widthCalc = `calc((100% - ${(columns - 1) * gap}px) / ${columns})`;
-                              const leftCalc = `calc(${(col * 100) / columns}% + ${col * gap}px)`;
-                              const eventHeightPercent =
-                                ((end - start) / totalMinutes) * 100;
-                              let fontSizeClass = "text-xs";
-                              let showJob = !!entry.jobTitle;
-
-                              // Responsive font sizing based on event height percentage
-                              if (eventHeightPercent < 6) {
-                                fontSizeClass = "text-[10px]";
-                                showJob = false;
-                              } else if (eventHeightPercent < 10) {
-                                fontSizeClass = "text-[11px]";
-                                showJob = false;
-                              } else if (eventHeightPercent < 14) {
-                                fontSizeClass = "text-xs";
-                                showJob = eventHeightPercent >= 12;
-                              } else {
-                                fontSizeClass = "text-sm";
-                              }
-
-                              const studentName = entry.student.name || "";
-                              const timeRange = `${formatTimeLabel(start)} - ${formatTimeLabel(end)}`;
-
-                              return (
-                                <div
-                                  key={idx}
-                                  lang="en"
-                                  className={`absolute rounded-md shadow-sm ring-1 ring-black/5 text-gray-900 bg-white hover:shadow-md cursor-pointer flex flex-col justify-center items-stretch transition-shadow ${fontSizeClass} p-1`}
-                                  style={{
-                                    top: `${top}%`,
-                                    height: `${height}%`,
-                                    width: widthCalc,
-                                    left: leftCalc,
-                                    background: accent.bg,
-                                    borderLeft: `3px solid ${accent.border}`,
-                                    overflow: "hidden",
-                                    minHeight: "20px",
-                                  }}
-                                  title={`${entry.student.name} • ${formatTimeLabel(start)} - ${formatTimeLabel(end)}${entry.jobTitle ? ` • ${entry.jobTitle}` : ""}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleScheduleClick(entry.student);
-                                  }}
-                                >
-                                  <div
-                                    className="font-semibold leading-tight text-center truncate"
-                                    title={entry.student.name}
-                                  >
-                                    {studentName}
-                                  </div>
-                                  <div
-                                    className="leading-tight text-center truncate"
-                                    title={timeRange}
-                                  >
-                                    {timeRange}
-                                  </div>
-                                  {showJob && (
-                                    <div
-                                      className="leading-tight text-center truncate opacity-85 text-[10px]"
-                                      title={entry.jobTitle}
-                                    >
-                                      {entry.jobTitle}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            },
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    ))}
                   </div>
-                </div>
-              ) : (
-                <div ref={listRef}>
-                  {visibleDays.map((day) => {
-                    const dayEntries = (entriesByDayWithLayout[day] || [])
-                      .slice()
-                      .sort((a, b) => a.start - b.start);
-                    if (dayEntries.length === 0) return null;
-                    return (
-                      <div key={day} className="mb-6 last:mb-0">
-                        <h4 className="text-md font-semibold text-gray-800 mb-3 pb-2 border-b border-gray-200">
-                          {DAY_LABELS[day]}
-                        </h4>
-                        <div className="space-y-3">
-                          {dayEntries.map((item, idx) => {
-                            const { entry, start, end } = item;
-                            const accent = accentForStudentAndJob(
-                              entry.student.id,
-                              entry.jobTitle,
-                            );
-                            return (
-                              <div
-                                key={idx}
-                                className="flex items-center justify-between p-4 rounded-lg border border-gray-200 hover:shadow-md cursor-pointer transition-shadow"
-                                style={{
-                                  background: accent.bg,
-                                  borderLeft: `4px solid ${accent.border}`,
-                                }}
-                                onClick={() =>
-                                  handleScheduleClick(entry.student)
-                                }
-                                title={`Click to view ${entry.student.name}'s contact information`}
-                              >
-                                <div className="flex-1">
-                                  <div className="font-semibold text-gray-900 text-base">
-                                    {entry.student.name}
-                                  </div>
-                                  <div className="text-sm text-gray-600 mt-1">
-                                    {formatTimeLabel(start)} -{" "}
-                                    {formatTimeLabel(end)}
-                                    {entry.jobTitle && (
-                                      <span className="ml-2 text-gray-500">
-                                        • {entry.jobTitle}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {filteredStudents.length === 0 && (
-                    <div className="text-center text-gray-500 py-8">
-                      No schedule entries found with current filters.
-                    </div>
-                  )}
                 </div>
               )}
             </>
           )}
 
-          {activeTab === "building" && (
-            <div ref={buildingRef}>
-              <BuildingScheduleView
-                students={filteredStudents}
-                selectedBuildings={selectedBuildings}
-                selectedJobTitles={selectedJobTitles}
-                dayView={dayView}
-                onPrint={() => window.print()}
-                onExport={() => setShowExportModal(true)}
-              />
-            </div>
-          )}
-
           {activeTab === "list" && (
-            <div className="space-y-6">
+            <div className="space-y-4">
               {filteredStudents.length === 0 ? (
-                <div className="text-center text-gray-500 py-8">
-                  No students found with current filters.
+                <div className="text-center py-12">
+                  <List size={48} className="mx-auto text-gray-300 mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-700 mb-2">No Students Found</h3>
+                  <p className="text-gray-500">Adjust filters to view student schedules.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {filteredStudents.map((student) => (
-                    <div
-                      key={student.id}
-                      className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
-                      onClick={() => handleScheduleClick(student)}
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <h3 className="font-semibold text-gray-900">
-                            {student.name}
-                          </h3>
-                          <p className="text-sm text-gray-500">
-                            {student.email}
-                          </p>
-                        </div>
-                        <span className="text-xs text-gray-400">
-                          {student.visibleAssignments.length} job
-                          {student.visibleAssignments.length !== 1 ? "s" : ""}
-                        </span>
-                      </div>
-                      <div className="space-y-2">
-                        {student.visibleAssignments.map((assignment, idx) => (
-                          <div
-                            key={idx}
-                            className="text-sm p-2 rounded bg-gray-50"
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="font-medium text-gray-700">
-                                {assignment.jobTitle || "Unnamed Job"}
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                {Array.isArray(assignment.buildings) &&
-                                  assignment.buildings.length > 0
-                                  ? assignment.buildings.join(", ")
-                                  : "No building"}
-                              </span>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {filteredStudents.map((student) => {
+                    const color = getColorForKey(student.id);
+                    return (
+                      <div
+                        key={student.id}
+                        className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-md cursor-pointer"
+                        style={{ borderLeftWidth: "4px", borderLeftColor: color.border }}
+                        onClick={() => setSelectedStudentForCard(student)}
+                      >
+                        <div className="p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div>
+                              <h3 className="font-semibold text-gray-900">{student.name}</h3>
+                              {student.email && <p className="text-sm text-gray-500">{student.email}</p>}
                             </div>
-                            {Array.isArray(assignment.schedule) &&
-                              assignment.schedule.length > 0 && (
-                                <div className="text-xs text-gray-500 mt-1">
-                                  {assignment.schedule
-                                    .filter(
-                                      (s) =>
-                                        dayView === "All" || s.day === dayView,
-                                    )
-                                    .map((s) => `${s.day}: ${s.start}-${s.end}`)
-                                    .join(", ")}
-                                </div>
-                              )}
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                              {student.visibleAssignments.length} job{student.visibleAssignments.length !== 1 ? "s" : ""}
+                            </span>
                           </div>
-                        ))}
+                          <div className="space-y-3">
+                            {student.visibleAssignments.map((assignment, idx) => (
+                              <div key={idx} className="bg-gray-50 rounded-lg p-3 text-sm">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="font-medium text-gray-800">{assignment.jobTitle || "Unnamed Job"}</span>
+                                  {assignment.buildings?.length > 0 && (
+                                    <span className="text-xs text-gray-500 flex items-center gap-1">
+                                      <Building size={12} />
+                                      {assignment.buildings.join(", ")}
+                                    </span>
+                                  )}
+                                </div>
+                                {assignment.schedule?.length > 0 && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {DAY_ORDER.map((day) => {
+                                      const daySchedules = assignment.schedule.filter((s) => s.day === day);
+                                      if (daySchedules.length === 0) return null;
+                                      return (
+                                        <span key={day} className="inline-flex items-center bg-white border border-gray-200 rounded px-2 py-0.5 text-xs">
+                                          <span className="font-medium text-baylor-green mr-1">{day}</span>
+                                          <span className="text-gray-600">
+                                            {daySchedules.map((s) => `${formatTimeCompact(parseTimeToMinutes(s.start))}-${formatTimeCompact(parseTimeToMinutes(s.end))}`).join(", ")}
+                                          </span>
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -997,69 +501,23 @@ const StudentSchedules = ({ embedded = false }) => {
         </div>
       </div>
 
-      {/* Export Modal */}
-      <ExportModal
-        isOpen={showExportModal}
-        onClose={() => setShowExportModal(false)}
-        scheduleTableRef={getExportRef()}
-        title={`Student Worker Schedules - ${dayView === "All" ? "All Days" : DAY_LABELS[dayView]} (${activeTab === "building" ? "Building View" : viewMode === "calendar" ? "Calendar" : "List"} View)`}
-      />
-
-      {/* Contact Card Modal */}
       {selectedStudentForCard && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <FacultyContactCard
-              person={selectedStudentForCard}
-              onClose={() => setSelectedStudentForCard(null)}
-              personType="student"
-            />
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 print:hidden">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 relative">
+            <button onClick={() => setSelectedStudentForCard(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+              <X size={20} />
+            </button>
+            <div className="p-6">
+              <FacultyContactCard person={selectedStudentForCard} onClose={() => setSelectedStudentForCard(null)} personType="student" />
+            </div>
           </div>
         </div>
       )}
 
-      {/* Global Print Styles */}
       <style>{`
         @media print {
-          /* Hide UI elements when printing */
-          .print\\:hidden,
-          button,
-          select,
-          input[type="checkbox"],
-          .fixed {
-            display: none !important;
-          }
-          
-          /* Ensure building schedules print nicely */
-          .building-schedule-sheet {
-            break-inside: avoid;
-            page-break-inside: avoid;
-            margin-bottom: 20px;
-          }
-          
-          /* Page breaks between buildings */
-          .building-schedule-sheet + .building-schedule-sheet {
-            page-break-before: always;
-          }
-          
-          /* Remove shadows and borders for cleaner print */
-          .shadow-sm,
-          .shadow-md,
-          .shadow-lg {
-            box-shadow: none !important;
-          }
-          
-          /* Ensure backgrounds print */
-          * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          
-          /* Expand collapsed sections for printing */
-          [class*="overflow-hidden"] {
-            overflow: visible !important;
-            height: auto !important;
-          }
+          .print\\:hidden { display: none !important; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
       `}</style>
     </div>

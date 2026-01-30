@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import VisualScheduleBuilder from "./VisualScheduleBuilder";
 import BuildingSelector from "./BuildingSelector";
+import SuggestionInput from "./SuggestionInput";
 
 /**
  * JobCard - Visual card for displaying and editing job assignments
@@ -50,6 +51,7 @@ const JobCard = ({
   onChange,
   availableBuildings = [],
   existingSupervisors = [],
+  existingJobTitles = [],
   showActions = true,
   compact = false,
 }) => {
@@ -124,40 +126,23 @@ const JobCard = ({
         <div className="space-y-4">
           {/* Job Title & Supervisor */}
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Job Title <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={draft.jobTitle}
-                onChange={(e) =>
-                  setDraft({ ...draft, jobTitle: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                placeholder="e.g., Front Desk Assistant"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Supervisor
-              </label>
-              <input
-                type="text"
-                list="supervisors-list"
-                value={draft.supervisor}
-                onChange={(e) =>
-                  setDraft({ ...draft, supervisor: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                placeholder="Supervisor name"
-              />
-              <datalist id="supervisors-list">
-                {existingSupervisors.map((s, i) => (
-                  <option key={i} value={s} />
-                ))}
-              </datalist>
-            </div>
+            <SuggestionInput
+              label="Job Title"
+              required={true}
+              value={draft.jobTitle}
+              onChange={(value) => setDraft({ ...draft, jobTitle: value })}
+              options={existingJobTitles}
+              placeholder="e.g., Front Desk Assistant"
+              helperText="Choose an existing title or add a new one."
+            />
+            <SuggestionInput
+              label="Supervisor"
+              value={draft.supervisor}
+              onChange={(value) => setDraft({ ...draft, supervisor: value })}
+              options={existingSupervisors}
+              placeholder="Supervisor name"
+              helperText="Select from existing supervisors or add a new one."
+            />
           </div>
 
           {/* Hourly Rate & Dates */}
@@ -222,6 +207,7 @@ const JobCard = ({
               onChange={(newSchedule) =>
                 setDraft({ ...draft, weeklySchedule: newSchedule })
               }
+              showPresets={false}
             />
           </div>
 

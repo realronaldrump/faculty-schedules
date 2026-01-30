@@ -4,8 +4,9 @@ import { formatMinutesToTime } from "../../utils/timeUtils";
 import {
   normalizeScheduleDay,
   normalizeScheduleTime,
-  normalizeWeeklySchedule,
+  normalizeStudentWeeklySchedule,
   sortWeeklySchedule,
+  STUDENT_SCHEDULE_RULES,
   toScheduleMinutes,
 } from "../../utils/studentScheduleUtils";
 
@@ -22,11 +23,11 @@ const DAYS = [
   { key: "W", label: "Wed", full: "Wednesday" },
   { key: "R", label: "Thu", full: "Thursday" },
   { key: "F", label: "Fri", full: "Friday" },
-  { key: "S", label: "Sat", full: "Saturday" },
-  { key: "U", label: "Sun", full: "Sunday" },
 ];
 
-const HOURS = Array.from({ length: 15 }, (_, i) => i + 7); // 7 AM to 9 PM (15 hours)
+const START_HOUR = STUDENT_SCHEDULE_RULES.startMinutes / 60;
+const END_HOUR = STUDENT_SCHEDULE_RULES.endMinutes / 60;
+const HOURS = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => i + START_HOUR); // 8 AM to 5 PM
 
 const PRESETS = [
   {
@@ -55,24 +56,24 @@ const PRESETS = [
 const VisualScheduleBuilder = ({
   schedule = [],
   onChange,
-  showPresets = true,
+  showPresets = false,
   showSummary = true,
 }) => {
   const [hoveredSlot, setHoveredSlot] = useState(null);
   const [manualEntry, setManualEntry] = useState({
     day: DAYS[0].key,
-    start: "09:00",
-    end: "10:00",
+    start: "08:00",
+    end: "09:00",
   });
   const [manualError, setManualError] = useState("");
 
   const normalizedSchedule = useMemo(
-    () => sortWeeklySchedule(normalizeWeeklySchedule(schedule)),
+    () => sortWeeklySchedule(normalizeStudentWeeklySchedule(schedule)),
     [schedule],
   );
 
   const normalizeAndSort = useCallback(
-    (entries) => sortWeeklySchedule(normalizeWeeklySchedule(entries)),
+    (entries) => sortWeeklySchedule(normalizeStudentWeeklySchedule(entries)),
     [],
   );
 
@@ -111,6 +112,9 @@ const VisualScheduleBuilder = ({
   // Toggle a time slot
   const toggleSlot = (day, hour) => {
     const normalizedDay = normalizeScheduleDay(day) || day;
+    if (!STUDENT_SCHEDULE_RULES.allowedDays.includes(normalizedDay)) {
+      return;
+    }
     const existingBlock = getBlock(normalizedDay, hour);
 
     if (existingBlock) {
@@ -206,12 +210,23 @@ const VisualScheduleBuilder = ({
       setManualError("Choose a day for this time block.");
       return;
     }
+    if (!STUDENT_SCHEDULE_RULES.allowedDays.includes(day)) {
+      setManualError("Only Monday through Friday can be scheduled.");
+      return;
+    }
     if (startMinutes === null || endMinutes === null) {
       setManualError("Enter a valid start and end time.");
       return;
     }
     if (startMinutes >= endMinutes) {
       setManualError("End time must be after the start time.");
+      return;
+    }
+    if (
+      startMinutes < STUDENT_SCHEDULE_RULES.startMinutes ||
+      endMinutes > STUDENT_SCHEDULE_RULES.endMinutes
+    ) {
+      setManualError("Times must be between 8:00 AM and 5:00 PM.");
       return;
     }
 
@@ -252,6 +267,10 @@ const VisualScheduleBuilder = ({
           ))}
         </div>
       )}
+
+      <p className="text-xs text-gray-500">
+        Scheduling window: Monday-Friday, 8:00 AM-5:00 PM.
+      </p>
 
       {/* Schedule Grid */}
       <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
@@ -349,6 +368,8 @@ const VisualScheduleBuilder = ({
             step={300}
             value={manualEntry.start}
             onChange={(e) => handleManualFieldChange("start", e.target.value)}
+            min="08:00"
+            max="17:00"
             className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
           />
           <input
@@ -356,6 +377,8 @@ const VisualScheduleBuilder = ({
             step={300}
             value={manualEntry.end}
             onChange={(e) => handleManualFieldChange("end", e.target.value)}
+            min="08:00"
+            max="17:00"
             className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
           />
           <button

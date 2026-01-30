@@ -39,6 +39,7 @@ const StudentAddWizard = ({
   onCancel,
   availableBuildings = [],
   existingSupervisors = [],
+  existingJobTitles = [],
   semesterLabel = "",
 }) => {
   const [currentStep, setCurrentStep] = useState(0);
@@ -358,6 +359,7 @@ const StudentAddWizard = ({
             onRemove={() => removeJob(idx)}
             availableBuildings={availableBuildings}
             existingSupervisors={existingSupervisors}
+            existingJobTitles={existingJobTitles}
           />
         ))}
       </div>
@@ -400,6 +402,7 @@ const StudentAddWizard = ({
             onCancel={() => setEditingJobIndex(null)}
             availableBuildings={availableBuildings}
             existingSupervisors={existingSupervisors}
+            existingJobTitles={existingJobTitles}
           />
         </div>
       )}

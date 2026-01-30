@@ -39,7 +39,7 @@ import {
   getStudentStatusForSemester,
 } from "../utils/studentWorkers";
 import {
-  normalizeWeeklySchedule,
+  normalizeStudentWeeklySchedule,
   sortWeeklySchedule,
 } from "../utils/studentScheduleUtils";
 import { formatPhoneNumber } from "../utils/directoryUtils";
@@ -69,7 +69,7 @@ const normalizeBuildingList = (value) => {
 };
 
 const sanitizeWeeklyEntries = (entries) =>
-  sortWeeklySchedule(normalizeWeeklySchedule(entries));
+  sortWeeklySchedule(normalizeStudentWeeklySchedule(entries));
 
 const prepareStudentPayload = (student) => {
   if (!student) return {};
@@ -1049,6 +1049,7 @@ const StudentDirectory = () => {
             onCancel={() => setIsWizardOpen(false)}
             availableBuildings={availableBuildings}
             existingSupervisors={availableSupervisors}
+            existingJobTitles={availableJobTitles}
             semesterLabel={semesterLabel}
           />
         </div>
@@ -1063,6 +1064,7 @@ const StudentDirectory = () => {
           onDelete={handleStudentDelete}
           availableBuildings={availableBuildings}
           existingSupervisors={availableSupervisors}
+          existingJobTitles={availableJobTitles}
           semesterLabel={semesterLabel}
         />
       )}

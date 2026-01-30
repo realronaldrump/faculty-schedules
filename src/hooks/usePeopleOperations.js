@@ -15,7 +15,7 @@ import { useUI } from '../contexts/UIContext';
 import { getProgramNameKey, isReservedProgramName, normalizeProgramName } from '../utils/programUtils';
 import { deletePersonSafely } from '../utils/dataHygiene';
 import { parseFullName } from '../utils/nameUtils';
-import { normalizeWeeklySchedule, sortWeeklySchedule } from '../utils/studentScheduleUtils';
+import { normalizeStudentWeeklySchedule, sortWeeklySchedule } from '../utils/studentScheduleUtils';
 // Use centralized location service
 import {
   parseRoomLabel,
@@ -87,13 +87,13 @@ const usePeopleOperations = () => {
     if (Array.isArray(next.jobs)) {
       next.jobs = next.jobs.map((job) => {
         if (!job || typeof job !== 'object') return job;
-        const weeklySchedule = sortWeeklySchedule(normalizeWeeklySchedule(job.weeklySchedule));
+        const weeklySchedule = sortWeeklySchedule(normalizeStudentWeeklySchedule(job.weeklySchedule));
         return { ...job, weeklySchedule };
       });
     }
 
     if (next.weeklySchedule !== undefined) {
-      next.weeklySchedule = sortWeeklySchedule(normalizeWeeklySchedule(next.weeklySchedule));
+      next.weeklySchedule = sortWeeklySchedule(normalizeStudentWeeklySchedule(next.weeklySchedule));
     }
 
     if (next.semesterSchedules && typeof next.semesterSchedules === 'object') {
@@ -103,12 +103,12 @@ const usePeopleOperations = () => {
           const entryJobs = Array.isArray(entry.jobs)
             ? entry.jobs.map((job) => {
                 if (!job || typeof job !== 'object') return job;
-                const weeklySchedule = sortWeeklySchedule(normalizeWeeklySchedule(job.weeklySchedule));
+                const weeklySchedule = sortWeeklySchedule(normalizeStudentWeeklySchedule(job.weeklySchedule));
                 return { ...job, weeklySchedule };
               })
             : entry.jobs;
           const entryWeeklySchedule = entry.weeklySchedule !== undefined
-            ? sortWeeklySchedule(normalizeWeeklySchedule(entry.weeklySchedule))
+            ? sortWeeklySchedule(normalizeStudentWeeklySchedule(entry.weeklySchedule))
             : entry.weeklySchedule;
           return [
             key,

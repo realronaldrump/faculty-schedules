@@ -46,6 +46,12 @@ export const normalizeScheduleDay = (value) => {
   return DAY_MAP[key] || "";
 };
 
+export const STUDENT_SCHEDULE_RULES = {
+  allowedDays: ["M", "T", "W", "R", "F"],
+  startMinutes: 8 * 60,
+  endMinutes: 17 * 60,
+};
+
 export const toScheduleMinutes = (value) => {
   if (value === null || value === undefined) return null;
   if (typeof value === "number") {
@@ -84,6 +90,25 @@ export const normalizeWeeklySchedule = (entries) => {
     seen.add(key);
     return true;
   });
+};
+
+export const isWithinStudentScheduleWindow = (entry) => {
+  if (!entry) return false;
+  const day = normalizeScheduleDay(entry.day);
+  if (!day || !STUDENT_SCHEDULE_RULES.allowedDays.includes(day)) return false;
+  const startMinutes = toScheduleMinutes(entry.start);
+  const endMinutes = toScheduleMinutes(entry.end);
+  if (startMinutes === null || endMinutes === null) return false;
+  return (
+    startMinutes >= STUDENT_SCHEDULE_RULES.startMinutes &&
+    endMinutes <= STUDENT_SCHEDULE_RULES.endMinutes &&
+    startMinutes < endMinutes
+  );
+};
+
+export const normalizeStudentWeeklySchedule = (entries) => {
+  const normalized = normalizeWeeklySchedule(entries);
+  return normalized.filter((entry) => isWithinStudentScheduleWindow(entry));
 };
 
 export const sortWeeklySchedule = (entries = []) => {

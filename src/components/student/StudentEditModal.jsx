@@ -41,6 +41,7 @@ const StudentEditModal = ({
   onDelete,
   availableBuildings = [],
   existingSupervisors = [],
+  existingJobTitles = [],
   semesterLabel = "",
 }) => {
   const [activeTab, setActiveTab] = useState("basic");
@@ -246,6 +247,7 @@ const StudentEditModal = ({
             onRemove={() => removeJob(idx)}
             availableBuildings={availableBuildings}
             existingSupervisors={existingSupervisors}
+            existingJobTitles={existingJobTitles}
           />
         ))}
 
@@ -267,6 +269,7 @@ const StudentEditModal = ({
             onCancel={() => setAddingJob(false)}
             availableBuildings={availableBuildings}
             existingSupervisors={existingSupervisors}
+            existingJobTitles={existingJobTitles}
           />
         )}
 

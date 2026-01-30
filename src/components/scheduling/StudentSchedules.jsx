@@ -59,16 +59,20 @@ function formatTimeCompact(minutes) {
   return `${hr12}:${m.toString().padStart(2, "0")}${ampm}`;
 }
 
-// Consistent colors using Tailwind classes
+// Baylor brand color palette for schedule events
+// Uses only Baylor Green scale and Baylor Gold scale from tailwind.config.js
 const COLORS = [
-  { bg: "rgba(21, 71, 52, 0.1)", border: "#154734", text: "#154734" },
-  { bg: "rgba(37, 99, 235, 0.1)", border: "#2563eb", text: "#1e40af" },
-  { bg: "rgba(234, 88, 12, 0.1)", border: "#ea580c", text: "#c2410c" },
-  { bg: "rgba(147, 51, 234, 0.1)", border: "#9333ea", text: "#7e22ce" },
-  { bg: "rgba(13, 148, 136, 0.1)", border: "#0d9488", text: "#0f766e" },
-  { bg: "rgba(202, 138, 4, 0.1)", border: "#ca8a04", text: "#a16207" },
-  { bg: "rgba(219, 39, 119, 0.1)", border: "#db2777", text: "#be185d" },
-  { bg: "rgba(71, 85, 105, 0.1)", border: "#475569", text: "#334155" },
+  // Baylor Green variations
+  { bg: "rgba(21, 71, 52, 0.08)", border: "#154734", text: "#154734" },      // baylor-green DEFAULT
+  { bg: "rgba(45, 112, 92, 0.10)", border: "#2d705c", text: "#22473f" },     // baylor-green-600/800
+  { bg: "rgba(61, 139, 115, 0.10)", border: "#3d8b73", text: "#26594c" },    // baylor-green-500/700
+  { bg: "rgba(31, 60, 54, 0.10)", border: "#1f3c36", text: "#0f211d" },      // baylor-green-900/950
+  // Baylor Gold variations
+  { bg: "rgba(255, 184, 28, 0.12)", border: "#d97706", text: "#92400e" },    // baylor-gold/amber-600/800
+  { bg: "rgba(251, 191, 36, 0.12)", border: "#b45309", text: "#78350f" },    // amber-400/700/900
+  // Neutral/charcoal for variety
+  { bg: "rgba(56, 56, 56, 0.08)", border: "#383838", text: "#383838" },      // baylor-charcoal
+  { bg: "rgba(0, 63, 92, 0.10)", border: "#003F5C", text: "#003F5C" },       // baylor-blue (limited use)
 ];
 
 function getColorForKey(key) {

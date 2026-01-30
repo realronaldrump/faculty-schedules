@@ -128,8 +128,8 @@ const StudentEditModal = ({
 
   const currentStatus = getStudentStatus(formData);
 
-  // Tab Components
-  const BasicInfoTab = () => (
+  // Tab Render Functions
+  const renderBasicInfoTab = () => (
     <div className="max-w-2xl space-y-6">
       <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-1">
@@ -207,7 +207,7 @@ const StudentEditModal = ({
     </div>
   );
 
-  const JobsTab = () => (
+  const renderJobsTab = () => (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -283,7 +283,7 @@ const StudentEditModal = ({
     </div>
   );
 
-  const EmploymentTab = () => (
+  const renderEmploymentTab = () => (
     <div className="max-w-2xl space-y-6">
       <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-1">
@@ -364,7 +364,7 @@ const StudentEditModal = ({
     </div>
   );
 
-  const PayrollTab = () => (
+  const renderPayrollTab = () => (
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-1">
@@ -491,8 +491,8 @@ const StudentEditModal = ({
                 }}
                 disabled={!canDeleteStudent}
                 className={`p-2 rounded-full transition-colors ${canDeleteStudent
-                    ? "text-white/80 hover:text-white hover:bg-white/20"
-                    : "text-white/40 cursor-not-allowed"
+                  ? "text-white/80 hover:text-white hover:bg-white/20"
+                  : "text-white/40 cursor-not-allowed"
                   }`}
                 title={
                   canDeleteStudent
@@ -550,8 +550,8 @@ const StudentEditModal = ({
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${activeTab === tab.id
-                        ? "bg-baylor-green text-white"
-                        : "text-gray-700 hover:bg-gray-200"
+                      ? "bg-baylor-green text-white"
+                      : "text-gray-700 hover:bg-gray-200"
                       }`}
                   >
                     <Icon size={18} />
@@ -572,8 +572,8 @@ const StudentEditModal = ({
                     updateField("isActive", formData.isActive === false)
                   }
                   className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${formData.isActive !== false
-                      ? "bg-red-100 text-red-700 hover:bg-red-200"
-                      : "bg-green-100 text-green-700 hover:bg-green-200"
+                    ? "bg-red-100 text-red-700 hover:bg-red-200"
+                    : "bg-green-100 text-green-700 hover:bg-green-200"
                     }`}
                 >
                   {formData.isActive !== false
@@ -586,10 +586,10 @@ const StudentEditModal = ({
 
           {/* Content Area */}
           <div className="flex-1 overflow-y-auto p-6">
-            {activeTab === "basic" && <BasicInfoTab />}
-            {activeTab === "jobs" && <JobsTab />}
-            {activeTab === "employment" && <EmploymentTab />}
-            {activeTab === "payroll" && <PayrollTab />}
+            {activeTab === "basic" && renderBasicInfoTab()}
+            {activeTab === "jobs" && renderJobsTab()}
+            {activeTab === "employment" && renderEmploymentTab()}
+            {activeTab === "payroll" && renderPayrollTab()}
           </div>
         </div>
 

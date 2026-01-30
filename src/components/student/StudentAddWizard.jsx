@@ -165,8 +165,8 @@ const StudentAddWizard = ({
   // Get current status
   const currentStatus = getStudentStatus(student);
 
-  // Step Components
-  const BasicInfoStep = () => (
+  // Step Render Functions
+  const renderBasicInfoStep = () => (
     <div className="space-y-6">
       <div className="text-center mb-8">
         <h3 className="text-lg font-semibold text-gray-900">
@@ -186,9 +186,8 @@ const StudentAddWizard = ({
             type="text"
             value={student.name}
             onChange={(e) => updateStudent({ name: e.target.value })}
-            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${
-              errors.name ? "border-red-500" : "border-gray-300"
-            }`}
+            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.name ? "border-red-500" : "border-gray-300"
+              }`}
             placeholder="e.g., John Doe"
           />
           {errors.name && (
@@ -207,9 +206,8 @@ const StudentAddWizard = ({
             type="email"
             value={student.email}
             onChange={(e) => updateStudent({ email: e.target.value })}
-            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${
-              errors.email ? "border-red-500" : "border-gray-300"
-            }`}
+            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.email ? "border-red-500" : "border-gray-300"
+              }`}
             placeholder="student@baylor.edu"
           />
           {errors.email && (
@@ -230,9 +228,8 @@ const StudentAddWizard = ({
               value={student.phone}
               disabled={student.hasNoPhone}
               onChange={(e) => updateStudent({ phone: e.target.value })}
-              className={`flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${
-                errors.phone ? "border-red-500" : "border-gray-300"
-              } ${student.hasNoPhone ? "bg-gray-100" : ""}`}
+              className={`flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.phone ? "border-red-500" : "border-gray-300"
+                } ${student.hasNoPhone ? "bg-gray-100" : ""}`}
               placeholder="(254) 710-1234"
             />
             <label className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
@@ -260,7 +257,7 @@ const StudentAddWizard = ({
     </div>
   );
 
-  const EmploymentStep = () => (
+  const renderEmploymentStep = () => (
     <div className="space-y-6">
       <div className="text-center mb-8">
         <h3 className="text-lg font-semibold text-gray-900">
@@ -333,7 +330,7 @@ const StudentAddWizard = ({
     </div>
   );
 
-  const JobsStep = () => (
+  const renderJobsStep = () => (
     <div className="space-y-6">
       <div className="text-center mb-4">
         <h3 className="text-lg font-semibold text-gray-900">Job Assignments</h3>
@@ -429,7 +426,7 @@ const StudentAddWizard = ({
     </div>
   );
 
-  const ReviewStep = () => (
+  const renderReviewStep = () => (
     <div className="space-y-6">
       <div className="text-center mb-8">
         <h3 className="text-lg font-semibold text-gray-900">
@@ -589,13 +586,12 @@ const StudentAddWizard = ({
             return (
               <div key={step.id} className="flex items-center flex-1">
                 <div
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
-                    isActive
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${isActive
                       ? "bg-baylor-green text-white"
                       : isCompleted
                         ? "bg-baylor-green/20 text-baylor-green"
                         : "bg-gray-100 text-gray-400"
-                  }`}
+                    }`}
                 >
                   <div
                     className={`${isCompleted ? "bg-baylor-green text-white" : ""} rounded-full p-0.5`}
@@ -608,9 +604,8 @@ const StudentAddWizard = ({
                 </div>
                 {idx < STEPS.length - 1 && (
                   <div
-                    className={`flex-1 h-0.5 mx-2 ${
-                      isCompleted ? "bg-baylor-green/50" : "bg-gray-200"
-                    }`}
+                    className={`flex-1 h-0.5 mx-2 ${isCompleted ? "bg-baylor-green/50" : "bg-gray-200"
+                      }`}
                   />
                 )}
               </div>
@@ -621,10 +616,10 @@ const StudentAddWizard = ({
 
       {/* Content */}
       <div className="p-6 min-h-[400px]">
-        {currentStep === 0 && <BasicInfoStep />}
-        {currentStep === 1 && <EmploymentStep />}
-        {currentStep === 2 && <JobsStep />}
-        {currentStep === 3 && <ReviewStep />}
+        {currentStep === 0 && renderBasicInfoStep()}
+        {currentStep === 1 && renderEmploymentStep()}
+        {currentStep === 2 && renderJobsStep()}
+        {currentStep === 3 && renderReviewStep()}
       </div>
 
       {/* Footer Navigation */}

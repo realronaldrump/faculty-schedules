@@ -149,9 +149,8 @@ const StudentEditModal = ({
             type="text"
             value={formData.name || ""}
             onChange={(e) => updateField("name", e.target.value)}
-            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${
-              errors.name ? "border-red-500" : "border-gray-300"
-            }`}
+            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.name ? "border-red-500" : "border-gray-300"
+              }`}
           />
           {errors.name && (
             <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
@@ -169,9 +168,8 @@ const StudentEditModal = ({
             type="email"
             value={formData.email || ""}
             onChange={(e) => updateField("email", e.target.value)}
-            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${
-              errors.email ? "border-red-500" : "border-gray-300"
-            }`}
+            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.email ? "border-red-500" : "border-gray-300"
+              }`}
           />
           {errors.email && (
             <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
@@ -191,9 +189,8 @@ const StudentEditModal = ({
               value={formData.phone || ""}
               disabled={formData.hasNoPhone}
               onChange={(e) => updateField("phone", e.target.value)}
-              className={`flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${
-                formData.hasNoPhone ? "bg-gray-100" : "border-gray-300"
-              }`}
+              className={`flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${formData.hasNoPhone ? "bg-gray-100" : "border-gray-300"
+                }`}
             />
             <label className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
               <input
@@ -492,26 +489,26 @@ const StudentEditModal = ({
                 onClick={() => {
                   if (canDeleteStudent) setShowDeleteConfirm(true);
                 }}
-              disabled={!canDeleteStudent}
-              className={`p-2 rounded-full transition-colors ${
-                canDeleteStudent
-                  ? "text-white/80 hover:text-white hover:bg-white/20"
-                  : "text-white/40 cursor-not-allowed"
-              }`}
-              title={
-                canDeleteStudent
-                  ? "Delete Student"
-                  : "You do not have permission to delete students"
-              }
-            >
-              <Trash2 size={20} />
-            </button>
-            <button
-              onClick={onClose}
-              className="p-2 text-white/80 hover:text-white hover:bg-white/20 rounded-full transition-colors"
-            >
-              <X size={24} />
-            </button>
+                disabled={!canDeleteStudent}
+                className={`p-2 rounded-full transition-colors ${canDeleteStudent
+                    ? "text-white/80 hover:text-white hover:bg-white/20"
+                    : "text-white/40 cursor-not-allowed"
+                  }`}
+                title={
+                  canDeleteStudent
+                    ? "Delete Student"
+                    : "You do not have permission to delete students"
+                }
+              >
+                <Trash2 size={20} />
+              </button>
+              <button
+                onClick={onClose}
+                className="p-2 text-white/80 hover:text-white hover:bg-white/20 rounded-full transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -552,11 +549,10 @@ const StudentEditModal = ({
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
-                      activeTab === tab.id
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${activeTab === tab.id
                         ? "bg-baylor-green text-white"
                         : "text-gray-700 hover:bg-gray-200"
-                    }`}
+                      }`}
                   >
                     <Icon size={18} />
                     <span className="font-medium">{tab.label}</span>
@@ -575,11 +571,10 @@ const StudentEditModal = ({
                   onClick={() =>
                     updateField("isActive", formData.isActive === false)
                   }
-                  className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    formData.isActive !== false
+                  className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${formData.isActive !== false
                       ? "bg-red-100 text-red-700 hover:bg-red-200"
                       : "bg-green-100 text-green-700 hover:bg-green-200"
-                  }`}
+                    }`}
                 >
                   {formData.isActive !== false
                     ? "Deactivate Student"

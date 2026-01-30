@@ -657,6 +657,22 @@ const StudentDirectory = () => {
       ),
     },
     {
+      key: "jobTitle",
+      label: "Job Title",
+      headerClassName: "w-[15%]",
+      render: (student) => {
+        const primaryJobTitle =
+          student.jobs && student.jobs.length > 0
+            ? student.jobs[0]?.jobTitle
+            : student.jobTitle;
+        return (
+          <div className="text-sm text-gray-700">
+            {primaryJobTitle || "-"}
+          </div>
+        );
+      },
+    },
+    {
       key: "email",
       label: "Email",
       headerClassName: "w-[20%]",

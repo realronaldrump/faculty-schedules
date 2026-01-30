@@ -1,26 +1,28 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import {
   Users,
   Edit,
   Save,
   X,
   Plus,
-  Mail,
-  Phone,
-  MapPin,
-  Building2,
-  UserCog,
   Search,
-  Filter,
-  ArrowUpDown,
   GripVertical,
   MoreVertical,
-  Check,
+  UserCog,
+  Building2,
+  ChevronDown,
+  ChevronUp,
+  ArrowRightLeft,
+  Trash2,
+  GraduationCap,
+  Star,
+  Move,
+  Eye,
 } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db, COLLECTIONS } from "../../firebase";
-import { logUpdate } from "../../utils/changeLogger";
+import { logUpdate, logDelete } from "../../utils/changeLogger";
 import { usePermissions } from "../../utils/permissions";
 import {
   getProgramNameKey,
@@ -35,13 +37,14 @@ import { useUI } from "../../contexts/UIContext";
 const ProgramManagement = ({ embedded = false }) => {
   const { facultyData = [], programs = [], loadPrograms } = useData();
   const { loadPeople } = usePeople();
-  const { handleProgramCreate, handleFacultyUpdate } = usePeopleOperations();
+  const { handleProgramCreate, handleProgramUpdate, handleFacultyUpdate } =
+    usePeopleOperations();
   const { showNotification } = useUI();
   const { canEdit } = usePermissions();
   const canEditHere = canEdit("people/programs");
+
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [editingUPD, setEditingUPD] = useState(null);
-  const [selectedProgram, setSelectedProgram] = useState("all");
   const [searchText, setSearchText] = useState("");
   const [showCreateProgram, setShowCreateProgram] = useState(false);
   const [newProgramName, setNewProgramName] = useState("");
@@ -50,8 +53,13 @@ const ProgramManagement = ({ embedded = false }) => {
   const [dragOverProgram, setDragOverProgram] = useState(null);
   const [showAdjuncts, setShowAdjuncts] = useState(false);
   const [expandedPrograms, setExpandedPrograms] = useState(new Set());
-  const allowCreateProgram = canEditHere;
-  const activePrograms = Array.isArray(programs) ? programs : [];
+  const [editingProgramName, setEditingProgramName] = useState(null);
+  const [editNameValue, setEditNameValue] = useState("");
+  const [isUpdatingName, setIsUpdatingName] = useState(false);
+  const [selectedProgramFilter, setSelectedProgramFilter] = useState("all");
+  const [programToDelete, setProgramToDelete] = useState(null);
+  const [isDeletingProgram, setIsDeletingProgram] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   useEffect(() => {
     loadPeople();
@@ -62,14 +70,16 @@ const ProgramManagement = ({ embedded = false }) => {
   const programData = useMemo(() => {
     if (!facultyData || !Array.isArray(facultyData)) return {};
 
-    // Start with all programs from the database
     const programGroups = {};
-    activePrograms.forEach((p) => {
+
+    // Initialize with all programs from the database
+    programs.forEach((p) => {
       programGroups[p.name] = {
         name: p.name,
         faculty: [],
         upds: [],
         programId: p.id,
+        rawProgram: p,
       };
     });
 
@@ -80,6 +90,7 @@ const ProgramManagement = ({ embedded = false }) => {
         faculty: [],
         upds: [],
         programId: null,
+        rawProgram: null,
       };
     }
 
@@ -89,24 +100,22 @@ const ProgramManagement = ({ embedded = false }) => {
       : facultyData.filter((f) => !f.isAdjunct);
 
     facultyToProcess.forEach((faculty) => {
-      // Use the program from faculty data (which comes from the programs collection)
       let programName = "Unassigned";
 
-      // Find the program name from the programs list using programId
       if (faculty.programId) {
-        const program = activePrograms.find((p) => p.id === faculty.programId);
+        const program = programs.find((p) => p.id === faculty.programId);
         if (program) {
           programName = program.name;
         }
       }
 
       if (!programGroups[programName]) {
-        // This case should ideally not be hit if faculty programs are clean
         programGroups[programName] = {
           name: programName,
           faculty: [],
           upds: [],
           programId: faculty.programId,
+          rawProgram: null,
         };
       }
 
@@ -114,10 +123,7 @@ const ProgramManagement = ({ embedded = false }) => {
 
       // Check if this faculty member is marked as UPD
       if (faculty.isUPD) {
-        // Check if this program has this faculty as UPD (supports single updId and multiple updIds)
-        const programInfo = activePrograms.find(
-          (p) => p.id === faculty.programId,
-        );
+        const programInfo = programs.find((p) => p.id === faculty.programId);
         const updIds = Array.isArray(programInfo?.updIds)
           ? programInfo.updIds
           : programInfo?.updId
@@ -136,43 +142,71 @@ const ProgramManagement = ({ embedded = false }) => {
     return programGroups;
   }, [facultyData, showAdjuncts, programs]);
 
-  const programList = Object.keys(programData).sort();
+  // Separate unassigned from regular programs
+  const { regularPrograms, unassignedProgram } = useMemo(() => {
+    const allPrograms = Object.keys(programData).sort();
+    const unassigned = allPrograms.find((p) => p === "Unassigned");
+    const regular = allPrograms.filter((p) => p !== "Unassigned");
 
-  // Filter faculty based on selected program and search
-  const filteredFaculty = useMemo(() => {
-    let faculty = facultyData || [];
+    return {
+      regularPrograms: regular,
+      unassignedProgram: unassigned ? programData[unassigned] : null,
+    };
+  }, [programData]);
 
-    // Filter out adjuncts if the toggle is off
-    if (!showAdjuncts) {
-      faculty = faculty.filter((f) => !f.isAdjunct);
-    }
+  // Filter programs based on search
+  const filteredPrograms = useMemo(() => {
+    let programList = [...regularPrograms];
 
-    if (selectedProgram !== "all") {
-      // Find faculty in the selected program from programData
-      const program = programData[selectedProgram];
-      if (program && program.faculty) {
-        const programFacultyIds = new Set(program.faculty.map((f) => f.id));
-        faculty = faculty.filter((f) => programFacultyIds.has(f.id));
-      } else {
-        faculty = [];
-      }
+    if (
+      selectedProgramFilter !== "all" &&
+      selectedProgramFilter !== "Unassigned"
+    ) {
+      programList = programList.filter((p) => p === selectedProgramFilter);
     }
 
     if (searchText) {
       const searchLower = searchText.toLowerCase();
-      faculty = faculty.filter(
+      programList = programList.filter((programName) => {
+        const program = programData[programName];
+        // Search in program name
+        if (programName.toLowerCase().includes(searchLower)) return true;
+        // Search in faculty names
+        return program.faculty.some(
+          (f) =>
+            f.name?.toLowerCase().includes(searchLower) ||
+            f.email?.toLowerCase().includes(searchLower) ||
+            f.jobTitle?.toLowerCase().includes(searchLower),
+        );
+      });
+    }
+
+    return programList;
+  }, [programData, searchText, selectedProgramFilter, regularPrograms]);
+
+  // Check if unassigned should be shown based on filters
+  const shouldShowUnassigned = useMemo(() => {
+    if (!unassignedProgram) return false;
+    if (
+      selectedProgramFilter !== "all" &&
+      selectedProgramFilter !== "Unassigned"
+    )
+      return false;
+
+    if (searchText) {
+      const searchLower = searchText.toLowerCase();
+      return unassignedProgram.faculty.some(
         (f) =>
           f.name?.toLowerCase().includes(searchLower) ||
           f.email?.toLowerCase().includes(searchLower) ||
-          f.jobTitle?.toLowerCase().includes(searchLower) ||
-          f.office?.toLowerCase().includes(searchLower),
+          f.jobTitle?.toLowerCase().includes(searchLower),
       );
     }
 
-    return faculty;
-  }, [facultyData, programData, selectedProgram, searchText, showAdjuncts]);
+    return true;
+  }, [unassignedProgram, selectedProgramFilter, searchText]);
 
-  // Handle UPD designation - now updates the programs collection (supports up to two UPDs)
+  // Handle UPD designation
   const handleSetUPD = async (programName, faculty) => {
     if (!canEditHere) {
       showNotification(
@@ -184,7 +218,6 @@ const ProgramManagement = ({ embedded = false }) => {
     }
 
     try {
-      // Validation: Only non-adjunct faculty can be UPD
       if (faculty.isAdjunct) {
         showNotification(
           "error",
@@ -194,7 +227,6 @@ const ProgramManagement = ({ embedded = false }) => {
         return;
       }
 
-      // Find the program in our programs data
       const program = programData[programName];
       if (!program || !program.programId) {
         showNotification(
@@ -205,7 +237,6 @@ const ProgramManagement = ({ embedded = false }) => {
         return;
       }
 
-      // Determine current UPDs for this program
       const currentUPDs = Array.isArray(program.upds) ? program.upds : [];
       if (currentUPDs.some((u) => u.id === faculty.id)) {
         showNotification(
@@ -225,14 +256,12 @@ const ProgramManagement = ({ embedded = false }) => {
         return;
       }
 
-      // Set new UPD on the faculty member
       await handleFacultyUpdate({
         ...faculty,
         isUPD: true,
         updatedAt: new Date().toISOString(),
       });
 
-      // Update the programs collection to reference this faculty member as UPD (append to updIds array)
       const programRef = doc(db, COLLECTIONS.PROGRAMS, program.programId);
       const prevUpdIds = currentUPDs.map((u) => u.id);
       const newUpdIds = [...prevUpdIds, faculty.id];
@@ -243,13 +272,12 @@ const ProgramManagement = ({ embedded = false }) => {
 
       await updateDoc(programRef, updateData);
 
-      // Log the change
       await logUpdate(
         `Program UPD Assignment - ${programName} → ${faculty.name}`,
         "programs",
         program.programId,
         updateData,
-        { updIds: prevUpdIds }, // Previous UPDs
+        { updIds: prevUpdIds },
         "ProgramManagement.jsx - handleSetUPD",
       );
 
@@ -270,7 +298,54 @@ const ProgramManagement = ({ embedded = false }) => {
     }
   };
 
-  // Handle program reassignment via drag and drop
+  // Handle removing UPD
+  const handleRemoveUPD = async (programName, faculty) => {
+    if (!canEditHere) {
+      showNotification(
+        "warning",
+        "Permission Denied",
+        "You do not have permission to remove Undergraduate Program Directors.",
+      );
+      return;
+    }
+
+    try {
+      const program = programData[programName];
+      if (!program || !program.programId) return;
+
+      const currentUPDs = Array.isArray(program.upds) ? program.upds : [];
+      const newUpdIds = currentUPDs
+        .filter((u) => u.id !== faculty.id)
+        .map((u) => u.id);
+
+      const programRef = doc(db, COLLECTIONS.PROGRAMS, program.programId);
+      await updateDoc(programRef, {
+        updIds: newUpdIds,
+        updatedAt: new Date().toISOString(),
+      });
+
+      await handleFacultyUpdate({
+        ...faculty,
+        isUPD: false,
+        updatedAt: new Date().toISOString(),
+      });
+
+      showNotification(
+        "success",
+        "UPD Removed",
+        `${faculty.name} is no longer an Undergraduate Program Director for ${programName}`,
+      );
+    } catch (error) {
+      console.error("Error removing UPD:", error);
+      showNotification(
+        "error",
+        "Error",
+        "Failed to remove UPD designation. Please try again.",
+      );
+    }
+  };
+
+  // Drag and drop handlers
   const handleDragStart = (e, faculty) => {
     if (!faculty || !faculty.id) {
       e.preventDefault();
@@ -278,12 +353,18 @@ const ProgramManagement = ({ embedded = false }) => {
     }
     setDraggedFaculty(faculty);
     e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", faculty.id);
   };
 
-  const handleDragOver = (e, program) => {
-    if (!draggedFaculty || !program) return;
+  const handleDragOver = (e, programName) => {
     e.preventDefault();
-    setDragOverProgram(program);
+    if (draggedFaculty && programName) {
+      setDragOverProgram(programName);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverProgram(null);
   };
 
   const handleDrop = async (e, targetProgramName) => {
@@ -295,7 +376,6 @@ const ProgramManagement = ({ embedded = false }) => {
       return;
     }
 
-    // Don't move if already in the target program
     const currentProgram = Object.keys(programData).find((prog) =>
       programData[prog].faculty.some((f) => f.id === draggedFaculty.id),
     );
@@ -306,7 +386,6 @@ const ProgramManagement = ({ embedded = false }) => {
     }
 
     try {
-      // Find the target program ID
       const targetProgram = programData[targetProgramName];
       if (!targetProgram || !targetProgram.programId) {
         showNotification(
@@ -318,7 +397,6 @@ const ProgramManagement = ({ embedded = false }) => {
         return;
       }
 
-      // Update faculty member's programId
       const updateData = {
         ...draggedFaculty,
         programId: targetProgram.programId,
@@ -348,7 +426,6 @@ const ProgramManagement = ({ embedded = false }) => {
   const handleProgramChange = async (faculty, newProgramName) => {
     if (!faculty || !newProgramName) return;
 
-    // Don't move if already in the target program
     const currentProgram = Object.keys(programData).find((program) =>
       programData[program].faculty.some((f) => f.id === faculty.id),
     );
@@ -356,7 +433,6 @@ const ProgramManagement = ({ embedded = false }) => {
     if (currentProgram === newProgramName) return;
 
     try {
-      // Find the target program ID
       const targetProgram = programData[newProgramName];
       if (!targetProgram || !targetProgram.programId) {
         showNotification(
@@ -367,7 +443,6 @@ const ProgramManagement = ({ embedded = false }) => {
         return;
       }
 
-      // Update faculty member's programId
       const updateData = {
         ...faculty,
         programId: targetProgram.programId,
@@ -402,8 +477,50 @@ const ProgramManagement = ({ embedded = false }) => {
     setExpandedPrograms(newExpanded);
   };
 
+  // Start editing program name
+  const startEditingProgramName = (program) => {
+    if (!canEditHere) {
+      showNotification(
+        "warning",
+        "Permission Denied",
+        "You do not have permission to edit program names.",
+      );
+      return;
+    }
+    setEditingProgramName(program.name);
+    setEditNameValue(program.name);
+  };
+
+  // Save edited program name
+  const saveProgramName = async (program) => {
+    if (!editNameValue.trim() || editNameValue.trim() === program.name) {
+      setEditingProgramName(null);
+      setEditNameValue("");
+      return;
+    }
+
+    setIsUpdatingName(true);
+    const result = await handleProgramUpdate(
+      program.rawProgram || { id: program.programId, name: program.name },
+      editNameValue.trim(),
+    );
+    setIsUpdatingName(false);
+
+    if (result) {
+      setEditingProgramName(null);
+      setEditNameValue("");
+    }
+  };
+
+  // Cancel editing program name
+  const cancelEditingProgramName = () => {
+    setEditingProgramName(null);
+    setEditNameValue("");
+  };
+
+  // Create new program
   const createNewProgram = async () => {
-    if (!allowCreateProgram) {
+    if (!canEditHere) {
       showNotification(
         "warning",
         "Permission Denied",
@@ -429,7 +546,7 @@ const ProgramManagement = ({ embedded = false }) => {
     }
 
     const programKey = getProgramNameKey(programName);
-    const duplicate = activePrograms.find(
+    const duplicate = programs.find(
       (p) => getProgramNameKey(p.name) === programKey,
     );
     if (duplicate) {
@@ -460,280 +577,213 @@ const ProgramManagement = ({ embedded = false }) => {
     }
   };
 
+  // Delete program
+  const deleteProgram = async () => {
+    if (!programToDelete || !canEditHere) return;
+
+    const program = programData[programToDelete];
+    if (!program) return;
+
+    // Check if program has faculty
+    if (program.faculty.length > 0) {
+      showNotification(
+        "error",
+        "Cannot Delete",
+        "Cannot delete a program that has faculty members. Please reassign all faculty first.",
+      );
+      setProgramToDelete(null);
+      return;
+    }
+
+    setIsDeletingProgram(true);
+    try {
+      await deleteDoc(doc(db, COLLECTIONS.PROGRAMS, program.programId));
+
+      await logDelete(
+        `Program - ${program.name}`,
+        COLLECTIONS.PROGRAMS,
+        program.programId,
+        program.rawProgram,
+        "ProgramManagement.jsx - deleteProgram",
+      );
+
+      await loadPrograms();
+      showNotification(
+        "success",
+        "Program Deleted",
+        `${program.name} has been deleted successfully.`,
+      );
+    } catch (error) {
+      console.error("Error deleting program:", error);
+      showNotification(
+        "error",
+        "Error",
+        "Failed to delete program. Please try again.",
+      );
+    } finally {
+      setIsDeletingProgram(false);
+      setProgramToDelete(null);
+    }
+  };
+
+  // Get all program names for dropdown
+  const allProgramNames = useMemo(() => {
+    return Object.keys(programData)
+      .filter((p) => p !== "Unassigned")
+      .sort();
+  }, [programData]);
+
+  const programList = Object.keys(programData).sort();
+
   return (
-    <div className="space-y-6 p-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          {embedded ? (
-            <h2 className="text-xl font-semibold text-gray-900">
-              Programs & UPDs
-            </h2>
-          ) : (
-            <h1 className="text-2xl font-bold text-gray-900">
-              Programs & UPDs
-            </h1>
-          )}
-          <p className="text-gray-600">
-            Organize faculty by program and manage UPD designations
-          </p>
-        </div>
-        <button
-          onClick={() => {
-            if (!allowCreateProgram) {
-              showNotification(
-                "warning",
-                "Permission Denied",
-                "You do not have permission to create programs.",
-              );
-              return;
-            }
-            setShowCreateProgram(true);
-          }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-            allowCreateProgram
-              ? "bg-baylor-green text-white hover:bg-baylor-green/90"
-              : "bg-gray-200 text-gray-400 cursor-not-allowed"
-          }`}
-          disabled={!allowCreateProgram}
-          title={
-            allowCreateProgram
-              ? "Add a new program"
-              : "You do not have permission to add programs"
-          }
-        >
-          <Plus size={16} />
-          Add Program
-        </button>
-      </div>
-
-      {/* Program Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {programList.map((programName) => {
-          const program = programData[programName];
-          const isDragOver = dragOverProgram === programName;
-
-          return (
-            <div
-              key={programName}
-              className={`bg-white rounded-lg border-2 p-4 transition-all ${
-                isDragOver
-                  ? "border-baylor-green bg-baylor-green/5 shadow-lg"
-                  : "border-gray-200 hover:border-baylor-green/50"
-              }`}
-              onDragOver={(e) => handleDragOver(e, programName)}
-              onDrop={(e) => handleDrop(e, programName)}
-            >
-              {/* Program Header */}
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                  <Building2 size={16} className="text-baylor-green" />
-                  {programName}
-                </h3>
-                <span className="bg-baylor-gold/20 text-baylor-gold px-2 py-1 rounded-full text-xs font-medium">
-                  {program.faculty.length} faculty
-                </span>
-              </div>
-
-              {/* UPD Section */}
-              <div className="mb-3 p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
-                    <UserCog size={14} className="text-amber-600" />
-                    UPD
-                  </span>
-
-                  {editingUPD === programName ? (
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setEditingUPD(null)}
-                        className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                        title="Cancel"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setEditingUPD(programName)}
-                      className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                      title="Edit UPD"
-                    >
-                      <Edit size={14} />
-                    </button>
-                  )}
-                </div>
-
-                {editingUPD === programName ? (
-                  <div className="mt-2 space-y-2 max-h-32 overflow-y-auto">
-                    {program.faculty
-                      .filter((f) => !f.isAdjunct)
-                      .map((faculty) => (
-                        <button
-                          key={faculty.id}
-                          onClick={() => handleSetUPD(programName, faculty)}
-                          className="w-full text-left p-2 text-sm bg-white rounded border hover:bg-baylor-green/5 hover:border-baylor-green/30 transition-all"
-                        >
-                          <div className="font-medium text-gray-900">
-                            {faculty.name}
-                          </div>
-                          <div className="text-gray-500 text-xs">
-                            {faculty.jobTitle}
-                          </div>
-                        </button>
-                      ))}
-                  </div>
-                ) : (
-                  <div className="mt-2">
-                    {Array.isArray(program.upds) && program.upds.length > 0 ? (
-                      <div className="text-sm space-y-1">
-                        {program.upds.map((u) => (
-                          <div key={u.id}>
-                            <div className="font-medium text-gray-900">
-                              {u.name}
-                            </div>
-                            <div className="text-gray-500 text-xs">
-                              {u.jobTitle}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-sm text-gray-500 italic">
-                        No UPD assigned
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Faculty Preview */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700">
-                    Faculty
-                  </span>
-                  <button
-                    onClick={() => toggleProgramExpansion(programName)}
-                    className="text-xs text-baylor-green hover:text-baylor-green/80 transition-colors"
-                  >
-                    {expandedPrograms.has(programName)
-                      ? "Show Less"
-                      : "Show All"}
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  {(expandedPrograms.has(programName)
-                    ? program.faculty
-                    : program.faculty.slice(0, 3)
-                  ).map((faculty) => (
-                    <div
-                      key={faculty.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, faculty)}
-                      className="flex items-start justify-between gap-2 p-2 bg-white rounded border border-gray-200 hover:border-baylor-green/30 transition-all cursor-move group"
-                    >
-                      <div className="flex items-start gap-2 flex-1">
-                        <GripVertical
-                          size={14}
-                          className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 flex-shrink-0"
-                        />
-                        <div className="flex-1">
-                          <div className="font-medium text-sm text-gray-900 leading-snug">
-                            {faculty.name}
-                          </div>
-                          <div className="text-xs text-gray-500 leading-snug">
-                            {faculty.jobTitle}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                        <button
-                          onClick={() => setSelectedFacultyForCard(faculty)}
-                          className="p-1 text-gray-400 hover:text-baylor-green transition-colors"
-                          title="View Details"
-                        >
-                          <Users size={12} />
-                        </button>
-                        <div className="relative">
-                          <select
-                            value={programName}
-                            onChange={(e) =>
-                              handleProgramChange(faculty, e.target.value)
-                            }
-                            className="text-xs border-0 bg-transparent cursor-pointer text-gray-400 hover:text-baylor-green transition-colors"
-                            title="Move to Program"
-                          >
-                            <option value={programName}>{programName}</option>
-                            {programList
-                              .filter((p) => p !== programName)
-                              .map((otherProgram) => (
-                                <option key={otherProgram} value={otherProgram}>
-                                  {otherProgram}
-                                </option>
-                              ))}
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-
-                  {!expandedPrograms.has(programName) &&
-                    program.faculty.length > 3 && (
-                      <div className="text-center py-2">
-                        <span className="text-xs text-gray-500">
-                          +{program.faculty.length - 3} more faculty
-                        </span>
-                      </div>
-                    )}
-                </div>
-              </div>
+    <div className="min-h-screen bg-gray-50/50">
+      {/* Header Section */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              {embedded ? (
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Programs & UPDs
+                </h2>
+              ) : (
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Programs & UPDs
+                </h1>
+              )}
+              <p className="text-sm text-gray-500 mt-1">
+                Manage programs, assign UPDs, and organize faculty
+              </p>
             </div>
-          );
-        })}
+            <div className="flex items-center gap-3">
+              {/* Edit Mode Toggle */}
+              {canEditHere && (
+                <button
+                  onClick={() => setIsEditMode(!isEditMode)}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+                    isEditMode
+                      ? "bg-amber-100 text-amber-800 border-2 border-amber-300"
+                      : "bg-white text-gray-700 border-2 border-gray-300 hover:border-[#154734] hover:text-[#154734]"
+                  }`}
+                  title={
+                    isEditMode
+                      ? "Exit edit mode"
+                      : "Enter edit mode to reorganize faculty"
+                  }
+                >
+                  {isEditMode ? (
+                    <>
+                      <Eye size={18} />
+                      <span className="hidden sm:inline">View Mode</span>
+                      <span className="sm:hidden">Done</span>
+                    </>
+                  ) : (
+                    <>
+                      <Move size={18} />
+                      <span className="hidden sm:inline">Edit Mode</span>
+                      <span className="sm:hidden">Edit</span>
+                    </>
+                  )}
+                </button>
+              )}
+
+              <button
+                onClick={() => {
+                  if (!canEditHere) {
+                    showNotification(
+                      "warning",
+                      "Permission Denied",
+                      "You do not have permission to create programs.",
+                    );
+                    return;
+                  }
+                  setShowCreateProgram(true);
+                }}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+                  canEditHere
+                    ? "bg-[#154734] text-white hover:bg-[#0f3526] shadow-sm hover:shadow"
+                    : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                }`}
+                disabled={!canEditHere}
+              >
+                <Plus size={18} />
+                Add Program
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Filters and Search */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex flex-col sm:flex-row gap-4 items-center">
-          <div className="flex items-center gap-2 flex-1">
-            <Search size={16} className="text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search faculty..."
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              className="flex-1 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-baylor-green"
-            />
+      {/* Edit Mode Banner */}
+      {isEditMode && canEditHere && (
+        <div className="bg-amber-50 border-b-2 border-amber-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+                  <Move size={16} className="text-amber-700" />
+                </div>
+                <div>
+                  <p className="font-medium text-amber-900">Edit Mode Active</p>
+                  <p className="text-sm text-amber-700">
+                    Drag and drop faculty members between programs to reorganize
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsEditMode(false)}
+                className="px-4 py-2 bg-white text-amber-800 border border-amber-300 rounded-lg font-medium hover:bg-amber-100 transition-colors"
+              >
+                Done
+              </button>
+            </div>
           </div>
+        </div>
+      )}
 
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Filter size={16} className="text-gray-400" />
+      {/* Filters & Search Bar */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* Search */}
+            <div className="flex-1 relative">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                size={18}
+              />
+              <input
+                type="text"
+                placeholder="Search programs or faculty..."
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#154734] focus:border-transparent transition-all"
+              />
+            </div>
+
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-3">
               <select
-                value={selectedProgram}
-                onChange={(e) => setSelectedProgram(e.target.value)}
-                className="p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-baylor-green"
+                value={selectedProgramFilter}
+                onChange={(e) => setSelectedProgramFilter(e.target.value)}
+                className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#154734] focus:border-transparent bg-white text-sm"
               >
                 <option value="all">All Programs</option>
-                {programList.map((program) => (
+                {regularPrograms.map((program) => (
                   <option key={program} value={program}>
                     {program}
                   </option>
                 ))}
+                {unassignedProgram && unassignedProgram.faculty.length > 0 && (
+                  <option value="Unassigned">Unassigned</option>
+                )}
               </select>
-            </div>
 
-            {/* Adjunct Toggle */}
-            <div className="flex items-center gap-2">
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex items-center gap-2 px-3 py-2.5 border border-gray-300 rounded-lg bg-white cursor-pointer hover:bg-gray-50 transition-colors">
                 <input
                   type="checkbox"
                   checked={showAdjuncts}
                   onChange={(e) => setShowAdjuncts(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600"
+                  className="h-4 w-4 rounded border-gray-300 text-[#154734] focus:ring-[#154734]"
                 />
                 <span className="text-sm text-gray-700">Show Adjuncts</span>
               </label>
@@ -742,165 +792,599 @@ const ProgramManagement = ({ embedded = false }) => {
         </div>
       </div>
 
-      {/* Faculty Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Faculty Member
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Program
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Position
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Contact
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredFaculty.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan="6"
-                    className="px-6 py-8 text-center text-gray-500"
-                  >
-                    {searchText
-                      ? "No faculty found matching your search."
-                      : selectedProgram !== "all"
-                        ? "No faculty in this program."
-                        : showAdjuncts
-                          ? "No faculty found."
-                          : 'No permanent faculty found. Try enabling "Show Adjuncts".'}
-                  </td>
-                </tr>
-              ) : (
-                filteredFaculty.map((faculty) => {
-                  const program = Object.keys(programData).find((prog) =>
-                    programData[prog].faculty.some((f) => f.id === faculty.id),
-                  );
-                  const isUPD =
-                    Array.isArray(programData[program]?.upds) &&
-                    programData[program].upds.some((u) => u.id === faculty.id);
+      {/* Programs Grid */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+        {filteredPrograms.length === 0 && !shouldShowUnassigned ? (
+          <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
+            <Building2 className="mx-auto h-12 w-12 text-gray-300" />
+            <h3 className="mt-4 text-lg font-medium text-gray-900">
+              {searchText ? "No programs match your search" : "No programs yet"}
+            </h3>
+            <p className="mt-2 text-sm text-gray-500 max-w-sm mx-auto">
+              {searchText
+                ? "Try adjusting your search terms or filters to find what you're looking for."
+                : "Get started by creating your first program to organize your faculty."}
+            </p>
+            {!searchText && canEditHere && (
+              <button
+                onClick={() => setShowCreateProgram(true)}
+                className="mt-6 inline-flex items-center gap-2 px-4 py-2 bg-[#154734] text-white rounded-lg font-medium hover:bg-[#0f3526] transition-colors"
+              >
+                <Plus size={18} />
+                Create First Program
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            {filteredPrograms.map((programName) => {
+              const program = programData[programName];
+              const isDragOver = dragOverProgram === programName;
+              const isExpanded = expandedPrograms.has(programName);
+              const isEditingName = editingProgramName === programName;
+              const facultyCount = program.faculty.length;
+              const displayFaculty = isExpanded
+                ? program.faculty
+                : program.faculty.slice(0, 4);
 
-                  return (
-                    <tr
-                      key={faculty.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, faculty)}
-                      className="hover:bg-gray-50 cursor-move"
-                      onClick={(e) => {
-                        // Only open contact card if not clicking on select dropdown
-                        if (!e.target.closest("select")) {
-                          setSelectedFacultyForCard(faculty);
-                        }
-                      }}
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <GripVertical
-                            size={14}
-                            className="text-gray-400 cursor-move"
-                            title="Drag to move program"
-                          />
-                          <div>
-                            <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
-                              {faculty.name}
-                              {isUPD && (
-                                <UserCog
-                                  size={14}
-                                  className="text-amber-600"
-                                  title="Undergraduate Program Director"
-                                />
-                              )}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              {faculty.email}
-                            </div>
+              return (
+                <div
+                  key={programName}
+                  className={`bg-white rounded-xl border-2 transition-all duration-200 relative ${
+                    isDragOver
+                      ? "border-[#154734] bg-[#154734]/5 shadow-lg scale-[1.02]"
+                      : "border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md"
+                  }`}
+                  onDragOver={(e) => handleDragOver(e, programName)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, programName)}
+                >
+                  {/* Card Header */}
+                  <div className="p-5 border-b border-gray-100">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0 group">
+                        {isEditingName ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={editNameValue}
+                              onChange={(e) => setEditNameValue(e.target.value)}
+                              className="flex-1 px-2 py-1 text-lg font-semibold border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#154734]"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveProgramName(program);
+                                if (e.key === "Escape")
+                                  cancelEditingProgramName();
+                              }}
+                            />
+                            <button
+                              onClick={() => saveProgramName(program)}
+                              disabled={isUpdatingName}
+                              className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
+                            >
+                              <Save size={16} />
+                            </button>
+                            <button
+                              onClick={cancelEditingProgramName}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                            >
+                              <X size={16} />
+                            </button>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <select
-                          value={program || "Unassigned"}
-                          onChange={(e) =>
-                            handleProgramChange(faculty, e.target.value)
-                          }
-                          className="text-sm text-gray-900 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-baylor-green"
-                          onClick={(e) => e.stopPropagation()} // Prevent row click
-                        >
-                          <option value="Unassigned">Unassigned</option>
-                          {programList.map((prog) => (
-                            <option key={prog} value={prog}>
-                              {prog}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {faculty.jobTitle}
-                        </div>
-                        <div className="flex gap-1 mt-1">
-                          {faculty.isTenured && (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                              Tenured
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-semibold text-gray-900 truncate">
+                              {programName}
+                            </h3>
+                            {canEditHere && (
+                              <button
+                                onClick={() => startEditingProgramName(program)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-[#154734]"
+                                title="Edit program name"
+                              >
+                                <Edit size={14} />
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Stats */}
+                        <div className="flex items-center gap-3 mt-2">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#FFB81C]/20 text-[#154734]">
+                            <Users size={12} className="mr-1" />
+                            {facultyCount} faculty
+                          </span>
+                          {program.upds.length > 0 && (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                              <Star size={12} className="mr-1" />
+                              {program.upds.length} UPD
                             </span>
                           )}
+                        </div>
+                      </div>
+
+                      {/* Actions Menu */}
+                      {canEditHere && (
+                        <div className="relative">
+                          <button
+                            onClick={() =>
+                              setProgramToDelete(
+                                programToDelete === programName
+                                  ? null
+                                  : programName,
+                              )
+                            }
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete program"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* UPD Section */}
+                  <div className="px-5 py-4 bg-gray-50/50 border-b border-gray-100">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                        <UserCog size={16} className="text-amber-600" />
+                        Program Directors
+                      </div>
+                      {canEditHere && (
+                        <button
+                          onClick={() =>
+                            setEditingUPD(
+                              editingUPD === programName ? null : programName,
+                            )
+                          }
+                          className="text-xs text-[#154734] hover:text-[#0f3526] font-medium transition-colors"
+                        >
+                          {editingUPD === programName ? "Done" : "Manage"}
+                        </button>
+                      )}
+                    </div>
+
+                    {editingUPD === programName ? (
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {program.faculty
+                          .filter((f) => !f.isAdjunct)
+                          .map((faculty) => {
+                            const isUPD = program.upds.some(
+                              (u) => u.id === faculty.id,
+                            );
+                            return (
+                              <button
+                                key={faculty.id}
+                                onClick={() =>
+                                  isUPD
+                                    ? handleRemoveUPD(programName, faculty)
+                                    : handleSetUPD(programName, faculty)
+                                }
+                                className={`w-full text-left p-2.5 rounded-lg border transition-all ${
+                                  isUPD
+                                    ? "bg-amber-50 border-amber-200"
+                                    : "bg-white border-gray-200 hover:border-[#154734]/30 hover:bg-[#154734]/5"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div
+                                      className={`font-medium text-sm ${isUPD ? "text-amber-900" : "text-gray-900"}`}
+                                    >
+                                      {faculty.name}
+                                    </div>
+                                    <div className="text-gray-500 text-xs">
+                                      {faculty.jobTitle}
+                                    </div>
+                                  </div>
+                                  {isUPD && (
+                                    <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-1 rounded">
+                                      Current UPD
+                                    </span>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        {program.faculty.filter((f) => !f.isAdjunct).length ===
+                          0 && (
+                          <div className="text-sm text-gray-500 italic p-2">
+                            No eligible faculty members (adjuncts cannot be
+                            UPDs)
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {program.upds.length > 0 ? (
+                          program.upds.map((upd) => (
+                            <div
+                              key={upd.id}
+                              className="flex items-center gap-3 p-2.5 bg-white rounded-lg border border-amber-200"
+                            >
+                              <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                                <Star size={14} className="text-amber-700" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-sm text-gray-900 truncate">
+                                  {upd.name}
+                                </div>
+                                <div className="text-xs text-gray-500 truncate">
+                                  {upd.jobTitle}
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="flex items-center gap-3 p-2.5 bg-white rounded-lg border border-dashed border-gray-300">
+                            <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                              <UserCog size={14} className="text-gray-400" />
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              No UPD assigned
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Faculty List */}
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-medium text-gray-700">
+                        Faculty Members
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {facultyCount} total
+                      </span>
+                    </div>
+
+                    {facultyCount === 0 ? (
+                      <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                        <GraduationCap className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+                        <p className="text-sm text-gray-500">
+                          No faculty assigned
+                        </p>
+                        {isEditMode && (
+                          <p className="text-xs text-amber-600 mt-1">
+                            Drag faculty here to assign them
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <div
+                          className={`space-y-2 ${isEditMode ? "p-2 bg-amber-50/50 rounded-lg border-2 border-dashed border-amber-200" : ""}`}
+                        >
+                          {displayFaculty.map((faculty) => (
+                            <div
+                              key={faculty.id}
+                              draggable={isEditMode && canEditHere}
+                              onDragStart={(e) => handleDragStart(e, faculty)}
+                              className={`group flex items-center gap-3 p-3 rounded-lg border transition-all ${
+                                isEditMode && canEditHere
+                                  ? "cursor-move bg-white border-gray-300 shadow-sm hover:border-[#154734] hover:shadow-md"
+                                  : "bg-white border-gray-200 hover:border-gray-300"
+                              } ${draggedFaculty?.id === faculty.id ? "opacity-50" : ""}`}
+                            >
+                              {/* Drag Handle - only visible in edit mode */}
+                              {isEditMode && canEditHere ? (
+                                <div className="flex-shrink-0 w-6 h-6 rounded bg-gray-100 flex items-center justify-center">
+                                  <GripVertical
+                                    size={14}
+                                    className="text-gray-500"
+                                  />
+                                </div>
+                              ) : (
+                                /* View-only indicator */
+                                <div className="flex-shrink-0 w-2 h-2 rounded-full bg-gray-300" />
+                              )}
+
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-sm text-gray-900 truncate">
+                                    {faculty.name}
+                                  </span>
+                                  {program.upds.some(
+                                    (u) => u.id === faculty.id,
+                                  ) && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
+                                      <Star size={10} className="mr-0.5" />
+                                      UPD
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-gray-500 truncate">
+                                  {faculty.jobTitle}
+                                  {faculty.isAdjunct && (
+                                    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
+                                      Adjunct
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* View details button - always visible */}
+                              <button
+                                onClick={() =>
+                                  setSelectedFacultyForCard(faculty)
+                                }
+                                className="p-1.5 text-gray-400 hover:text-[#154734] hover:bg-[#154734]/10 rounded transition-colors opacity-0 group-hover:opacity-100"
+                                title="View details"
+                              >
+                                <Users size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+
+                        {facultyCount > 4 && (
+                          <button
+                            onClick={() => toggleProgramExpansion(programName)}
+                            className="mt-3 w-full py-2 text-sm text-[#154734] hover:text-[#0f3526] font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                          >
+                            {isExpanded ? (
+                              <>
+                                <ChevronUp size={16} />
+                                Show Less
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown size={16} />
+                                Show {facultyCount - 4} More
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Drag Overlay Hint */}
+                  {isDragOver && (
+                    <div className="absolute inset-0 bg-[#154734]/10 border-2 border-[#154734] border-dashed rounded-xl flex items-center justify-center pointer-events-none">
+                      <div className="bg-white px-4 py-2 rounded-lg shadow-lg text-[#154734] font-medium">
+                        <ArrowRightLeft size={16} className="inline mr-2" />
+                        Drop to move faculty here
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Unassigned Section */}
+      {shouldShowUnassigned && unassignedProgram && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+          <div className="border-t-2 border-dashed border-gray-300 pt-8 mt-4">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                <Users size={20} className="text-gray-500" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-gray-700">
+                  Unassigned Faculty
+                </h2>
+                <p className="text-sm text-gray-500">
+                  Faculty members not currently assigned to any program
+                </p>
+              </div>
+              <span className="ml-auto inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-200 text-gray-700">
+                {unassignedProgram.faculty.length} faculty
+              </span>
+            </div>
+
+            <div
+              className={`rounded-xl border-2 border-dashed p-6 transition-all duration-200 relative ${
+                isEditMode
+                  ? "bg-amber-50/50 border-amber-300"
+                  : "bg-gray-100/50 border-gray-300"
+              } ${
+                dragOverProgram === "Unassigned"
+                  ? "border-[#154734] bg-[#154734]/5"
+                  : ""
+              }`}
+              onDragOver={(e) => handleDragOver(e, "Unassigned")}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, "Unassigned")}
+            >
+              {unassignedProgram.faculty.length === 0 ? (
+                <div className="text-center py-12">
+                  <Users className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+                  <p className="text-gray-500 font-medium">
+                    All faculty members are assigned to programs
+                  </p>
+                  {isEditMode && (
+                    <p className="text-sm text-amber-600 mt-1">
+                      Drag faculty here to unassign them
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div
+                  className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${isEditMode ? "p-3 bg-amber-100/30 rounded-lg" : ""}`}
+                >
+                  {unassignedProgram.faculty.map((faculty) => (
+                    <div
+                      key={faculty.id}
+                      draggable={isEditMode && canEditHere}
+                      onDragStart={(e) => handleDragStart(e, faculty)}
+                      className={`group bg-white rounded-lg border p-4 transition-all ${
+                        isEditMode && canEditHere
+                          ? "cursor-move border-gray-300 shadow-sm hover:border-[#154734] hover:shadow-md"
+                          : "border-gray-200 hover:border-gray-300"
+                      } ${draggedFaculty?.id === faculty.id ? "opacity-50" : ""}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* Drag Handle - only visible in edit mode */}
+                        {isEditMode && canEditHere ? (
+                          <div className="flex-shrink-0 w-6 h-6 rounded bg-gray-100 flex items-center justify-center mt-0.5">
+                            <GripVertical size={14} className="text-gray-500" />
+                          </div>
+                        ) : (
+                          /* View-only indicator */
+                          <div className="flex-shrink-0 w-2 h-2 rounded-full bg-gray-300 mt-2" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm text-gray-900">
+                            {faculty.name}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            {faculty.jobTitle}
+                          </div>
                           {faculty.isAdjunct && (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            <span className="mt-2 inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
                               Adjunct
                             </span>
                           )}
                         </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <div className="space-y-1">
-                          {faculty.phone && (
-                            <div className="flex items-center gap-1">
-                              <Phone size={12} />
-                              {faculty.phone}
-                            </div>
-                          )}
-                          {faculty.office && (
-                            <div className="flex items-center gap-1">
-                              <MapPin size={12} />
-                              {faculty.office}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {isUPD && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                            <UserCog size={12} className="mr-1" />
-                            UPD
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button className="text-baylor-green hover:text-baylor-green/80">
-                          <MoreVertical size={16} />
+                        {/* View details button - always visible */}
+                        <button
+                          onClick={() => setSelectedFacultyForCard(faculty)}
+                          className="p-1.5 text-gray-400 hover:text-[#154734] hover:bg-[#154734]/10 rounded transition-colors opacity-0 group-hover:opacity-100"
+                          title="View details"
+                        >
+                          <Users size={14} />
                         </button>
-                      </td>
-                    </tr>
-                  );
-                })
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
-            </tbody>
-          </table>
+
+              {/* Drag Overlay for Unassigned */}
+              {dragOverProgram === "Unassigned" && (
+                <div className="absolute inset-0 bg-[#154734]/10 border-2 border-[#154734] border-dashed rounded-xl flex items-center justify-center pointer-events-none">
+                  <div className="bg-white px-4 py-2 rounded-lg shadow-lg text-[#154734] font-medium">
+                    <ArrowRightLeft size={16} className="inline mr-2" />
+                    Drop to unassign from current program
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Create Program Modal */}
+      {showCreateProgram && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Create New Program
+              </h3>
+              <button
+                onClick={() => setShowCreateProgram(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Program Name
+              </label>
+              <input
+                type="text"
+                value={newProgramName}
+                onChange={(e) => setNewProgramName(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#154734] focus:border-transparent"
+                placeholder="Enter program name..."
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") createNewProgram();
+                }}
+              />
+              <p className="mt-2 text-xs text-gray-500">
+                Program names must be unique and cannot be "Unassigned".
+              </p>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => setShowCreateProgram(false)}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createNewProgram}
+                disabled={!newProgramName.trim() || isCreatingProgram}
+                className="px-4 py-2 bg-[#154734] text-white rounded-lg font-medium hover:bg-[#0f3526] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isCreatingProgram ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus size={18} />
+                    Create Program
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {programToDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Delete Program
+              </h3>
+            </div>
+
+            <div className="p-6">
+              <p className="text-gray-700">
+                Are you sure you want to delete{" "}
+                <strong>{programToDelete}</strong>?
+              </p>
+              <p className="mt-2 text-sm text-gray-500">
+                This action cannot be undone. Programs with faculty members
+                cannot be deleted.
+              </p>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => setProgramToDelete(null)}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={deleteProgram}
+                disabled={isDeletingProgram}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {isDeletingProgram ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={18} />
+                    Delete Program
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Faculty Contact Card Modal */}
       {selectedFacultyForCard && (
@@ -910,58 +1394,6 @@ const ProgramManagement = ({ embedded = false }) => {
           onUpdate={handleFacultyUpdate}
           showNotification={showNotification}
         />
-      )}
-
-      {/* Create New Program Modal */}
-      {showCreateProgram && (
-        <div className="modal-overlay">
-          <div className="modal-content max-w-md">
-            <div className="modal-header">
-              <h3 className="modal-title">Create New Program</h3>
-              <button
-                onClick={() => setShowCreateProgram(false)}
-                className="modal-close"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="modal-body">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Program Name
-                  </label>
-                  <input
-                    type="text"
-                    value={newProgramName}
-                    onChange={(e) => setNewProgramName(e.target.value)}
-                    className="input-field"
-                    placeholder="Enter program name..."
-                    autoFocus
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button
-                onClick={() => setShowCreateProgram(false)}
-                className="btn-ghost"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={createNewProgram}
-                className={`btn-primary ${isCreatingProgram ? "opacity-70 cursor-not-allowed" : ""}`}
-                disabled={!newProgramName.trim() || isCreatingProgram}
-              >
-                <Plus size={16} className="mr-2" />
-                {isCreatingProgram ? "Creating..." : "Create Program"}
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

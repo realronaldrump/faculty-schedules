@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Building,
   Clock,
@@ -30,6 +30,16 @@ const DAYS = {
   U: "Sun",
 };
 
+const EMPTY_JOB = {
+  jobTitle: "",
+  supervisor: "",
+  hourlyRate: "",
+  buildings: [],
+  weeklySchedule: [],
+  startDate: "",
+  endDate: "",
+};
+
 const JobCard = ({
   job,
   isEditing = false,
@@ -44,17 +54,13 @@ const JobCard = ({
   compact = false,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [draft, setDraft] = useState(
-    job || {
-      jobTitle: "",
-      supervisor: "",
-      hourlyRate: "",
-      buildings: [],
-      weeklySchedule: [],
-      startDate: "",
-      endDate: "",
-    },
-  );
+  const [draft, setDraft] = useState(job || EMPTY_JOB);
+
+  useEffect(() => {
+    if (isEditing) {
+      setDraft(job || EMPTY_JOB);
+    }
+  }, [isEditing, job]);
 
   // Calculate weekly hours
   const weeklyHours = (job?.weeklySchedule || []).reduce((sum, entry) => {

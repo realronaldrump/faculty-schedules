@@ -1,5 +1,13 @@
-import React, { useState, useCallback } from "react";
-import { Clock, X, Copy, Trash2 } from "lucide-react";
+import React, { useState, useCallback, useMemo } from "react";
+import { Clock, X, Trash2, Plus } from "lucide-react";
+import { formatMinutesToTime } from "../../utils/timeUtils";
+import {
+  normalizeScheduleDay,
+  normalizeScheduleTime,
+  normalizeWeeklySchedule,
+  sortWeeklySchedule,
+  toScheduleMinutes,
+} from "../../utils/studentScheduleUtils";
 
 /**
  * VisualScheduleBuilder - Grid-based visual schedule selector
@@ -51,68 +59,84 @@ const VisualScheduleBuilder = ({
   showSummary = true,
 }) => {
   const [hoveredSlot, setHoveredSlot] = useState(null);
+  const [manualEntry, setManualEntry] = useState({
+    day: DAYS[0].key,
+    start: "09:00",
+    end: "10:00",
+  });
+  const [manualError, setManualError] = useState("");
+
+  const normalizedSchedule = useMemo(
+    () => sortWeeklySchedule(normalizeWeeklySchedule(schedule)),
+    [schedule],
+  );
+
+  const normalizeAndSort = useCallback(
+    (entries) => sortWeeklySchedule(normalizeWeeklySchedule(entries)),
+    [],
+  );
 
   // Check if a specific day/hour is scheduled
   const isScheduled = useCallback(
     (day, hour) => {
-      return schedule.some((entry) => {
+      const slotStart = hour * 60;
+      const slotEnd = (hour + 1) * 60;
+      return normalizedSchedule.some((entry) => {
         if (entry.day !== day) return false;
-        const startHour = parseInt(entry.start.split(":")[0]);
-        const endHour = parseInt(entry.end.split(":")[0]);
-        const startMin = parseInt(entry.start.split(":")[1] || 0);
-        const endMin = parseInt(entry.end.split(":")[1] || 0);
-
-        const entryStart = startHour + startMin / 60;
-        const entryEnd = endHour + endMin / 60;
-        const slotTime = hour;
-
-        return slotTime >= entryStart && slotTime < entryEnd;
+        const entryStart = toScheduleMinutes(entry.start);
+        const entryEnd = toScheduleMinutes(entry.end);
+        if (entryStart === null || entryEnd === null) return false;
+        return entryStart < slotEnd && entryEnd > slotStart;
       });
     },
-    [schedule],
+    [normalizedSchedule],
   );
 
   // Get the continuous block for a day/hour (if any)
   const getBlock = useCallback(
     (day, hour) => {
-      return schedule.find((entry) => {
+      const slotStart = hour * 60;
+      const slotEnd = (hour + 1) * 60;
+      return normalizedSchedule.find((entry) => {
         if (entry.day !== day) return false;
-        const startHour = parseInt(entry.start.split(":")[0]);
-        const endHour = parseInt(entry.end.split(":")[0]);
-        const startMin = parseInt(entry.start.split(":")[1] || 0);
-        const endMin = parseInt(entry.end.split(":")[1] || 0);
-
-        const entryStart = startHour + startMin / 60;
-        const entryEnd = endHour + endMin / 60;
-        const slotTime = hour;
-
-        return slotTime >= entryStart && slotTime < entryEnd;
+        const entryStart = toScheduleMinutes(entry.start);
+        const entryEnd = toScheduleMinutes(entry.end);
+        if (entryStart === null || entryEnd === null) return false;
+        return entryStart < slotEnd && entryEnd > slotStart;
       });
     },
-    [schedule],
+    [normalizedSchedule],
   );
 
   // Toggle a time slot
   const toggleSlot = (day, hour) => {
-    const existingBlock = getBlock(day, hour);
+    const normalizedDay = normalizeScheduleDay(day) || day;
+    const existingBlock = getBlock(normalizedDay, hour);
 
     if (existingBlock) {
       // Remove the entire block
       onChange(
-        schedule.filter(
-          (entry) =>
-            !(
-              entry.day === day &&
-              entry.start === existingBlock.start &&
-              entry.end === existingBlock.end
-            ),
+        normalizeAndSort(
+          normalizedSchedule.filter(
+            (entry) =>
+              !(
+                entry.day === normalizedDay &&
+                entry.start === existingBlock.start &&
+                entry.end === existingBlock.end
+              ),
+          ),
         ),
       );
     } else {
       // Add a 1-hour block
       const startTime = `${hour.toString().padStart(2, "0")}:00`;
       const endTime = `${(hour + 1).toString().padStart(2, "0")}:00`;
-      onChange([...schedule, { day, start: startTime, end: endTime }]);
+      onChange(
+        normalizeAndSort([
+          ...normalizedSchedule,
+          { day: normalizedDay, start: startTime, end: endTime },
+        ]),
+      );
     }
   };
 
@@ -129,38 +153,36 @@ const VisualScheduleBuilder = ({
       end: preset.pattern.end,
     }));
 
-    onChange(newEntries);
+    onChange(normalizeAndSort(newEntries));
   };
 
   // Calculate weekly hours
-  const weeklyHours = schedule.reduce((total, entry) => {
-    const start =
-      parseInt(entry.start.split(":")[0]) +
-      parseInt(entry.start.split(":")[1] || 0) / 60;
-    const end =
-      parseInt(entry.end.split(":")[0]) +
-      parseInt(entry.end.split(":")[1] || 0) / 60;
-    return total + (end - start);
+  const weeklyHours = normalizedSchedule.reduce((total, entry) => {
+    const start = toScheduleMinutes(entry.start);
+    const end = toScheduleMinutes(entry.end);
+    if (start === null || end === null) return total;
+    return total + (end - start) / 60;
   }, 0);
 
   // Format time for display
   const formatTime = (timeStr) => {
-    const [hours, minutes] = timeStr.split(":").map(Number);
-    const ampm = hours >= 12 ? "PM" : "AM";
-    const h = hours % 12 || 12;
-    return `${h}:${minutes.toString().padStart(2, "0")} ${ampm}`;
+    const minutes = toScheduleMinutes(timeStr);
+    if (minutes === null) return timeStr || "";
+    return formatMinutesToTime(minutes);
   };
 
   // Remove a specific entry
   const removeEntry = (entryToRemove) => {
     onChange(
-      schedule.filter(
-        (entry) =>
-          !(
-            entry.day === entryToRemove.day &&
-            entry.start === entryToRemove.start &&
-            entry.end === entryToRemove.end
-          ),
+      normalizeAndSort(
+        normalizedSchedule.filter(
+          (entry) =>
+            !(
+              entry.day === entryToRemove.day &&
+              entry.start === entryToRemove.start &&
+              entry.end === entryToRemove.end
+            ),
+        ),
       ),
     );
   };
@@ -168,6 +190,43 @@ const VisualScheduleBuilder = ({
   // Clear all
   const clearAll = () => {
     onChange([]);
+  };
+
+  const handleManualFieldChange = (field, value) => {
+    setManualEntry((prev) => ({ ...prev, [field]: value }));
+    setManualError("");
+  };
+
+  const handleAddManualEntry = () => {
+    const day = normalizeScheduleDay(manualEntry.day);
+    const startMinutes = toScheduleMinutes(manualEntry.start);
+    const endMinutes = toScheduleMinutes(manualEntry.end);
+
+    if (!day) {
+      setManualError("Choose a day for this time block.");
+      return;
+    }
+    if (startMinutes === null || endMinutes === null) {
+      setManualError("Enter a valid start and end time.");
+      return;
+    }
+    if (startMinutes >= endMinutes) {
+      setManualError("End time must be after the start time.");
+      return;
+    }
+
+    const start = normalizeScheduleTime(startMinutes);
+    const end = normalizeScheduleTime(endMinutes);
+    const exists = normalizedSchedule.some(
+      (entry) => entry.day === day && entry.start === start && entry.end === end,
+    );
+    if (exists) {
+      setManualError("That time entry already exists.");
+      return;
+    }
+
+    setManualError("");
+    onChange(normalizeAndSort([...normalizedSchedule, { day, start, end }]));
   };
 
   return (
@@ -264,6 +323,54 @@ const VisualScheduleBuilder = ({
         </div>
       </div>
 
+      {/* Precise Time Entry */}
+      <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+            <Clock size={14} className="text-gray-500" />
+            Precise time entry
+          </div>
+          <span className="text-xs text-gray-500">5-minute increments</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+          <select
+            value={manualEntry.day}
+            onChange={(e) => handleManualFieldChange("day", e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+          >
+            {DAYS.map((day) => (
+              <option key={day.key} value={day.key}>
+                {day.full}
+              </option>
+            ))}
+          </select>
+          <input
+            type="time"
+            step={300}
+            value={manualEntry.start}
+            onChange={(e) => handleManualFieldChange("start", e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+          />
+          <input
+            type="time"
+            step={300}
+            value={manualEntry.end}
+            onChange={(e) => handleManualFieldChange("end", e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+          />
+          <button
+            onClick={handleAddManualEntry}
+            className="flex items-center justify-center gap-2 px-3 py-2 bg-baylor-green text-white rounded-md text-sm font-medium hover:bg-baylor-green/90 transition-colors"
+          >
+            <Plus size={14} />
+            Add time
+          </button>
+        </div>
+        {manualError && (
+          <p className="text-xs text-red-600 mt-2">{manualError}</p>
+        )}
+      </div>
+
       {/* Summary */}
       {showSummary && (
         <div className="bg-baylor-green/5 rounded-lg p-4 border border-baylor-green/20">
@@ -274,7 +381,7 @@ const VisualScheduleBuilder = ({
                 {weeklyHours.toFixed(1)} hours per week
               </span>
             </div>
-            {schedule.length > 0 && (
+            {normalizedSchedule.length > 0 && (
               <button
                 onClick={clearAll}
                 className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700"
@@ -286,13 +393,13 @@ const VisualScheduleBuilder = ({
           </div>
 
           {/* Current Schedule List */}
-          {schedule.length > 0 && (
+          {normalizedSchedule.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-medium text-gray-700">
                 Current Schedule:
               </p>
               <div className="flex flex-wrap gap-2">
-                {schedule.map((entry, idx) => {
+                {normalizedSchedule.map((entry, idx) => {
                   const dayInfo = DAYS.find((d) => d.key === entry.day);
                   return (
                     <span
@@ -317,7 +424,7 @@ const VisualScheduleBuilder = ({
             </div>
           )}
 
-          {schedule.length === 0 && (
+          {normalizedSchedule.length === 0 && (
             <p className="text-sm text-gray-500 italic">
               No schedule entries yet. Click cells in the grid above to add time
               blocks.

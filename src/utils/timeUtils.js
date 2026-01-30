@@ -80,3 +80,17 @@ export const formatMinutesToLabel = (minutes) => {
     }
     return `${displayHour}:${m.toString().padStart(2, '0')} ${ampm}`;
 };
+
+/**
+ * Format minutes from midnight into 24-hour HH:MM string.
+ *
+ * @param {number} minutes - Minutes from midnight
+ * @returns {string} 24-hour time string like "16:45"
+ */
+export const formatMinutesTo24Hour = (minutes) => {
+    if (!Number.isFinite(minutes)) return "";
+    const safe = Math.min(1439, Math.max(0, Math.round(minutes)));
+    const h = Math.floor(safe / 60);
+    const m = safe % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+};

@@ -1,4 +1,5 @@
 import { normalizeTermLabel, termCodeFromLabel } from './termUtils';
+import { toScheduleMinutes } from './studentScheduleUtils';
 
 export const parseHourlyRate = (value) => {
   if (value === null || value === undefined) return 0;
@@ -10,17 +11,8 @@ export const parseHourlyRate = (value) => {
 
 const calculateEntryMinutes = (entry) => {
   if (!entry || !entry.start || !entry.end) return 0;
-  const parseTime = (timeStr) => {
-    if (typeof timeStr !== 'string') return null;
-    const [hourStr, minuteStr = '0'] = timeStr.split(':');
-    const hour = parseInt(hourStr, 10);
-    const minute = parseInt(minuteStr, 10);
-    if (Number.isNaN(hour) || Number.isNaN(minute)) return null;
-    return hour * 60 + minute;
-  };
-
-  const startMinutes = parseTime(entry.start);
-  const endMinutes = parseTime(entry.end);
+  const startMinutes = toScheduleMinutes(entry.start);
+  const endMinutes = toScheduleMinutes(entry.end);
   if (startMinutes === null || endMinutes === null) return 0;
   const diff = endMinutes - startMinutes;
   return diff > 0 ? diff : 0;

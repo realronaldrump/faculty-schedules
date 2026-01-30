@@ -35,10 +35,13 @@ import {
 import {
   calculateWeeklyHoursFromSchedule,
   buildSemesterKey,
-  formatHoursValue,
   getStudentAssignments,
   getStudentStatusForSemester,
 } from "../utils/studentWorkers";
+import {
+  normalizeWeeklySchedule,
+  sortWeeklySchedule,
+} from "../utils/studentScheduleUtils";
 import { formatPhoneNumber } from "../utils/directoryUtils";
 import {
   getCanonicalBuildingList,
@@ -65,19 +68,8 @@ const normalizeBuildingList = (value) => {
   return Array.from(new Set(normalized));
 };
 
-const sanitizeWeeklyEntries = (entries) => {
-  if (!Array.isArray(entries)) return [];
-  return entries
-    .map((entry) => ({
-      day: entry?.day || "",
-      start: entry?.start || "",
-      end: entry?.end || "",
-    }))
-    .filter(
-      (entry) =>
-        entry.day && entry.start && entry.end && entry.start < entry.end,
-    );
-};
+const sanitizeWeeklyEntries = (entries) =>
+  sortWeeklySchedule(normalizeWeeklySchedule(entries));
 
 const prepareStudentPayload = (student) => {
   if (!student) return {};
@@ -120,7 +112,7 @@ const prepareStudentPayload = (student) => {
       : student.primaryBuilding,
   );
   const aggregatedWeeklySchedule = hasJobs
-    ? normalizedJobs.flatMap((job) => job.weeklySchedule)
+    ? sanitizeWeeklyEntries(normalizedJobs.flatMap((job) => job.weeklySchedule))
     : fallbackWeeklySchedule;
   const aggregatedBuildings = hasJobs
     ? Array.from(new Set(normalizedJobs.flatMap((job) => job.location)))
@@ -704,16 +696,10 @@ const StudentDirectory = () => {
       render: (student) => {
         const jobs = student.jobs || [];
         const primaryJob = jobs[0];
-        const totalHours = jobs.reduce((sum, job) => {
-          return (
-            sum +
-            (job.weeklySchedule?.reduce((h, entry) => {
-              const start = parseInt(entry.start.split(":")[0]);
-              const end = parseInt(entry.end.split(":")[0]);
-              return h + (end - start);
-            }, 0) || 0)
-          );
-        }, 0);
+        const totalHours = jobs.reduce(
+          (sum, job) => sum + calculateWeeklyHoursFromSchedule(job.weeklySchedule),
+          0,
+        );
 
         return (
           <div>

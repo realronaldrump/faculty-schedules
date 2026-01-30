@@ -15,6 +15,7 @@ import { useUI } from '../contexts/UIContext';
 import { getProgramNameKey, isReservedProgramName, normalizeProgramName } from '../utils/programUtils';
 import { deletePersonSafely } from '../utils/dataHygiene';
 import { parseFullName } from '../utils/nameUtils';
+import { normalizeWeeklySchedule, sortWeeklySchedule } from '../utils/studentScheduleUtils';
 // Use centralized location service
 import {
   parseRoomLabel,
@@ -74,6 +75,51 @@ const usePeopleOperations = () => {
 
     if (!fullName && (firstName || lastName)) {
       next.name = `${firstName} ${lastName}`.trim();
+    }
+
+    return next;
+  }, []);
+
+  const normalizeStudentSchedules = useCallback((studentData) => {
+    if (!studentData || typeof studentData !== 'object') return studentData;
+    const next = { ...studentData };
+
+    if (Array.isArray(next.jobs)) {
+      next.jobs = next.jobs.map((job) => {
+        if (!job || typeof job !== 'object') return job;
+        const weeklySchedule = sortWeeklySchedule(normalizeWeeklySchedule(job.weeklySchedule));
+        return { ...job, weeklySchedule };
+      });
+    }
+
+    if (next.weeklySchedule !== undefined) {
+      next.weeklySchedule = sortWeeklySchedule(normalizeWeeklySchedule(next.weeklySchedule));
+    }
+
+    if (next.semesterSchedules && typeof next.semesterSchedules === 'object') {
+      next.semesterSchedules = Object.fromEntries(
+        Object.entries(next.semesterSchedules).map(([key, entry]) => {
+          if (!entry || typeof entry !== 'object') return [key, entry];
+          const entryJobs = Array.isArray(entry.jobs)
+            ? entry.jobs.map((job) => {
+                if (!job || typeof job !== 'object') return job;
+                const weeklySchedule = sortWeeklySchedule(normalizeWeeklySchedule(job.weeklySchedule));
+                return { ...job, weeklySchedule };
+              })
+            : entry.jobs;
+          const entryWeeklySchedule = entry.weeklySchedule !== undefined
+            ? sortWeeklySchedule(normalizeWeeklySchedule(entry.weeklySchedule))
+            : entry.weeklySchedule;
+          return [
+            key,
+            {
+              ...entry,
+              jobs: entryJobs,
+              weeklySchedule: entryWeeklySchedule
+            }
+          ];
+        })
+      );
     }
 
     return next;
@@ -509,6 +555,7 @@ const usePeopleOperations = () => {
         Object.entries(studentToUpdate).filter(([_, value]) => value !== undefined)
       );
       const normalizedStudentData = normalizeNameFields(cleanStudentData);
+      const normalizedStudentWithSchedules = normalizeStudentSchedules(normalizedStudentData);
 
       const existingStudent = !isNewStudent
         ? rawPeople.find(p => p.id === studentToUpdate.id) || null
@@ -516,7 +563,7 @@ const usePeopleOperations = () => {
       const fallbackIsActive = existingStudent?.isActive ?? true;
 
       const updateData = {
-        ...normalizedStudentData,
+        ...normalizedStudentWithSchedules,
         roles: ['student'],
         hasNoOffice: true,
         office: '',
@@ -583,7 +630,7 @@ const usePeopleOperations = () => {
         showNotification('error', 'Operation Failed', !studentToUpdate.id ? 'Failed to add student worker. Please try again.' : `Failed to update student worker. ${friendly}`);
       }
     }
-  }, [rawPeople, loadPeople, canCreateStudent, canEditStudent, showNotification, normalizeNameFields]);
+  }, [rawPeople, loadPeople, canCreateStudent, canEditStudent, showNotification, normalizeNameFields, normalizeStudentSchedules]);
 
   // Handle student delete
   const handleStudentDelete = useCallback(async (studentToDelete) => {

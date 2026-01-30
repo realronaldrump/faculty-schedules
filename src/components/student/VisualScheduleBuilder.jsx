@@ -175,6 +175,9 @@ const VisualScheduleBuilder = ({
     return formatMinutesToTime(minutes);
   };
 
+  const formatHourLabel = (hour) =>
+    formatMinutesToTime(hour * 60).replace(":00", "");
+
   // Remove a specific entry
   const removeEntry = (entryToRemove) => {
     onChange(
@@ -275,7 +278,10 @@ const VisualScheduleBuilder = ({
       {/* Schedule Grid */}
       <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
         {/* Header */}
-        <div className="grid grid-cols-8 border-b border-gray-200">
+        <div
+          className="grid border-b border-gray-200"
+          style={{ gridTemplateColumns: `repeat(${DAYS.length + 1}, minmax(0, 1fr))` }}
+        >
           <div className="p-2 bg-gray-50 text-xs font-medium text-gray-500 border-r border-gray-200">
             Time
           </div>
@@ -290,12 +296,15 @@ const VisualScheduleBuilder = ({
         </div>
 
         {/* Grid */}
-        <div className="grid grid-cols-8">
+        <div
+          className="grid"
+          style={{ gridTemplateColumns: `repeat(${DAYS.length + 1}, minmax(0, 1fr))` }}
+        >
           {HOURS.map((hour) => (
             <React.Fragment key={hour}>
               {/* Time Label */}
               <div className="p-2 text-xs text-gray-500 border-r border-b border-gray-200 bg-gray-50">
-                {hour <= 12 ? `${hour} AM` : `${hour - 12} PM`}
+                {formatHourLabel(hour)}
               </div>
 
               {/* Day Cells */}
@@ -317,7 +326,7 @@ const VisualScheduleBuilder = ({
                     onClick={() => toggleSlot(day.key, hour)}
                     onMouseEnter={() => setHoveredSlot({ day: day.key, hour })}
                     onMouseLeave={() => setHoveredSlot(null)}
-                    title={`${day.full} ${hour}:00 - ${hour + 1}:00`}
+                    title={`${day.full} ${formatMinutesToTime(hour * 60)} - ${formatMinutesToTime((hour + 1) * 60)}`}
                   />
                 );
               })}

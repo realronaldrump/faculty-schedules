@@ -472,23 +472,26 @@ const StudentEditModal = ({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="bg-baylor-green text-white px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-white/20 p-2 rounded-full">
-              <User size={20} />
+        <div className="bg-baylor-green text-white px-6 py-4">
+          <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2 rounded-full">
+                <User size={20} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold">Edit Student Worker</h2>
+              </div>
             </div>
-            <div>
-              <h2 className="text-xl font-bold">Edit Student Worker</h2>
-              <p className="text-sm text-white/80">
+            <div className="text-center min-w-0">
+              <p className="text-sm font-semibold text-white truncate">
                 {formData.name || "New Student"}
               </p>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                if (canDeleteStudent) setShowDeleteConfirm(true);
-              }}
+            <div className="flex items-center gap-2 justify-end">
+              <button
+                onClick={() => {
+                  if (canDeleteStudent) setShowDeleteConfirm(true);
+                }}
               disabled={!canDeleteStudent}
               className={`p-2 rounded-full transition-colors ${
                 canDeleteStudent

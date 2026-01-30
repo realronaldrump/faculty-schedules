@@ -77,6 +77,51 @@ const VisualScheduleBuilder = ({
     [],
   );
 
+  const buildEntry = (day, startMinutes, endMinutes) => ({
+    day,
+    start: normalizeScheduleTime(startMinutes),
+    end: normalizeScheduleTime(endMinutes),
+  });
+
+  const mergeEntriesForDay = useCallback((entries, day) => {
+    const dayEntries = entries
+      .filter((entry) => entry.day === day)
+      .map((entry) => ({
+        ...entry,
+        startMinutes: toScheduleMinutes(entry.start),
+        endMinutes: toScheduleMinutes(entry.end),
+      }))
+      .filter(
+        (entry) =>
+          entry.startMinutes !== null &&
+          entry.endMinutes !== null &&
+          entry.startMinutes < entry.endMinutes,
+      )
+      .sort((a, b) => a.startMinutes - b.startMinutes);
+
+    const merged = [];
+    dayEntries.forEach((entry) => {
+      const last = merged[merged.length - 1];
+      if (!last) {
+        merged.push({ ...entry });
+        return;
+      }
+      if (entry.startMinutes <= last.endMinutes) {
+        last.endMinutes = Math.max(last.endMinutes, entry.endMinutes);
+        return;
+      }
+      merged.push({ ...entry });
+    });
+
+    const otherEntries = entries.filter((entry) => entry.day !== day);
+    return [
+      ...otherEntries,
+      ...merged.map((entry) =>
+        buildEntry(day, entry.startMinutes, entry.endMinutes),
+      ),
+    ];
+  }, []);
+
   // Check if a specific day/hour is scheduled
   const isScheduled = useCallback(
     (day, hour) => {
@@ -115,32 +160,43 @@ const VisualScheduleBuilder = ({
     if (!STUDENT_SCHEDULE_RULES.allowedDays.includes(normalizedDay)) {
       return;
     }
+    const slotStart = hour * 60;
+    const slotEnd = (hour + 1) * 60;
     const existingBlock = getBlock(normalizedDay, hour);
 
     if (existingBlock) {
-      // Remove the entire block
-      onChange(
-        normalizeAndSort(
-          normalizedSchedule.filter(
-            (entry) =>
-              !(
-                entry.day === normalizedDay &&
-                entry.start === existingBlock.start &&
-                entry.end === existingBlock.end
-              ),
-          ),
-        ),
-      );
+      // Remove this hour from the block (trim or split)
+      const updated = [];
+      normalizedSchedule.forEach((entry) => {
+        if (entry.day !== normalizedDay) {
+          updated.push(entry);
+          return;
+        }
+        const startMinutes = toScheduleMinutes(entry.start);
+        const endMinutes = toScheduleMinutes(entry.end);
+        if (startMinutes === null || endMinutes === null) return;
+        if (endMinutes <= slotStart || startMinutes >= slotEnd) {
+          updated.push(entry);
+          return;
+        }
+        if (startMinutes < slotStart) {
+          updated.push(buildEntry(normalizedDay, startMinutes, slotStart));
+        }
+        if (endMinutes > slotEnd) {
+          updated.push(buildEntry(normalizedDay, slotEnd, endMinutes));
+        }
+      });
+      onChange(normalizeAndSort(updated));
     } else {
       // Add a 1-hour block
-      const startTime = `${hour.toString().padStart(2, "0")}:00`;
-      const endTime = `${(hour + 1).toString().padStart(2, "0")}:00`;
-      onChange(
-        normalizeAndSort([
+      const nextEntries = mergeEntriesForDay(
+        [
           ...normalizedSchedule,
-          { day: normalizedDay, start: startTime, end: endTime },
-        ]),
+          buildEntry(normalizedDay, slotStart, slotEnd),
+        ],
+        normalizedDay,
       );
+      onChange(normalizeAndSort(nextEntries));
     }
   };
 
@@ -244,7 +300,11 @@ const VisualScheduleBuilder = ({
     }
 
     setManualError("");
-    onChange(normalizeAndSort([...normalizedSchedule, { day, start, end }]));
+    const nextEntries = mergeEntriesForDay(
+      [...normalizedSchedule, { day, start, end }],
+      day,
+    );
+    onChange(normalizeAndSort(nextEntries));
   };
 
   return (

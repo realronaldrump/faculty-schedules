@@ -112,6 +112,7 @@ const StudentAddWizard = ({
           job.jobTitle?.trim() ||
           job.supervisor?.trim() ||
           job.hourlyRate ||
+          (Array.isArray(job.buildings) && job.buildings.length > 0) ||
           (Array.isArray(job.location) && job.location.length > 0) ||
           (Array.isArray(job.weeklySchedule) && job.weeklySchedule.length > 0),
       );

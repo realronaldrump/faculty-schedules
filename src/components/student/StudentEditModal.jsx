@@ -57,9 +57,16 @@ const StudentEditModal = ({
 
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors((prev) => ({ ...prev, [field]: null }));
-    }
+    setErrors((prev) => {
+      if (!prev[field] && !(field === "startDate" && prev.endDate)) {
+        return prev;
+      }
+      const next = { ...prev, [field]: null };
+      if (field === "startDate") {
+        next.endDate = null;
+      }
+      return next;
+    });
   };
 
   const validate = () => {
@@ -327,8 +334,16 @@ const StudentEditModal = ({
             type="date"
             value={formData.endDate || ""}
             onChange={(e) => updateField("endDate", e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${
+              errors.endDate ? "border-red-500" : "border-gray-300"
+            }`}
           />
+          {errors.endDate && (
+            <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+              <AlertCircle size={14} />
+              {errors.endDate}
+            </p>
+          )}
         </div>
       </div>
 

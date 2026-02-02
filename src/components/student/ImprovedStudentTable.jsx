@@ -12,7 +12,11 @@ import {
   PhoneOff,
   Briefcase,
 } from "lucide-react";
-import StatusBadge, { getStudentStatus } from "./StatusBadge";
+import StatusBadge from "./StatusBadge";
+import {
+  getStudentBadgeStatusForSemester,
+  parseStudentWorkerDate,
+} from "../../utils/studentWorkers";
 
 /**
  * ImprovedStudentTable - Enhanced table with expandable rows and visual job cards
@@ -33,6 +37,11 @@ const DAYS = {
   F: "Fri",
   S: "Sat",
   U: "Sun",
+};
+
+const formatStudentWorkerDate = (value) => {
+  const parsed = parseStudentWorkerDate(value);
+  return parsed ? parsed.toLocaleDateString() : "";
 };
 
 const ImprovedStudentTable = ({
@@ -130,7 +139,7 @@ const ImprovedStudentTable = ({
           <tbody>
             {students.map((student) => {
               const isExpanded = expandedIds.has(student.id);
-              const status = getStudentStatus(student, semesterMeta);
+              const status = getStudentBadgeStatusForSemester(student, semesterMeta);
               const jobs = student.jobs || [];
               const primaryJob = jobs[0];
               const totalHours = jobs.reduce(
@@ -155,7 +164,7 @@ const ImprovedStudentTable = ({
                           {student.startDate && (
                             <p className="text-xs text-gray-500">
                               Started{" "}
-                              {new Date(student.startDate).toLocaleDateString()}
+                              {formatStudentWorkerDate(student.startDate)}
                             </p>
                           )}
                         </div>
@@ -166,7 +175,7 @@ const ImprovedStudentTable = ({
                       <StatusBadge status={status} size="sm" />
                       {student.endDate && (
                         <p className="text-xs text-gray-500 mt-1">
-                          Until {new Date(student.endDate).toLocaleDateString()}
+                          Until {formatStudentWorkerDate(student.endDate)}
                         </p>
                       )}
                     </td>

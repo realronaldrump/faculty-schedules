@@ -68,8 +68,12 @@ const ProgressBar = ({
 
 const StudentWorkerAnalytics = ({ embedded = false }) => {
   const navigate = useNavigate();
-  const { studentData = [], selectedSemesterMeta, rawPeople, peopleIndex } =
-    useData();
+  const {
+    studentData = [],
+    selectedSemesterMeta,
+    rawPeople,
+    peopleIndex,
+  } = useData();
   const { loadPeople } = usePeople();
   const [searchText, setSearchText] = useState("");
   const [filters, setFilters] = useState(() => ({ ...DEFAULT_FILTERS }));
@@ -118,7 +122,7 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
       const statusInfo = getAssignmentStatusForSemester(
         assignment,
         student,
-        selectedSemesterMeta
+        selectedSemesterMeta,
       );
 
       const resolvedBuildings =
@@ -285,13 +289,27 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
   const buildingBreakdown = useMemo(() => {
     const map = new Map();
     filteredAssignments.forEach((assignment) => {
-      assignment.resolvedBuildings.forEach((building) => {
-        const key = building || "Unassigned";
-        const existing = map.get(key) || { hours: 0, pay: 0 };
+      const buildings = assignment.resolvedBuildings;
+      const buildingCount = buildings.length || 1;
+      // Split hours/pay proportionally across buildings to avoid double-counting
+      const hoursPerBuilding = (assignment.weeklyHours || 0) / buildingCount;
+      const payPerBuilding = (assignment.weeklyPay || 0) / buildingCount;
+
+      if (buildings.length === 0) {
+        // No buildings assigned
+        const existing = map.get("Unassigned") || { hours: 0, pay: 0 };
         existing.hours += assignment.weeklyHours || 0;
         existing.pay += assignment.weeklyPay || 0;
-        map.set(key, existing);
-      });
+        map.set("Unassigned", existing);
+      } else {
+        buildings.forEach((building) => {
+          const key = building || "Unassigned";
+          const existing = map.get(key) || { hours: 0, pay: 0 };
+          existing.hours += hoursPerBuilding;
+          existing.pay += payPerBuilding;
+          map.set(key, existing);
+        });
+      }
     });
     return Array.from(map.entries())
       .map(([label, data]) => ({ label, ...data }))
@@ -458,9 +476,7 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() =>
-              handleNavigate("people/directory?tab=student")
-            }
+            onClick={() => handleNavigate("people/directory?tab=student")}
             className="px-4 py-2 rounded-lg border border-baylor-green/40 text-baylor-green hover:bg-baylor-green/10 transition-colors font-medium"
           >
             View Student Directory
@@ -685,10 +701,11 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
             <div className="flex border-b border-gray-200">
               <button
                 onClick={() => setActiveTab("overview")}
-                className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${activeTab === "overview"
+                className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${
+                  activeTab === "overview"
                     ? "text-baylor-green bg-baylor-green/5"
                     : "text-gray-600 hover:text-baylor-green hover:bg-gray-50"
-                  }`}
+                }`}
               >
                 <LayoutGrid size={18} />
                 Overview
@@ -698,10 +715,11 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
               </button>
               <button
                 onClick={() => setActiveTab("assignments")}
-                className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${activeTab === "assignments"
+                className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors relative ${
+                  activeTab === "assignments"
                     ? "text-baylor-green bg-baylor-green/5"
                     : "text-gray-600 hover:text-baylor-green hover:bg-gray-50"
-                  }`}
+                }`}
               >
                 <List size={18} />
                 Assignments
@@ -837,9 +855,7 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
                             label="Supervisor"
                             columnKey="supervisor"
                           />
-                          <th className="table-header-cell">
-                            Buildings
-                          </th>
+                          <th className="table-header-cell">Buildings</th>
                           <SortableHeader
                             label="Weekly Hours"
                             columnKey="weeklyHours"
@@ -899,14 +915,15 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
                               </td>
                               <td className="px-4 py-3 text-sm">
                                 <span
-                                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${assignment.status === "Active"
+                                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                    assignment.status === "Active"
                                       ? "bg-green-100 text-green-800"
                                       : assignment.status === "Upcoming"
                                         ? "bg-blue-100 text-blue-800"
                                         : assignment.status === "Ended"
                                           ? "bg-gray-100 text-gray-700"
                                           : "bg-yellow-100 text-yellow-800"
-                                    }`}
+                                  }`}
                                 >
                                   {assignment.status}
                                 </span>

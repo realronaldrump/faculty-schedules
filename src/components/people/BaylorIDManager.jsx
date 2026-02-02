@@ -15,14 +15,7 @@ import { usePeople } from "../../contexts/PeopleContext";
 import { usePeopleOperations } from "../../hooks";
 import { useUI } from "../../contexts/UIContext";
 import { usePermissions } from "../../utils/permissions";
-
-const hasRole = (person, roleKey) => {
-  const roles = person?.roles;
-  if (!roles) return false;
-  if (Array.isArray(roles)) return roles.includes(roleKey);
-  if (typeof roles === "object") return roles[roleKey] === true;
-  return false;
-};
+import { hasRole } from "../../utils/peopleUtils";
 
 const getDisplayRoleLabels = (person) => {
   const labels = [];
@@ -41,8 +34,7 @@ const getPersonType = (person) => {
 
 const BaylorIDManager = ({ embedded = false }) => {
   const { people: directoryData, loadPeople } = usePeople();
-  const { handleFacultyUpdate, handleStaffUpdate, handleStudentUpdate } =
-    usePeopleOperations();
+  const { handleBaylorIdUpdate } = usePeopleOperations();
   const { showNotification } = useUI();
   const { canEdit } = usePermissions();
   const canEditIds = canEdit("people/baylor-id-manager");
@@ -149,27 +141,12 @@ const BaylorIDManager = ({ embedded = false }) => {
       );
       return;
     }
-    const payload = {
-      id: person.id,
-      baylorId: baylorIdDraft.replace(/\D/g, ""),
-    };
-    const roles = getDisplayRoleLabels(person);
+    const cleanedId = baylorIdDraft.replace(/\D/g, "");
     try {
-      if (roles.includes("student")) {
-        await handleStudentUpdate(payload);
-      } else if (roles.includes("staff") && !roles.includes("faculty")) {
-        await handleStaffUpdate(payload);
-      } else {
-        await handleFacultyUpdate(payload, person);
-      }
+      await handleBaylorIdUpdate(person.id, cleanedId);
       setEditingId(null);
       setBaylorIdDraft("");
       setError("");
-      showNotification?.(
-        "success",
-        "Baylor ID Updated",
-        `${person.name}'s Baylor ID was updated.`,
-      );
     } catch (e) {
       setError(e?.message || "Failed to save.");
     }
@@ -293,15 +270,9 @@ const BaylorIDManager = ({ embedded = false }) => {
             <table className="university-table">
               <thead>
                 <tr>
-                  <th className="table-header-cell">
-                    Name
-                  </th>
-                  <th className="table-header-cell">
-                    Roles
-                  </th>
-                  <th className="table-header-cell">
-                    Baylor ID
-                  </th>
+                  <th className="table-header-cell">Name</th>
+                  <th className="table-header-cell">Roles</th>
+                  <th className="table-header-cell">Baylor ID</th>
                   <th className="table-header-cell" />
                 </tr>
               </thead>

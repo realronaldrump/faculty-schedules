@@ -16,6 +16,7 @@ import TimelineVisualization from "./TimelineVisualization";
 import StatusBadge, { getStudentStatus } from "./StatusBadge";
 import BuildingSelector from "./BuildingSelector";
 import VisualScheduleBuilder from "./VisualScheduleBuilder";
+import { parseStudentWorkerDate } from "../../utils/studentWorkers";
 
 /**
  * StudentEditModal - Full-screen modal for editing student workers
@@ -68,6 +69,14 @@ const StudentEditModal = ({
       newErrors.email = "Email is required";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = "Please enter a valid email";
+    }
+    // Validate date range
+    if (formData.startDate && formData.endDate) {
+      const start = parseStudentWorkerDate(formData.startDate);
+      const end = parseStudentWorkerDate(formData.endDate);
+      if (start && end && end < start) {
+        newErrors.endDate = "End date cannot be before start date";
+      }
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -149,8 +158,9 @@ const StudentEditModal = ({
             type="text"
             value={formData.name || ""}
             onChange={(e) => updateField("name", e.target.value)}
-            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.name ? "border-red-500" : "border-gray-300"
-              }`}
+            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${
+              errors.name ? "border-red-500" : "border-gray-300"
+            }`}
           />
           {errors.name && (
             <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
@@ -168,8 +178,9 @@ const StudentEditModal = ({
             type="email"
             value={formData.email || ""}
             onChange={(e) => updateField("email", e.target.value)}
-            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.email ? "border-red-500" : "border-gray-300"
-              }`}
+            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${
+              errors.email ? "border-red-500" : "border-gray-300"
+            }`}
           />
           {errors.email && (
             <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
@@ -189,8 +200,9 @@ const StudentEditModal = ({
               value={formData.phone || ""}
               disabled={formData.hasNoPhone}
               onChange={(e) => updateField("phone", e.target.value)}
-              className={`flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${formData.hasNoPhone ? "bg-gray-100" : "border-gray-300"
-                }`}
+              className={`flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${
+                formData.hasNoPhone ? "bg-gray-100" : "border-gray-300"
+              }`}
             />
             <label className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
               <input
@@ -344,20 +356,20 @@ const StudentEditModal = ({
         />
       </div>
 
-      <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+      <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
         <div className="flex items-start gap-3">
           <AlertCircle
             size={20}
-            className="text-yellow-600 flex-shrink-0 mt-0.5"
+            className="text-blue-600 flex-shrink-0 mt-0.5"
           />
           <div>
-            <p className="text-sm font-medium text-yellow-800">
-              Automatic Inactivation
+            <p className="text-sm font-medium text-blue-800">
+              Employment Period
             </p>
-            <p className="text-sm text-yellow-700 mt-1">
-              Students will be automatically marked inactive after their end
-              date unless extended. Individual job assignments may have
-              different end dates.
+            <p className="text-sm text-blue-700 mt-1">
+              Students with an end date in the past will show as "Ended" in the
+              directory. To mark a student as inactive manually, use the toggle
+              above.
             </p>
           </div>
         </div>
@@ -403,18 +415,10 @@ const StudentEditModal = ({
           <table className="university-table">
             <thead>
               <tr>
-                <th className="table-header-cell">
-                  Job Title
-                </th>
-                <th className="table-header-cell">
-                  Rate
-                </th>
-                <th className="table-header-cell">
-                  Hours/Week
-                </th>
-                <th className="table-header-cell">
-                  Weekly Pay
-                </th>
+                <th className="table-header-cell">Job Title</th>
+                <th className="table-header-cell">Rate</th>
+                <th className="table-header-cell">Hours/Week</th>
+                <th className="table-header-cell">Weekly Pay</th>
               </tr>
             </thead>
             <tbody>
@@ -442,7 +446,9 @@ const StudentEditModal = ({
                       ${job.hourlyRate || "0.00"}/hr
                     </td>
                     <td className="table-cell">{hours.toFixed(1)} hrs</td>
-                    <td className="table-cell font-medium">${pay.toFixed(2)}</td>
+                    <td className="table-cell font-medium">
+                      ${pay.toFixed(2)}
+                    </td>
                   </tr>
                 );
               })}
@@ -491,10 +497,11 @@ const StudentEditModal = ({
                   if (canDeleteStudent) setShowDeleteConfirm(true);
                 }}
                 disabled={!canDeleteStudent}
-                className={`p-2 rounded-full transition-colors ${canDeleteStudent
-                  ? "text-white/80 hover:text-white hover:bg-white/20"
-                  : "text-white/40 cursor-not-allowed"
-                  }`}
+                className={`p-2 rounded-full transition-colors ${
+                  canDeleteStudent
+                    ? "text-white/80 hover:text-white hover:bg-white/20"
+                    : "text-white/40 cursor-not-allowed"
+                }`}
                 title={
                   canDeleteStudent
                     ? "Delete Student"
@@ -550,10 +557,11 @@ const StudentEditModal = ({
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${activeTab === tab.id
-                      ? "bg-baylor-green text-white"
-                      : "text-gray-700 hover:bg-gray-200"
-                      }`}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                      activeTab === tab.id
+                        ? "bg-baylor-green text-white"
+                        : "text-gray-700 hover:bg-gray-200"
+                    }`}
                   >
                     <Icon size={18} />
                     <span className="font-medium">{tab.label}</span>
@@ -572,10 +580,11 @@ const StudentEditModal = ({
                   onClick={() =>
                     updateField("isActive", formData.isActive === false)
                   }
-                  className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${formData.isActive !== false
-                    ? "bg-red-100 text-red-700 hover:bg-red-200"
-                    : "bg-green-100 text-green-700 hover:bg-green-200"
-                    }`}
+                  className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    formData.isActive !== false
+                      ? "bg-red-100 text-red-700 hover:bg-red-200"
+                      : "bg-green-100 text-green-700 hover:bg-green-200"
+                  }`}
                 >
                   {formData.isActive !== false
                     ? "Deactivate Student"

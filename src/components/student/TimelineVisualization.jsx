@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { Calendar, Briefcase } from "lucide-react";
+import { parseStudentWorkerDate } from "../../utils/studentWorkers";
 
 /**
  * TimelineVisualization - Visual representation of employment periods
@@ -18,12 +19,24 @@ const TimelineVisualization = ({
   const timelineRange = useMemo(() => {
     const dates = [];
 
-    if (studentStartDate) dates.push(new Date(studentStartDate));
-    if (studentEndDate) dates.push(new Date(studentEndDate));
+    if (studentStartDate) {
+      const parsed = parseStudentWorkerDate(studentStartDate);
+      if (parsed) dates.push(parsed);
+    }
+    if (studentEndDate) {
+      const parsed = parseStudentWorkerDate(studentEndDate, { endOfDay: true });
+      if (parsed) dates.push(parsed);
+    }
 
     jobs.forEach((job) => {
-      if (job.startDate) dates.push(new Date(job.startDate));
-      if (job.endDate) dates.push(new Date(job.endDate));
+      if (job.startDate) {
+        const parsed = parseStudentWorkerDate(job.startDate);
+        if (parsed) dates.push(parsed);
+      }
+      if (job.endDate) {
+        const parsed = parseStudentWorkerDate(job.endDate, { endOfDay: true });
+        if (parsed) dates.push(parsed);
+      }
     });
 
     if (dates.length === 0) return null;
@@ -44,7 +57,8 @@ const TimelineVisualization = ({
   // Calculate position percentage for a date
   const getPosition = (dateStr) => {
     if (!dateStr || !timelineRange) return 0;
-    const date = new Date(dateStr);
+    const date = parseStudentWorkerDate(dateStr);
+    if (!date) return 0;
     const position = ((date - timelineRange.start) / timelineRange.total) * 100;
     return Math.max(0, Math.min(100, position));
   };
@@ -52,8 +66,11 @@ const TimelineVisualization = ({
   // Calculate width percentage for a date range
   const getWidth = (startStr, endStr) => {
     if (!startStr || !timelineRange) return 0;
-    const start = new Date(startStr);
-    const end = endStr ? new Date(endStr) : timelineRange.end;
+    const start = parseStudentWorkerDate(startStr);
+    const end = endStr
+      ? parseStudentWorkerDate(endStr, { endOfDay: true })
+      : timelineRange.end;
+    if (!start || !end) return 0;
     const width = ((end - start) / timelineRange.total) * 100;
     return Math.max(0, Math.min(100, width));
   };
@@ -61,7 +78,9 @@ const TimelineVisualization = ({
   // Format date for display
   const formatDate = (dateStr) => {
     if (!dateStr) return "Ongoing";
-    return new Date(dateStr).toLocaleDateString("en-US", {
+    const parsed = parseStudentWorkerDate(dateStr);
+    if (!parsed) return "Ongoing";
+    return parsed.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",

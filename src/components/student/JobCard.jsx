@@ -14,6 +14,7 @@ import VisualScheduleBuilder from "./VisualScheduleBuilder";
 import BuildingSelector from "./BuildingSelector";
 import SuggestionInput from "./SuggestionInput";
 import SupervisorSelect from "./SupervisorSelect";
+import { parseStudentWorkerDate } from "../../utils/studentWorkers";
 
 /**
  * JobCard - Visual card for displaying and editing job assignments
@@ -118,6 +119,17 @@ const JobCard = ({
   };
 
   const formattedSchedule = formatSchedule(job?.weeklySchedule);
+  const { startDateLabel, endDateLabel, endOfDay } = useMemo(() => {
+    const start = parseStudentWorkerDate(job?.startDate);
+    const end = parseStudentWorkerDate(job?.endDate);
+    const endOfDay = parseStudentWorkerDate(job?.endDate, { endOfDay: true });
+    return {
+      startDateLabel: start ? start.toLocaleDateString() : "",
+      endDateLabel: end ? end.toLocaleDateString() : "",
+      endOfDay,
+    };
+  }, [job?.startDate, job?.endDate]);
+  const isEnded = Boolean(endOfDay && new Date() > endOfDay);
 
   // Handle edit mode
   if (isEditing) {
@@ -284,7 +296,7 @@ const JobCard = ({
             >
               {job?.jobTitle || "Untitled Job"}
             </h4>
-            {job?.endDate && new Date(job.endDate) < new Date() && (
+            {job?.endDate && isEnded && (
               <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full whitespace-nowrap">
                 Ended
               </span>
@@ -375,11 +387,9 @@ const JobCard = ({
           {(job?.startDate || job?.endDate) && !compact && (
             <div className="mt-2 flex items-center gap-1 text-xs text-gray-500">
               <Calendar size={12} />
-              {job.startDate && new Date(job.startDate).toLocaleDateString()}
+              {job.startDate && startDateLabel}
               {" → "}
-              {job.endDate
-                ? new Date(job.endDate).toLocaleDateString()
-                : "Ongoing"}
+              {job.endDate ? endDateLabel : "Ongoing"}
             </div>
           )}
         </div>

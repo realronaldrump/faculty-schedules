@@ -1088,6 +1088,65 @@ const usePeopleOperations = () => {
     [showNotification],
   );
 
+  // Handle Baylor ID update - minimal update that preserves roles
+  const handleBaylorIdUpdate = useCallback(
+    async (personId, baylorId) => {
+      if (!personId) {
+        showNotification(
+          "error",
+          "Invalid Request",
+          "Person ID is required to update Baylor ID.",
+        );
+        return;
+      }
+
+      console.log("🎫 Updating Baylor ID for person:", personId);
+
+      try {
+        const personRef = doc(db, "people", personId);
+        const personSnap = await getDoc(personRef);
+
+        if (!personSnap.exists()) {
+          showNotification("error", "Not Found", "Person record not found.");
+          return;
+        }
+
+        const originalData = { id: personId, ...personSnap.data() };
+        const updateData = {
+          baylorId: baylorId || "",
+          updatedAt: new Date().toISOString(),
+        };
+
+        await updateDoc(personRef, updateData);
+
+        await logUpdate(
+          `Person - ${originalData.name || "Unknown"}`,
+          "people",
+          personId,
+          updateData,
+          originalData,
+          "usePeopleOperations - handleBaylorIdUpdate",
+        );
+
+        await loadPeople({ force: true });
+
+        showNotification(
+          "success",
+          "Baylor ID Updated",
+          `Baylor ID has been updated successfully.`,
+        );
+      } catch (error) {
+        console.error("❌ Error updating Baylor ID:", error);
+        showNotification(
+          "error",
+          "Update Failed",
+          "Failed to update Baylor ID. Please try again.",
+        );
+      }
+    },
+    [loadPeople, showNotification],
+  );
+
   return {
     handleFacultyUpdate,
     handleFacultyDelete,
@@ -1098,6 +1157,7 @@ const usePeopleOperations = () => {
     handleProgramCreate,
     handleProgramUpdate,
     handleRevertChange,
+    handleBaylorIdUpdate,
   };
 };
 

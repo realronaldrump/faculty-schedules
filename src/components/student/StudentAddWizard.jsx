@@ -16,6 +16,7 @@ import {
 import JobCard from "./JobCard";
 import TimelineVisualization from "./TimelineVisualization";
 import StatusBadge, { getStudentStatus } from "./StatusBadge";
+import { parseStudentWorkerDate } from "../../utils/studentWorkers";
 
 /**
  * StudentAddWizard - Step-by-step wizard for adding new student workers
@@ -33,6 +34,11 @@ const STEPS = [
   { id: "jobs", label: "Jobs", icon: Building },
   { id: "review", label: "Review", icon: Check },
 ];
+
+const formatStudentWorkerDate = (value) => {
+  const parsed = parseStudentWorkerDate(value);
+  return parsed ? parsed.toLocaleDateString() : "";
+};
 
 const StudentAddWizard = ({
   onSave,
@@ -89,9 +95,28 @@ const StudentAddWizard = ({
       }
     }
 
+    if (stepIndex === 1) {
+      // Validate employment dates
+      if (student.startDate && student.endDate) {
+        const start = parseStudentWorkerDate(student.startDate);
+        const end = parseStudentWorkerDate(student.endDate);
+        if (start && end && end < start) {
+          newErrors.endDate = "End date cannot be before start date";
+        }
+      }
+    }
+
     if (stepIndex === 2) {
-      if (student.jobs.length === 0) {
-        newErrors.jobs = "Add at least one job assignment";
+      const validJobs = (student.jobs || []).filter(
+        (job) =>
+          job.jobTitle?.trim() ||
+          job.supervisor?.trim() ||
+          job.hourlyRate ||
+          (Array.isArray(job.location) && job.location.length > 0) ||
+          (Array.isArray(job.weeklySchedule) && job.weeklySchedule.length > 0),
+      );
+      if (validJobs.length === 0) {
+        newErrors.jobs = "Add at least one job assignment with meaningful data";
       }
     }
 
@@ -201,8 +226,9 @@ const StudentAddWizard = ({
             type="text"
             value={student.name}
             onChange={(e) => updateStudent({ name: e.target.value })}
-            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.name ? "border-red-500" : "border-gray-300"
-              }`}
+            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${
+              errors.name ? "border-red-500" : "border-gray-300"
+            }`}
             placeholder="e.g., John Doe"
           />
           {errors.name && (
@@ -221,8 +247,9 @@ const StudentAddWizard = ({
             type="email"
             value={student.email}
             onChange={(e) => updateStudent({ email: e.target.value })}
-            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.email ? "border-red-500" : "border-gray-300"
-              }`}
+            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${
+              errors.email ? "border-red-500" : "border-gray-300"
+            }`}
             placeholder="student@baylor.edu"
           />
           {errors.email && (
@@ -243,8 +270,9 @@ const StudentAddWizard = ({
               value={student.phone}
               disabled={student.hasNoPhone}
               onChange={(e) => updateStudent({ phone: e.target.value })}
-              className={`flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.phone ? "border-red-500" : "border-gray-300"
-                } ${student.hasNoPhone ? "bg-gray-100" : ""}`}
+              className={`flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${
+                errors.phone ? "border-red-500" : "border-gray-300"
+              } ${student.hasNoPhone ? "bg-gray-100" : ""}`}
               placeholder="(254) 710-1234"
             />
             <label className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
@@ -491,10 +519,10 @@ const StudentAddWizard = ({
             <h4 className="font-medium text-gray-900">Employment Period</h4>
           </div>
           <p className="text-sm">
-            {new Date(student.startDate).toLocaleDateString()}
+            {formatStudentWorkerDate(student.startDate)}
             {" → "}
             {student.endDate
-              ? new Date(student.endDate).toLocaleDateString()
+              ? formatStudentWorkerDate(student.endDate)
               : "Ongoing"}
           </p>
         </div>
@@ -515,8 +543,7 @@ const StudentAddWizard = ({
               >
                 <p className="font-medium">{job.jobTitle}</p>
                 <p className="text-gray-600">
-                  {resolveSupervisorLabel(job)} • $
-                  {job.hourlyRate || "0.00"}/hr
+                  {resolveSupervisorLabel(job)} • ${job.hourlyRate || "0.00"}/hr
                 </p>
                 <p className="text-gray-500 text-xs">
                   {job.weeklySchedule?.length || 0} schedule entries
@@ -602,12 +629,13 @@ const StudentAddWizard = ({
             return (
               <div key={step.id} className="flex items-center flex-1">
                 <div
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${isActive
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
+                    isActive
                       ? "bg-baylor-green text-white"
                       : isCompleted
                         ? "bg-baylor-green/20 text-baylor-green"
                         : "bg-gray-100 text-gray-400"
-                    }`}
+                  }`}
                 >
                   <div
                     className={`${isCompleted ? "bg-baylor-green text-white" : ""} rounded-full p-0.5`}
@@ -620,8 +648,9 @@ const StudentAddWizard = ({
                 </div>
                 {idx < STEPS.length - 1 && (
                   <div
-                    className={`flex-1 h-0.5 mx-2 ${isCompleted ? "bg-baylor-green/50" : "bg-gray-200"
-                      }`}
+                    className={`flex-1 h-0.5 mx-2 ${
+                      isCompleted ? "bg-baylor-green/50" : "bg-gray-200"
+                    }`}
                   />
                 )}
               </div>

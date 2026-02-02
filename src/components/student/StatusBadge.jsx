@@ -1,4 +1,5 @@
 import React from "react";
+import { parseStudentWorkerDate } from "../../utils/studentWorkers";
 
 /**
  * StatusBadge - Visual status indicator with color coding
@@ -77,14 +78,15 @@ export const getStudentStatus = (student, referenceDate = new Date()) => {
   if (student.isActive === false) return "inactive";
   if (!student.startDate) return "inactive";
 
-  const now = referenceDate;
-  const start = new Date(student.startDate);
+  const now = referenceDate instanceof Date ? referenceDate : new Date();
+  const start = parseStudentWorkerDate(student.startDate);
+  if (!start) return "inactive";
 
   if (start > now) return "upcoming";
 
   if (student.endDate) {
-    const end = new Date(student.endDate);
-    if (end < now) return "ended";
+    const end = parseStudentWorkerDate(student.endDate, { endOfDay: true });
+    if (end && now > end) return "ended";
   }
 
   // Check if some jobs are ended but student is still active
@@ -113,14 +115,15 @@ export const getJobStatus = (job, student, referenceDate = new Date()) => {
 
   if (!startDate) return "inactive";
 
-  const now = referenceDate;
-  const start = new Date(startDate);
+  const now = referenceDate instanceof Date ? referenceDate : new Date();
+  const start = parseStudentWorkerDate(startDate);
+  if (!start) return "inactive";
 
   if (start > now) return "upcoming";
 
   if (endDate) {
-    const end = new Date(endDate);
-    if (end < now) return "ended";
+    const end = parseStudentWorkerDate(endDate, { endOfDay: true });
+    if (end && now > end) return "ended";
   }
 
   return "active";

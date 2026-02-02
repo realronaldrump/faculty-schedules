@@ -11,20 +11,42 @@
  * - Data transformation and adaptation
  */
 
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { db } from '../firebase';
-import { collection, getDocs, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { fetchPrograms, getInstructorDisplayName, UNASSIGNED } from '../utils/dataAdapter';
-import { fetchRecentChanges } from '../utils/recentChanges';
-import { usePermissions } from '../utils/permissions';
-import { buildCourseSectionKey, parseCourseCode } from '../utils/courseUtils';
-import { adaptPeopleToFaculty, adaptPeopleToStaff } from '../utils/dataAdapter';
-import { applySemesterSchedule } from '../utils/studentWorkers';
-import { normalizeSpaceRecord, resolveScheduleSpaces } from '../utils/spaceUtils';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
+import { db } from "../firebase";
+import {
+  collection,
+  getDocs,
+  onSnapshot,
+  query,
+  orderBy,
+} from "firebase/firestore";
+import {
+  fetchPrograms,
+  getInstructorDisplayName,
+  UNASSIGNED,
+} from "../utils/dataAdapter";
+import { fetchRecentChanges } from "../utils/recentChanges";
+import { usePermissions } from "../utils/permissions";
+import { buildCourseSectionKey, parseCourseCode } from "../utils/courseUtils";
+import { adaptPeopleToFaculty, adaptPeopleToStaff } from "../utils/dataAdapter";
+import { applySemesterSchedule } from "../utils/studentWorkers";
+import { isStudentWorker } from "../utils/peopleUtils";
+import {
+  normalizeSpaceRecord,
+  resolveScheduleSpaces,
+} from "../utils/spaceUtils";
 
 // Import new contexts
-import { usePeople } from './PeopleContext';
-import { useSchedules } from './ScheduleContext';
+import { usePeople } from "./PeopleContext";
+import { useSchedules } from "./ScheduleContext";
 
 const DataContext = createContext(null);
 
@@ -38,7 +60,7 @@ export const DataProvider = ({ children }) => {
     addPerson,
     updatePerson,
     deletePerson,
-    loading: peopleLoading
+    loading: peopleLoading,
   } = usePeople();
 
   const {
@@ -47,7 +69,7 @@ export const DataProvider = ({ children }) => {
     setSelectedSemester,
     availableSemesters,
     selectedTermMeta,
-    loading: schedulesLoading
+    loading: schedulesLoading,
   } = useSchedules();
 
   // Local state for other entities
@@ -77,112 +99,143 @@ export const DataProvider = ({ children }) => {
 
   // Helper to derive credits
   const deriveCreditsFromSchedule = (courseCode, credits) => {
-    if (credits !== undefined && credits !== null && credits !== '') {
+    if (credits !== undefined && credits !== null && credits !== "") {
       const numericCredits = Number(credits);
       if (!Number.isNaN(numericCredits)) {
         return numericCredits;
       }
     }
-    const parsed = parseCourseCode(courseCode || '');
-    if (parsed && !parsed.error && parsed.credits !== undefined && parsed.credits !== null) {
+    const parsed = parseCourseCode(courseCode || "");
+    if (
+      parsed &&
+      !parsed.error &&
+      parsed.credits !== undefined &&
+      parsed.credits !== null
+    ) {
       return parsed.credits;
     }
     return null;
   };
 
   const peopleById = useMemo(() => {
-    return new Map((rawPeople || []).map(person => [person.id, person]));
+    return new Map((rawPeople || []).map((person) => [person.id, person]));
   }, [rawPeople]);
 
   const splitInstructorNames = (value) => {
     if (!value) return [];
     return String(value)
       .split(/;|\/|\s+&\s+|\s+and\s+/i)
-      .map((part) => part.replace(/\[[^\]]*\]/g, '').replace(/\([^)]*\)/g, '').trim())
+      .map((part) =>
+        part
+          .replace(/\[[^\]]*\]/g, "")
+          .replace(/\([^)]*\)/g, "")
+          .trim(),
+      )
       .filter(Boolean);
   };
 
-  const buildInstructorInfo = useCallback((schedule) => {
-    if (!schedule) {
+  const buildInstructorInfo = useCallback(
+    (schedule) => {
+      if (!schedule) {
+        return {
+          instructorIds: [],
+          instructorNames: [],
+          instructors: [],
+          primaryInstructorId: "",
+          primaryInstructor: null,
+          displayName: UNASSIGNED,
+        };
+      }
+
+      const assignments = Array.isArray(schedule.instructorAssignments)
+        ? schedule.instructorAssignments
+        : [];
+      const assignmentIds = assignments
+        .map(
+          (assignment) =>
+            assignment?.personId || assignment?.instructorId || assignment?.id,
+        )
+        .filter(Boolean);
+      const instructorIds = Array.from(
+        new Set([
+          ...(Array.isArray(schedule.instructorIds)
+            ? schedule.instructorIds
+            : []),
+          ...assignmentIds,
+          schedule.instructorId,
+        ]),
+      ).filter(Boolean);
+
+      const instructors = instructorIds
+        .map((id) => peopleById.get(id))
+        .filter(Boolean);
+      const resolvedNames = instructors
+        .map((person) => getInstructorDisplayName(person))
+        .filter((name) => name && name !== UNASSIGNED);
+      const fallbackName = (
+        schedule.instructorName ||
+        schedule.Instructor ||
+        ""
+      ).trim();
+      const instructorNames =
+        resolvedNames.length > 0
+          ? resolvedNames
+          : splitInstructorNames(fallbackName);
+
+      const primaryInstructorId =
+        schedule.instructorId ||
+        assignments.find((assignment) => assignment?.isPrimary)?.personId ||
+        instructorIds[0] ||
+        "";
+      const primaryInstructor = primaryInstructorId
+        ? peopleById.get(primaryInstructorId)
+        : null;
+      const displayName =
+        instructorNames.length > 0 ? instructorNames.join(" / ") : UNASSIGNED;
+
       return {
-        instructorIds: [],
-        instructorNames: [],
-        instructors: [],
-        primaryInstructorId: '',
-        primaryInstructor: null,
-        displayName: UNASSIGNED
+        instructorIds,
+        instructorNames,
+        instructors,
+        primaryInstructorId,
+        primaryInstructor,
+        displayName,
       };
-    }
-
-    const assignments = Array.isArray(schedule.instructorAssignments)
-      ? schedule.instructorAssignments
-      : [];
-    const assignmentIds = assignments
-      .map((assignment) => assignment?.personId || assignment?.instructorId || assignment?.id)
-      .filter(Boolean);
-    const instructorIds = Array.from(new Set([
-      ...(Array.isArray(schedule.instructorIds) ? schedule.instructorIds : []),
-      ...assignmentIds,
-      schedule.instructorId
-    ])).filter(Boolean);
-
-    const instructors = instructorIds
-      .map((id) => peopleById.get(id))
-      .filter(Boolean);
-    const resolvedNames = instructors
-      .map((person) => getInstructorDisplayName(person))
-      .filter((name) => name && name !== UNASSIGNED);
-    const fallbackName = (schedule.instructorName || schedule.Instructor || '').trim();
-    const instructorNames = resolvedNames.length > 0
-      ? resolvedNames
-      : splitInstructorNames(fallbackName);
-
-    const primaryInstructorId = schedule.instructorId
-      || assignments.find((assignment) => assignment?.isPrimary)?.personId
-      || instructorIds[0]
-      || '';
-    const primaryInstructor = primaryInstructorId ? peopleById.get(primaryInstructorId) : null;
-    const displayName = instructorNames.length > 0
-      ? instructorNames.join(' / ')
-      : UNASSIGNED;
-
-    return {
-      instructorIds,
-      instructorNames,
-      instructors,
-      primaryInstructorId,
-      primaryInstructor,
-      displayName
-    };
-  }, [peopleById]);
+    },
+    [peopleById],
+  );
 
   // Computed schedule objects (flattened for UI)
   const scheduleData = useMemo(() => {
     if (!rawScheduleData || rawScheduleData.length === 0) return [];
 
     const normalizeCourseCode = (value) => {
-      if (!value) return '';
-      return String(value).trim().toUpperCase().replace(/\s+/g, ' ');
+      if (!value) return "";
+      return String(value).trim().toUpperCase().replace(/\s+/g, " ");
     };
     const normalizeCourseId = (value) => {
-      if (!value) return '';
-      return String(value).trim().toUpperCase().replace(/\s+/g, '_');
+      if (!value) return "";
+      return String(value).trim().toUpperCase().replace(/\s+/g, "_");
     };
     const coursesById = new Map();
     const coursesByCode = new Map();
     rawCourses.forEach((course) => {
       if (!course) return;
       if (course.id) coursesById.set(course.id, course);
-      const courseCode = normalizeCourseCode(course.courseCode || course.code || '');
+      const courseCode = normalizeCourseCode(
+        course.courseCode || course.code || "",
+      );
       if (courseCode) coursesByCode.set(courseCode, course);
-      const normalizedId = normalizeCourseId(course.courseCode || course.code || '');
+      const normalizedId = normalizeCourseId(
+        course.courseCode || course.code || "",
+      );
       if (normalizedId && !coursesById.has(normalizedId)) {
         coursesById.set(normalizedId, course);
       }
     });
 
     const flattened = [];
-    rawScheduleData.forEach(schedule => {
+    rawScheduleData.forEach((schedule) => {
       if (!schedule || !schedule.id) return;
 
       const {
@@ -191,59 +244,61 @@ export const DataProvider = ({ children }) => {
         instructors,
         primaryInstructorId,
         primaryInstructor,
-        displayName
+        displayName,
       } = buildInstructorInfo(schedule);
 
       // Helper to create reliable display strings
       const getRoomDisplay = (s) => {
         const resolved = resolveScheduleSpaces(s, spacesByKey);
         if (resolved.display) return resolved.display;
-        return '';
+        return "";
       };
 
-      const courseCode = schedule.courseCode || schedule.Course || '';
+      const courseCode = schedule.courseCode || schedule.Course || "";
       const courseFromId = schedule.courseId
-        ? (coursesById.get(schedule.courseId) || coursesById.get(normalizeCourseId(schedule.courseId)))
+        ? coursesById.get(schedule.courseId) ||
+          coursesById.get(normalizeCourseId(schedule.courseId))
         : null;
       const courseFromCode = courseCode
-        ? (coursesByCode.get(normalizeCourseCode(courseCode)) || coursesById.get(normalizeCourseId(courseCode)))
+        ? coursesByCode.get(normalizeCourseCode(courseCode)) ||
+          coursesById.get(normalizeCourseId(courseCode))
         : null;
       const resolvedCourse = courseFromId || courseFromCode;
       const baseCourseTitle =
         schedule.courseTitle ||
-        schedule['Course Title'] ||
+        schedule["Course Title"] ||
         schedule.Title ||
         schedule.title ||
-        '';
+        "";
       const courseTitle =
         baseCourseTitle ||
         resolvedCourse?.title ||
         resolvedCourse?.courseTitle ||
-        resolvedCourse?.['Course Title'] ||
-        '';
-      const crn = schedule.crn || schedule.CRN || '';
+        resolvedCourse?.["Course Title"] ||
+        "";
+      const crn = schedule.crn || schedule.CRN || "";
 
       const commonProps = {
         ...schedule,
         Course: courseCode,
         courseTitle,
         crn,
-        'Course Title': courseTitle,
+        "Course Title": courseTitle,
         CRN: crn,
         Instructor: displayName,
         instructorName: displayName,
-        InstructorId: primaryInstructorId || '',
-        instructorId: primaryInstructorId || '',
+        InstructorId: primaryInstructorId || "",
+        instructorId: primaryInstructorId || "",
         instructorIds,
         instructorNames,
         instructors,
         instructor: primaryInstructor,
-        Section: schedule.section || '',
+        Section: schedule.section || "",
         Credits: deriveCreditsFromSchedule(courseCode, schedule.credits),
-        Program: schedule.program || '',
-        Term: schedule.term || '',
-        Status: schedule.status || 'Active',
-        _originalId: schedule.id
+        Program: schedule.program || "",
+        Term: schedule.term || "",
+        Status: schedule.status || "Active",
+        _originalId: schedule.id,
       };
 
       if (schedule.meetingPatterns && schedule.meetingPatterns.length > 0) {
@@ -252,16 +307,16 @@ export const DataProvider = ({ children }) => {
             ...commonProps,
             id: `${schedule.id}-${idx}`,
             Day: pattern.day,
-            'Start Time': pattern.startTime,
-            'End Time': pattern.endTime,
-            Room: getRoomDisplay(schedule)
+            "Start Time": pattern.startTime,
+            "End Time": pattern.endTime,
+            Room: getRoomDisplay(schedule),
           });
         });
       } else {
         flattened.push({
           ...commonProps,
           id: schedule.id,
-          Room: getRoomDisplay(schedule)
+          Room: getRoomDisplay(schedule),
         });
       }
     });
@@ -293,8 +348,8 @@ export const DataProvider = ({ children }) => {
         const minutes = parseInt(match[2], 10);
         const period = match[3];
         if (period) {
-          if (period.toUpperCase() === 'PM' && hours !== 12) hours += 12;
-          if (period.toUpperCase() === 'AM' && hours === 12) hours = 0;
+          if (period.toUpperCase() === "PM" && hours !== 12) hours += 12;
+          if (period.toUpperCase() === "AM" && hours === 12) hours = 0;
         }
         return hours * 60 + minutes;
       };
@@ -308,16 +363,22 @@ export const DataProvider = ({ children }) => {
 
     let adjunctTaughtSessions = 0;
 
-    scheduleData.forEach(s => {
+    scheduleData.forEach((s) => {
       const names = Array.isArray(s.instructorNames)
         ? s.instructorNames
-        : (s.Instructor ? [s.Instructor] : []);
+        : s.Instructor
+          ? [s.Instructor]
+          : [];
       names.forEach((name) => {
         if (name) instructors.add(name);
       });
-      const roomLabel = s.Room || '';
+      const roomLabel = s.Room || "";
       const lowerRoom = roomLabel.toLowerCase();
-      if (roomLabel && lowerRoom !== 'online' && !lowerRoom.includes('no room needed')) {
+      if (
+        roomLabel &&
+        lowerRoom !== "online" &&
+        !lowerRoom.includes("no room needed")
+      ) {
         rooms.add(roomLabel);
       }
       const courseKey = buildCourseSectionKey(s);
@@ -325,16 +386,20 @@ export const DataProvider = ({ children }) => {
       if (s.Day && daySchedules[s.Day] !== undefined) daySchedules[s.Day]++;
 
       // Check if any instructor is an adjunct
-      const scheduleInstructors = Array.isArray(s.instructors) ? s.instructors : [];
-      const isAdjunctTaught = scheduleInstructors.some(instructor => instructor?.isAdjunct);
+      const scheduleInstructors = Array.isArray(s.instructors)
+        ? s.instructors
+        : [];
+      const isAdjunctTaught = scheduleInstructors.some(
+        (instructor) => instructor?.isAdjunct,
+      );
       if (isAdjunctTaught) {
         adjunctTaughtSessions++;
       }
 
       // Calculate faculty workload
-      const duration = calculateDuration(s['Start Time'], s['End Time']);
-      const displayName = s.Instructor || 'Unassigned';
-      if (displayName && displayName !== 'Unassigned') {
+      const duration = calculateDuration(s["Start Time"], s["End Time"]);
+      const displayName = s.Instructor || "Unassigned";
+      if (displayName && displayName !== "Unassigned") {
         if (!facultyWorkload[displayName]) {
           facultyWorkload[displayName] = { courses: new Set(), totalHours: 0 };
         }
@@ -346,9 +411,17 @@ export const DataProvider = ({ children }) => {
       }
 
       // Calculate room utilization
-      if (roomLabel && lowerRoom !== 'online' && !lowerRoom.includes('no room needed')) {
+      if (
+        roomLabel &&
+        lowerRoom !== "online" &&
+        !lowerRoom.includes("no room needed")
+      ) {
         if (!roomUtilization[roomLabel]) {
-          roomUtilization[roomLabel] = { classes: 0, hours: 0, adjunctTaughtClasses: 0 };
+          roomUtilization[roomLabel] = {
+            classes: 0,
+            hours: 0,
+            adjunctTaughtClasses: 0,
+          };
         }
         roomUtilization[roomLabel].classes++;
         roomUtilization[roomLabel].hours += duration;
@@ -363,13 +436,13 @@ export const DataProvider = ({ children }) => {
     Object.entries(facultyWorkload).forEach(([name, data]) => {
       facultyWorkloadFinal[name] = {
         courses: data.courses.size,
-        totalHours: data.totalHours
+        totalHours: data.totalHours,
       };
     });
 
     const busiestDay = Object.entries(daySchedules).reduce(
-      (max, [day, count]) => count > max.count ? { day, count } : max,
-      { day: 'M', count: 0 }
+      (max, [day, count]) => (count > max.count ? { day, count } : max),
+      { day: "M", count: 0 },
     );
 
     return {
@@ -380,7 +453,7 @@ export const DataProvider = ({ children }) => {
       uniqueCourses: courses.size,
       busiestDay,
       facultyWorkload: facultyWorkloadFinal,
-      roomUtilization
+      roomUtilization,
     };
   }, [scheduleData]);
 
@@ -395,15 +468,7 @@ export const DataProvider = ({ children }) => {
 
   const studentData = useMemo(() => {
     return rawPeople
-      .filter(person => {
-        if (!person.roles) return false;
-        const roles = Array.isArray(person.roles)
-          ? person.roles
-          : (typeof person.roles === 'object'
-            ? Object.keys(person.roles).filter(k => person.roles[k])
-            : []);
-        return roles.includes('student');
-      })
+      .filter((person) => isStudentWorker(person))
       .map((student) => {
         const resolved = selectedSemester
           ? applySemesterSchedule(student, selectedSemester)
@@ -412,40 +477,46 @@ export const DataProvider = ({ children }) => {
       });
   }, [rawPeople, selectedSemester]);
 
-  const loadPrograms = useCallback(async ({ force = false } = {}) => {
-    if (programsLoaded && !force) return rawPrograms;
-    try {
-      const programs = await fetchPrograms();
-      setRawPrograms(programs);
-      setProgramsLoaded(true);
-      return programs;
-    } catch (e) {
-      console.error('Programs load error:', e);
-      setDataError(e.message);
-      return [];
-    }
-  }, [programsLoaded, rawPrograms]);
+  const loadPrograms = useCallback(
+    async ({ force = false } = {}) => {
+      if (programsLoaded && !force) return rawPrograms;
+      try {
+        const programs = await fetchPrograms();
+        setRawPrograms(programs);
+        setProgramsLoaded(true);
+        return programs;
+      } catch (e) {
+        console.error("Programs load error:", e);
+        setDataError(e.message);
+        return [];
+      }
+    },
+    [programsLoaded, rawPrograms],
+  );
 
-  const loadCourses = useCallback(async ({ force = false } = {}) => {
-    if (coursesLoaded && !force) return rawCourses;
-    setCoursesLoading(true);
-    try {
-      const snapshot = await getDocs(collection(db, 'courses'));
-      const courses = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data()
-      }));
-      setRawCourses(courses);
-      setCoursesLoaded(true);
-      return courses;
-    } catch (e) {
-      console.error('Courses load error:', e);
-      setDataError(e.message);
-      return [];
-    } finally {
-      setCoursesLoading(false);
-    }
-  }, [coursesLoaded, rawCourses]);
+  const loadCourses = useCallback(
+    async ({ force = false } = {}) => {
+      if (coursesLoaded && !force) return rawCourses;
+      setCoursesLoading(true);
+      try {
+        const snapshot = await getDocs(collection(db, "courses"));
+        const courses = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+        }));
+        setRawCourses(courses);
+        setCoursesLoaded(true);
+        return courses;
+      } catch (e) {
+        console.error("Courses load error:", e);
+        setDataError(e.message);
+        return [];
+      } finally {
+        setCoursesLoading(false);
+      }
+    },
+    [coursesLoaded, rawCourses],
+  );
 
   // Load rooms from Firestore
   const normalizeRoomsSnapshot = useCallback((snapshot) => {
@@ -475,16 +546,16 @@ export const DataProvider = ({ children }) => {
     if (roomsUnsubscribeRef.current) return;
     setRoomsLoading(true);
     roomsUnsubscribeRef.current = onSnapshot(
-      collection(db, 'rooms'),
+      collection(db, "rooms"),
       (snapshot) => {
         normalizeRoomsSnapshot(snapshot);
         setRoomsLoading(false);
       },
       (error) => {
-        console.error('Rooms subscription error:', error);
+        console.error("Rooms subscription error:", error);
         setDataError(error.message);
         setRoomsLoading(false);
-      }
+      },
     );
   }, [normalizeRoomsSnapshot]);
 
@@ -504,161 +575,205 @@ export const DataProvider = ({ children }) => {
     loadCourses();
   }, [rawScheduleData, coursesLoaded, coursesLoading, loadCourses]);
 
-  const loadRooms = useCallback(async ({ force = false } = {}) => {
-    if (!roomsUnsubscribeRef.current || force) {
-      if (roomsUnsubscribeRef.current && force) {
-        roomsUnsubscribeRef.current();
-        roomsUnsubscribeRef.current = null;
+  const loadRooms = useCallback(
+    async ({ force = false } = {}) => {
+      if (!roomsUnsubscribeRef.current || force) {
+        if (roomsUnsubscribeRef.current && force) {
+          roomsUnsubscribeRef.current();
+          roomsUnsubscribeRef.current = null;
+        }
+        startRoomsSubscription();
       }
-      startRoomsSubscription();
-    }
-    return roomsData;
-  }, [roomsData, startRoomsSubscription]);
+      return roomsData;
+    },
+    [roomsData, startRoomsSubscription],
+  );
 
   // Refresh rooms (force reload)
-  const refreshRooms = useCallback(() => loadRooms({ force: true }), [loadRooms]);
+  const refreshRooms = useCallback(
+    () => loadRooms({ force: true }),
+    [loadRooms],
+  );
 
-  const loadEditHistory = useCallback(async ({ force = false } = {}) => {
-    if (editHistoryLoaded && !force) return editHistory;
-    try {
-      const snap = await getDocs(query(collection(db, 'editHistory'), orderBy('timestamp', 'desc')));
-      const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setEditHistory(items);
-      setEditHistoryLoaded(true);
-      return items;
-    } catch (e) {
-      console.error('Edit history load error:', e);
-      setDataError(e.message);
-      return [];
-    }
-  }, [editHistoryLoaded, editHistory]);
+  const loadEditHistory = useCallback(
+    async ({ force = false } = {}) => {
+      if (editHistoryLoaded && !force) return editHistory;
+      try {
+        const snap = await getDocs(
+          query(collection(db, "editHistory"), orderBy("timestamp", "desc")),
+        );
+        const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setEditHistory(items);
+        setEditHistoryLoaded(true);
+        return items;
+      } catch (e) {
+        console.error("Edit history load error:", e);
+        setDataError(e.message);
+        return [];
+      }
+    },
+    [editHistoryLoaded, editHistory],
+  );
 
-  const loadRecentChanges = useCallback(async ({ limit = 100, force = false } = {}) => {
-    if (recentChangesLoaded && !force) return recentChanges;
-    try {
-      const changes = await fetchRecentChanges(limit);
-      setRecentChanges(changes);
-      setRecentChangesLoaded(true);
-      return changes;
-    } catch (e) {
-      console.error('Recent changes load error:', e);
-      setDataError(e.message);
-      return [];
-    }
-  }, [recentChangesLoaded, recentChanges]);
+  const loadRecentChanges = useCallback(
+    async ({ limit = 100, force = false } = {}) => {
+      if (recentChangesLoaded && !force) return recentChanges;
+      try {
+        const changes = await fetchRecentChanges(limit);
+        setRecentChanges(changes);
+        setRecentChangesLoaded(true);
+        return changes;
+      } catch (e) {
+        console.error("Recent changes load error:", e);
+        setDataError(e.message);
+        return [];
+      }
+    },
+    [recentChangesLoaded, recentChanges],
+  );
 
   // Main Load Orchestrator
-  const loadData = useCallback(async ({
-    silent = false,
-    includePeople = true,
-    includeCourses = true,
-    includePrograms = true,
-    includeEditHistory = true,
-    includeRecentChanges = true,
-    force = false
-  } = {}) => {
-    if (!silent) setLocalLoading(true);
-    try {
-      console.log('📡 DataContext: Orchestrating data load...');
+  const loadData = useCallback(
+    async ({
+      silent = false,
+      includePeople = true,
+      includeCourses = true,
+      includePrograms = true,
+      includeEditHistory = true,
+      includeRecentChanges = true,
+      force = false,
+    } = {}) => {
+      if (!silent) setLocalLoading(true);
+      try {
+        console.log("📡 DataContext: Orchestrating data load...");
 
-      const tasks = [];
-      if (includePeople) tasks.push(loadPeople({ force }));
-      if (includeCourses) tasks.push(loadCourses({ force }));
-      if (includePrograms) tasks.push(loadPrograms({ force }));
-      if (includeEditHistory) tasks.push(loadEditHistory({ force }));
-      if (includeRecentChanges) tasks.push(loadRecentChanges({ force }));
+        const tasks = [];
+        if (includePeople) tasks.push(loadPeople({ force }));
+        if (includeCourses) tasks.push(loadCourses({ force }));
+        if (includePrograms) tasks.push(loadPrograms({ force }));
+        if (includeEditHistory) tasks.push(loadEditHistory({ force }));
+        if (includeRecentChanges) tasks.push(loadRecentChanges({ force }));
 
-      await Promise.all(tasks);
-      // Note: Schedules load automatically via ScheduleContext when semester is set
-    } catch (e) {
-      console.error('Data load error:', e);
-      setDataError(e.message);
-    } finally {
-      if (!silent) setLocalLoading(false);
-    }
-  }, [loadPeople, loadCourses, loadPrograms, loadEditHistory, loadRecentChanges]);
+        await Promise.all(tasks);
+        // Note: Schedules load automatically via ScheduleContext when semester is set
+      } catch (e) {
+        console.error("Data load error:", e);
+        setDataError(e.message);
+      } finally {
+        if (!silent) setLocalLoading(false);
+      }
+    },
+    [loadPeople, loadCourses, loadPrograms, loadEditHistory, loadRecentChanges],
+  );
 
   // Initial Load effect handled by components calling loadData or individual contexts
 
-  const value = useMemo(() => ({
-    // Passthrough Data
-    rawScheduleData,
-    rawPeople,
-    allPeople,
-    peopleIndex,
-    rawPrograms,
-    rawCourses,
+  const value = useMemo(
+    () => ({
+      // Passthrough Data
+      rawScheduleData,
+      rawPeople,
+      allPeople,
+      peopleIndex,
+      rawPrograms,
+      rawCourses,
 
-    // Transformed/Legacy Data
-    scheduleData,
-    facultyData,
-    staffData,
-    studentData,
-    programs: rawPrograms,
-    courses: rawCourses,
-    directoryData: rawPeople,
+      // Transformed/Legacy Data
+      scheduleData,
+      facultyData,
+      staffData,
+      studentData,
+      programs: rawPrograms,
+      courses: rawCourses,
+      directoryData: rawPeople,
 
-    analytics,
-    editHistory,
-    recentChanges,
+      analytics,
+      editHistory,
+      recentChanges,
 
-    // Rooms/Spaces Data
-    roomsData,
-    spacesByKey,
-    spacesList,
+      // Rooms/Spaces Data
+      roomsData,
+      spacesByKey,
+      spacesList,
 
-    // Semester State (Delegated)
-    selectedSemester,
-    setSelectedSemester,
-    availableSemesters,
-    selectedSemesterMeta: selectedTermMeta,
+      // Semester State (Delegated)
+      selectedSemester,
+      setSelectedSemester,
+      availableSemesters,
+      selectedSemesterMeta: selectedTermMeta,
 
-    loading,
-    dataError,
+      loading,
+      dataError,
 
-    // Actions
-    loadData,
-    loadCourses,
-    loadPrograms,
-    loadRooms,
-    refreshRooms,
-    loadEditHistory,
-    loadRecentChanges,
-    refreshData: (options = {}) => loadData({ silent: true, ...options }),
+      // Actions
+      loadData,
+      loadCourses,
+      loadPrograms,
+      loadRooms,
+      refreshRooms,
+      loadEditHistory,
+      loadRecentChanges,
+      refreshData: (options = {}) => loadData({ silent: true, ...options }),
 
-    // Load State
-    programsLoaded,
-    coursesLoaded,
-    coursesLoading,
-    roomsLoaded,
-    roomsLoading,
-    editHistoryLoaded,
-    recentChangesLoaded,
+      // Load State
+      programsLoaded,
+      coursesLoaded,
+      coursesLoading,
+      roomsLoaded,
+      roomsLoading,
+      editHistoryLoaded,
+      recentChangesLoaded,
 
-    // Permissions (Passthrough)
-    ...permissions
-  }), [
-    rawScheduleData, rawPeople, allPeople, peopleIndex, rawPrograms, rawCourses,
-    scheduleData, facultyData, staffData, studentData,
-    analytics, editHistory, recentChanges, roomsData, spacesByKey, spacesList,
-    selectedSemester, availableSemesters, selectedTermMeta,
-    loading, dataError, loadData,
-    loadCourses, loadPrograms, loadRooms, refreshRooms, loadEditHistory, loadRecentChanges,
-    programsLoaded, coursesLoaded, coursesLoading, roomsLoaded, roomsLoading, editHistoryLoaded, recentChangesLoaded,
-    permissions
-  ]);
-
-  return (
-    <DataContext.Provider value={value}>
-      {children}
-    </DataContext.Provider>
+      // Permissions (Passthrough)
+      ...permissions,
+    }),
+    [
+      rawScheduleData,
+      rawPeople,
+      allPeople,
+      peopleIndex,
+      rawPrograms,
+      rawCourses,
+      scheduleData,
+      facultyData,
+      staffData,
+      studentData,
+      analytics,
+      editHistory,
+      recentChanges,
+      roomsData,
+      spacesByKey,
+      spacesList,
+      selectedSemester,
+      availableSemesters,
+      selectedTermMeta,
+      loading,
+      dataError,
+      loadData,
+      loadCourses,
+      loadPrograms,
+      loadRooms,
+      refreshRooms,
+      loadEditHistory,
+      loadRecentChanges,
+      programsLoaded,
+      coursesLoaded,
+      coursesLoading,
+      roomsLoaded,
+      roomsLoading,
+      editHistoryLoaded,
+      recentChangesLoaded,
+      permissions,
+    ],
   );
+
+  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };
 
 export const useData = () => {
   const context = useContext(DataContext);
   if (!context) {
-    throw new Error('useData must be used within a DataProvider');
+    throw new Error("useData must be used within a DataProvider");
   }
   return context;
 };

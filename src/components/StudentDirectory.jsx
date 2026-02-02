@@ -21,7 +21,6 @@ import {
   StudentAddWizard,
   StudentEditModal,
   StatusBadge,
-  getStudentStatus,
 } from "./student";
 import {
   Edit,
@@ -37,6 +36,8 @@ import {
   buildSemesterKey,
   getStudentAssignments,
   getStudentStatusForSemester,
+  getStudentBadgeStatusForSemester,
+  parseStudentWorkerDate,
 } from "../utils/studentWorkers";
 import {
   normalizeStudentWeeklySchedule,
@@ -75,6 +76,11 @@ const normalizeBuildingList = (value) => {
 
 const sanitizeWeeklyEntries = (entries) =>
   sortWeeklySchedule(normalizeStudentWeeklySchedule(entries));
+
+const formatStudentWorkerDate = (value) => {
+  const parsed = parseStudentWorkerDate(value);
+  return parsed ? parsed.toLocaleDateString() : "";
+};
 
 const prepareStudentPayload = (
   student,
@@ -667,7 +673,7 @@ const StudentDirectory = () => {
 
     filteredAndSortedData.forEach((student) => {
       const assignments = getStudentAssignments(student);
-      const status = getStudentStatus(student, selectedSemesterMeta);
+      const status = getStudentBadgeStatusForSemester(student, selectedSemesterMeta);
 
       if (assignments.length === 0) {
         rows.push([
@@ -781,7 +787,7 @@ const StudentDirectory = () => {
             <p className="font-medium text-gray-900">{student.name}</p>
             {student.startDate && (
               <p className="text-xs text-gray-500">
-                Started {new Date(student.startDate).toLocaleDateString()}
+                Started {formatStudentWorkerDate(student.startDate)}
               </p>
             )}
           </div>
@@ -871,7 +877,7 @@ const StudentDirectory = () => {
       label: "Status",
       headerClassName: "w-[15%]",
       render: (student) => {
-        const status = getStudentStatus(student, selectedSemesterMeta);
+        const status = getStudentBadgeStatusForSemester(student, selectedSemesterMeta);
         return <StatusBadge status={status} size="sm" />;
       },
     },

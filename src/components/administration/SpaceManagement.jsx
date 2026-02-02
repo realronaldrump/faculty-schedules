@@ -10,7 +10,7 @@
  * - Usage indicators (schedules, offices, temperature)
  */
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
   DoorOpen,
   Plus,
@@ -27,28 +27,41 @@ import {
   Thermometer,
   ChevronDown,
   ChevronUp,
-  Layers
-} from 'lucide-react';
-import { useData } from '../../contexts/DataContext';
-import { useAppConfig } from '../../contexts/AppConfigContext';
-import { useUI } from '../../contexts/UIContext';
-import { usePeople } from '../../contexts/PeopleContext';
-import { ConfirmationDialog } from '../CustomAlert';
-import { SPACE_TYPE, buildSpaceKey, formatSpaceDisplayName, normalizeSpaceNumber } from '../../utils/locationService';
-import { generateSpaceId, validateSpace } from '../../utils/canonicalSchema';
-import { doc, setDoc } from 'firebase/firestore';
-import { db } from '../../firebase';
+  Layers,
+} from "lucide-react";
+import { useData } from "../../contexts/DataContext";
+import { useAppConfig } from "../../contexts/AppConfigContext";
+import { useUI } from "../../contexts/UIContext";
+import { usePeople } from "../../contexts/PeopleContext";
+import { ConfirmationDialog } from "../CustomAlert";
+import {
+  SPACE_TYPE,
+  buildSpaceKey,
+  formatSpaceDisplayName,
+  normalizeSpaceNumber,
+} from "../../utils/locationService";
+import { generateSpaceId, validateSpace } from "../../utils/canonicalSchema";
+import { standardizeRoom } from "../../utils/hygieneCore";
+import { doc, setDoc } from "firebase/firestore";
+import { db } from "../../firebase";
 
 const SpaceManagement = () => {
-  const { roomsData, spacesByKey, spacesList, refreshRooms, loadRooms, scheduleData = [] } = useData();
+  const {
+    roomsData,
+    spacesByKey,
+    spacesList,
+    refreshRooms,
+    loadRooms,
+    scheduleData = [],
+  } = useData();
   const { buildingConfig } = useAppConfig();
   const { showNotification } = useUI();
   const { people = [], loadPeople } = usePeople();
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [buildingFilter, setBuildingFilter] = useState('all');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [usageFilter, setUsageFilter] = useState('all'); // all, scheduled, office, unused
+  const [searchQuery, setSearchQuery] = useState("");
+  const [buildingFilter, setBuildingFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [usageFilter, setUsageFilter] = useState("all"); // all, scheduled, office, unused
   const [editingSpace, setEditingSpace] = useState(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [isBulkAdding, setIsBulkAdding] = useState(false);
@@ -65,30 +78,30 @@ const SpaceManagement = () => {
 
   // Form state
   const [formData, setFormData] = useState({
-    buildingCode: '',
-    spaceNumber: '',
+    buildingCode: "",
+    spaceNumber: "",
     type: SPACE_TYPE.Classroom,
-    capacity: '',
+    capacity: "",
     equipment: [],
-    notes: ''
+    notes: "",
   });
-  const [equipmentInput, setEquipmentInput] = useState('');
+  const [equipmentInput, setEquipmentInput] = useState("");
 
   // Bulk add state
   const [bulkData, setBulkData] = useState({
-    buildingCode: '',
-    startNumber: '',
-    endNumber: '',
-    prefix: '',
-    suffix: '',
-    type: SPACE_TYPE.Classroom
+    buildingCode: "",
+    startNumber: "",
+    endNumber: "",
+    prefix: "",
+    suffix: "",
+    type: SPACE_TYPE.Classroom,
   });
 
   // Get buildings for dropdown
   const buildings = useMemo(() => {
     return (buildingConfig?.buildings || [])
-      .filter(b => b.isActive !== false)
-      .sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+      .filter((b) => b.isActive !== false)
+      .sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""));
   }, [buildingConfig]);
 
   // Calculate usage data for each space
@@ -96,22 +109,26 @@ const SpaceManagement = () => {
     const usage = {};
 
     // Check schedules for room usage
-    (scheduleData || []).forEach(schedule => {
+    (scheduleData || []).forEach((schedule) => {
       const rooms = Array.isArray(schedule.spaceIds) ? schedule.spaceIds : [];
 
-      rooms.forEach(spaceKey => {
+      rooms.forEach((spaceKey) => {
         if (!spaceKey) return;
-        if (!usage[spaceKey]) usage[spaceKey] = { scheduled: 0, offices: 0, temperature: false };
+        if (!usage[spaceKey])
+          usage[spaceKey] = { scheduled: 0, offices: 0, temperature: false };
         usage[spaceKey].scheduled++;
       });
     });
 
     // Check people for office assignments
-    (people || []).forEach(person => {
-      const officeIds = person.officeSpaceIds || (person.officeSpaceId ? [person.officeSpaceId] : []);
-      officeIds.forEach(spaceKey => {
+    (people || []).forEach((person) => {
+      const officeIds =
+        person.officeSpaceIds ||
+        (person.officeSpaceId ? [person.officeSpaceId] : []);
+      officeIds.forEach((spaceKey) => {
         if (!spaceKey) return;
-        if (!usage[spaceKey]) usage[spaceKey] = { scheduled: 0, offices: 0, temperature: false };
+        if (!usage[spaceKey])
+          usage[spaceKey] = { scheduled: 0, offices: 0, temperature: false };
         usage[spaceKey].offices++;
       });
     });
@@ -121,38 +138,42 @@ const SpaceManagement = () => {
 
   // Filter and search spaces
   const filteredSpaces = useMemo(() => {
-    let spaces = Array.isArray(spacesList) ? [...spacesList] : Object.entries(roomsData || {}).map(([id, data]) => ({
-      id,
-      ...data
-    }));
+    let spaces = Array.isArray(spacesList)
+      ? [...spacesList]
+      : Object.entries(roomsData || {}).map(([id, data]) => ({
+          id,
+          ...data,
+        }));
 
     // Only show active spaces in management list
-    spaces = spaces.filter(s => s.isActive !== false);
+    spaces = spaces.filter((s) => s.isActive !== false);
 
     // Apply building filter
-    if (buildingFilter !== 'all') {
-      spaces = spaces.filter(s =>
-        (s.buildingCode || s.building || '').toUpperCase() === buildingFilter.toUpperCase()
+    if (buildingFilter !== "all") {
+      spaces = spaces.filter(
+        (s) =>
+          (s.buildingCode || s.building || "").toUpperCase() ===
+          buildingFilter.toUpperCase(),
       );
     }
 
     // Apply type filter
-    if (typeFilter !== 'all') {
-      spaces = spaces.filter(s => s.type === typeFilter);
+    if (typeFilter !== "all") {
+      spaces = spaces.filter((s) => s.type === typeFilter);
     }
 
     // Apply usage filter
-    if (usageFilter !== 'all') {
-      spaces = spaces.filter(s => {
+    if (usageFilter !== "all") {
+      spaces = spaces.filter((s) => {
         const key = s.spaceKey || s.id;
         const usage = spaceUsage[key] || { scheduled: 0, offices: 0 };
 
         switch (usageFilter) {
-          case 'scheduled':
+          case "scheduled":
             return usage.scheduled > 0;
-          case 'office':
+          case "office":
             return usage.offices > 0;
-          case 'unused':
+          case "unused":
             return usage.scheduled === 0 && usage.offices === 0;
           default:
             return true;
@@ -163,35 +184,56 @@ const SpaceManagement = () => {
     // Apply search
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      spaces = spaces.filter(s =>
-        (s.spaceKey || '').toLowerCase().includes(query) ||
-        (s.displayName || s.name || '').toLowerCase().includes(query) ||
-        (s.spaceNumber || s.roomNumber || '').toLowerCase().includes(query) ||
-        (s.building || '').toLowerCase().includes(query)
+      spaces = spaces.filter(
+        (s) =>
+          (s.spaceKey || "").toLowerCase().includes(query) ||
+          (s.displayName || s.name || "").toLowerCase().includes(query) ||
+          (s.spaceNumber || s.roomNumber || "").toLowerCase().includes(query) ||
+          (s.building || "").toLowerCase().includes(query),
       );
     }
 
     // Sort by building, then space number
     return spaces.sort((a, b) => {
-      const buildingCompare = (a.buildingCode || a.building || '').localeCompare(b.buildingCode || b.building || '');
+      const buildingCompare = (
+        a.buildingCode ||
+        a.building ||
+        ""
+      ).localeCompare(b.buildingCode || b.building || "");
       if (buildingCompare !== 0) return buildingCompare;
-      return (a.spaceNumber || a.roomNumber || '').localeCompare(b.spaceNumber || b.roomNumber || '', undefined, { numeric: true });
+      return (a.spaceNumber || a.roomNumber || "").localeCompare(
+        b.spaceNumber || b.roomNumber || "",
+        undefined,
+        { numeric: true },
+      );
     });
-  }, [roomsData, spacesList, buildingFilter, typeFilter, usageFilter, searchQuery, spaceUsage]);
+  }, [
+    roomsData,
+    spacesList,
+    buildingFilter,
+    typeFilter,
+    usageFilter,
+    searchQuery,
+    spaceUsage,
+  ]);
 
   // Calculate statistics
   const stats = useMemo(() => {
-    const allSpaces = Array.isArray(spacesList) ? spacesList : Object.values(roomsData || {});
-    const activeSpaces = allSpaces.filter(s => s.isActive !== false);
+    const allSpaces = Array.isArray(spacesList)
+      ? spacesList
+      : Object.values(roomsData || {});
+    const activeSpaces = allSpaces.filter((s) => s.isActive !== false);
 
     const byType = {};
-    Object.values(SPACE_TYPE).forEach(type => { byType[type] = 0; });
+    Object.values(SPACE_TYPE).forEach((type) => {
+      byType[type] = 0;
+    });
 
     let withSchedules = 0;
     let withOffices = 0;
     let unused = 0;
 
-    activeSpaces.forEach(s => {
+    activeSpaces.forEach((s) => {
       const key = s.spaceKey || s.id;
       const usage = spaceUsage[key] || { scheduled: 0, offices: 0 };
 
@@ -206,20 +248,23 @@ const SpaceManagement = () => {
       byType,
       withSchedules,
       withOffices,
-      unused
+      unused,
     };
   }, [spacesList, roomsData, spaceUsage]);
 
   // Get unique building codes from actual data
   const dataBuildings = useMemo(() => {
     const codes = new Set();
-    const source = Array.isArray(spacesList) && spacesList.length > 0 ? spacesList : Object.values(roomsData || {});
-    source.forEach(room => {
+    const source =
+      Array.isArray(spacesList) && spacesList.length > 0
+        ? spacesList
+        : Object.values(roomsData || {});
+    source.forEach((room) => {
       const code = room.buildingCode || room.building;
       if (code) codes.add(code.toUpperCase());
     });
     // Also include buildings from config that aren't in data yet
-    buildings.forEach(b => {
+    buildings.forEach((b) => {
       if (b.code) codes.add(b.code.toUpperCase());
     });
     return Array.from(codes).sort();
@@ -227,14 +272,14 @@ const SpaceManagement = () => {
 
   const resetForm = useCallback(() => {
     setFormData({
-      buildingCode: buildings[0]?.code || '',
-      spaceNumber: '',
+      buildingCode: buildings[0]?.code || "",
+      spaceNumber: "",
       type: SPACE_TYPE.Classroom,
-      capacity: '',
+      capacity: "",
       equipment: [],
-      notes: ''
+      notes: "",
     });
-    setEquipmentInput('');
+    setEquipmentInput("");
     setEditingSpace(null);
     setIsAddingNew(false);
     setIsBulkAdding(false);
@@ -242,12 +287,12 @@ const SpaceManagement = () => {
 
   const handleEdit = useCallback((space) => {
     setFormData({
-      buildingCode: (space.buildingCode || space.building || '').toUpperCase(),
-      spaceNumber: space.spaceNumber || space.roomNumber || '',
+      buildingCode: (space.buildingCode || space.building || "").toUpperCase(),
+      spaceNumber: space.spaceNumber || space.roomNumber || "",
       type: space.type || SPACE_TYPE.Classroom,
-      capacity: space.capacity || '',
+      capacity: space.capacity || "",
       equipment: [...(space.equipment || [])],
-      notes: space.notes || ''
+      notes: space.notes || "",
     });
     setEditingSpace(space);
     setIsAddingNew(false);
@@ -262,12 +307,12 @@ const SpaceManagement = () => {
 
   const handleBulkAdd = useCallback(() => {
     setBulkData({
-      buildingCode: buildings[0]?.code || '',
-      startNumber: '',
-      endNumber: '',
-      prefix: '',
-      suffix: '',
-      type: SPACE_TYPE.Classroom
+      buildingCode: buildings[0]?.code || "",
+      startNumber: "",
+      endNumber: "",
+      prefix: "",
+      suffix: "",
+      type: SPACE_TYPE.Classroom,
     });
     setIsBulkAdding(true);
     setIsAddingNew(false);
@@ -278,30 +323,42 @@ const SpaceManagement = () => {
     const item = equipmentInput.trim();
     if (!item) return;
     if (formData.equipment.includes(item)) {
-      showNotification('warning', 'Duplicate Item', 'This equipment item already exists.');
+      showNotification(
+        "warning",
+        "Duplicate Item",
+        "This equipment item already exists.",
+      );
       return;
     }
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      equipment: [...prev.equipment, item]
+      equipment: [...prev.equipment, item],
     }));
-    setEquipmentInput('');
+    setEquipmentInput("");
   }, [equipmentInput, formData.equipment, showNotification]);
 
   const handleRemoveEquipment = useCallback((itemToRemove) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      equipment: prev.equipment.filter(e => e !== itemToRemove)
+      equipment: prev.equipment.filter((e) => e !== itemToRemove),
     }));
   }, []);
 
   const validateForm = useCallback(() => {
     if (!formData.buildingCode) {
-      showNotification('warning', 'Missing Building', 'Please select a building.');
+      showNotification(
+        "warning",
+        "Missing Building",
+        "Please select a building.",
+      );
       return false;
     }
     if (!formData.spaceNumber.trim()) {
-      showNotification('warning', 'Missing Space Number', 'Space number is required.');
+      showNotification(
+        "warning",
+        "Missing Space Number",
+        "Space number is required.",
+      );
       return false;
     }
     return true;
@@ -316,20 +373,33 @@ const SpaceManagement = () => {
       const spaceNumber = normalizeSpaceNumber(formData.spaceNumber.trim());
       const spaceKey = buildSpaceKey(buildingCode, spaceNumber);
       if (!spaceKey) {
-        showNotification('warning', 'Invalid Space', 'Please provide a valid building and space number.');
+        showNotification(
+          "warning",
+          "Invalid Space",
+          "Please provide a valid building and space number.",
+        );
         return;
       }
-      const buildingRecord = buildings.find(b => b.code === buildingCode);
+      const buildingRecord = buildings.find((b) => b.code === buildingCode);
       const buildingDisplayName = buildingRecord?.displayName || buildingCode;
       const buildingId = buildingRecord?.id || buildingCode.toLowerCase();
-      const displayName = formatSpaceDisplayName({ buildingCode, buildingDisplayName, spaceNumber });
+      const displayName = formatSpaceDisplayName({
+        buildingCode,
+        buildingDisplayName,
+        spaceNumber,
+      });
 
       if (isAddingNew) {
-        const existing = spacesByKey instanceof Map
-          ? spacesByKey.get(spaceKey)
-          : spacesByKey?.[spaceKey];
+        const existing =
+          spacesByKey instanceof Map
+            ? spacesByKey.get(spaceKey)
+            : spacesByKey?.[spaceKey];
         if (existing) {
-          showNotification('warning', 'Duplicate Space', `${spaceKey} already exists.`);
+          showNotification(
+            "warning",
+            "Duplicate Space",
+            `${spaceKey} already exists.`,
+          );
           return;
         }
       }
@@ -355,26 +425,33 @@ const SpaceManagement = () => {
         displayName: displayName,
 
         // Timestamps
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
-      const validation = validateSpace(spaceDoc);
+      // Apply hygieneCore standardization for consistent data quality
+      const standardizedDoc = standardizeRoom(spaceDoc);
+
+      const validation = validateSpace(standardizedDoc);
       if (!validation.isValid) {
-        showNotification('warning', 'Validation Failed', validation.errors.join(' '));
+        showNotification(
+          "warning",
+          "Validation Failed",
+          validation.errors.join(" "),
+        );
         return;
       }
 
       let docId;
       if (isAddingNew) {
         docId = generateSpaceId({ buildingCode, spaceNumber }) || spaceKey;
-        spaceDoc.createdAt = new Date().toISOString();
+        standardizedDoc.createdAt = new Date().toISOString();
       } else {
         docId = editingSpace.id;
       }
 
-      await setDoc(doc(db, 'rooms', docId), spaceDoc, { merge: true });
+      await setDoc(doc(db, "rooms", docId), standardizedDoc, { merge: true });
 
-      showNotification('success', 'Space Saved', `${spaceKey} has been saved.`);
+      showNotification("success", "Space Saved", `${spaceKey} has been saved.`);
       resetForm();
 
       // Refresh rooms data
@@ -382,16 +459,34 @@ const SpaceManagement = () => {
         await refreshRooms();
       }
     } catch (error) {
-      console.error('Error saving space:', error);
-      showNotification('error', 'Save Failed', 'Failed to save space. Please try again.');
+      console.error("Error saving space:", error);
+      showNotification(
+        "error",
+        "Save Failed",
+        "Failed to save space. Please try again.",
+      );
     } finally {
       setSaving(false);
     }
-  }, [formData, isAddingNew, editingSpace, buildings, validateForm, resetForm, showNotification, refreshRooms, spacesByKey]);
+  }, [
+    formData,
+    isAddingNew,
+    editingSpace,
+    buildings,
+    validateForm,
+    resetForm,
+    showNotification,
+    refreshRooms,
+    spacesByKey,
+  ]);
 
   const handleBulkSave = useCallback(async () => {
     if (!bulkData.buildingCode) {
-      showNotification('warning', 'Missing Building', 'Please select a building.');
+      showNotification(
+        "warning",
+        "Missing Building",
+        "Please select a building.",
+      );
       return;
     }
 
@@ -399,24 +494,36 @@ const SpaceManagement = () => {
     const end = parseInt(bulkData.endNumber, 10);
 
     if (isNaN(start) || isNaN(end)) {
-      showNotification('warning', 'Invalid Range', 'Please enter valid start and end numbers.');
+      showNotification(
+        "warning",
+        "Invalid Range",
+        "Please enter valid start and end numbers.",
+      );
       return;
     }
 
     if (start > end) {
-      showNotification('warning', 'Invalid Range', 'Start number must be less than or equal to end number.');
+      showNotification(
+        "warning",
+        "Invalid Range",
+        "Start number must be less than or equal to end number.",
+      );
       return;
     }
 
     if (end - start > 50) {
-      showNotification('warning', 'Range Too Large', 'Maximum 50 spaces can be added at once.');
+      showNotification(
+        "warning",
+        "Range Too Large",
+        "Maximum 50 spaces can be added at once.",
+      );
       return;
     }
 
     setSaving(true);
     try {
       const buildingCode = bulkData.buildingCode.toUpperCase();
-      const buildingRecord = buildings.find(b => b.code === buildingCode);
+      const buildingRecord = buildings.find((b) => b.code === buildingCode);
       const buildingDisplayName = buildingRecord?.displayName || buildingCode;
       const buildingId = buildingRecord?.id || buildingCode.toLowerCase();
 
@@ -424,20 +531,27 @@ const SpaceManagement = () => {
       const existingKeys = [];
 
       for (let num = start; num <= end; num++) {
-        const spaceNumber = `${bulkData.prefix}${num}${bulkData.suffix}`.toUpperCase();
+        const spaceNumber =
+          `${bulkData.prefix}${num}${bulkData.suffix}`.toUpperCase();
         const spaceKey = buildSpaceKey(buildingCode, spaceNumber);
 
-        const existing = spacesByKey instanceof Map
-          ? spacesByKey.get(spaceKey)
-          : spacesByKey?.[spaceKey];
+        const existing =
+          spacesByKey instanceof Map
+            ? spacesByKey.get(spaceKey)
+            : spacesByKey?.[spaceKey];
 
         if (existing) {
           existingKeys.push(spaceKey);
           continue;
         }
 
-        const displayName = formatSpaceDisplayName({ buildingCode, buildingDisplayName, spaceNumber });
-        const docId = generateSpaceId({ buildingCode, spaceNumber }) || spaceKey;
+        const displayName = formatSpaceDisplayName({
+          buildingCode,
+          buildingDisplayName,
+          spaceNumber,
+        });
+        const docId =
+          generateSpaceId({ buildingCode, spaceNumber }) || spaceKey;
 
         spacesToCreate.push({
           docId,
@@ -450,68 +564,100 @@ const SpaceManagement = () => {
             type: bulkData.type,
             capacity: null,
             equipment: [],
-            notes: '',
+            notes: "",
             isActive: true,
             building: buildingDisplayName,
             roomNumber: spaceNumber,
             name: displayName,
             displayName: displayName,
             createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          }
+            updatedAt: new Date().toISOString(),
+          },
         });
       }
 
       if (spacesToCreate.length === 0) {
-        showNotification('warning', 'No New Spaces', 'All spaces in this range already exist.');
+        showNotification(
+          "warning",
+          "No New Spaces",
+          "All spaces in this range already exist.",
+        );
         return;
       }
 
-      // Save all spaces
+      // Save all spaces with standardization
       for (const space of spacesToCreate) {
-        await setDoc(doc(db, 'rooms', space.docId), space.data);
+        const standardizedData = standardizeRoom(space.data);
+        await setDoc(doc(db, "rooms", space.docId), standardizedData);
       }
 
-      const message = existingKeys.length > 0
-        ? `Created ${spacesToCreate.length} spaces. ${existingKeys.length} already existed.`
-        : `Created ${spacesToCreate.length} spaces.`;
+      const message =
+        existingKeys.length > 0
+          ? `Created ${spacesToCreate.length} spaces. ${existingKeys.length} already existed.`
+          : `Created ${spacesToCreate.length} spaces.`;
 
-      showNotification('success', 'Bulk Add Complete', message);
+      showNotification("success", "Bulk Add Complete", message);
       resetForm();
 
       if (refreshRooms) {
         await refreshRooms();
       }
     } catch (error) {
-      console.error('Error in bulk add:', error);
-      showNotification('error', 'Bulk Add Failed', 'Failed to create spaces. Please try again.');
+      console.error("Error in bulk add:", error);
+      showNotification(
+        "error",
+        "Bulk Add Failed",
+        "Failed to create spaces. Please try again.",
+      );
     } finally {
       setSaving(false);
     }
-  }, [bulkData, buildings, spacesByKey, showNotification, resetForm, refreshRooms]);
+  }, [
+    bulkData,
+    buildings,
+    spacesByKey,
+    showNotification,
+    resetForm,
+    refreshRooms,
+  ]);
 
-  const handleDelete = useCallback(async (space) => {
-    setSaving(true);
-    try {
-      await setDoc(doc(db, 'rooms', space.id), {
-        isActive: false,
-        updatedAt: new Date().toISOString(),
-        deletedAt: new Date().toISOString()
-      }, { merge: true });
-      showNotification('success', 'Space Deactivated', `${space.spaceKey || space.name} has been deactivated.`);
-      setDeleteConfirm(null);
+  const handleDelete = useCallback(
+    async (space) => {
+      setSaving(true);
+      try {
+        await setDoc(
+          doc(db, "rooms", space.id),
+          {
+            isActive: false,
+            updatedAt: new Date().toISOString(),
+            deletedAt: new Date().toISOString(),
+          },
+          { merge: true },
+        );
+        showNotification(
+          "success",
+          "Space Deactivated",
+          `${space.spaceKey || space.name} has been deactivated.`,
+        );
+        setDeleteConfirm(null);
 
-      // Refresh rooms data
-      if (refreshRooms) {
-        await refreshRooms();
+        // Refresh rooms data
+        if (refreshRooms) {
+          await refreshRooms();
+        }
+      } catch (error) {
+        console.error("Error deleting space:", error);
+        showNotification(
+          "error",
+          "Deactivate Failed",
+          "Failed to deactivate space. Please try again.",
+        );
+      } finally {
+        setSaving(false);
       }
-    } catch (error) {
-      console.error('Error deleting space:', error);
-      showNotification('error', 'Deactivate Failed', 'Failed to deactivate space. Please try again.');
-    } finally {
-      setSaving(false);
-    }
-  }, [showNotification, refreshRooms]);
+    },
+    [showNotification, refreshRooms],
+  );
 
   const handleRefresh = useCallback(async () => {
     setLoading(true);
@@ -519,9 +665,17 @@ const SpaceManagement = () => {
       if (refreshRooms) {
         await refreshRooms();
       }
-      showNotification('success', 'Refreshed', 'Spaces data has been refreshed.');
+      showNotification(
+        "success",
+        "Refreshed",
+        "Spaces data has been refreshed.",
+      );
     } catch (error) {
-      showNotification('error', 'Refresh Failed', 'Failed to refresh spaces data.');
+      showNotification(
+        "error",
+        "Refresh Failed",
+        "Failed to refresh spaces data.",
+      );
     } finally {
       setLoading(false);
     }
@@ -529,12 +683,18 @@ const SpaceManagement = () => {
 
   const getSpaceTypeColor = (type) => {
     switch (type) {
-      case SPACE_TYPE.Classroom: return 'bg-blue-100 text-blue-800';
-      case SPACE_TYPE.Office: return 'bg-green-100 text-green-800';
-      case SPACE_TYPE.Lab: return 'bg-purple-100 text-purple-800';
-      case SPACE_TYPE.Studio: return 'bg-orange-100 text-orange-800';
-      case SPACE_TYPE.Conference: return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case SPACE_TYPE.Classroom:
+        return "bg-blue-100 text-blue-800";
+      case SPACE_TYPE.Office:
+        return "bg-green-100 text-green-800";
+      case SPACE_TYPE.Lab:
+        return "bg-purple-100 text-purple-800";
+      case SPACE_TYPE.Studio:
+        return "bg-orange-100 text-orange-800";
+      case SPACE_TYPE.Conference:
+        return "bg-yellow-100 text-yellow-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   };
 
@@ -547,7 +707,7 @@ const SpaceManagement = () => {
         {usage.scheduled > 0 && (
           <span
             className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs"
-            title={`${usage.scheduled} scheduled class${usage.scheduled !== 1 ? 'es' : ''}`}
+            title={`${usage.scheduled} scheduled class${usage.scheduled !== 1 ? "es" : ""}`}
           >
             <Calendar size={10} />
             {usage.scheduled}
@@ -556,7 +716,7 @@ const SpaceManagement = () => {
         {usage.offices > 0 && (
           <span
             className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-50 text-green-700 rounded text-xs"
-            title={`${usage.offices} office assignment${usage.offices !== 1 ? 's' : ''}`}
+            title={`${usage.offices} office assignment${usage.offices !== 1 ? "s" : ""}`}
           >
             <Briefcase size={10} />
             {usage.offices}
@@ -575,7 +735,9 @@ const SpaceManagement = () => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <DoorOpen className="w-6 h-6 text-baylor-green" />
-          <h2 className="text-xl font-semibold text-gray-900">Space Management</h2>
+          <h2 className="text-xl font-semibold text-gray-900">
+            Space Management
+          </h2>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -583,7 +745,7 @@ const SpaceManagement = () => {
             disabled={loading}
             className="flex items-center gap-2 px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
             Refresh
           </button>
           {!isAddingNew && !editingSpace && !isBulkAdding && (
@@ -622,31 +784,43 @@ const SpaceManagement = () => {
         {showStats && (
           <div className="p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
             <div className="text-center">
-              <div className="text-2xl font-bold text-baylor-green">{stats.total}</div>
+              <div className="text-2xl font-bold text-baylor-green">
+                {stats.total}
+              </div>
               <div className="text-xs text-gray-500">Total Spaces</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{stats.withSchedules}</div>
+              <div className="text-2xl font-bold text-blue-600">
+                {stats.withSchedules}
+              </div>
               <div className="text-xs text-gray-500 flex items-center justify-center gap-1">
                 <Calendar size={10} /> With Classes
               </div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{stats.withOffices}</div>
+              <div className="text-2xl font-bold text-green-600">
+                {stats.withOffices}
+              </div>
               <div className="text-xs text-gray-500 flex items-center justify-center gap-1">
                 <Briefcase size={10} /> As Offices
               </div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-gray-400">{stats.unused}</div>
+              <div className="text-2xl font-bold text-gray-400">
+                {stats.unused}
+              </div>
               <div className="text-xs text-gray-500">Unused</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-500">{stats.byType[SPACE_TYPE.Classroom] || 0}</div>
+              <div className="text-2xl font-bold text-blue-500">
+                {stats.byType[SPACE_TYPE.Classroom] || 0}
+              </div>
               <div className="text-xs text-gray-500">Classrooms</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-500">{stats.byType[SPACE_TYPE.Office] || 0}</div>
+              <div className="text-2xl font-bold text-green-500">
+                {stats.byType[SPACE_TYPE.Office] || 0}
+              </div>
               <div className="text-xs text-gray-500">Offices</div>
             </div>
           </div>
@@ -656,7 +830,9 @@ const SpaceManagement = () => {
       {/* Bulk Add Form */}
       {isBulkAdding && (
         <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Bulk Add Spaces</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">
+            Bulk Add Spaces
+          </h3>
           <p className="text-sm text-gray-600 mb-4">
             Add multiple spaces at once by specifying a range of room numbers.
           </p>
@@ -669,12 +845,19 @@ const SpaceManagement = () => {
               </label>
               <select
                 value={bulkData.buildingCode}
-                onChange={(e) => setBulkData(prev => ({ ...prev, buildingCode: e.target.value }))}
+                onChange={(e) =>
+                  setBulkData((prev) => ({
+                    ...prev,
+                    buildingCode: e.target.value,
+                  }))
+                }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
               >
                 <option value="">Select building...</option>
-                {buildings.map(b => (
-                  <option key={b.code} value={b.code}>{b.displayName} ({b.code})</option>
+                {buildings.map((b) => (
+                  <option key={b.code} value={b.code}>
+                    {b.displayName} ({b.code})
+                  </option>
                 ))}
               </select>
             </div>
@@ -687,7 +870,12 @@ const SpaceManagement = () => {
               <input
                 type="number"
                 value={bulkData.startNumber}
-                onChange={(e) => setBulkData(prev => ({ ...prev, startNumber: e.target.value }))}
+                onChange={(e) =>
+                  setBulkData((prev) => ({
+                    ...prev,
+                    startNumber: e.target.value,
+                  }))
+                }
                 placeholder="e.g., 101"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
               />
@@ -701,7 +889,12 @@ const SpaceManagement = () => {
               <input
                 type="number"
                 value={bulkData.endNumber}
-                onChange={(e) => setBulkData(prev => ({ ...prev, endNumber: e.target.value }))}
+                onChange={(e) =>
+                  setBulkData((prev) => ({
+                    ...prev,
+                    endNumber: e.target.value,
+                  }))
+                }
                 placeholder="e.g., 120"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
               />
@@ -715,7 +908,9 @@ const SpaceManagement = () => {
               <input
                 type="text"
                 value={bulkData.prefix}
-                onChange={(e) => setBulkData(prev => ({ ...prev, prefix: e.target.value }))}
+                onChange={(e) =>
+                  setBulkData((prev) => ({ ...prev, prefix: e.target.value }))
+                }
                 placeholder="e.g., A or 1"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
               />
@@ -729,7 +924,9 @@ const SpaceManagement = () => {
               <input
                 type="text"
                 value={bulkData.suffix}
-                onChange={(e) => setBulkData(prev => ({ ...prev, suffix: e.target.value }))}
+                onChange={(e) =>
+                  setBulkData((prev) => ({ ...prev, suffix: e.target.value }))
+                }
                 placeholder="e.g., A or B"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
               />
@@ -742,32 +939,49 @@ const SpaceManagement = () => {
               </label>
               <select
                 value={bulkData.type}
-                onChange={(e) => setBulkData(prev => ({ ...prev, type: e.target.value }))}
+                onChange={(e) =>
+                  setBulkData((prev) => ({ ...prev, type: e.target.value }))
+                }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
               >
-                {Object.values(SPACE_TYPE).map(type => (
-                  <option key={type} value={type}>{type}</option>
+                {Object.values(SPACE_TYPE).map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
                 ))}
               </select>
             </div>
           </div>
 
           {/* Preview */}
-          {bulkData.buildingCode && bulkData.startNumber && bulkData.endNumber && (
-            <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-600">
-                <strong>Preview:</strong> Will create spaces from{' '}
-                <span className="font-mono text-baylor-green">
-                  {bulkData.buildingCode}:{bulkData.prefix}{bulkData.startNumber}{bulkData.suffix}
-                </span>{' '}
-                to{' '}
-                <span className="font-mono text-baylor-green">
-                  {bulkData.buildingCode}:{bulkData.prefix}{bulkData.endNumber}{bulkData.suffix}
-                </span>
-                {' '}({Math.max(0, parseInt(bulkData.endNumber, 10) - parseInt(bulkData.startNumber, 10) + 1)} spaces)
-              </p>
-            </div>
-          )}
+          {bulkData.buildingCode &&
+            bulkData.startNumber &&
+            bulkData.endNumber && (
+              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-600">
+                  <strong>Preview:</strong> Will create spaces from{" "}
+                  <span className="font-mono text-baylor-green">
+                    {bulkData.buildingCode}:{bulkData.prefix}
+                    {bulkData.startNumber}
+                    {bulkData.suffix}
+                  </span>{" "}
+                  to{" "}
+                  <span className="font-mono text-baylor-green">
+                    {bulkData.buildingCode}:{bulkData.prefix}
+                    {bulkData.endNumber}
+                    {bulkData.suffix}
+                  </span>{" "}
+                  (
+                  {Math.max(
+                    0,
+                    parseInt(bulkData.endNumber, 10) -
+                      parseInt(bulkData.startNumber, 10) +
+                      1,
+                  )}{" "}
+                  spaces)
+                </p>
+              </div>
+            )}
 
           {/* Form Actions */}
           <div className="mt-6 flex justify-end gap-3">
@@ -783,7 +997,7 @@ const SpaceManagement = () => {
               className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors disabled:opacity-50"
             >
               <Layers size={18} />
-              {saving ? 'Creating...' : 'Create Spaces'}
+              {saving ? "Creating..." : "Create Spaces"}
             </button>
           </div>
         </div>
@@ -793,7 +1007,9 @@ const SpaceManagement = () => {
       {(isAddingNew || editingSpace) && (
         <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
           <h3 className="text-lg font-medium text-gray-900 mb-4">
-            {isAddingNew ? 'Add New Space' : `Edit Space: ${editingSpace?.spaceKey || editingSpace?.name}`}
+            {isAddingNew
+              ? "Add New Space"
+              : `Edit Space: ${editingSpace?.spaceKey || editingSpace?.name}`}
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -804,13 +1020,20 @@ const SpaceManagement = () => {
               </label>
               <select
                 value={formData.buildingCode}
-                onChange={(e) => setFormData(prev => ({ ...prev, buildingCode: e.target.value }))}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    buildingCode: e.target.value,
+                  }))
+                }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
                 disabled={!!editingSpace}
               >
                 <option value="">Select building...</option>
-                {buildings.map(b => (
-                  <option key={b.code} value={b.code}>{b.displayName} ({b.code})</option>
+                {buildings.map((b) => (
+                  <option key={b.code} value={b.code}>
+                    {b.displayName} ({b.code})
+                  </option>
                 ))}
               </select>
             </div>
@@ -823,7 +1046,12 @@ const SpaceManagement = () => {
               <input
                 type="text"
                 value={formData.spaceNumber}
-                onChange={(e) => setFormData(prev => ({ ...prev, spaceNumber: e.target.value }))}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    spaceNumber: e.target.value,
+                  }))
+                }
                 placeholder="e.g., 101 or 101A"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
                 disabled={!!editingSpace}
@@ -837,11 +1065,15 @@ const SpaceManagement = () => {
               </label>
               <select
                 value={formData.type}
-                onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value }))}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, type: e.target.value }))
+                }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
               >
-                {Object.values(SPACE_TYPE).map(type => (
-                  <option key={type} value={type}>{type}</option>
+                {Object.values(SPACE_TYPE).map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
                 ))}
               </select>
             </div>
@@ -854,7 +1086,9 @@ const SpaceManagement = () => {
               <input
                 type="number"
                 value={formData.capacity}
-                onChange={(e) => setFormData(prev => ({ ...prev, capacity: e.target.value }))}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, capacity: e.target.value }))
+                }
                 placeholder="e.g., 30"
                 min="0"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
@@ -869,7 +1103,9 @@ const SpaceManagement = () => {
               <input
                 type="text"
                 value={formData.notes}
-                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, notes: e.target.value }))
+                }
                 placeholder="e.g., Requires keycard access"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
               />
@@ -886,7 +1122,10 @@ const SpaceManagement = () => {
                 type="text"
                 value={equipmentInput}
                 onChange={(e) => setEquipmentInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddEquipment())}
+                onKeyDown={(e) =>
+                  e.key === "Enter" &&
+                  (e.preventDefault(), handleAddEquipment())
+                }
                 placeholder="Add equipment (e.g., Projector, Whiteboard)"
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
               />
@@ -914,7 +1153,9 @@ const SpaceManagement = () => {
                 </span>
               ))}
               {formData.equipment.length === 0 && (
-                <span className="text-sm text-gray-400 italic">No equipment listed</span>
+                <span className="text-sm text-gray-400 italic">
+                  No equipment listed
+                </span>
               )}
             </div>
           </div>
@@ -933,7 +1174,7 @@ const SpaceManagement = () => {
               className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors disabled:opacity-50"
             >
               <Save size={18} />
-              {saving ? 'Saving...' : 'Save Space'}
+              {saving ? "Saving..." : "Save Space"}
             </button>
           </div>
         </div>
@@ -960,8 +1201,8 @@ const SpaceManagement = () => {
           className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
         >
           <option value="all">All Buildings</option>
-          {dataBuildings.map(code => {
-            const building = buildings.find(b => b.code === code);
+          {dataBuildings.map((code) => {
+            const building = buildings.find((b) => b.code === code);
             return (
               <option key={code} value={code}>
                 {building?.displayName || code}
@@ -977,8 +1218,10 @@ const SpaceManagement = () => {
           className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
         >
           <option value="all">All Types</option>
-          {Object.values(SPACE_TYPE).map(type => (
-            <option key={type} value={type}>{type}</option>
+          {Object.values(SPACE_TYPE).map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
           ))}
         </select>
 
@@ -999,8 +1242,14 @@ const SpaceManagement = () => {
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
         <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
           <p className="text-sm text-gray-600">
-            {filteredSpaces.length} space{filteredSpaces.length !== 1 ? 's' : ''}
-            {buildingFilter !== 'all' || typeFilter !== 'all' || usageFilter !== 'all' || searchQuery ? ' (filtered)' : ''}
+            {filteredSpaces.length} space
+            {filteredSpaces.length !== 1 ? "s" : ""}
+            {buildingFilter !== "all" ||
+            typeFilter !== "all" ||
+            usageFilter !== "all" ||
+            searchQuery
+              ? " (filtered)"
+              : ""}
           </p>
         </div>
 
@@ -1008,8 +1257,11 @@ const SpaceManagement = () => {
           <div className="p-8 text-center text-gray-500">
             <DoorOpen className="w-12 h-12 mx-auto mb-3 text-gray-300" />
             <p>
-              {searchQuery || buildingFilter !== 'all' || typeFilter !== 'all' || usageFilter !== 'all'
-                ? 'No spaces match your filters.'
+              {searchQuery ||
+              buildingFilter !== "all" ||
+              typeFilter !== "all" ||
+              usageFilter !== "all"
+                ? "No spaces match your filters."
                 : 'No spaces found. Click "Add Space" or "Bulk Add" to create some.'}
             </p>
           </div>
@@ -1032,7 +1284,8 @@ const SpaceManagement = () => {
                   <tr key={space.id}>
                     <td className="px-4 py-3">
                       <span className="font-mono text-sm text-baylor-green">
-                        {space.spaceKey || `${space.buildingCode || space.building}:${space.spaceNumber || space.roomNumber}`}
+                        {space.spaceKey ||
+                          `${space.buildingCode || space.building}:${space.spaceNumber || space.roomNumber}`}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
@@ -1042,8 +1295,10 @@ const SpaceManagement = () => {
                       {space.spaceNumber || space.roomNumber}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-block px-2 py-0.5 text-xs rounded-full ${getSpaceTypeColor(space.type)}`}>
-                        {space.type || 'Unknown'}
+                      <span
+                        className={`inline-block px-2 py-0.5 text-xs rounded-full ${getSpaceTypeColor(space.type)}`}
+                      >
+                        {space.type || "Unknown"}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center text-sm text-gray-600">
@@ -1052,7 +1307,9 @@ const SpaceManagement = () => {
                           <Users size={14} />
                           {space.capacity}
                         </span>
-                      ) : '-'}
+                      ) : (
+                        "-"
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       {renderUsageIndicators(space)}

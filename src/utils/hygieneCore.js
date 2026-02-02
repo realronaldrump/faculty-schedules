@@ -117,9 +117,7 @@ const normalizeBuildingLabel = (value) => {
 
 const normalizeBuildings = (value) => {
   const list = Array.isArray(value) ? value : value ? [value] : [];
-  const normalized = list
-    .map((b) => normalizeBuildingLabel(b))
-    .filter(Boolean);
+  const normalized = list.map((b) => normalizeBuildingLabel(b)).filter(Boolean);
   return Array.from(new Set(normalized));
 };
 
@@ -148,12 +146,15 @@ const normalizeSemesterSchedules = (semesterSchedules) => {
     entries.map(([key, entry]) => {
       if (!entry || typeof entry !== "object") return [key, entry];
       const primaryBuildings = normalizeBuildings(
-        Array.isArray(entry.primaryBuildings) && entry.primaryBuildings.length > 0
+        Array.isArray(entry.primaryBuildings) &&
+          entry.primaryBuildings.length > 0
           ? entry.primaryBuildings
           : entry.primaryBuilding,
       );
       const primaryBuilding =
-        normalizeBuildingLabel(entry.primaryBuilding) || primaryBuildings[0] || "";
+        normalizeBuildingLabel(entry.primaryBuilding) ||
+        primaryBuildings[0] ||
+        "";
       return [
         key,
         {
@@ -310,83 +311,91 @@ export const standardizeSchedule = (schedule = {}) => {
     instructionMethod: normalizeString(schedule.instructionMethod),
     updatedAt: new Date().toISOString(),
     ...(() => {
-    const normalizeRoomlessLabel = (value) => {
-      const upper = normalizeString(value).toUpperCase();
-      return (
-        upper === "NO ROOM NEEDED" ||
-        upper.includes("ONLINE") ||
-        upper.includes("VIRTUAL") ||
-        upper.includes("ZOOM")
+      const normalizeRoomlessLabel = (value) => {
+        const upper = normalizeString(value).toUpperCase();
+        return (
+          upper === "NO ROOM NEEDED" ||
+          upper.includes("ONLINE") ||
+          upper.includes("VIRTUAL") ||
+          upper.includes("ZOOM")
+        );
+      };
+
+      const baseSpaceDisplayNames = Array.isArray(schedule.spaceDisplayNames)
+        ? schedule.spaceDisplayNames.map(standardizeSpaceLabel).filter(Boolean)
+        : [];
+      const hasRoomlessLabel = baseSpaceDisplayNames.some((name) =>
+        normalizeRoomlessLabel(name),
       );
-    };
+      const locationType =
+        schedule.locationType === "no_room" ||
+        schedule.isOnline ||
+        hasRoomlessLabel
+          ? "no_room"
+          : "room";
+      const locationLabel =
+        locationType === "no_room"
+          ? normalizeString(schedule.locationLabel) || "No Room Needed"
+          : normalizeString(schedule.locationLabel);
+      const spaceDisplayNames =
+        locationType === "no_room"
+          ? []
+          : baseSpaceDisplayNames.filter(
+              (name) => !normalizeRoomlessLabel(name),
+            );
+      const spaceIds =
+        locationType === "no_room"
+          ? []
+          : Array.isArray(schedule.spaceIds)
+            ? schedule.spaceIds.filter(Boolean)
+            : [];
 
-    const baseSpaceDisplayNames = Array.isArray(schedule.spaceDisplayNames)
-      ? schedule.spaceDisplayNames.map(standardizeSpaceLabel).filter(Boolean)
-      : [];
-    const hasRoomlessLabel =
-      baseSpaceDisplayNames.some((name) => normalizeRoomlessLabel(name));
-    const locationType =
-      schedule.locationType === "no_room" ||
-      schedule.isOnline ||
-      hasRoomlessLabel
-        ? "no_room"
-        : "room";
-    const locationLabel =
-      locationType === "no_room"
-        ? normalizeString(schedule.locationLabel) || "No Room Needed"
-        : normalizeString(schedule.locationLabel);
-    const spaceDisplayNames =
-      locationType === "no_room"
-        ? []
-        : baseSpaceDisplayNames.filter((name) => !normalizeRoomlessLabel(name));
-    const spaceIds = locationType === "no_room"
-      ? []
-      : (Array.isArray(schedule.spaceIds) ? schedule.spaceIds.filter(Boolean) : []);
+      const baseAssignments = Array.isArray(schedule.instructorAssignments)
+        ? schedule.instructorAssignments
+        : [];
+      let instructorAssignments = baseAssignments
+        .map((assignment) => ({
+          ...assignment,
+          personId:
+            assignment?.personId || assignment?.instructorId || assignment?.id,
+        }))
+        .filter((assignment) => assignment.personId);
+      if (instructorAssignments.length === 0 && schedule.instructorId) {
+        instructorAssignments = [
+          { personId: schedule.instructorId, isPrimary: true, percentage: 100 },
+        ];
+      }
+      if (
+        instructorAssignments.length > 0 &&
+        !instructorAssignments.some((assignment) => assignment.isPrimary)
+      ) {
+        instructorAssignments[0].isPrimary = true;
+      }
+      const primaryAssignment =
+        instructorAssignments.find((assignment) => assignment.isPrimary) ||
+        instructorAssignments[0];
+      const instructorIds = Array.from(
+        new Set([
+          ...(Array.isArray(schedule.instructorIds)
+            ? schedule.instructorIds
+            : []),
+          schedule.instructorId,
+          ...instructorAssignments.map((assignment) => assignment.personId),
+        ]),
+      ).filter(Boolean);
+      const instructorId =
+        schedule.instructorId || primaryAssignment?.personId || "";
 
-    const baseAssignments = Array.isArray(schedule.instructorAssignments)
-      ? schedule.instructorAssignments
-      : [];
-    let instructorAssignments = baseAssignments
-      .map((assignment) => ({
-        ...assignment,
-        personId:
-          assignment?.personId || assignment?.instructorId || assignment?.id,
-      }))
-      .filter((assignment) => assignment.personId);
-    if (instructorAssignments.length === 0 && schedule.instructorId) {
-      instructorAssignments = [
-        { personId: schedule.instructorId, isPrimary: true, percentage: 100 },
-      ];
-    }
-    if (
-      instructorAssignments.length > 0 &&
-      !instructorAssignments.some((assignment) => assignment.isPrimary)
-    ) {
-      instructorAssignments[0].isPrimary = true;
-    }
-    const primaryAssignment =
-      instructorAssignments.find((assignment) => assignment.isPrimary) ||
-      instructorAssignments[0];
-    const instructorIds = Array.from(
-      new Set([
-        ...(Array.isArray(schedule.instructorIds) ? schedule.instructorIds : []),
-        schedule.instructorId,
-        ...instructorAssignments.map((assignment) => assignment.personId),
-      ]),
-    ).filter(Boolean);
-    const instructorId =
-      schedule.instructorId || primaryAssignment?.personId || "";
-
-    return {
-      spaceIds,
-      spaceDisplayNames,
-      locationType,
-      locationLabel,
-      instructorAssignments,
-      instructorIds,
-      instructorId,
-    };
-  })(),
+      return {
+        spaceIds,
+        spaceDisplayNames,
+        locationType,
+        locationLabel,
+        instructorAssignments,
+        instructorIds,
+        instructorId,
+      };
+    })(),
   };
 };
 
@@ -474,7 +483,14 @@ const scoreScheduleCompleteness = (schedule = {}) => {
 };
 
 const scoreRoomCompleteness = (room = {}) => {
-  const fields = ["displayName", "buildingCode", "buildingDisplayName", "spaceNumber", "spaceKey", "capacity"];
+  const fields = [
+    "displayName",
+    "buildingCode",
+    "buildingDisplayName",
+    "spaceNumber",
+    "spaceKey",
+    "capacity",
+  ];
   return fields.reduce((score, key) => {
     const value = room[key];
     if (typeof value === "string")
@@ -1081,17 +1097,19 @@ export const detectCrossCollectionIssues = (
     const spaceIds = Array.isArray(schedule.spaceIds)
       ? schedule.spaceIds.filter(Boolean)
       : [];
-    spaceIds.forEach((spaceKey) => {
-      if (spaceKey && !spaceKeys.has(spaceKey)) {
-        issues.push({
-          type: "orphaned_space",
-          severity: "medium",
-          record: schedule,
-          reason: "Schedule references non-existent space",
-          fix: "link_to_existing_room",
-        });
-      }
-    });
+    const missingSpaceIds = spaceIds.filter(
+      (spaceKey) => spaceKey && !spaceKeys.has(spaceKey),
+    );
+    if (missingSpaceIds.length > 0) {
+      issues.push({
+        type: "orphaned_space",
+        severity: "medium",
+        record: schedule,
+        missingSpaceIds,
+        reason: "Schedule references non-existent space(s)",
+        fix: "link_to_existing_room",
+      });
+    }
   });
 
   return issues;
@@ -1312,7 +1330,10 @@ export const mergeScheduleData = (primary, secondary) => {
   }
 
   merged.spaceIds = mergeArrayValues(primary.spaceIds, secondary.spaceIds);
-  merged.spaceDisplayNames = mergeArrayValues(primary.spaceDisplayNames, secondary.spaceDisplayNames);
+  merged.spaceDisplayNames = mergeArrayValues(
+    primary.spaceDisplayNames,
+    secondary.spaceDisplayNames,
+  );
 
   const normalized = standardizeSchedule(merged);
   normalized.updatedAt = new Date().toISOString();
@@ -1339,4 +1360,206 @@ export const mergeRoomData = (primary, secondary) => {
   merged.capacity = Math.max(primary.capacity || 0, secondary.capacity || 0);
   merged.updatedAt = new Date().toISOString();
   return merged;
+};
+
+// ---------------------------------------------------------------------------
+// TEACHING CONFLICT DETECTION
+// ---------------------------------------------------------------------------
+// Detects when an instructor is assigned to multiple schedules with overlapping
+// meeting times. These conflicts are often caused by duplicate schedule records.
+
+/**
+ * Parse time string to minutes from midnight
+ * @param {string} timeStr - Time like "9:30 AM" or "14:00"
+ * @returns {number|null} Minutes from midnight
+ */
+const parseTimeToMinutes = (timeStr) => {
+  if (!timeStr) return null;
+
+  const cleanTime = String(timeStr).trim().toUpperCase();
+
+  // Handle 24-hour format (14:30)
+  const match24 = cleanTime.match(/^(\d{1,2}):(\d{2})$/);
+  if (match24) {
+    return parseInt(match24[1], 10) * 60 + parseInt(match24[2], 10);
+  }
+
+  // Handle 12-hour format (9:30 AM)
+  const match12 = cleanTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+  if (match12) {
+    let hours = parseInt(match12[1], 10);
+    const minutes = parseInt(match12[2], 10);
+    const isPM = match12[3] === "PM";
+
+    if (hours === 12) hours = 0;
+    if (isPM) hours += 12;
+
+    return hours * 60 + minutes;
+  }
+
+  return null;
+};
+
+/**
+ * Check if two time intervals overlap
+ * @param {number} start1 - Start of first interval (minutes from midnight)
+ * @param {number} end1 - End of first interval
+ * @param {number} start2 - Start of second interval
+ * @param {number} end2 - End of second interval
+ * @returns {boolean}
+ */
+const intervalsOverlap = (start1, end1, start2, end2) => {
+  if (start1 === null || end1 === null || start2 === null || end2 === null) {
+    return false;
+  }
+  // Two intervals [s1, e1) and [s2, e2) overlap if s1 < e2 AND s2 < e1
+  return start1 < end2 && start2 < end1;
+};
+
+/**
+ * Get instructor IDs from a schedule record
+ * @param {Object} schedule
+ * @returns {string[]}
+ */
+const getScheduleInstructorIds = (schedule) => {
+  const ids = new Set();
+  if (schedule?.instructorId) ids.add(schedule.instructorId);
+  if (Array.isArray(schedule?.instructorIds)) {
+    schedule.instructorIds.forEach((id) => ids.add(id));
+  }
+  if (Array.isArray(schedule?.instructorAssignments)) {
+    schedule.instructorAssignments.forEach((assignment) => {
+      if (assignment?.personId) ids.add(assignment.personId);
+    });
+  }
+  return Array.from(ids).filter(Boolean);
+};
+
+/**
+ * Detect teaching conflicts - faculty assigned to overlapping schedules
+ *
+ * This is a common symptom of duplicate schedule records. When the same section
+ * is imported multiple times, a faculty member appears "double booked".
+ *
+ * @param {Array} schedules - Array of schedule objects
+ * @param {Object} options
+ * @param {Set} options.blockedSchedulePairs - Schedule pairs already marked as "not duplicate"
+ * @returns {Array} Array of teaching conflicts
+ */
+export const detectTeachingConflicts = (schedules = [], options = {}) => {
+  const conflicts = [];
+  const blockedPairs =
+    options.blockedSchedulePairs instanceof Set
+      ? options.blockedSchedulePairs
+      : new Set();
+
+  // Build a map of instructor -> schedules with meeting patterns
+  const instructorSchedules = new Map();
+
+  for (const schedule of schedules) {
+    const instructorIds = getScheduleInstructorIds(schedule);
+    const patterns = Array.isArray(schedule.meetingPatterns)
+      ? schedule.meetingPatterns
+      : [];
+
+    // Skip schedules without meeting patterns or instructors
+    if (patterns.length === 0 || instructorIds.length === 0) continue;
+
+    for (const instructorId of instructorIds) {
+      if (!instructorSchedules.has(instructorId)) {
+        instructorSchedules.set(instructorId, []);
+      }
+      instructorSchedules.get(instructorId).push(schedule);
+    }
+  }
+
+  // For each instructor, check for overlapping schedules
+  for (const [instructorId, instrSchedules] of instructorSchedules) {
+    if (instrSchedules.length < 2) continue;
+
+    // Compare all pairs of schedules
+    for (let i = 0; i < instrSchedules.length; i++) {
+      for (let j = i + 1; j < instrSchedules.length; j++) {
+        const scheduleA = instrSchedules[i];
+        const scheduleB = instrSchedules[j];
+
+        // Skip if this pair is marked as "not duplicate"
+        const pairKey = [scheduleA.id, scheduleB.id].sort().join("__");
+        if (blockedPairs.has(pairKey)) continue;
+
+        // Check if they're in the same term
+        const termA = (scheduleA.term || scheduleA.termCode || "")
+          .toLowerCase()
+          .trim();
+        const termB = (scheduleB.term || scheduleB.termCode || "")
+          .toLowerCase()
+          .trim();
+        if (termA !== termB) continue;
+
+        // Check for overlapping meeting patterns
+        const patternsA = Array.isArray(scheduleA.meetingPatterns)
+          ? scheduleA.meetingPatterns
+          : [];
+        const patternsB = Array.isArray(scheduleB.meetingPatterns)
+          ? scheduleB.meetingPatterns
+          : [];
+
+        for (const patternA of patternsA) {
+          for (const patternB of patternsB) {
+            // Must be same day
+            if (
+              (patternA.day || "").toUpperCase() !==
+              (patternB.day || "").toUpperCase()
+            )
+              continue;
+
+            const startA = parseTimeToMinutes(patternA.startTime);
+            const endA = parseTimeToMinutes(patternA.endTime);
+            const startB = parseTimeToMinutes(patternB.startTime);
+            const endB = parseTimeToMinutes(patternB.endTime);
+
+            if (intervalsOverlap(startA, endA, startB, endB)) {
+              // Found a teaching conflict
+              conflicts.push({
+                type: "teaching_conflict",
+                severity: "high",
+                instructorId,
+                schedules: [scheduleA, scheduleB],
+                day: patternA.day,
+                overlapDescription: `${patternA.startTime}-${patternA.endTime} overlaps with ${patternB.startTime}-${patternB.endTime}`,
+                reason: `Faculty assigned to overlapping classes: ${scheduleA.courseCode || "Course A"} and ${scheduleB.courseCode || "Course B"} both meet on ${patternA.day} with overlapping times`,
+                likelyCause: "duplicate_schedule",
+                fix: "merge_duplicate_schedules",
+              });
+              break; // Only report one conflict per schedule pair
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return conflicts;
+};
+
+/**
+ * Enhanced cross-collection detection that includes teaching conflicts
+ */
+export const detectAllDataIssues = (
+  people = [],
+  schedules = [],
+  rooms = [],
+  options = {},
+) => {
+  const issues = {
+    duplicates: {
+      people: detectPeopleDuplicates(people, options),
+      schedules: detectScheduleDuplicates(schedules, options),
+      rooms: detectRoomDuplicates(rooms, options),
+    },
+    orphaned: detectCrossCollectionIssues(people, schedules, rooms),
+    teachingConflicts: detectTeachingConflicts(schedules, options),
+  };
+
+  return issues;
 };

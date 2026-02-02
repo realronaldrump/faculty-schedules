@@ -1261,6 +1261,7 @@ const previewScheduleChanges = async (
     // Extract room information (support simultaneous multi-rooms)
     const splitRooms = Array.isArray(baseData.spaceDisplayNames) ? baseData.spaceDisplayNames : [];
     const resolvedSpaceKeys = [];
+    const resolvedDisplayNames = [];
     if (splitRooms.length > 0) {
       for (const singleRoom of splitRooms) {
         const nameKey = normalizeRoomName(singleRoom);
@@ -1270,11 +1271,17 @@ const previewScheduleChanges = async (
         const buildingCode = (parsed?.buildingCode || parsed?.building?.code || '').toString().trim().toUpperCase();
         const spaceNumber = normalizeSpaceNumber(parsed?.spaceNumber || '');
         const spaceKey = parsed?.spaceKey || (buildingCode && spaceNumber ? buildSpaceKey(buildingCode, spaceNumber) : '');
-        if (spaceKey) resolvedSpaceKeys.push(spaceKey);
 
         let room = spaceKey ? roomsKeyMap.get(spaceKey) : null;
         if (!room) {
           room = roomsMap.get(nameKey) || null;
+        }
+
+        let canonicalSpaceKey = spaceKey;
+        let canonicalDisplayName = parsed?.displayName || singleRoom;
+        if (room) {
+          if (room.spaceKey) canonicalSpaceKey = room.spaceKey;
+          if (room.displayName) canonicalDisplayName = room.displayName;
         }
 
         if (!room && spaceKey) {
@@ -1299,6 +1306,15 @@ const previewScheduleChanges = async (
           roomsKeyMap.set(spaceKey, placeholder);
           buildRoomNameKeys(placeholder).forEach((key) => roomsMap.set(key, placeholder));
           room = placeholder;
+          canonicalSpaceKey = placeholder.spaceKey || spaceKey;
+          canonicalDisplayName = placeholder.displayName || displayName;
+        }
+
+        if (canonicalSpaceKey) {
+          resolvedSpaceKeys.push(canonicalSpaceKey);
+        }
+        if (canonicalDisplayName) {
+          resolvedDisplayNames.push(canonicalDisplayName);
         }
 
         if (room?.id) {
@@ -1329,12 +1345,18 @@ const previewScheduleChanges = async (
     const instructorMatchIssueIds = instructorAssignments
       .map((assignment) => assignment.matchIssueId)
       .filter(Boolean);
+    const preferredSpaceIds = resolvedSpaceKeys.length > 0
+      ? resolvedSpaceKeys
+      : (baseData.spaceIds || []);
+    const preferredDisplayNames = resolvedDisplayNames.length > 0
+      ? resolvedDisplayNames
+      : (baseData.spaceDisplayNames || splitRooms);
     const uniqueSpaceIds = baseData.locationType === 'no_room'
       ? []
-      : Array.from(new Set([...(baseData.spaceIds || []), ...resolvedSpaceKeys]));
+      : Array.from(new Set(preferredSpaceIds.filter(Boolean)));
     const spaceDisplayNames = baseData.locationType === 'no_room'
       ? []
-      : Array.from(new Set(baseData.spaceDisplayNames || splitRooms));
+      : Array.from(new Set(preferredDisplayNames.filter(Boolean)));
 
     const scheduleData = {
       courseCode,

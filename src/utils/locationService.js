@@ -48,6 +48,14 @@ export const DEFAULT_BUILDING_CONFIG = {
   buildings: []
 };
 
+const stripDepartmentCode = (value = '') => {
+  if (!value || typeof value !== 'string') return '';
+  return value
+    .replace(/\s*\(([A-Z]{2,6})\)\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
 /**
  * Patterns that indicate virtual/no-room locations
  */
@@ -187,9 +195,12 @@ const normalizeBuilding = (building) => {
   if (!building || typeof building !== 'object') return null;
   const rawCode = typeof building.code === 'string' ? building.code.trim() : '';
   const code = rawCode ? rawCode.toUpperCase() : '';
-  const displayName = typeof building.displayName === 'string' ? building.displayName.trim() : '';
+  const rawDisplayName = typeof building.displayName === 'string' ? building.displayName.trim() : '';
+  const displayName = stripDepartmentCode(rawDisplayName);
   const aliases = Array.isArray(building.aliases)
-    ? building.aliases.map((alias) => (alias || '').toString().trim()).filter(Boolean)
+    ? building.aliases
+      .map((alias) => stripDepartmentCode((alias || '').toString().trim()))
+      .filter(Boolean)
     : [];
   const isActive = building.isActive !== false;
   const idSource = code || displayName;

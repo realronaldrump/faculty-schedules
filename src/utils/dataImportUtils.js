@@ -1236,9 +1236,6 @@ export const processScheduleImport = async (csvData) => {
             || buildingCode;
           const displayName = roomData.displayName || `${buildingDisplayName} ${spaceNumber}`.trim();
 
-          spaceDisplayNames.push(displayName);
-          spaceIds.push(spaceKey);
-
           const existingRoom = existingRooms.find(
             (r) =>
               r.spaceKey === spaceKey ||
@@ -1246,20 +1243,26 @@ export const processScheduleImport = async (csvData) => {
               r.displayName === displayName,
           );
 
+          const canonicalSpaceKey = existingRoom?.spaceKey || spaceKey;
+          const canonicalDisplayName = existingRoom?.displayName || displayName;
+
+          spaceDisplayNames.push(canonicalDisplayName);
+          spaceIds.push(canonicalSpaceKey);
+
           if (!existingRoom) {
             const newRoom = createRoomModel({
-              displayName,
+              displayName: canonicalDisplayName,
               buildingCode,
               buildingDisplayName,
               spaceNumber,
-              spaceKey,
+              spaceKey: canonicalSpaceKey,
               type: "Classroom",
             });
 
-            const roomRef = doc(db, COLLECTIONS.ROOMS, spaceKey);
+            const roomRef = doc(db, COLLECTIONS.ROOMS, canonicalSpaceKey);
             await setDoc(roomRef, newRoom, { merge: true });
             logCreate(
-              `Room - ${displayName}`,
+              `Room - ${canonicalDisplayName}`,
               COLLECTIONS.ROOMS,
               roomRef.id,
               newRoom,
@@ -1269,7 +1272,7 @@ export const processScheduleImport = async (csvData) => {
             );
             existingRooms.push({ ...newRoom, id: roomRef.id });
             results.roomsCreated++;
-            console.log(`🏛️ Created new room: ${displayName} (spaceKey: ${spaceKey})`);
+            console.log(`🏛️ Created new room: ${canonicalDisplayName} (spaceKey: ${canonicalSpaceKey})`);
           }
         }
 

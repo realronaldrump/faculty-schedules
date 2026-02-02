@@ -28,7 +28,7 @@ import {
   normalizeProgramName,
 } from "../utils/programUtils";
 import { deletePersonSafely } from "../utils/dataHygiene";
-import { parseFullName } from "../utils/nameUtils";
+import { standardizePerson } from "../utils/hygieneCore";
 import {
   normalizeStudentWeeklySchedule,
   sortWeeklySchedule,
@@ -65,37 +65,8 @@ const usePeopleOperations = () => {
 
   const { showNotification } = useUI();
 
-  const normalizeNameFields = useCallback((personData) => {
-    if (!personData || typeof personData !== "object") return personData;
-    const next = { ...personData };
-    const fullName = (next.name || "").trim();
-    const firstName = (next.firstName || "").trim();
-    const lastName = (next.lastName || "").trim();
-
-    if (!firstName && !lastName && fullName) {
-      if (fullName.includes(",")) {
-        const [lastPart, firstPartRaw] = fullName.split(",", 2);
-        const last = (lastPart || "").trim();
-        const first = (firstPartRaw || "").trim().split(/\s+/)[0] || "";
-        if (first || last) {
-          next.firstName = first;
-          next.lastName = last;
-        }
-      } else {
-        const parsed = parseFullName(fullName);
-        if (parsed.firstName || parsed.lastName) {
-          next.firstName = parsed.firstName;
-          next.lastName = parsed.lastName;
-        }
-      }
-    }
-
-    if (!fullName && (firstName || lastName)) {
-      next.name = `${firstName} ${lastName}`.trim();
-    }
-
-    return next;
-  }, []);
+  // NOTE: normalizeNameFields has been replaced by standardizePerson from hygieneCore
+  // which provides more comprehensive standardization including phone, email, baylorId, etc.
 
   const normalizeStudentSchedules = useCallback((studentData) => {
     if (!studentData || typeof studentData !== "object") return studentData;
@@ -331,7 +302,10 @@ const usePeopleOperations = () => {
           );
         };
         const cleanData = cleanDataRecursively(facultyToUpdate);
-        const normalizedData = normalizeNameFields(cleanData);
+        // Use hygieneCore standardization for consistent data quality
+        const normalizedData = standardizePerson(cleanData, {
+          updateTimestamp: false,
+        });
 
         const updateData = {
           ...normalizedData,
@@ -438,7 +412,6 @@ const usePeopleOperations = () => {
       canEditFaculty,
       showNotification,
       resolveOfficeSpaceId,
-      normalizeNameFields,
     ],
   );
 
@@ -513,7 +486,10 @@ const usePeopleOperations = () => {
             ([_, value]) => value !== undefined,
           ),
         );
-        const normalizedStaffData = normalizeNameFields(cleanStaffData);
+        // Use hygieneCore standardization for consistent data quality
+        const normalizedStaffData = standardizePerson(cleanStaffData, {
+          updateTimestamp: false,
+        });
 
         const nextOffices = Array.isArray(normalizedStaffData.offices)
           ? normalizedStaffData.offices.filter(Boolean)
@@ -633,7 +609,6 @@ const usePeopleOperations = () => {
       canEditStaff,
       showNotification,
       resolveOfficeSpaceId,
-      normalizeNameFields,
     ],
   );
 
@@ -718,7 +693,11 @@ const usePeopleOperations = () => {
             ([_, value]) => value !== undefined,
           ),
         );
-        const normalizedStudentData = normalizeNameFields(cleanStudentData);
+        // Use hygieneCore standardization for consistent data quality
+        // This handles name normalization, and student schedule normalization is done separately
+        const normalizedStudentData = standardizePerson(cleanStudentData, {
+          updateTimestamp: false,
+        });
         const normalizedStudentWithSchedules = normalizeStudentSchedules(
           normalizedStudentData,
         );
@@ -835,7 +814,6 @@ const usePeopleOperations = () => {
       canCreateStudent,
       canEditStudent,
       showNotification,
-      normalizeNameFields,
       normalizeStudentSchedules,
     ],
   );

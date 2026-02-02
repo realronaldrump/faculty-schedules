@@ -149,7 +149,7 @@ const JobCard = ({
 
         <div className="space-y-4">
           {/* Job Title & Supervisor */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <SuggestionInput
               label="Job Title"
               required={true}
@@ -181,7 +181,7 @@ const JobCard = ({
           </div>
 
           {/* Hourly Rate & Dates */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Hourly Rate ($)

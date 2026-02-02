@@ -599,9 +599,9 @@ const StudentAddWizard = ({
   );
 
   return (
-    <div className="bg-white rounded-lg shadow-lg max-w-4xl mx-auto">
+    <div className="bg-white rounded-lg shadow-lg w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col mx-auto">
       {/* Header with Stepper */}
-      <div className="border-b border-gray-200 p-6">
+      <div className="border-b border-gray-200 p-6 flex-shrink-0">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <div className="bg-baylor-green/10 p-2 rounded-full">
@@ -661,7 +661,7 @@ const StudentAddWizard = ({
       </div>
 
       {/* Content */}
-      <div className="p-6 min-h-[400px]">
+      <div className="p-6 flex-1 overflow-y-auto min-h-0">
         {currentStep === 0 && renderBasicInfoStep()}
         {currentStep === 1 && renderEmploymentStep()}
         {currentStep === 2 && renderJobsStep()}
@@ -669,7 +669,7 @@ const StudentAddWizard = ({
       </div>
 
       {/* Footer Navigation */}
-      <div className="border-t border-gray-200 p-6 flex justify-between">
+      <div className="border-t border-gray-200 p-6 flex justify-between flex-shrink-0">
         <button
           onClick={handleBack}
           disabled={currentStep === 0}

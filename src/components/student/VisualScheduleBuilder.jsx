@@ -336,67 +336,71 @@ const VisualScheduleBuilder = ({
       </p>
 
       {/* Schedule Grid */}
-      <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-        {/* Header */}
-        <div
-          className="grid border-b border-gray-200"
-          style={{ gridTemplateColumns: `repeat(${DAYS.length + 1}, minmax(0, 1fr))` }}
-        >
-          <div className="p-2 bg-gray-50 text-xs font-medium text-gray-500 border-r border-gray-200">
-            Time
-          </div>
-          {DAYS.map((day) => (
+      <div className="border border-gray-200 rounded-lg bg-white">
+        <div className="overflow-x-auto">
+          <div className="min-w-[36rem]">
+            {/* Header */}
             <div
-              key={day.key}
-              className="p-2 bg-gray-50 text-xs font-medium text-gray-700 text-center border-r border-gray-200 last:border-r-0"
+              className="grid border-b border-gray-200"
+              style={{ gridTemplateColumns: `repeat(${DAYS.length + 1}, minmax(0, 1fr))` }}
             >
-              {day.label}
-            </div>
-          ))}
-        </div>
-
-        {/* Grid */}
-        <div
-          className="grid"
-          style={{ gridTemplateColumns: `repeat(${DAYS.length + 1}, minmax(0, 1fr))` }}
-        >
-          {HOURS.map((hour) => (
-            <React.Fragment key={hour}>
-              {/* Time Label */}
-              <div className="p-2 text-xs text-gray-500 border-r border-b border-gray-200 bg-gray-50">
-                {formatHourLabel(hour)}
+              <div className="p-2 bg-gray-50 text-xs font-medium text-gray-500 border-r border-gray-200">
+                Time
               </div>
+              {DAYS.map((day) => (
+                <div
+                  key={day.key}
+                  className="p-2 bg-gray-50 text-xs font-medium text-gray-700 text-center border-r border-gray-200 last:border-r-0"
+                >
+                  {day.label}
+                </div>
+              ))}
+            </div>
 
-              {/* Day Cells */}
-              {DAYS.map((day) => {
-                const scheduled = isScheduled(day.key, hour);
-                const isHovered =
-                  hoveredSlot?.day === day.key && hoveredSlot?.hour === hour;
+            {/* Grid */}
+            <div
+              className="grid"
+              style={{ gridTemplateColumns: `repeat(${DAYS.length + 1}, minmax(0, 1fr))` }}
+            >
+              {HOURS.map((hour) => (
+                <React.Fragment key={hour}>
+                  {/* Time Label */}
+                  <div className="p-2 text-xs text-gray-500 border-r border-b border-gray-200 bg-gray-50">
+                    {formatHourLabel(hour)}
+                  </div>
 
-                return (
-                  <div
-                    key={`${day.key}-${hour}`}
-                    className={`h-10 border-r border-b border-gray-200 cursor-pointer transition-all ${
-                      scheduled
-                        ? "bg-baylor-green"
-                        : isHovered
-                          ? "bg-baylor-green/30"
-                          : "hover:bg-baylor-green/10"
-                    }`}
-                    onClick={() => toggleSlot(day.key, hour)}
-                    onMouseEnter={() => setHoveredSlot({ day: day.key, hour })}
-                    onMouseLeave={() => setHoveredSlot(null)}
-                    title={`${day.full} ${formatMinutesToTime(hour * 60)} - ${formatMinutesToTime((hour + 1) * 60)}`}
-                  />
-                );
-              })}
-            </React.Fragment>
-          ))}
+                  {/* Day Cells */}
+                  {DAYS.map((day) => {
+                    const scheduled = isScheduled(day.key, hour);
+                    const isHovered =
+                      hoveredSlot?.day === day.key && hoveredSlot?.hour === hour;
+
+                    return (
+                      <div
+                        key={`${day.key}-${hour}`}
+                        className={`h-10 border-r border-b border-gray-200 cursor-pointer transition-all ${
+                          scheduled
+                            ? "bg-baylor-green"
+                            : isHovered
+                              ? "bg-baylor-green/30"
+                              : "hover:bg-baylor-green/10"
+                        }`}
+                        onClick={() => toggleSlot(day.key, hour)}
+                        onMouseEnter={() => setHoveredSlot({ day: day.key, hour })}
+                        onMouseLeave={() => setHoveredSlot(null)}
+                        title={`${day.full} ${formatMinutesToTime(hour * 60)} - ${formatMinutesToTime((hour + 1) * 60)}`}
+                      />
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-6 text-xs text-gray-600">
+      <div className="flex flex-wrap items-center gap-4 text-xs text-gray-600">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-baylor-green rounded" />
           <span>Scheduled</span>

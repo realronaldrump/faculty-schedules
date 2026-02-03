@@ -10,6 +10,7 @@ import { useUI } from '../../contexts/UIContext';
 import { useAppConfig } from '../../contexts/AppConfigContext';
 import { backfillTermMetadata } from '../../utils/termDataUtils';
 import { normalizeTermDateValue, parseTermDate } from '../../utils/termUtils';
+import { deleteSemesterImport, previewSemesterDeletion } from '../../utils/importLifecycleUtils';
 import { ConfirmationDialog } from '../CustomAlert';
 import BuildingManagement from './BuildingManagement';
 import SpaceManagement from './SpaceManagement';
@@ -416,60 +417,43 @@ const AppSettings = () => {
     }
   };
 
-  // Term deletion handler
+  // Term deletion handler - uses comprehensive deletion with orphaned entity cleanup
   const handleDeleteTerm = async (term) => {
     if (!term?.termCode) {
       showNotification?.('warning', 'Missing Semester', 'Cannot delete semester without a semester code.');
       return;
     }
-    
-    const courseCount = termCourseCounts[term.termCode] || 0;
-    
+
     setTermActionLoading(term.termCode);
     try {
-      if (courseCount > 0) {
-        // Delete all schedules for this term
-        const schedulesQuery = query(
-          collection(db, COLLECTIONS.SCHEDULES),
-          where('termCode', '==', term.termCode)
-        );
-        const schedulesSnapshot = await getDocs(schedulesQuery);
-        
-        const batch = writeBatch(db);
-        schedulesSnapshot.docs.forEach(docSnap => {
-          batch.delete(docSnap.ref);
-        });
-        
-        // Delete the term document
-        const termRef = doc(db, COLLECTIONS.TERMS, term.termCode);
-        batch.delete(termRef);
-        
-        await batch.commit();
-        
-        await logBulkUpdate(
-          `Deleted semester ${term.term || term.termCode} and ${courseCount} courses`,
-          COLLECTIONS.TERMS,
-          courseCount,
-          'AppSettings.jsx - handleDeleteTerm',
-          { action: 'delete_term_with_courses', termCode: term.termCode }
-        );
-      } else {
-        // Just delete the term document
-        const termRef = doc(db, COLLECTIONS.TERMS, term.termCode);
-        await deleteDoc(termRef);
-        
-        await logDelete(
-          `Deleted empty semester ${term.term || term.termCode}`,
-          COLLECTIONS.TERMS,
-          term.termCode,
-          term,
-          'AppSettings.jsx - handleDeleteTerm'
-        );
-      }
-      
+      // Use comprehensive deletion that also cleans up orphaned rooms
+      const report = await deleteSemesterImport(term.termCode, {
+        cleanupOrphanedRooms: true,
+        cleanupOrphanedPeople: false, // Preserve faculty records
+        deleteTransactions: true,
+        dryRun: false
+      });
+
       await refreshTerms?.();
       await fetchTermCourseCounts();
-      showNotification?.('success', 'Semester Deleted', `${term.term || term.termCode} has been permanently deleted.`);
+
+      // Build notification message with cleanup details
+      const details = [];
+      if (report.schedulesDeleted > 0) {
+        details.push(`${report.schedulesDeleted} schedules`);
+      }
+      if (report.roomsCleaned > 0) {
+        details.push(`${report.roomsCleaned} orphaned rooms`);
+      }
+      if (report.transactionsMarked > 0) {
+        details.push(`${report.transactionsMarked} import records`);
+      }
+
+      const message = details.length > 0
+        ? `Deleted ${details.join(', ')}.`
+        : `${term.term || term.termCode} has been permanently deleted.`;
+
+      showNotification?.('success', 'Semester Deleted', message);
     } catch (error) {
       console.error('Error deleting term:', error);
       showNotification?.('error', 'Delete Failed', 'Could not delete the semester.');

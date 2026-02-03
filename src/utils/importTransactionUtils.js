@@ -34,6 +34,10 @@ import {
   deriveScheduleIdentity,
   resolveScheduleIdentityMatch
 } from './importIdentityUtils';
+import {
+  generateImportReport,
+  formatImportReportForLog
+} from './importReportUtils';
 
 // Import transaction model for tracking changes
 export class ImportTransaction {
@@ -2192,6 +2196,15 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
     console.log(`✅ Transaction committed with ${changesToApply.length} changes`);
     console.log(`👤 Created ${createdPeopleCount} new people`);
     console.log(`🏛️ Created ${createdRoomsCount} new rooms`);
+
+    // Generate and log import report
+    try {
+      const importReport = generateImportReport(transaction);
+      console.log(formatImportReportForLog(importReport));
+      transaction.importReport = importReport;
+    } catch (reportError) {
+      console.warn('Could not generate import report:', reportError?.message || reportError);
+    }
 
     // Centralized change logging for applied changes
     try {

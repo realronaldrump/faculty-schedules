@@ -48,6 +48,7 @@ import {
 } from "./locationService";
 import { resolveScheduleSpaces } from "./spaceUtils";
 import { hashRecord } from "./hashUtils";
+import { isCancelledStatus } from "./hygieneCore";
 import {
   buildScheduleDocId,
   buildScheduleIdentityIndex,
@@ -1037,18 +1038,19 @@ export const processScheduleImport = async (csvData) => {
       const catalogNumber = (row["Catalog Number"] || "").trim();
       const creditsFromCsv = row["Credit Hrs"] || row["Credit Hrs Min"];
       const scheduleType = row["Schedule Type"] || "Class Instruction";
-      const status = row["Status"] || "Active";
+      const status = (row["Status"] || "Active").toString().trim();
+      const isCancelled = isCancelledStatus(status);
       const enrollment = normalizeNumericField(row["Enrollment"]);
       const maxEnrollment = normalizeNumericField(row["Maximum Enrollment"]);
 
-      if (!courseCode || !instructorField) {
+      if (!courseCode || (!instructorField && !isCancelled)) {
         results.skipped++;
         continue;
       }
 
       // Parse instructor information (supports multiple instructors)
       const instructorInfos = parseInstructorFieldList(instructorField);
-      if (!instructorInfos || instructorInfos.length === 0) {
+      if ((!instructorInfos || instructorInfos.length === 0) && !isCancelled) {
         results.errors.push(`Could not parse instructor: ${instructorField}`);
         continue;
       }
@@ -1403,7 +1405,7 @@ export const processScheduleImport = async (csvData) => {
         instructorAssignments: dedupedAssignments,
         instructorName: instructorData
           ? `${instructorData.firstName} ${instructorData.lastName}`.trim()
-          : "Staff",
+          : instructorField.trim() || (isCancelled ? "" : "Staff"),
         courseId,
         courseCode,
         courseTitle,
@@ -1781,13 +1783,15 @@ const isCourseTitleRow = (values) => {
  * Check if a row contains valid schedule data
  */
 const isValidScheduleRow = (rowData) => {
-  // Must have instructor and course information
+  // Must have course information; instructor required unless cancelled
   const hasInstructor = rowData["Instructor"] && rowData["Instructor"].trim();
   const hasCourse = rowData["Course"] && rowData["Course"].trim();
   const hasValidCRN =
     rowData["CRN"] && rowData["CRN"].trim() && !isNaN(rowData["CRN"]);
+  const status = (rowData["Status"] || "").toString().trim();
+  const isCancelled = isCancelledStatus(status);
 
-  return hasInstructor && hasCourse && hasValidCRN;
+  return hasCourse && hasValidCRN && (hasInstructor || isCancelled);
 };
 
 // ==================== RELATIONAL DATA FETCHING ====================

@@ -70,6 +70,11 @@ const cloneDefaultValue = (value) => {
 const normalizeString = (value) =>
   value === undefined || value === null ? "" : String(value).trim();
 
+export const isCancelledStatus = (status) => {
+  const normalized = normalizeString(status).toLowerCase();
+  return normalized.startsWith("cancel");
+};
+
 const normalizeEmail = (email) => normalizeString(email).toLowerCase();
 
 export const standardizePhone = (phone) => {
@@ -1062,6 +1067,7 @@ export const detectCrossCollectionIssues = (
   };
 
   schedules.forEach((schedule) => {
+    if (isCancelledStatus(schedule?.status)) return;
     const instructorIds = getScheduleInstructorIds(schedule);
     if (instructorIds.length === 0) {
       issues.push({
@@ -1093,6 +1099,7 @@ export const detectCrossCollectionIssues = (
       .filter((key) => typeof key === "string" && key.trim().length > 0),
   );
   schedules.forEach((schedule) => {
+    if (isCancelledStatus(schedule?.status)) return;
     if (schedule?.locationType === "no_room") return;
     const spaceIds = Array.isArray(schedule.spaceIds)
       ? schedule.spaceIds.filter(Boolean)

@@ -22,7 +22,7 @@ import {
 } from './locationService';
 import { normalizeSectionNumber } from './canonicalSchema';
 import { hashRecord } from './hashUtils';
-import { standardizeCourseCode } from './hygieneCore';
+import { standardizeCourseCode, isCancelledStatus } from './hygieneCore';
 import {
   standardizeImportedPerson,
   standardizeImportedRoom,
@@ -1082,6 +1082,7 @@ const previewScheduleChanges = async (
       crn: baseData.crn || '',
       clssId: baseData.clssId || ''
     };
+    const isCancelled = isCancelledStatus(baseData.status);
 
     if (!baseData.courseCode) {
       addValidation('error', `${rowLabel}: Missing Course`);
@@ -1095,7 +1096,7 @@ const previewScheduleChanges = async (
       summary.rowsSkipped += 1;
       continue;
     }
-    if (!baseData.instructorField) {
+    if (!baseData.instructorField && !isCancelled) {
       addValidation('error', `${rowLabel}: Missing Instructor`);
       transaction.addRowLineage({ ...rowLineageBase, action: 'skipped', reason: 'Missing Instructor' });
       summary.rowsSkipped += 1;
@@ -1159,16 +1160,18 @@ const previewScheduleChanges = async (
       return Boolean(parsed?.firstName || parsed?.lastName || baylorId);
     });
 
-    if (parsedForMatch.length === 0) {
+    if (!isCancelled && parsedForMatch.length === 0) {
       addValidation('warning', `${rowLabel}: Instructor parsed as staff/unassigned`);
     }
 
-    parsedForMatch.forEach((parsed) => {
-      const baylorId = normalizeBaylorId(parsed?.id);
-      if (!baylorId) {
-        addValidation('warning', `${rowLabel}: Missing instructor ID for ${parsed?.lastName || parsed?.firstName || 'Unknown'}`);
-      }
-    });
+    if (!isCancelled) {
+      parsedForMatch.forEach((parsed) => {
+        const baylorId = normalizeBaylorId(parsed?.id);
+        if (!baylorId) {
+          addValidation('warning', `${rowLabel}: Missing instructor ID for ${parsed?.lastName || parsed?.firstName || 'Unknown'}`);
+        }
+      });
+    }
 
     let instructorId = null;
     const instructorAssignments = [];

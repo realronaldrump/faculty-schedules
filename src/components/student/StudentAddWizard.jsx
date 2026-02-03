@@ -47,13 +47,14 @@ const StudentAddWizard = ({
   supervisorOptions = [],
   existingJobTitles = [],
   semesterLabel = "",
+  isTutorialMode = false,
 }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [student, setStudent] = useState({
-    name: "",
-    email: "",
+    name: isTutorialMode ? "[TUTORIAL] Test Student" : "",
+    email: isTutorialMode ? "tutorial.test@example.edu" : "",
     phone: "",
-    hasNoPhone: false,
+    hasNoPhone: isTutorialMode,
     startDate: new Date().toISOString().split("T")[0],
     endDate: "",
     isActive: true,
@@ -208,7 +209,7 @@ const StudentAddWizard = ({
 
   // Step Render Functions
   const renderBasicInfoStep = () => (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tutorial="basic-info-form">
       <div className="text-center mb-8">
         <h3 className="text-lg font-semibold text-gray-900">
           Basic Information
@@ -227,9 +228,8 @@ const StudentAddWizard = ({
             type="text"
             value={student.name}
             onChange={(e) => updateStudent({ name: e.target.value })}
-            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${
-              errors.name ? "border-red-500" : "border-gray-300"
-            }`}
+            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.name ? "border-red-500" : "border-gray-300"
+              }`}
             placeholder="e.g., John Doe"
           />
           {errors.name && (
@@ -248,9 +248,8 @@ const StudentAddWizard = ({
             type="email"
             value={student.email}
             onChange={(e) => updateStudent({ email: e.target.value })}
-            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${
-              errors.email ? "border-red-500" : "border-gray-300"
-            }`}
+            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.email ? "border-red-500" : "border-gray-300"
+              }`}
             placeholder="student@baylor.edu"
           />
           {errors.email && (
@@ -271,9 +270,8 @@ const StudentAddWizard = ({
               value={student.phone}
               disabled={student.hasNoPhone}
               onChange={(e) => updateStudent({ phone: e.target.value })}
-              className={`flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${
-                errors.phone ? "border-red-500" : "border-gray-300"
-              } ${student.hasNoPhone ? "bg-gray-100" : ""}`}
+              className={`flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green ${errors.phone ? "border-red-500" : "border-gray-300"
+                } ${student.hasNoPhone ? "bg-gray-100" : ""}`}
               placeholder="(254) 710-1234"
             />
             <label className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
@@ -302,7 +300,7 @@ const StudentAddWizard = ({
   );
 
   const renderEmploymentStep = () => (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tutorial="employment-form">
       <div className="text-center mb-8">
         <h3 className="text-lg font-semibold text-gray-900">
           Employment Details
@@ -375,7 +373,7 @@ const StudentAddWizard = ({
   );
 
   const renderJobsStep = () => (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tutorial="jobs-section">
       <div className="text-center mb-4">
         <h3 className="text-lg font-semibold text-gray-900">Job Assignments</h3>
         <p className="text-sm text-gray-600">
@@ -414,7 +412,7 @@ const StudentAddWizard = ({
 
       {/* Add Job Button */}
       {editingJobIndex === null && (
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-2xl mx-auto" data-tutorial="add-job-btn">
           <button
             onClick={() => setEditingJobIndex("new")}
             className="w-full py-4 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-baylor-green hover:text-baylor-green transition-colors flex items-center justify-center gap-2"
@@ -472,7 +470,7 @@ const StudentAddWizard = ({
   );
 
   const renderReviewStep = () => (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tutorial="review-section">
       <div className="text-center mb-8">
         <h3 className="text-lg font-semibold text-gray-900">
           Review & Confirm
@@ -619,8 +617,21 @@ const StudentAddWizard = ({
           </button>
         </div>
 
+        {/* Tutorial Mode Banner */}
+        {isTutorialMode && (
+          <div className="mx-6 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-amber-800">Tutorial Mode</p>
+              <p className="text-xs text-amber-700">
+                This is a test entry that will be automatically deleted when the tutorial ends.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Stepper */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between" data-tutorial="wizard-stepper">
           {STEPS.map((step, idx) => {
             const Icon = step.icon;
             const isActive = idx === currentStep;
@@ -630,13 +641,12 @@ const StudentAddWizard = ({
             return (
               <div key={step.id} className="flex items-center flex-1">
                 <div
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
-                    isActive
-                      ? "bg-baylor-green text-white"
-                      : isCompleted
-                        ? "bg-baylor-green/20 text-baylor-green"
-                        : "bg-gray-100 text-gray-400"
-                  }`}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${isActive
+                    ? "bg-baylor-green text-white"
+                    : isCompleted
+                      ? "bg-baylor-green/20 text-baylor-green"
+                      : "bg-gray-100 text-gray-400"
+                    }`}
                 >
                   <div
                     className={`${isCompleted ? "bg-baylor-green text-white" : ""} rounded-full p-0.5`}
@@ -649,9 +659,8 @@ const StudentAddWizard = ({
                 </div>
                 {idx < STEPS.length - 1 && (
                   <div
-                    className={`flex-1 h-0.5 mx-2 ${
-                      isCompleted ? "bg-baylor-green/50" : "bg-gray-200"
-                    }`}
+                    className={`flex-1 h-0.5 mx-2 ${isCompleted ? "bg-baylor-green/50" : "bg-gray-200"
+                      }`}
                   />
                 )}
               </div>
@@ -669,7 +678,7 @@ const StudentAddWizard = ({
       </div>
 
       {/* Footer Navigation */}
-      <div className="border-t border-gray-200 p-6 flex justify-between flex-shrink-0">
+      <div className="border-t border-gray-200 p-6 flex justify-between flex-shrink-0" data-tutorial="wizard-navigation">
         <button
           onClick={handleBack}
           disabled={currentStep === 0}
@@ -691,6 +700,7 @@ const StudentAddWizard = ({
           <button
             onClick={() => onSave(student)}
             className="flex items-center gap-2 px-6 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+            data-tutorial="save-student-btn"
           >
             <Check size={16} />
             Save Student

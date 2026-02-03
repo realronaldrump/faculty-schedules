@@ -16,6 +16,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
 } from "react";
 
 const TutorialContext = createContext(null);
@@ -446,6 +447,173 @@ export const TUTORIALS = {
       },
     ],
   },
+  "add-student-worker": {
+    id: "add-student-worker",
+    title: "Add Student Worker Tutorial",
+    description:
+      "Hands-on tutorial: Create a test student worker (auto-deleted after).",
+    estimatedTime: "5 min",
+    category: "People Management",
+    targetPage: "people/directory?tab=student",
+    isInteractive: true, // Flag for interactive mode
+    steps: [
+      {
+        id: "welcome",
+        title: "Interactive Tutorial",
+        content:
+          "In this hands-on tutorial, you'll create a REAL test student worker to practice the workflow. Don't worry - the test data will be automatically deleted when the tutorial ends. Look for the [TUTORIAL] prefix to identify test records.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+      {
+        id: "student-tab",
+        title: "Student Workers Tab",
+        content:
+          "Make sure you're on the Student Workers tab. Click it now if you're not already there.",
+        target: '[data-tutorial="student-workers-card"]',
+        position: "bottom",
+        action: "Click to select Student Workers tab",
+        actionType: "click",
+      },
+      {
+        id: "add-button",
+        title: "Open the Add Student Wizard",
+        content:
+          "Click the 'Add Student' button to open the wizard. We'll create a test student named '[TUTORIAL] Test Student'.",
+        target: '[data-tutorial="add-student-btn"]',
+        position: "bottom",
+        action: "Click to open the Add Student wizard",
+        actionType: "click",
+      },
+      {
+        id: "wizard-overview",
+        title: "The Student Worker Wizard",
+        content:
+          "You're now in the 4-step wizard. Notice the stepper at the top showing: Basic Info → Employment → Jobs → Review. The name field has been pre-filled with '[TUTORIAL] Test Student'.",
+        target: '[data-tutorial="wizard-stepper"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "basic-info-enter",
+        title: "Enter Basic Information",
+        content:
+          "Fill in the form: The name '[TUTORIAL] Test Student' should already be entered. Add an email like 'tutorial.test@example.edu'. You can check 'No Phone' to skip the phone field.",
+        target: '[data-tutorial="basic-info-form"]',
+        position: "right",
+        action: "Enter the required name and email",
+        actionType: "input",
+        validationTarget: '[data-tutorial="basic-info-form"] input[type="text"]',
+      },
+      {
+        id: "basic-info-next",
+        title: "Continue to Employment",
+        content:
+          "Great! Now click the 'Next' button at the bottom to proceed to the Employment step.",
+        target: '[data-tutorial="wizard-navigation"]',
+        position: "top",
+        action: "Click Next to continue",
+        actionType: "click",
+      },
+      {
+        id: "employment-dates",
+        title: "Set Employment Dates",
+        content:
+          "Set a Start Date (today is fine). The End Date is optional - leave it blank for ongoing employment. Make sure 'Active Student Worker' is checked.",
+        target: '[data-tutorial="employment-form"]',
+        position: "right",
+        action: null,
+      },
+      {
+        id: "employment-next",
+        title: "Continue to Jobs",
+        content:
+          "Click 'Next' to proceed to the Job Assignments step. This is where you'll define what work the student does.",
+        target: '[data-tutorial="wizard-navigation"]',
+        position: "top",
+        action: "Click Next to continue",
+        actionType: "click",
+      },
+      {
+        id: "jobs-intro",
+        title: "Job Assignments",
+        content:
+          "Each student needs at least one job assignment. A job includes: title, supervisor, pay rate, schedule, and work locations. Let's add one now.",
+        target: '[data-tutorial="jobs-section"]',
+        position: "top",
+        action: null,
+      },
+      {
+        id: "add-job",
+        title: "Add a Job Assignment",
+        content:
+          "Click the 'Add Job Assignment' button to create a new job entry for this student.",
+        target: '[data-tutorial="add-job-btn"]',
+        position: "top",
+        action: "Click to add a job assignment",
+        actionType: "click",
+      },
+      {
+        id: "job-title",
+        title: "Enter Job Details",
+        content:
+          "Enter a job title like 'Tutorial Example Job'. Select any supervisor from the dropdown. Set an hourly rate (e.g., $12.50).",
+        target: '[data-tutorial="job-form"]',
+        position: "left",
+        action: "Fill in job title and rate",
+        actionType: "input",
+      },
+      {
+        id: "schedule-builder",
+        title: "Set the Weekly Schedule",
+        content:
+          "Use the visual schedule builder to set work hours. Click on a day (like Monday) and set a time range (e.g., 9:00 AM - 11:00 AM). Add at least one shift.",
+        target: '[data-tutorial="schedule-builder"]',
+        position: "top",
+        action: "Add at least one work shift",
+        actionType: "click",
+      },
+      {
+        id: "save-job",
+        title: "Save the Job Assignment",
+        content:
+          "Click 'Save Job' to save this job assignment, then click 'Next' to proceed to the review step.",
+        target: '[data-tutorial="job-form"]',
+        position: "top",
+        action: "Save the job and click Next",
+        actionType: "click",
+      },
+      {
+        id: "review-step",
+        title: "Review Your Entry",
+        content:
+          "Review all the information you entered. You'll see the student info, employment period, and job assignments summarized here. Make sure it shows '[TUTORIAL] Test Student'.",
+        target: '[data-tutorial="review-section"]',
+        position: "top",
+        action: null,
+      },
+      {
+        id: "save-student",
+        title: "Save the Test Student",
+        content:
+          "Click 'Save Student' to create the test record. After saving, the tutorial will automatically delete this test student when you finish or exit.",
+        target: '[data-tutorial="save-student-btn"]',
+        position: "top",
+        action: "Click Save Student to create the record",
+        actionType: "click",
+      },
+      {
+        id: "complete",
+        title: "Tutorial Complete! 🎉",
+        content:
+          "Excellent work! You've learned how to add a student worker. The test student '[TUTORIAL] Test Student' will be automatically deleted now. In real use, you would enter actual student information following these same steps.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+    ],
+  },
 };
 
 // Help hints that appear throughout the app
@@ -479,6 +647,10 @@ export const TutorialProvider = ({ children }) => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [actionCompleted, setActionCompleted] = useState(false);
+
+  // Tutorial-created data tracking (for cleanup)
+  const [tutorialStudentId, setTutorialStudentId] = useState(null);
+  const cleanupCallbackRef = useRef(null);
 
   // User preferences
   const [showTooltips, setShowTooltips] = useState(() => {
@@ -539,7 +711,16 @@ export const TutorialProvider = ({ children }) => {
 
   // End/exit tutorial
   const endTutorial = useCallback(
-    (markComplete = false) => {
+    async (markComplete = false) => {
+      // Run cleanup callback if registered (e.g., delete tutorial student)
+      if (cleanupCallbackRef.current && tutorialStudentId) {
+        try {
+          await cleanupCallbackRef.current(tutorialStudentId);
+        } catch (error) {
+          console.error("Tutorial cleanup failed:", error);
+        }
+      }
+
       if (markComplete && activeTutorial) {
         setCompletedTutorials((prev) =>
           prev.includes(activeTutorial.id)
@@ -551,8 +732,10 @@ export const TutorialProvider = ({ children }) => {
       setCurrentStepIndex(0);
       setIsPaused(false);
       setActionCompleted(false);
+      setTutorialStudentId(null);
+      cleanupCallbackRef.current = null;
     },
-    [activeTutorial],
+    [activeTutorial, tutorialStudentId],
   );
 
   // Navigate tutorial steps
@@ -635,7 +818,19 @@ export const TutorialProvider = ({ children }) => {
     setDismissedHints([]);
     setActiveTutorial(null);
     setCurrentStepIndex(0);
+    setTutorialStudentId(null);
+    cleanupCallbackRef.current = null;
   }, []);
+
+  // Register cleanup callback for tutorial-created data
+  const registerCleanupCallback = useCallback((callback) => {
+    cleanupCallbackRef.current = callback;
+  }, []);
+
+  // Check if currently in tutorial mode for add-student-worker tutorial
+  const isTutorialMode = useMemo(() => {
+    return activeTutorial?.id === "add-student-worker";
+  }, [activeTutorial]);
 
   // Current step helper
   const currentStep = useMemo(() => {
@@ -688,6 +883,12 @@ export const TutorialProvider = ({ children }) => {
       // Reset
       resetAllProgress,
 
+      // Tutorial student management (for interactive tutorials)
+      tutorialStudentId,
+      setTutorialStudentId,
+      registerCleanupCallback,
+      isTutorialMode,
+
       // Static data
       tutorials: TUTORIALS,
       hints: HELP_HINTS,
@@ -715,6 +916,10 @@ export const TutorialProvider = ({ children }) => {
       isHintDismissed,
       resetHints,
       resetAllProgress,
+      tutorialStudentId,
+      setTutorialStudentId,
+      registerCleanupCallback,
+      isTutorialMode,
     ],
   );
 

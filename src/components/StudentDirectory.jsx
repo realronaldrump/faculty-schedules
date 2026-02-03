@@ -57,6 +57,7 @@ import { useData } from "../contexts/DataContext";
 import { usePeopleOperations } from "../hooks";
 import { useUI } from "../contexts/UIContext";
 import { useAppConfig } from "../contexts/AppConfigContext";
+import { useTutorial } from "../contexts/TutorialContext";
 
 const trimValue = (value) => (typeof value === "string" ? value.trim() : value);
 
@@ -223,6 +224,11 @@ const StudentDirectory = () => {
   const { handleStudentUpdate, handleStudentDelete } = usePeopleOperations();
   const { showNotification } = useUI();
   const { buildingConfigVersion } = useAppConfig();
+  const {
+    isTutorialMode,
+    setTutorialStudentId,
+    registerCleanupCallback,
+  } = useTutorial();
 
   // State management
   const [filterText, setFilterText] = useState("");
@@ -531,6 +537,32 @@ const StudentDirectory = () => {
         isActive: payload.isActive !== undefined ? payload.isActive : true,
         semesterSchedules: nextSchedules,
       });
+
+      // If in tutorial mode, track the student ID for cleanup
+      if (isTutorialMode && payload.name?.startsWith("[TUTORIAL]")) {
+        // Find the newly created student by name
+        // The ID would be generated, but we need to search by name pattern
+        setTutorialStudentId(payload.email); // Use email as unique identifier for cleanup
+
+        // Register cleanup callback to delete the tutorial student
+        registerCleanupCallback(async (tutorialEmail) => {
+          try {
+            // Find the tutorial student by email
+            const tutorialStudent = studentData?.find(
+              (s) => s.email === tutorialEmail || s.name?.startsWith("[TUTORIAL]")
+            );
+            if (tutorialStudent) {
+              await handleStudentDelete(tutorialStudent);
+              showNotification(
+                "Tutorial complete! Test student has been removed.",
+                "success"
+              );
+            }
+          } catch (error) {
+            console.error("Failed to cleanup tutorial student:", error);
+          }
+        });
+      }
 
       setIsWizardOpen(false);
       showNotification("Student worker added successfully", "success");
@@ -941,11 +973,10 @@ const StudentDirectory = () => {
             </div>
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                showFilters
-                  ? "bg-baylor-green text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${showFilters
+                ? "bg-baylor-green text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
             >
               <Filter size={16} />
               Filters
@@ -1006,6 +1037,7 @@ const StudentDirectory = () => {
             <button
               onClick={() => setIsWizardOpen(true)}
               className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+              data-tutorial="add-student-btn"
               disabled={
                 typeof window !== "undefined" &&
                 window?.appPermissions?.canCreateStudent === false
@@ -1204,6 +1236,7 @@ const StudentDirectory = () => {
             supervisorOptions={supervisorOptions}
             existingJobTitles={availableJobTitles}
             semesterLabel={semesterLabel}
+            isTutorialMode={isTutorialMode}
           />
         </div>
       )}

@@ -134,7 +134,7 @@ const JobCard = ({
   // Handle edit mode
   if (isEditing) {
     return (
-      <div className="bg-baylor-green/5 border-2 border-baylor-green/30 rounded-lg p-4">
+      <div className="bg-baylor-green/5 border-2 border-baylor-green/30 rounded-lg p-4" data-tutorial="job-form">
         <div className="flex items-center justify-between mb-4">
           <h4 className="font-semibold text-gray-900">Edit Job Assignment</h4>
           {showActions && onCancel && (
@@ -233,7 +233,7 @@ const JobCard = ({
           </div>
 
           {/* Schedule Builder */}
-          <div>
+          <div data-tutorial="schedule-builder">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Weekly Schedule <span className="text-red-500">*</span>
             </label>
@@ -247,7 +247,7 @@ const JobCard = ({
           </div>
 
           {/* Building Selector */}
-          <div>
+          <div data-tutorial="building-selector">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Locations
             </label>

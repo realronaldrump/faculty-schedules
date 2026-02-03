@@ -32,6 +32,9 @@ const renderStatusToggles = ({
 
     const isDisabled = typeof toggle.disabled === 'function' ? toggle.disabled(formData) : toggle.disabled;
     const containerClassName = `${toggle.className || 'flex items-center gap-2 text-xs'}${isDisabled ? ' opacity-60' : ''}`;
+    const isChecked = typeof toggle.getChecked === 'function'
+      ? toggle.getChecked(formData)
+      : !!formData[toggle.name];
 
     const handleToggle = (event) => {
       if (typeof toggle.onToggle === 'function') {
@@ -60,7 +63,7 @@ const renderStatusToggles = ({
           type="checkbox"
           id={`${idPrefix}-${toggle.name}`}
           name={toggle.name}
-          checked={!!formData[toggle.name]}
+          checked={isChecked}
           onChange={handleToggle}
           disabled={isDisabled}
           className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green disabled:cursor-not-allowed"

@@ -122,6 +122,7 @@ const SpaceManagement = () => {
 
     // Check people for office assignments
     (people || []).forEach((person) => {
+      if (person?.isActive === false) return;
       const officeIds =
         person.officeSpaceIds ||
         (person.officeSpaceId ? [person.officeSpaceId] : []);

@@ -89,13 +89,20 @@ export const fetchSchedulesWithInstructors = async () => {
 /**
  * Convert normalized people data to faculty format for components
  */
-export const adaptPeopleToFaculty = (people, scheduleData = [], programs = []) => {
+export const adaptPeopleToFaculty = (
+  people,
+  scheduleData = [],
+  programs = [],
+  options = {},
+) => {
+  const { includeInactive = false } = options;
   // Create lookup map for programs
   const programsMap = new Map(programs.map(program => [program.id, program]));
   const normalizedPeople = people.filter(person => !person?.mergedInto);
 
   return normalizedPeople
     .filter(person => {
+      if (!includeInactive && person?.isActive === false) return false;
       const hasFacultyRole = Array.isArray(person.roles)
         ? person.roles.includes('faculty')
         : (typeof person.roles === 'object' && person.roles !== null
@@ -145,6 +152,9 @@ export const adaptPeopleToFaculty = (people, scheduleData = [], programs = []) =
         isTenured: isAdjunct ? false : (person.isTenured || false),
         isAlsoStaff: hasRole('staff'),
         isUPD: person.isUPD || false,
+        isActive: person.isActive !== false,
+        inactiveAt: person.inactiveAt || '',
+        inactiveReason: person.inactiveReason || '',
         baylorId: person.baylorId || '', // 9-digit Baylor ID number
         hasNoPhone: person.hasNoPhone || false,
         hasNoOffice: person.hasNoOffice || false,
@@ -156,10 +166,12 @@ export const adaptPeopleToFaculty = (people, scheduleData = [], programs = []) =
 /**
  * Convert normalized people data to staff format for components
  */
-export const adaptPeopleToStaff = (people) => {
+export const adaptPeopleToStaff = (people, _scheduleData = [], _programs = [], options = {}) => {
+  const { includeInactive = false } = options;
   const normalizedPeople = people.filter(person => !person?.mergedInto);
   return normalizedPeople
     .filter(person => {
+      if (!includeInactive && person?.isActive === false) return false;
       // Handle both array and object formats for roles
       if (Array.isArray(person.roles)) {
         return person.roles.includes('staff');
@@ -196,6 +208,9 @@ export const adaptPeopleToStaff = (people) => {
         isFullTime: person.isFullTime,
         isTenured: hasRole('faculty') && !isAdjunct ? (person.isTenured || false) : false,
         isAlsoFaculty: hasRole('faculty'),
+        isActive: person.isActive !== false,
+        inactiveAt: person.inactiveAt || '',
+        inactiveReason: person.inactiveReason || '',
         hasNoPhone: person.hasNoPhone || false,
         hasNoOffice: person.hasNoOffice || false
       };

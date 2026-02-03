@@ -202,6 +202,10 @@ const getDetailedDescription = (change) => {
           changes.push(`${change.to === 'Yes' ? 'Marked as' : 'Removed'} Tenured status`);
         } else if (field === 'isAlsoStaff') {
           changes.push(`${change.to === 'Yes' ? 'Added' : 'Removed'} Staff role`);
+        } else if (field === 'isActive') {
+          const toValue = String(change.to || '').toLowerCase();
+          const isInactive = toValue === 'no' || toValue === 'false';
+          changes.push(isInactive ? 'Deactivated' : 'Reactivated');
         } else {
           changes.push(`Changed ${displayName}: "${change.from}" → "${change.to}"`);
         }
@@ -237,6 +241,9 @@ const getFieldDisplayNames = () => {
     'isAdjunct': 'Adjunct Status',
     'isTenured': 'Tenure Status',
     'isAlsoStaff': 'Staff Role',
+    'isActive': 'Active Status',
+    'inactiveAt': 'Inactive At',
+    'inactiveReason': 'Inactive Reason',
     'hasPhD': 'PhD Status',
     'hasNoPhone': 'No Phone Status',
     'hasNoOffice': 'No Office Status',

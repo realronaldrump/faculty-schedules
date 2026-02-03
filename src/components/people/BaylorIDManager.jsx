@@ -46,6 +46,7 @@ const BaylorIDManager = ({ embedded = false }) => {
     studentWorkers: true,
   });
   const [onlyMissing, setOnlyMissing] = useState(false);
+  const [includeInactive, setIncludeInactive] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [baylorIdDraft, setBaylorIdDraft] = useState("");
   const [error, setError] = useState("");
@@ -65,6 +66,7 @@ const BaylorIDManager = ({ embedded = false }) => {
     return people
       .filter((p) => {
         if (!p) return false;
+        if (!includeInactive && p.isActive === false) return false;
         const includeByRole =
           (roleChecks.faculty && hasRole(p, "faculty") && !p.isAdjunct) ||
           (roleChecks.adjunct && p.isAdjunct) ||
@@ -79,7 +81,7 @@ const BaylorIDManager = ({ embedded = false }) => {
         return name.includes(term) || email.includes(term) || id.includes(term);
       })
       .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  }, [people, filterText, roleChecks, onlyMissing]);
+  }, [people, filterText, roleChecks, onlyMissing, includeInactive]);
 
   const exportToCSV = () => {
     const headers = ["Name", "Baylor ID"];
@@ -255,6 +257,15 @@ const BaylorIDManager = ({ embedded = false }) => {
                   className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                 />
                 Only show missing IDs
+              </label>
+              <label className="flex items-center gap-2 text-sm ml-2">
+                <input
+                  type="checkbox"
+                  checked={includeInactive}
+                  onChange={(e) => setIncludeInactive(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+                />
+                Include inactive
               </label>
             </div>
             <button

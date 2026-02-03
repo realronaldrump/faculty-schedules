@@ -239,6 +239,11 @@ const FacultyContactCard = ({
                     {contactPerson.jobTitle && <p className="text-md text-gray-600">{contactPerson.jobTitle}</p>}
                     <p className="text-md text-baylor-gold font-semibold">{getRoleLabel()}</p>
                     <div className="mt-2 flex items-center justify-center gap-2">
+                        {contactPerson.isActive === false && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                                Inactive
+                            </span>
+                        )}
                         {contactPerson.hasPhD && personType !== 'student' && (
                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                 <GraduationCap size={12} className="mr-1" />
@@ -259,6 +264,21 @@ const FacultyContactCard = ({
                             </span>
                         )}
                     </div>
+                    {contactPerson.isActive === false && (
+                        <div className="mt-2 text-xs text-red-700">
+                            {contactPerson.inactiveAt && (
+                                <span className="font-medium">
+                                    Inactive since {new Date(contactPerson.inactiveAt).toLocaleDateString()}
+                                </span>
+                            )}
+                            {contactPerson.inactiveReason && (
+                                <span>
+                                    {contactPerson.inactiveAt ? ' — ' : ''}
+                                    {contactPerson.inactiveReason}
+                                </span>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 <div className="mt-6 space-y-4">

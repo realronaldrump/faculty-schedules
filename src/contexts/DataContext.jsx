@@ -459,11 +459,15 @@ export const DataProvider = ({ children }) => {
 
   // Adapters with Cross-Linking (preserves rich objects for UI views)
   const facultyData = useMemo(() => {
-    return adaptPeopleToFaculty(rawPeople, rawScheduleData, rawPrograms);
+    return adaptPeopleToFaculty(rawPeople, rawScheduleData, rawPrograms, {
+      includeInactive: false,
+    });
   }, [rawPeople, rawScheduleData, rawPrograms]);
 
   const staffData = useMemo(() => {
-    return adaptPeopleToStaff(rawPeople, rawScheduleData, rawPrograms);
+    return adaptPeopleToStaff(rawPeople, rawScheduleData, rawPrograms, {
+      includeInactive: false,
+    });
   }, [rawPeople, rawScheduleData, rawPrograms]);
 
   const studentData = useMemo(() => {

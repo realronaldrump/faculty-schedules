@@ -5,13 +5,13 @@ import { useData } from '../contexts/DataContext';
 import { usePeopleOperations } from '../hooks';
 
 const AdjunctDirectory = () => {
-  const { facultyData, scheduleData, programs } = useData();
+  const { directoryData, scheduleData, programs } = useData();
   const { handleFacultyUpdate, handleStaffUpdate, handleFacultyDelete } = usePeopleOperations();
 
   return (
     <PersonDirectory
       config={adjunctDirectoryConfig}
-      data={facultyData}
+      data={directoryData}
       scheduleData={scheduleData}
       programs={programs}
       onUpdate={handleFacultyUpdate}

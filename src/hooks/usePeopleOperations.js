@@ -122,6 +122,43 @@ const usePeopleOperations = () => {
     return next;
   }, []);
 
+  const applyActiveMetadata = (nextData, originalData = null, hasStatusOverride = false) => {
+    const now = new Date().toISOString();
+
+    if (!hasStatusOverride && originalData) {
+      return {
+        ...nextData,
+        isActive: originalData.isActive !== false,
+        inactiveAt: originalData.inactiveAt || "",
+        inactiveReason: originalData.inactiveReason || "",
+      };
+    }
+
+    const wasActive = originalData ? originalData.isActive !== false : true;
+    const isActive = nextData?.isActive !== false;
+
+    if (isActive) {
+      return {
+        ...nextData,
+        isActive: true,
+        inactiveAt: "",
+        inactiveReason: "",
+      };
+    }
+
+    const previousReason = (originalData?.inactiveReason || "").toString().trim();
+    const nextReason = (nextData?.inactiveReason || "").toString().trim();
+    const resolvedReason = nextReason || previousReason;
+    const previousInactiveAt = originalData?.inactiveAt || "";
+
+    return {
+      ...nextData,
+      isActive: false,
+      inactiveAt: wasActive ? now : previousInactiveAt || now,
+      inactiveReason: resolvedReason,
+    };
+  };
+
   const resolveOfficeSpaceId = useCallback(
     async (personData, { allowCreate = true } = {}) => {
       const office = (personData?.office || "").toString().trim();
@@ -302,20 +339,34 @@ const usePeopleOperations = () => {
           );
         };
         const cleanData = cleanDataRecursively(facultyToUpdate);
+        const hasStatusOverride = ["isActive", "inactiveAt", "inactiveReason"].some(
+          (key) => Object.prototype.hasOwnProperty.call(cleanData, key),
+        );
         // Use hygieneCore standardization for consistent data quality
         const normalizedData = standardizePerson(cleanData, {
           updateTimestamp: false,
         });
+        const resolvedOriginal =
+          originalData ||
+          (!isNewFaculty
+            ? rawPeople.find((p) => p.id === facultyToUpdate.id) || null
+            : null);
+
+        const normalizedWithStatus = applyActiveMetadata(
+          normalizedData,
+          resolvedOriginal,
+          hasStatusOverride,
+        );
 
         const updateData = {
-          ...normalizedData,
+          ...normalizedWithStatus,
           updatedAt: new Date().toISOString(),
         };
 
         const shouldClearTenure =
           normalizedData.isAdjunct === true ||
           (normalizedData.isAdjunct === undefined &&
-            originalData?.isAdjunct === true);
+            resolvedOriginal?.isAdjunct === true);
         if (shouldClearTenure) {
           updateData.isTenured = false;
         }
@@ -382,7 +433,7 @@ const usePeopleOperations = () => {
             "people",
             facultyToUpdate.id,
             updateData,
-            originalData,
+            resolvedOriginal,
             "usePeopleOperations - handleFacultyUpdate",
           );
         }
@@ -412,6 +463,7 @@ const usePeopleOperations = () => {
       canEditFaculty,
       showNotification,
       resolveOfficeSpaceId,
+      rawPeople,
     ],
   );
 
@@ -486,6 +538,9 @@ const usePeopleOperations = () => {
             ([_, value]) => value !== undefined,
           ),
         );
+        const hasStatusOverride = ["isActive", "inactiveAt", "inactiveReason"].some(
+          (key) => Object.prototype.hasOwnProperty.call(cleanStaffData, key),
+        );
         // Use hygieneCore standardization for consistent data quality
         const normalizedStaffData = standardizePerson(cleanStaffData, {
           updateTimestamp: false,
@@ -539,8 +594,13 @@ const usePeopleOperations = () => {
           originalData =
             rawPeople.find((p) => p.id === staffToUpdate.id) || null;
           const staffRef = doc(db, "people", staffToUpdate.id);
+          const normalizedWithStatus = applyActiveMetadata(
+            normalizedStaffData,
+            originalData,
+            hasStatusOverride,
+          );
           const updateData = {
-            ...normalizedStaffData,
+            ...normalizedWithStatus,
             updatedAt: new Date().toISOString(),
           };
 
@@ -560,8 +620,13 @@ const usePeopleOperations = () => {
             "usePeopleOperations - handleStaffUpdate",
           );
         } else {
+          const normalizedWithStatus = applyActiveMetadata(
+            normalizedStaffData,
+            null,
+            hasStatusOverride,
+          );
           const createData = {
-            ...normalizedStaffData,
+            ...normalizedWithStatus,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           };

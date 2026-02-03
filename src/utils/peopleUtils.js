@@ -63,6 +63,8 @@ export const hasRole = (person, role) => (
   getRoleList(person?.roles).includes(role)
 );
 
+export const isPersonActive = (person) => person?.isActive !== false;
+
 export const isStudentWorker = (person) => {
   const roles = getRoleList(person?.roles);
   return roles.includes('student') && !roles.includes('faculty') && !roles.includes('staff');

@@ -51,6 +51,8 @@ export const DEFAULT_PERSON_SCHEMA = {
   hasNoOffice: false,
   // Basic activity flag so we can "disable" a record without deleting it
   isActive: true,
+  inactiveAt: "",
+  inactiveReason: "",
   // Employment dates (used primarily for student workers)
   startDate: "",
   endDate: "",

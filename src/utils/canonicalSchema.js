@@ -245,6 +245,8 @@ export const PERSON_SCHEMA = {
   isTenured: false,
   isUPD: false,
   isActive: true,
+  inactiveAt: "",
+  inactiveReason: "",
 
   // Program assignment
   programId: "", // Reference to programs collection

@@ -163,11 +163,11 @@ export const PeopleProvider = ({ children }) => {
     // This adapter might need to be resilient to missing schedule data if we are decoupling tightly.
     // For now, pass empty arrays if we don't have them in this context.
     // Ideally, "Load" calculation happens in a "ReportingContext" or similar that consumes both.
-    return adaptPeopleToFaculty(canonicalPeople, [], []);
+    return adaptPeopleToFaculty(canonicalPeople, [], [], { includeInactive: false });
   }, [canonicalPeople]);
 
   const staffData = useMemo(
-    () => adaptPeopleToStaff(canonicalPeople, [], []),
+    () => adaptPeopleToStaff(canonicalPeople, [], [], { includeInactive: false }),
     [canonicalPeople],
   );
 

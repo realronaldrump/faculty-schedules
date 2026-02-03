@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import FacultyContactCard from './FacultyContactCard';
 import MultiSelectDropdown from './MultiSelectDropdown';
-import { adaptPeopleToStaff } from '../utils/dataAdapter';
+import { adaptPeopleToFaculty, adaptPeopleToStaff } from '../utils/dataAdapter';
 import { formatPhoneNumber, validateDirectoryEntry } from '../utils/directoryUtils';
 import { buildCourseSectionKey } from '../utils/courseUtils';
 import { normalizeTermLabel, termCodeFromLabel } from '../utils/termUtils';
@@ -43,6 +43,40 @@ const triggerCSVDownload = (csvContent, filename) => {
 const normalizeCourseField = (value) => {
   if (value === null || value === undefined) return '';
   return String(value).trim();
+};
+
+const validateWithInactiveReason = (data, options = {}) => {
+  const errors = validateDirectoryEntry(data, options);
+  if (data?.isActive === false && !String(data?.inactiveReason || '').trim()) {
+    errors.inactiveReason = 'Reason is required when deactivating.';
+  }
+  return errors;
+};
+
+const renderInactiveReasonInput = ({ formData, onChange, errors, idPrefix }) => {
+  if (formData?.isActive !== false) return null;
+
+  return (
+    <div className="mt-2">
+      <label
+        htmlFor={`${idPrefix}-inactiveReason`}
+        className="block text-xs font-medium text-gray-700 mb-1"
+      >
+        Inactive reason
+      </label>
+      <input
+        id={`${idPrefix}-inactiveReason`}
+        name="inactiveReason"
+        value={formData?.inactiveReason || ''}
+        onChange={onChange}
+        className={`w-full p-2 border rounded bg-baylor-gold/10 text-xs ${errors?.inactiveReason ? 'border-red-500' : 'border-baylor-gold'}`}
+        placeholder="Why is this person inactive?"
+      />
+      {errors?.inactiveReason && (
+        <p className="text-red-600 text-xs mt-1">{errors.inactiveReason}</p>
+      )}
+    </div>
+  );
 };
 
 
@@ -542,7 +576,8 @@ const facultyDirectoryConfig = {
     isAlsoStaff: 'all',
     hasPhD: 'all',
     hasBaylorId: 'all',
-    isRemote: 'all'
+    isRemote: 'all',
+    activeStatus: 'active'
   },
   includePrograms: true,
   createEmptyRecord: () => ({
@@ -558,9 +593,12 @@ const facultyDirectoryConfig = {
     hasNoPhone: false,
     hasNoOffice: false,
     hasPhD: false,
-    isRemote: false
+    isRemote: false,
+    isActive: true,
+    inactiveAt: '',
+    inactiveReason: ''
   }),
-  validate: validateDirectoryEntry,
+  validate: validateWithInactiveReason,
   preparePayload: (data) => {
     const originalRoles = data.roles;
     let updatedRoles;
@@ -583,14 +621,18 @@ const facultyDirectoryConfig = {
     };
   },
   useExtraState: useFacultyExtras,
-  deriveData: ({ data, scheduleData, selectedSemester }) => buildCourseCounts(
-    data,
-    scheduleData,
-    undefined,
-    selectedSemester
-  ),
+  deriveData: ({ data, scheduleData, selectedSemester, programs }) => {
+    const base = adaptPeopleToFaculty(data, scheduleData, programs, { includeInactive: true });
+    return buildCourseCounts(base, scheduleData, undefined, selectedSemester);
+  },
   applyFilters: (records, { filters, extraState }) => {
     let filtered = [...records];
+
+    if (filters.activeStatus && filters.activeStatus !== 'all') {
+      filtered = filtered.filter((person) =>
+        filters.activeStatus === 'active' ? person.isActive !== false : person.isActive === false
+      );
+    }
 
     if (filters.adjunct !== 'all') {
       filtered = filtered.filter((person) => filters.adjunct === 'include' ? person.isAdjunct : !person.isAdjunct);
@@ -633,8 +675,14 @@ const facultyDirectoryConfig = {
   },
   enableCreate: true,
   emptyMessage: 'No faculty members found.',
-  getColumns: ({ baseColumns, renderStatusToggles, editFormData, newRecord, handleChange, handleCreateChange, setEditFormData, setNewRecord }) => {
+  getColumns: ({ baseColumns, renderStatusToggles, editFormData, newRecord, handleChange, handleCreateChange, setEditFormData, setNewRecord, errors }) => {
     const statusToggles = [
+      {
+        name: 'isActive',
+        label: 'Active',
+        className: 'flex items-center gap-2 text-xs',
+        getChecked: (formData) => formData?.isActive !== false
+      },
       { name: 'isAdjunct', label: 'Adjunct', className: 'flex items-center gap-2 text-xs' },
       { name: 'isTenured', label: 'Tenured', disabled: (formData) => formData?.isAdjunct },
       { name: 'isAlsoStaff', label: 'Also a staff member' },
@@ -650,6 +698,9 @@ const facultyDirectoryConfig = {
         render: (faculty) => (
           <div className="text-gray-700 font-medium">
             <div>{faculty.name}</div>
+            {faculty.isActive === false && (
+              <div className="text-xs text-red-600 font-medium">Inactive</div>
+            )}
             {faculty.program && <div className="text-xs text-baylor-green font-medium">{faculty.program.name}</div>}
             {faculty.isUPD && (
               <div className="text-xs text-amber-600 font-medium flex items-center gap-1">
@@ -677,6 +728,12 @@ const facultyDirectoryConfig = {
               setFormData: setEditFormData,
               idPrefix: `faculty-${faculty.id}`
             })}
+            {renderInactiveReasonInput({
+              formData: editFormData,
+              onChange: handleChange,
+              errors,
+              idPrefix: `faculty-${faculty.id}`
+            })}
           </div>
         ),
         renderCreate: () => (
@@ -697,6 +754,12 @@ const facultyDirectoryConfig = {
                 idPrefix: 'new-faculty'
               })}
             </div>
+            {renderInactiveReasonInput({
+              formData: newRecord,
+              onChange: handleCreateChange,
+              errors,
+              idPrefix: 'new-faculty'
+            })}
           </div>
         )
       },
@@ -808,7 +871,7 @@ const facultyDirectoryConfig = {
           placeholder="Select buildings..."
         />
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-8 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-9 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Adjunct Status</label>
           <select
@@ -905,6 +968,18 @@ const facultyDirectoryConfig = {
             <option value="exclude">Exclude Remote</option>
           </select>
         </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Active Status</label>
+          <select
+            value={state.filters.activeStatus}
+            onChange={(event) => state.setFilters((prev) => ({ ...prev, activeStatus: event.target.value }))}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+          >
+            <option value="active">Active Only</option>
+            <option value="inactive">Inactive Only</option>
+            <option value="all">All</option>
+          </select>
+        </div>
       </div>
     </>
   ),
@@ -926,7 +1001,8 @@ const staffDirectoryConfig = {
     buildings: [],
     isFullTime: 'all',
     isAlsoFaculty: 'all',
-    isRemote: 'all'
+    isRemote: 'all',
+    activeStatus: 'active'
   },
   createEmptyRecord: () => ({
     name: '',
@@ -938,9 +1014,12 @@ const staffDirectoryConfig = {
     isAlsoFaculty: false,
     hasNoPhone: false,
     hasNoOffice: false,
-    isRemote: false
+    isRemote: false,
+    isActive: true,
+    inactiveAt: '',
+    inactiveReason: ''
   }),
-  validate: validateDirectoryEntry,
+  validate: validateWithInactiveReason,
   preparePayload: (data) => {
     const originalRoles = data.roles;
     let updatedRoles;
@@ -962,10 +1041,18 @@ const staffDirectoryConfig = {
     };
   },
   useExtraState: useNoExtras,
-  deriveData: ({ data, programs }) => (Array.isArray(data) ? adaptPeopleToStaff(data, [], programs) : []),
+  deriveData: ({ data, programs }) => (
+    Array.isArray(data) ? adaptPeopleToStaff(data, [], programs, { includeInactive: true }) : []
+  ),
   changeTracking: { idKey: 'staffId', nameKey: 'staffName' },
   applyFilters: (records, { filters }) => {
     let filtered = [...records];
+
+    if (filters.activeStatus && filters.activeStatus !== 'all') {
+      filtered = filtered.filter((person) =>
+        filters.activeStatus === 'active' ? person.isActive !== false : person.isActive === false
+      );
+    }
 
     if (filters.isFullTime !== 'all') {
       filtered = filtered.filter((person) => {
@@ -998,8 +1085,14 @@ const staffDirectoryConfig = {
   },
   enableCreate: true,
   emptyMessage: 'No staff members found.',
-  getColumns: ({ baseColumns, renderStatusToggles, editFormData, newRecord, handleChange, handleCreateChange, setEditFormData, setNewRecord }) => {
+  getColumns: ({ baseColumns, renderStatusToggles, editFormData, newRecord, handleChange, handleCreateChange, setEditFormData, setNewRecord, errors }) => {
     const statusToggles = [
+      {
+        name: 'isActive',
+        label: 'Active',
+        className: 'flex items-center gap-2 text-xs',
+        getChecked: (formData) => formData?.isActive !== false
+      },
       { name: 'isFullTime', label: 'Full Time', className: 'flex items-center gap-2 text-xs' },
       { name: 'isAlsoFaculty', label: 'Also a faculty member' },
       { name: 'isRemote', label: 'Remote' }
@@ -1013,6 +1106,9 @@ const staffDirectoryConfig = {
         render: (staff) => (
           <div className="text-gray-700 font-medium">
             <div>{staff.name}</div>
+            {staff.isActive === false && (
+              <div className="text-xs text-red-600 font-medium">Inactive</div>
+            )}
             {staff.isAlsoFaculty && (
               <div className="text-xs text-baylor-gold font-medium">Also Faculty</div>
             )}
@@ -1036,6 +1132,12 @@ const staffDirectoryConfig = {
               setFormData: setEditFormData,
               idPrefix: `staff-${staff.id}`
             })}
+            {renderInactiveReasonInput({
+              formData: editFormData,
+              onChange: handleChange,
+              errors,
+              idPrefix: `staff-${staff.id}`
+            })}
           </div>
         ),
         renderCreate: () => (
@@ -1056,6 +1158,12 @@ const staffDirectoryConfig = {
                 idPrefix: 'new-staff'
               })}
             </div>
+            {renderInactiveReasonInput({
+              formData: newRecord,
+              onChange: handleCreateChange,
+              errors,
+              idPrefix: 'new-staff'
+            })}
           </div>
         )
       },
@@ -1149,6 +1257,18 @@ const staffDirectoryConfig = {
             <option value="exclude">Exclude Remote</option>
           </select>
         </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Active Status</label>
+          <select
+            value={state.filters.activeStatus}
+            onChange={(event) => state.setFilters((prev) => ({ ...prev, activeStatus: event.target.value }))}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+          >
+            <option value="active">Active Only</option>
+            <option value="inactive">Inactive Only</option>
+            <option value="all">All</option>
+          </select>
+        </div>
       </div>
     </>
   ),
@@ -1192,7 +1312,8 @@ const adjunctDirectoryConfig = {
     jobTitles: [],
     buildings: [],
     courseCount: 'all',
-    isRemote: 'all'
+    isRemote: 'all',
+    activeStatus: 'active'
   },
   includePrograms: true,
   createEmptyRecord: () => ({
@@ -1207,9 +1328,12 @@ const adjunctDirectoryConfig = {
     isAlsoStaff: false,
     hasNoPhone: false,
     hasNoOffice: false,
-    isRemote: false
+    isRemote: false,
+    isActive: true,
+    inactiveAt: '',
+    inactiveReason: ''
   }),
-  validate: validateDirectoryEntry,
+  validate: validateWithInactiveReason,
   preparePayload: (data) => {
     const originalRoles = data.roles;
     let updatedRoles;
@@ -1234,15 +1358,19 @@ const adjunctDirectoryConfig = {
     };
   },
   useExtraState: useAdjunctExtras,
-  deriveData: ({ data, scheduleData, selectedSemester }) => buildCourseCounts(
-    data,
-    scheduleData,
-    (faculty) => faculty.isAdjunct,
-    selectedSemester
-  ),
+  deriveData: ({ data, scheduleData, selectedSemester, programs }) => {
+    const base = adaptPeopleToFaculty(data, scheduleData, programs, { includeInactive: true });
+    return buildCourseCounts(base, scheduleData, (faculty) => faculty.isAdjunct, selectedSemester);
+  },
   changeTracking: { idKey: 'facultyId', nameKey: 'facultyName' },
   applyFilters: (records, { filters, extraState }) => {
     let filtered = [...records];
+
+    if (filters.activeStatus && filters.activeStatus !== 'all') {
+      filtered = filtered.filter((person) =>
+        filters.activeStatus === 'active' ? person.isActive !== false : person.isActive === false
+      );
+    }
 
     if (extraState.showOnlyWithCourses || filters.courseCount === 'with-courses') {
       filtered = filtered.filter((person) => person.courseCount > 0);
@@ -1263,8 +1391,14 @@ const adjunctDirectoryConfig = {
   },
   enableCreate: true,
   emptyMessage: 'No adjunct faculty found.',
-  getColumns: ({ baseColumns, renderStatusToggles, editFormData, newRecord, handleChange, handleCreateChange, setEditFormData, setNewRecord }) => {
+  getColumns: ({ baseColumns, renderStatusToggles, editFormData, newRecord, handleChange, handleCreateChange, setEditFormData, setNewRecord, errors }) => {
     const statusToggles = [
+      {
+        name: 'isActive',
+        label: 'Active',
+        className: 'flex items-center gap-2 text-xs',
+        getChecked: (formData) => formData?.isActive !== false
+      },
       { name: 'isAdjunct', label: 'Adjunct', className: 'flex items-center gap-2 text-xs' },
       { name: 'isTenured', label: 'Tenured', disabled: (formData) => formData?.isAdjunct },
       { name: 'isAlsoStaff', label: 'Also a staff member' },
@@ -1279,6 +1413,9 @@ const adjunctDirectoryConfig = {
         render: (faculty) => (
           <div className="text-gray-700 font-medium">
             <div>{faculty.name}</div>
+            {faculty.isActive === false && (
+              <div className="text-xs text-red-600 font-medium">Inactive</div>
+            )}
             {faculty.program && (
               <div className="text-xs text-baylor-green font-medium">{faculty.program.name}</div>
             )}
@@ -1306,6 +1443,12 @@ const adjunctDirectoryConfig = {
               setFormData: setEditFormData,
               idPrefix: `adjunct-${faculty.id}`
             })}
+            {renderInactiveReasonInput({
+              formData: editFormData,
+              onChange: handleChange,
+              errors,
+              idPrefix: `adjunct-${faculty.id}`
+            })}
           </div>
         ),
         renderCreate: () => (
@@ -1326,6 +1469,12 @@ const adjunctDirectoryConfig = {
                 idPrefix: 'new-adjunct'
               })}
             </div>
+            {renderInactiveReasonInput({
+              formData: newRecord,
+              onChange: handleCreateChange,
+              errors,
+              idPrefix: 'new-adjunct'
+            })}
           </div>
         )
       },
@@ -1466,6 +1615,18 @@ const adjunctDirectoryConfig = {
             <option value="all">All</option>
             <option value="include">Remote Only</option>
             <option value="exclude">Exclude Remote</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Active Status</label>
+          <select
+            value={state.filters.activeStatus}
+            onChange={(event) => state.setFilters((prev) => ({ ...prev, activeStatus: event.target.value }))}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+          >
+            <option value="active">Active Only</option>
+            <option value="inactive">Inactive Only</option>
+            <option value="all">All</option>
           </select>
         </div>
       </div>

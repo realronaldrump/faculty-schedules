@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   GraduationCap,
@@ -229,6 +229,11 @@ const StudentDirectory = () => {
     setTutorialStudentId,
     registerCleanupCallback,
   } = useTutorial();
+  const latestStudentDataRef = useRef(studentData);
+
+  useEffect(() => {
+    latestStudentDataRef.current = studentData;
+  }, [studentData]);
 
   // State management
   const [filterText, setFilterText] = useState("");
@@ -506,9 +511,9 @@ const StudentDirectory = () => {
   };
 
   // Save handlers with undo tracking
-  const handleCreateStudent = async (studentData) => {
+  const handleCreateStudent = async (studentFormData) => {
     try {
-      const payload = prepareStudentPayload(studentData, {
+      const payload = prepareStudentPayload(studentFormData, {
         supervisorIndex,
         peopleIndex,
       });
@@ -540,17 +545,34 @@ const StudentDirectory = () => {
 
       // If in tutorial mode, track the student ID for cleanup
       if (isTutorialMode && payload.name?.startsWith("[TUTORIAL]")) {
-        // Find the newly created student by name
-        // The ID would be generated, but we need to search by name pattern
-        setTutorialStudentId(payload.email); // Use email as unique identifier for cleanup
+        // Track the newly created student for cleanup
+        const tutorialIdentifier =
+          payload.email || payload.name || "[TUTORIAL]";
+        setTutorialStudentId(tutorialIdentifier); // Prefer email as unique identifier for cleanup
 
         // Register cleanup callback to delete the tutorial student
-        registerCleanupCallback(async (tutorialEmail) => {
+        registerCleanupCallback(async (tutorialIdentifierValue) => {
           try {
-            // Find the tutorial student by email
-            const tutorialStudent = studentData?.find(
-              (s) => s.email === tutorialEmail || s.name?.startsWith("[TUTORIAL]")
-            );
+            // Find the tutorial student by identifier (email or name)
+            const latestStudents = latestStudentDataRef.current || [];
+            const normalizedIdentifier =
+              typeof tutorialIdentifierValue === "string"
+                ? tutorialIdentifierValue.trim().toLowerCase()
+                : "";
+            const tutorialStudent =
+              (normalizedIdentifier
+                ? latestStudents.find((student) => {
+                    const email = (student.email || "").toLowerCase();
+                    const name = (student.name || "").toLowerCase();
+                    return (
+                      email === normalizedIdentifier ||
+                      name === normalizedIdentifier
+                    );
+                  })
+                : null) ||
+              latestStudents.find((student) =>
+                (student.name || "").toUpperCase().startsWith("[TUTORIAL]")
+              );
             if (tutorialStudent) {
               await handleStudentDelete(tutorialStudent);
               showNotification(

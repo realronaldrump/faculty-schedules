@@ -713,7 +713,7 @@ export const TutorialProvider = ({ children }) => {
   const endTutorial = useCallback(
     async (markComplete = false) => {
       // Run cleanup callback if registered (e.g., delete tutorial student)
-      if (cleanupCallbackRef.current && tutorialStudentId) {
+      if (cleanupCallbackRef.current) {
         try {
           await cleanupCallbackRef.current(tutorialStudentId);
         } catch (error) {
@@ -813,14 +813,11 @@ export const TutorialProvider = ({ children }) => {
   );
 
   // Reset all progress
-  const resetAllProgress = useCallback(() => {
+  const resetAllProgress = useCallback(async () => {
+    await endTutorial(false);
     setCompletedTutorials([]);
     setDismissedHints([]);
-    setActiveTutorial(null);
-    setCurrentStepIndex(0);
-    setTutorialStudentId(null);
-    cleanupCallbackRef.current = null;
-  }, []);
+  }, [endTutorial]);
 
   // Register cleanup callback for tutorial-created data
   const registerCleanupCallback = useCallback((callback) => {

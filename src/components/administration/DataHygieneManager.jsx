@@ -39,6 +39,7 @@ import {
   repairScheduleSpaceLinks,
   previewScheduleSpaceLinks,
 } from "../../utils/dataHygiene";
+import { linkSchedules } from "../../utils/scheduleLinkUtils";
 import { logUpdate } from "../../utils/changeLogger";
 import { fetchPeople } from "../../utils/dataAdapter";
 import MissingDataReviewModal from "./MissingDataReviewModal";
@@ -303,6 +304,7 @@ const DuplicateItemCard = ({
   type,
   onMerge,
   onIgnore,
+  onLink,
   isProcessing,
   showPreview,
 }) => {
@@ -438,6 +440,16 @@ const DuplicateItemCard = ({
           >
             Not a duplicate
           </button>
+          {type === "schedules" && (
+            <button
+              onClick={() => onLink?.(duplicate)}
+              disabled={isProcessing}
+              className="px-3 py-1.5 text-sm text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1"
+            >
+              <Link className="w-4 h-4" />
+              Link sections
+            </button>
+          )}
           <button
             onClick={() => onMerge(duplicate)}
             disabled={isProcessing}
@@ -499,7 +511,7 @@ const OrphanedScheduleCard = ({ issue, onLink, onFixSpace, isProcessing }) => {
 };
 
 // Teaching Conflict Card
-const TeachingConflictCard = ({ conflict }) => {
+const TeachingConflictCard = ({ conflict, onLink, isProcessing }) => {
   const { instructorId, schedules, reason, likelyCause } = conflict;
 
   return (
@@ -507,10 +519,24 @@ const TeachingConflictCard = ({ conflict }) => {
       <div className="flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
         <div className="flex-1">
-          <div className="font-medium text-gray-900">
-            {schedules?.[0]?.instructorName || "Unknown Instructor"}
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="font-medium text-gray-900">
+                {schedules?.[0]?.instructorName || "Unknown Instructor"}
+              </div>
+              <div className="text-sm text-gray-600 mt-1">{reason}</div>
+            </div>
+            {Array.isArray(schedules) && schedules.length >= 2 && (
+              <button
+                onClick={() => onLink?.(conflict)}
+                disabled={isProcessing}
+                className="px-3 py-1.5 text-sm text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1"
+              >
+                <Link className="w-4 h-4" />
+                Link sections
+              </button>
+            )}
           </div>
-          <div className="text-sm text-gray-600 mt-1">{reason}</div>
           {likelyCause === "duplicate_schedule" && (
             <div className="text-xs text-orange-600 mt-2">
               Likely caused by duplicate schedule records. Merge duplicates to
@@ -1148,6 +1174,28 @@ const DataHygieneManager = () => {
     }
   };
 
+  const executeLinkSections = async (scheduleIds) => {
+    if (!Array.isArray(scheduleIds) || scheduleIds.length < 2) return;
+    setIsProcessing(true);
+    try {
+      await linkSchedules({
+        scheduleIds,
+        reason: "Linked by user",
+        source: "DataHygieneManager",
+      });
+      showNotification(
+        "success",
+        "Linked",
+        "Sections linked successfully.",
+      );
+      await handleScan();
+    } catch (error) {
+      showNotification("error", "Link Failed", error.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const requestMerge = (duplicate, type) => {
     const [primary, secondary] = duplicate.records || [];
     const label =
@@ -1206,6 +1254,61 @@ const DataHygieneManager = () => {
         </div>
       ),
       onConfirm: () => executeIgnore(duplicate, type),
+    });
+  };
+
+  const requestLinkDuplicate = (duplicate) => {
+    const [primary, secondary] = duplicate.records || [];
+    if (!primary?.id || !secondary?.id) return;
+    const labelPrimary = `${primary?.courseCode || ""} ${primary?.section || ""}`.trim();
+    const labelSecondary = `${secondary?.courseCode || ""} ${secondary?.section || ""}`.trim();
+    openConfirm({
+      title: "Link Sections?",
+      confirmText: "Link Sections",
+      variant: "info",
+      message: (
+        <div className="text-sm space-y-2">
+          <div>
+            This will link the two sections so they are not flagged as
+            duplicates or teaching conflicts.
+          </div>
+          <div>
+            Primary: <strong>{labelPrimary || primary?.id}</strong>
+          </div>
+          <div>
+            Secondary: <strong>{labelSecondary || secondary?.id}</strong>
+          </div>
+        </div>
+      ),
+      onConfirm: () => executeLinkSections([primary.id, secondary.id]),
+    });
+  };
+
+  const requestLinkConflict = (conflict) => {
+    const schedules = Array.isArray(conflict?.schedules)
+      ? conflict.schedules
+      : [];
+    const scheduleIds = schedules.map((s) => s?.id).filter(Boolean);
+    if (scheduleIds.length < 2) return;
+    openConfirm({
+      title: "Link Sections?",
+      confirmText: "Link Sections",
+      variant: "info",
+      message: (
+        <div className="text-sm space-y-2">
+          <div>
+            Link these sections so they are not flagged as teaching conflicts.
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {schedules.map((s, i) => (
+              <span key={i} className="px-2 py-1 bg-gray-100 rounded text-xs">
+                {s.courseCode} {s.section}
+              </span>
+            ))}
+          </div>
+        </div>
+      ),
+      onConfirm: () => executeLinkSections(scheduleIds),
     });
   };
 
@@ -1434,6 +1537,7 @@ const DataHygieneManager = () => {
                           type="people"
                           onMerge={(d) => requestMerge(d, "people")}
                           onIgnore={(d) => requestIgnore(d, "people")}
+                          onLink={requestLinkDuplicate}
                           isProcessing={isProcessing}
                         />
                       ))}
@@ -1455,12 +1559,13 @@ const DataHygieneManager = () => {
                         .map((dup, i) => (
                           <DuplicateItemCard
                             key={i}
-                          duplicate={dup}
-                          type="schedules"
-                          onMerge={(d) => requestMerge(d, "schedules")}
-                          onIgnore={(d) => requestIgnore(d, "schedules")}
-                          isProcessing={isProcessing}
-                        />
+                            duplicate={dup}
+                            type="schedules"
+                            onMerge={(d) => requestMerge(d, "schedules")}
+                            onIgnore={(d) => requestIgnore(d, "schedules")}
+                            onLink={requestLinkDuplicate}
+                            isProcessing={isProcessing}
+                          />
                         ))}
                       {scanResult.issues.duplicates.schedules.length > 20 && (
                         <div className="text-sm text-gray-500 text-center py-2">
@@ -1485,12 +1590,13 @@ const DataHygieneManager = () => {
                         .map((dup, i) => (
                           <DuplicateItemCard
                             key={i}
-                          duplicate={dup}
-                          type="rooms"
-                          onMerge={(d) => requestMerge(d, "rooms")}
-                          onIgnore={(d) => requestIgnore(d, "rooms")}
-                          isProcessing={isProcessing}
-                        />
+                            duplicate={dup}
+                            type="rooms"
+                            onMerge={(d) => requestMerge(d, "rooms")}
+                            onIgnore={(d) => requestIgnore(d, "rooms")}
+                            onLink={requestLinkDuplicate}
+                            isProcessing={isProcessing}
+                          />
                         ))}
                     </div>
                   </div>
@@ -1606,7 +1712,12 @@ const DataHygieneManager = () => {
                 {scanResult.issues.teachingConflicts
                   .slice(0, 20)
                   .map((conflict, i) => (
-                    <TeachingConflictCard key={i} conflict={conflict} />
+                    <TeachingConflictCard
+                      key={i}
+                      conflict={conflict}
+                      onLink={requestLinkConflict}
+                      isProcessing={isProcessing}
+                    />
                   ))}
               </div>
             </IssueSection>

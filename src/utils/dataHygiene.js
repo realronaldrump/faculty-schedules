@@ -65,6 +65,7 @@ import {
   detectTeachingConflicts,
   detectAllDataIssues,
 } from "./hygieneCore";
+import { buildLinkedSchedulePairSet } from "./scheduleLinkUtils";
 
 const MAX_BATCH_OPERATIONS = 450;
 
@@ -1463,8 +1464,10 @@ export const autoMergeObviousDuplicates = async () => {
   }));
 
   // Merge schedules
+  const linkedPairs = buildLinkedSchedulePairSet(schedules);
+  const scheduleBlocks = new Set([...scheduleDecisions, ...linkedPairs]);
   const scheduleDuplicates = detectScheduleDuplicates(schedules, {
-    blockedPairs: scheduleDecisions,
+    blockedPairs: scheduleBlocks,
   });
   for (const dup of scheduleDuplicates) {
     if (dup.confidence >= 0.98) {
@@ -1739,8 +1742,10 @@ export const generateDataHygieneReport = async () => {
   const peopleDuplicates = detectPeopleDuplicates(canonicalPeople, {
     blockedPairs: peopleDecisions,
   });
+  const linkedPairs = buildLinkedSchedulePairSet(schedules);
+  const scheduleBlocks = new Set([...scheduleDecisions, ...linkedPairs]);
   const scheduleDuplicates = detectScheduleDuplicates(schedules, {
-    blockedPairs: scheduleDecisions,
+    blockedPairs: scheduleBlocks,
   });
   const roomDuplicates = detectRoomDuplicates(rooms, {
     blockedPairs: roomDecisions,
@@ -3679,15 +3684,17 @@ export const scanDataHealth = async () => {
   const peopleDuplicates = detectPeopleDuplicates(people, {
     blockedPairs: peopleDecisions,
   });
+  const linkedPairs = buildLinkedSchedulePairSet(schedules);
+  const scheduleBlocks = new Set([...scheduleDecisions, ...linkedPairs]);
   const scheduleDuplicates = detectScheduleDuplicates(schedules, {
-    blockedPairs: scheduleDecisions,
+    blockedPairs: scheduleBlocks,
   });
   const roomDuplicates = detectRoomDuplicates(rooms, {
     blockedPairs: roomDecisions,
   });
   const orphanedIssues = detectCrossCollectionIssues(people, schedules, rooms);
   const teachingConflicts = detectTeachingConflicts(schedules, {
-    blockedSchedulePairs: scheduleDecisions,
+    blockedSchedulePairs: scheduleBlocks,
   });
 
   // Count missing data
@@ -3861,8 +3868,10 @@ export const autoFixAllIssues = async (options = {}) => {
         id: doc.id,
         ...doc.data(),
       }));
+      const linkedPairs = buildLinkedSchedulePairSet(schedules);
+      const scheduleBlocks = new Set([...scheduleDecisions, ...linkedPairs]);
       const scheduleDuplicates = detectScheduleDuplicates(schedules, {
-        blockedPairs: scheduleDecisions,
+        blockedPairs: scheduleBlocks,
       });
 
       for (const dup of scheduleDuplicates) {

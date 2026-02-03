@@ -430,24 +430,22 @@ const TutorialOverlay = () => {
     if (actionType === 'click') {
       // For click actions, listen for click on the target or its descendants
       targetElement.addEventListener('click', handleActionComplete, { capture: true });
-    } else if (actionType === 'type') {
-      // For type actions, find input elements and listen for input events
-      const inputs = targetElement.querySelectorAll('input, textarea');
-      const input = inputs.length > 0 ? inputs[0] : targetElement;
-      input.addEventListener('input', handleActionComplete);
-      input.addEventListener('change', handleActionComplete);
-
       return () => {
-        input.removeEventListener('input', handleActionComplete);
-        input.removeEventListener('change', handleActionComplete);
+        targetElement.removeEventListener('click', handleActionComplete, { capture: true });
       };
     }
 
-    return () => {
-      if (actionType === 'click') {
-        targetElement.removeEventListener('click', handleActionComplete, { capture: true });
-      }
-    };
+    if (actionType === 'type' || actionType === 'input') {
+      // For input actions, listen for any input/change within the target (captures text + checkboxes)
+      targetElement.addEventListener('input', handleActionComplete, { capture: true });
+      targetElement.addEventListener('change', handleActionComplete, { capture: true });
+      return () => {
+        targetElement.removeEventListener('input', handleActionComplete, { capture: true });
+        targetElement.removeEventListener('change', handleActionComplete, { capture: true });
+      };
+    }
+
+    return;
   }, [currentStep, targetElement, actionCompleted, markActionCompleted]);
 
   // Keyboard navigation

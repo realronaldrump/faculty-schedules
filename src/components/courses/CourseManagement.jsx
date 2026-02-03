@@ -13,6 +13,8 @@ import {
   ChevronDown,
   Settings,
   Download,
+  Link2,
+  Unlink,
 } from "lucide-react";
 import MultiSelectDropdown from "../MultiSelectDropdown";
 import FacultyContactCard from "../FacultyContactCard";
@@ -21,11 +23,14 @@ import { buildCourseSectionKey, parseCourseCode } from "../../utils/courseUtils"
 import { parseTime } from "../../utils/timeUtils";
 import { getBuildingDisplay } from "../../utils/locationService";
 import { getMaxEnrollment } from "../../utils/enrollmentUtils";
+import { normalizeTermLabel, termCodeFromLabel } from "../../utils/termUtils";
+import { linkSchedules, unlinkSchedules } from "../../utils/scheduleLinkUtils";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { useScheduleOperations, usePeopleOperations } from "../../hooks";
 import { useUI } from "../../contexts/UIContext";
 import { useAppConfig } from "../../contexts/AppConfigContext";
+import { useSchedules } from "../../contexts/ScheduleContext";
 
 const MAX_ENROLLMENT_EXPORT_KEY = "Max Enrollment";
 const MAX_ENROLLMENT_FIELD_KEYS = new Set([
@@ -40,6 +45,7 @@ const MAX_ENROLLMENT_FIELD_KEYS = new Set([
 const CourseManagement = ({ embedded = false }) => {
   const {
     scheduleData = [],
+    rawScheduleData = [],
     facultyData = [],
     editHistory = [],
     recentChanges = [],
@@ -51,6 +57,7 @@ const CourseManagement = ({ embedded = false }) => {
   const { handleRevertChange } = usePeopleOperations();
   const { showNotification } = useUI();
   const { buildingConfigVersion } = useAppConfig();
+  const { refreshSchedules } = useSchedules();
   const [editingRowId, setEditingRowId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [historyVisible, setHistoryVisible] = useState(false);
@@ -85,12 +92,104 @@ const CourseManagement = ({ embedded = false }) => {
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [selectedExportFields, setSelectedExportFields] = useState([]);
   const [selectedRows, setSelectedRows] = useState(new Set());
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkSourceSchedule, setLinkSourceSchedule] = useState(null);
+  const [linkTargetId, setLinkTargetId] = useState("");
+  const [linkSearch, setLinkSearch] = useState("");
+  const [isLinking, setIsLinking] = useState(false);
 
   useEffect(() => {
     loadPeople();
     loadEditHistory();
     loadRecentChanges();
   }, [loadPeople, loadEditHistory, loadRecentChanges]);
+
+  const openLinkModal = (row) => {
+    const sourceId = row?._originalId || row?.id;
+    if (!sourceId) return;
+    const sourceSchedule = (rawScheduleData || []).find(
+      (schedule) => schedule.id === sourceId,
+    );
+    if (!sourceSchedule) {
+      showNotification?.(
+        "error",
+        "Link Failed",
+        "Original schedule not found.",
+      );
+      return;
+    }
+    setLinkSourceSchedule(sourceSchedule);
+    setLinkTargetId("");
+    setLinkSearch("");
+    setLinkModalOpen(true);
+  };
+
+  const closeLinkModal = () => {
+    setLinkModalOpen(false);
+    setLinkSourceSchedule(null);
+    setLinkTargetId("");
+    setLinkSearch("");
+  };
+
+  const handleConfirmLink = async () => {
+    if (!linkSourceSchedule || !linkTargetId) {
+      showNotification?.(
+        "warning",
+        "Select a Section",
+        "Choose a section to link.",
+      );
+      return;
+    }
+    setIsLinking(true);
+    try {
+      await linkSchedules({
+        scheduleIds: [linkSourceSchedule.id, linkTargetId],
+        reason: "Linked via Course Management",
+        source: "CourseManagement",
+      });
+      await refreshSchedules?.();
+      showNotification?.(
+        "success",
+        "Linked",
+        "Sections linked successfully.",
+      );
+      closeLinkModal();
+    } catch (error) {
+      showNotification?.("error", "Link Failed", error.message);
+    } finally {
+      setIsLinking(false);
+    }
+  };
+
+  const handleUnlink = async (row) => {
+    const sourceId = row?._originalId || row?.id;
+    if (!sourceId) return;
+    setIsLinking(true);
+    try {
+      const result = await unlinkSchedules({
+        scheduleIds: [sourceId],
+        source: "CourseManagement",
+      });
+      await refreshSchedules?.();
+      if (result?.updated > 0) {
+        showNotification?.(
+          "success",
+          "Unlinked",
+          "Section unlinked successfully.",
+        );
+      } else {
+        showNotification?.(
+          "info",
+          "Not Linked",
+          "This section is not linked.",
+        );
+      }
+    } catch (error) {
+      showNotification?.("error", "Unlink Failed", error.message);
+    } finally {
+      setIsLinking(false);
+    }
+  };
 
   const computeCourseMetadata = (courseCode) => {
     if (!courseCode || typeof courseCode !== "string") {
@@ -106,6 +205,18 @@ const CourseManagement = ({ embedded = false }) => {
       program: programCode,
       catalogNumber: parsed.catalogNumber || "",
     };
+  };
+
+  const resolveScheduleTermKey = (schedule) => {
+    if (!schedule) return "";
+    const term = normalizeTermLabel(schedule.term || schedule.Term || "");
+    const termCode =
+      schedule.termCode ||
+      schedule.TermCode ||
+      termCodeFromLabel(term) ||
+      termCodeFromLabel(schedule.term || "") ||
+      "";
+    return termCode || term || "";
   };
 
   const extractBuildingNameFromLocation = (locationLabel) => {
@@ -124,6 +235,68 @@ const CourseManagement = ({ embedded = false }) => {
     () => computeCourseMetadata(newCourseData.Course || "").credits,
     [newCourseData.Course],
   );
+
+  const linkCandidates = useMemo(() => {
+    if (!linkSourceSchedule) return [];
+    const sourceTerm = resolveScheduleTermKey(linkSourceSchedule);
+    const search = (linkSearch || "").toLowerCase().trim();
+
+    return (rawScheduleData || [])
+      .filter((schedule) => {
+        if (!schedule?.id) return false;
+        if (schedule.id === linkSourceSchedule.id) return false;
+        return resolveScheduleTermKey(schedule) === sourceTerm;
+      })
+      .map((schedule) => {
+        const courseCode = schedule.courseCode || schedule.Course || "";
+        const section = schedule.section || schedule.Section || "";
+        const crn = schedule.crn || schedule.CRN || "";
+        const instructorName =
+          schedule.instructorName || schedule.Instructor || "Staff";
+        const roomLabel =
+          Array.isArray(schedule.spaceDisplayNames) &&
+          schedule.spaceDisplayNames.length > 0
+            ? schedule.spaceDisplayNames.join("; ")
+            : schedule.locationLabel || "";
+        const meetingSummary = Array.isArray(schedule.meetingPatterns)
+          ? schedule.meetingPatterns
+              .map((p) =>
+                p?.day && p?.startTime && p?.endTime
+                  ? `${p.day} ${p.startTime}-${p.endTime}`
+                  : p?.raw || "",
+              )
+              .filter(Boolean)
+              .join(", ")
+          : "";
+        const searchBlob = [
+          courseCode,
+          section,
+          crn,
+          instructorName,
+          roomLabel,
+          meetingSummary,
+        ]
+          .join(" ")
+          .toLowerCase();
+        return {
+          id: schedule.id,
+          courseCode,
+          section,
+          crn,
+          instructorName,
+          roomLabel,
+          meetingSummary,
+          linkGroupId: schedule.linkGroupId || "",
+          searchBlob,
+        };
+      })
+      .filter((item) => (search ? item.searchBlob.includes(search) : true))
+      .sort((a, b) => {
+        const courseCompare = a.courseCode.localeCompare(b.courseCode);
+        if (courseCompare !== 0) return courseCompare;
+        return a.section.localeCompare(b.section);
+      });
+  }, [linkSourceSchedule, linkSearch, rawScheduleData]);
 
   const sortedFaculty = useMemo(() => {
     if (!facultyData) return [];
@@ -2379,6 +2552,25 @@ const CourseManagement = ({ embedded = false }) => {
                             >
                               <Edit size={16} />
                             </button>
+                            {row.linkGroupId ? (
+                              <button
+                                onClick={() => handleUnlink(row)}
+                                className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-full"
+                                title="Unlink this section"
+                                disabled={isLinking}
+                              >
+                                <Unlink size={16} />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => openLinkModal(row)}
+                                className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-full"
+                                title="Link to another section"
+                                disabled={isLinking}
+                              >
+                                <Link2 size={16} />
+                              </button>
+                            )}
                             <button
                               onClick={() =>
                                 handleDeleteSchedule(row._originalId || row.id)
@@ -2480,6 +2672,117 @@ const CourseManagement = ({ embedded = false }) => {
                   Cancel
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {linkModalOpen && linkSourceSchedule && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-gray-200">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Link Sections
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Select another section in the same term to link.
+                </p>
+              </div>
+              <button
+                onClick={closeLinkModal}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4 overflow-y-auto">
+              <div className="p-3 bg-gray-50 border rounded-lg">
+                <div className="text-xs text-gray-500">Source Section</div>
+                <div className="text-sm text-gray-900 font-medium">
+                  {linkSourceSchedule.courseCode || ""}{" "}
+                  {linkSourceSchedule.section || ""} •{" "}
+                  {linkSourceSchedule.term || linkSourceSchedule.termCode || ""}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {linkSourceSchedule.instructorName || "Staff"}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-700">
+                  Search
+                </label>
+                <input
+                  type="text"
+                  value={linkSearch}
+                  onChange={(e) => setLinkSearch(e.target.value)}
+                  placeholder="Search by course, section, CRN, instructor, room, or time"
+                  className="mt-1 w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-baylor-green focus:border-baylor-green"
+                />
+              </div>
+
+              <div className="border rounded-lg overflow-hidden">
+                <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
+                  {linkCandidates.length > 0 ? (
+                    linkCandidates.map((candidate) => (
+                      <button
+                        key={candidate.id}
+                        onClick={() => setLinkTargetId(candidate.id)}
+                        className={`w-full text-left p-3 hover:bg-gray-50 flex items-start justify-between gap-3 ${
+                          linkTargetId === candidate.id
+                            ? "bg-baylor-green/10"
+                            : ""
+                        }`}
+                      >
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {candidate.courseCode} {candidate.section}
+                            {candidate.crn ? ` • ${candidate.crn}` : ""}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {candidate.instructorName}
+                          </div>
+                          {candidate.meetingSummary && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              {candidate.meetingSummary}
+                            </div>
+                          )}
+                          {candidate.roomLabel && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              {candidate.roomLabel}
+                            </div>
+                          )}
+                        </div>
+                        {candidate.linkGroupId && (
+                          <span className="px-2 py-1 text-xs bg-indigo-50 text-indigo-600 border border-indigo-200 rounded">
+                            Linked
+                          </span>
+                        )}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="p-4 text-sm text-gray-500 text-center">
+                      No other sections found for this term.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="p-4 border-t flex items-center justify-end gap-2">
+              <button
+                onClick={closeLinkModal}
+                className="px-4 py-2 text-sm bg-gray-200 rounded hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmLink}
+                disabled={!linkTargetId || isLinking}
+                className="px-4 py-2 text-sm bg-baylor-green text-white rounded hover:bg-baylor-green/90 disabled:opacity-50"
+              >
+                {isLinking ? "Linking..." : "Link Sections"}
+              </button>
             </div>
           </div>
         </div>

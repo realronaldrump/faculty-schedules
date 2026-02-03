@@ -42,6 +42,17 @@ If existing schedules were imported before identity keys existed, use the
 Data Hygiene page to run the **Schedule Identity Backfill** action. It will
 preview changes and apply them in-app without a terminal step.
 
+## Linked sections (manual)
+
+Some sections are intentionally duplicated across different identifiers but
+represent the same meeting. When this happens, link the sections in the app:
+
+- Schedules may carry a `linkGroupId` field.
+- Sections that share the same `linkGroupId` are treated as linked and will
+  not be flagged as duplicates or teaching conflicts in Data Hygiene.
+- Linking is manual and per-term. Use Data Hygiene or Course Management to
+  link/unlink sections.
+
 ## Tests
 
 Run the import idempotency tests:

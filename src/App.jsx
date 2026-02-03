@@ -53,7 +53,6 @@ import {
   LogOut,
   ChevronDown,
   X,
-  Database,
   Radio,
   BookOpen,
   Shield,
@@ -220,31 +219,6 @@ const navigationItems = [
     ],
   },
   {
-    id: "admin-tools",
-    label: "Admin Tools",
-    icon: Database,
-    children: [
-      {
-        id: "smart-import",
-        label: "Import Wizard",
-        path: "admin-tools/import-wizard",
-        canonicalId: "admin-tools/import-wizard",
-        permissions: {
-          hideFromRoles: ["faculty"],
-        },
-      },
-      {
-        id: "crn-tools",
-        label: "CRN Quality Tools",
-        path: "admin-tools/crn-tools",
-        canonicalId: "admin-tools/crn-tools",
-        permissions: {
-          hideFromRoles: ["faculty"],
-        },
-      },
-    ],
-  },
-  {
     id: "help",
     label: "Help & Resources",
     icon: BookOpen,
@@ -298,31 +272,52 @@ const navigationItems = [
     id: "administration",
     label: "Administration",
     icon: Shield,
-    adminOnly: true,
     children: [
+      {
+        id: "smart-import",
+        label: "Import Wizard",
+        path: "admin-tools/import-wizard",
+        canonicalId: "admin-tools/import-wizard",
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
+      },
+      {
+        id: "crn-tools",
+        label: "CRN Quality Tools",
+        path: "admin-tools/crn-tools",
+        canonicalId: "admin-tools/crn-tools",
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
+      },
       {
         id: "access-control",
         label: "Access Control",
         path: "admin/access-control",
         canonicalId: "admin/access-control",
+        adminOnly: true,
       },
       {
         id: "app-settings",
         label: "App Settings",
         path: "admin/settings",
         canonicalId: "admin/settings",
+        adminOnly: true,
       },
       {
         id: "recent-changes",
         label: "Recent Changes",
         path: "admin/recent-changes",
         canonicalId: "admin/recent-changes",
+        adminOnly: true,
       },
       {
         id: "data-hygiene",
         label: "Data Hygiene",
         path: "admin/data-hygiene",
         canonicalId: "admin/data-hygiene",
+        adminOnly: true,
       },
     ],
   },

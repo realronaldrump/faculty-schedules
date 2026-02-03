@@ -33,7 +33,12 @@ import {
 } from "../../utils/authz";
 
 const AccessControl = () => {
-  const { userProfile, getAllPageIds, isAdmin } = useAuth();
+  const {
+    userProfile,
+    getAllPageIds,
+    getAllNavigationEntries,
+    isAdmin,
+  } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("roles"); // 'roles' | 'users'
@@ -50,6 +55,10 @@ const AccessControl = () => {
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   const allPages = useMemo(() => getAllPageIds(), [getAllPageIds]);
+  const navigationEntries = useMemo(
+    () => getAllNavigationEntries(),
+    [getAllNavigationEntries],
+  );
 
   useEffect(() => {
     const staffPages = rolePermissions?.staff?.pages || {};
@@ -64,73 +73,60 @@ const AccessControl = () => {
     setPendingPages(unconfigured);
   }, [allPages, rolePermissions]);
 
-  // Friendly page labels for display
-  const PAGE_LABELS = {
-    "dashboard": "Dashboard",
-    "live-view": "Today View",
-    "people/directory": "People Directory",
-    "people/email-lists": "Email Lists",
-    "people/offices": "Office Directory",
-    "people/programs": "Programs & UPDs",
-    "people/baylor-ids": "Baylor IDs",
-    "scheduling/faculty": "Faculty Schedules",
-    "scheduling/rooms": "Room Schedules",
-    "scheduling/student-workers": "Student Workers",
-    "analytics/department-insights": "Department Insights",
-    "data/import-wizard": "Import Wizard",
-    "data/schedule-data": "Schedule Data",
-    "data/crn-tools": "CRN Quality Tools",
-    "help/tutorials": "Tutorials",
-    "help/baylor-systems": "Baylor Systems",
-    "help/acronyms": "Acronyms",
-    "facilities/temperature": "Temperature Monitoring",
-    "admin/access-control": "Access Control",
-    "admin/settings": "App Settings",
-    "admin/recent-changes": "Recent Changes",
-    "admin/data-hygiene": "Data Hygiene",
-  };
-
-  const getPageLabel = (pageId) => PAGE_LABELS[pageId] || pageId;
-
-  // Group pages by section for better organization
-  const PAGE_GROUPS = useMemo(() => {
-    const groups = [
-      { name: "Home", prefix: ["dashboard", "live-view"], pages: [] },
-      { name: "People", prefix: "people/", pages: [] },
-      { name: "Scheduling", prefix: "scheduling/", pages: [] },
-      { name: "Analytics", prefix: "analytics/", pages: [] },
-      { name: "Data Tools", prefix: "data/", pages: [] },
-      { name: "Help & Resources", prefix: "help/", pages: [] },
-      { name: "Facilities", prefix: "facilities/", pages: [] },
-      { name: "Administration", prefix: "admin/", pages: [] },
-    ];
-
-    allPages.forEach((page) => {
-      for (const group of groups) {
-        if (Array.isArray(group.prefix)) {
-          if (group.prefix.includes(page)) {
-            group.pages.push(page);
-            return;
-          }
-        } else if (page.startsWith(group.prefix)) {
-          group.pages.push(page);
-          return;
-        }
+  const permissionDescriptorLookup = useMemo(() => {
+    const map = new Map();
+    navigationEntries.forEach((entry) => {
+      if (!map.has(entry.id)) {
+        map.set(entry.id, { label: entry.label, section: entry.section });
       }
-      // Fallback: add to a catch-all "Other" group
-      let other = groups.find((g) => g.name === "Other");
-      if (!other) {
-        other = { name: "Other", prefix: "", pages: [] };
-        groups.push(other);
+    });
+    return map;
+  }, [navigationEntries]);
+
+  const NAV_GROUPS = useMemo(() => {
+    const groupMap = new Map();
+    navigationEntries.forEach((entry) => {
+      const section = entry.section || "Other";
+      if (!groupMap.has(section)) {
+        groupMap.set(section, {
+          name: section,
+          sectionOrder:
+            Number.isInteger(entry.sectionOrder) ? entry.sectionOrder : 999,
+          pages: [],
+          permissionIds: new Set(),
+        });
       }
-      other.pages.push(page);
+      const group = groupMap.get(section);
+      group.pages.push(entry);
+      group.permissionIds.add(entry.id);
     });
 
-    // Filter out empty groups and sort pages within each group
-    return groups
-      .filter((g) => g.pages.length > 0)
-      .map((g) => ({ ...g, pages: g.pages.sort((a, b) => a.localeCompare(b)) }));
-  }, [allPages]);
+    return Array.from(groupMap.values())
+      .map((group) => ({
+        ...group,
+        permissionIds: Array.from(group.permissionIds),
+        pages: group.pages.sort((a, b) => {
+          const orderDiff = (a.order ?? 999) - (b.order ?? 999);
+          if (orderDiff !== 0) return orderDiff;
+          return (a.label || "").localeCompare(b.label || "");
+        }),
+      }))
+      .sort((a, b) => {
+        const orderDiff = (a.sectionOrder ?? 999) - (b.sectionOrder ?? 999);
+        if (orderDiff !== 0) return orderDiff;
+        return (a.name || "").localeCompare(b.name || "");
+      });
+  }, [navigationEntries]);
+
+  const getPermissionLabel = (pageId) =>
+    permissionDescriptorLookup.get(pageId)?.label || pageId;
+
+  const getPermissionDescriptor = (pageId) => {
+    const meta = permissionDescriptorLookup.get(pageId);
+    if (!meta) return pageId;
+    if (!meta.section) return meta.label;
+    return `${meta.section} / ${meta.label}`;
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -613,23 +609,37 @@ const AccessControl = () => {
 
                     <div className="p-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {PAGE_GROUPS.map((group) => (
+                        {NAV_GROUPS.map((group) => (
                           <div key={`${role}-${group.name}`} className="bg-gray-50 rounded-lg p-3">
                             <div className="flex items-center justify-between mb-2">
                               <h4 className="text-sm font-semibold text-gray-700">{group.name}</h4>
                               <div className="flex items-center gap-1">
-                                <button className="text-xs text-baylor-green hover:underline" onClick={() => setGroupForRole(role, group.pages, true)}>All</button>
+                                <button className="text-xs text-baylor-green hover:underline" onClick={() => setGroupForRole(role, group.permissionIds, true)}>All</button>
                                 <span className="text-xs text-gray-400">|</span>
-                                <button className="text-xs text-gray-500 hover:underline" onClick={() => setGroupForRole(role, group.pages, false)}>None</button>
+                                <button className="text-xs text-gray-500 hover:underline" onClick={() => setGroupForRole(role, group.permissionIds, false)}>None</button>
                               </div>
                             </div>
                             <div className="space-y-1.5">
-                              {group.pages.map((pid) => (
-                                <label key={`${role}-${pid}`} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-white/50 rounded px-2 py-1">
-                                  <input type="checkbox" checked={Boolean(((rolePermissions[role] || {}).pages || {})[pid])} onChange={() => toggleRolePage(role, pid)} className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
-                                  <span className="text-gray-700">{getPageLabel(pid)}</span>
-                                </label>
-                              ))}
+                              {group.pages.map((page) => {
+                                const permissionId = page.id;
+                                const isAlias =
+                                  page.accessId && page.accessId !== page.path;
+                                const permissionDescriptor =
+                                  getPermissionDescriptor(permissionId);
+                                return (
+                                  <label key={`${role}-${page.sourceId || permissionId}`} className="flex items-start gap-2 text-xs cursor-pointer hover:bg-white/50 rounded px-2 py-1">
+                                    <input type="checkbox" checked={Boolean(((rolePermissions[role] || {}).pages || {})[permissionId])} onChange={() => toggleRolePage(role, permissionId)} className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green" />
+                                    <span className="text-gray-700 leading-tight">
+                                      {page.label}
+                                      {isAlias && permissionDescriptor !== page.label && (
+                                        <span className="block text-[10px] text-gray-500">
+                                          Uses {permissionDescriptor} access
+                                        </span>
+                                      )}
+                                    </span>
+                                  </label>
+                                );
+                              })}
                             </div>
                           </div>
                         ))}
@@ -1078,7 +1088,7 @@ const AccessControl = () => {
                                       : "text-gray-700"
                                   }
                                 >
-                                  {getPageLabel(pid)}
+                                  {getPermissionLabel(pid)}
                                   {hasViaRole && (
                                     <span className="ml-1 text-green-600">
                                       ✓

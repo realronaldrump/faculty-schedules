@@ -21,7 +21,10 @@ import {
   onSnapshot,
 } from "firebase/firestore";
 import { logCreate, logUpdate } from "../utils/changeLogger";
-import { getAllRegisteredPageIds } from "../utils/pageRegistry";
+import {
+  getAllRegisteredPageIds,
+  getRegisteredNavigationEntries,
+} from "../utils/pageRegistry";
 import {
   USER_STATUS,
   normalizeRoleList,
@@ -258,6 +261,11 @@ export const AuthProvider = ({ children }) => {
     return Array.isArray(fromRegistry) ? fromRegistry : [];
   };
 
+  const getAllNavigationEntries = () => {
+    const fromRegistry = getRegisteredNavigationEntries();
+    return Array.isArray(fromRegistry) ? fromRegistry : [];
+  };
+
   const canAccess = (pageId) =>
     canAccessPage({ userProfile, rolePermissions, pageId });
 
@@ -271,6 +279,7 @@ export const AuthProvider = ({ children }) => {
     signOut,
     canAccess,
     getAllPageIds,
+    getAllNavigationEntries,
     userStatus: resolveUserStatus(userProfile),
     isPending: isUserPending(userProfile),
     isActive: isUserActive(userProfile),

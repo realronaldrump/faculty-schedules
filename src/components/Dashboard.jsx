@@ -168,61 +168,61 @@ const Dashboard = () => {
 
     return (
       <details
-        className="university-card group"
+        className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden group/card transition-all duration-200 hover:shadow-md hover:border-gray-200"
         open={defaultOpen}
       >
         <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-          <div className="flex items-start justify-between gap-4 p-6">
+          <div className="flex items-start justify-between gap-4 p-5">
             <div className="flex items-start gap-3">
-              <div className="mt-1 rounded-lg bg-baylor-green/10 p-2">
-                <SectionIcon className="h-5 w-5 text-baylor-green" />
+              <div className="mt-0.5 rounded-xl bg-gradient-to-br from-baylor-green/10 to-baylor-green/5 p-2.5 group-hover/card:from-baylor-gold/20 group-hover/card:to-baylor-gold/10 transition-all">
+                <SectionIcon className="h-5 w-5 text-baylor-green group-hover/card:text-baylor-gold/80 transition-colors" />
               </div>
               <div>
-                <h3 className="text-base font-semibold text-gray-900">
+                <h3 className="text-base font-semibold text-gray-800">
                   {section.label}
                 </h3>
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-0.5 text-sm text-gray-400">
                   {section.description}
                 </p>
               </div>
             </div>
-            <ChevronRight className="mt-1 h-5 w-5 text-gray-400 transition-transform duration-200 group-open:rotate-90" />
+            <ChevronRight className="mt-1.5 h-5 w-5 text-gray-300 transition-all duration-200 group-open:rotate-90 group-hover/card:text-baylor-gold/60" />
           </div>
         </summary>
-        <div className="border-t border-gray-100 divide-y divide-gray-100">
+        <div className="border-t border-gray-50 divide-y divide-gray-50">
           {section.items.map((item) => {
             const ItemIcon = item.icon || section.icon;
             const pinned = isPinned(item.id);
 
             return (
-              <div key={item.id} className="flex items-stretch">
+              <div key={item.id} className="flex items-stretch group/item">
                 <button
                   onClick={() => handleNavigate(item.path)}
-                  className="flex flex-1 items-start gap-3 px-6 py-4 text-left hover:bg-gray-50 transition-colors"
+                  className="flex flex-1 items-start gap-3 px-5 py-3.5 text-left hover:bg-gray-50/80 transition-colors"
                 >
-                  <div className="mt-0.5 rounded-lg bg-gray-50 p-2">
-                    <ItemIcon className="h-4 w-4 text-baylor-green" />
+                  <div className="mt-0.5 rounded-lg bg-gray-100/50 p-2 group-hover/item:bg-baylor-gold/10 transition-colors">
+                    <ItemIcon className="h-4 w-4 text-gray-500 group-hover/item:text-baylor-gold transition-colors" />
                   </div>
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-semibold text-gray-900">
+                      <span className="text-sm font-medium text-gray-700">
                         {item.label}
                       </span>
                     </div>
-                    <p className="mt-1 text-sm text-gray-500">
+                    <p className="mt-0.5 text-sm text-gray-400 truncate">
                       {item.description}
                     </p>
                   </div>
-                  <ChevronRight className="mt-1 h-4 w-4 text-gray-300" />
+                  <ChevronRight className="mt-1 h-4 w-4 text-gray-200 group-hover/item:text-baylor-gold/60 transition-colors" />
                 </button>
                 <button
                   onClick={(event) => handlePinToggle(event, item.id)}
-                  className="flex items-center px-4 text-gray-400 hover:text-baylor-gold"
+                  className="flex items-center px-4 text-gray-300 hover:text-baylor-gold transition-colors"
                   aria-pressed={pinned}
-                  title={pinned ? "Unpin" : "Pin"}
+                  title={pinned ? "Unpin" : "Pin for quick access"}
                 >
                   <Star
-                    className={`h-4 w-4 ${pinned ? "text-baylor-gold fill-current" : "text-gray-300"}`}
+                    className={`h-4 w-4 ${pinned ? "text-baylor-gold fill-current" : ""}`}
                   />
                 </button>
               </div>
@@ -235,95 +235,101 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-8">
-      <header className="space-y-2">
-        <p className="text-sm font-semibold uppercase tracking-wider text-baylor-green">
-          Home
-        </p>
+      <header className="space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="h-1 w-8 rounded-full bg-baylor-gold"></div>
+          <p className="text-sm font-medium text-baylor-green/70">
+            Welcome back{firstName ? `, ${firstName}` : ""}
+          </p>
+        </div>
         <h1 className="text-2xl font-semibold text-gray-900">
-          Find what you need{firstName ? `, ${firstName}` : ""}
+          What are you looking for?
         </h1>
-        <p className="max-w-2xl text-sm text-gray-600">
-          This is the launchpad for Baylor systems and HSD department tools.
-          Search or browse by section to open the right place quickly.
+        <p className="max-w-2xl text-sm text-gray-500 leading-relaxed">
+          Your launchpad to Baylor systems and department tools. Search below or
+          explore the sections to get where you need to go.
         </p>
       </header>
 
       <section aria-label="Search" className="space-y-3">
-        <div className="university-card">
-          <div className="university-card-content space-y-3">
-            <div>
-              <h2 className="text-sm font-semibold text-gray-700">
-                Search destinations
-              </h2>
-              <p className="text-xs text-gray-500">
-                Filter by name, description, or section.
-              </p>
+        <div className="bg-gradient-to-br from-white to-gray-50/50 rounded-2xl shadow-sm border border-gray-100 p-6">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-baylor-gold/10 rounded-lg">
+                <Search className="h-4 w-4 text-baylor-gold" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-gray-800">
+                  Quick search
+                </h2>
+                <p className="text-xs text-gray-400">
+                  Find by name, description, or category
+                </p>
+              </div>
             </div>
             <div className="relative">
               <label htmlFor="dashboard-search" className="sr-only">
                 Search destinations
               </label>
-              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 id="dashboard-search"
                 type="text"
-                placeholder="Search for people, rooms, courses, or tools"
+                placeholder="Search for people, rooms, courses, or tools..."
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 onKeyDown={handleSearchKeyDown}
-                className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-11 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-baylor-green focus:outline-none focus:ring-2 focus:ring-baylor-green/20"
+                className="w-full rounded-xl border border-gray-200 bg-white py-3.5 pl-4 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-baylor-green focus:outline-none focus:ring-2 focus:ring-baylor-green/20 transition-all"
               />
             </div>
           </div>
         </div>
 
         {searchQuery.trim().length > 0 && (
-          <div className="university-card">
-            <div className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 border-b border-gray-100">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-5 py-3 text-xs font-medium text-gray-400 border-b border-gray-50 bg-gray-50/30">
               Search results
             </div>
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-gray-50">
               {searchResults.length === 0 ? (
-                <div className="px-6 py-6 text-sm text-gray-500">
-                  No matches found. Try a different keyword or browse the
-                  sections below.
+                <div className="px-5 py-8 text-sm text-gray-400 text-center">
+                  No matches found. Try a different keyword or browse below.
                 </div>
               ) : (
                 searchResults.map((item) => {
                   const ItemIcon = item.icon;
                   const pinned = isPinned(item.id);
                   return (
-                    <div key={item.id} className="flex items-stretch">
+                    <div key={item.id} className="flex items-stretch group">
                       <button
                         onClick={() => handleNavigate(item.path)}
-                        className="flex flex-1 items-start gap-3 px-6 py-4 text-left hover:bg-gray-50 transition-colors"
+                        className="flex flex-1 items-start gap-3 px-5 py-4 text-left hover:bg-gray-50/80 transition-colors"
                       >
-                        <div className="mt-0.5 rounded-lg bg-gray-50 p-2">
-                          <ItemIcon className="h-4 w-4 text-baylor-green" />
+                        <div className="mt-0.5 rounded-lg bg-baylor-green/5 p-2 group-hover:bg-baylor-gold/10 transition-colors">
+                          <ItemIcon className="h-4 w-4 text-baylor-green group-hover:text-baylor-gold transition-colors" />
                         </div>
                         <div className="flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-semibold text-gray-900">
+                            <span className="text-sm font-semibold text-gray-800">
                               {item.label}
                             </span>
-                            <span className="text-xs text-gray-400">
+                            <span className="text-xs text-gray-300">
                               {item.sectionLabel}
                             </span>
                           </div>
-                          <p className="mt-1 text-sm text-gray-500">
+                          <p className="mt-1 text-sm text-gray-400">
                             {item.description}
                           </p>
                         </div>
-                        <ChevronRight className="mt-1 h-4 w-4 text-gray-300" />
+                        <ChevronRight className="mt-1 h-4 w-4 text-gray-200 group-hover:text-baylor-gold transition-colors" />
                       </button>
                       <button
                         onClick={(event) => handlePinToggle(event, item.id)}
-                        className="flex items-center px-4 text-gray-400 hover:text-baylor-gold"
+                        className="flex items-center px-4 text-gray-300 hover:text-baylor-gold transition-colors"
                         aria-pressed={pinned}
                         title={pinned ? "Unpin" : "Pin"}
                       >
                         <Star
-                          className={`h-4 w-4 ${pinned ? "text-baylor-gold fill-current" : "text-gray-300"}`}
+                          className={`h-4 w-4 ${pinned ? "text-baylor-gold fill-current" : ""}`}
                         />
                       </button>
                     </div>
@@ -336,53 +342,63 @@ const Dashboard = () => {
       </section>
 
       <section aria-label="Pinned destinations">
-        <div className="university-card">
-          <div className="university-card-header">
-            <h2 className="university-card-title">Pinned</h2>
-            <p className="university-card-subtitle">
-              Keep your most-used destinations one click away.
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-6 py-5 border-b border-gray-50 bg-gradient-to-r from-baylor-gold/5 to-transparent">
+            <div className="flex items-center gap-2">
+              <Star className="h-4 w-4 text-baylor-gold fill-current" />
+              <h2 className="text-base font-semibold text-gray-800">
+                Your shortcuts
+              </h2>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Quick access to your favorite tools
             </p>
           </div>
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-gray-50">
             {pinnedItems.length === 0 ? (
-              <div className="px-6 py-6 text-sm text-gray-500">
-                No pins yet. Use the star next to any destination to keep it
-                here.
+              <div className="px-6 py-8 text-sm text-gray-400 text-center">
+                <div className="flex flex-col items-center gap-2">
+                  <Star className="h-6 w-6 text-gray-200" />
+                  <span>
+                    No shortcuts yet. Click the star on any tool below to add it
+                    here.
+                  </span>
+                </div>
               </div>
             ) : (
               pinnedItems.map((item) => {
                 const ItemIcon = item.icon;
                 return (
-                  <div key={item.id} className="flex items-stretch">
+                  <div key={item.id} className="flex items-stretch group">
                     <button
                       onClick={() => handleNavigate(item.path)}
-                      className="flex flex-1 items-start gap-3 px-6 py-4 text-left hover:bg-gray-50 transition-colors"
+                      className="flex flex-1 items-start gap-3 px-5 py-4 text-left hover:bg-gray-50/80 transition-colors"
                     >
-                      <div className="mt-0.5 rounded-lg bg-gray-50 p-2">
-                        <ItemIcon className="h-4 w-4 text-baylor-green" />
+                      <div className="mt-0.5 rounded-lg bg-baylor-gold/10 p-2">
+                        <ItemIcon className="h-4 w-4 text-baylor-gold" />
                       </div>
                       <div className="flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-semibold text-gray-900">
+                          <span className="text-sm font-semibold text-gray-800">
                             {item.label}
                           </span>
-                          <span className="text-xs text-gray-400">
+                          <span className="text-xs text-gray-300">
                             {item.sectionLabel}
                           </span>
                         </div>
-                        <p className="mt-1 text-sm text-gray-500">
+                        <p className="mt-1 text-sm text-gray-400">
                           {item.description}
                         </p>
                       </div>
-                      <ChevronRight className="mt-1 h-4 w-4 text-gray-300" />
+                      <ChevronRight className="mt-1 h-4 w-4 text-gray-200 group-hover:text-baylor-gold transition-colors" />
                     </button>
                     <button
                       onClick={(event) => handlePinToggle(event, item.id)}
-                      className="flex items-center px-4 text-gray-400 hover:text-baylor-gold"
+                      className="flex items-center px-4 text-baylor-gold hover:text-gray-300 transition-colors"
                       aria-pressed
                       title="Unpin"
                     >
-                      <Star className="h-4 w-4 text-baylor-gold fill-current" />
+                      <Star className="h-4 w-4 fill-current" />
                     </button>
                   </div>
                 );
@@ -392,14 +408,16 @@ const Dashboard = () => {
         </div>
       </section>
 
-      <section aria-label="Browse by section" className="space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">Browse</h2>
-          <p className="text-sm text-gray-500">
-            Expand a section to see every destination you can access.
-          </p>
+      <section aria-label="Browse by section" className="space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-200 to-transparent"></div>
+          <div className="text-center">
+            <h2 className="text-base font-semibold text-gray-700">Explore</h2>
+            <p className="text-xs text-gray-400">Browse all available tools</p>
+          </div>
+          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-200 to-transparent"></div>
         </div>
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           {navigationSections.map((section, index) => (
             <SectionCard
               key={section.id}

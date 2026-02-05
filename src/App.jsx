@@ -32,6 +32,8 @@ import LiveView from "./components/LiveView";
 import FacultyFinder from "./components/FacultyFinder";
 import TemperatureMonitoring from "./components/temperature/TemperatureMonitoring";
 import FacilitiesHub from "./components/facilities/FacilitiesHub";
+import OutlookRoomExport from "./components/tools/OutlookRoomExport.jsx";
+import RoomGridGenerator from "./components/administration/RoomGridGenerator.jsx";
 import Login from "./components/Login";
 import ProtectedContent from "./components/ProtectedContent.jsx";
 import AccessControl from "./components/administration/AccessControl.jsx";
@@ -181,6 +183,18 @@ const navigationItems = [
         label: "Rooms",
         path: "scheduling/rooms",
         canonicalId: "scheduling/rooms",
+      },
+      {
+        id: "room-calendar-export",
+        label: "Room Calendar Export",
+        path: "tools/outlook-export",
+        canonicalId: "tools/outlook-export",
+      },
+      {
+        id: "room-grids",
+        label: "Room Grids",
+        path: "tools/room-grid-generator",
+        canonicalId: "tools/room-grid-generator",
       },
       {
         id: "student-schedules",
@@ -534,6 +548,18 @@ function App() {
         return (
           <ProtectedContent pageId="scheduling/rooms">
             <RoomsHub />
+          </ProtectedContent>
+        );
+      case "tools/outlook-export":
+        return (
+          <ProtectedContent pageId="tools/outlook-export">
+            <OutlookRoomExport />
+          </ProtectedContent>
+        );
+      case "tools/room-grid-generator":
+        return (
+          <ProtectedContent pageId="tools/room-grid-generator">
+            <RoomGridGenerator />
           </ProtectedContent>
         );
       case "scheduling/student-workers":

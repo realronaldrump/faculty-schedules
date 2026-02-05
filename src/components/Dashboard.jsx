@@ -7,7 +7,11 @@ import {
   ChevronRight,
   FileText,
   GraduationCap,
-  Building
+  Building,
+  Mail,
+  LayoutGrid,
+  BookOpen,
+  Thermometer
 } from 'lucide-react';
 // Recent changes removed from dashboard
 import { useAuth } from '../contexts/AuthContext';
@@ -53,13 +57,13 @@ const Dashboard = () => {
         requiredAccess: 'scheduling/student-workers'
       },
       {
-        title: 'Schedule Group Meeting',
-        description: 'Find overlapping availability across faculty',
-        icon: Calendar,
-        path: 'scheduling/faculty?tab=meetings',
-        color: 'bg-baylor-gold',
-        textColor: 'text-baylor-gold',
-        requiredAccess: 'scheduling/faculty'
+        title: 'Email Lists',
+        description: 'Department-wide email groups and exports',
+        icon: Mail,
+        path: 'people/email-lists',
+        color: 'bg-blue-600',
+        textColor: 'text-blue-600',
+        requiredAccess: 'people/email-lists'
       },
       {
         title: 'Check Room Availability',
@@ -83,6 +87,42 @@ const Dashboard = () => {
         requiredAccess: 'data/import-wizard'
       });
     }
+
+    return actions
+      .filter(action => !action.requiredAccess || hasAccess(action.requiredAccess))
+      .map(action => ({ ...action, action: () => handleNavigate(action.path) }));
+  }, [hasAccess, handleNavigate]);
+
+  const toolActions = useMemo(() => {
+    const actions = [
+      {
+        title: 'Generate Room Grids',
+        description: 'Build downloadable room grid schedules',
+        icon: LayoutGrid,
+        path: 'tools/room-grid-generator',
+        color: 'bg-emerald-600',
+        textColor: 'text-emerald-600',
+        requiredAccess: 'tools/room-grid-generator'
+      },
+      {
+        title: 'Tutorials',
+        description: 'Step-by-step guides for common workflows',
+        icon: BookOpen,
+        path: 'help/tutorials',
+        color: 'bg-baylor-gold',
+        textColor: 'text-baylor-gold',
+        requiredAccess: 'help/tutorials'
+      },
+      {
+        title: 'Temperatures',
+        description: 'Monitor rooms and sensor status',
+        icon: Thermometer,
+        path: 'facilities/temperature',
+        color: 'bg-orange-500',
+        textColor: 'text-orange-600',
+        requiredAccess: 'facilities/temperature'
+      }
+    ];
 
     return actions
       .filter(action => !action.requiredAccess || hasAccess(action.requiredAccess))
@@ -180,7 +220,7 @@ const Dashboard = () => {
       <div className="mb-8">
         <div className="university-card-header">
           <h2 className="university-card-title">Quick Actions</h2>
-          <p className="university-card-subtitle">Common tasks and tools</p>
+          <p className="university-card-subtitle">Common tasks and shortcuts</p>
         </div>
         {quickActions.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
@@ -191,6 +231,25 @@ const Dashboard = () => {
         ) : (
           <p className="text-gray-500 text-sm mt-6">
             No shortcuts are assigned to your role yet. Let us know what you use most and we&apos;ll add it here.
+          </p>
+        )}
+      </div>
+
+      {/* Tools & Interactive Section */}
+      <div className="mb-8">
+        <div className="university-card-header">
+          <h2 className="university-card-title">Tools & Interactive</h2>
+          <p className="university-card-subtitle">Hands-on tools and guided workflows</p>
+        </div>
+        {toolActions.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            {toolActions.map((action, index) => (
+              <QuickActionCard key={`${action.title}-${index}`} {...action} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-500 text-sm mt-6">
+            No tools are available for your role yet. Ask an administrator to enable these options.
           </p>
         )}
       </div>

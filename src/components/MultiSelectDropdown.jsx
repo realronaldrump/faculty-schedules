@@ -12,6 +12,7 @@ const MultiSelectDropdown = ({
   maxDisplayCount = 2,
   menuPortal = false,
   menuMaxHeight = 240,
+  menuMinWidth,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -87,10 +88,19 @@ const MultiSelectDropdown = ({
     return `${visible} +${labels.length - maxDisplayCount} more`;
   }, [selected, showSelectedLabels, displayMap, placeholder, maxDisplayCount]);
 
+  const menuInlineStyle = menuPortal
+    ? {
+        ...menuStyle,
+        ...(menuMinWidth ? { minWidth: menuMinWidth } : {}),
+      }
+    : menuMinWidth
+      ? { minWidth: menuMinWidth }
+      : undefined;
+
   const menuContent = (
     <div
       ref={menuRef}
-      style={menuPortal ? menuStyle : undefined}
+      style={menuInlineStyle}
       className={`absolute z-30 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto ${
         menuPortal ? '' : ''
       }`}

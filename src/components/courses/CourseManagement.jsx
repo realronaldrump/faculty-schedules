@@ -21,7 +21,7 @@ import FacultyContactCard from "../FacultyContactCard";
 import { formatChangeForDisplay } from "../../utils/recentChanges";
 import { buildCourseSectionKey, parseCourseCode } from "../../utils/courseUtils";
 import { parseTime } from "../../utils/timeUtils";
-import { getBuildingDisplay } from "../../utils/locationService";
+import { getBuildingDisplay, SPACE_TYPE } from "../../utils/locationService";
 import { getMaxEnrollment } from "../../utils/enrollmentUtils";
 import { normalizeTermLabel, termCodeFromLabel } from "../../utils/termUtils";
 import { linkSchedules, unlinkSchedules } from "../../utils/scheduleLinkUtils";
@@ -41,6 +41,7 @@ const MAX_ENROLLMENT_FIELD_KEYS = new Set([
   "max_enrollment",
   "Max Enrollment",
 ]);
+const ROOM_MENU_MIN_WIDTH = "min(20rem, 90vw)";
 
 const CourseManagement = ({ embedded = false }) => {
   const {
@@ -49,6 +50,7 @@ const CourseManagement = ({ embedded = false }) => {
     facultyData = [],
     editHistory = [],
     recentChanges = [],
+    spacesList = [],
     loadEditHistory,
     loadRecentChanges,
   } = useData();
@@ -381,23 +383,37 @@ const CourseManagement = ({ embedded = false }) => {
   }, [scheduleData]);
 
   const uniqueRooms = useMemo(() => {
-    const all = [];
+    const roomMap = new Map();
+    const addRoom = (value) => {
+      const label = String(value || "").trim();
+      if (!label) return;
+      const lower = label.toLowerCase();
+      if (lower === "online" || lower.includes("no room needed")) return;
+      if (!roomMap.has(lower)) {
+        roomMap.set(lower, label);
+      }
+    };
+
     scheduleData.forEach((item) => {
       if (!item) return;
       if (item.Room && typeof item.Room === "string") {
         item.Room.split(";")
           .map((s) => s.trim())
           .filter(Boolean)
-          .forEach((r) => all.push(r));
+          .forEach((room) => addRoom(room));
       }
     });
-    return [...new Set(all)]
-      .filter((r) => {
-        const lower = r.toLowerCase();
-        return lower !== "online" && !lower.includes("no room needed");
-      })
-      .sort();
-  }, [scheduleData]);
+
+    (spacesList || []).forEach((space) => {
+      if (!space || space.isActive === false) return;
+      if (space.type === SPACE_TYPE.OFFICE) return;
+      addRoom(space.displayName || space.name || space.spaceKey || space.id);
+    });
+
+    return Array.from(roomMap.values()).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true }),
+    );
+  }, [scheduleData, spacesList]);
 
   const uniqueTerms = useMemo(
     () =>
@@ -1679,6 +1695,7 @@ const CourseManagement = ({ embedded = false }) => {
                     setNewCourseData((prev) => ({ ...prev, Rooms: selected }))
                   }
                   placeholder="Select one or more rooms..."
+                  menuMinWidth={ROOM_MENU_MIN_WIDTH}
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -1876,6 +1893,7 @@ const CourseManagement = ({ embedded = false }) => {
                 setFilters({ ...filters, room: selected })
               }
               placeholder="Filter by Room..."
+              menuMinWidth={ROOM_MENU_MIN_WIDTH}
             />
           </div>
 
@@ -2381,6 +2399,8 @@ const CourseManagement = ({ embedded = false }) => {
                               }))
                             }
                             placeholder="Select room(s)..."
+                            menuMinWidth={ROOM_MENU_MIN_WIDTH}
+                            menuPortal
                           />
                         </td>
                         <td className="p-1">

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import {
   Calendar,
   List,
@@ -9,12 +9,14 @@ import {
   Users,
   Clock,
   Briefcase,
+  Download,
   X,
 } from "lucide-react";
 import MultiSelectDropdown from "../MultiSelectDropdown";
 import FacultyContactCard from "../FacultyContactCard";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
+import ExportModal from "../administration/ExportModal";
 import {
   getStudentAssignments,
   isAssignmentActiveDuringSemester,
@@ -57,6 +59,13 @@ function formatTimeCompact(minutes) {
   if (m === 0) return `${hr12}${ampm}`;
   return `${hr12}:${m.toString().padStart(2, "0")}${ampm}`;
 }
+
+const summarizeList = (items = [], emptyLabel = "All") => {
+  const cleaned = (items || []).filter(Boolean);
+  if (cleaned.length === 0) return emptyLabel;
+  if (cleaned.length <= 3) return cleaned.join(", ");
+  return `${cleaned.slice(0, 3).join(", ")} +${cleaned.length - 3} more`;
+};
 
 // PMS Color Palette for schedule events
 // Green family
@@ -131,6 +140,8 @@ const StudentSchedules = ({ embedded = false }) => {
   const [activeTab, setActiveTab] = useState("calendar");
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [selectedStudentForCard, setSelectedStudentForCard] = useState(null);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const exportRef = useRef(null);
 
   useEffect(() => {
     loadPeople();
@@ -168,6 +179,40 @@ const StudentSchedules = ({ embedded = false }) => {
     });
     return map;
   }, [studentData]);
+
+  const semesterLabel = useMemo(() => {
+    const label =
+      selectedSemesterMeta?.term ||
+      selectedSemesterMeta?.label ||
+      selectedSemesterMeta?.name ||
+      selectedSemesterMeta?.termCode;
+    return label || "All Semesters";
+  }, [selectedSemesterMeta]);
+
+  const viewLabel = activeTab === "calendar" ? "Weekly Calendar" : "Student List";
+
+  const exportTitle = useMemo(
+    () => `Student-Worker-Schedules-${activeTab}-${semesterLabel || "semester"}`,
+    [activeTab, semesterLabel],
+  );
+
+  const filterSummary = useMemo(() => {
+    const studentNames = selectedStudentIds.map(
+      (id) => studentIdToNameMap[id] || id,
+    );
+    return {
+      buildings: summarizeList(selectedBuildings),
+      jobs: summarizeList(selectedJobTitles),
+      students: summarizeList(studentNames),
+      includeInactive: includeInactive ? "Yes" : "No",
+    };
+  }, [
+    selectedBuildings,
+    selectedJobTitles,
+    selectedStudentIds,
+    studentIdToNameMap,
+    includeInactive,
+  ]);
 
   const filteredStudents = useMemo(() => {
     return studentData
@@ -270,19 +315,29 @@ const StudentSchedules = ({ embedded = false }) => {
 
   return (
     <div className="space-y-4">
-      <div>
-        {embedded ? (
-          <h2 className="text-xl font-semibold text-gray-900 mb-1">
-            Student Worker Schedules
-          </h2>
-        ) : (
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Student Worker Schedules
-          </h1>
-        )}
-        <p className="text-gray-600">
-          Review student worker assignments and availability
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          {embedded ? (
+            <h2 className="text-xl font-semibold text-gray-900 mb-1">
+              Student Worker Schedules
+            </h2>
+          ) : (
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+              Student Worker Schedules
+            </h1>
+          )}
+          <p className="text-gray-600">
+            Review student worker assignments and availability
+          </p>
+        </div>
+        <button
+          onClick={() => setIsExportModalOpen(true)}
+          className="no-print inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-baylor-green bg-white border border-baylor-green rounded-lg hover:bg-baylor-green hover:text-white transition-colors"
+          title="Export student schedules"
+        >
+          <Download size={16} />
+          Export
+        </button>
       </div>
 
       {/* Filters */}
@@ -383,7 +438,7 @@ const StudentSchedules = ({ embedded = false }) => {
 
       {/* Main Content */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="flex border-b border-gray-200">
+        <div className="flex border-b border-gray-200 no-print">
           <button
             onClick={() => setActiveTab("calendar")}
             className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold relative ${activeTab === "calendar" ? "text-baylor-green bg-baylor-green/5" : "text-gray-600 hover:text-baylor-green hover:bg-gray-50"}`}
@@ -406,271 +461,318 @@ const StudentSchedules = ({ embedded = false }) => {
           </button>
         </div>
 
-        <div className="flex items-center gap-6 px-6 py-3 bg-gray-50 border-b border-gray-200 text-sm">
-          <div className="flex items-center gap-2 text-gray-600">
-            <Users size={16} className="text-baylor-green" />
-            <strong className="text-gray-900">{stats.students}</strong> Students
-          </div>
-          <div className="flex items-center gap-2 text-gray-600">
-            <Briefcase size={16} className="text-baylor-green" />
-            <strong className="text-gray-900">{stats.jobs}</strong> Job Types
-          </div>
-          <div className="flex items-center gap-2 text-gray-600">
-            <Clock size={16} className="text-baylor-green" />
-            <strong className="text-gray-900">{stats.shifts}</strong>{" "}
-            Shifts/Week
-          </div>
-        </div>
-
-        <div className="p-4">
-          {activeTab === "calendar" && (
-            <>
-              {filteredStudents.length === 0 ? (
-                <div className="text-center py-12">
-                  <Calendar size={48} className="mx-auto text-gray-300 mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-700 mb-2">
-                    No Schedules Found
-                  </h3>
-                  <p className="text-gray-500">
-                    Adjust filters to view student schedules.
-                  </p>
+        <div ref={exportRef} className="student-schedule-export">
+          <div className="hidden print-only border-b border-gray-200 pb-3 mb-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-baylor-green">
+                  Student Worker Schedules
+                </h2>
+                <div className="text-sm text-gray-600">
+                  Semester:{" "}
+                  <span className="font-semibold text-gray-900">
+                    {semesterLabel}
+                  </span>
                 </div>
-              ) : (
-                <div className="border border-gray-200 rounded-lg overflow-hidden flex flex-col gap-0.5">
-                  {/* Header - separate from grid body */}
-                  <div className="flex bg-baylor-green text-white shrink-0">
-                    <div className="w-[50px] py-2 text-xs font-medium text-center border-r border-baylor-green/50 shrink-0"></div>
-                    {DAY_ORDER.map((day) => (
-                      <div
-                        key={day}
-                        className="flex-1 py-2 text-center border-r border-baylor-green/50 last:border-r-0"
-                      >
-                        <div className="font-bold text-sm">
-                          {DAY_LABELS[day]}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+              </div>
+              <div className="text-sm text-gray-500 text-right">
+                <div>{viewLabel}</div>
+                <div>Exported {new Date().toLocaleDateString()}</div>
+              </div>
+            </div>
+            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-600">
+              <div>
+                <span className="font-semibold text-gray-900">Buildings:</span>{" "}
+                {filterSummary.buildings}
+              </div>
+              <div>
+                <span className="font-semibold text-gray-900">Job Titles:</span>{" "}
+                {filterSummary.jobs}
+              </div>
+              <div>
+                <span className="font-semibold text-gray-900">Students:</span>{" "}
+                {filterSummary.students}
+              </div>
+              <div>
+                <span className="font-semibold text-gray-900">
+                  Include Inactive:
+                </span>{" "}
+                {filterSummary.includeInactive}
+              </div>
+            </div>
+          </div>
 
-                  {/* Grid Body */}
-                  <div className="grid grid-cols-[50px_repeat(5,1fr)]">
-                    {/* Time Column */}
-                    <div className="border-r border-gray-200 bg-gray-50">
-                      {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
+          <div className="flex items-center gap-6 px-6 py-3 bg-gray-50 border-b border-gray-200 text-sm">
+            <div className="flex items-center gap-2 text-gray-600">
+              <Users size={16} className="text-baylor-green" />
+              <strong className="text-gray-900">{stats.students}</strong>{" "}
+              Students
+            </div>
+            <div className="flex items-center gap-2 text-gray-600">
+              <Briefcase size={16} className="text-baylor-green" />
+              <strong className="text-gray-900">{stats.jobs}</strong> Job Types
+            </div>
+            <div className="flex items-center gap-2 text-gray-600">
+              <Clock size={16} className="text-baylor-green" />
+              <strong className="text-gray-900">{stats.shifts}</strong>{" "}
+              Shifts/Week
+            </div>
+          </div>
+
+          <div className="p-4">
+            {activeTab === "calendar" && (
+              <>
+                {filteredStudents.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Calendar size={48} className="mx-auto text-gray-300 mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-700 mb-2">
+                      No Schedules Found
+                    </h3>
+                    <p className="text-gray-500">
+                      Adjust filters to view student schedules.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="border border-gray-200 rounded-lg overflow-hidden flex flex-col gap-0.5">
+                    {/* Header - separate from grid body */}
+                    <div className="flex bg-baylor-green text-white shrink-0">
+                      <div className="w-[50px] py-2 text-xs font-medium text-center border-r border-baylor-green/50 shrink-0"></div>
+                      {DAY_ORDER.map((day) => (
                         <div
-                          key={i}
-                          className="border-b border-gray-100 text-[11px] text-gray-500 text-right pr-1 flex items-start justify-end"
-                          style={{ height: `${HOUR_HEIGHT}px` }}
+                          key={day}
+                          className="flex-1 py-2 text-center border-r border-baylor-green/50 last:border-r-0"
                         >
-                          <span className="mt-[-0.5em]">
-                            {formatTime((START_HOUR + i) * 60)}
-                          </span>
+                          <div className="font-bold text-sm">
+                            {DAY_LABELS[day]}
+                          </div>
                         </div>
                       ))}
                     </div>
 
-                    {/* Day Columns */}
-                    {DAY_ORDER.map((day, dayIndex) => {
-                      // Day backgrounds using PMS palette - alternating warm/cool tones
-                      const dayBackgrounds = [
-                        "rgba(74, 93, 58, 0.04)", // PMS 7743 - subtle forest (Mon)
-                        "rgba(201, 162, 39, 0.05)", // PMS 7555 - subtle golden (Tue)
-                        "rgba(45, 90, 82, 0.04)", // PMS 7729 - subtle teal (Wed)
-                        "rgba(184, 149, 47, 0.05)", // PMS 7753 - subtle deep gold (Thu)
-                        "rgba(122, 139, 90, 0.04)", // PMS 575 - subtle olive (Fri)
-                      ];
-                      const bgColor = dayBackgrounds[dayIndex];
+                    {/* Grid Body */}
+                    <div className="grid grid-cols-[50px_repeat(5,1fr)]">
+                      {/* Time Column */}
+                      <div className="border-r border-gray-200 bg-gray-50">
+                        {Array.from(
+                          { length: END_HOUR - START_HOUR },
+                          (_, i) => (
+                            <div
+                              key={i}
+                              className="border-b border-gray-100 text-[11px] text-gray-500 text-right pr-1 flex items-start justify-end"
+                              style={{ height: `${HOUR_HEIGHT}px` }}
+                            >
+                              <span className="mt-[-0.5em]">
+                                {formatTime((START_HOUR + i) * 60)}
+                              </span>
+                            </div>
+                          ),
+                        )}
+                      </div>
 
+                      {/* Day Columns */}
+                      {DAY_ORDER.map((day, dayIndex) => {
+                        // Day backgrounds using PMS palette - alternating warm/cool tones
+                        const dayBackgrounds = [
+                          "rgba(74, 93, 58, 0.04)", // PMS 7743 - subtle forest (Mon)
+                          "rgba(201, 162, 39, 0.05)", // PMS 7555 - subtle golden (Tue)
+                          "rgba(45, 90, 82, 0.04)", // PMS 7729 - subtle teal (Wed)
+                          "rgba(184, 149, 47, 0.05)", // PMS 7753 - subtle deep gold (Thu)
+                          "rgba(122, 139, 90, 0.04)", // PMS 575 - subtle olive (Fri)
+                        ];
+                        const bgColor = dayBackgrounds[dayIndex];
+
+                        return (
+                          <div
+                            key={day}
+                            className="relative border-r border-gray-200 last:border-r-0"
+                            style={{
+                              height: `${totalHeight}px`,
+                              backgroundColor: bgColor,
+                            }}
+                          >
+                            {/* Hour grid lines */}
+                            {Array.from(
+                              { length: END_HOUR - START_HOUR },
+                              (_, i) => (
+                                <div
+                                  key={i}
+                                  className="absolute left-0 right-0 border-b border-gray-100"
+                                  style={{
+                                    top: `${i * HOUR_HEIGHT}px`,
+                                    height: `${HOUR_HEIGHT}px`,
+                                  }}
+                                />
+                              ),
+                            )}
+
+                            {/* Events */}
+                            {layoutByDay[day].map((event, idx) => {
+                              const top =
+                                ((event.startMinutes - START_HOUR * 60) / 60) *
+                                HOUR_HEIGHT;
+                              const height = Math.max(
+                                ((event.endMinutes - event.startMinutes) / 60) *
+                                  HOUR_HEIGHT,
+                                28,
+                              );
+                              const color = getColorForKey(event.colorKey);
+                              const widthPercent = 100 / event.totalColumns;
+                              const leftPercent =
+                                (event.column / event.totalColumns) * 100;
+
+                              return (
+                                <div
+                                  key={`${event.student.id}-${idx}`}
+                                  className="absolute rounded shadow-sm cursor-pointer hover:shadow-md hover:z-20 transition-shadow overflow-hidden"
+                                  style={{
+                                    top: `${top}px`,
+                                    height: `${height}px`,
+                                    width: `calc(${widthPercent}% - 3px)`,
+                                    left: `calc(${leftPercent}% + 1px)`,
+                                    backgroundColor: color.bg,
+                                    borderLeft: `3px solid ${color.border}`,
+                                  }}
+                                  onClick={() =>
+                                    setSelectedStudentForCard(event.student)
+                                  }
+                                  title={`${event.student.name}\n${formatTime(event.startMinutes)} - ${formatTime(event.endMinutes)}\n${event.assignment.jobTitle || ""}`}
+                                >
+                                  <div className="px-1.5 py-0.5 h-full flex flex-col justify-center overflow-hidden">
+                                    <div
+                                      className="font-semibold text-xs leading-tight"
+                                      style={{ color: color.text }}
+                                    >
+                                      {event.student.name}
+                                    </div>
+                                    <div className="text-[10px] text-gray-600 leading-tight">
+                                      {formatTimeCompact(event.startMinutes)}-
+                                      {formatTimeCompact(event.endMinutes)}
+                                    </div>
+                                    {height > 44 &&
+                                      event.assignment.jobTitle && (
+                                        <div className="text-[10px] text-gray-500 leading-tight truncate">
+                                          {event.assignment.jobTitle}
+                                        </div>
+                                      )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === "list" && (
+              <div className="space-y-4">
+                {filteredStudents.length === 0 ? (
+                  <div className="text-center py-12">
+                    <List size={48} className="mx-auto text-gray-300 mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-700 mb-2">
+                      No Students Found
+                    </h3>
+                    <p className="text-gray-500">
+                      Adjust filters to view student schedules.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {filteredStudents.map((student) => {
+                      const color = getColorForKey(student.id);
                       return (
                         <div
-                          key={day}
-                          className="relative border-r border-gray-200 last:border-r-0"
+                          key={student.id}
+                          className="student-schedule-card bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-md cursor-pointer"
                           style={{
-                            height: `${totalHeight}px`,
-                            backgroundColor: bgColor,
+                            borderLeftWidth: "4px",
+                            borderLeftColor: color.border,
                           }}
+                          onClick={() => setSelectedStudentForCard(student)}
                         >
-                          {/* Hour grid lines */}
-                          {Array.from(
-                            { length: END_HOUR - START_HOUR },
-                            (_, i) => (
-                              <div
-                                key={i}
-                                className="absolute left-0 right-0 border-b border-gray-100"
-                                style={{
-                                  top: `${i * HOUR_HEIGHT}px`,
-                                  height: `${HOUR_HEIGHT}px`,
-                                }}
-                              />
-                            ),
-                          )}
-
-                          {/* Events */}
-                          {layoutByDay[day].map((event, idx) => {
-                            const top =
-                              ((event.startMinutes - START_HOUR * 60) / 60) *
-                              HOUR_HEIGHT;
-                            const height = Math.max(
-                              ((event.endMinutes - event.startMinutes) / 60) *
-                                HOUR_HEIGHT,
-                              28,
-                            );
-                            const color = getColorForKey(event.colorKey);
-                            const widthPercent = 100 / event.totalColumns;
-                            const leftPercent =
-                              (event.column / event.totalColumns) * 100;
-
-                            return (
-                              <div
-                                key={`${event.student.id}-${idx}`}
-                                className="absolute rounded shadow-sm cursor-pointer hover:shadow-md hover:z-20 transition-shadow overflow-hidden"
-                                style={{
-                                  top: `${top}px`,
-                                  height: `${height}px`,
-                                  width: `calc(${widthPercent}% - 3px)`,
-                                  left: `calc(${leftPercent}% + 1px)`,
-                                  backgroundColor: color.bg,
-                                  borderLeft: `3px solid ${color.border}`,
-                                }}
-                                onClick={() =>
-                                  setSelectedStudentForCard(event.student)
-                                }
-                                title={`${event.student.name}\n${formatTime(event.startMinutes)} - ${formatTime(event.endMinutes)}\n${event.assignment.jobTitle || ""}`}
-                              >
-                                <div className="px-1.5 py-0.5 h-full flex flex-col justify-center overflow-hidden">
-                                  <div
-                                    className="font-semibold text-xs leading-tight"
-                                    style={{ color: color.text }}
-                                  >
-                                    {event.student.name}
-                                  </div>
-                                  <div className="text-[10px] text-gray-600 leading-tight">
-                                    {formatTimeCompact(event.startMinutes)}-
-                                    {formatTimeCompact(event.endMinutes)}
-                                  </div>
-                                  {height > 44 && event.assignment.jobTitle && (
-                                    <div className="text-[10px] text-gray-500 leading-tight truncate">
-                                      {event.assignment.jobTitle}
-                                    </div>
-                                  )}
-                                </div>
+                          <div className="p-4">
+                            <div className="flex items-start justify-between mb-3">
+                              <div>
+                                <h3 className="font-semibold text-gray-900">
+                                  {student.name}
+                                </h3>
+                                {student.email && (
+                                  <p className="text-sm text-gray-500">
+                                    {student.email}
+                                  </p>
+                                )}
                               </div>
-                            );
-                          })}
+                              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                                {student.visibleAssignments.length} job
+                                {student.visibleAssignments.length !== 1
+                                  ? "s"
+                                  : ""}
+                              </span>
+                            </div>
+                            <div className="space-y-3">
+                              {student.visibleAssignments.map(
+                                (assignment, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="bg-gray-50 rounded-lg p-3 text-sm"
+                                  >
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="font-medium text-gray-800">
+                                        {assignment.jobTitle || "Unnamed Job"}
+                                      </span>
+                                      {assignment.buildings?.length > 0 && (
+                                        <span className="text-xs text-gray-500 flex items-center gap-1">
+                                          <Building size={12} />
+                                          {assignment.buildings.join(", ")}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {assignment.schedule?.length > 0 && (
+                                      <div className="flex flex-wrap gap-1">
+                                        {DAY_ORDER.map((day) => {
+                                          const daySchedules =
+                                            assignment.schedule.filter(
+                                              (s) => s.day === day,
+                                            );
+                                          if (daySchedules.length === 0)
+                                            return null;
+                                          return (
+                                            <span
+                                              key={day}
+                                              className="inline-flex items-center bg-white border border-gray-200 rounded px-2 py-0.5 text-xs"
+                                            >
+                                              <span className="font-medium text-baylor-green mr-1">
+                                                {day}
+                                              </span>
+                                              <span className="text-gray-600">
+                                                {daySchedules
+                                                  .map(
+                                                    (s) =>
+                                                      `${formatTimeCompact(parseTimeToMinutes(s.start))}-${formatTimeCompact(parseTimeToMinutes(s.end))}`,
+                                                  )
+                                                  .join(", ")}
+                                              </span>
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                ),
+                              )}
+                            </div>
+                          </div>
                         </div>
                       );
                     })}
                   </div>
-                </div>
-              )}
-            </>
-          )}
-
-          {activeTab === "list" && (
-            <div className="space-y-4">
-              {filteredStudents.length === 0 ? (
-                <div className="text-center py-12">
-                  <List size={48} className="mx-auto text-gray-300 mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-700 mb-2">
-                    No Students Found
-                  </h3>
-                  <p className="text-gray-500">
-                    Adjust filters to view student schedules.
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {filteredStudents.map((student) => {
-                    const color = getColorForKey(student.id);
-                    return (
-                      <div
-                        key={student.id}
-                        className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-md cursor-pointer"
-                        style={{
-                          borderLeftWidth: "4px",
-                          borderLeftColor: color.border,
-                        }}
-                        onClick={() => setSelectedStudentForCard(student)}
-                      >
-                        <div className="p-4">
-                          <div className="flex items-start justify-between mb-3">
-                            <div>
-                              <h3 className="font-semibold text-gray-900">
-                                {student.name}
-                              </h3>
-                              {student.email && (
-                                <p className="text-sm text-gray-500">
-                                  {student.email}
-                                </p>
-                              )}
-                            </div>
-                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                              {student.visibleAssignments.length} job
-                              {student.visibleAssignments.length !== 1
-                                ? "s"
-                                : ""}
-                            </span>
-                          </div>
-                          <div className="space-y-3">
-                            {student.visibleAssignments.map(
-                              (assignment, idx) => (
-                                <div
-                                  key={idx}
-                                  className="bg-gray-50 rounded-lg p-3 text-sm"
-                                >
-                                  <div className="flex items-center justify-between mb-2">
-                                    <span className="font-medium text-gray-800">
-                                      {assignment.jobTitle || "Unnamed Job"}
-                                    </span>
-                                    {assignment.buildings?.length > 0 && (
-                                      <span className="text-xs text-gray-500 flex items-center gap-1">
-                                        <Building size={12} />
-                                        {assignment.buildings.join(", ")}
-                                      </span>
-                                    )}
-                                  </div>
-                                  {assignment.schedule?.length > 0 && (
-                                    <div className="flex flex-wrap gap-1">
-                                      {DAY_ORDER.map((day) => {
-                                        const daySchedules =
-                                          assignment.schedule.filter(
-                                            (s) => s.day === day,
-                                          );
-                                        if (daySchedules.length === 0)
-                                          return null;
-                                        return (
-                                          <span
-                                            key={day}
-                                            className="inline-flex items-center bg-white border border-gray-200 rounded px-2 py-0.5 text-xs"
-                                          >
-                                            <span className="font-medium text-baylor-green mr-1">
-                                              {day}
-                                            </span>
-                                            <span className="text-gray-600">
-                                              {daySchedules
-                                                .map(
-                                                  (s) =>
-                                                    `${formatTimeCompact(parseTimeToMinutes(s.start))}-${formatTimeCompact(parseTimeToMinutes(s.end))}`,
-                                                )
-                                                .join(", ")}
-                                            </span>
-                                          </span>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
-                              ),
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -693,6 +795,31 @@ const StudentSchedules = ({ embedded = false }) => {
           </div>
         </div>
       )}
+
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        scheduleTableRef={exportRef}
+        title={exportTitle}
+      />
+
+      <style>{`
+        @media print {
+          @page { size: 11in 8.5in; margin: 0.35in; }
+          .student-schedule-export {
+            width: 11in;
+            min-height: 8.5in;
+            margin: 0 auto;
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .student-schedule-card {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+        }
+      `}</style>
     </div>
   );
 };

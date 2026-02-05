@@ -459,7 +459,7 @@ const DepartmentInsights = () => {
               Faculty Teaching Load
             </h3>
             <p className="text-sm text-gray-600">
-              Weekly hours and course assignments by faculty member
+              Credit hours and course assignments by faculty member
             </p>
           </div>
         </div>
@@ -481,7 +481,7 @@ const DepartmentInsights = () => {
                   onSort={handleFacultySort}
                 />
                 <SortableHeader
-                  label="Weekly Hours"
+                  label="Credit Hours"
                   sortKey="totalHours"
                   currentSort={facultySort}
                   onSort={handleFacultySort}

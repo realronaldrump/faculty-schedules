@@ -337,7 +337,7 @@ export const DataProvider = ({ children }) => {
     const facultyWorkload = {};
     const roomUtilization = {};
 
-    // Helper to calculate duration in hours
+    // Helper to calculate duration in hours (used for room utilization)
     const calculateDuration = (startTime, endTime) => {
       if (!startTime || !endTime) return 0;
       const parseTimeToMinutes = (timeStr) => {
@@ -359,6 +359,12 @@ export const DataProvider = ({ children }) => {
         return (endMinutes - startMinutes) / 60;
       }
       return 0;
+    };
+
+    const parseCreditHours = (value) => {
+      if (value === undefined || value === null || value === "") return 0;
+      const numeric = Number(value);
+      return Number.isNaN(numeric) ? 0 : numeric;
     };
 
     let adjunctTaughtSessions = 0;
@@ -396,18 +402,33 @@ export const DataProvider = ({ children }) => {
         adjunctTaughtSessions++;
       }
 
-      // Calculate faculty workload
-      const duration = calculateDuration(s["Start Time"], s["End Time"]);
+      // Calculate faculty workload (credit hours per course section)
       const displayName = s.Instructor || "Unassigned";
       if (displayName && displayName !== "Unassigned") {
         if (!facultyWorkload[displayName]) {
-          facultyWorkload[displayName] = { courses: new Set(), totalHours: 0 };
+          facultyWorkload[displayName] = {
+            courses: new Set(),
+            creditedCourses: new Set(),
+            totalHours: 0,
+          };
         }
-        const workloadCourseKey = buildCourseSectionKey(s);
+        const workloadCourseKey =
+          buildCourseSectionKey(s) || s._originalId || s.id || "";
         if (workloadCourseKey) {
           facultyWorkload[displayName].courses.add(workloadCourseKey);
         }
-        facultyWorkload[displayName].totalHours += duration;
+        if (
+          !workloadCourseKey ||
+          !facultyWorkload[displayName].creditedCourses.has(workloadCourseKey)
+        ) {
+          const credits = parseCreditHours(
+            s.Credits ?? s.credits ?? s["Credit Hrs"],
+          );
+          facultyWorkload[displayName].totalHours += credits;
+          if (workloadCourseKey) {
+            facultyWorkload[displayName].creditedCourses.add(workloadCourseKey);
+          }
+        }
       }
 
       // Calculate room utilization
@@ -424,7 +445,10 @@ export const DataProvider = ({ children }) => {
           };
         }
         roomUtilization[roomLabel].classes++;
-        roomUtilization[roomLabel].hours += duration;
+        roomUtilization[roomLabel].hours += calculateDuration(
+          s["Start Time"],
+          s["End Time"],
+        );
         if (isAdjunctTaught) {
           roomUtilization[roomLabel].adjunctTaughtClasses++;
         }

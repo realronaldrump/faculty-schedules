@@ -35,7 +35,12 @@ export const UIProvider = ({ children }) => {
   const [pinnedPages, setPinnedPages] = useState(() => {
     try {
       const savedPins = localStorage.getItem('pinnedPages');
-      return savedPins ? JSON.parse(savedPins) : [];
+      const parsed = savedPins ? JSON.parse(savedPins) : [];
+      if (!Array.isArray(parsed)) return [];
+      const normalized = parsed.map((id) =>
+        id === 'faculty-finder' ? 'live-view' : id,
+      );
+      return Array.from(new Set(normalized));
     } catch (error) {
       console.error("Failed to parse pinned pages from localStorage", error);
       return [];

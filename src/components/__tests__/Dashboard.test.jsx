@@ -58,17 +58,17 @@ describe("Dashboard", () => {
     render(<Dashboard />);
 
     const input = screen.getByLabelText(/search destinations/i);
-    fireEvent.change(input, { target: { value: "Faculty Finder" } });
+    fireEvent.change(input, { target: { value: "Today" } });
 
     const resultsCard = screen
       .getByText(/search results/i)
       .closest(".university-card");
     const resultButton = within(resultsCard).getByRole("button", {
-      name: /faculty finder/i,
+      name: /today/i,
     });
 
     fireEvent.click(resultButton);
 
-    expect(navigateMock).toHaveBeenCalledWith("/faculty-finder");
+    expect(navigateMock).toHaveBeenCalledWith("/live-view");
   });
 });

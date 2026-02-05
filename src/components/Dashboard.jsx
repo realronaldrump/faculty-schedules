@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Star, ChevronRight } from "lucide-react";
+import { Search, Star, ChevronRight, HelpCircle } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useUI } from "../contexts/UIContext";
 import { navigationItems } from "../utils/navigationConfig";
@@ -236,11 +236,21 @@ const Dashboard = () => {
   return (
     <div className="space-y-8">
       <header className="space-y-3">
-        <div className="flex items-center gap-3">
-          <div className="h-1 w-8 rounded-full bg-baylor-gold"></div>
-          <p className="text-sm font-medium text-baylor-green/70">
-            Welcome back{firstName ? `, ${firstName}` : ""}
-          </p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-1 w-8 rounded-full bg-baylor-gold"></div>
+            <p className="text-sm font-medium text-baylor-green/70">
+              Welcome back{firstName ? `, ${firstName}` : ""}
+            </p>
+          </div>
+          <button
+            onClick={() => handleNavigate("/help/tutorials")}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-baylor-green bg-baylor-green/10 hover:bg-baylor-green hover:text-white rounded-md transition-all group"
+            title="View tutorials and help"
+          >
+            <HelpCircle className="h-5 w-5" />
+            <span>Tutorials</span>
+          </button>
         </div>
         <h1 className="text-2xl font-semibold text-gray-900">
           What are you looking for?

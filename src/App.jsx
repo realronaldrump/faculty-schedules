@@ -29,7 +29,6 @@ import BaylorAcronyms from "./components/administration/BaylorAcronyms";
 import CRNQualityTools from "./components/administration/CRNQualityTools";
 import RecentChangesPage from "./components/administration/RecentChangesPage";
 import LiveView from "./components/LiveView";
-import FacultyFinder from "./components/FacultyFinder";
 import TemperatureMonitoring from "./components/temperature/TemperatureMonitoring";
 import FacilitiesHub from "./components/facilities/FacilitiesHub";
 import OutlookRoomExport from "./components/tools/OutlookRoomExport.jsx";
@@ -250,11 +249,8 @@ function App() {
           </ProtectedContent>
         );
       case "faculty-finder":
-        return (
-          <ProtectedContent pageId="faculty-finder">
-            <FacultyFinder />
-          </ProtectedContent>
-        );
+        navigate("/live-view?explore=1&tab=faculty", { replace: true });
+        return null;
       // Scheduling Hubs
       case "scheduling/faculty":
         return (

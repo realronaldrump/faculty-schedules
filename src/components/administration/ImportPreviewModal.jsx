@@ -44,11 +44,79 @@ const FIELD_LABELS = {
   scheduleType: 'Schedule Type',
   status: 'Status',
   meetingPatterns: 'Meeting Patterns',
-  instructionMethod: 'Instruction Method'
+  instructionMethod: 'Instruction Method',
+  firstName: 'First Name',
+  lastName: 'Last Name',
+  name: 'Name',
+  email: 'Email',
+  phone: 'Phone',
+  office: 'Office',
+  officeSpaceId: 'Office Space ID',
+  title: 'Title',
+  jobTitle: 'Job Title',
+  department: 'Department',
+  baylorId: 'Baylor ID',
+  externalIds: 'External IDs',
+  'externalIds.clssInstructorId': 'CLSS Instructor ID',
+  'externalIds.baylorId': 'Baylor ID (external)',
+  'externalIds.emails': 'External Emails'
+};
+
+const HUMAN_LABEL_OVERRIDES = {
+  clssInstructorId: 'CLSS Instructor ID',
+  clssId: 'CLSS ID',
+  baylorId: 'Baylor ID',
+  officeSpaceId: 'Office Space ID',
+  crn: 'CRN'
+};
+
+const humanizeKey = (key) => {
+  const normalized = key === undefined || key === null ? '' : String(key);
+  if (!normalized) return '';
+  if (HUMAN_LABEL_OVERRIDES[normalized]) return HUMAN_LABEL_OVERRIDES[normalized];
+  return normalized
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+};
+
+const formatKeyLabel = (key) => {
+  if (key === undefined || key === null) return '';
+  const normalized = String(key);
+  if (FIELD_LABELS[normalized]) return FIELD_LABELS[normalized];
+  if (normalized.includes('.')) {
+    const [root, ...rest] = normalized.split('.');
+    const rootLabel = FIELD_LABELS[root] || humanizeKey(root);
+    const tail = rest.join('.');
+    const fullKey = `${root}.${tail}`;
+    const tailLabel = FIELD_LABELS[fullKey] || humanizeKey(tail);
+    return `${rootLabel}: ${tailLabel}`;
+  }
+  return humanizeKey(normalized);
 };
 
 const formatValue = (value) => {
   if (value === undefined || value === null || value === '') return '-';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '-';
+    return value.map((entry) => formatValue(entry)).join(', ');
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value).filter(([, entryValue]) => {
+      if (entryValue === undefined || entryValue === null || entryValue === '') return false;
+      if (Array.isArray(entryValue) && entryValue.length === 0) return false;
+      return true;
+    });
+    if (entries.length === 0) return '-';
+    return entries
+      .map(([entryKey, entryValue]) => `${formatKeyLabel(entryKey)}: ${formatValue(entryValue)}`)
+      .join(', ');
+  }
   return String(value);
 };
 
@@ -416,6 +484,26 @@ const ImportPreviewModal = ({
     return {};
   };
 
+  const getChangeSummary = (change) => {
+    if (!change || change.action !== 'modify') return '';
+    const meta = changeMeta.metaById.get(change.id);
+    const diff = meta?.displayDiff || change.diff || [];
+    if (!diff || diff.length === 0) {
+      if (meta?.internalOnly || (Array.isArray(meta?.internalDiff) && meta.internalDiff.length > 0)) {
+        return 'Internal metadata update';
+      }
+      return 'No visible field changes';
+    }
+    if (diff.length === 1) {
+      const entry = diff[0];
+      return `${formatKeyLabel(entry.key)} -> ${formatValue(entry.to)}`;
+    }
+    const labels = diff.map((entry) => formatKeyLabel(entry.key));
+    const preview = labels.slice(0, 3).join(', ');
+    const more = labels.length > 3 ? ` +${labels.length - 3} more` : '';
+    return `Changes: ${preview}${more}`;
+  };
+
   const renderFieldDiffs = (change) => {
     const meta = changeMeta.metaById.get(change.id);
     const diff = meta?.displayDiff || change.diff || [];
@@ -475,7 +563,7 @@ const ImportPreviewModal = ({
                 onChange={() => toggleField(key)}
               />
               <div className="flex-1">
-                <div className="text-xs text-gray-500">{FIELD_LABELS[key] || key}</div>
+                <div className="text-xs text-gray-500">{formatKeyLabel(key)}</div>
                 <div className="text-sm text-gray-900">{formatValue(to)}</div>
                 <div className="text-xs text-gray-500 line-through">{formatValue(from)}</div>
               </div>
@@ -898,6 +986,11 @@ const ImportPreviewModal = ({
                                       }
                                     </button>
                                   </div>
+                                  {change.action === 'modify' && !showDetails[change.id] && (
+                                    <div className="ml-7 mt-2 text-xs text-gray-600">
+                                      {getChangeSummary(change)}
+                                    </div>
+                                  )}
 
                                   {showDetails[change.id] && (
                                     <div className="mt-3 pt-3 border-t border-gray-100">

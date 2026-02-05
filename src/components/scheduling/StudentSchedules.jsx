@@ -493,12 +493,6 @@ const StudentSchedules = ({ embedded = false }) => {
                 <span className="font-semibold text-gray-900">Students:</span>{" "}
                 {filterSummary.students}
               </div>
-              <div>
-                <span className="font-semibold text-gray-900">
-                  Include Inactive:
-                </span>{" "}
-                {filterSummary.includeInactive}
-              </div>
             </div>
           </div>
 
@@ -612,7 +606,7 @@ const StudentSchedules = ({ embedded = false }) => {
                                 HOUR_HEIGHT;
                               const height = Math.max(
                                 ((event.endMinutes - event.startMinutes) / 60) *
-                                  HOUR_HEIGHT,
+                                HOUR_HEIGHT,
                                 28,
                               );
                               const color = getColorForKey(event.colorKey);

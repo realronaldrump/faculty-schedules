@@ -237,7 +237,7 @@ const FacultyFinder = () => {
       </div>
 
       {/* Search + Time Control Row */}
-      <div className="university-card">
+      <div className="university-card overflow-visible">
         <div className="university-card-content">
           <div className="flex flex-col lg:flex-row gap-4">
             {/* Search */}

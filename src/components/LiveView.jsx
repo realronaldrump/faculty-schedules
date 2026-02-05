@@ -684,7 +684,7 @@ const LiveView = () => {
       </div>
 
       {/* Finder Row */}
-      <div className="university-card mb-6">
+      <div className="university-card overflow-visible mb-6">
         <div className="university-card-content">
           <div className="flex flex-col lg:flex-row gap-4">
             <div className="flex-1 relative">

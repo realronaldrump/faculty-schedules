@@ -688,7 +688,7 @@ const GroupMeetings = ({ embedded = false }) => {
               <button
                 onClick={() => setShowResults(true)}
                 disabled={selectedProfessors.length === 0}
-                className="px-8 py-3 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed font-bold text-lg shadow-md"
+                className="px-8 py-3 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-bold text-lg shadow-md"
               >
                 <span className="flex items-center justify-center">
                   <Calendar className="mr-2" size={18} />

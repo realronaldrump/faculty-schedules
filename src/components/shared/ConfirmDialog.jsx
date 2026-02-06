@@ -9,25 +9,29 @@ import { AlertTriangle, X } from 'lucide-react';
  * @param {Object} props
  * @param {boolean} props.isOpen - Whether the dialog is visible
  * @param {string} props.title - Dialog title
- * @param {string} props.message - Main message to display
+ * @param {React.ReactNode} props.message - Main message to display
+ * @param {React.ReactNode} props.children - Optional additional content rendered under the message
  * @param {Function} props.onConfirm - Handler called when action is confirmed
  * @param {Function} props.onCancel - Handler called when dialog is cancelled
  * @param {string} props.confirmText - Text for confirm button (default: "Confirm")
  * @param {string} props.cancelText - Text for cancel button (default: "Cancel")
  * @param {string} props.variant - Visual variant: 'default' | 'danger' | 'warning' (default: 'default')
  * @param {React.ReactNode} props.icon - Custom icon component (optional)
+ * @param {boolean} props.confirmDisabled - Whether the confirm button is disabled (default: false)
  */
-const ConfirmDialog = ({
+ const ConfirmDialog = ({
     isOpen,
     title = 'Confirm Action',
     message,
+    children,
     onConfirm,
     onCancel,
     confirmText = 'Confirm',
     cancelText = 'Cancel',
     variant = 'default',
-    icon: CustomIcon
-}) => {
+    icon: CustomIcon,
+    confirmDisabled = false
+  }) => {
     if (!isOpen) return null;
 
     const variantStyles = {
@@ -69,9 +73,10 @@ const ConfirmDialog = ({
                     </h3>
                 </div>
 
-                <p className="text-gray-600 mb-6">
-                    {message}
-                </p>
+                <div className="text-gray-600 mb-6 space-y-4">
+                    <div>{message}</div>
+                    {children}
+                </div>
 
                 <div className="flex justify-end gap-3">
                     <button
@@ -83,7 +88,8 @@ const ConfirmDialog = ({
                     </button>
                     <button
                         onClick={onConfirm}
-                        className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${styles.confirmBg} ${styles.confirmText}`}
+                        disabled={confirmDisabled}
+                        className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${styles.confirmBg} ${styles.confirmText}`}
                     >
                         {confirmText}
                     </button>

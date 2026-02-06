@@ -306,9 +306,9 @@ const BaylorAcronyms = () => {
     return <div className="text-center p-8">Loading Acronyms...</div>;
   }
 
-  return (
-    <div className="p-4 md:p-6">
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">Baylor Acronyms</h1>
+    return (
+      <div className="p-4 md:p-6">
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">Baylor Acronyms</h1>
 
       <div className="mb-8 p-6 bg-white border border-gray-200 rounded-lg shadow-sm">
         <h2 className="text-xl font-semibold text-gray-700 mb-4 flex items-center">

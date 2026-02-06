@@ -31,7 +31,7 @@ import {
   limit,
 } from "firebase/firestore";
 import { logCreate, logDelete } from "../../utils/changeLogger";
-import { ConfirmationDialog } from "../CustomAlert";
+import ConfirmDialog from "../shared/ConfirmDialog";
 import { usePermissions } from "../../utils/permissions";
 import { fetchSchedulesByTerm } from "../../utils/dataImportUtils";
 import { getBuildingDisplay } from "../../utils/locationService";
@@ -74,7 +74,7 @@ const RoomGridGenerator = () => {
     message: "",
     title: "",
   });
-  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState({
+  const [deleteGridConfirm, setDeleteGridConfirm] = useState({
     isOpen: false,
     grid: null,
   });
@@ -1213,24 +1213,24 @@ const RoomGridGenerator = () => {
       return;
     }
     if (!grid) return;
-    setDeleteConfirmDialog({ isOpen: true, grid });
+    setDeleteGridConfirm({ isOpen: true, grid });
   };
 
   const handleConfirmDelete = async () => {
-    if (!deleteConfirmDialog.grid) return;
+    if (!deleteGridConfirm.grid) return;
     if (!canEditHere) {
       showMessage("You do not have permission to delete grids.", "error");
       return;
     }
     try {
       await deleteDoc(
-        doc(collection(db, "roomGrids"), deleteConfirmDialog.grid.id),
+        doc(collection(db, "roomGrids"), deleteGridConfirm.grid.id),
       );
       logDelete(
-        `Room Grid - ${deleteConfirmDialog.grid.title}`,
+        `Room Grid - ${deleteGridConfirm.grid.title}`,
         "roomGrids",
-        deleteConfirmDialog.grid.id,
-        deleteConfirmDialog.grid,
+        deleteGridConfirm.grid.id,
+        deleteGridConfirm.grid,
         "RoomGridGenerator.jsx - deleteGrid",
       ).catch(() => { });
       showMessage("Grid deleted.", "success");
@@ -1239,12 +1239,12 @@ const RoomGridGenerator = () => {
       console.error("Error deleting grid:", err);
       showMessage("Failed to delete grid.", "error");
     } finally {
-      setDeleteConfirmDialog({ isOpen: false, grid: null });
+      setDeleteGridConfirm({ isOpen: false, grid: null });
     }
   };
 
   const handleCancelDelete = () => {
-    setDeleteConfirmDialog({ isOpen: false, grid: null });
+    setDeleteGridConfirm({ isOpen: false, grid: null });
   };
 
   const buildingOptions = Object.keys(buildings)
@@ -1701,11 +1701,11 @@ const RoomGridGenerator = () => {
       )}
 
       {/* Reset Confirmation Dialog */}
-      <ConfirmationDialog
+      <ConfirmDialog
         isOpen={resetConfirmDialog}
         title="Reset Form"
         message="This will clear all selections and the generated schedule. Are you sure?"
-        type="warning"
+        variant="warning"
         confirmText="Reset"
         cancelText="Cancel"
         onConfirm={() => {
@@ -1937,11 +1937,11 @@ const RoomGridGenerator = () => {
       />
 
       {/* Alert Dialog */}
-      <ConfirmationDialog
+      <ConfirmDialog
         isOpen={alertDialog.isOpen}
         title={alertDialog.title}
         message={alertDialog.message}
-        type="warning"
+        variant="warning"
         confirmText="OK"
         onConfirm={() =>
           setAlertDialog({ isOpen: false, message: "", title: "" })
@@ -1952,11 +1952,11 @@ const RoomGridGenerator = () => {
       />
 
       {/* Delete Confirmation Dialog */}
-      <ConfirmationDialog
-        isOpen={deleteConfirmDialog.isOpen}
+      <ConfirmDialog
+        isOpen={deleteGridConfirm.isOpen}
         title="Delete Saved Grid"
-        message={`Are you sure you want to delete "${deleteConfirmDialog.grid?.title}"? This action cannot be undone.`}
-        type="danger"
+        message={`Are you sure you want to delete "${deleteGridConfirm.grid?.title}"? This action cannot be undone.`}
+        variant="danger"
         confirmText="Delete"
         cancelText="Cancel"
         onConfirm={handleConfirmDelete}

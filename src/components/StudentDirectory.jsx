@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import MultiSelectDropdown from "./MultiSelectDropdown";
 import FacultyContactCard from "./FacultyContactCard";
-import { DeleteConfirmDialog } from "./shared";
+import ConfirmDialog from "./shared/ConfirmDialog";
 import PersonDirectory from "./PersonDirectory";
 import SortableHeader from "./shared/SortableHeader";
 import {
@@ -1210,10 +1210,24 @@ const StudentDirectory = () => {
             )}
 
             {/* Delete Confirmation */}
-            <DeleteConfirmDialog
+            <ConfirmDialog
               isOpen={!!studentToDelete}
-              record={studentToDelete}
-              recordType="student worker"
+              variant="danger"
+              title="Delete student worker?"
+              message={
+                <div>
+                  Are you sure you want to delete{" "}
+                  <strong>
+                    {studentToDelete?.name ||
+                      studentToDelete?.displayName ||
+                      studentToDelete?.email ||
+                      "this student worker"}
+                  </strong>
+                  ? This action cannot be undone.
+                </div>
+              }
+              confirmText="Delete"
+              cancelText="Cancel"
               onConfirm={executeDelete}
               onCancel={() => setStudentToDelete(null)}
             />

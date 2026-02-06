@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { Edit, Save, X, Trash2, Phone, PhoneOff, Building, BuildingIcon, Plus, Minus, ExternalLink } from 'lucide-react';
 import { useDirectoryState, useDirectoryHandlers } from '../hooks';
 import { useData } from '../contexts/DataContext';
-import { DeleteConfirmDialog, UniversalDirectory } from './shared';
+import ConfirmDialog from './shared/ConfirmDialog';
+import { UniversalDirectory } from './shared';
 import {
   buildDirectoryFilterOptions,
   dedupeDirectoryRecords,
@@ -900,6 +901,12 @@ const ConfiguredPersonDirectory = (props) => {
     })
     : bodyBottom;
 
+  const deleteDisplayName =
+    recordToDelete?.name ||
+    recordToDelete?.displayName ||
+    recordToDelete?.email ||
+    'this record';
+
   return (
     <UniversalDirectory
       {...rest}
@@ -940,10 +947,18 @@ const ConfiguredPersonDirectory = (props) => {
         onUpdate,
         onRelatedUpdate
       })}
-      <DeleteConfirmDialog
+      <ConfirmDialog
         isOpen={showDeleteConfirm}
-        record={recordToDelete}
-        recordType={recordType}
+        variant="danger"
+        title={`Delete ${recordType}?`}
+        message={
+          <div>
+            Are you sure you want to delete <strong>{deleteDisplayName}</strong>?
+            This action cannot be undone.
+          </div>
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
         onConfirm={confirmDelete}
         onCancel={cancelDelete}
       />

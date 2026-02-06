@@ -33,7 +33,7 @@ import { useData } from "../../contexts/DataContext";
 import { useAppConfig } from "../../contexts/AppConfigContext";
 import { useUI } from "../../contexts/UIContext";
 import { usePeople } from "../../contexts/PeopleContext";
-import { ConfirmationDialog } from "../CustomAlert";
+import ConfirmDialog from "../shared/ConfirmDialog";
 import {
   SPACE_TYPE,
   buildSpaceKey,
@@ -1340,12 +1340,12 @@ const SpaceManagement = () => {
       </div>
 
       {/* Delete Confirmation */}
-      <ConfirmationDialog
+      <ConfirmDialog
         isOpen={!!deleteConfirm}
         title="Delete Space"
         message={`Deactivate "${deleteConfirm?.spaceKey || deleteConfirm?.name}"? References will be preserved, but the space will be hidden from active lists.`}
-        confirmLabel="Deactivate"
-        confirmVariant="danger"
+        confirmText="Deactivate"
+        variant="danger"
         onConfirm={() => handleDelete(deleteConfirm)}
         onCancel={() => setDeleteConfirm(null)}
       />

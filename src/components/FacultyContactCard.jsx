@@ -322,7 +322,7 @@ const FacultyContactCard = ({
                                     <button
                                         onClick={saveBaylorId}
                                         disabled={savingBaylorId}
-                                        className="px-2 py-1 text-xs bg-baylor-green text-white rounded disabled:opacity-60"
+                                        className="px-2 py-1 text-xs bg-baylor-green text-white rounded disabled:opacity-50"
                                     >
                                         {savingBaylorId ? 'Saving…' : 'Save'}
                                     </button>

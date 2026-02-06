@@ -393,7 +393,7 @@ const ImportWizard = ({ embedded = false }) => {
               Import Wizard
             </h2>
           ) : (
-            <h1 className="text-3xl font-bold text-baylor-green">
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">
               Import Wizard
             </h1>
           )}
@@ -580,7 +580,7 @@ const ImportWizard = ({ embedded = false }) => {
             <button
               onClick={startPreview}
               disabled={!validateDetected() || isProcessing}
-              className="px-6 py-3 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:bg-gray-400"
+              className="px-6 py-3 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50"
             >
               {isProcessing ? "Generating Preview..." : "Generate Preview"}
             </button>

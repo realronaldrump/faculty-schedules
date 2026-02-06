@@ -241,6 +241,37 @@
     font-family: "calluna", Georgia, serif;
   }
 
+  /* Compact Inputs & Buttons (used by Baylor Acronyms) */
+  .input-style {
+    @apply w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green transition-colors bg-white;
+  }
+
+  .input-style:focus {
+    @apply outline-none;
+  }
+
+  .btn-icon-primary {
+    @apply inline-flex items-center justify-center p-2 rounded-lg text-baylor-green hover:bg-baylor-green/10 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-icon-secondary {
+    @apply inline-flex items-center justify-center p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-icon-danger {
+    @apply inline-flex items-center justify-center p-2 rounded-lg text-red-600 hover:bg-red-100 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-danger-sm {
+    @apply inline-flex items-center justify-center px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold text-xs shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    font-family: "calluna", Georgia, serif;
+  }
+
+  .btn-secondary-sm {
+    @apply inline-flex items-center justify-center px-3 py-1.5 bg-gray-100 text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors font-semibold text-xs shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    font-family: "calluna", Georgia, serif;
+  }
+
   /* Professional Form Elements */
   .form-group {
     @apply space-y-2;

@@ -838,7 +838,7 @@ const OutlookRoomExport = () => {
               type="button"
               onClick={() => performDownload("ics")}
               disabled={exporting}
-              className="inline-flex items-center gap-2 rounded-lg bg-baylor-green px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-baylor-green/90 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg bg-baylor-green px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-baylor-green/90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="w-4 h-4" />
               {exporting ? "Preparing…" : "Download per-room ICS"}
@@ -847,7 +847,7 @@ const OutlookRoomExport = () => {
               type="button"
               onClick={() => performDownload("zip")}
               disabled={exporting}
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600/90 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600/90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <FileArchive className="w-4 h-4" />
               {exporting ? "Packaging…" : "Download multi-room ZIP"}
@@ -1035,7 +1035,7 @@ const OutlookRoomExport = () => {
                     disabled={
                       !exceptionDraft.date || !canAccess("scheduling/rooms")
                     }
-                    className="inline-flex items-center gap-1 rounded-lg bg-baylor-green px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-baylor-green/90 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex items-center gap-1 rounded-lg bg-baylor-green px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-baylor-green/90 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Plus className="w-4 h-4" />
                     Add date

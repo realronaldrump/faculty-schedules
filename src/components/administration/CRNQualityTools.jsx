@@ -221,9 +221,9 @@ const CRNQualityTools = () => {
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+      <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-baylor-green">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">
           CRN Quality Tools
         </h1>
         <p className="text-gray-600">
@@ -243,7 +243,7 @@ const CRNQualityTools = () => {
         <button
           onClick={handleAnalyze}
           disabled={isAnalyzing}
-          className="px-6 py-3 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 disabled:bg-gray-400 flex items-center"
+          className="px-6 py-3 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 disabled:opacity-50 flex items-center"
         >
           {isAnalyzing ? (
             "Analyzing..."
@@ -393,15 +393,15 @@ const CRNQualityTools = () => {
                                 <div className="flex items-center gap-2">
                                   {canEditHere && (
                                     <button
-                                      onClick={() => handleCrnSave(row.id)}
-                                      className="btn btn-primary btn-sm"
+                                      onClick={() => handleCrnSave(row)}
+                                      className="inline-flex items-center px-2 py-1 text-sm font-medium bg-baylor-green text-white rounded-md hover:bg-baylor-green/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                       Save
                                     </button>
                                   )}
                                   <button
                                     onClick={() => cancelCrnEdit(row.id)}
-                                    className="inline-flex items-center px-2 py-1 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+                                    className="inline-flex items-center px-2 py-1 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors"
                                   >
                                     <X className="w-4 h-4 mr-1" /> Cancel
                                   </button>
@@ -410,8 +410,8 @@ const CRNQualityTools = () => {
                                 <>
                                   {canEditHere && (
                                     <button
-                                      onClick={cancelCrnEdit}
-                                      className="btn btn-outline btn-xs"
+                                      onClick={() => cancelCrnEdit(row.id)}
+                                      className="inline-flex items-center px-2 py-1 text-xs bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
                                     >
                                       Cancel
                                     </button>

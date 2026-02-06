@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import MultiSelectDropdown from "../MultiSelectDropdown";
 import FacultyContactCard from "../FacultyContactCard";
-import { ConfirmationDialog } from "../CustomAlert";
+import ConfirmDialog from "../shared/ConfirmDialog";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -1508,7 +1508,7 @@ const EmailLists = ({ embedded = false }) => {
                 <button
                   onClick={() => generateEmailList("gmail")}
                   disabled={selectedPeople.length === 0}
-                  className="flex items-center px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  className="flex items-center px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <Mail className="w-4 h-4 mr-2" />
                   Copy Emails
@@ -1517,7 +1517,7 @@ const EmailLists = ({ embedded = false }) => {
                 <button
                   onClick={downloadCSV}
                   disabled={selectedPeople.length === 0}
-                  className="flex items-center px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  className="flex items-center px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <Download className="w-4 h-4 mr-2" />
                   Download CSV
@@ -1873,7 +1873,7 @@ const EmailLists = ({ embedded = false }) => {
                       selectedPeople.length === 0 ||
                       presetSaving
                     }
-                    className="px-4 py-2 text-sm bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    className="px-4 py-2 text-sm bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                   >
                     {presetSaving ? (
                       <>
@@ -2172,7 +2172,7 @@ const EmailLists = ({ embedded = false }) => {
                   selectedPeople.length === 0 ||
                   presetSaving
                 }
-                className="px-4 py-2 text-sm bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                className="px-4 py-2 text-sm bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
                 {presetSaving ? (
                   <>
@@ -2211,11 +2211,11 @@ const EmailLists = ({ embedded = false }) => {
         </div>
       )}
 
-      <ConfirmationDialog
+      <ConfirmDialog
         isOpen={deletePresetConfirm.isOpen}
         title="Delete Preset?"
         message={`Are you sure you want to delete ${deletePresetLabel}? This action cannot be undone.`}
-        type="danger"
+        variant="danger"
         confirmText={presetDeleting ? "Deleting..." : "Delete Preset"}
         cancelText="Cancel"
         onConfirm={handleConfirmDeletePreset}

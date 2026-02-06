@@ -11,7 +11,7 @@ import { useAppConfig } from '../../contexts/AppConfigContext';
 import { backfillTermMetadata } from '../../utils/termDataUtils';
 import { normalizeTermDateValue, parseTermDate } from '../../utils/termUtils';
 import { deleteSemesterImport, previewSemesterDeletion } from '../../utils/importLifecycleUtils';
-import { ConfirmationDialog } from '../CustomAlert';
+import ConfirmDialog from '../shared/ConfirmDialog';
 import BuildingManagement from './BuildingManagement';
 import SpaceManagement from './SpaceManagement';
 
@@ -549,7 +549,7 @@ const AppSettings = () => {
   return (
     <div className="space-y-6">
       {/* Backfill Confirmation Dialog */}
-      <ConfirmationDialog
+      <ConfirmDialog
         isOpen={showBackfillConfirm}
         title="Backfill Semester Metadata"
         message="This will scan all schedules and ensure each semester has metadata in the semesters list. Continue?"
@@ -827,7 +827,7 @@ const AppSettings = () => {
                       <button
                         onClick={() => handleMoveSeasonOrder(index, -1)}
                         disabled={index === 0}
-                        className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         title="Move up"
                       >
                         <ChevronUp size={16} />
@@ -835,7 +835,7 @@ const AppSettings = () => {
                       <button
                         onClick={() => handleMoveSeasonOrder(index, 1)}
                         disabled={index === seasonOrder.length - 1}
-                        className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         title="Move down"
                       >
                         <ChevronDown size={16} />
@@ -1193,7 +1193,7 @@ const AppSettings = () => {
 
           {/* Delete Confirmation Dialog */}
           {showDeleteConfirm && (
-            <ConfirmationDialog
+            <ConfirmDialog
               isOpen={true}
               title="Delete Semester?"
               message={
@@ -1232,7 +1232,7 @@ const AppSettings = () => {
 
           {/* Merge Dialog */}
           {showMergeDialog && (
-            <ConfirmationDialog
+            <ConfirmDialog
               isOpen={true}
               title="Merge Semester"
               message={

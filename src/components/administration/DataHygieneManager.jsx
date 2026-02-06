@@ -45,7 +45,7 @@ import { linkSchedules } from "../../utils/scheduleLinkUtils";
 import { logUpdate } from "../../utils/changeLogger";
 import { fetchPeople } from "../../utils/dataAdapter";
 import MissingDataReviewModal from "./MissingDataReviewModal";
-import { ConfirmationDialog } from "../CustomAlert";
+import ConfirmDialog from "../shared/ConfirmDialog";
 import OrphanedDataCleanupModal from "./OrphanedDataCleanupModal";
 import { useUI } from "../../contexts/UIContext";
 import { useAuth } from "../../contexts/AuthContext.jsx";
@@ -2045,7 +2045,7 @@ const DataHygieneManager = () => {
         confirmDisabled={spaceFixConfirmDisabled}
       />
 
-      <ConfirmationDialog
+      <ConfirmDialog
         isOpen={!!confirmAction}
         title={confirmAction?.title || ""}
         message={confirmAction?.message || ""}

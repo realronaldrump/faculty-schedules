@@ -25,7 +25,7 @@ import { collection, getDocs, query, where, writeBatch } from 'firebase/firestor
 import { db } from '../../firebase';
 import { useAppConfig } from '../../contexts/AppConfigContext';
 import { useUI } from '../../contexts/UIContext';
-import { ConfirmationDialog } from '../CustomAlert';
+import ConfirmDialog from '../shared/ConfirmDialog';
 import { extractSpaceNumber, formatSpaceDisplayName, normalizeSpaceNumber } from '../../utils/locationService';
 
 const BuildingManagement = () => {
@@ -498,12 +498,12 @@ const BuildingManagement = () => {
       </div>
 
       {/* Deactivate Confirmation */}
-      <ConfirmationDialog
+      <ConfirmDialog
         isOpen={!!deleteConfirm}
         title="Deactivate Building"
         message={`Deactivate "${deleteConfirm?.displayName}"? Spaces remain intact, but the building will be hidden from active lists.`}
-        confirmLabel="Deactivate"
-        confirmVariant="danger"
+        confirmText="Deactivate"
+        variant="danger"
         onConfirm={() => handleDelete(deleteConfirm)}
         onCancel={() => setDeleteConfirm(null)}
       />

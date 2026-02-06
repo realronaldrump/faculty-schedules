@@ -1,6 +1,15 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ExternalLink, GraduationCap, Calendar, IdCard, BookOpen, Settings } from 'lucide-react';
+import {
+  ArrowLeft,
+  ExternalLink,
+  GraduationCap,
+  Calendar,
+  IdCard,
+  BookOpen,
+  Settings,
+  ClipboardList,
+} from 'lucide-react';
 
 const BaylorSystems = () => {
   const navigate = useNavigate();
@@ -29,6 +38,14 @@ const BaylorSystems = () => {
       icon: Settings,
       category: 'Administrative',
       color: 'bg-baylor-green'
+    },
+    {
+      name: 'Qualtrics',
+      description: 'Survey platform for creating, distributing, and analyzing questionnaires',
+      url: 'https://baylor.qualtrics.com/',
+      icon: ClipboardList,
+      category: 'Administrative',
+      color: 'bg-baylor-gold'
     },
     { 
       name: 'Canvas', 

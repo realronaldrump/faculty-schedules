@@ -2051,7 +2051,7 @@ const DataHygieneManager = () => {
         message={confirmAction?.message || ""}
         confirmText={confirmAction?.confirmText || "Confirm"}
         cancelText={confirmAction?.cancelText || "Cancel"}
-        variant={confirmAction?.variant || "info"}
+        variant={confirmAction?.variant || "default"}
         confirmDisabled={confirmAction?.confirmDisabled || false}
         onConfirm={async () => {
           const action = confirmAction;

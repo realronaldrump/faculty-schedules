@@ -31,6 +31,7 @@ export default [
       ...react.configs.flat.recommended.rules,
       ...react.configs.flat["jsx-runtime"].rules,
       ...reactHooks.configs.recommended.rules,
+      "no-alert": "error",
       "no-unused-vars": "off",
       "react/no-unescaped-entities": "off",
       "react-hooks/exhaustive-deps": "off",

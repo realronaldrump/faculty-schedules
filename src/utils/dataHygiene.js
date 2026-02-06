@@ -869,35 +869,51 @@ export const linkScheduleToPerson = async (scheduleId, personId) => {
 /**
  * Standardize all existing data
  */
-export const standardizeAllData = async () => {
+export const standardizeAllData = async (options = {}) => {
+  const {
+    termCode = "",
+    includePeople = true,
+    includeSchedules = true,
+    includeRooms = true,
+  } = options;
   const batchWriter = createBatchWriter();
   let updateCount = 0;
 
   // Standardize people
-  const peopleSnapshot = await getDocs(collection(db, "people"));
-  for (const docSnap of peopleSnapshot.docs) {
-    const standardized = standardizePerson(docSnap.data());
-    await batchWriter.add((batch) => batch.update(docSnap.ref, standardized));
-    updateCount++;
+  if (includePeople) {
+    const peopleSnapshot = await getDocs(collection(db, "people"));
+    for (const docSnap of peopleSnapshot.docs) {
+      const standardized = standardizePerson(docSnap.data());
+      await batchWriter.add((batch) => batch.update(docSnap.ref, standardized));
+      updateCount++;
+    }
   }
 
   // Standardize schedules
-  const schedulesSnapshot = await getDocs(collection(db, "schedules"));
-  for (const docSnap of schedulesSnapshot.docs) {
-    const standardized = standardizeSchedule(docSnap.data());
-    if (standardized.instructorId) {
-      standardized.instructorName = deleteField();
+  if (includeSchedules) {
+    const schedulesSnapshot = termCode
+      ? await getDocs(
+          query(collection(db, "schedules"), where("termCode", "==", termCode)),
+        )
+      : await getDocs(collection(db, "schedules"));
+    for (const docSnap of schedulesSnapshot.docs) {
+      const standardized = standardizeSchedule(docSnap.data());
+      if (standardized.instructorId) {
+        standardized.instructorName = deleteField();
+      }
+      await batchWriter.add((batch) => batch.update(docSnap.ref, standardized));
+      updateCount++;
     }
-    await batchWriter.add((batch) => batch.update(docSnap.ref, standardized));
-    updateCount++;
   }
 
   // Standardize rooms
-  const roomsSnapshot = await getDocs(collection(db, "rooms"));
-  for (const docSnap of roomsSnapshot.docs) {
-    const standardized = standardizeRoom(docSnap.data());
-    await batchWriter.add((batch) => batch.update(docSnap.ref, standardized));
-    updateCount++;
+  if (includeRooms) {
+    const roomsSnapshot = await getDocs(collection(db, "rooms"));
+    for (const docSnap of roomsSnapshot.docs) {
+      const standardized = standardizeRoom(docSnap.data());
+      await batchWriter.add((batch) => batch.update(docSnap.ref, standardized));
+      updateCount++;
+    }
   }
 
   await batchWriter.flush();
@@ -1512,6 +1528,204 @@ export const autoMergeObviousDuplicates = async () => {
   }
 
   return results;
+};
+
+/**
+ * Run scoped post-import cleanup (user-triggered).
+ *
+ * Scope is intentionally limited to the specified term(s):
+ * - Merge high-confidence schedule duplicates (>= 0.98)
+ * - Create missing room docs for referenced spaceKeys
+ * - Repair schedule space links / normalize display names (term schedules only)
+ */
+export const runPostImportCleanup = async ({
+  termCode,
+  termCodes,
+  transactionId = "",
+} = {}) => {
+  const codes = Array.isArray(termCodes)
+    ? termCodes.filter(Boolean)
+    : termCode
+      ? [termCode]
+      : [];
+  const uniqueTermCodes = Array.from(new Set(codes.map((code) => String(code).trim()).filter(Boolean)));
+
+  if (uniqueTermCodes.length === 0) {
+    throw new Error("runPostImportCleanup requires a termCode (or termCodes).");
+  }
+
+  const chunkArray = (items, size = 10) => {
+    const chunks = [];
+    for (let i = 0; i < items.length; i += size) {
+      chunks.push(items.slice(i, i + size));
+    }
+    return chunks;
+  };
+
+  const fetchSchedulesForTerms = async (termCodeList) => {
+    const queries = chunkArray(termCodeList).map((chunk) =>
+      getDocs(query(collection(db, "schedules"), where("termCode", "in", chunk))),
+    );
+    const snapshots = await Promise.all(queries);
+    const seen = new Set();
+    const schedules = [];
+    snapshots.forEach((snapshot) => {
+      snapshot.docs.forEach((docSnap) => {
+        if (seen.has(docSnap.id)) return;
+        seen.add(docSnap.id);
+        schedules.push({ id: docSnap.id, ...docSnap.data() });
+      });
+    });
+    return schedules;
+  };
+
+  const report = {
+    transactionId: transactionId || "",
+    termCodes: uniqueTermCodes,
+    schedulesFetched: 0,
+    scheduleDuplicatesDetected: 0,
+    scheduleDuplicatesMerged: 0,
+    scheduleMergeErrors: [],
+    roomsCreated: 0,
+    roomCreateErrors: [],
+    spaceLinkRepairs: null,
+    timestamp: new Date().toISOString(),
+  };
+
+  // 1) Fetch term schedules
+  let schedules = await fetchSchedulesForTerms(uniqueTermCodes);
+  report.schedulesFetched = schedules.length;
+
+  // 2) Merge high-confidence schedule duplicates (respect dedupe decisions + link groups)
+  const [scheduleDecisions] = await Promise.all([
+    fetchDedupeDecisions("schedules"),
+  ]);
+  const linkedPairs = buildLinkedSchedulePairSet(schedules);
+  const blockedPairs = new Set([...scheduleDecisions, ...linkedPairs]);
+  const scheduleDuplicates = detectScheduleDuplicates(schedules, {
+    blockedPairs,
+  });
+  report.scheduleDuplicatesDetected = scheduleDuplicates.length;
+
+  // Greedy merge: avoid attempting to merge schedules already removed in this run.
+  const mergedSecondaryIds = new Set();
+  for (const dup of scheduleDuplicates) {
+    if (dup.confidence < 0.98) continue;
+    const [primary, secondary] = dup.records || [];
+    if (!primary?.id || !secondary?.id) continue;
+    if (mergedSecondaryIds.has(primary.id) || mergedSecondaryIds.has(secondary.id)) continue;
+    try {
+      await mergeScheduleRecords(dup);
+      report.scheduleDuplicatesMerged += 1;
+      mergedSecondaryIds.add(secondary.id);
+    } catch (error) {
+      report.scheduleMergeErrors.push(error?.message || String(error));
+    }
+  }
+
+  if (report.scheduleDuplicatesMerged > 0) {
+    schedules = await fetchSchedulesForTerms(uniqueTermCodes);
+  }
+
+  // 3) Create missing room docs for referenced spaceKeys (term schedules only)
+  const roomsSnapshot = await getDocs(collection(db, "rooms"));
+  const rooms = roomsSnapshot.docs.map((docSnap) => ({
+    id: docSnap.id,
+    ...docSnap.data(),
+  }));
+  const existingRoomKeys = new Set(
+    rooms
+      .map((room) => (room?.spaceKey || room?.id || "").toString().trim())
+      .filter(Boolean),
+  );
+
+  const referencedSpaceKeys = new Set();
+  schedules.forEach((schedule) => {
+    const ids = Array.isArray(schedule?.spaceIds) ? schedule.spaceIds : [];
+    ids.forEach((id) => {
+      const value = (id || "").toString().trim();
+      if (!value) return;
+      const validation = validateSpaceKey(value);
+      if (validation.valid) referencedSpaceKeys.add(value);
+    });
+
+    const names = Array.isArray(schedule?.spaceDisplayNames)
+      ? schedule.spaceDisplayNames.filter(Boolean)
+      : [];
+    if (names.length > 0) {
+      const parsed = parseMultiRoom(names.join("; "));
+      const parsedKeys = Array.isArray(parsed?.spaceKeys) ? parsed.spaceKeys : [];
+      parsedKeys.forEach((key) => {
+        const value = (key || "").toString().trim();
+        if (!value) return;
+        const validation = validateSpaceKey(value);
+        if (validation.valid) referencedSpaceKeys.add(value);
+      });
+    }
+  });
+
+  const batchWriter = createBatchWriter();
+  const now = new Date().toISOString();
+  const createdBy = transactionId ? `post-import:${transactionId}` : "post-import-cleanup";
+
+  for (const spaceKey of referencedSpaceKeys) {
+    if (existingRoomKeys.has(spaceKey)) continue;
+    const parsedKey = parseSpaceKey(spaceKey);
+    const buildingCode = (parsedKey?.buildingCode || "").toString().trim().toUpperCase();
+    const spaceNumber = normalizeSpaceNumber(parsedKey?.spaceNumber || "");
+    const canonicalKey = buildingCode && spaceNumber ? buildSpaceKey(buildingCode, spaceNumber) : "";
+    if (!canonicalKey) continue;
+    if (existingRoomKeys.has(canonicalKey)) continue;
+
+    try {
+      const buildingDisplayName =
+        resolveBuildingDisplayName(buildingCode) || buildingCode;
+      const resolvedBuilding = resolveBuilding(buildingCode);
+      const displayName = formatSpaceDisplayName({
+        buildingCode,
+        buildingDisplayName,
+        spaceNumber,
+      });
+      const payload = {
+        spaceKey: canonicalKey,
+        buildingCode,
+        buildingDisplayName,
+        buildingId: resolvedBuilding?.id || "",
+        spaceNumber,
+        displayName,
+        name: displayName,
+        building: buildingDisplayName,
+        roomNumber: spaceNumber,
+        type: SPACE_TYPE.CLASSROOM,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+        createdBy,
+      };
+
+      await batchWriter.add((batch) => {
+        batch.set(doc(db, "rooms", canonicalKey), payload, { merge: true });
+      });
+      report.roomsCreated += 1;
+      existingRoomKeys.add(canonicalKey);
+    } catch (error) {
+      report.roomCreateErrors.push(error?.message || String(error));
+    }
+  }
+
+  await batchWriter.flush();
+
+  // 4) Repair schedule space links/display names (term schedules only)
+  try {
+    report.spaceLinkRepairs = await repairScheduleSpaceLinks({
+      schedules,
+      normalizeRoomDisplayNames: true,
+    });
+  } catch (error) {
+    report.spaceLinkRepairs = { error: error?.message || String(error) };
+  }
+
+  return report;
 };
 
 // ==================== REAL-TIME VALIDATION ====================
@@ -2260,8 +2474,12 @@ export const getStandardizationHistory = async (limitCount = 10) => {
 // SCHEDULE IDENTITY BACKFILL
 // ---------------------------------------------------------------------------
 
-export const previewScheduleIdentityBackfill = async () => {
-  const snapshot = await getDocs(collection(db, "schedules"));
+export const previewScheduleIdentityBackfill = async ({ termCode = "" } = {}) => {
+  const snapshot = termCode
+    ? await getDocs(
+        query(collection(db, "schedules"), where("termCode", "==", termCode)),
+      )
+    : await getDocs(collection(db, "schedules"));
   const changes = [];
 
   snapshot.docs.forEach((docSnap) => {

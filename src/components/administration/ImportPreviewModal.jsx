@@ -772,6 +772,7 @@ const ImportPreviewModal = ({
                   const proposedName = `${proposed.firstName || ''} ${proposed.lastName || ''}`.trim() || 'Unnamed';
                   const resolution = matchResolutions[issue.id];
                   const searchTerm = matchSearchTerms[issue.id] || '';
+                  const canCreatePerson = Boolean(issue.pendingPersonChangeId);
                   const normalizedSearch = searchTerm.trim().toLowerCase();
                   const searchResults = normalizedSearch.length >= 2
                     ? people
@@ -895,12 +896,20 @@ const ImportPreviewModal = ({
                       </div>
 
                       <div className="mt-3 flex items-center justify-between">
-                        <button
-                          onClick={() => applyResolution(issue, { action: 'create' })}
-                          className="text-sm px-3 py-2 bg-baylor-green text-white rounded-md hover:bg-baylor-green/90"
-                        >
-                          Create new person
-                        </button>
+                        <div>
+                          <button
+                            onClick={() => applyResolution(issue, { action: 'create' })}
+                            disabled={!canCreatePerson}
+                            className="text-sm px-3 py-2 bg-baylor-green text-white rounded-md hover:bg-baylor-green/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Create new person
+                          </button>
+                          {!canCreatePerson && (
+                            <div className="mt-1 text-xs text-gray-500">
+                              Create disabled: missing identifier in import data.
+                            </div>
+                          )}
+                        </div>
                         {resolution && (
                           <button
                             onClick={() => clearResolution(issue)}

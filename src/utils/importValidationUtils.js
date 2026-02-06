@@ -363,23 +363,39 @@ const validateModifications = (transaction) => {
  * Build validation summary
  */
 const buildValidationSummary = (transaction, errors, warnings) => {
-  const scheduleErrors = errors.filter(e => e.collection === 'schedules').length;
-  const peopleErrors = errors.filter(e => e.collection === 'people').length;
-  const roomErrors = errors.filter(e => e.collection === 'rooms').length;
-
   const schedulesAdded = transaction.changes?.schedules?.added?.length || 0;
   const peopleAdded = transaction.changes?.people?.added?.length || 0;
   const roomsAdded = transaction.changes?.rooms?.added?.length || 0;
 
+  const countInvalidChanges = (collection, addedCount) => {
+    const scoped = errors
+      .filter(e => e.collection === collection && e.changeId)
+      .map(e => e.changeId);
+    const scopedInvalid = new Set(scoped).size;
+
+    const unscopedErrors = errors.filter(
+      e => e.collection === collection && !e.changeId,
+    ).length;
+
+    // Errors are recorded per-field, so a single change can produce multiple
+    // errors. Summaries should count invalid *changes*, never go negative.
+    const estimatedUnscopedInvalid = unscopedErrors > 0 ? 1 : 0;
+    return Math.min(scopedInvalid + estimatedUnscopedInvalid, addedCount);
+  };
+
+  const schedulesInvalid = countInvalidChanges('schedules', schedulesAdded);
+  const peopleInvalid = countInvalidChanges('people', peopleAdded);
+  const roomsInvalid = countInvalidChanges('rooms', roomsAdded);
+
   return {
     errorCount: errors.length,
     warningCount: warnings.length,
-    schedulesValid: schedulesAdded - scheduleErrors,
-    schedulesInvalid: scheduleErrors,
-    peopleValid: peopleAdded - peopleErrors,
-    peopleInvalid: peopleErrors,
-    roomsValid: roomsAdded - roomErrors,
-    roomsInvalid: roomErrors,
+    schedulesValid: Math.max(0, schedulesAdded - schedulesInvalid),
+    schedulesInvalid,
+    peopleValid: Math.max(0, peopleAdded - peopleInvalid),
+    peopleInvalid,
+    roomsValid: Math.max(0, roomsAdded - roomsInvalid),
+    roomsInvalid,
     orphanedReferences: warnings.filter(w => w.type === 'orphaned_reference').length,
     potentialConflicts: warnings.filter(w => w.type === 'potential_teaching_conflict').length
   };

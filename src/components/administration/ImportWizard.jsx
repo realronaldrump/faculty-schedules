@@ -16,13 +16,15 @@ import {
   commitTransaction,
   projectSchedulePreviewRow,
 } from "../../utils/importTransactionUtils";
+import { parseCSVRecords } from "../../utils/csvUtils";
+import { runPostImportCleanup } from "../../utils/dataHygiene";
 import ImportPreviewModal from "./ImportPreviewModal";
 import ImportHistoryModal from "./ImportHistoryModal";
 import { useSchedules } from "../../contexts/ScheduleContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { useUI } from "../../contexts/UIContext";
-import { normalizeTermLabel } from "../../utils/termUtils";
-import { hashString } from "../../utils/hashUtils";
+import { normalizeTermLabel, termCodeFromLabel } from "../../utils/termUtils";
+import { hashString, hashRecord } from "../../utils/hashUtils";
 
 const ImportWizard = ({ embedded = false }) => {
   const { selectedSemester, refreshSchedules, refreshTerms, isTermLocked } =
@@ -46,6 +48,8 @@ const ImportWizard = ({ embedded = false }) => {
   const [showHistory, setShowHistory] = useState(false);
   const [resultsSummary, setResultsSummary] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isCleanupRunning, setIsCleanupRunning] = useState(false);
+  const [cleanupReport, setCleanupReport] = useState(null);
 
   const handleDataRefresh = async () => {
     await Promise.all([
@@ -127,31 +131,29 @@ const ImportWizard = ({ embedded = false }) => {
           ).trim();
           setDetectedTerm(term);
         } else {
-          // Simple CSV parser for directory
-          const lines = text.split("\n").filter((l) => l.trim());
-          if (lines.length < 2) throw new Error("CSV has no data rows");
-          const headers = lines[0]
-            .split(",")
-            .map((h) => h.replace(/"/g, "").trim());
-          const data = lines.slice(1).map((line) => {
-            const values = [];
-            let current = "";
-            let inQuotes = false;
-            for (let i = 0; i < line.length; i++) {
-              const ch = line[i];
-              if (ch === '"') inQuotes = !inQuotes;
-              else if (ch === "," && !inQuotes) {
-                values.push(current);
-                current = "";
-              } else current += ch;
-            }
-            values.push(current);
+          // Robust CSV parse for directory imports (supports commas, quotes, multiline fields)
+          const rows = parseCSVRecords(text);
+          if (!rows || rows.length < 2) throw new Error("CSV has no data rows");
+          const normalizeHeader = (value) =>
+            String(value || "")
+              .replace(/\s+/g, " ")
+              .trim();
+          const headers = rows[0].map((h) => normalizeHeader(h));
+          const data = [];
+          for (let i = 1; i < rows.length; i += 1) {
+            const values = rows[i] || [];
+            const isEmpty = values.every((value) => !String(value || "").trim());
+            if (isEmpty) continue;
             const obj = {};
             headers.forEach((h, idx) => {
-              obj[h] = (values[idx] || "").replace(/"/g, "").trim();
+              obj[h] = String(values[idx] ?? "").trim();
             });
-            return obj;
-          });
+            obj.__rowIndex = i + 1;
+            const hashInput = { ...obj };
+            delete hashInput.__rowIndex;
+            obj.__rowHash = hashRecord(hashInput);
+            data.push(obj);
+          }
           setCsvData(data);
           setImportType("directory");
         }
@@ -274,7 +276,22 @@ const ImportWizard = ({ embedded = false }) => {
         matchResolutions,
       );
       const stats = result.getSummary().stats;
+      const termCodes = new Set();
+      (result.changes?.schedules?.added || []).forEach((change) => {
+        const tc = change?.newData?.termCode;
+        if (tc) termCodes.add(tc);
+      });
+      (result.changes?.schedules?.modified || []).forEach((change) => {
+        const tc = change?.newData?.termCode || change?.originalData?.termCode;
+        if (tc) termCodes.add(tc);
+      });
+      if (termCodes.size === 0) {
+        const tc = termCodeFromLabel(result.getSummary().semester || "");
+        if (tc) termCodes.add(tc);
+      }
       setResultsSummary({
+        transactionId: result.getSummary().id,
+        termCodes: Array.from(termCodes),
         total: stats.totalChanges,
         schedulesAdded: stats.schedulesAdded,
         peopleAdded: stats.peopleAdded,
@@ -289,6 +306,7 @@ const ImportWizard = ({ embedded = false }) => {
       setShowPreviewModal(false);
       setPreviewTransaction(null);
       setStep(4);
+      setCleanupReport(null);
       if (importType === "schedule") {
         await refreshSchedules();
         await refreshTerms?.();
@@ -323,6 +341,47 @@ const ImportWizard = ({ embedded = false }) => {
     setResultsSummary(null);
     setFileHash("");
     setFileSize(0);
+    setIsCleanupRunning(false);
+    setCleanupReport(null);
+  };
+
+  const handlePostImportCleanup = async () => {
+    if (!resultsSummary?.transactionId) return;
+    const termCodes = Array.isArray(resultsSummary.termCodes)
+      ? resultsSummary.termCodes
+      : [];
+    if (termCodes.length === 0) {
+      showNotification?.(
+        "warning",
+        "Cleanup Unavailable",
+        "No term codes were detected for this import.",
+      );
+      return;
+    }
+
+    setIsCleanupRunning(true);
+    try {
+      const report = await runPostImportCleanup({
+        termCodes,
+        transactionId: resultsSummary.transactionId,
+      });
+      setCleanupReport(report);
+      const repaired = report?.spaceLinkRepairs?.schedulesUpdated || 0;
+      showNotification?.(
+        "success",
+        "Cleanup Complete",
+        `Merged ${report.scheduleDuplicatesMerged || 0} schedule duplicates, created ${report.roomsCreated || 0} rooms, repaired ${repaired} schedules.`,
+      );
+    } catch (e) {
+      console.error("Post-import cleanup failed:", e);
+      showNotification?.(
+        "error",
+        "Cleanup Failed",
+        e.message || "Post-import cleanup failed.",
+      );
+    } finally {
+      setIsCleanupRunning(false);
+    }
   };
 
   return (
@@ -546,6 +605,17 @@ const ImportWizard = ({ embedded = false }) => {
               <History className="w-4 h-4" />
               <span>View Import History</span>
             </button>
+            {importType === "schedule" && (
+              <button
+                onClick={handlePostImportCleanup}
+                disabled={isCleanupRunning}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+              >
+                {isCleanupRunning
+                  ? "Running Cleanup..."
+                  : "Run Post-Import Cleanup"}
+              </button>
+            )}
             <button
               onClick={resetWizard}
               className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90"
@@ -553,6 +623,16 @@ const ImportWizard = ({ embedded = false }) => {
               Import Another File
             </button>
           </div>
+          {cleanupReport && (
+            <details className="mt-4">
+              <summary className="cursor-pointer text-sm font-medium text-gray-700">
+                Cleanup Details
+              </summary>
+              <pre className="mt-2 text-xs bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-x-auto">
+                {JSON.stringify(cleanupReport, null, 2)}
+              </pre>
+            </details>
+          )}
         </div>
       )}
 

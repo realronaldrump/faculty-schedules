@@ -1,4 +1,4 @@
-import { collection, getDocs, getDoc, doc, updateDoc, addDoc, deleteDoc, writeBatch, query, orderBy, setDoc, where } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, updateDoc, addDoc, deleteDoc, writeBatch, query, orderBy, setDoc, where, documentId } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { logCreate, logUpdate, logDelete, logBulkUpdate, logImport } from './changeLogger';
 import {
@@ -38,6 +38,13 @@ import {
   generateImportReport,
   formatImportReportForLog
 } from './importReportUtils';
+import { preprocessImportData } from './importPreprocessor';
+import { validateImportTransaction } from './importValidationUtils';
+import { buildPeopleIndex } from './peopleUtils';
+import {
+  extractScheduleRowBaseData,
+  projectSchedulePreviewRow
+} from './importScheduleRowUtils';
 
 // Import transaction model for tracking changes
 export class ImportTransaction {
@@ -67,6 +74,10 @@ export class ImportTransaction {
     };
     this.matchingIssues = [];
     this.validation = { errors: [], warnings: [] };
+    // Structured import preprocessing report (within-batch dedupe, normalization, etc)
+    this.preprocessReport = null;
+    // Structured transaction validation report (schema + cross-ref checks)
+    this.validationReport = null;
     this.previewSummary = null;
     this.originalData = {}; // Store original data for rollback
     this.importMetadata = {};
@@ -177,11 +188,11 @@ export class ImportTransaction {
     ['schedules', 'people', 'rooms'].forEach(collection => {
       ['added', 'modified', 'deleted'].forEach(actionKey => {
         this.changes[collection][actionKey].forEach(change => {
-          allChanges.push({
-            ...change,
-            collection,
-            action: actionMap[actionKey]
-          });
+          // Keep references to the underlying change objects so commit/rollback can
+          // persist `applied` and `documentId` updates reliably.
+          if (!change.collection) change.collection = collection;
+          if (!change.action) change.action = actionMap[actionKey];
+          allChanges.push(change);
         });
       });
     });
@@ -202,11 +213,14 @@ export class ImportTransaction {
       changes: this.changes,
       matchingIssues: this.matchingIssues,
       validation: this.validation,
+      preprocessReport: this.preprocessReport,
+      validationReport: this.validationReport,
       previewSummary: this.previewSummary,
       originalData: this.originalData,
       importMetadata: this.importMetadata,
       rowLineage: this.rowLineage,
       stats: this.stats,
+      importReport: this.importReport,
       createdBy: this.createdBy,
       lastModified: this.lastModified
     };
@@ -227,6 +241,12 @@ export class ImportTransaction {
     if (!Array.isArray(transaction.validation.warnings)) {
       transaction.validation.warnings = [];
     }
+    if (transaction.preprocessReport === undefined) {
+      transaction.preprocessReport = null;
+    }
+    if (transaction.validationReport === undefined) {
+      transaction.validationReport = null;
+    }
     if (!transaction.importMetadata || typeof transaction.importMetadata !== 'object') {
       transaction.importMetadata = {};
     }
@@ -241,18 +261,48 @@ export class ImportTransaction {
 export const previewImportChanges = async (csvData, importType, selectedSemester, options = {}) => {
   const { persist = true, includeOfficeRooms = true, importMetadata = {} } = options;
   const normalizedSemester = normalizeTermLabel(selectedSemester || '');
+  const fallbackTerm = normalizedSemester || selectedSemester || '';
   const transaction = new ImportTransaction(
     importType,
     `${importType} import preview`,
     normalizedSemester || selectedSemester
   );
   const rows = Array.isArray(csvData) ? csvData : [];
+  const preprocessResult = preprocessImportData(rows, importType, { fallbackTerm });
+  const dedupedRows = Array.isArray(preprocessResult?.dedupedRows)
+    ? preprocessResult.dedupedRows
+    : rows;
   const rowHashes = rows.map((row) => row?.__rowHash || hashRecord(row));
   transaction.importMetadata = {
     ...importMetadata,
     rowCount: rows.length,
+    dedupedRowCount: dedupedRows.length,
     rowHashes
   };
+  if (preprocessResult?.validationReport) {
+    transaction.preprocessReport = {
+      importType,
+      ...preprocessResult.validationReport,
+      normalizedRowCount: Array.isArray(preprocessResult.normalizedRows)
+        ? preprocessResult.normalizedRows.length
+        : 0,
+      dedupedRowCount: dedupedRows.length
+    };
+    const reportWarnings = Array.isArray(preprocessResult.validationReport.warnings)
+      ? preprocessResult.validationReport.warnings
+      : [];
+    const reportErrors = Array.isArray(preprocessResult.validationReport.errors)
+      ? preprocessResult.validationReport.errors
+      : [];
+    reportWarnings.forEach((entry) => {
+      const message = entry?.message || String(entry);
+      if (message) transaction.validation.warnings.push(message);
+    });
+    reportErrors.forEach((entry) => {
+      const message = entry?.message || String(entry);
+      if (message) transaction.validation.errors.push(message);
+    });
+  }
 
   try {
     let existingSchedulesData = [];
@@ -263,15 +313,15 @@ export const previewImportChanges = async (csvData, importType, selectedSemester
       const termCodes = new Set();
       const termLabels = new Set();
 
-      rows.forEach((row) => {
-        const rawTerm = (row?.Semester || row?.Term || normalizedSemester || selectedSemester || '').toString().trim();
-        const normalizedTerm = normalizeTermLabel(rawTerm);
-        const termCode = termCodeFromLabel(
-          row?.['Semester Code'] || row?.['Term Code'] || normalizedTerm || rawTerm
-        );
+      const termSourceRows = Array.isArray(preprocessResult?.normalizedRows) && preprocessResult.normalizedRows.length > 0
+        ? preprocessResult.normalizedRows
+        : dedupedRows;
+      termSourceRows.forEach((row) => {
+        const base = row?.baseData || extractScheduleRowBaseData(row?.raw || row, fallbackTerm);
+        const termCode = (base?.termCode || '').toString().trim();
+        const termLabel = (base?.term || '').toString().trim();
         if (termCode) termCodes.add(termCode);
-        if (rawTerm) termLabels.add(rawTerm);
-        if (normalizedTerm) termLabels.add(normalizedTerm);
+        if (termLabel) termLabels.add(termLabel);
       });
 
       const chunkItems = (items) => {
@@ -331,16 +381,39 @@ export const previewImportChanges = async (csvData, importType, selectedSemester
 
     if (importType === 'schedule') {
       await previewScheduleChanges(
-        csvData,
+        dedupedRows,
         transaction,
         existingSchedulesData,
         existingPeopleData,
         existingRoomsData,
-        { fallbackTerm: normalizedSemester || selectedSemester }
+        { fallbackTerm }
       );
     } else if (importType === 'directory') {
-      await previewDirectoryChanges(csvData, transaction, existingPeopleData, existingRoomsData, { includeOfficeRooms });
+      await previewDirectoryChanges(dedupedRows, transaction, existingPeopleData, existingRoomsData, { includeOfficeRooms });
     }
+
+    const validationReport = validateImportTransaction(transaction, {
+      schedules: existingSchedulesData,
+      people: existingPeopleData,
+      rooms: existingRoomsData
+    });
+    transaction.validationReport = validationReport;
+    const formatIssue = (issue) => {
+      if (!issue) return '';
+      if (typeof issue === 'string') return issue;
+      const collection = issue.collection ? String(issue.collection) : 'import';
+      const field = issue.field ? ` (${issue.field})` : '';
+      const message = issue.message ? String(issue.message) : String(issue);
+      return `${collection}${field}: ${message}`;
+    };
+    (Array.isArray(validationReport?.errors) ? validationReport.errors : []).forEach((issue) => {
+      const message = formatIssue(issue);
+      if (message) transaction.validation.errors.push(message);
+    });
+    (Array.isArray(validationReport?.warnings) ? validationReport.warnings : []).forEach((issue) => {
+      const message = formatIssue(issue);
+      if (message) transaction.validation.warnings.push(message);
+    });
 
     // Store transaction in database for cross-browser access (optional)
     if (persist) {
@@ -399,6 +472,23 @@ const mergeExternalIds = (base = {}, updates = {}) => {
     }
   });
   return next;
+};
+
+const normalizeIdentifierString = (value) => (
+  typeof value === 'string' ? value.trim() : ''
+);
+
+const hasPersonIdentifier = (personData) => {
+  if (!personData || typeof personData !== 'object') return false;
+  const email = normalizeIdentifierString(personData.email);
+  const baylorId =
+    normalizeIdentifierString(personData.baylorId) ||
+    normalizeIdentifierString(personData.externalIds?.baylorId);
+  const clssInstructorId =
+    normalizeIdentifierString(personData.clssInstructorId) ||
+    normalizeIdentifierString(personData.externalIds?.clssInstructorId);
+
+  return Boolean(email || baylorId || clssInstructorId);
 };
 
 const buildPersonBackfillUpdates = (existingPerson, parsedInstructor) => {
@@ -467,216 +557,6 @@ const buildRoomBackfillUpdates = (existingRoom, parsedRoom) => {
   setIfMissing('displayName', parsedRoom.displayName);
 
   return { updates, diff };
-};
-
-export const normalizeSectionIdentifier = (sectionField) =>
-  normalizeSectionNumber(sectionField);
-
-export const extractCrnFromSectionField = (sectionField) => {
-  if (!sectionField) return '';
-  const match = String(sectionField).match(/\((\d{5,6})\)/);
-  return match ? match[1] : '';
-};
-
-export const extractAcademicYear = (term) => {
-  const match = String(term || '').match(/(\d{4})/);
-  if (match) {
-    const parsed = Number.parseInt(match[1], 10);
-    if (!Number.isNaN(parsed)) {
-      return parsed;
-    }
-  }
-  return new Date().getFullYear();
-};
-
-export const extractScheduleRowBaseData = (row, fallbackTerm = '') => {
-  const rowHashInput = { ...(row || {}) };
-  delete rowHashInput.__rowIndex;
-  delete rowHashInput.__rowHash;
-  const rowHash = row?.__rowHash || hashRecord(rowHashInput);
-
-  const courseCode = standardizeCourseCode(row.Course || '');
-  const courseTitle = row['Course Title'] || row['Long Title'] || row['Title/Topic'] || '';
-  const section = normalizeSectionIdentifier(row['Section #'] || '');
-
-  const clssId = (row['CLSS ID'] || '').toString().trim();
-  const directCrn = (row['CRN'] || '').toString().trim();
-  const sectionCrn = extractCrnFromSectionField(row['Section #'] || '');
-  const crn = /^\d{5,6}$/.test(directCrn)
-    ? directCrn
-    : (/^\d{5,6}$/.test(sectionCrn) ? sectionCrn : '');
-
-  const rawCredits = row['Credit Hrs'] ?? row['Credit Hrs Min'] ?? row['Credit Hrs Max'] ?? null;
-  const catalogNumber = (row['Catalog Number'] || '').toString().trim().toUpperCase();
-  const parsedCourse = parseCourseCode(courseCode || '');
-  const catalogForCredits = catalogNumber || parsedCourse?.catalogNumber || '';
-  const derivedCredits = deriveCreditsFromCatalogNumber(catalogForCredits, rawCredits);
-  const numericFallback = rawCredits === null || rawCredits === undefined
-    ? null
-    : Number.parseFloat(rawCredits);
-  const credits = derivedCredits ?? (Number.isNaN(numericFallback) ? null : numericFallback) ?? (parsedCourse?.credits ?? null);
-  const parsedProgram = parsedCourse?.error ? '' : (parsedCourse?.program || '');
-  const subjectCode = (row['Subject Code'] || '').toString().trim().toUpperCase() || parsedProgram;
-  const program = parsedProgram || subjectCode;
-  const departmentCode = (row['Department Code'] || '').toString().trim().toUpperCase();
-  const courseLevel = Number.isFinite(parsedCourse?.level) ? parsedCourse.level : 0;
-  const enrollment = normalizeNumericField(row['Enrollment']);
-  const maxEnrollment = normalizeNumericField(row['Maximum Enrollment']);
-  const waitCap = normalizeNumericField(row['Wait Cap']);
-  const waitTotal = normalizeNumericField(row['Wait Total']);
-  const openSeats = normalizeNumericField(row['Open Seats']);
-  const waitAvailable = normalizeNumericField(row['Wait Available']);
-  const reservedSeats = normalizeNumericField(row['Reserved Seats']);
-  const reservedSeatsEnrollment = normalizeNumericField(row['Reserved Seats - Enrollment']);
-
-  const rawTerm = row.Semester || row.Term || fallbackTerm || '';
-  const normalizedTerm = normalizeTermLabel(rawTerm);
-  const term = normalizedTerm || rawTerm;
-  const termCode = termCodeFromLabel(row['Semester Code'] || row['Term Code'] || normalizedTerm);
-  const academicYear = extractAcademicYear(term);
-
-  const instructorField = row.Instructor || '';
-  const parsedInstructors = parseInstructorFieldList(instructorField);
-  const primaryInstructor = parsedInstructors.find((info) => info.isPrimary) || parsedInstructors[0] || null;
-  const formatInstructorName = (info) => {
-    if (!info) return '';
-    const firstName = (info.firstName || '').trim();
-    const lastName = (info.lastName || '').trim();
-    if (firstName && lastName) return `${lastName}, ${firstName}`;
-    return lastName || firstName;
-  };
-  const normalizedInstructorName = parsedInstructors.length > 1
-    ? parsedInstructors.map(formatInstructorName).filter(Boolean).join('; ')
-    : formatInstructorName(primaryInstructor) || instructorField.trim();
-  const instructorBaylorId = normalizeBaylorId(primaryInstructor?.id);
-  const parsedInstructor = primaryInstructor || parseInstructorField(instructorField) || { firstName: '', lastName: '', id: '' };
-
-  const meetingPatternRaw = (row['Meeting Pattern'] || row['Meetings'] || '').toString().trim();
-  const meetingPatterns = parseMeetingPatterns(row);
-
-  const instructionMethod = (row['Inst. Method'] || row['Instruction Method'] || '').toString().trim();
-
-  const roomRaw = (row.Room || '').toString().trim();
-  const parsedRooms = parseMultiRoom(roomRaw);
-  const parsedRoomNames = Array.isArray(parsedRooms.displayNames)
-    ? parsedRooms.displayNames
-    : [];
-  const locationNames = parsedRoomNames.length > 0
-    ? parsedRoomNames
-    : (roomRaw ? splitMultiRoom(roomRaw) : []);
-  const inferredIsOnline =
-    parsedRooms.locationType === LOCATION_TYPE.VIRTUAL ||
-    roomRaw.toUpperCase().includes('ONLINE') ||
-    instructionMethod.toLowerCase().includes('online');
-  const isPhysical =
-    parsedRooms.locationType === LOCATION_TYPE.PHYSICAL ||
-    (parsedRooms.locationType === LOCATION_TYPE.UNKNOWN && locationNames.length > 0);
-  const locationType = isPhysical ? 'room' : 'no_room';
-  const locationLabel = inferredIsOnline
-    ? 'Online'
-    : (locationType === 'no_room'
-      ? (parsedRooms.locationLabel || (roomRaw || 'No Room Needed'))
-      : '');
-  const filteredRoomNames = locationType === 'no_room'
-    ? []
-    : locationNames;
-  const spaceIds = locationType === 'no_room'
-    ? []
-    : Array.from(new Set(parsedRooms.spaceKeys || []));
-  const spaceDisplayNames = locationType === 'no_room'
-    ? []
-    : (parsedRoomNames.length > 0 ? parsedRoomNames : filteredRoomNames);
-
-  return {
-    courseCode,
-    courseTitle,
-    section,
-    clssId,
-    crn,
-    credits: credits ?? null,
-    creditRaw: rawCredits,
-    subjectCode,
-    catalogNumber,
-    program,
-    departmentCode,
-    courseLevel,
-    term,
-    termCode,
-    academicYear,
-    instructorField,
-    parsedInstructor,
-    parsedInstructors,
-    normalizedInstructorName,
-    instructorBaylorId,
-    meetingPatternRaw,
-    meetingPatterns,
-    roomRaw,
-    spaceIds,
-    spaceDisplayNames,
-    locationType,
-    locationLabel,
-    isOnline: inferredIsOnline,
-    enrollment,
-    maxEnrollment,
-    waitCap,
-    waitTotal,
-    openSeats,
-    waitAvailable,
-    reservedSeats,
-    reservedSeatsEnrollment,
-    scheduleType: row['Schedule Type'] || 'Class Instruction',
-    status: row.Status || 'Active',
-    partOfTerm: row['Part of Semester'] || row['Part of Term'] || '',
-    instructionMethod,
-    campus: row.Campus || '',
-    visibleOnWeb: row['Visible on Web'] || '',
-    specialApproval: row['Special Approval'] || '',
-    rowHash
-  };
-};
-
-export const projectSchedulePreviewRow = (row, fallbackTerm = '') => {
-  const base = extractScheduleRowBaseData(row, fallbackTerm);
-  const meetingSummary = Array.isArray(base.meetingPatterns)
-    ? base.meetingPatterns
-      .map((pattern) => {
-        if (pattern.day && pattern.startTime && pattern.endTime) {
-          return `${pattern.day} ${pattern.startTime}-${pattern.endTime}`;
-        }
-        return pattern.raw || '';
-      })
-      .filter(Boolean)
-      .join('\n')
-    : '';
-
-  return {
-    'Course Code': base.courseCode,
-    'Course Title': base.courseTitle,
-    'Section': base.section,
-    'CRN': base.crn,
-    'Credits (parsed)': base.credits ?? '',
-    'Credits (raw)': base.creditRaw ?? '',
-    'Semester': base.term,
-    'Semester Code': base.termCode,
-    'Academic Year': base.academicYear ?? '',
-    'Department Code': base.departmentCode,
-    'Subject Code': base.subjectCode,
-    'Catalog Number': base.catalogNumber,
-    'Instructor (parsed)': base.normalizedInstructorName,
-    'Instructor Baylor ID': base.instructorBaylorId,
-    'Instructor (raw)': base.instructorField,
-    'Schedule Type': base.scheduleType,
-    'Status': base.status,
-    'Part of Semester': base.partOfTerm,
-    'Instruction Method': base.instructionMethod,
-    'Campus': base.campus,
-    'Rooms (raw)': base.roomRaw,
-    'Rooms (parsed)': Array.isArray(base.spaceDisplayNames) ? base.spaceDisplayNames.join('; ') : '',
-    'Meeting Pattern (raw)': base.meetingPatternRaw,
-    'Meeting Pattern (parsed)': meetingSummary,
-    'Visible on Web': base.visibleOnWeb,
-    'Special Approval': base.specialApproval
-  };
 };
 
 const buildRoomNameKeys = (roomData) => {
@@ -926,12 +806,13 @@ const previewScheduleChanges = async (
   const { fallbackTerm = '' } = options;
   const roomsMap = new Map();
   const roomsKeyMap = new Map();
-  const seenIdentityKeys = new Set();
   const pendingMatchMap = new Map();
   const pendingPersonUpdates = new Map();
   const pendingRoomUpdates = new Map();
   const createdRoomIds = new Set();
   const { index: scheduleIdentityIndex, collisions } = buildScheduleIdentityIndex(existingSchedules);
+  const peopleIndex = buildPeopleIndex(existingPeople);
+  const { peopleById, resolvePersonId } = peopleIndex;
   const summarizeIdentityCollisions = (items = []) => {
     const byType = {};
     const examples = [];
@@ -1071,11 +952,15 @@ const previewScheduleChanges = async (
   };
 
   let rowCounter = 0;
-  for (const row of csvData) {
+  for (const rowEntry of csvData) {
     rowCounter += 1;
-    const baseData = extractScheduleRowBaseData(row, fallbackTerm);
-    const rowIndex = row.__rowIndex || rowCounter;
+    const rawRow = rowEntry?.raw || rowEntry;
+    const baseData = rowEntry?.baseData || extractScheduleRowBaseData(rawRow, fallbackTerm);
+    const rowIndex = rowEntry?.__rowIndex || rawRow?.__rowIndex || rowCounter;
     const rowLabel = `Row ${rowIndex}`;
+    const mergedFromRows = Array.isArray(rowEntry?.__mergedFromRows)
+      ? rowEntry.__mergedFromRows
+      : null;
     const rowLineageBase = {
       rowIndex,
       rowHash: baseData.rowHash,
@@ -1084,7 +969,8 @@ const previewScheduleChanges = async (
       term: baseData.term || '',
       termCode: baseData.termCode || '',
       crn: baseData.crn || '',
-      clssId: baseData.clssId || ''
+      clssId: baseData.clssId || '',
+      ...(mergedFromRows ? { mergedFromRows } : {})
     };
     const isCancelled = isCancelledStatus(baseData.status);
 
@@ -1113,7 +999,7 @@ const previewScheduleChanges = async (
       continue;
     }
 
-    const identity = deriveScheduleIdentity({
+    const derivedIdentity = deriveScheduleIdentity({
       courseCode: baseData.courseCode,
       section: baseData.section,
       term: baseData.term,
@@ -1124,20 +1010,23 @@ const previewScheduleChanges = async (
       spaceIds: baseData.spaceIds,
       spaceDisplayNames: baseData.spaceDisplayNames
     });
-    const identityKey = identity.primaryKey;
+    const identityKey = ((rowEntry && rowEntry.__identityKey) || derivedIdentity.primaryKey || '').toString().trim();
+    const identityKeys = Array.isArray(rowEntry?.__identityKeys) && rowEntry.__identityKeys.length > 0
+      ? rowEntry.__identityKeys
+      : derivedIdentity.keys;
+    const identitySource = ((rowEntry && rowEntry.__identitySource) || derivedIdentity.source || (identityKey ? identityKey.split(':')[0] : '')).toString().trim();
+    const identity = {
+      ...derivedIdentity,
+      primaryKey: identityKey,
+      keys: identityKeys,
+      source: identitySource
+    };
     if (!identityKey) {
       addValidation('error', `${rowLabel}: Unable to derive identity key`);
       transaction.addRowLineage({ ...rowLineageBase, action: 'skipped', reason: 'Missing identity key' });
       summary.rowsSkipped += 1;
       continue;
     }
-    if (seenIdentityKeys.has(identityKey)) {
-      addValidation('warning', `${rowLabel}: Duplicate schedule identity "${identityKey}" skipped`);
-      transaction.addRowLineage({ ...rowLineageBase, action: 'skipped', reason: 'Duplicate identity', identityKey });
-      summary.rowsSkipped += 1;
-      continue;
-    }
-    seenIdentityKeys.add(identityKey);
 
     const rowLineageIdentity = {
       ...rowLineageBase,
@@ -1189,30 +1078,82 @@ const previewScheduleChanges = async (
       if (!matchKey) return null;
       let matchIssue = pendingMatchMap.get(matchKey) || null;
       if (!matchIssue) {
+        const now = new Date().toISOString();
+        const rawInstructorId = parsed?.id ? String(parsed.id).trim() : '';
         const proposedPerson = standardizeImportedPerson({
           firstName: parsed?.firstName || '',
           lastName: parsed?.lastName || '',
           email: '',
           baylorId: baylorId || '',
+          externalIds: rawInstructorId ? { clssInstructorId: rawInstructorId } : {},
           roles: ['faculty'],
-          isActive: true
-        });
+          isActive: true,
+          createdAt: now,
+          updatedAt: now
+        }, { updateTimestamp: false });
+        const canCreatePerson = hasPersonIdentifier(proposedPerson);
+        const reason = canCreatePerson
+          ? (matchResult?.reason || 'No exact match')
+          : 'Missing instructor identifier (ID/email). Link to an existing person or update the source data before importing.';
         matchIssue = transaction.addMatchIssue({
           importType: 'schedule',
           matchKey,
-          reason: matchResult?.reason || 'No exact match',
+          reason,
           proposedPerson,
           candidates: matchResult?.candidates || [],
           scheduleChangeIds: []
         });
-        matchIssue.pendingPersonChangeId = transaction.addChange(
-          'people',
-          'add',
-          proposedPerson,
-          null,
-          { groupKey: `person_${matchIssue.id}`, pendingResolution: true, matchIssueId: matchIssue.id }
-        );
+        if (canCreatePerson) {
+          matchIssue.pendingPersonChangeId = transaction.addChange(
+            'people',
+            'add',
+            proposedPerson,
+            null,
+            { groupKey: `person_${matchIssue.id}`, pendingResolution: true, matchIssueId: matchIssue.id }
+          );
+        }
         pendingMatchMap.set(matchKey, matchIssue);
+      } else {
+        const mergeIfMissing = (target, source) => {
+          const merged = { ...target };
+          Object.entries(source).forEach(([key, value]) => {
+            if (value === undefined || value === null || value === '') return;
+            if (merged[key] === undefined || merged[key] === null || merged[key] === '') {
+              merged[key] = value;
+            }
+          });
+          return merged;
+        };
+
+        const now = new Date().toISOString();
+        const rawInstructorId = parsed?.id ? String(parsed.id).trim() : '';
+        const nextProposedPerson = standardizeImportedPerson({
+          firstName: parsed?.firstName || '',
+          lastName: parsed?.lastName || '',
+          email: '',
+          baylorId: baylorId || '',
+          externalIds: rawInstructorId ? { clssInstructorId: rawInstructorId } : {},
+          roles: ['faculty'],
+          isActive: true,
+          createdAt: now,
+          updatedAt: now
+        }, { updateTimestamp: false });
+
+        matchIssue.proposedPerson = mergeIfMissing(matchIssue.proposedPerson || {}, nextProposedPerson);
+        const pendingChange = transaction.changes.people.added.find(c => c.id === matchIssue.pendingPersonChangeId);
+        if (pendingChange) {
+          pendingChange.newData = mergeIfMissing(pendingChange.newData || {}, nextProposedPerson);
+        }
+
+        if (!matchIssue.pendingPersonChangeId && hasPersonIdentifier(matchIssue.proposedPerson)) {
+          matchIssue.pendingPersonChangeId = transaction.addChange(
+            'people',
+            'add',
+            matchIssue.proposedPerson,
+            null,
+            { groupKey: `person_${matchIssue.id}`, pendingResolution: true, matchIssueId: matchIssue.id }
+          );
+        }
       }
       return matchIssue;
     };
@@ -1228,12 +1169,13 @@ const previewScheduleChanges = async (
       }, existingPeople, { minScore: 0.85, maxCandidates: 5 });
 
       if (matchResult.status === 'exact' && matchResult.person?.id) {
-        const personId = matchResult.person.id;
-        instructorIds.add(personId);
-        instructorPeople.set(personId, matchResult.person);
-        queuePersonBackfill(matchResult.person, parsed);
+        const resolvedId = resolvePersonId(matchResult.person.id);
+        const canonicalPerson = peopleById.get(resolvedId) || matchResult.person;
+        instructorIds.add(resolvedId);
+        instructorPeople.set(resolvedId, canonicalPerson);
+        queuePersonBackfill(canonicalPerson, parsed);
         instructorAssignments.push({
-          personId,
+          personId: resolvedId,
           isPrimary: parsed?.isPrimary || false,
           percentage: Number.isFinite(parsed?.percentage) ? parsed.percentage : 100
         });
@@ -1417,9 +1359,16 @@ const previewScheduleChanges = async (
     };
     const standardizedScheduleData = standardizeImportedSchedule(scheduleData);
 
-    const crossListCrns = parseCrossListCrns(row);
-    if (crossListCrns && crossListCrns.length > 0) {
-      standardizedScheduleData.crossListCrns = Array.from(new Set(crossListCrns));
+    // Preserve match-issue assignments for commit-time resolution.
+    standardizedScheduleData.instructorAssignments = scheduleData.instructorAssignments;
+    standardizedScheduleData.instructorIds = scheduleData.instructorIds;
+    standardizedScheduleData.instructorId = scheduleData.instructorId || '';
+
+    const crossListFromRaw = parseCrossListCrns(rawRow) || [];
+    const crossListFromBase = Array.isArray(baseData.crossListCrns) ? baseData.crossListCrns : [];
+    const crossListCrns = Array.from(new Set([...crossListFromRaw, ...crossListFromBase].filter(Boolean)));
+    if (crossListCrns.length > 0) {
+      standardizedScheduleData.crossListCrns = crossListCrns;
     }
 
     const {
@@ -1427,12 +1376,18 @@ const previewScheduleChanges = async (
       instructorMatchIssueIds: _omitMatchIssueIds,
       ...scheduleWrite
     } = standardizedScheduleData;
+    const scheduleWriteForUpdate = {
+      ...scheduleWrite,
+      instructorAssignments: Array.isArray(scheduleWrite.instructorAssignments)
+        ? scheduleWrite.instructorAssignments.filter((assignment) => assignment?.personId)
+        : []
+    };
 
     if (existingSchedule) {
       const allowEmptyFields = (scheduleWrite.locationType === 'no_room' || scheduleWrite.isOnline)
         ? ['spaceIds', 'spaceDisplayNames']
         : [];
-      const { updates, hasChanges } = buildScheduleImportUpdates(existingSchedule, scheduleWrite, { allowEmptyFields });
+      const { updates, hasChanges } = buildScheduleImportUpdates(existingSchedule, scheduleWriteForUpdate, { allowEmptyFields });
       if (!hasChanges) {
         summary.schedulesUnchanged += 1;
         transaction.addRowLineage({
@@ -1472,7 +1427,7 @@ const previewScheduleChanges = async (
       continue;
     }
 
-    const scheduleChangeId = transaction.addChange('schedules', 'add', standardizedScheduleData, null, { groupKey, importMeta });
+    const scheduleChangeId = transaction.addChange('schedules', 'add', scheduleWrite, null, { groupKey, importMeta });
     matchIssuesForSchedule.forEach((issue) => {
       if (!issue) return;
       issue.scheduleChangeIds = Array.isArray(issue.scheduleChangeIds)
@@ -1520,6 +1475,8 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
   const roomsMap = new Map();
   const roomsKeyMap = new Map();
   const { includeOfficeRooms = true } = options;
+  const peopleIndex = buildPeopleIndex(existingPeople);
+  const { peopleById, resolvePersonId } = peopleIndex;
 
   existingRooms.forEach((room) => {
     const spaceKey = room?.spaceKey || '';
@@ -1529,10 +1486,11 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
     buildRoomNameKeys(room).forEach((key) => roomsMap.set(key, room));
   });
 
-  for (const row of csvData) {
+  for (const rowEntry of csvData) {
+    const row = rowEntry?.raw || rowEntry;
     const rawFirstName = (row['First Name'] || '').trim();
     const rawLastName = (row['Last Name'] || '').trim();
-    const rawEmail = (row['E-mail Address'] || '').trim();
+    const rawEmail = (row['E-mail Address'] || row['E-mail'] || row.Email || '').trim();
 
     if (!rawFirstName && !rawLastName && !rawEmail) continue;
 
@@ -1550,6 +1508,7 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
     }
     const officeSpaceId = officeSpaceKey || '';
 
+    const now = new Date().toISOString();
     const basePersonData = {
       firstName: rawFirstName,
       lastName: rawLastName,
@@ -1558,7 +1517,9 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
       phone: row['Phone'] || row['Business Phone'] || row['Home Phone'] || '',
       office: officeRaw,
       officeSpaceId,
-      isActive: true
+      isActive: true,
+      createdAt: now,
+      updatedAt: now
     };
     const normalizedPerson = standardizeImportedPerson(basePersonData, { updateTimestamp: false });
     const firstName = normalizedPerson.firstName || '';
@@ -1569,10 +1530,13 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
     const normalizedOfficeSpaceId = normalizedPerson.officeSpaceId || '';
     const nameKey = makeNameKey(firstName, lastName);
     const emailKey = email.toLowerCase();
-    const personData = standardizeImportedPerson(basePersonData);
+    const personData = normalizedPerson;
 
     const matchResult = findPersonMatch({ firstName, lastName, email }, existingPeople, { minScore: 0.85, maxCandidates: 5 });
-    const existingPerson = matchResult.status === 'exact' ? matchResult.person : null;
+    const matchedPerson = matchResult.status === 'exact' ? matchResult.person : null;
+    const existingPerson = matchedPerson?.id
+      ? (peopleById.get(resolvePersonId(matchedPerson.id)) || matchedPerson)
+      : null;
 
     if (existingPerson) {
       const groupKey = `dir_${existingPerson.id}`;
@@ -1636,7 +1600,9 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
         matchIssue = transaction.addMatchIssue({
           importType: 'directory',
           matchKey,
-          reason: matchResult?.reason || 'No exact match',
+          reason: hasPersonIdentifier(personData)
+            ? (matchResult?.reason || 'No exact match')
+            : 'Missing person identifier (email/Baylor ID/CLSS ID). Link to an existing person or update the source data before importing.',
           proposedPerson: personData,
           candidates: matchResult?.candidates || []
         });
@@ -1661,13 +1627,15 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
           buildRoomNameKeys(placeholder).forEach((key) => roomsMap.set(key, placeholder));
         }
 
-        matchIssue.pendingPersonChangeId = transaction.addChange(
-          'people',
-          'add',
-          personData,
-          null,
-          { groupKey, pendingResolution: true, matchIssueId: matchIssue.id }
-        );
+        if (hasPersonIdentifier(personData)) {
+          matchIssue.pendingPersonChangeId = transaction.addChange(
+            'people',
+            'add',
+            personData,
+            null,
+            { groupKey, pendingResolution: true, matchIssueId: matchIssue.id }
+          );
+        }
         pendingMatchMap.set(matchKey, matchIssue);
       } else {
         const mergeIfMissing = (target, source) => {
@@ -1684,6 +1652,15 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
         const pendingChange = transaction.changes.people.added.find(c => c.id === matchIssue.pendingPersonChangeId);
         if (pendingChange) {
           pendingChange.newData = mergeIfMissing(pendingChange.newData || {}, personData);
+        }
+        if (!matchIssue.pendingPersonChangeId && hasPersonIdentifier(matchIssue.proposedPerson)) {
+          matchIssue.pendingPersonChangeId = transaction.addChange(
+            'people',
+            'add',
+            matchIssue.proposedPerson,
+            null,
+            { groupKey: `dir_${matchKey}`, pendingResolution: true, matchIssueId: matchIssue.id }
+          );
         }
         if (includeOfficeRooms && officeSpaceKey && !existingOfficeRoom && !roomsKeyMap.has(officeSpaceKey)) {
           const groupKey = `dir_${matchKey}`;
@@ -1834,28 +1811,226 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
     throw new Error(`Resolve ${unresolvedIssues.length} person match${unresolvedIssues.length === 1 ? '' : 'es'} before committing.`);
   }
 
+  const invalidCreateIssues = matchingIssues.filter((issue) => (
+    resolutionMap?.[issue.id]?.action === 'create' && !issue.pendingPersonChangeId
+  ));
+  if (invalidCreateIssues.length > 0) {
+    throw new Error(
+      `Cannot create ${invalidCreateIssues.length} person record${invalidCreateIssues.length === 1 ? '' : 's'} from the import data because an identifier is missing (email/Baylor ID/CLSS ID). Link to an existing person or update the source data, then retry.`
+    );
+  }
+
   const selectedChangeIds = selectedChanges ? new Set(selectedChanges) : null;
   const resolutionChangeIds = new Set();
+
+  const chunkItems = (items, size = 10) => {
+    const chunks = [];
+    for (let i = 0; i < items.length; i += size) {
+      chunks.push(items.slice(i, i + size));
+    }
+    return chunks;
+  };
+
+  const loadExistingDataForCommit = async () => {
+    const normalizeId = (value) => (value || '').toString().trim();
+    const personIds = new Set();
+    const roomIds = new Set();
+
+    const addPersonId = (value) => {
+      const id = normalizeId(value);
+      if (id) personIds.add(id);
+    };
+    const addRoomId = (value) => {
+      const id = normalizeId(value);
+      if (id) roomIds.add(id);
+    };
+
+    // IDs referenced by match-resolution links (must exist for commit).
+    matchingIssues.forEach((issue) => {
+      const resolution = resolutionMap[issue.id];
+      if (resolution?.action === 'link' && resolution.personId) {
+        addPersonId(resolution.personId);
+      }
+    });
+
+    const collectFromSchedule = (schedule) => {
+      if (!schedule || typeof schedule !== 'object') return;
+      addPersonId(schedule.instructorId);
+      (Array.isArray(schedule.instructorIds) ? schedule.instructorIds : []).forEach(addPersonId);
+      (Array.isArray(schedule.instructorAssignments) ? schedule.instructorAssignments : []).forEach((assignment) => {
+        addPersonId(assignment?.personId);
+      });
+      (Array.isArray(schedule.spaceIds) ? schedule.spaceIds : []).forEach(addRoomId);
+    };
+
+    transaction.getAllChanges().forEach((change) => {
+      if (!change || typeof change !== 'object') return;
+
+      if (change.collection === 'schedules') {
+        collectFromSchedule(change.newData);
+        collectFromSchedule(change.originalData);
+        return;
+      }
+
+      if (change.collection === 'people') {
+        addPersonId(change.originalData?.id);
+        addPersonId(change.newData?.id);
+        addPersonId(change.originalData?.mergedInto);
+        addPersonId(change.newData?.mergedInto);
+        return;
+      }
+
+      if (change.collection === 'rooms') {
+        addRoomId(change.originalData?.id);
+        addRoomId(change.originalData?.spaceKey);
+        addRoomId(change.newData?.id);
+        addRoomId(change.newData?.spaceKey);
+      }
+    });
+
+    const fetchDocsByIds = async (collectionName, ids = []) => {
+      const uniqueIds = Array.from(
+        new Set((Array.isArray(ids) ? ids : []).map(normalizeId).filter(Boolean))
+      );
+      if (uniqueIds.length === 0) return [];
+
+      const snapshots = await Promise.all(
+        chunkItems(uniqueIds, 10).map((chunk) => (
+          getDocs(
+            query(
+              collection(db, collectionName),
+              where(documentId(), 'in', chunk)
+            )
+          )
+        ))
+      );
+
+      const results = [];
+      const seenIds = new Set();
+      snapshots.forEach((snapshot) => {
+        snapshot.docs.forEach((docSnap) => {
+          if (seenIds.has(docSnap.id)) return;
+          seenIds.add(docSnap.id);
+          results.push({ id: docSnap.id, ...docSnap.data() });
+        });
+      });
+      return results;
+    };
+
+    const loadPeopleForIds = async (seedIds = []) => {
+      const queue = new Set((Array.isArray(seedIds) ? seedIds : []).map(normalizeId).filter(Boolean));
+      const peopleById = new Map();
+      let iterations = 0;
+
+      // Follow mergedInto chains so resolvePersonId works for referenced people.
+      while (queue.size > 0 && iterations < 10) {
+        const batchIds = Array.from(queue).filter((id) => !peopleById.has(id));
+        queue.clear();
+        if (batchIds.length === 0) break;
+
+        const fetched = await fetchDocsByIds(COLLECTIONS.PEOPLE, batchIds);
+        fetched.forEach((person) => {
+          if (person?.id) peopleById.set(person.id, person);
+        });
+        fetched.forEach((person) => {
+          const mergedInto = normalizeId(person?.mergedInto);
+          if (mergedInto && !peopleById.has(mergedInto)) {
+            queue.add(mergedInto);
+          }
+        });
+
+        iterations += 1;
+      }
+
+      return Array.from(peopleById.values());
+    };
+
+    const peoplePromise = loadPeopleForIds(Array.from(personIds));
+    const roomsPromise = fetchDocsByIds(COLLECTIONS.ROOMS, Array.from(roomIds));
+
+    let schedulesPromise = Promise.resolve([]);
+    if (transaction.type === 'schedule') {
+      schedulesPromise = (async () => {
+        const termCodes = new Set();
+        const termLabels = new Set();
+
+        const addTermFromSchedule = (schedule) => {
+          if (!schedule || typeof schedule !== 'object') return;
+          const termCode = (schedule.termCode || '').toString().trim();
+          const termLabel = normalizeTermLabel(schedule.term || '') || (schedule.term || '').toString().trim();
+          if (termCode) termCodes.add(termCode);
+          if (termLabel) termLabels.add(termLabel);
+        };
+
+        transaction.getAllChanges().forEach((change) => {
+          if (change.collection !== 'schedules') return;
+          addTermFromSchedule(change.newData);
+          addTermFromSchedule(change.originalData);
+        });
+
+        const normalizedTxSemester = normalizeTermLabel(transaction.semester || '');
+        const txTermCode = termCodeFromLabel(normalizedTxSemester || transaction.semester || '');
+        if (txTermCode) termCodes.add(txTermCode);
+        if (normalizedTxSemester) termLabels.add(normalizedTxSemester);
+
+        const scheduleQueries = [];
+        if (termCodes.size > 0) {
+          chunkItems(Array.from(termCodes)).forEach((chunk) => {
+            scheduleQueries.push(query(collection(db, COLLECTIONS.SCHEDULES), where('termCode', 'in', chunk)));
+          });
+        }
+        if (termLabels.size > 0) {
+          chunkItems(Array.from(termLabels)).forEach((chunk) => {
+            scheduleQueries.push(query(collection(db, COLLECTIONS.SCHEDULES), where('term', 'in', chunk)));
+          });
+        }
+
+        if (scheduleQueries.length === 0) return [];
+
+        const scheduleSnapshots = await Promise.all(scheduleQueries.map((q) => getDocs(q)));
+        const seenIds = new Set();
+        const collected = [];
+        scheduleSnapshots.forEach((snapshot) => {
+          snapshot.docs.forEach((docSnap) => {
+            if (seenIds.has(docSnap.id)) return;
+            seenIds.add(docSnap.id);
+            collected.push({ id: docSnap.id, ...docSnap.data() });
+          });
+        });
+        return collected;
+      })();
+    }
+
+    const [people, rooms, schedules] = await Promise.all([
+      peoplePromise,
+      roomsPromise,
+      schedulesPromise
+    ]);
+
+    return { people, rooms, schedules };
+  };
+
+  const existingData = await loadExistingDataForCommit();
+  const existingPeopleData = existingData.people || [];
+  const existingRoomsData = existingData.rooms || [];
+  const existingSchedulesData = existingData.schedules || [];
+
+  const peopleIndex = buildPeopleIndex(existingPeopleData);
+  const { peopleById, resolvePersonId } = peopleIndex;
 
   const linkedPersonIds = new Set();
   matchingIssues.forEach((issue) => {
     const resolution = resolutionMap[issue.id];
     if (resolution?.action === 'link' && resolution.personId) {
-      linkedPersonIds.add(resolution.personId);
+      linkedPersonIds.add(resolvePersonId(resolution.personId));
     }
   });
 
   const linkedPeopleMap = new Map();
-  if (linkedPersonIds.size > 0) {
-    const linkedDocs = await Promise.all(
-      Array.from(linkedPersonIds).map((personId) => getDoc(doc(db, COLLECTIONS.PEOPLE, personId)))
-    );
-    linkedDocs.forEach((snap) => {
-      if (snap.exists()) {
-        linkedPeopleMap.set(snap.id, { id: snap.id, ...snap.data() });
-      }
-    });
-  }
+  linkedPersonIds.forEach((personId) => {
+    const person = peopleById.get(personId);
+    if (person) linkedPeopleMap.set(personId, person);
+  });
 
   const buildResolutionUpdates = (existingPerson, proposedPerson, importType) => {
     const updates = {};
@@ -1890,9 +2065,10 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
   matchingIssues.forEach((issue) => {
     const resolution = resolutionMap[issue.id];
     if (resolution?.action !== 'link' || !resolution.personId) return;
-    const existingPerson = linkedPeopleMap.get(resolution.personId);
+    const resolvedPersonId = resolvePersonId(resolution.personId);
+    const existingPerson = linkedPeopleMap.get(resolvedPersonId);
     if (!existingPerson) {
-      throw new Error(`Linked person not found for match resolution: ${resolution.personId}`);
+      throw new Error(`Linked person not found for match resolution: ${resolvedPersonId}`);
     }
     const updates = buildResolutionUpdates(existingPerson, issue.proposedPerson, issue.importType);
     if (Object.keys(updates).length > 1) {
@@ -1928,6 +2104,66 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
     return true;
   });
 
+  const buildValidationSubset = (changes = []) => {
+    const subset = {
+      changes: {
+        schedules: { added: [], modified: [], deleted: [] },
+        people: { added: [], modified: [], deleted: [] },
+        rooms: { added: [], modified: [], deleted: [] }
+      },
+      matchingIssues: Array.isArray(transaction.matchingIssues) ? transaction.matchingIssues : [],
+      validation: transaction.validation || { errors: [], warnings: [] }
+    };
+
+    changes.forEach((change) => {
+      if (!change?.collection || !change?.action) return;
+      const bucket = change.action === 'add'
+        ? 'added'
+        : change.action === 'modify'
+          ? 'modified'
+          : 'deleted';
+      if (subset.changes?.[change.collection]?.[bucket]) {
+        subset.changes[change.collection][bucket].push(change);
+      }
+    });
+
+    return subset;
+  };
+
+  // Defensive: ensure create-time invariants are present before validation/writes.
+  const nowISO = new Date().toISOString();
+  changesToApply.forEach((change) => {
+    if (change?.collection !== 'people' || change?.action !== 'add') return;
+    const personPayload = { ...(change.newData || {}) };
+    if (typeof personPayload.createdAt !== 'string' || personPayload.createdAt.trim() === '') {
+      personPayload.createdAt = nowISO;
+    }
+    if (typeof personPayload.updatedAt !== 'string' || personPayload.updatedAt.trim() === '') {
+      personPayload.updatedAt = nowISO;
+    }
+    change.newData = personPayload;
+  });
+
+  // Validate immediately before any writes (fail-fast on errors, allow warnings).
+  const commitValidationReport = validateImportTransaction(
+    buildValidationSubset(changesToApply),
+    {
+      schedules: existingSchedulesData,
+      people: existingPeopleData,
+      rooms: existingRoomsData
+    }
+  );
+  transaction.validationReport = commitValidationReport;
+  if (!commitValidationReport.isValid) {
+    const examples = (commitValidationReport.errors || [])
+      .slice(0, 5)
+      .map((entry) => entry?.message || String(entry))
+      .filter(Boolean);
+    throw new Error(
+      `Import validation failed (${commitValidationReport.errors.length} error${commitValidationReport.errors.length === 1 ? '' : 's'}): ${examples.join(' | ')}`
+    );
+  }
+
   // Maps to track newly created IDs
   const newPeopleIdsByName = new Map();
   const newPeopleIdsByBaylorId = new Map();
@@ -1941,21 +2177,30 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
     // First pass: Create people and rooms, collect their IDs
     for (const change of changesToApply) {
       if (change.collection === 'people' && change.action === 'add') {
+        const now = new Date().toISOString();
+        const personPayload = { ...(change.newData || {}) };
+        if (typeof personPayload.createdAt !== 'string' || personPayload.createdAt.trim() === '') {
+          personPayload.createdAt = now;
+        }
+        if (typeof personPayload.updatedAt !== 'string' || personPayload.updatedAt.trim() === '') {
+          personPayload.updatedAt = now;
+        }
+        change.newData = personPayload;
         const docRef = doc(collection(db, COLLECTIONS.PEOPLE));
         await batchWriter.add(change, (batch) => {
-          batch.set(docRef, change.newData);
+          batch.set(docRef, personPayload);
         });
         change.documentId = docRef.id;
         createdPeopleCount += 1;
 
         // Map name to ID for schedule linking
-        const nameKey = makeNameKey(change.newData.firstName, change.newData.lastName);
+        const nameKey = makeNameKey(personPayload.firstName, personPayload.lastName);
         if (nameKey) {
           newPeopleIdsByName.set(nameKey, docRef.id);
           console.log(`👤 Created person mapping: ${nameKey} -> ${docRef.id}`);
         }
 
-        const baylorKey = normalizeBaylorId(change.newData.baylorId);
+        const baylorKey = normalizeBaylorId(personPayload.baylorId);
         if (baylorKey) {
           newPeopleIdsByBaylorId.set(baylorKey, docRef.id);
         }
@@ -2003,8 +2248,9 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
           if (assignment.matchIssueId) {
             const resolution = resolutionMap[assignment.matchIssueId];
             if (resolution?.action === 'link' && resolution.personId) {
-              resolved.personId = resolution.personId;
-              const linkedPerson = linkedPeopleMap.get(resolution.personId);
+              const canonicalId = resolvePersonId(resolution.personId);
+              resolved.personId = canonicalId;
+              const linkedPerson = peopleById.get(canonicalId) || linkedPeopleMap.get(canonicalId);
               if (linkedPerson?.baylorId) {
                 scheduleData.instructorBaylorId = linkedPerson.baylorId;
               }
@@ -2016,6 +2262,7 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
             }
           }
           if (resolved.personId) {
+            resolved.personId = resolvePersonId(resolved.personId) || resolved.personId;
             resolvedAssignments.push({
               personId: resolved.personId,
               isPrimary: !!resolved.isPrimary,
@@ -2802,3 +3049,6 @@ export const deleteTransaction = async (transactionId) => {
     throw error;
   }
 };
+
+// Re-export shared schedule row helpers for legacy imports/tests.
+export { extractScheduleRowBaseData, projectSchedulePreviewRow };

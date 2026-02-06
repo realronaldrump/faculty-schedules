@@ -27,6 +27,7 @@ import { normalizeTermLabel, termCodeFromLabel } from "../utils/termUtils";
 import { parseMultiRoom, buildSpaceKey } from "../utils/locationService";
 import { getMaxEnrollment } from "../utils/enrollmentUtils";
 import { standardizeSchedule } from "../utils/hygieneCore";
+import { deriveScheduleIdentity } from "../utils/importIdentityUtils";
 
 const useScheduleOperations = () => {
   const {
@@ -433,7 +434,33 @@ const useScheduleOperations = () => {
         };
 
         // Apply hygieneCore standardization for consistent data quality
-        const standardizedData = standardizeSchedule(updateData);
+        let standardizedData = standardizeSchedule(updateData);
+
+        // Ensure new schedules always have canonical identity metadata (create-time hygiene).
+        const applyScheduleIdentity = (schedule) => {
+          const identity = deriveScheduleIdentity({
+            courseCode: schedule.courseCode,
+            section: schedule.section,
+            term: schedule.term,
+            termCode: schedule.termCode,
+            clssId: schedule.clssId,
+            crn: schedule.crn,
+            meetingPatterns: schedule.meetingPatterns,
+            spaceIds: schedule.spaceIds,
+            spaceDisplayNames: schedule.spaceDisplayNames,
+          });
+          return {
+            ...schedule,
+            identityKey: identity.primaryKey || schedule.identityKey || "",
+            identityKeys:
+              Array.isArray(identity.keys) && identity.keys.length > 0
+                ? identity.keys
+                : Array.isArray(schedule.identityKeys)
+                  ? schedule.identityKeys
+                  : [],
+            identitySource: identity.source || schedule.identitySource || "",
+          };
+        };
 
         const updatePayload = {
           ...standardizedData,
@@ -471,7 +498,13 @@ const useScheduleOperations = () => {
 
         // Save to Firebase
         if (isNewCourse) {
-          await setDoc(scheduleRef, standardizedData);
+          const withIdentity = applyScheduleIdentity({
+            ...standardizedData,
+            createdAt: new Date().toISOString(),
+          });
+          const { instructorName: _omitInstructorName, ...writeData } =
+            withIdentity;
+          await setDoc(scheduleRef, writeData);
           await logCreate(
             `Schedule - ${standardizedData.courseCode} ${standardizedData.section} (${instructorDisplayName})`,
             "schedules",
@@ -514,7 +547,7 @@ const useScheduleOperations = () => {
           if (dayCodes.length > originalSchedules.length) {
             for (let i = originalSchedules.length; i < dayCodes.length; i++) {
               const dayCode = dayCodes[i];
-              const newScheduleData = {
+              const newScheduleData = applyScheduleIdentity({
                 ...standardizedData,
                 meetingPatterns: [
                   {
@@ -524,9 +557,11 @@ const useScheduleOperations = () => {
                   },
                 ],
                 createdAt: new Date().toISOString(),
-              };
+              });
               const newScheduleRef = doc(collection(db, "schedules"));
-              await setDoc(newScheduleRef, newScheduleData);
+              const { instructorName: _omitInstructorName, ...writeData } =
+                newScheduleData;
+              await setDoc(newScheduleRef, writeData);
               console.log(`✅ Created new schedule for day ${dayCode}`);
             }
           }

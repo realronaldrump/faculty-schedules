@@ -394,10 +394,11 @@ export const VALIDATION_RULES = {
 export const validateSection = (section) => {
   const errors = [];
   const warnings = [];
+  const sectionNumber = section.sectionNumber || section.section || "";
 
   // Check required fields
   if (!section.courseCode) errors.push("Course code is required");
-  if (!section.sectionNumber) errors.push("Section number is required");
+  if (!sectionNumber) errors.push("Section number is required");
   if (!section.termCode) errors.push("Semester code is required");
 
   // Check formats
@@ -413,6 +414,15 @@ export const validateSection = (section) => {
   if (section.crn && !VALIDATION_RULES.section.formats.crn.test(section.crn)) {
     warnings.push(
       `CRN "${section.crn}" doesn't match expected 5-6 digit format`,
+    );
+  }
+
+  if (
+    sectionNumber &&
+    !VALIDATION_RULES.section.formats.sectionNumber.test(sectionNumber)
+  ) {
+    warnings.push(
+      `Section "${sectionNumber}" doesn't match expected format`,
     );
   }
 
@@ -451,9 +461,15 @@ export const validatePerson = (person) => {
   const warnings = [];
 
   // At least one identifier should be present
-  if (!person.clssInstructorId && !person.baylorId && !person.email) {
-    warnings.push(
-      "Person has no external identifier (CLSS ID, Baylor ID, or email)",
+  const clssInstructorId =
+    person.clssInstructorId || person.externalIds?.clssInstructorId;
+  const baylorId = person.baylorId || person.externalIds?.baylorId;
+  const email =
+    person.email ||
+    (Array.isArray(person.externalIds?.emails) ? person.externalIds.emails[0] : "");
+  if (!clssInstructorId && !baylorId && !email) {
+    errors.push(
+      "Person must have an external identifier (CLSS ID, Baylor ID, or email)",
     );
   }
 
@@ -462,12 +478,20 @@ export const validatePerson = (person) => {
     errors.push("Person must have at least a first or last name");
   }
 
+  // Require timestamps for new writes (import/create-time hygiene)
+  if (!person.createdAt || !String(person.createdAt).trim()) {
+    errors.push("createdAt timestamp is required");
+  }
+  if (!person.updatedAt || !String(person.updatedAt).trim()) {
+    errors.push("updatedAt timestamp is required");
+  }
+
   // Check email format
   if (
-    person.email &&
-    !VALIDATION_RULES.person.formats.email.test(person.email)
+    email &&
+    !VALIDATION_RULES.person.formats.email.test(email)
   ) {
-    warnings.push(`Email "${person.email}" doesn't appear to be valid`);
+    warnings.push(`Email "${email}" doesn't appear to be valid`);
   }
 
   // Check phone format

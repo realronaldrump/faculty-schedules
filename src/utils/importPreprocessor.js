@@ -20,12 +20,11 @@ import {
 } from './importHygieneUtils';
 import {
   extractScheduleRowBaseData,
-  normalizeSectionIdentifier,
-  extractCrnFromSectionField
-} from './importTransactionUtils';
+} from './importScheduleRowUtils';
 import { standardizeCourseCode, isCancelledStatus } from './hygieneCore';
 import { hashRecord } from './hashUtils';
 import { normalizeTermLabel, termCodeFromLabel } from './termUtils';
+import { parseCrossListCrns } from './dataImportUtils';
 
 /**
  * Preprocess all import rows, normalizing and detecting within-batch duplicates
@@ -86,6 +85,7 @@ const preprocessScheduleRows = (rows, fallbackTerm) => {
 
   // Group rows by identity key for duplicate detection
   const identityGroups = new Map();
+  const unkeyedRows = [];
 
   rows.forEach((row, index) => {
     const rowIndex = row.__rowIndex || index + 1;
@@ -136,6 +136,9 @@ const preprocessScheduleRows = (rows, fallbackTerm) => {
           identityGroups.set(primaryKey, []);
         }
         identityGroups.get(primaryKey).push(normalizedRow);
+      } else {
+        // Keep rows even if we can't derive an identity key yet; downstream preview will surface errors.
+        unkeyedRows.push(normalizedRow);
       }
     } catch (err) {
       errors.push({
@@ -147,12 +150,14 @@ const preprocessScheduleRows = (rows, fallbackTerm) => {
 
   // Merge within-batch duplicates
   const { dedupedRows, mergeWarnings, duplicateCount } = mergeWithinBatchDuplicates(identityGroups);
+  const combinedDeduped = [...dedupedRows, ...unkeyedRows].filter(Boolean);
+  combinedDeduped.sort((a, b) => (a?.__rowIndex || 0) - (b?.__rowIndex || 0));
 
   warnings.push(...mergeWarnings);
 
   return {
     normalizedRows,
-    dedupedRows,
+    dedupedRows: combinedDeduped,
     validationReport: {
       totalRows: rows.length,
       validRows: normalizedRows.length,
@@ -217,10 +222,13 @@ const mergeScheduleRowGroup = (group) => {
   // Start with most complete row
   const base = { ...scored[0].row };
   const baseData = { ...base.baseData };
+  const mergedIdentityKeys = new Set(Array.isArray(base.__identityKeys) ? base.__identityKeys : []);
 
   // Merge data from other rows
   for (let i = 1; i < scored.length; i++) {
     const other = scored[i].row.baseData;
+    const otherKeys = scored[i].row.__identityKeys || [];
+    otherKeys.forEach((key) => key && mergedIdentityKeys.add(key));
 
     // Merge meeting patterns (combine all unique patterns)
     if (Array.isArray(other.meetingPatterns) && other.meetingPatterns.length > 0) {
@@ -268,18 +276,102 @@ const mergeScheduleRowGroup = (group) => {
     }
 
     // Merge instructor info (prefer non-empty)
-    if (!baseData.instructorField && other.instructorField) {
-      baseData.instructorField = other.instructorField;
-      baseData.parsedInstructor = other.parsedInstructor;
-      baseData.parsedInstructors = other.parsedInstructors;
-      baseData.normalizedInstructorName = other.normalizedInstructorName;
-      baseData.instructorBaylorId = other.instructorBaylorId;
+    // (We will merge instructors across the full group after this loop.)
+  }
+
+  // Merge instructor information across all rows in the group.
+  const normalizeDigits = (value) => (value || '').toString().replace(/\D/g, '');
+  const buildInstructorKey = (info) => {
+    if (!info) return '';
+    const digits = normalizeDigits(info.id);
+    if (digits && digits.length === 9) return `baylor:${digits}`;
+    const first = (info.firstName || '').toString().trim().toLowerCase();
+    const last = (info.lastName || '').toString().trim().toLowerCase();
+    if (!first && !last) return '';
+    return `name:${last}|${first}`;
+  };
+  const mergedInstructorMap = new Map();
+  const allInstructors = group
+    .map((row) => row?.baseData?.parsedInstructors)
+    .flat()
+    .filter(Boolean);
+  allInstructors.forEach((info) => {
+    const key = buildInstructorKey(info);
+    if (!key) return;
+    const existing = mergedInstructorMap.get(key);
+    if (!existing) {
+      mergedInstructorMap.set(key, { ...info });
+      return;
     }
+    const merged = { ...existing };
+    if (!merged.id && info.id) merged.id = info.id;
+    if (!merged.firstName && info.firstName) merged.firstName = info.firstName;
+    if (!merged.lastName && info.lastName) merged.lastName = info.lastName;
+    if (!merged.title && info.title) merged.title = info.title;
+    const percA = Number.isFinite(existing.percentage) ? existing.percentage : null;
+    const percB = Number.isFinite(info.percentage) ? info.percentage : null;
+    if (percA === null) merged.percentage = percB ?? existing.percentage ?? 100;
+    else if (percB === null) merged.percentage = percA;
+    else merged.percentage = Math.max(percA, percB);
+    merged.isPrimary = Boolean(existing.isPrimary || info.isPrimary);
+    merged.isStaff = Boolean(existing.isStaff || info.isStaff);
+    mergedInstructorMap.set(key, merged);
+  });
+
+  const mergedInstructors = Array.from(mergedInstructorMap.values());
+  const choosePrimaryInstructor = () => {
+    if (mergedInstructors.length === 0) return null;
+    const candidates = mergedInstructors.some((i) => i.isPrimary)
+      ? mergedInstructors.filter((i) => i.isPrimary)
+      : mergedInstructors;
+    return [...candidates].sort((a, b) => {
+      const percA = Number.isFinite(a.percentage) ? a.percentage : 0;
+      const percB = Number.isFinite(b.percentage) ? b.percentage : 0;
+      if (percA !== percB) return percB - percA;
+      const lastA = (a.lastName || '').toString();
+      const lastB = (b.lastName || '').toString();
+      return lastA.localeCompare(lastB);
+    })[0];
+  };
+  const primaryInstructor = choosePrimaryInstructor();
+  if (primaryInstructor) {
+    const primaryKey = buildInstructorKey(primaryInstructor);
+    mergedInstructors.forEach((info) => {
+      info.isPrimary = buildInstructorKey(info) === primaryKey;
+    });
+  }
+
+  const formatInstructorName = (info) => {
+    if (!info) return '';
+    const firstName = (info.firstName || '').trim();
+    const lastName = (info.lastName || '').trim();
+    if (firstName && lastName) return `${lastName}, ${firstName}`;
+    return lastName || firstName;
+  };
+  const normalizedInstructorName = mergedInstructors
+    .map(formatInstructorName)
+    .filter(Boolean);
+  baseData.parsedInstructors = mergedInstructors;
+  baseData.parsedInstructor = primaryInstructor || baseData.parsedInstructor || null;
+  baseData.normalizedInstructorName = Array.from(new Set(normalizedInstructorName)).join('; ');
+  const primaryDigits = normalizeDigits(primaryInstructor?.id);
+  baseData.instructorBaylorId = primaryDigits && primaryDigits.length === 9 ? primaryDigits : '';
+  baseData.instructorField = baseData.normalizedInstructorName || baseData.instructorField || '';
+
+  // Merge cross-listed CRNs across raw rows.
+  const crossListSet = new Set(Array.isArray(baseData.crossListCrns) ? baseData.crossListCrns : []);
+  group.forEach((row) => {
+    const crns = parseCrossListCrns(row?.raw || row) || [];
+    crns.forEach((crn) => crn && crossListSet.add(crn));
+  });
+  if (crossListSet.size > 0) {
+    baseData.crossListCrns = Array.from(crossListSet);
   }
 
   base.baseData = baseData;
   base.__merged = true;
   base.__mergedFromRows = group.map(r => r.__rowIndex);
+  base.__identityKeys = Array.from(mergedIdentityKeys).filter(Boolean);
 
   return base;
 };
@@ -345,7 +437,7 @@ const preprocessDirectoryRows = (rows, options = {}) => {
     const rowIndex = row.__rowIndex || index + 1;
 
     try {
-      const email = (row['E-mail'] || row.Email || '').toString().trim().toLowerCase();
+      const email = (row['E-mail Address'] || row['E-mail'] || row.Email || '').toString().trim().toLowerCase();
       const firstName = (row['First Name'] || '').toString().trim();
       const lastName = (row['Last Name'] || '').toString().trim();
 

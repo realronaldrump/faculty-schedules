@@ -55,6 +55,7 @@ import {
   deriveScheduleIdentityFromSchedule,
   resolveScheduleIdentityMatch,
 } from "./importIdentityUtils";
+import { parseCSVRecords } from "./csvUtils";
 
 // ==================== PROGRAM MAPPING ====================
 
@@ -849,6 +850,22 @@ export const processDirectoryImport = async (csvData, options = {}) => {
         results.people.push({ ...existingMatch, ...updates });
       } else {
         // Create new person
+        const hasIdentifier = Boolean(
+          (personData.email || "").trim() ||
+            (personData.baylorId || "").trim() ||
+            (personData.externalIds?.clssInstructorId &&
+              String(personData.externalIds.clssInstructorId).trim()) ||
+            (personData.externalIds?.baylorId &&
+              String(personData.externalIds.baylorId).trim()),
+        );
+        if (!hasIdentifier) {
+          results.errors.push(
+            `Row ${i + 1}: Cannot create person without an identifier (email/Baylor ID/CLSS ID): ${personData.firstName} ${personData.lastName}`,
+          );
+          results.skipped++;
+          continue;
+        }
+
         const docRef = await addDoc(collection(db, "people"), personData);
 
         // Log creation (no await to avoid slowing bulk import)
@@ -1130,6 +1147,20 @@ export const processScheduleImport = async (csvData) => {
             programId: programId, // Set program based on course
             clssInstructorId: info.id || null,
           });
+
+          const hasIdentifier = Boolean(
+            (newPerson.email || "").trim() ||
+              (newPerson.baylorId || "").trim() ||
+              (newPerson.externalIds?.clssInstructorId &&
+                String(newPerson.externalIds.clssInstructorId).trim()) ||
+              (newPerson.externalIds?.baylorId &&
+                String(newPerson.externalIds.baylorId).trim()),
+          );
+          if (!hasIdentifier) {
+            throw new Error(
+              `Cannot create instructor without identifier (email/Baylor ID/CLSS ID): ${info.firstName} ${info.lastName}`,
+            );
+          }
 
           const docRef = await addDoc(
             collection(db, COLLECTIONS.PEOPLE),
@@ -1648,9 +1679,13 @@ export const parseCLSSCSV = (csvText) => {
   }
 
   // Parse header row
-  const headers = rows[headerRowIndex].map((h) =>
-    (h || "").replace(/"/g, "").trim(),
-  );
+  const normalizeHeader = (value) =>
+    (value || "")
+      .toString()
+      .replace(/"/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  const headers = rows[headerRowIndex].map((h) => normalizeHeader(h));
   console.log(
     "📊 CLSS Headers found:",
     headers.slice(0, 10),
@@ -1709,59 +1744,6 @@ export const parseCLSSCSV = (csvText) => {
   );
   console.log("🎓 All records tagged with semester:", detectedSemester);
   return scheduleData;
-};
-
-/**
- * Robust CSV parser that handles escaped quotes and multiline fields
- */
-const parseCSVRecords = (text) => {
-  const rows = [];
-  let currentRow = [];
-  let currentValue = "";
-  let inQuotes = false;
-  let lastCharWasLineBreak = false;
-
-  for (let i = 0; i < text.length; i++) {
-    let char = text[i];
-
-    if (i === 0 && char === "\ufeff") {
-      // Strip BOM if present
-      continue;
-    }
-
-    if (char === '"') {
-      if (inQuotes && text[i + 1] === '"') {
-        currentValue += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      lastCharWasLineBreak = false;
-    } else if (char === "," && !inQuotes) {
-      currentRow.push(currentValue);
-      currentValue = "";
-      lastCharWasLineBreak = false;
-    } else if ((char === "\n" || char === "\r") && !inQuotes) {
-      if (char === "\r" && text[i + 1] === "\n") {
-        i++;
-      }
-      currentRow.push(currentValue);
-      rows.push(currentRow);
-      currentRow = [];
-      currentValue = "";
-      lastCharWasLineBreak = true;
-    } else {
-      currentValue += char;
-      lastCharWasLineBreak = false;
-    }
-  }
-
-  if (!lastCharWasLineBreak || currentRow.length > 0 || currentValue) {
-    currentRow.push(currentValue);
-    rows.push(currentRow);
-  }
-
-  return rows;
 };
 
 /**

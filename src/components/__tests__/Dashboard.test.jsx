@@ -36,7 +36,7 @@ describe("Dashboard", () => {
     render(<Dashboard />);
 
     expect(
-      screen.getByRole("heading", { name: /find what you need/i }),
+      screen.getByRole("heading", { name: /what are you looking for\?/i }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText(/search destinations/i)).toBeInTheDocument();
   });
@@ -47,11 +47,12 @@ describe("Dashboard", () => {
     const input = screen.getByLabelText(/search destinations/i);
     fireEvent.change(input, { target: { value: "Acronyms" } });
 
-    const resultsCard = screen
-      .getByText(/search results/i)
-      .closest(".university-card");
-    expect(resultsCard).toBeInTheDocument();
-    expect(within(resultsCard).getByText("Acronyms")).toBeInTheDocument();
+    const resultsLabel = screen.getByText(/search results/i);
+    const resultsPanel = resultsLabel?.parentElement?.parentElement;
+    expect(resultsPanel).toBeTruthy();
+    expect(
+      within(resultsPanel).getByRole("button", { name: /acronyms/i }),
+    ).toBeInTheDocument();
   });
 
   it("navigates to a result on click", () => {
@@ -60,10 +61,10 @@ describe("Dashboard", () => {
     const input = screen.getByLabelText(/search destinations/i);
     fireEvent.change(input, { target: { value: "Today" } });
 
-    const resultsCard = screen
-      .getByText(/search results/i)
-      .closest(".university-card");
-    const resultButton = within(resultsCard).getByRole("button", {
+    const resultsLabel = screen.getByText(/search results/i);
+    const resultsPanel = resultsLabel?.parentElement?.parentElement;
+    expect(resultsPanel).toBeTruthy();
+    const resultButton = within(resultsPanel).getByRole("button", {
       name: /today/i,
     });
 

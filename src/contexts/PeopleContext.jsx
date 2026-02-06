@@ -70,6 +70,19 @@ export const PeopleProvider = ({ children }) => {
       const standardizedData = standardizePerson(personData, {
         updateTimestamp: false,
       });
+      const hasIdentifier = Boolean(
+        (standardizedData.email || "").trim() ||
+          (standardizedData.baylorId || "").trim() ||
+          (standardizedData.externalIds?.clssInstructorId &&
+            String(standardizedData.externalIds.clssInstructorId).trim()) ||
+          (standardizedData.externalIds?.baylorId &&
+            String(standardizedData.externalIds.baylorId).trim()),
+      );
+      if (!hasIdentifier) {
+        throw new Error(
+          "Person must have an identifier (email, Baylor ID, or CLSS ID).",
+        );
+      }
       const docRef = await addDoc(collection(db, "people"), {
         ...standardizedData,
         createdAt: new Date().toISOString(),

@@ -318,6 +318,59 @@ service cloud.firestore {
         data.spaceNumber.matches('^[A-Za-z0-9./-]+$');
     }
 
+    function isValidPersonCreate(data) {
+      return isNonEmptyString(data.createdAt) &&
+        isNonEmptyString(data.updatedAt) &&
+        (
+          isNonEmptyString(data.baylorId) ||
+          isNonEmptyString(data.email) ||
+          (data.externalIds is map &&
+            (isNonEmptyString(data.externalIds.baylorId) ||
+             isNonEmptyString(data.externalIds.clssInstructorId))) ||
+          isNonEmptyString(data.clssInstructorId)
+        );
+    }
+
+    function hasValidSpaceIds(data) {
+      return data.spaceIds is list &&
+        data.spaceIds.size() <= 20 &&
+        (data.spaceIds.size() < 1 || (data.spaceIds[0] is string && isValidSpaceKey(data.spaceIds[0]))) &&
+        (data.spaceIds.size() < 2 || (data.spaceIds[1] is string && isValidSpaceKey(data.spaceIds[1]))) &&
+        (data.spaceIds.size() < 3 || (data.spaceIds[2] is string && isValidSpaceKey(data.spaceIds[2]))) &&
+        (data.spaceIds.size() < 4 || (data.spaceIds[3] is string && isValidSpaceKey(data.spaceIds[3]))) &&
+        (data.spaceIds.size() < 5 || (data.spaceIds[4] is string && isValidSpaceKey(data.spaceIds[4]))) &&
+        (data.spaceIds.size() < 6 || (data.spaceIds[5] is string && isValidSpaceKey(data.spaceIds[5]))) &&
+        (data.spaceIds.size() < 7 || (data.spaceIds[6] is string && isValidSpaceKey(data.spaceIds[6]))) &&
+        (data.spaceIds.size() < 8 || (data.spaceIds[7] is string && isValidSpaceKey(data.spaceIds[7]))) &&
+        (data.spaceIds.size() < 9 || (data.spaceIds[8] is string && isValidSpaceKey(data.spaceIds[8]))) &&
+        (data.spaceIds.size() < 10 || (data.spaceIds[9] is string && isValidSpaceKey(data.spaceIds[9]))) &&
+        (data.spaceIds.size() < 11 || (data.spaceIds[10] is string && isValidSpaceKey(data.spaceIds[10]))) &&
+        (data.spaceIds.size() < 12 || (data.spaceIds[11] is string && isValidSpaceKey(data.spaceIds[11]))) &&
+        (data.spaceIds.size() < 13 || (data.spaceIds[12] is string && isValidSpaceKey(data.spaceIds[12]))) &&
+        (data.spaceIds.size() < 14 || (data.spaceIds[13] is string && isValidSpaceKey(data.spaceIds[13]))) &&
+        (data.spaceIds.size() < 15 || (data.spaceIds[14] is string && isValidSpaceKey(data.spaceIds[14]))) &&
+        (data.spaceIds.size() < 16 || (data.spaceIds[15] is string && isValidSpaceKey(data.spaceIds[15]))) &&
+        (data.spaceIds.size() < 17 || (data.spaceIds[16] is string && isValidSpaceKey(data.spaceIds[16]))) &&
+        (data.spaceIds.size() < 18 || (data.spaceIds[17] is string && isValidSpaceKey(data.spaceIds[17]))) &&
+        (data.spaceIds.size() < 19 || (data.spaceIds[18] is string && isValidSpaceKey(data.spaceIds[18]))) &&
+        (data.spaceIds.size() < 20 || (data.spaceIds[19] is string && isValidSpaceKey(data.spaceIds[19])));
+    }
+
+    function isValidScheduleCreate(data) {
+      return isNonEmptyString(data.courseCode) &&
+        isNonEmptyString(data.section) &&
+        isNonEmptyString(data.term) &&
+        isNonEmptyString(data.termCode) &&
+        isNonEmptyString(data.identityKey) &&
+        isNonEmptyString(data.identitySource) &&
+        (data.identityKeys is list && data.identityKeys.size() > 0 && data.identityKey in data.identityKeys) &&
+        (
+          data.isOnline == true ||
+          data.locationType == 'no_room' ||
+          hasValidSpaceIds(data)
+        );
+    }
+
     function isLegacySpaceRecord(data) {
       return !(data.spaceKey is string) || data.spaceKey.size() == 0;
     }
@@ -346,7 +399,7 @@ service cloud.firestore {
       allow read: if canReadAppData();
 
       // Create operations - allow users with people directory access (or import wizard)
-      allow create: if canManagePeople();
+      allow create: if canManagePeople() && isValidPersonCreate(request.resource.data);
 
       // Update operations - allow users with people directory access (or import wizard)
       allow update: if canManagePeople();
@@ -358,7 +411,8 @@ service cloud.firestore {
     match /schedules/{id} {
       allow read: if canReadAppData();
       allow create: if canManageSchedules() &&
-        canWriteScheduleTerm(request.resource.data.termCode);
+        canWriteScheduleTerm(request.resource.data.termCode) &&
+        isValidScheduleCreate(request.resource.data);
       allow update: if canManageSchedules() &&
         canWriteScheduleTerm(request.resource.data.termCode);
       allow delete: if canManageSchedules() &&

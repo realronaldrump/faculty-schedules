@@ -24,7 +24,7 @@ import {
   ArrowRight,
   Trash2,
 } from "lucide-react";
-import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc, query, where } from "firebase/firestore";
 import { db } from "../../firebase";
 import {
   scanDataHealth,
@@ -35,6 +35,8 @@ import {
   linkScheduleToPerson,
   markNotDuplicate,
   standardizeAllData,
+  previewScheduleIdentityBackfill,
+  applyScheduleIdentityBackfill,
   backfillInstructorIdsFromNames,
   repairScheduleSpaceLinks,
   previewScheduleSpaceLinks,
@@ -918,6 +920,10 @@ const DataHygieneManager = () => {
   const [showFixModal, setShowFixModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastScanTime, setLastScanTime] = useState(null);
+  // Backfill (no merges)
+  const [backfillTermCode, setBackfillTermCode] = useState("");
+  const [identityBackfillPreview, setIdentityBackfillPreview] = useState(null);
+  const [isBackfillRunning, setIsBackfillRunning] = useState(false);
 
   // Expanded sections
   const [expandedSection, setExpandedSection] = useState(null);
@@ -957,6 +963,111 @@ const DataHygieneManager = () => {
       showNotification("error", "Scan Failed", error.message);
     } finally {
       setIsScanning(false);
+    }
+  };
+
+  const fetchSchedulesForTermCode = useCallback(async (termCode) => {
+    const normalized = (termCode || "").toString().trim();
+    if (!normalized) return [];
+    const snapshot = await getDocs(
+      query(collection(db, "schedules"), where("termCode", "==", normalized)),
+    );
+    return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+  }, []);
+
+  const handlePreviewIdentityBackfill = async () => {
+    const termCode = backfillTermCode.trim();
+    if (!termCode) {
+      showNotification("warning", "Missing Term Code", "Enter a term code (e.g., 202610).");
+      return;
+    }
+    setIsBackfillRunning(true);
+    try {
+      const preview = await previewScheduleIdentityBackfill({ termCode });
+      setIdentityBackfillPreview(preview);
+      showNotification(
+        "success",
+        "Identity Backfill Preview",
+        `Found ${preview.recordsToUpdate || 0} schedules to update.`,
+      );
+    } catch (error) {
+      console.error("Identity backfill preview failed:", error);
+      showNotification("error", "Preview Failed", error.message);
+    } finally {
+      setIsBackfillRunning(false);
+    }
+  };
+
+  const handleApplyIdentityBackfill = async () => {
+    const changes = identityBackfillPreview?.changes || [];
+    if (!Array.isArray(changes) || changes.length === 0) {
+      showNotification("info", "No Changes", "No schedule identity changes to apply.");
+      return;
+    }
+    setIsBackfillRunning(true);
+    try {
+      const result = await applyScheduleIdentityBackfill(changes);
+      showNotification(
+        "success",
+        "Identity Backfill Applied",
+        `Updated ${result.updated || 0} schedules.`,
+      );
+      setIdentityBackfillPreview(null);
+      await handleScan();
+    } catch (error) {
+      console.error("Identity backfill apply failed:", error);
+      showNotification("error", "Apply Failed", error.message);
+    } finally {
+      setIsBackfillRunning(false);
+    }
+  };
+
+  const handleStandardizeTermSchedules = async () => {
+    const termCode = backfillTermCode.trim();
+    if (!termCode) {
+      showNotification("warning", "Missing Term Code", "Enter a term code (e.g., 202610).");
+      return;
+    }
+    setIsBackfillRunning(true);
+    try {
+      const result = await standardizeAllData({
+        termCode,
+        includePeople: false,
+        includeRooms: false,
+        includeSchedules: true,
+      });
+      showNotification(
+        "success",
+        "Standardization Complete",
+        `Updated ${result.updatedRecords || 0} schedules in ${termCode}.`,
+      );
+      await handleScan();
+    } catch (error) {
+      console.error("Standardize term schedules failed:", error);
+      showNotification("error", "Standardization Failed", error.message);
+    } finally {
+      setIsBackfillRunning(false);
+    }
+  };
+
+  const handlePreviewTermSpaceLinks = async () => {
+    const termCode = backfillTermCode.trim();
+    if (!termCode) {
+      showNotification("warning", "Missing Term Code", "Enter a term code (e.g., 202610).");
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const schedules = await fetchSchedulesForTermCode(termCode);
+      await openSpaceFixPreview({
+        schedules,
+        title: `Fix Space Links (${termCode})`,
+      });
+    } catch (error) {
+      console.error("Space link preview failed:", error);
+      showNotification("error", "Preview Failed", error.message);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -1458,6 +1569,86 @@ const DataHygieneManager = () => {
           />
           {isScanning ? "Scanning..." : "Scan Now"}
         </button>
+      </div>
+
+      {/* Backfill (No Merges) */}
+      <div className="bg-white border rounded-lg p-4 mb-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">
+              Backfill Canonical Fields (No Merges)
+            </h2>
+            <p className="text-xs text-gray-600 mt-1">
+              Term-scoped utilities to bring legacy data up to current import
+              invariants without merging records.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Term Code
+            </label>
+            <input
+              value={backfillTermCode}
+              onChange={(e) => setBackfillTermCode(e.target.value)}
+              placeholder="e.g., 202610"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            />
+          </div>
+
+          <div className="flex items-end gap-2">
+            <button
+              onClick={handlePreviewIdentityBackfill}
+              disabled={isBackfillRunning}
+              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
+            >
+              Preview Identity Backfill
+            </button>
+            <button
+              onClick={handleApplyIdentityBackfill}
+              disabled={
+                isBackfillRunning ||
+                !(identityBackfillPreview?.recordsToUpdate > 0)
+              }
+              className="px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50 text-sm"
+            >
+              Apply
+            </button>
+          </div>
+
+          <div className="flex items-end gap-2">
+            <button
+              onClick={handleStandardizeTermSchedules}
+              disabled={isBackfillRunning}
+              className="px-3 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 text-sm"
+            >
+              Standardize Term Schedules
+            </button>
+            <button
+              onClick={handlePreviewTermSpaceLinks}
+              disabled={isProcessing}
+              className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 text-sm"
+            >
+              Fix Space Links (Term)
+            </button>
+          </div>
+        </div>
+
+        {identityBackfillPreview && (
+          <div className="mt-4 text-xs text-gray-600">
+            Identity backfill preview:{" "}
+            <span className="font-medium text-gray-900">
+              {identityBackfillPreview.recordsToUpdate || 0}
+            </span>{" "}
+            schedules would be updated out of{" "}
+            <span className="font-medium text-gray-900">
+              {identityBackfillPreview.totalRecords || 0}
+            </span>
+            .
+          </div>
+        )}
       </div>
 
       {scanResult && (

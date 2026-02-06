@@ -42,6 +42,35 @@ import {
   SPACE_TYPE,
 } from "../utils/locationService";
 
+const normalizeIdentifierString = (value) => {
+  if (value === undefined || value === null) return "";
+  if (typeof value !== "string") return "";
+  return value.trim();
+};
+
+const getPrimaryEmailIdentifier = (personData) => {
+  const direct = normalizeIdentifierString(personData?.email);
+  if (direct) return direct;
+  const externalEmails = personData?.externalIds?.emails;
+  if (Array.isArray(externalEmails) && externalEmails.length > 0) {
+    const first = normalizeIdentifierString(externalEmails[0]);
+    if (first) return first;
+  }
+  return "";
+};
+
+const hasPersonCreateIdentifier = (personData) => {
+  const email = getPrimaryEmailIdentifier(personData);
+  const baylorId =
+    normalizeIdentifierString(personData?.baylorId) ||
+    normalizeIdentifierString(personData?.externalIds?.baylorId);
+  const clssInstructorId =
+    normalizeIdentifierString(personData?.clssInstructorId) ||
+    normalizeIdentifierString(personData?.externalIds?.clssInstructorId);
+
+  return Boolean(email || baylorId || clssInstructorId);
+};
+
 const usePeopleOperations = () => {
   const {
     rawPeople,
@@ -418,12 +447,31 @@ const usePeopleOperations = () => {
         }
 
         if (isNewFaculty) {
-          await setDoc(facultyRef, updateData);
+          const now = new Date().toISOString();
+          const createPayload = {
+            ...updateData,
+            createdAt:
+              typeof updateData.createdAt === "string" &&
+              updateData.createdAt.trim() !== ""
+                ? updateData.createdAt
+                : now,
+          };
+
+          if (!hasPersonCreateIdentifier(createPayload)) {
+            showNotification(
+              "error",
+              "Missing Identifier",
+              "New people records require at least one identifier (email, Baylor ID, or CLSS instructor ID).",
+            );
+            return;
+          }
+
+          await setDoc(facultyRef, createPayload);
           await logCreate(
             `Faculty - ${facultyToUpdate.name}`,
             "people",
             facultyRef.id,
-            updateData,
+            createPayload,
             "usePeopleOperations - handleFacultyUpdate",
           );
         } else {
@@ -634,6 +682,15 @@ const usePeopleOperations = () => {
           const officeFields = await resolveAllOffices();
           Object.assign(createData, officeFields);
 
+          if (!hasPersonCreateIdentifier(createData)) {
+            showNotification(
+              "error",
+              "Missing Identifier",
+              "New people records require at least one identifier (email, Baylor ID, or CLSS instructor ID).",
+            );
+            return;
+          }
+
           docRef = await addDoc(collection(db, "people"), createData);
           action = "CREATE";
 
@@ -788,15 +845,26 @@ const usePeopleOperations = () => {
         };
 
         if (isNewStudent) {
-          await setDoc(studentRef, {
+          const createPayload = {
             ...updateData,
             createdAt: new Date().toISOString(),
-          });
+          };
+
+          if (!hasPersonCreateIdentifier(createPayload)) {
+            showNotification(
+              "error",
+              "Missing Identifier",
+              "New people records require at least one identifier (email, Baylor ID, or CLSS instructor ID).",
+            );
+            return;
+          }
+
+          await setDoc(studentRef, createPayload);
           await logCreate(
             `Student - ${studentToUpdate.name}`,
             "people",
             studentRef.id,
-            { ...updateData, createdAt: new Date().toISOString() },
+            createPayload,
             "usePeopleOperations - handleStudentUpdate",
           );
         } else {
@@ -806,15 +874,26 @@ const usePeopleOperations = () => {
               "⚠️ Provided student id not found; creating new student instead",
             );
             const createRef = doc(collection(db, "people"));
-            await setDoc(createRef, {
+            const createPayload = {
               ...updateData,
               createdAt: new Date().toISOString(),
-            });
+            };
+
+            if (!hasPersonCreateIdentifier(createPayload)) {
+              showNotification(
+                "error",
+                "Missing Identifier",
+                "New people records require at least one identifier (email, Baylor ID, or CLSS instructor ID).",
+              );
+              return;
+            }
+
+            await setDoc(createRef, createPayload);
             await logCreate(
               `Student - ${studentToUpdate.name}`,
               "people",
               createRef.id,
-              { ...updateData, createdAt: new Date().toISOString() },
+              createPayload,
               "usePeopleOperations - handleStudentUpdate",
             );
             await loadPeople({ force: true });

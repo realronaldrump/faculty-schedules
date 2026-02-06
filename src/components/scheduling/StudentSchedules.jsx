@@ -167,10 +167,46 @@ const StudentSchedules = ({ embedded = false }) => {
     return Array.from(set).sort();
   }, [studentData]);
 
-  const studentIdOptions = useMemo(
-    () => studentData.map((s) => s.id).filter(Boolean),
-    [studentData],
-  );
+  const studentIdOptions = useMemo(() => {
+    const getFirstNameKey = (name) => {
+      if (!name) return "";
+      const n = String(name).trim();
+      if (!n) return "";
+      if (n.includes(",")) {
+        const afterComma = n.split(",")[1]?.trim() || "";
+        return (afterComma.split(/\s+/)[0] || "").toLowerCase();
+      }
+      return (n.split(/\s+/)[0] || "").toLowerCase();
+    };
+
+    return studentData
+      .filter((s) => s?.id)
+      .map((s) => ({
+        id: s.id,
+        name: s.name || "",
+        firstKey: getFirstNameKey(s.name),
+      }))
+      .sort((a, b) => {
+        const aMissing = a.firstKey ? 0 : 1;
+        const bMissing = b.firstKey ? 0 : 1;
+        if (aMissing !== bMissing) return aMissing - bMissing;
+
+        const firstCmp = a.firstKey.localeCompare(b.firstKey, undefined, {
+          sensitivity: "base",
+        });
+        if (firstCmp) return firstCmp;
+
+        const nameCmp = a.name.localeCompare(b.name, undefined, {
+          sensitivity: "base",
+        });
+        if (nameCmp) return nameCmp;
+
+        return String(a.id).localeCompare(String(b.id), undefined, {
+          sensitivity: "base",
+        });
+      })
+      .map((s) => s.id);
+  }, [studentData]);
 
   const studentIdToNameMap = useMemo(() => {
     const map = {};
@@ -341,7 +377,7 @@ const StudentSchedules = ({ embedded = false }) => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-visible relative z-20">
         <div
           role="button"
           tabIndex={0}

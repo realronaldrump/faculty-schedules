@@ -387,7 +387,7 @@ const Dashboard = () => {
             <SectionCard
               key={section.id}
               section={section}
-              defaultOpen={index < 2}
+              defaultOpen={false}
             />
           ))}
         </div>

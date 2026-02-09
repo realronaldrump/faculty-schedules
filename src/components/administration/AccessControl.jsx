@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { db, functions } from "../../firebase";
+import { auth, db } from "../../firebase";
 import {
   doc,
   getDoc,
@@ -11,7 +11,6 @@ import {
   orderBy,
   onSnapshot,
 } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { logUpdate } from "../../utils/changeLogger";
 import {
@@ -496,8 +495,32 @@ const AccessControl = () => {
     if (!deleteTarget) return;
     const uid = deleteTarget.id;
     try {
-      const deleteUser = httpsCallable(functions, "deleteUser");
-      await deleteUser({ uid });
+      const current = auth.currentUser;
+      const token = await current?.getIdToken?.();
+      if (!token) {
+        throw new Error("Not signed in");
+      }
+
+      const res = await fetch("/api/deleteUser", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ uid }),
+      });
+
+      if (!res.ok) {
+        let detail = "";
+        try {
+          const payload = await res.json();
+          detail = payload?.message || payload?.error || "";
+        } catch (_) {
+          // ignore
+        }
+        throw new Error(detail || `Failed to delete user (${res.status})`);
+      }
+
       await loadAccessControl();
       if (selectedUserId === uid) {
         setSelectedUserId("");

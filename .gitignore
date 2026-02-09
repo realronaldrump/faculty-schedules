@@ -44,3 +44,4 @@ docs/student-worker-audit.md
 # Tests
 src/utils/__tests__/
 CLAUDE.md
+functions/package-lock.json

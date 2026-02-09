@@ -6,6 +6,17 @@ admin.initializeApp();
 const db = admin.firestore();
 const auth = admin.auth();
 
+// Callable functions v2 require explicit CORS config when invoked from non-Firebase
+// origins (for example, a Vercel-hosted SPA).
+const ALLOWED_CALLABLE_ORIGINS = [
+  "https://faculty-schedules.vercel.app",
+  // Local dev
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  // Vercel preview deployments
+  /^https:\/\/faculty-schedules(?:-[a-z0-9-]+)?\.vercel\.app$/,
+];
+
 const normalizeRoleList = (roles) => {
   if (Array.isArray(roles)) {
     return roles.filter(Boolean);
@@ -19,7 +30,15 @@ const normalizeRoleList = (roles) => {
   return [];
 };
 
-exports.deleteUser = onCall(async (request) => {
+exports.deleteUser = onCall(
+  {
+    region: "us-central1",
+    cors: ALLOWED_CALLABLE_ORIGINS,
+    // Callable functions must be reachable from browsers; auth is enforced via Firebase Auth tokens,
+    // not Cloud Run IAM.
+    invoker: "public",
+  },
+  async (request) => {
   const callerUid = request.auth?.uid;
   if (!callerUid) {
     throw new HttpsError("unauthenticated", "You must be signed in.");
@@ -86,4 +105,5 @@ exports.deleteUser = onCall(async (request) => {
     authDeleted,
     profileDeleted: targetSnap.exists,
   };
-});
+  },
+);

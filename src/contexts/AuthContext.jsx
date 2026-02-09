@@ -113,13 +113,13 @@ export const AuthProvider = ({ children }) => {
         lastLoginAt: serverTimestamp(),
       };
       await setDoc(userRef, newProfile);
-      await logCreate(
+      logCreate(
         `User - ${newProfile.email}`,
         "users",
         firebaseUser.uid,
         newProfile,
         "AuthContext.jsx - loadUserProfile:create",
-      );
+      ).catch(() => {});
       setUserProfile({
         ...newProfile,
         createdAt: new Date().toISOString(),
@@ -133,9 +133,6 @@ export const AuthProvider = ({ children }) => {
       } catch (error) {
         console.warn(error);
       }
-      // Ensure bootstrap admin has admin role
-      // Legacy code removed: We no longer auto-grant admin based on .env emails.
-      // Admins must be manually promoted in Firestore or via the initial seed script.
       setUserProfile(existing);
     }
   };
@@ -167,7 +164,7 @@ export const AuthProvider = ({ children }) => {
           await loadUserProfile(u);
         }
       } catch (error) {
-        console.warn(error);
+        console.error("Failed to load/create user profile:", error);
       }
       // Subscribe to current user's profile
       if (u) {

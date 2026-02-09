@@ -7,9 +7,9 @@ import {
   setDoc,
   serverTimestamp,
   collection,
-  getDocs,
   query,
   orderBy,
+  onSnapshot,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { useAuth } from "../../contexts/AuthContext.jsx";
@@ -128,8 +128,7 @@ const AccessControl = () => {
     return `${meta.section} / ${meta.label}`;
   };
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadAccessControl = async () => {
     try {
       const acRef = doc(db, "settings", "accessControl");
       const acSnap = await getDoc(acRef);
@@ -153,19 +152,29 @@ const AccessControl = () => {
         }
         setRolePermissions(normalized);
       }
-
-      const usersSnap = await getDocs(
-        query(collection(db, "users"), orderBy("email")),
-      );
-      const userList = usersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setUsers(userList);
-    } finally {
-      setLoading(false);
+    } catch (e) {
+      console.error("Failed to load access control settings:", e);
     }
   };
 
+  // Real-time listener for users collection
   useEffect(() => {
-    loadData();
+    setLoading(true);
+    loadAccessControl();
+    const q = query(collection(db, "users"), orderBy("email"));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const userList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setUsers(userList);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Failed to listen to users collection:", error);
+        setLoading(false);
+      },
+    );
+    return () => unsub();
   }, []);
 
   const toggleRolePage = (role, pageId) => {
@@ -259,7 +268,7 @@ const AccessControl = () => {
         original,
         "AccessControl.jsx - saveUserStatus",
       );
-      await loadData();
+      await loadAccessControl();
     } finally {
       setSaving(false);
     }
@@ -286,7 +295,7 @@ const AccessControl = () => {
         original,
         "AccessControl.jsx - approveUser",
       );
-      await loadData();
+      await loadAccessControl();
     } finally {
       setSaving(false);
     }
@@ -326,7 +335,7 @@ const AccessControl = () => {
         original,
         "AccessControl.jsx - saveAccessControl",
       );
-      await loadData();
+      await loadAccessControl();
     } finally {
       setSaving(false);
     }
@@ -351,7 +360,7 @@ const AccessControl = () => {
         original,
         "AccessControl.jsx - saveUserOverrides",
       );
-      await loadData();
+      await loadAccessControl();
     } finally {
       setSaving(false);
     }
@@ -388,7 +397,7 @@ const AccessControl = () => {
         original,
         "AccessControl.jsx - saveUserRoles",
       );
-      await loadData();
+      await loadAccessControl();
     } finally {
       setSaving(false);
     }
@@ -443,7 +452,7 @@ const AccessControl = () => {
         data,
         "AccessControl.jsx - quickToggleRole",
       );
-      await loadData();
+      await loadAccessControl();
     } catch (e) {
       console.error(e);
     }
@@ -466,7 +475,7 @@ const AccessControl = () => {
         data,
         "AccessControl.jsx - toggleDisable",
       );
-      await loadData();
+      await loadAccessControl();
     } catch (e) {
       console.error(e);
     }
@@ -489,7 +498,7 @@ const AccessControl = () => {
     try {
       const deleteUser = httpsCallable(functions, "deleteUser");
       await deleteUser({ uid });
-      await loadData();
+      await loadAccessControl();
       if (selectedUserId === uid) {
         setSelectedUserId("");
         setUserOverrides({});

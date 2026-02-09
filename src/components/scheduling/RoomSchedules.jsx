@@ -449,7 +449,7 @@ const RoomSchedules = ({ embedded = false }) => {
       { length: (dayEnd - dayStart) / 60 + 1 },
       (_, i) => dayStart + i * 60,
     );
-    const rowHeight = density === "compact" ? "44px" : "60px";
+    const rowHeight = density === "compact" ? "52px" : "72px";
 
     return (
       <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
@@ -542,6 +542,7 @@ const RoomSchedules = ({ embedded = false }) => {
                         bottom: density === "compact" ? "4px" : "6px",
                       }}
                       className={`px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md shadow-sm transition-all cursor-pointer group ${nowMinutes >= start && nowMinutes <= end ? "bg-baylor-gold text-baylor-green ring-2 ring-baylor-gold/40" : "bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green"}`}
+                      title={`${item.Course} • ${item.Instructor || ''} • ${formatMinutesToTime(start)} - ${formatMinutesToTime(end)}`}
                       onClick={() => openCourseCard(item, room)}
                     >
                       <div className="font-bold truncate">{item.Course}</div>
@@ -676,20 +677,16 @@ const RoomSchedules = ({ embedded = false }) => {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
+        {!embedded && (
         <div>
-          {embedded ? (
-            <h2 className="text-xl font-semibold text-gray-900 mb-1">
-              Room Schedules
-            </h2>
-          ) : (
             <h1 className="text-2xl font-bold text-gray-900 mb-2">
               Room Schedules
             </h1>
-          )}
           <p className="text-gray-600">
             View classroom usage and availability across the department
           </p>
         </div>
+        )}
         <div className="flex items-center gap-2">
           <Link
             to="/facilities/spaces"

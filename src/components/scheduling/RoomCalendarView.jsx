@@ -151,7 +151,7 @@ const RoomCalendarView = ({
         return remainder === 0 ? maxEnd : maxEnd + (15 - remainder);
     }, [allSessions]);
 
-    const pixelsPerMinute = density === 'compact' ? 0.75 : 1;
+    const pixelsPerMinute = density === 'compact' ? 0.9 : 1.2;
     const totalMinutes = Math.max(0, latestEndMinutes - dayStartMinutes);
 
     const hourTicks = useMemo(() => {
@@ -189,7 +189,7 @@ const RoomCalendarView = ({
 
         const safeStart = Math.max(start, dayStartMinutes);
         const topPx = (safeStart - dayStartMinutes) * pixelsPerMinute;
-        const heightPx = Math.max(20, (Math.min(end, latestEndMinutes) - safeStart) * pixelsPerMinute);
+        const heightPx = Math.max(48, (Math.min(end, latestEndMinutes) - safeStart) * pixelsPerMinute);
 
         return {
             position: 'absolute',

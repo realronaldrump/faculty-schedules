@@ -276,11 +276,6 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function isEmptyOrMissingMap(field) {
-      return !(field in request.resource.data) ||
-        (request.resource.data[field] is map && request.resource.data[field].size() == 0);
-    }
-
     function isSelfProfileCreateAllowed(userId) {
       return isSelf(userId) &&
         request.resource.data.uid == request.auth.uid &&
@@ -288,12 +283,7 @@ service cloud.firestore {
         request.resource.data.status == 'pending' &&
         request.resource.data.roles is list &&
         request.resource.data.roles.size() == 0 &&
-        request.resource.data.disabled != true &&
-        isEmptyOrMissingMap('permissions') &&
-        isEmptyOrMissingMap('actions') &&
-        (!(request.resource.data.overrides is map) ||
-          ((request.resource.data.overrides.pages is map && request.resource.data.overrides.pages.size() == 0) &&
-           (request.resource.data.overrides.actions is map && request.resource.data.overrides.actions.size() == 0)));
+        request.resource.data.disabled == false;
     }
 
     function isSelfProfileUpdateAllowed(userId) {

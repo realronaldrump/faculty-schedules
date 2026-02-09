@@ -245,7 +245,9 @@ export const AuthProvider = ({ children }) => {
         console.warn(error);
       }
     }
-    await loadUserProfile(cred.user);
+    // Profile creation is handled by onAuthStateChanged listener — don't
+    // call loadUserProfile here to avoid a race where two concurrent
+    // setDoc calls collide (second one hits the update rule and is denied).
     return cred.user;
   };
 

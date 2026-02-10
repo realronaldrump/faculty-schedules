@@ -1,15 +1,14 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import {
   IdCard,
-  Search,
   Edit,
   Save,
   X,
-  Filter,
   CheckCircle2,
   AlertCircle,
   Download,
 } from "lucide-react";
+import { UniversalDirectory } from "../shared";
 import FacultyContactCard from "../FacultyContactCard";
 import { usePeople } from "../../contexts/PeopleContext";
 import { usePeopleOperations } from "../../hooks";
@@ -39,6 +38,7 @@ const BaylorIDManager = ({ embedded = false }) => {
   const { canEdit } = usePermissions();
   const canEditIds = canEdit("people/baylor-id-manager");
   const [filterText, setFilterText] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [roleChecks, setRoleChecks] = useState({
     faculty: true,
     adjunct: true,
@@ -51,6 +51,10 @@ const BaylorIDManager = ({ embedded = false }) => {
   const [baylorIdDraft, setBaylorIdDraft] = useState("");
   const [error, setError] = useState("");
   const [selectedPersonForCard, setSelectedPersonForCard] = useState(null);
+  const [sortConfig, setSortConfig] = useState({
+    key: "name",
+    direction: "ascending",
+  });
 
   useEffect(() => {
     loadPeople();
@@ -80,8 +84,23 @@ const BaylorIDManager = ({ embedded = false }) => {
         const id = (p.baylorId || "").toLowerCase();
         return name.includes(term) || email.includes(term) || id.includes(term);
       })
-      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  }, [people, filterText, roleChecks, onlyMissing, includeInactive]);
+      .sort((a, b) => {
+        let valA, valB;
+        if (sortConfig.key === "name") {
+          valA = (a.name || "").toLowerCase();
+          valB = (b.name || "").toLowerCase();
+        } else if (sortConfig.key === "baylorId") {
+          valA = (a.baylorId || "").toLowerCase();
+          valB = (b.baylorId || "").toLowerCase();
+        } else {
+          valA = (a[sortConfig.key] || "").toString().toLowerCase();
+          valB = (b[sortConfig.key] || "").toString().toLowerCase();
+        }
+        if (valA < valB) return sortConfig.direction === "ascending" ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === "ascending" ? 1 : -1;
+        return 0;
+      });
+  }, [people, filterText, roleChecks, onlyMissing, includeInactive, sortConfig]);
 
   const exportToCSV = () => {
     const headers = ["Name", "Baylor ID"];
@@ -154,264 +173,253 @@ const BaylorIDManager = ({ embedded = false }) => {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <div>
-        {embedded ? (
-          <h2 className="text-xl font-semibold text-gray-900">Baylor IDs</h2>
-        ) : (
-          <h1 className="text-2xl font-bold text-gray-900">Baylor IDs</h1>
-        )}
-        <p className="text-gray-600">
-          Quickly view and update Baylor IDs across directory members.
-        </p>
-      </div>
-      <div className="university-card">
-        <div className="university-card-header flex justify-between items-center">
-          <div>
-            <h2 className="university-card-title">Directory Baylor IDs</h2>
-          </div>
-          <div className="p-3 bg-baylor-green/10 rounded-lg">
-            <IdCard className="h-6 w-6 text-baylor-green" />
-          </div>
-        </div>
+  const handleSort = useCallback((key) => {
+    setSortConfig((prev) => ({
+      key,
+      direction:
+        prev.key === key && prev.direction === "ascending"
+          ? "descending"
+          : "ascending",
+    }));
+  }, []);
 
-        <div className="university-card-content">
-          <div className="flex flex-wrap gap-3 items-center mb-4">
-            <div className="relative">
-              <Search
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                size={18}
-              />
-              <input
-                type="text"
-                placeholder="Search by name, email, or ID..."
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-                className="w-64 pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <Filter size={16} className="text-gray-500" />
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={roleChecks.faculty}
-                  onChange={(e) =>
-                    setRoleChecks((prev) => ({
-                      ...prev,
-                      faculty: e.target.checked,
-                    }))
-                  }
-                  className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                />
-                Faculty
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={roleChecks.adjunct}
-                  onChange={(e) =>
-                    setRoleChecks((prev) => ({
-                      ...prev,
-                      adjunct: e.target.checked,
-                    }))
-                  }
-                  className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                />
-                Adjunct
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={roleChecks.staff}
-                  onChange={(e) =>
-                    setRoleChecks((prev) => ({
-                      ...prev,
-                      staff: e.target.checked,
-                    }))
-                  }
-                  className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                />
-                Staff
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={roleChecks.studentWorkers}
-                  onChange={(e) =>
-                    setRoleChecks((prev) => ({
-                      ...prev,
-                      studentWorkers: e.target.checked,
-                    }))
-                  }
-                  className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                />
-                Student Workers
-              </label>
-              <label className="flex items-center gap-2 text-sm ml-2">
-                <input
-                  type="checkbox"
-                  checked={onlyMissing}
-                  onChange={(e) => setOnlyMissing(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                />
-                Only show missing IDs
-              </label>
-              <label className="flex items-center gap-2 text-sm ml-2">
-                <input
-                  type="checkbox"
-                  checked={includeInactive}
-                  onChange={(e) => setIncludeInactive(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
-                />
-                Include inactive
-              </label>
-            </div>
-            <button
-              onClick={exportToCSV}
-              className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+  const clearFilters = useCallback(() => {
+    setRoleChecks({
+      faculty: true,
+      adjunct: true,
+      staff: true,
+      studentWorkers: true,
+    });
+    setOnlyMissing(false);
+    setIncludeInactive(false);
+  }, []);
+
+  // Column definitions for DirectoryTable
+  const columns = useMemo(
+    () => [
+      {
+        key: "name",
+        label: "Name",
+        render: (person) => (
+          <div>
+            <div
+              className="text-gray-900 font-medium cursor-pointer hover:text-baylor-green transition-colors"
+              onClick={() => setSelectedPersonForCard(person)}
             >
-              <Download size={18} />
-              Export CSV
+              {person.name || "-"}
+            </div>
+            <div className="text-xs text-gray-500">{person.email || ""}</div>
+          </div>
+        ),
+      },
+      {
+        key: "roles",
+        label: "Roles",
+        render: (person) => {
+          const roles = getDisplayRoleLabels(person);
+          return (
+            <div className="flex flex-wrap gap-1">
+              {roles.length === 0 ? (
+                <span className="text-xs text-gray-500">Unassigned</span>
+              ) : (
+                roles.map((r) => (
+                  <span
+                    key={r}
+                    className="px-2 py-0.5 bg-gray-100 rounded-full text-xs text-gray-700"
+                  >
+                    {r}
+                  </span>
+                ))
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        key: "baylorId",
+        label: "Baylor ID",
+        render: (person) => {
+          const isEditing = editingId === person.id;
+          const hasId = person.baylorId && person.baylorId.trim() !== "";
+
+          if (isEditing) {
+            return (
+              <div>
+                <input
+                  value={baylorIdDraft}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, "").slice(0, 9);
+                    setBaylorIdDraft(v);
+                    if (error) setError("");
+                  }}
+                  placeholder="9 digits"
+                  className={`w-48 p-2 border rounded ${error ? "border-red-500" : "border-gray-300"}`}
+                />
+                {error && (
+                  <div className="flex items-center gap-1 text-red-600 text-xs mt-1">
+                    <AlertCircle size={12} />
+                    {error}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          return (
+            <div className="flex items-center gap-2">
+              {hasId ? (
+                <span className="inline-flex items-center gap-1 text-gray-800">
+                  <CheckCircle2 size={14} className="text-green-600" />
+                  {person.baylorId}
+                </span>
+              ) : (
+                <span className="text-gray-500 italic">Missing</span>
+              )}
+            </div>
+          );
+        },
+      },
+    ],
+    [editingId, baylorIdDraft, error],
+  );
+
+  // Actions column renderer
+  const renderActions = useCallback(
+    (person) => {
+      const isEditing = editingId === person.id;
+      if (isEditing) {
+        return (
+          <div className="flex gap-1 justify-end">
+            <button
+              onClick={() => saveId(person)}
+              className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
+              title="Save"
+            >
+              <Save size={16} />
+            </button>
+            <button
+              onClick={cancelEdit}
+              className="p-2 text-red-600 hover:bg-red-100 rounded-full"
+              title="Cancel"
+            >
+              <X size={16} />
             </button>
           </div>
+        );
+      }
 
-          <div className="overflow-x-auto">
-            <table className="university-table">
-              <thead>
-                <tr>
-                  <th className="table-header-cell">Name</th>
-                  <th className="table-header-cell">Roles</th>
-                  <th className="table-header-cell">Baylor ID</th>
-                  <th className="table-header-cell" />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((person) => {
-                  const roles = getDisplayRoleLabels(person);
-                  const isEditing = editingId === person.id;
-                  const hasId =
-                    person.baylorId && person.baylorId.trim() !== "";
-                  return (
-                    <tr key={person.id}>
-                      <td className="px-4 py-3">
-                        <div
-                          className="text-gray-900 font-medium cursor-pointer hover:text-baylor-green"
-                          onClick={() => setSelectedPersonForCard(person)}
-                        >
-                          {person.name || "-"}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {person.email || ""}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {roles.length === 0 ? (
-                            <span className="text-xs text-gray-500">
-                              Unassigned
-                            </span>
-                          ) : (
-                            roles.map((r) => (
-                              <span
-                                key={r}
-                                className="px-2 py-0.5 bg-gray-100 rounded-full text-xs text-gray-700"
-                              >
-                                {r}
-                              </span>
-                            ))
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {isEditing ? (
-                          <div>
-                            <input
-                              value={baylorIdDraft}
-                              onChange={(e) => {
-                                const v = e.target.value
-                                  .replace(/\D/g, "")
-                                  .slice(0, 9);
-                                setBaylorIdDraft(v);
-                                if (error) setError("");
-                              }}
-                              placeholder="9 digits"
-                              className={`w-48 p-2 border rounded ${error ? "border-red-500" : "border-gray-300"}`}
-                            />
-                            {error && (
-                              <div className="flex items-center gap-1 text-red-600 text-xs mt-1">
-                                <AlertCircle size={12} />
-                                {error}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            {hasId ? (
-                              <span className="inline-flex items-center gap-1 text-gray-800">
-                                <CheckCircle2
-                                  size={14}
-                                  className="text-green-600"
-                                />
-                                {person.baylorId}
-                              </span>
-                            ) : (
-                              <span className="text-gray-500 italic">
-                                Missing
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {isEditing ? (
-                          <div className="flex gap-1 justify-end">
-                            <button
-                              onClick={() => saveId(person)}
-                              className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
-                              title="Save"
-                            >
-                              <Save size={16} />
-                            </button>
-                            <button
-                              onClick={cancelEdit}
-                              className="p-2 text-red-600 hover:bg-red-100 rounded-full"
-                              title="Cancel"
-                            >
-                              <X size={16} />
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => startEdit(person)}
-                            className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
-                            title="Edit Baylor ID"
-                          >
-                            <Edit size={16} />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+      return (
+        <button
+          onClick={() => startEdit(person)}
+          className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
+          title="Edit Baylor ID"
+        >
+          <Edit size={16} />
+        </button>
+      );
+    },
+    [editingId],
+  );
 
-          {filtered.length === 0 && (
-            <div className="text-center py-12">
-              <IdCard className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">
-                No people found
-              </h3>
-              <p className="mt-1 text-sm text-gray-500">
-                Adjust your search or filters.
-              </p>
-            </div>
-          )}
+  // Filter content for the collapsible panel
+  const filterContent = (
+    <div className="space-y-3">
+      <div>
+        <h4 className="text-sm font-medium text-gray-700 mb-2">Roles</h4>
+        <div className="flex flex-wrap gap-4">
+          {[
+            { key: "faculty", label: "Faculty" },
+            { key: "adjunct", label: "Adjunct" },
+            { key: "staff", label: "Staff" },
+            { key: "studentWorkers", label: "Student Workers" },
+          ].map(({ key, label }) => (
+            <label key={key} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={roleChecks[key]}
+                onChange={(e) =>
+                  setRoleChecks((prev) => ({
+                    ...prev,
+                    [key]: e.target.checked,
+                  }))
+                }
+                className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+              />
+              {label}
+            </label>
+          ))}
         </div>
       </div>
+      <div className="border-t border-gray-200 pt-3">
+        <h4 className="text-sm font-medium text-gray-700 mb-2">Options</h4>
+        <div className="flex flex-wrap gap-4">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={onlyMissing}
+              onChange={(e) => setOnlyMissing(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+            />
+            Only show missing IDs
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={includeInactive}
+              onChange={(e) => setIncludeInactive(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+            />
+            Include inactive
+          </label>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Export CSV button in the header actions area
+  const trailingActions = (
+    <button
+      onClick={exportToCSV}
+      className="flex items-center gap-2 px-3 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors text-sm"
+    >
+      <Download size={16} />
+      Export CSV
+    </button>
+  );
+
+  return (
+    <div className="space-y-6">
+      {!embedded && (
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Baylor IDs</h1>
+          <p className="text-gray-600">
+            Quickly view and update Baylor IDs across directory members.
+          </p>
+        </div>
+      )}
+
+      <UniversalDirectory
+        type="people"
+        title="Baylor IDs"
+        icon={IdCard}
+        data={filtered}
+        columns={columns}
+        sortConfig={sortConfig}
+        onSort={handleSort}
+        filterText={filterText}
+        onFilterTextChange={setFilterText}
+        showFilters={showFilters}
+        onToggleFilters={() => setShowFilters(!showFilters)}
+        onClearFilters={clearFilters}
+        filterContent={filterContent}
+        trailingActions={trailingActions}
+        useHtmlTable
+        tableProps={{
+          editingId,
+          renderActions,
+          emptyMessage: "No people found. Adjust your search or filters.",
+        }}
+      />
 
       {selectedPersonForCard && (
         <FacultyContactCard

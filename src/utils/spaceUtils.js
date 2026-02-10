@@ -6,11 +6,9 @@ import {
   buildSpaceKey,
   formatSpaceDisplayName,
   normalizeSpaceNumber,
-  parseRoomLabel,
-  parseMultiRoom,
   parseSpaceKey,
-  resolveBuilding,
-  resolveBuildingDisplayName
+  resolveBuildingDisplayName,
+  validateSpaceKey,
 } from './locationService';
 
 export const normalizeSpaceRecord = (space = {}, docId = '') => {
@@ -19,92 +17,62 @@ export const normalizeSpaceRecord = (space = {}, docId = '') => {
   }
 
   const base = { ...space };
-  const id = base.id || docId;
+  // Canonical: Firestore doc id == spaceKey.
+  const id = docId || base.id || '';
 
-  let spaceKey = (base.spaceKey || '').toString().trim();
-  let buildingCode = (base.buildingCode || '').toString().trim().toUpperCase();
+  let spaceKey = (base.spaceKey || id || '').toString().trim();
+  let buildingCode = (base.buildingCode || '').toString().trim();
   let spaceNumber = (base.spaceNumber || '').toString().trim();
   let buildingDisplayName = (base.buildingDisplayName || '').toString().trim();
 
-  // If we have a spaceKey, canonicalize it immediately so downstream logic
-  // (indexes, lookups, comparisons) doesn't depend on legacy formatting.
   if (spaceKey) {
     const parsedKey = parseSpaceKey(spaceKey);
-    const canonicalKey = parsedKey?.buildingCode && parsedKey?.spaceNumber
-      ? buildSpaceKey(parsedKey.buildingCode, parsedKey.spaceNumber)
-      : '';
-    if (canonicalKey) {
-      spaceKey = canonicalKey;
+    const canonicalKey =
+      parsedKey?.buildingCode && parsedKey?.spaceNumber
+        ? buildSpaceKey(parsedKey.buildingCode, parsedKey.spaceNumber)
+        : '';
+    if (canonicalKey && validateSpaceKey(canonicalKey).valid) {
       const canonicalParts = parseSpaceKey(canonicalKey);
-      if (canonicalParts?.buildingCode) buildingCode = canonicalParts.buildingCode.toUpperCase();
-      if (canonicalParts?.spaceNumber) spaceNumber = canonicalParts.spaceNumber;
-    }
-  }
-
-  if (spaceKey && (!buildingCode || !spaceNumber)) {
-    const parsedKey = parseSpaceKey(spaceKey);
-    if (parsedKey?.buildingCode) buildingCode = parsedKey.buildingCode.toUpperCase();
-    if (parsedKey?.spaceNumber) spaceNumber = parsedKey.spaceNumber;
-  }
-
-  if ((!buildingCode || !spaceNumber || !buildingDisplayName) && (base.displayName || base.name)) {
-    const parsed = parseRoomLabel(base.displayName || base.name);
-    if (parsed?.buildingCode) buildingCode = parsed.buildingCode.toUpperCase();
-    if (parsed?.spaceNumber) spaceNumber = parsed.spaceNumber;
-    if (!buildingDisplayName && parsed?.building?.displayName) {
-      buildingDisplayName = parsed.building.displayName;
-    }
-  }
-
-  // Legacy records often store the building name in `building` (or
-  // `buildingDisplayName`) without a buildingCode. Try to resolve it via
-  // configured building aliases so edit forms can default the building dropdown.
-  const legacyBuildingLabel = (base.buildingDisplayName || base.building || '')
-    .toString()
-    .trim();
-  if ((!buildingCode || !buildingDisplayName) && legacyBuildingLabel) {
-    const resolved = resolveBuilding(legacyBuildingLabel);
-    if (!buildingCode && resolved?.code) buildingCode = resolved.code.toUpperCase();
-    if (!buildingDisplayName) {
-      buildingDisplayName = resolved?.displayName || legacyBuildingLabel;
+      spaceKey = canonicalKey;
+      buildingCode = canonicalParts?.buildingCode || parsedKey.buildingCode;
+      spaceNumber = canonicalParts?.spaceNumber || parsedKey.spaceNumber;
     }
   }
 
   const normalizedNumber = normalizeSpaceNumber(spaceNumber);
-  const canonicalSpaceKey = buildingCode && normalizedNumber
-    ? buildSpaceKey(buildingCode, normalizedNumber)
-    : '';
-  if (!spaceKey && canonicalSpaceKey) {
+  const canonicalSpaceKey =
+    buildingCode && normalizedNumber
+      ? buildSpaceKey(buildingCode, normalizedNumber)
+      : '';
+  if (!spaceKey && canonicalSpaceKey) spaceKey = canonicalSpaceKey;
+  if (canonicalSpaceKey && validateSpaceKey(canonicalSpaceKey).valid) {
     spaceKey = canonicalSpaceKey;
-  } else if (spaceKey && canonicalSpaceKey && spaceKey !== canonicalSpaceKey) {
-    // Keep the canonical key in-memory even if the stored record is legacy.
-    spaceKey = canonicalSpaceKey;
-  }
-  if (canonicalSpaceKey) {
     const parts = parseSpaceKey(canonicalSpaceKey);
-    if (parts?.buildingCode) buildingCode = parts.buildingCode.toUpperCase();
-    if (parts?.spaceNumber) spaceNumber = parts.spaceNumber;
+    buildingCode = parts?.buildingCode || buildingCode;
+    spaceNumber = parts?.spaceNumber || normalizedNumber;
   }
 
-  const resolvedFromConfig = buildingCode ? resolveBuildingDisplayName(buildingCode) : '';
-  const resolvedBuildingName = (resolvedFromConfig && resolvedFromConfig !== buildingCode)
-    ? resolvedFromConfig
-    : (buildingDisplayName || resolvedFromConfig || buildingCode);
-  const displayName = base.displayName
-    || formatSpaceDisplayName({
+  const resolvedFromConfig = buildingCode
+    ? resolveBuildingDisplayName(buildingCode)
+    : '';
+  const resolvedBuildingName =
+    resolvedFromConfig || buildingDisplayName || buildingCode;
+  const displayName =
+    (base.displayName || '').toString().trim() ||
+    formatSpaceDisplayName({
       buildingCode,
       buildingDisplayName: resolvedBuildingName,
-      spaceNumber: normalizedNumber
+      spaceNumber: normalizedNumber,
     });
 
   return {
     ...base,
     id,
     spaceKey,
-    buildingCode,
+    buildingCode: (buildingCode || '').toString().trim().toUpperCase(),
     buildingDisplayName: resolvedBuildingName || '',
     spaceNumber: normalizedNumber || '',
-    displayName
+    displayName,
   };
 };
 
@@ -112,14 +80,13 @@ export const resolveSpaceDisplayName = (spaceKey, spacesByKey) => {
   if (!spaceKey) return '';
   const raw = (spaceKey || '').toString().trim();
   const parsedInput = parseSpaceKey(raw);
-  const canonicalKey = parsedInput?.buildingCode && parsedInput?.spaceNumber
-    ? buildSpaceKey(parsedInput.buildingCode, parsedInput.spaceNumber)
-    : '';
+  const canonicalKey =
+    parsedInput?.buildingCode && parsedInput?.spaceNumber
+      ? buildSpaceKey(parsedInput.buildingCode, parsedInput.spaceNumber)
+      : '';
   const lookupKey = canonicalKey || raw;
   const map = spacesByKey instanceof Map ? spacesByKey : null;
-  const space = map
-    ? (map.get(lookupKey) || (lookupKey !== raw ? map.get(raw) : null))
-    : (spacesByKey?.[lookupKey] || (lookupKey !== raw ? spacesByKey?.[raw] : null));
+  const space = map ? map.get(lookupKey) : spacesByKey?.[lookupKey];
   if (space) {
     const normalized = normalizeSpaceRecord(space, space.id);
     return normalized.displayName || normalized.spaceKey || '';
@@ -129,7 +96,7 @@ export const resolveSpaceDisplayName = (spaceKey, spacesByKey) => {
   if (!parsed?.buildingCode || !parsed?.spaceNumber) return spaceKey;
   return formatSpaceDisplayName({
     buildingCode: parsed.buildingCode,
-    spaceNumber: parsed.spaceNumber
+    spaceNumber: parsed.spaceNumber,
   });
 };
 
@@ -148,31 +115,13 @@ export const resolveScheduleSpaces = (schedule, spacesByKey) => {
   const spaceIds = Array.isArray(schedule.spaceIds)
     ? schedule.spaceIds.filter(Boolean)
     : [];
-  const resolvedNames = spaceIds
+  const displayNames = spaceIds
     .map((id) => resolveSpaceDisplayName(id, spacesByKey))
     .filter(Boolean);
 
-  const fallbackNames = Array.isArray(schedule.spaceDisplayNames) && schedule.spaceDisplayNames.length > 0
-    ? schedule.spaceDisplayNames
-    : [];
-
-  let displayNames = resolvedNames.length > 0 ? resolvedNames : fallbackNames;
-
-  if (resolvedNames.length === 0 && fallbackNames.length > 0) {
-    const parsed = parseMultiRoom(fallbackNames.join('; '));
-    const parsedNames = Array.isArray(parsed?.spaceKeys)
-      ? parsed.spaceKeys
-        .map((id) => resolveSpaceDisplayName(id, spacesByKey))
-        .filter(Boolean)
-      : [];
-    if (parsedNames.length > 0) {
-      displayNames = parsedNames;
-    }
-  }
-
   return {
     displayNames,
-    display: displayNames.join('; ')
+    display: displayNames.join('; '),
   };
 };
 
@@ -204,7 +153,7 @@ export const resolveOfficeLocations = (person, spacesByKey) => {
   const map = spacesByKey instanceof Map ? spacesByKey : null;
 
   // Helper to resolve a single space ID
-  const resolveOne = (spaceId, officeStr) => {
+  const resolveOne = (spaceId) => {
     const rawId = (spaceId || '').toString().trim();
     const parsedKey = parseSpaceKey(rawId);
     const canonicalId = parsedKey?.buildingCode && parsedKey?.spaceNumber
@@ -212,9 +161,7 @@ export const resolveOfficeLocations = (person, spacesByKey) => {
       : '';
     const id = canonicalId || rawId;
     if (id) {
-      const space = map
-        ? (map.get(id) || (id !== rawId ? map.get(rawId) : null))
-        : (spacesByKey?.[id] || (id !== rawId ? spacesByKey?.[rawId] : null));
+      const space = map ? map.get(id) : spacesByKey?.[id];
       if (space) {
         const normalized = normalizeSpaceRecord(space, space.id);
         return {
@@ -230,7 +177,8 @@ export const resolveOfficeLocations = (person, spacesByKey) => {
       if (parsedKey?.buildingCode && parsedKey?.spaceNumber) {
         const displayName = formatSpaceDisplayName({
           buildingCode: parsedKey.buildingCode,
-          spaceNumber: parsedKey.spaceNumber
+          buildingDisplayName: resolveBuildingDisplayName(parsedKey.buildingCode),
+          spaceNumber: parsedKey.spaceNumber,
         });
         return {
           spaceKey: id,
@@ -242,46 +190,19 @@ export const resolveOfficeLocations = (person, spacesByKey) => {
       }
     }
 
-    // Try parsing from office string
-    const office = (officeStr || '').toString().trim();
-    if (office) {
-      const parsed = parseRoomLabel(office);
-      if (parsed?.buildingCode || parsed?.spaceNumber) {
-        const displayName = formatSpaceDisplayName({
-          buildingCode: parsed.buildingCode || parsed?.building?.code || '',
-          buildingDisplayName: parsed?.building?.displayName || '',
-          spaceNumber: parsed.spaceNumber || ''
-        });
-        return {
-          spaceKey: parsed.spaceKey || '',
-          buildingCode: parsed.buildingCode || parsed?.building?.code || '',
-          buildingDisplayName: parsed?.building?.displayName || '',
-          spaceNumber: normalizeSpaceNumber(parsed.spaceNumber || ''),
-          displayName: displayName || parsed.displayName || office
-        };
-      }
-    }
-
     return null;
   };
 
-  // First try new array fields
-  const officeSpaceIds = Array.isArray(person.officeSpaceIds) ? person.officeSpaceIds : [];
-  const offices = Array.isArray(person.offices) ? person.offices : [];
+  const officeSpaceIds = Array.isArray(person.officeSpaceIds)
+    ? person.officeSpaceIds
+    : person.officeSpaceId
+      ? [person.officeSpaceId]
+      : [];
 
-  if (officeSpaceIds.length > 0 || offices.length > 0) {
-    const maxLen = Math.max(officeSpaceIds.length, offices.length);
-    for (let i = 0; i < maxLen; i++) {
-      const resolved = resolveOne(officeSpaceIds[i], offices[i]);
-      if (resolved) results.push(resolved);
-    }
-  }
-
-  // Fall back to singular office fields if no array data
-  if (results.length === 0) {
-    const resolved = resolveOne(person.officeSpaceId, person.office);
+  officeSpaceIds.forEach((spaceId) => {
+    const resolved = resolveOne(spaceId);
     if (resolved) results.push(resolved);
-  }
+  });
 
   return results;
 };

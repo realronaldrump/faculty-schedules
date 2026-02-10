@@ -5,7 +5,8 @@ import { useAuth } from './AuthContext';
 import {
   DEFAULT_BUILDING_CONFIG,
   normalizeBuildingConfig,
-  applyBuildingConfig
+  applyBuildingConfig,
+  slugify
 } from '../utils/locationService';
 import {
   DEFAULT_TERM_CONFIG,
@@ -43,13 +44,14 @@ export const AppConfigProvider = ({ children }) => {
         const buildingMap = new Map();
         roomsSnapshot.docs.forEach((docSnap) => {
           const data = docSnap.data() || {};
-          const code = (data.buildingCode || '').toString().trim().toUpperCase();
+          const rawCode = (data.buildingCode || '').toString().trim();
+          const code = rawCode ? slugify(rawCode).toUpperCase() : '';
           const displayName = (data.buildingDisplayName || data.building || '').toString().trim();
           const key = code || displayName;
           if (!key) return;
           if (!buildingMap.has(key)) {
             buildingMap.set(key, {
-              code: code || displayName.toUpperCase(),
+              code: code || (displayName ? slugify(displayName).toUpperCase() : ''),
               displayName: displayName || code,
               aliases: []
             });

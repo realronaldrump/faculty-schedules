@@ -41,6 +41,10 @@ import {
   repairScheduleSpaceLinks,
   previewScheduleSpaceLinks,
 } from "../../utils/dataHygiene";
+import {
+  applyCanonicalLocationMigration,
+  previewCanonicalLocationMigration,
+} from "../../utils/canonicalLocationMigration";
 import { linkSchedules } from "../../utils/scheduleLinkUtils";
 import { logUpdate } from "../../utils/changeLogger";
 import { fetchPeople } from "../../utils/dataAdapter";
@@ -924,6 +928,13 @@ const DataHygieneManager = () => {
   const [backfillTermCode, setBackfillTermCode] = useState("");
   const [identityBackfillPreview, setIdentityBackfillPreview] = useState(null);
   const [isBackfillRunning, setIsBackfillRunning] = useState(false);
+  // Canonical location migration (breaking change, one-time)
+  const [canonicalLocationPreview, setCanonicalLocationPreview] = useState(null);
+  const [canonicalLocationResult, setCanonicalLocationResult] = useState(null);
+  const [isCanonicalLocationPreviewRunning, setIsCanonicalLocationPreviewRunning] =
+    useState(false);
+  const [isCanonicalLocationApplyRunning, setIsCanonicalLocationApplyRunning] =
+    useState(false);
 
   // Expanded sections
   const [expandedSection, setExpandedSection] = useState(null);
@@ -1069,6 +1080,73 @@ const DataHygieneManager = () => {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handlePreviewCanonicalLocationMigration = async () => {
+    setIsCanonicalLocationPreviewRunning(true);
+    try {
+      const preview = await previewCanonicalLocationMigration();
+      setCanonicalLocationPreview(preview);
+      setCanonicalLocationResult(null);
+      const buildingChanges = preview?.buildings?.changes?.length || 0;
+      const roomMoves = preview?.rooms?.moves?.length || 0;
+      const scheduleUpdates = preview?.schedules?.updates?.length || 0;
+      const peopleUpdates = preview?.people?.updates?.length || 0;
+      showNotification(
+        "success",
+        "Canonical Migration Preview Ready",
+        `Buildings: ${buildingChanges}, rooms moved/merged: ${roomMoves}, schedules: ${scheduleUpdates}, people: ${peopleUpdates}.`,
+      );
+    } catch (error) {
+      console.error("Canonical location preview failed:", error);
+      showNotification("error", "Preview Failed", error.message);
+    } finally {
+      setIsCanonicalLocationPreviewRunning(false);
+    }
+  };
+
+  const requestApplyCanonicalLocationMigration = () => {
+    openConfirm({
+      title: "Apply Canonical Location Migration?",
+      variant: "danger",
+      confirmText: "Apply Migration",
+      message: (
+        <div className="space-y-2 text-sm">
+          <div>
+            This is a breaking one-time migration. It rewrites:
+          </div>
+          <ul className="list-disc pl-5 text-gray-600 space-y-1">
+            <li>settings/buildings (canonical building codes)</li>
+            <li>rooms (doc id = spaceKey, merges duplicates)</li>
+            <li>schedules (canonical spaceIds + display names)</li>
+            <li>people (canonical officeSpaceIds + derived office display fields)</li>
+            <li>temperature collections (spaceKey fields + doc ids)</li>
+          </ul>
+          <div className="text-xs text-gray-500">
+            Make sure you have a Firestore backup/export first. This cannot be automatically undone.
+          </div>
+        </div>
+      ),
+      confirmDisabled: isCanonicalLocationApplyRunning,
+      onConfirm: async () => {
+        setIsCanonicalLocationApplyRunning(true);
+        try {
+          const result = await applyCanonicalLocationMigration();
+          setCanonicalLocationResult(result);
+          showNotification(
+            "success",
+            "Migration Applied",
+            `Updated rooms/schedules/people successfully.`,
+          );
+          await handleScan();
+        } catch (error) {
+          console.error("Canonical location migration failed:", error);
+          showNotification("error", "Migration Failed", error.message);
+        } finally {
+          setIsCanonicalLocationApplyRunning(false);
+        }
+      },
+    });
   };
 
   const openConfirm = (config) => {
@@ -1569,6 +1647,112 @@ const DataHygieneManager = () => {
           />
           {isScanning ? "Scanning..." : "Scan Now"}
         </button>
+      </div>
+
+      {/* Canonical Location Migration (Breaking) */}
+      <div className="bg-white border rounded-lg p-4 mb-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">
+              Canonical Location Migration (Breaking)
+            </h2>
+            <p className="text-xs text-gray-600 mt-1">
+              Makes all location references consistent by enforcing canonical
+              building codes and `spaceKey` values everywhere. After applying,
+              this app assumes canonical keys only (no legacy formats).
+            </p>
+          </div>
+
+          <div className="flex items-start gap-2">
+            <button
+              onClick={handlePreviewCanonicalLocationMigration}
+              disabled={isCanonicalLocationPreviewRunning}
+              className="px-3 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 text-sm"
+            >
+              {isCanonicalLocationPreviewRunning ? "Previewing..." : "Preview"}
+            </button>
+            <button
+              onClick={requestApplyCanonicalLocationMigration}
+              disabled={
+                isCanonicalLocationApplyRunning ||
+                !canonicalLocationPreview ||
+                (canonicalLocationPreview?.buildings?.collisions?.length || 0) > 0 ||
+                (canonicalLocationPreview?.rooms?.invalidRooms?.length || 0) > 0
+              }
+              className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 text-sm"
+              title={
+                !canonicalLocationPreview
+                  ? "Run preview first"
+                  : (canonicalLocationPreview?.buildings?.collisions?.length || 0) > 0 ||
+                      (canonicalLocationPreview?.rooms?.invalidRooms?.length || 0) > 0
+                    ? "Preview found blockers (collisions/invalid rooms)"
+                    : "Apply the canonical migration"
+              }
+            >
+              {isCanonicalLocationApplyRunning ? "Applying..." : "Apply"}
+            </button>
+          </div>
+        </div>
+
+        {canonicalLocationPreview && (
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div className="p-3 rounded-lg bg-gray-50 border">
+              <div className="text-gray-500">Buildings</div>
+              <div className="text-gray-900 font-semibold">
+                {canonicalLocationPreview?.buildings?.changes?.length || 0} code
+                change(s)
+              </div>
+              {(canonicalLocationPreview?.buildings?.collisions?.length || 0) >
+                0 && (
+                <div className="text-red-600 mt-1">
+                  {(canonicalLocationPreview?.buildings?.collisions?.length || 0)} collision(s)
+                </div>
+              )}
+            </div>
+            <div className="p-3 rounded-lg bg-gray-50 border">
+              <div className="text-gray-500">Rooms</div>
+              <div className="text-gray-900 font-semibold">
+                {canonicalLocationPreview?.rooms?.moves?.length || 0} move(s),{" "}
+                {canonicalLocationPreview?.rooms?.collisions?.length || 0} merge group(s)
+              </div>
+              {(canonicalLocationPreview?.rooms?.invalidRooms?.length || 0) >
+                0 && (
+                <div className="text-red-600 mt-1">
+                  {(canonicalLocationPreview?.rooms?.invalidRooms?.length || 0)} invalid room(s)
+                </div>
+              )}
+            </div>
+            <div className="p-3 rounded-lg bg-gray-50 border">
+              <div className="text-gray-500">Links</div>
+              <div className="text-gray-900 font-semibold">
+                {canonicalLocationPreview?.schedules?.updates?.length || 0} schedule(s),{" "}
+                {canonicalLocationPreview?.people?.updates?.length || 0} people
+              </div>
+              <div className="text-gray-600 mt-1">
+                Seeds{" "}
+                {canonicalLocationPreview?.rooms?.missingRoomKeys?.length || 0} missing space(s)
+              </div>
+            </div>
+          </div>
+        )}
+
+        {canonicalLocationResult && (
+          <div className="mt-4 text-xs text-gray-700">
+            Applied:{" "}
+            <span className="font-medium text-gray-900">
+              {canonicalLocationResult.schedulesUpdated || 0}
+            </span>{" "}
+            schedules,{" "}
+            <span className="font-medium text-gray-900">
+              {canonicalLocationResult.peopleUpdated || 0}
+            </span>{" "}
+            people,{" "}
+            <span className="font-medium text-gray-900">
+              {canonicalLocationResult.roomsMoved || 0}
+            </span>{" "}
+            rooms moved.
+          </div>
+        )}
       </div>
 
       {/* Backfill (No Merges) */}

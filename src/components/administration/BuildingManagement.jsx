@@ -191,11 +191,8 @@ const BuildingManagement = () => {
             batch.set(docSnap.ref, {
               buildingCode: updatedBuilding.code,
               buildingDisplayName: updatedBuilding.displayName,
-              building: updatedBuilding.displayName,
               spaceNumber: spaceNumber || room.spaceNumber || '',
-              roomNumber: spaceNumber || room.roomNumber || '',
               displayName,
-              name: displayName,
               updatedAt: new Date().toISOString()
             }, { merge: true });
           });

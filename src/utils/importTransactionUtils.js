@@ -1506,7 +1506,10 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
     if (!existingOfficeRoom && officeNameKey) {
       existingOfficeRoom = roomsMap.get(officeNameKey) || null;
     }
-    const officeSpaceId = officeSpaceKey || '';
+    const nextOfficeSpaceIds = officeSpaceKey ? [officeSpaceKey] : [];
+    const nextOffices = officeSpaceKey ? [officeDisplayName] : [];
+    const nextOfficeSpaceId = nextOfficeSpaceIds[0] || '';
+    const nextOffice = nextOffices[0] || '';
 
     const now = new Date().toISOString();
     const basePersonData = {
@@ -1515,8 +1518,10 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
       email: rawEmail,
       roles: ['faculty'], // default to faculty for directory imports
       phone: row['Phone'] || row['Business Phone'] || row['Home Phone'] || '',
-      office: officeRaw,
-      officeSpaceId,
+      office: nextOffice,
+      offices: nextOffices,
+      officeSpaceId: nextOfficeSpaceId,
+      officeSpaceIds: nextOfficeSpaceIds,
       isActive: true,
       createdAt: now,
       updatedAt: now
@@ -1527,7 +1532,13 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
     const email = normalizedPerson.email || '';
     const phone = normalizedPerson.phone || '';
     const office = normalizedPerson.office || '';
-    const normalizedOfficeSpaceId = normalizedPerson.officeSpaceId || '';
+    const normalizedOfficeSpaceIds = Array.isArray(normalizedPerson.officeSpaceIds)
+      ? normalizedPerson.officeSpaceIds.filter(Boolean).map((v) => String(v).trim()).filter(Boolean)
+      : [];
+    const normalizedOfficeSpaceId = normalizedOfficeSpaceIds[0] || (normalizedPerson.officeSpaceId || '');
+    const normalizedOffices = Array.isArray(normalizedPerson.offices)
+      ? normalizedPerson.offices.filter(Boolean).map((v) => String(v).trim()).filter(Boolean)
+      : office ? [office] : [];
     const nameKey = makeNameKey(firstName, lastName);
     const emailKey = email.toLowerCase();
     const personData = normalizedPerson;
@@ -1570,17 +1581,38 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
       }
       const existingPhone = existingPerson.phone || '';
       const existingOffice = existingPerson.office || '';
+      const existingOfficeSpaceIds = Array.isArray(existingPerson.officeSpaceIds)
+        ? existingPerson.officeSpaceIds.filter(Boolean).map((v) => String(v).trim()).filter(Boolean)
+        : [];
+      const existingOffices = Array.isArray(existingPerson.offices)
+        ? existingPerson.offices.filter(Boolean).map((v) => String(v).trim()).filter(Boolean)
+        : [];
       if (phone && existingPhone !== phone) {
         updates.phone = phone;
         diff.push({ key: 'phone', from: existingPhone, to: phone });
       }
-      if (office && existingOffice !== office) {
-        updates.office = office;
-        diff.push({ key: 'office', from: existingOffice, to: office });
+      const officeIdsChanged =
+        normalizedOfficeSpaceIds.length !== existingOfficeSpaceIds.length ||
+        normalizedOfficeSpaceIds.some((v, idx) => v !== existingOfficeSpaceIds[idx]);
+      if (normalizedOfficeSpaceIds.length > 0 && officeIdsChanged) {
+        updates.officeSpaceIds = normalizedOfficeSpaceIds;
+        diff.push({ key: 'officeSpaceIds', from: existingOfficeSpaceIds, to: normalizedOfficeSpaceIds });
       }
       if (normalizedOfficeSpaceId && existingPerson.officeSpaceId !== normalizedOfficeSpaceId) {
         updates.officeSpaceId = normalizedOfficeSpaceId;
         diff.push({ key: 'officeSpaceId', from: existingPerson.officeSpaceId || '', to: normalizedOfficeSpaceId });
+      }
+
+      const officesChanged =
+        normalizedOffices.length !== existingOffices.length ||
+        normalizedOffices.some((v, idx) => v !== existingOffices[idx]);
+      if (normalizedOffices.length > 0 && officesChanged) {
+        updates.offices = normalizedOffices;
+        diff.push({ key: 'offices', from: existingOffices, to: normalizedOffices });
+      }
+      if (office && existingOffice !== office) {
+        updates.office = office;
+        diff.push({ key: 'office', from: existingOffice, to: office });
       }
       if (diff.length > 0) {
         const changeId = transaction.addChange('people', 'modify', updates, existingPerson, { groupKey });
@@ -2042,6 +2074,21 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
         updates[key] = normalized;
       }
     };
+    const normalizeStringArray = (value) => (
+      Array.isArray(value)
+        ? value.map((v) => String(v).trim()).filter(Boolean)
+        : []
+    );
+    const setArrayIfDifferent = (key, value, transform = normalizeStringArray) => {
+      const next = transform(value);
+      if (next.length === 0) return;
+      const current = transform(existingPerson?.[key]);
+      const changed =
+        current.length !== next.length || current.some((v, idx) => v !== next[idx]);
+      if (changed) {
+        updates[key] = next;
+      }
+    };
 
     if (importType === 'schedule') {
       const incomingId = normalizeBaylorId(proposedPerson?.baylorId);
@@ -2052,8 +2099,10 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
     } else if (importType === 'directory') {
       setIfDifferent('email', proposedPerson?.email, (val) => String(val).toLowerCase().trim());
       setIfDifferent('phone', proposedPerson?.phone, (val) => String(val).replace(/\D/g, ''));
-      setIfDifferent('office', proposedPerson?.office, (val) => String(val).trim());
+      setArrayIfDifferent('officeSpaceIds', proposedPerson?.officeSpaceIds);
       setIfDifferent('officeSpaceId', proposedPerson?.officeSpaceId, (val) => String(val).trim());
+      setArrayIfDifferent('offices', proposedPerson?.offices);
+      setIfDifferent('office', proposedPerson?.office, (val) => String(val).trim());
     }
 
     if (Object.keys(updates).length > 0) {

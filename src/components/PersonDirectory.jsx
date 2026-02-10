@@ -1,10 +1,11 @@
 import React, { useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Edit, Save, X, Trash2, Phone, PhoneOff, Building, BuildingIcon, Plus, Minus, ExternalLink } from 'lucide-react';
+import { Edit, Save, X, Trash2, Phone, PhoneOff, Building, BuildingIcon, ExternalLink } from 'lucide-react';
 import { useDirectoryState, useDirectoryHandlers } from '../hooks';
 import { useData } from '../contexts/DataContext';
 import ConfirmDialog from './shared/ConfirmDialog';
 import { UniversalDirectory } from './shared';
+import MultiSelectDropdown from './MultiSelectDropdown';
 import {
   buildDirectoryFilterOptions,
   dedupeDirectoryRecords,
@@ -49,7 +50,15 @@ const renderStatusToggles = ({
         setFormData(prev => ({
           ...prev,
           isRemote: isChecked,
-          ...(isChecked ? { hasNoOffice: true, office: '' } : {})
+          ...(isChecked
+            ? {
+                hasNoOffice: true,
+                office: '',
+                offices: [],
+                officeSpaceId: '',
+                officeSpaceIds: [],
+              }
+            : {})
         }));
         return;
       }
@@ -92,7 +101,8 @@ const buildBaseColumns = ({
   toggleCreatePhoneState,
   toggleCreateOfficeState,
   getInputClass,
-  spacesByKey
+  spacesByKey,
+  spacePicker,
 }) => {
   const programColumn = {
     key: 'program',
@@ -248,45 +258,7 @@ const buildBaseColumns = ({
     )
   };
 
-  // Helper to get offices array from form data
-  const getOfficesArray = (formData) => {
-    if (Array.isArray(formData.offices) && formData.offices.length > 0) {
-      return formData.offices;
-    }
-    return formData.office ? [formData.office] : [];
-  };
-
-  // Helper to update offices in form data
-  const updateOfficesInForm = (formData, setFormData, index, value) => {
-    const currentOffices = getOfficesArray(formData);
-    const newOffices = [...currentOffices];
-    newOffices[index] = value;
-    setFormData(prev => ({
-      ...prev,
-      offices: newOffices,
-      office: newOffices[0] || '' // Keep primary in sync
-    }));
-  };
-
-  // Helper to add a new office
-  const addOffice = (formData, setFormData) => {
-    const currentOffices = getOfficesArray(formData);
-    setFormData(prev => ({
-      ...prev,
-      offices: [...currentOffices, '']
-    }));
-  };
-
-  // Helper to remove an office by index
-  const removeOffice = (formData, setFormData, index) => {
-    const currentOffices = getOfficesArray(formData);
-    const newOffices = currentOffices.filter((_, i) => i !== index);
-    setFormData(prev => ({
-      ...prev,
-      offices: newOffices,
-      office: newOffices[0] || ''
-    }));
-  };
+  const resolvedSpacePicker = spacePicker || { options: [], displayMap: {} };
 
   const officeColumn = {
     key: 'office',
@@ -304,24 +276,9 @@ const buildBaseColumns = ({
         );
       }
 
-      // Preserve any raw labels even if they can't be parsed/resolved.
-      const rawOffices = Array.isArray(person.offices) && person.offices.length > 0
-        ? person.offices
-        : (person.office ? [person.office] : []);
-
       const locations = resolveOfficeLocations(person, spacesByKey);
       if (locations.length === 0) {
-        if (rawOffices.length === 0) return <span className="text-gray-400">-</span>;
-        if (rawOffices.length === 1) return <span>{rawOffices[0]}</span>;
-        return (
-          <div className="flex flex-col gap-0.5">
-            {rawOffices.map((office, idx) => (
-              <span key={idx} className={idx === 0 ? 'font-medium' : 'text-gray-600 text-sm'}>
-                {office}{idx === 0 && rawOffices.length > 1 ? ' (primary)' : ''}
-              </span>
-            ))}
-          </div>
-        );
+        return <span className="text-gray-400">-</span>;
       }
 
       const renderOne = (location, idx, total) => {
@@ -361,131 +318,120 @@ const buildBaseColumns = ({
       );
     },
     renderEdit: () => {
-      const offices = getOfficesArray(editFormData);
-      const showAddButton = !editFormData.hasNoOffice && offices.length < 3; // Max 3 offices
-
+      const selected = Array.isArray(editFormData.officeSpaceIds)
+        ? editFormData.officeSpaceIds.filter(Boolean)
+        : editFormData.officeSpaceId
+          ? [editFormData.officeSpaceId]
+          : [];
       return (
         <div className="flex flex-col gap-2">
-          {offices.map((office, idx) => (
-            <div key={idx} className="flex items-center gap-2">
-              <input
-                name={`office-${idx}`}
-                value={office || ''}
-                onChange={(e) => updateOfficesInForm(editFormData, setEditFormData, idx, e.target.value)}
-                className={getInputClass('office')}
-                placeholder={idx === 0 ? 'Primary Office' : 'Additional Office'}
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <MultiSelectDropdown
+                options={resolvedSpacePicker.options}
+                selected={selected}
+                onChange={(next) => {
+                  const cleaned = Array.isArray(next)
+                    ? next
+                        .map((v) => (v || '').toString().trim())
+                        .filter(Boolean)
+                        .slice(0, 3)
+                    : [];
+                  setEditFormData((prev) => ({
+                    ...prev,
+                    officeSpaceIds: cleaned,
+                    officeSpaceId: cleaned[0] || '',
+                    hasNoOffice: cleaned.length > 0 ? false : prev.hasNoOffice,
+                  }));
+                }}
+                placeholder="Select office(s)..."
+                displayMap={resolvedSpacePicker.displayMap}
+                showSelectedLabels
+                menuPortal
+                enableSearch
+                searchPlaceholder="Search spaces..."
                 disabled={editFormData.hasNoOffice}
               />
-              {idx === 0 ? (
-                <button
-                  type="button"
-                  onClick={toggleEditOfficeState}
-                  className={`p-1 rounded transition-colors ${editFormData.hasNoOffice ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`}
-                  title={editFormData.hasNoOffice ? 'Has no office' : 'Has office'}
-                >
-                  {editFormData.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => removeOffice(editFormData, setEditFormData, idx)}
-                  className="p-1 rounded transition-colors text-red-500 hover:bg-red-100"
-                  title="Remove office"
-                >
-                  <Minus size={16} />
-                </button>
-              )}
+              <div className="text-[11px] text-gray-500 mt-1">
+                Select up to 3 spaces. Office labels are derived from the selected space keys.
+              </div>
             </div>
-          ))}
-          <div className="flex items-center gap-3">
-            {showAddButton && (
-              <button
-                type="button"
-                onClick={() => addOffice(editFormData, setEditFormData)}
-                className="flex items-center gap-1 text-xs text-baylor-green hover:text-baylor-green/80 transition-colors"
-              >
-                <Plus size={14} />
-                Add office
-              </button>
-            )}
-            <Link
-              to="/facilities/spaces"
-              className="flex items-center gap-1 text-xs text-gray-500 hover:text-baylor-green transition-colors"
-              title="Manage all spaces"
+            <button
+              type="button"
+              onClick={toggleEditOfficeState}
+              className={`p-1 rounded transition-colors mt-1 ${editFormData.hasNoOffice ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`}
+              title={editFormData.hasNoOffice ? 'Has no office' : 'Has office'}
             >
-              <ExternalLink size={12} />
-              Manage Spaces
-            </Link>
+              {editFormData.hasNoOffice ? (
+                <BuildingIcon size={16} className="opacity-50" />
+              ) : (
+                <Building size={16} />
+              )}
+            </button>
           </div>
+          <Link
+            to="/facilities/spaces"
+            className="flex items-center gap-1 text-xs text-gray-500 hover:text-baylor-green transition-colors"
+            title="Manage all spaces"
+          >
+            <ExternalLink size={12} />
+            Manage Spaces
+          </Link>
         </div>
       );
     },
     renderCreate: () => {
-      const offices = getOfficesArray(newRecord);
-      const showAddButton = !newRecord.hasNoOffice && offices.length < 3;
-
+      const selected = Array.isArray(newRecord.officeSpaceIds)
+        ? newRecord.officeSpaceIds.filter(Boolean)
+        : newRecord.officeSpaceId
+          ? [newRecord.officeSpaceId]
+          : [];
       return (
         <div className="flex flex-col gap-2">
-          {offices.length === 0 ? (
-            <div className="flex items-center gap-2">
-              <input
-                name="office"
-                value=""
-                onChange={(e) => updateOfficesInForm(newRecord, setNewRecord, 0, e.target.value)}
-                className={getInputClass('office')}
-                placeholder="Building & Room"
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <MultiSelectDropdown
+                options={resolvedSpacePicker.options}
+                selected={selected}
+                onChange={(next) => {
+                  const cleaned = Array.isArray(next)
+                    ? next
+                        .map((v) => (v || '').toString().trim())
+                        .filter(Boolean)
+                        .slice(0, 3)
+                    : [];
+                  setNewRecord((prev) => ({
+                    ...prev,
+                    officeSpaceIds: cleaned,
+                    officeSpaceId: cleaned[0] || '',
+                    hasNoOffice: cleaned.length > 0 ? false : prev.hasNoOffice,
+                  }));
+                }}
+                placeholder="Select office(s)..."
+                displayMap={resolvedSpacePicker.displayMap}
+                showSelectedLabels
+                menuPortal
+                enableSearch
+                searchPlaceholder="Search spaces..."
                 disabled={newRecord.hasNoOffice}
               />
-              <button
-                type="button"
-                onClick={toggleCreateOfficeState}
-                className={`p-1 rounded transition-colors ${newRecord.hasNoOffice ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`}
-              >
-                {newRecord.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
-              </button>
-            </div>
-          ) : (
-            offices.map((office, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <input
-                  name={`office-${idx}`}
-                  value={office || ''}
-                  onChange={(e) => updateOfficesInForm(newRecord, setNewRecord, idx, e.target.value)}
-                  className={getInputClass('office')}
-                  placeholder={idx === 0 ? 'Primary Office' : 'Additional Office'}
-                  disabled={newRecord.hasNoOffice}
-                />
-                {idx === 0 ? (
-                  <button
-                    type="button"
-                    onClick={toggleCreateOfficeState}
-                    className={`p-1 rounded transition-colors ${newRecord.hasNoOffice ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`}
-                  >
-                    {newRecord.hasNoOffice ? <BuildingIcon size={16} className="opacity-50" /> : <Building size={16} />}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => removeOffice(newRecord, setNewRecord, idx)}
-                    className="p-1 rounded transition-colors text-red-500 hover:bg-red-100"
-                    title="Remove office"
-                  >
-                    <Minus size={16} />
-                  </button>
-                )}
+              <div className="text-[11px] text-gray-500 mt-1">
+                Select up to 3 spaces.
               </div>
-            ))
-          )}
-          {showAddButton && offices.length > 0 && (
+            </div>
             <button
               type="button"
-              onClick={() => addOffice(newRecord, setNewRecord)}
-              className="flex items-center gap-1 text-xs text-baylor-green hover:text-baylor-green/80 transition-colors"
+              onClick={toggleCreateOfficeState}
+              className={`p-1 rounded transition-colors mt-1 ${newRecord.hasNoOffice ? 'text-red-600 bg-red-100 hover:bg-red-200' : 'text-gray-400 hover:bg-gray-100'}`}
+              title={newRecord.hasNoOffice ? 'Has no office' : 'Has office'}
             >
-              <Plus size={14} />
-              Add office
+              {newRecord.hasNoOffice ? (
+                <BuildingIcon size={16} className="opacity-50" />
+              ) : (
+                <Building size={16} />
+              )}
             </button>
-          )}
+          </div>
         </div>
       );
     }
@@ -530,7 +476,7 @@ const getPermissionValue = (permission, record) => {
 
 const ConfiguredPersonDirectory = (props) => {
   const { config } = props;
-  const { spacesByKey, selectedSemester } = useData();
+  const { spacesByKey, spacesList, selectedSemester } = useData();
 
   const {
     config: _config,
@@ -756,6 +702,33 @@ const ConfiguredPersonDirectory = (props) => {
     return sorted;
   }, [filteredData, sortConfig, nameSort, getSortPriority, getSortValue, extraState]);
 
+  const spacePicker = useMemo(() => {
+    const list = Array.isArray(spacesList) ? spacesList : [];
+    const seen = new Set();
+    const options = [];
+    const displayMap = {};
+    const typeMap = {};
+
+    list.forEach((space) => {
+      if (!space || space.isActive === false) return;
+      const key = (space.spaceKey || space.id || '').toString().trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      options.push(key);
+      displayMap[key] = (space.displayName || space.name || key).toString().trim() || key;
+      typeMap[key] = (space.type || '').toString().trim().toLowerCase();
+    });
+
+    options.sort((a, b) => {
+      const aOffice = typeMap[a] === 'office';
+      const bOffice = typeMap[b] === 'office';
+      if (aOffice !== bOffice) return aOffice ? -1 : 1;
+      return (displayMap[a] || a).localeCompare(displayMap[b] || b);
+    });
+
+    return { options, displayMap };
+  }, [spacesList]);
+
   const baseColumns = useMemo(() => buildBaseColumns({
     programs,
     editFormData,
@@ -770,7 +743,8 @@ const ConfiguredPersonDirectory = (props) => {
     toggleCreatePhoneState,
     toggleCreateOfficeState,
     getInputClass,
-    spacesByKey
+    spacesByKey,
+    spacePicker
   }), [
     programs,
     editFormData,
@@ -785,7 +759,8 @@ const ConfiguredPersonDirectory = (props) => {
     toggleCreatePhoneState,
     toggleCreateOfficeState,
     getInputClass,
-    spacesByKey
+    spacesByKey,
+    spacePicker
   ]);
 
   const columns = useMemo(() => getColumns({

@@ -35,11 +35,11 @@ import {
 } from "../utils/studentScheduleUtils";
 // Use centralized location service
 import {
-  parseRoomLabel,
-  normalizeSpaceNumber,
-  extractSpaceNumber,
+  buildSpaceKey,
   formatSpaceDisplayName,
-  SPACE_TYPE,
+  parseSpaceKey,
+  resolveBuildingDisplayName,
+  validateSpaceKey,
 } from "../utils/locationService";
 
 const normalizeIdentifierString = (value) => {
@@ -87,8 +87,6 @@ const usePeopleOperations = () => {
     canCreateStudent,
     canDeleteStudent,
     canCreateProgram,
-    canCreateRoom,
-    canEditRoom,
   } = useData();
   const { loadPeople } = usePeople();
 
@@ -188,131 +186,47 @@ const usePeopleOperations = () => {
     };
   };
 
-  const resolveOfficeSpaceId = useCallback(
-    async (personData, { allowCreate = true } = {}) => {
-      const office = (personData?.office || "").toString().trim();
-      const hasNoOffice =
-        personData?.hasNoOffice === true || personData?.isRemote === true;
+  const normalizeOfficeSpaceIds = useCallback(
+    (value, { max = 3 } = {}) => {
+      const input = Array.isArray(value) ? value : value ? [value] : [];
+      const seen = new Set();
+      const output = [];
 
-      if (hasNoOffice || !office) return { officeSpaceId: "" };
+      input.forEach((item) => {
+        const raw = (item || "").toString().trim();
+        if (!raw) return;
+        const parsed = parseSpaceKey(raw);
+        if (!parsed?.buildingCode || !parsed?.spaceNumber) return;
+        const canonical = buildSpaceKey(parsed.buildingCode, parsed.spaceNumber);
+        if (!canonical || seen.has(canonical)) return;
+        if (!validateSpaceKey(canonical).valid) return;
+        seen.add(canonical);
+        output.push(canonical);
+      });
 
-      const parsed = parseRoomLabel(office);
-      if (!parsed?.spaceKey) return { officeSpaceId: "" };
-
-      const now = new Date().toISOString();
-      const spaceKey = parsed.spaceKey;
-      const buildingCode = (
-        parsed.buildingCode ||
-        parsed.building?.code ||
-        ""
-      ).toUpperCase();
-      const spaceNumber = normalizeSpaceNumber(parsed.spaceNumber || "");
-      const buildingDisplayName = parsed.building?.displayName || "";
-      const displayName =
-        formatSpaceDisplayName({
-          buildingCode,
-          buildingDisplayName,
-          spaceNumber,
-        }) ||
-        parsed.displayName ||
-        office;
-
-      if (spacesByKey instanceof Map) {
-        const existing = spacesByKey.get(spaceKey);
-        if (existing) {
-          return { officeSpaceId: spaceKey };
-        }
-      }
-
-      // 1) Try to find by spaceKey first (new format)
-      try {
-        const bySpaceKeySnap = await getDocs(
-          query(
-            collection(db, COLLECTIONS.ROOMS),
-            where("spaceKey", "==", spaceKey),
-          ),
-        );
-        if (!bySpaceKeySnap.empty) {
-          const docId = bySpaceKeySnap.docs[0].id;
-          // Update with new fields if we have edit permission
-          if (typeof canEditRoom === "function" && canEditRoom()) {
-            setDoc(
-              doc(db, COLLECTIONS.ROOMS, docId),
-              {
-                buildingCode,
-                buildingDisplayName: buildingDisplayName || buildingCode,
-                spaceNumber,
-                spaceKey,
-                displayName,
-                updatedAt: now,
-              },
-              { merge: true },
-            ).catch(() => null);
-          }
-          return { officeSpaceId: spaceKey };
-        }
-      } catch (error) {
-        void error;
-      }
-
-      // 2) Building-only query (avoids composite index) + local match on space number
-      try {
-        const byBuildingSnap = await getDocs(
-          query(
-            collection(db, COLLECTIONS.ROOMS),
-            where("buildingCode", "==", buildingCode),
-          ),
-        );
-
-        const targetNumber = normalizeSpaceNumber(spaceNumber);
-        const matchDoc = byBuildingSnap.docs.find((docSnap) => {
-          const data = docSnap.data() || {};
-          if (data.spaceKey && data.spaceKey === spaceKey) return true;
-          const candidateNumber = normalizeSpaceNumber(
-            data.spaceNumber || extractSpaceNumber(data.displayName || ""),
-          );
-          return candidateNumber && candidateNumber === targetNumber;
-        });
-
-        if (matchDoc) {
-          return { officeSpaceId: spaceKey };
-        }
-      } catch (error) {
-        void error;
-      }
-
-      const canCreate =
-        typeof canCreateRoom === "function" ? canCreateRoom() : false;
-      if (!allowCreate || !canCreate) return { officeSpaceId: "" };
-
-      // Create new room
-      const newRoom = {
-        displayName: displayName,
-        // New canonical fields
-        spaceKey,
-        spaceNumber,
-        buildingCode,
-        buildingDisplayName: buildingDisplayName || buildingCode,
-        buildingId: buildingCode.toLowerCase(),
-        // Properties
-        capacity: null,
-        type: SPACE_TYPE.OFFICE,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      try {
-        await setDoc(doc(db, COLLECTIONS.ROOMS, spaceKey), newRoom, {
-          merge: true,
-        });
-        return { officeSpaceId: spaceKey };
-      } catch (error) {
-        console.warn("Unable to create office room record:", error);
-        return { officeSpaceId: "" };
-      }
+      return output.slice(0, max);
     },
-    [canCreateRoom, canEditRoom, spacesByKey],
+    [],
+  );
+
+  const resolveSpaceLabel = useCallback(
+    (spaceKey) => {
+      const raw = (spaceKey || "").toString().trim();
+      if (!raw) return "";
+      const space = spacesByKey instanceof Map ? spacesByKey.get(raw) : null;
+      const label = (space?.displayName || space?.name || "").toString().trim();
+      if (label) return label;
+      const parsed = parseSpaceKey(raw);
+      if (!parsed?.buildingCode || !parsed?.spaceNumber) return raw;
+      const buildingName =
+        resolveBuildingDisplayName(parsed.buildingCode) || parsed.buildingCode;
+      return formatSpaceDisplayName({
+        buildingCode: parsed.buildingCode,
+        buildingDisplayName: buildingName,
+        spaceNumber: parsed.spaceNumber,
+      });
+    },
+    [spacesByKey],
   );
 
   // Handle faculty update/create
@@ -400,51 +314,19 @@ const usePeopleOperations = () => {
           updateData.isTenured = false;
         }
 
-        // Handle office fields - sync both singular and array fields
-        const nextOffices = Array.isArray(normalizedData.offices)
-          ? normalizedData.offices.filter(Boolean)
-          : [];
-        const nextOffice = (normalizedData.office || nextOffices[0] || "")
-          .toString()
-          .trim();
+        // Canonical office fields (references + denormalized labels).
         const nextHasNoOffice =
           normalizedData.hasNoOffice === true ||
           normalizedData.isRemote === true;
+        const nextOfficeSpaceIds = nextHasNoOffice
+          ? []
+          : normalizeOfficeSpaceIds(normalizedData.officeSpaceIds);
+        const nextOffices = nextOfficeSpaceIds.map(resolveSpaceLabel).filter(Boolean);
 
-        if (nextHasNoOffice || (!nextOffice && nextOffices.length === 0)) {
-          // Clear all office fields
-          updateData.officeSpaceId = "";
-          updateData.office = "";
-          updateData.offices = [];
-          updateData.officeSpaceIds = [];
-        } else {
-          // Build arrays from offices field or fall back to singular office
-          const officesToResolve =
-            nextOffices.length > 0
-              ? nextOffices
-              : nextOffice
-                ? [nextOffice]
-                : [];
-          const resolvedOffices = [];
-          const resolvedSpaceIds = [];
-
-          for (const officeStr of officesToResolve) {
-            const resolved = await resolveOfficeSpaceId({
-              office: officeStr,
-              hasNoOffice: false,
-            });
-            resolvedOffices.push(officeStr);
-            resolvedSpaceIds.push(resolved.officeSpaceId || "");
-          }
-
-          // Set array fields
-          updateData.offices = resolvedOffices;
-          updateData.officeSpaceIds = resolvedSpaceIds;
-
-          // Set singular fields to primary (first) office
-          updateData.office = resolvedOffices[0] || "";
-          updateData.officeSpaceId = resolvedSpaceIds[0] || "";
-        }
+        updateData.officeSpaceIds = nextOfficeSpaceIds;
+        updateData.offices = nextOffices;
+        updateData.officeSpaceId = nextOfficeSpaceIds[0] || "";
+        updateData.office = nextOffices[0] || "";
 
         if (isNewFaculty) {
           const now = new Date().toISOString();
@@ -510,7 +392,8 @@ const usePeopleOperations = () => {
       canCreateFaculty,
       canEditFaculty,
       showNotification,
-      resolveOfficeSpaceId,
+      normalizeOfficeSpaceIds,
+      resolveSpaceLabel,
       rawPeople,
     ],
   );
@@ -594,48 +477,18 @@ const usePeopleOperations = () => {
           updateTimestamp: false,
         });
 
-        const nextOffices = Array.isArray(normalizedStaffData.offices)
-          ? normalizedStaffData.offices.filter(Boolean)
-          : [];
-        const nextOffice = (normalizedStaffData.office || nextOffices[0] || "")
-          .toString()
-          .trim();
         const nextHasNoOffice =
           normalizedStaffData.hasNoOffice === true ||
           normalizedStaffData.isRemote === true;
-
-        // Helper to resolve all offices
-        const resolveAllOffices = async () => {
-          if (nextHasNoOffice || (!nextOffice && nextOffices.length === 0)) {
-            return {
-              offices: [],
-              officeSpaceIds: [],
-              office: "",
-              officeSpaceId: "",
-            };
-          }
-          const officesToResolve =
-            nextOffices.length > 0
-              ? nextOffices
-              : nextOffice
-                ? [nextOffice]
-                : [];
-          const resolvedOffices = [];
-          const resolvedSpaceIds = [];
-          for (const officeStr of officesToResolve) {
-            const resolved = await resolveOfficeSpaceId({
-              office: officeStr,
-              hasNoOffice: false,
-            });
-            resolvedOffices.push(officeStr);
-            resolvedSpaceIds.push(resolved.officeSpaceId || "");
-          }
-          return {
-            offices: resolvedOffices,
-            officeSpaceIds: resolvedSpaceIds,
-            office: resolvedOffices[0] || "",
-            officeSpaceId: resolvedSpaceIds[0] || "",
-          };
+        const nextOfficeSpaceIds = nextHasNoOffice
+          ? []
+          : normalizeOfficeSpaceIds(normalizedStaffData.officeSpaceIds);
+        const nextOffices = nextOfficeSpaceIds.map(resolveSpaceLabel).filter(Boolean);
+        const officeFields = {
+          offices: nextOffices,
+          officeSpaceIds: nextOfficeSpaceIds,
+          office: nextOffices[0] || "",
+          officeSpaceId: nextOfficeSpaceIds[0] || "",
         };
 
         if (staffToUpdate.id) {
@@ -652,7 +505,6 @@ const usePeopleOperations = () => {
             updatedAt: new Date().toISOString(),
           };
 
-          const officeFields = await resolveAllOffices();
           Object.assign(updateData, officeFields);
 
           await updateDoc(staffRef, updateData);
@@ -679,7 +531,6 @@ const usePeopleOperations = () => {
             updatedAt: new Date().toISOString(),
           };
 
-          const officeFields = await resolveAllOffices();
           Object.assign(createData, officeFields);
 
           if (!hasPersonCreateIdentifier(createData)) {
@@ -730,7 +581,8 @@ const usePeopleOperations = () => {
       canCreateStaff,
       canEditStaff,
       showNotification,
-      resolveOfficeSpaceId,
+      normalizeOfficeSpaceIds,
+      resolveSpaceLabel,
     ],
   );
 

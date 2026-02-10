@@ -234,7 +234,10 @@ export function useDirectoryHandlers({
         setEditFormData(prev => ({
             ...prev,
             hasNoOffice: newHasNoOffice,
-            office: newHasNoOffice ? '' : prev.office
+            office: newHasNoOffice ? '' : prev.office,
+            offices: newHasNoOffice ? [] : prev.offices,
+            officeSpaceId: newHasNoOffice ? '' : prev.officeSpaceId,
+            officeSpaceIds: newHasNoOffice ? [] : prev.officeSpaceIds
         }));
     }, [editFormData.hasNoOffice, setEditFormData]);
 
@@ -252,7 +255,10 @@ export function useDirectoryHandlers({
         setNewRecord(prev => ({
             ...prev,
             hasNoOffice: newHasNoOffice,
-            office: newHasNoOffice ? '' : prev.office
+            office: newHasNoOffice ? '' : prev.office,
+            offices: newHasNoOffice ? [] : prev.offices,
+            officeSpaceId: newHasNoOffice ? '' : prev.officeSpaceId,
+            officeSpaceIds: newHasNoOffice ? [] : prev.officeSpaceIds
         }));
     }, [newRecord.hasNoOffice, setNewRecord]);
 

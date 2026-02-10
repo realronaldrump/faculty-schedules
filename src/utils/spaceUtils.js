@@ -56,10 +56,18 @@ export const normalizeSpaceRecord = (space = {}, docId = '') => {
     }
   }
 
-  if ((!buildingCode || !buildingDisplayName) && base.buildingDisplayName) {
-    const resolved = resolveBuilding(base.buildingDisplayName || '');
+  // Legacy records often store the building name in `building` (or
+  // `buildingDisplayName`) without a buildingCode. Try to resolve it via
+  // configured building aliases so edit forms can default the building dropdown.
+  const legacyBuildingLabel = (base.buildingDisplayName || base.building || '')
+    .toString()
+    .trim();
+  if ((!buildingCode || !buildingDisplayName) && legacyBuildingLabel) {
+    const resolved = resolveBuilding(legacyBuildingLabel);
     if (!buildingCode && resolved?.code) buildingCode = resolved.code.toUpperCase();
-    if (!buildingDisplayName && resolved?.displayName) buildingDisplayName = resolved.displayName;
+    if (!buildingDisplayName) {
+      buildingDisplayName = resolved?.displayName || legacyBuildingLabel;
+    }
   }
 
   const normalizedNumber = normalizeSpaceNumber(spaceNumber);

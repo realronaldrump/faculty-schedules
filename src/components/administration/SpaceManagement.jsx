@@ -41,6 +41,7 @@ import {
   formatSpaceDisplayName,
   normalizeSpaceNumber,
   parseRoomLabel,
+  parseMultiRoom,
   parseSpaceKey,
   resolveBuilding,
   resolveBuildingDisplayName,
@@ -234,11 +235,50 @@ const SpaceManagement = () => {
 
     // Check schedules for room usage
     (scheduleData || []).forEach((schedule) => {
-      const rooms = Array.isArray(schedule.spaceIds) ? schedule.spaceIds : [];
+      const keys = [];
+      const seen = new Set();
+      const addKey = (key) => {
+        const k = (key || "").toString().trim();
+        if (!k || seen.has(k)) return;
+        seen.add(k);
+        keys.push(k);
+      };
 
-      rooms.forEach((rawSpaceId) => {
-        const spaceKey = normalizeReferencedSpaceKey(rawSpaceId);
-        if (!spaceKey) return;
+      // Prefer canonical ids if present.
+      const roomIds = Array.isArray(schedule.spaceIds) ? schedule.spaceIds : [];
+      roomIds.forEach((rawSpaceId) => addKey(normalizeReferencedSpaceKey(rawSpaceId)));
+
+      // Fall back to display-name parsing for legacy schedules missing spaceIds.
+      if (keys.length === 0) {
+        const displayNames = Array.isArray(schedule.spaceDisplayNames)
+          ? schedule.spaceDisplayNames
+          : [];
+        displayNames.forEach((name) => {
+          const parsed = parseRoomLabel((name || "").toString());
+          if (parsed?.spaceKey) addKey(parsed.spaceKey);
+        });
+      }
+
+      // Last resort: parse the raw "Room" label if we have it.
+      if (keys.length === 0) {
+        const rawRoom = (
+          schedule.Room ||
+          schedule.room ||
+          schedule.locationLabel ||
+          schedule.locationDisplay ||
+          ""
+        )
+          .toString()
+          .trim();
+        if (rawRoom) {
+          const parsed = parseMultiRoom(rawRoom);
+          (Array.isArray(parsed?.spaceKeys) ? parsed.spaceKeys : []).forEach((k) =>
+            addKey(k),
+          );
+        }
+      }
+
+      keys.forEach((spaceKey) => {
         const record = ensure(spaceKey);
         if (!record) return;
         record.schedules.push(schedule);

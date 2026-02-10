@@ -901,11 +901,584 @@ const SpaceFixPreviewModal = ({
           <button
             onClick={onConfirm}
             disabled={confirmDisabled || isProcessing}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+            className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50"
           >
             {isProcessing ? "Fixing..." : "Apply Fix"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+};
+
+const CANONICAL_PREVIEW_LIMIT = 25;
+
+const CanonicalLocationPreviewDetails = ({ preview }) => {
+  const { showNotification } = useUI();
+  const [showRawJson, setShowRawJson] = useState(false);
+  const [showAll, setShowAll] = useState({
+    buildingChanges: false,
+    roomMoves: false,
+    roomCollisions: false,
+    roomFieldFixes: false,
+    invalidRooms: false,
+    nonPhysicalRooms: false,
+    missingRoomKeys: false,
+    scheduleUpdates: false,
+    peopleUpdates: false,
+  });
+
+  if (!preview) return null;
+
+  const take = (items, key) => {
+    if (!Array.isArray(items)) return [];
+    return showAll[key] ? items : items.slice(0, CANONICAL_PREVIEW_LIMIT);
+  };
+
+  const toggle = (key) => {
+    setShowAll((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const renderShowAll = (items, key) => {
+    if (!Array.isArray(items) || items.length <= CANONICAL_PREVIEW_LIMIT) return null;
+    return (
+      <button
+        type="button"
+        onClick={() => toggle(key)}
+        className="text-xs text-baylor-green hover:underline"
+      >
+        {showAll[key] ? "Show less" : `Show all (${items.length})`}
+      </button>
+    );
+  };
+
+  const safeJoin = (values) =>
+    Array.isArray(values) && values.length > 0 ? values.join("; ") : "—";
+
+  const buildingChanges = Array.isArray(preview?.buildings?.changes)
+    ? preview.buildings.changes
+    : [];
+  const buildingCollisions = Array.isArray(preview?.buildings?.collisions)
+    ? preview.buildings.collisions
+    : [];
+
+  const rooms = preview?.rooms || {};
+  const roomMoves = Array.isArray(rooms?.moves) ? rooms.moves : [];
+  const roomCollisions = Array.isArray(rooms?.collisions) ? rooms.collisions : [];
+  const roomFieldFixes = Array.isArray(rooms?.fieldFixes) ? rooms.fieldFixes : [];
+  const invalidRooms = Array.isArray(rooms?.invalidRooms) ? rooms.invalidRooms : [];
+  const nonPhysicalRooms = Array.isArray(rooms?.nonPhysicalRooms)
+    ? rooms.nonPhysicalRooms
+    : [];
+  const missingRoomKeys = Array.isArray(rooms?.missingRoomKeys) ? rooms.missingRoomKeys : [];
+
+  const schedules = preview?.schedules || {};
+  const scheduleUpdates = Array.isArray(schedules?.updates) ? schedules.updates : [];
+
+  const people = preview?.people || {};
+  const peopleUpdates = Array.isArray(people?.updates) ? people.updates : [];
+
+  const blockers = {
+    buildingCollisions: buildingCollisions.length,
+    invalidRooms: invalidRooms.length,
+  };
+  const hasBlockers = blockers.buildingCollisions > 0 || blockers.invalidRooms > 0;
+
+  const handleCopyJson = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(preview, null, 2));
+      showNotification("success", "Copied", "Preview JSON copied to clipboard.");
+    } catch (error) {
+      console.error("Copy preview JSON failed:", error);
+      showNotification(
+        "error",
+        "Copy Failed",
+        "Could not copy to clipboard in this browser.",
+      );
+    }
+  };
+
+  const handleDownloadJson = () => {
+    try {
+      const blob = new Blob([JSON.stringify(preview, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `canonical-location-preview-${new Date()
+        .toISOString()
+        .slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download preview JSON failed:", error);
+      showNotification("error", "Download Failed", error.message);
+    }
+  };
+
+  return (
+    <div className="mt-4 border-t pt-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div className="text-xs text-gray-600">
+          Preview details (exact document ids and keys that will be rewritten).
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleCopyJson}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs text-baylor-green border border-baylor-green rounded-lg hover:bg-baylor-green/5 transition-colors"
+          >
+            Copy JSON
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadJson}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs text-baylor-green border border-baylor-green rounded-lg hover:bg-baylor-green/5 transition-colors"
+          >
+            Download JSON
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowRawJson((v) => !v)}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            {showRawJson ? "Hide raw JSON" : "View raw JSON"}
+          </button>
+        </div>
+      </div>
+
+      {hasBlockers && (
+        <div className="mt-3 p-3 rounded-lg bg-red-50 border border-red-200 text-xs">
+          <div className="font-semibold text-red-800">Blockers (must resolve before applying)</div>
+          <div className="text-red-700 mt-1">
+            {blockers.buildingCollisions > 0 && (
+              <div>• {blockers.buildingCollisions} building code collision(s)</div>
+            )}
+            {blockers.invalidRooms > 0 && (
+              <div>• {blockers.invalidRooms} invalid room(s)</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-3 space-y-3 text-xs">
+        <div className="p-3 rounded-lg bg-gray-50 border">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-gray-900">Buildings</div>
+              <div className="text-xs text-gray-600 mt-0.5">
+                Building codes are normalized to a single canonical format.
+              </div>
+            </div>
+            <div className="text-xs text-gray-500">
+              {buildingChanges.length} change(s)
+            </div>
+          </div>
+
+          {buildingChanges.length > 0 ? (
+            <div className="mt-3 overflow-auto">
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr className="text-left text-gray-500">
+                    <th className="py-2 pr-3 font-medium">Building</th>
+                    <th className="py-2 pr-3 font-medium">From</th>
+                    <th className="py-2 pr-3 font-medium">To</th>
+                  </tr>
+                </thead>
+                <tbody className="text-gray-800">
+                  {take(buildingChanges, "buildingChanges").map((c) => (
+                    <tr key={`${c.id || c.displayName}-${c.from}-${c.to}`} className="border-t">
+                      <td className="py-2 pr-3">
+                        <div className="font-medium text-gray-900">
+                          {c.displayName || c.id || "—"}
+                        </div>
+                        {c.id && <div className="text-gray-500">{c.id}</div>}
+                      </td>
+                      <td className="py-2 pr-3 font-mono">{c.from || "—"}</td>
+                      <td className="py-2 pr-3 font-mono">{c.to || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="mt-2 flex items-center justify-between">
+                <div className="text-gray-500">
+                  Showing {take(buildingChanges, "buildingChanges").length} of{" "}
+                  {buildingChanges.length}
+                </div>
+                {renderShowAll(buildingChanges, "buildingChanges")}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 text-gray-600">No building code changes detected.</div>
+          )}
+
+          {buildingCollisions.length > 0 && (
+            <div className="mt-3 p-3 rounded-lg bg-red-50 border border-red-200">
+              <div className="font-semibold text-red-800">Collisions</div>
+              <div className="text-red-700 mt-1">
+                Multiple buildings would end up with the same canonical code.
+              </div>
+              <div className="mt-2 space-y-2">
+                {buildingCollisions.map((c) => (
+                  <div key={c.code} className="rounded border border-red-200 bg-white p-2">
+                    <div className="font-mono text-red-800">{c.code}</div>
+                    <div className="text-gray-700 mt-1">
+                      {(Array.isArray(c.buildings) ? c.buildings : []).map((b) => (
+                        <div key={b.id || b.displayName}>
+                          • {b.displayName || b.id || "—"}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="p-3 rounded-lg bg-gray-50 border">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-gray-900">Rooms</div>
+              <div className="text-xs text-gray-600 mt-0.5">
+                Room documents are renamed so their Firestore id equals the canonical
+                <span className="font-mono"> spaceKey</span>. Duplicate ids are merged.
+              </div>
+            </div>
+            <div className="text-xs text-gray-500">
+              {roomMoves.length} move(s), {roomCollisions.length} merge group(s)
+            </div>
+          </div>
+
+          {roomMoves.length > 0 ? (
+            <div className="mt-3 overflow-auto">
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr className="text-left text-gray-500">
+                    <th className="py-2 pr-3 font-medium">From doc id</th>
+                    <th className="py-2 pr-3 font-medium">To doc id (canonical)</th>
+                  </tr>
+                </thead>
+                <tbody className="text-gray-800">
+                  {take(roomMoves, "roomMoves").map((m) => (
+                    <tr key={`${m.from}-${m.to}`} className="border-t">
+                      <td className="py-2 pr-3 font-mono">{m.from || "—"}</td>
+                      <td className="py-2 pr-3 font-mono">{m.to || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="mt-2 flex items-center justify-between">
+                <div className="text-gray-500">
+                  Showing {take(roomMoves, "roomMoves").length} of {roomMoves.length}
+                </div>
+                {renderShowAll(roomMoves, "roomMoves")}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 text-gray-600">No room document id moves detected.</div>
+          )}
+
+          {roomCollisions.length > 0 && (
+            <div className="mt-3">
+              <div className="flex items-center justify-between">
+                <div className="font-semibold text-gray-900">Merge groups</div>
+                {renderShowAll(roomCollisions, "roomCollisions")}
+              </div>
+              <div className="mt-2 space-y-2">
+                {take(roomCollisions, "roomCollisions").map((g) => (
+                  <div key={g.canonicalKey} className="rounded border bg-white p-2">
+                    <div className="font-mono text-gray-900">{g.canonicalKey}</div>
+                    <div className="text-gray-600 mt-1">
+                      Merge:{" "}
+                      <span className="font-mono">
+                        {(Array.isArray(g.ids) ? g.ids : []).join(", ") || "—"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-gray-500">
+                Showing {take(roomCollisions, "roomCollisions").length} of{" "}
+                {roomCollisions.length}
+              </div>
+            </div>
+          )}
+
+          {roomFieldFixes.length > 0 && (
+            <div className="mt-3">
+              <div className="flex items-center justify-between">
+                <div className="font-semibold text-gray-900">Field fixes</div>
+                {renderShowAll(roomFieldFixes, "roomFieldFixes")}
+              </div>
+              <div className="text-gray-600 mt-0.5">
+                Rooms whose stored <span className="font-mono">spaceKey</span> field will be rewritten.
+              </div>
+              <div className="mt-2 overflow-auto">
+                <table className="min-w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-gray-500">
+                      <th className="py-2 pr-3 font-medium">Room doc id</th>
+                      <th className="py-2 pr-3 font-medium">spaceKey from</th>
+                      <th className="py-2 pr-3 font-medium">spaceKey to</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-gray-800">
+                    {take(roomFieldFixes, "roomFieldFixes").map((f) => (
+                      <tr key={`${f.id}-${f.from}-${f.to}`} className="border-t">
+                        <td className="py-2 pr-3 font-mono">{f.id || "—"}</td>
+                        <td className="py-2 pr-3 font-mono">{f.from || "—"}</td>
+                        <td className="py-2 pr-3 font-mono">{f.to || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="mt-2 text-gray-500">
+                  Showing {take(roomFieldFixes, "roomFieldFixes").length} of{" "}
+                  {roomFieldFixes.length}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {invalidRooms.length > 0 && (
+            <div className="mt-3 p-3 rounded-lg bg-red-50 border border-red-200">
+              <div className="flex items-center justify-between">
+                <div className="font-semibold text-red-800">Invalid rooms</div>
+                {renderShowAll(invalidRooms, "invalidRooms")}
+              </div>
+              <div className="text-red-700 mt-1">
+                These records cannot be canonicalized and must be fixed or deleted before applying.
+              </div>
+              <div className="mt-2 space-y-2 text-gray-800">
+                {take(invalidRooms, "invalidRooms").map((r) => (
+                  <div key={r.id} className="rounded border border-red-200 bg-white p-2">
+                    <div className="font-mono">{r.id}</div>
+                    <div className="text-gray-700 mt-1">
+                      {r.displayName || "—"}
+                    </div>
+                    <div className="text-red-700 mt-1">{r.reason || "Invalid"}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-red-700">
+                Showing {take(invalidRooms, "invalidRooms").length} of {invalidRooms.length}
+              </div>
+            </div>
+          )}
+
+          {nonPhysicalRooms.length > 0 && (
+            <div className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+              <div className="flex items-center justify-between">
+                <div className="font-semibold text-amber-900">Non-physical placeholders</div>
+                {renderShowAll(nonPhysicalRooms, "nonPhysicalRooms")}
+              </div>
+              <div className="text-amber-900/80 mt-1">
+                These room documents appear to be non-physical placeholders and will be deleted.
+              </div>
+              <div className="mt-2 space-y-2 text-gray-800">
+                {take(nonPhysicalRooms, "nonPhysicalRooms").map((r) => (
+                  <div key={r.id} className="rounded border border-amber-200 bg-white p-2">
+                    <div className="font-mono">{r.id}</div>
+                    <div className="text-gray-700 mt-1">{r.displayName || "—"}</div>
+                    {r.reason && <div className="text-amber-900/80 mt-1">{r.reason}</div>}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-amber-900/80">
+                Showing {take(nonPhysicalRooms, "nonPhysicalRooms").length} of{" "}
+                {nonPhysicalRooms.length}
+              </div>
+            </div>
+          )}
+
+          {missingRoomKeys.length > 0 && (
+            <div className="mt-3">
+              <div className="flex items-center justify-between">
+                <div className="font-semibold text-gray-900">Seeds</div>
+                {renderShowAll(missingRoomKeys, "missingRoomKeys")}
+              </div>
+              <div className="text-gray-600 mt-0.5">
+                Room keys referenced by schedules/people that do not exist yet. These will be created as basic room docs.
+              </div>
+              <div className="mt-2 space-y-1">
+                {take(missingRoomKeys, "missingRoomKeys").map((k) => (
+                  <div key={k} className="font-mono text-gray-800">
+                    {k}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-gray-500">
+                Showing {take(missingRoomKeys, "missingRoomKeys").length} of{" "}
+                {missingRoomKeys.length}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="p-3 rounded-lg bg-gray-50 border">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-gray-900">Schedules</div>
+              <div className="text-xs text-gray-600 mt-0.5">
+                Schedule <span className="font-mono">spaceIds</span> and display names are rewritten to canonical keys.
+              </div>
+            </div>
+            <div className="text-xs text-gray-500">{scheduleUpdates.length} update(s)</div>
+          </div>
+
+          {scheduleUpdates.length > 0 ? (
+            <div className="mt-3 overflow-auto">
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr className="text-left text-gray-500">
+                    <th className="py-2 pr-3 font-medium">Schedule</th>
+                    <th className="py-2 pr-3 font-medium">From</th>
+                    <th className="py-2 pr-3 font-medium">To</th>
+                  </tr>
+                </thead>
+                <tbody className="text-gray-800">
+                  {take(scheduleUpdates, "scheduleUpdates").map((u) => {
+                    const label =
+                      u?.courseCode && u?.section && u?.term
+                        ? `${u.courseCode} • ${u.section} • ${u.term}`
+                        : u?.courseCode && u?.term
+                          ? `${u.courseCode} • ${u.term}`
+                          : u?.id || "—";
+                    const subtitle = u?.instructorName ? String(u.instructorName) : "";
+                    return (
+                      <tr key={u.id} className="border-t align-top">
+                        <td className="py-2 pr-3">
+                          <div className="font-medium text-gray-900">{label}</div>
+                          {subtitle && <div className="text-gray-500">{subtitle}</div>}
+                          <div className="text-gray-400 font-mono">{u.id}</div>
+                        </td>
+                        <td className="py-2 pr-3 font-mono">{safeJoin(u.from)}</td>
+                        <td className="py-2 pr-3 font-mono">{safeJoin(u.to)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <div className="mt-2 flex items-center justify-between">
+                <div className="text-gray-500">
+                  Showing {take(scheduleUpdates, "scheduleUpdates").length} of{" "}
+                  {scheduleUpdates.length}
+                </div>
+                {renderShowAll(scheduleUpdates, "scheduleUpdates")}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 text-gray-600">No schedule updates detected.</div>
+          )}
+        </div>
+
+        <div className="p-3 rounded-lg bg-gray-50 border">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-gray-900">People</div>
+              <div className="text-xs text-gray-600 mt-0.5">
+                People <span className="font-mono">officeSpaceIds</span> and derived office fields are rewritten to canonical keys.
+              </div>
+            </div>
+            <div className="text-xs text-gray-500">{peopleUpdates.length} update(s)</div>
+          </div>
+
+          {peopleUpdates.length > 0 ? (
+            <div className="mt-3 overflow-auto">
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr className="text-left text-gray-500">
+                    <th className="py-2 pr-3 font-medium">Person</th>
+                    <th className="py-2 pr-3 font-medium">From</th>
+                    <th className="py-2 pr-3 font-medium">To</th>
+                  </tr>
+                </thead>
+                <tbody className="text-gray-800">
+                  {take(peopleUpdates, "peopleUpdates").map((u) => (
+                    <tr key={u.id} className="border-t align-top">
+                      <td className="py-2 pr-3">
+                        <div className="font-medium text-gray-900">
+                          {u?.name || u?.email || u?.id || "—"}
+                        </div>
+                        {u?.email && u?.name && (
+                          <div className="text-gray-500">{u.email}</div>
+                        )}
+                        <div className="text-gray-400 font-mono">{u.id}</div>
+                      </td>
+                      <td className="py-2 pr-3 font-mono">{safeJoin(u.from)}</td>
+                      <td className="py-2 pr-3 font-mono">{safeJoin(u.to)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="mt-2 flex items-center justify-between">
+                <div className="text-gray-500">
+                  Showing {take(peopleUpdates, "peopleUpdates").length} of{" "}
+                  {peopleUpdates.length}
+                </div>
+                {renderShowAll(peopleUpdates, "peopleUpdates")}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 text-gray-600">No people updates detected.</div>
+          )}
+        </div>
+
+        <div className="p-3 rounded-lg bg-gray-50 border">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-gray-900">Temperature</div>
+              <div className="text-xs text-gray-600 mt-0.5">
+                Temperature collections are updated to reference canonical space keys.
+              </div>
+            </div>
+          </div>
+          <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div className="flex items-center justify-between bg-white border rounded p-2">
+              <div className="text-gray-700">temperatureDevices updates</div>
+              <div className="font-mono text-gray-900">
+                {preview?.temperature?.temperatureDevices?.updates || 0}
+              </div>
+            </div>
+            <div className="flex items-center justify-between bg-white border rounded p-2">
+              <div className="text-gray-700">temperatureImports updates</div>
+              <div className="font-mono text-gray-900">
+                {preview?.temperature?.temperatureImports?.updates || 0}
+              </div>
+            </div>
+            <div className="flex items-center justify-between bg-white border rounded p-2">
+              <div className="text-gray-700">temperatureRoomSnapshots moves</div>
+              <div className="font-mono text-gray-900">
+                {preview?.temperature?.temperatureRoomSnapshots?.moves || 0}
+              </div>
+            </div>
+            <div className="flex items-center justify-between bg-white border rounded p-2">
+              <div className="text-gray-700">temperatureRoomAggregates moves</div>
+              <div className="font-mono text-gray-900">
+                {preview?.temperature?.temperatureRoomAggregates?.moves || 0}
+              </div>
+            </div>
+            <div className="flex items-center justify-between bg-white border rounded p-2">
+              <div className="text-gray-700">temperatureBuildingSettings updates</div>
+              <div className="font-mono text-gray-900">
+                {preview?.temperature?.temperatureBuildingSettings?.updates || 0}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {showRawJson && (
+          <div className="p-3 rounded-lg bg-white border">
+            <div className="text-sm font-semibold text-gray-900">Raw preview JSON</div>
+            <pre className="mt-2 text-xs bg-gray-50 border rounded-lg p-3 overflow-auto max-h-[60vh]">
+              {JSON.stringify(preview, null, 2)}
+            </pre>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -931,6 +1504,8 @@ const DataHygieneManager = () => {
   // Canonical location migration (breaking change, one-time)
   const [canonicalLocationPreview, setCanonicalLocationPreview] = useState(null);
   const [canonicalLocationResult, setCanonicalLocationResult] = useState(null);
+  const [showCanonicalLocationPreviewDetails, setShowCanonicalLocationPreviewDetails] =
+    useState(false);
   const [isCanonicalLocationPreviewRunning, setIsCanonicalLocationPreviewRunning] =
     useState(false);
   const [isCanonicalLocationApplyRunning, setIsCanonicalLocationApplyRunning] =
@@ -1088,6 +1663,7 @@ const DataHygieneManager = () => {
       const preview = await previewCanonicalLocationMigration();
       setCanonicalLocationPreview(preview);
       setCanonicalLocationResult(null);
+      setShowCanonicalLocationPreviewDetails(true);
       const buildingChanges = preview?.buildings?.changes?.length || 0;
       const roomMoves = preview?.rooms?.moves?.length || 0;
       const scheduleUpdates = preview?.schedules?.updates?.length || 0;
@@ -1667,7 +2243,7 @@ const DataHygieneManager = () => {
             <button
               onClick={handlePreviewCanonicalLocationMigration}
               disabled={isCanonicalLocationPreviewRunning}
-              className="px-3 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 text-sm"
+              className="px-3 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50 text-sm"
             >
               {isCanonicalLocationPreviewRunning ? "Previewing..." : "Preview"}
             </button>
@@ -1734,6 +2310,29 @@ const DataHygieneManager = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {canonicalLocationPreview && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                setShowCanonicalLocationPreviewDetails((prev) => !prev)
+              }
+              className="text-xs text-baylor-green hover:underline"
+            >
+              {showCanonicalLocationPreviewDetails
+                ? "Hide preview details"
+                : "Show preview details"}
+            </button>
+            <div className="text-xs text-gray-500">
+              Showing canonical rewrites only (no legacy runtime fallbacks).
+            </div>
+          </div>
+        )}
+
+        {canonicalLocationPreview && showCanonicalLocationPreviewDetails && (
+          <CanonicalLocationPreviewDetails preview={canonicalLocationPreview} />
         )}
 
         {canonicalLocationResult && (

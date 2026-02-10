@@ -493,6 +493,10 @@ export const previewCanonicalLocationMigration = async () => {
     if (changed) {
       scheduleChanges.push({
         id: schedule.id,
+        courseCode: (schedule.courseCode || "").toString(),
+        section: (schedule.section || "").toString(),
+        term: (schedule.term || "").toString(),
+        instructorName: (schedule.instructorName || "").toString(),
         from: current,
         to: next,
       });
@@ -517,8 +521,14 @@ export const previewCanonicalLocationMigration = async () => {
     const changed =
       current.length !== next.length || current.some((v, idx) => v !== next[idx]);
     if (changed) {
+      const name =
+        `${person?.firstName || ""} ${person?.lastName || ""}`.trim() ||
+        (person?.name || "").toString().trim() ||
+        (person?.email || "").toString().trim();
       peopleChanges.push({
         id: person.id,
+        name,
+        email: (person.email || "").toString(),
         from: current,
         to: next,
       });

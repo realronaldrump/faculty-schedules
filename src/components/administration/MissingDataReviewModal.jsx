@@ -23,6 +23,7 @@ import {
 import { db, COLLECTIONS } from "../../firebase";
 import { DEFAULT_PERSON_SCHEMA } from "../../utils/dataHygiene";
 import { logUpdate } from "../../utils/changeLogger";
+import { parseRoomLabel } from "../../utils/locationService";
 import { usePermissions } from "../../utils/permissions";
 import { isStudentWorker } from "../../utils/peopleUtils";
 
@@ -224,9 +225,34 @@ const MissingDataReviewModal = ({
       if (editingRecord.newHasNoOffice) {
         updates.hasNoOffice = true;
         updates.office = "";
+        updates.officeSpaceId = "";
+        updates.offices = [];
+        updates.officeSpaceIds = [];
       } else if (editingRecord.newOffice.trim()) {
-        updates.office = editingRecord.newOffice.trim();
+        const nextOffice = editingRecord.newOffice.trim();
+        const parsed = parseRoomLabel(nextOffice);
+        const nextOfficeSpaceId = parsed?.spaceKey || "";
+
+        updates.office = nextOffice;
         updates.hasNoOffice = false;
+
+        // Keep array fields in sync with the primary office.
+        const existingOffices = Array.isArray(editingRecord.offices)
+          ? editingRecord.offices.filter(Boolean)
+          : [];
+        const existingOfficeSpaceIds = Array.isArray(editingRecord.officeSpaceIds)
+          ? editingRecord.officeSpaceIds.filter((v) => v !== undefined && v !== null)
+          : [];
+
+        updates.offices =
+          existingOffices.length > 0
+            ? [nextOffice, ...existingOffices.slice(1)]
+            : [nextOffice];
+        updates.officeSpaceIds =
+          existingOfficeSpaceIds.length > 0
+            ? [nextOfficeSpaceId, ...existingOfficeSpaceIds.slice(1)]
+            : [nextOfficeSpaceId];
+        updates.officeSpaceId = nextOfficeSpaceId;
       }
 
       if (editingRecord.newJobTitle.trim()) {

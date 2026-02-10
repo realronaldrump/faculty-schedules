@@ -312,7 +312,7 @@ const usePeopleOperations = () => {
         return { officeSpaceId: "" };
       }
     },
-    [canCreateRoom, canEditRoom],
+    [canCreateRoom, canEditRoom, spacesByKey],
   );
 
   // Handle faculty update/create

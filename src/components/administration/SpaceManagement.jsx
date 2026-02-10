@@ -1347,7 +1347,7 @@ const SpaceManagement = () => {
                 {filteredSpaces.map((space) => (
                   <tr key={space.id}>
                     <td className="px-4 py-3">
-                      <span className="font-mono text-sm text-baylor-green">
+                      <span className="text-sm font-semibold text-baylor-green">
                         {space.spaceKey ||
                           `${space.buildingCode || space.building}:${space.spaceNumber || space.roomNumber}`}
                       </span>

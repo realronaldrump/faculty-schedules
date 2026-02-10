@@ -33,6 +33,7 @@ import { useAppConfig } from "../../contexts/AppConfigContext";
 import { useUI } from "../../contexts/UIContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import ConfirmDialog from "../shared/ConfirmDialog";
+import { HelpTooltip } from "../help/Tooltip";
 import {
   SPACE_TYPE,
   buildSpaceKey,
@@ -1584,7 +1585,28 @@ const SpaceManagement = () => {
                   <th className="table-header-cell">Number</th>
                   <th className="table-header-cell">Type</th>
                   <th className="table-header-cell text-center">Capacity</th>
-                  <th className="table-header-cell text-center">Usage</th>
+                  <th className="table-header-cell text-center">
+                    <span
+                      className="inline-flex items-center justify-center gap-1 w-full"
+                      title="Shows how many scheduled classes (blue) and office assignments (green) are held in this space. Click a badge for details."
+                    >
+                      Usage
+                      <HelpTooltip
+                        content={
+                          <div className="space-y-1">
+                            <div className="font-medium">What “Usage” shows</div>
+                            <div>Blue badge: number of scheduled classes in this space.</div>
+                            <div>Green badge: number of office assignments in this space.</div>
+                            <div className="opacity-90">Click a badge to view details.</div>
+                          </div>
+                        }
+                        position="top"
+                        variant="help"
+                        size={14}
+                        className="ml-0.5"
+                      />
+                    </span>
+                  </th>
                   <th className="table-header-cell text-right">Actions</th>
                 </tr>
               </thead>

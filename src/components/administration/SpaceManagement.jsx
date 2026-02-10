@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import {
   DoorOpen,
   Plus,
@@ -41,6 +42,8 @@ import {
   normalizeSpaceNumber,
   parseRoomLabel,
   parseSpaceKey,
+  resolveBuilding,
+  resolveBuildingDisplayName,
 } from "../../utils/locationService";
 import { normalizeSpaceRecord } from "../../utils/spaceUtils";
 import { generateSpaceId, validateSpace } from "../../utils/canonicalSchema";
@@ -81,6 +84,7 @@ const getCanonicalSpaceKeyFromSpace = (space) => {
 };
 
 const SpaceManagement = () => {
+  const location = useLocation();
   const {
     roomsData,
     spacesByKey,
@@ -111,6 +115,39 @@ const SpaceManagement = () => {
     loadRooms();
     loadPeople();
   }, [loadRooms, loadPeople]);
+
+  // Allow deep links from People Directory, schedules, etc.
+  // Example: /facilities/spaces?spaceKey=MARY_GIBBS_JONES:110&usage=office
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || "");
+    const rawParam =
+      params.get("spaceKey") ||
+      params.get("space") ||
+      params.get("office") ||
+      "";
+    const rawValue = (rawParam || "").toString().trim();
+    if (!rawValue) return;
+
+    let canonical = "";
+    const parsedKey = parseSpaceKey(rawValue);
+    if (parsedKey?.buildingCode && parsedKey?.spaceNumber) {
+      canonical = buildSpaceKey(parsedKey.buildingCode, parsedKey.spaceNumber);
+    } else {
+      const parsedLabel = parseRoomLabel(rawValue);
+      if (parsedLabel?.spaceKey) canonical = parsedLabel.spaceKey;
+    }
+
+    setSearchQuery(canonical || rawValue);
+
+    const usage = (params.get("usage") || params.get("mode") || "")
+      .toString()
+      .trim()
+      .toLowerCase();
+    if (usage === "office") setUsageFilter("office");
+    if (usage === "scheduled" || usage === "class" || usage === "classes") {
+      setUsageFilter("scheduled");
+    }
+  }, [location.search]);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -499,9 +536,9 @@ const SpaceManagement = () => {
 
     setSaving(true);
     try {
-      const buildingCode = formData.buildingCode.toUpperCase();
+      const rawBuildingCode = (formData.buildingCode || "").toString().trim();
       const spaceNumber = normalizeSpaceNumber(formData.spaceNumber.trim());
-      const spaceKey = buildSpaceKey(buildingCode, spaceNumber);
+      const spaceKey = buildSpaceKey(rawBuildingCode, spaceNumber);
       if (!spaceKey) {
         showNotification(
           "warning",
@@ -510,6 +547,19 @@ const SpaceManagement = () => {
         );
         return;
       }
+
+      const parsedKey = parseSpaceKey(spaceKey);
+      const buildingCode = (
+        parsedKey?.buildingCode || rawBuildingCode
+      ).toString().trim().toUpperCase();
+      const resolvedBuilding =
+        resolveBuilding(rawBuildingCode) || resolveBuilding(buildingCode);
+      const buildingDisplayName =
+        resolvedBuilding?.displayName ||
+        resolveBuildingDisplayName(buildingCode) ||
+        rawBuildingCode ||
+        buildingCode;
+      const buildingId = resolvedBuilding?.id || buildingCode.toLowerCase();
 
       const previousSpaceKey = editingSpace
         ? getCanonicalSpaceKeyFromSpace(editingSpace)
@@ -542,9 +592,6 @@ const SpaceManagement = () => {
         }
       }
 
-      const buildingRecord = buildings.find((b) => b.code === buildingCode);
-      const buildingDisplayName = buildingRecord?.displayName || buildingCode;
-      const buildingId = buildingRecord?.id || buildingCode.toLowerCase();
       const displayName = formatSpaceDisplayName({
         buildingCode,
         buildingDisplayName,
@@ -829,10 +876,21 @@ const SpaceManagement = () => {
 
     setSaving(true);
     try {
-      const buildingCode = bulkData.buildingCode.toUpperCase();
-      const buildingRecord = buildings.find((b) => b.code === buildingCode);
-      const buildingDisplayName = buildingRecord?.displayName || buildingCode;
-      const buildingId = buildingRecord?.id || buildingCode.toLowerCase();
+      const rawBuildingCode = (bulkData.buildingCode || "").toString().trim();
+      const sampleSpaceNumber = `${bulkData.prefix}${start}${bulkData.suffix}`.toUpperCase();
+      const sampleKey = buildSpaceKey(rawBuildingCode, sampleSpaceNumber);
+      const parsedKey = parseSpaceKey(sampleKey);
+      const buildingCode = (
+        parsedKey?.buildingCode || rawBuildingCode
+      ).toString().trim().toUpperCase();
+      const resolvedBuilding =
+        resolveBuilding(rawBuildingCode) || resolveBuilding(buildingCode);
+      const buildingDisplayName =
+        resolvedBuilding?.displayName ||
+        resolveBuildingDisplayName(buildingCode) ||
+        rawBuildingCode ||
+        buildingCode;
+      const buildingId = resolvedBuilding?.id || buildingCode.toLowerCase();
 
       const spacesToCreate = [];
       const existingKeys = [];
@@ -1512,10 +1570,10 @@ const SpaceManagement = () => {
         >
           <option value="all">All Buildings</option>
           {dataBuildings.map((code) => {
-            const building = buildings.find((b) => b.code === code);
+            const resolvedName = resolveBuildingDisplayName(code);
             return (
               <option key={code} value={code}>
-                {building?.displayName || code}
+                {resolvedName || code}
               </option>
             );
           })}

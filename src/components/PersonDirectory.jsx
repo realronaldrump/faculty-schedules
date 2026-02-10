@@ -11,6 +11,7 @@ import {
   formatPhoneNumber,
   resolveOfficeDetails
 } from '../utils/directoryUtils';
+import { resolveOfficeLocations } from '../utils/spaceUtils';
 
 const getNameSortValue = (person, nameSort) => {
   if (nameSort === 'firstName') {
@@ -90,7 +91,8 @@ const buildBaseColumns = ({
   toggleEditOfficeState,
   toggleCreatePhoneState,
   toggleCreateOfficeState,
-  getInputClass
+  getInputClass,
+  spacesByKey
 }) => {
   const programColumn = {
     key: 'program',
@@ -301,18 +303,59 @@ const buildBaseColumns = ({
           </div>
         );
       }
-      // Display multiple offices
-      const offices = Array.isArray(person.offices) && person.offices.length > 0
+
+      // Preserve any raw labels even if they can't be parsed/resolved.
+      const rawOffices = Array.isArray(person.offices) && person.offices.length > 0
         ? person.offices
         : (person.office ? [person.office] : []);
-      if (offices.length === 0) return <span className="text-gray-400">-</span>;
-      if (offices.length === 1) return <span>{offices[0]}</span>;
+
+      const locations = resolveOfficeLocations(person, spacesByKey);
+      if (locations.length === 0) {
+        if (rawOffices.length === 0) return <span className="text-gray-400">-</span>;
+        if (rawOffices.length === 1) return <span>{rawOffices[0]}</span>;
+        return (
+          <div className="flex flex-col gap-0.5">
+            {rawOffices.map((office, idx) => (
+              <span key={idx} className={idx === 0 ? 'font-medium' : 'text-gray-600 text-sm'}>
+                {office}{idx === 0 && rawOffices.length > 1 ? ' (primary)' : ''}
+              </span>
+            ))}
+          </div>
+        );
+      }
+
+      const renderOne = (location, idx, total) => {
+        const label = location?.displayName || location?.spaceKey || '-';
+        const spaceKey = (location?.spaceKey || '').toString().trim();
+        const content = (
+          <span className={idx === 0 ? 'font-medium' : 'text-gray-600 text-sm'}>
+            {label}
+            {idx === 0 && total > 1 ? ' (primary)' : ''}
+          </span>
+        );
+
+        if (!spaceKey) return content;
+
+        return (
+          <Link
+            to={`/facilities/spaces?spaceKey=${encodeURIComponent(spaceKey)}&usage=office`}
+            className="hover:underline text-baylor-green"
+            title="View this office in Facilities > Spaces"
+          >
+            {content}
+          </Link>
+        );
+      };
+
+      if (locations.length === 1) {
+        return renderOne(locations[0], 0, 1);
+      }
       return (
         <div className="flex flex-col gap-0.5">
-          {offices.map((office, idx) => (
-            <span key={idx} className={idx === 0 ? 'font-medium' : 'text-gray-600 text-sm'}>
-              {office}{idx === 0 && offices.length > 1 ? ' (primary)' : ''}
-            </span>
+          {locations.map((location, idx) => (
+            <div key={location?.spaceKey || location?.displayName || idx}>
+              {renderOne(location, idx, locations.length)}
+            </div>
           ))}
         </div>
       );
@@ -726,7 +769,8 @@ const ConfiguredPersonDirectory = (props) => {
     toggleEditOfficeState,
     toggleCreatePhoneState,
     toggleCreateOfficeState,
-    getInputClass
+    getInputClass,
+    spacesByKey
   }), [
     programs,
     editFormData,
@@ -740,7 +784,8 @@ const ConfiguredPersonDirectory = (props) => {
     toggleEditOfficeState,
     toggleCreatePhoneState,
     toggleCreateOfficeState,
-    getInputClass
+    getInputClass,
+    spacesByKey
   ]);
 
   const columns = useMemo(() => getColumns({

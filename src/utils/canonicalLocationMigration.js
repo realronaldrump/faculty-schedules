@@ -27,28 +27,82 @@ import {
 
 const MAX_BATCH_OPERATIONS = 450;
 
-const createBatchWriter = () => {
+const DEFAULT_READ_TIMEOUT_MS = 120_000;
+const DEFAULT_COMMIT_TIMEOUT_MS = 120_000;
+
+const withTimeout = async (promise, ms, context) => {
+  if (!ms || ms <= 0) return promise;
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          const label = context ? ` (${context})` : "";
+          reject(
+            new Error(
+              `Timed out${label}. This often means the browser lost connectivity to Firestore. Restore your connection and try again.`,
+            ),
+          );
+        }, ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
+
+const assertLikelyOnline = () => {
+  // navigator.onLine is imperfect, but it catches the obvious offline case.
+  if (
+    typeof navigator !== "undefined" &&
+    navigator &&
+    navigator.onLine === false
+  ) {
+    throw new Error(
+      "You appear to be offline. Reconnect to the internet before running the migration.",
+    );
+  }
+};
+
+const createBatchWriter = ({
+  timeoutMs = DEFAULT_COMMIT_TIMEOUT_MS,
+  onCommit,
+  label = "",
+} = {}) => {
   let batch = writeBatch(db);
   let opCount = 0;
+  let commitCount = 0;
+  let currentLabel = label;
+
+  const commit = async () => {
+    if (opCount === 0) return;
+    const committingOps = opCount;
+    const committingLabel = currentLabel || "batch";
+    await withTimeout(batch.commit(), timeoutMs, `committing ${committingLabel}`);
+    commitCount += 1;
+    onCommit?.({ label: committingLabel, ops: committingOps, commitCount });
+    batch = writeBatch(db);
+    opCount = 0;
+  };
 
   const add = async (apply) => {
     apply(batch);
     opCount += 1;
     if (opCount >= MAX_BATCH_OPERATIONS) {
-      await batch.commit();
-      batch = writeBatch(db);
-      opCount = 0;
+      await commit();
     }
   };
 
   const flush = async () => {
-    if (opCount === 0) return;
-    await batch.commit();
-    batch = writeBatch(db);
-    opCount = 0;
+    await commit();
   };
 
-  return { add, flush };
+  const setLabel = (next) => {
+    currentLabel = (next || "").toString().trim();
+  };
+
+  return { add, flush, setLabel };
 };
 
 const dedupeOrdered = (values = []) => {
@@ -267,7 +321,12 @@ const collectOfficeSpaceKeysFromPerson = ({ person, roomIdToCanonical } = {}) =>
 };
 
 const loadBuildingSettings = async () => {
-  const snap = await getDoc(doc(db, "settings", "buildings"));
+  assertLikelyOnline();
+  const snap = await withTimeout(
+    getDoc(doc(db, "settings", "buildings")),
+    DEFAULT_READ_TIMEOUT_MS,
+    "loading settings/buildings",
+  );
   const normalized = normalizeBuildingConfig(snap.exists() ? snap.data() : {});
   return {
     ref: doc(db, "settings", "buildings"),
@@ -353,22 +412,42 @@ const buildCanonicalBuildingConfig = ({ normalized } = {}) => {
 };
 
 const loadRooms = async () => {
-  const snap = await getDocs(collection(db, "rooms"));
+  assertLikelyOnline();
+  const snap = await withTimeout(
+    getDocs(collection(db, "rooms")),
+    DEFAULT_READ_TIMEOUT_MS,
+    "loading rooms",
+  );
   return snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() || {} }));
 };
 
 const loadSchedules = async () => {
-  const snap = await getDocs(collection(db, "schedules"));
+  assertLikelyOnline();
+  const snap = await withTimeout(
+    getDocs(collection(db, "schedules")),
+    DEFAULT_READ_TIMEOUT_MS,
+    "loading schedules",
+  );
   return snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() || {} }));
 };
 
 const loadPeople = async () => {
-  const snap = await getDocs(collection(db, "people"));
+  assertLikelyOnline();
+  const snap = await withTimeout(
+    getDocs(collection(db, "people")),
+    DEFAULT_READ_TIMEOUT_MS,
+    "loading people",
+  );
   return snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() || {} }));
 };
 
 const loadTemperatureCollection = async (name) => {
-  const snap = await getDocs(collection(db, name));
+  assertLikelyOnline();
+  const snap = await withTimeout(
+    getDocs(collection(db, name)),
+    DEFAULT_READ_TIMEOUT_MS,
+    `loading ${name}`,
+  );
   return snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() || {} }));
 };
 
@@ -637,7 +716,21 @@ export const previewCanonicalLocationMigration = async () => {
   };
 };
 
-export const applyCanonicalLocationMigration = async () => {
+export const applyCanonicalLocationMigration = async ({ onProgress } = {}) => {
+  const startedAt = Date.now();
+  const progress = (patch) => {
+    try {
+      onProgress?.({
+        startedAt,
+        at: Date.now(),
+        ...(patch || {}),
+      });
+    } catch {
+      // Never let progress reporting break a migration.
+    }
+  };
+
+  progress({ step: "preview", message: "Validating preview (reads)..." });
   const preview = await previewCanonicalLocationMigration();
   if (preview.buildings.collisions.length > 0) {
     throw new Error(
@@ -652,23 +745,35 @@ export const applyCanonicalLocationMigration = async () => {
     );
   }
 
-  const batchWriter = createBatchWriter();
+  const batchWriter = createBatchWriter({
+    label: "rooms",
+    onCommit: (info) =>
+      progress({
+        step: "rooms",
+        message: `Committed ${info.ops} ops (${info.label})`,
+      }),
+  });
   const now = new Date().toISOString();
 
   // 1) Canonicalize building settings.
+  progress({ step: "buildings", message: "Updating settings/buildings..." });
   const buildingSettings = await loadBuildingSettings();
   const canonicalBuildings = buildCanonicalBuildingConfig({
     normalized: buildingSettings.normalized,
   });
-  await setDoc(
-    doc(db, "settings", "buildings"),
-    {
-      version: canonicalBuildings.version,
-      buildings: canonicalBuildings.buildings,
-      updatedAt: now,
-      createdAt: buildingSettings.raw?.createdAt || now,
-    },
-    { merge: true },
+  await withTimeout(
+    setDoc(
+      doc(db, "settings", "buildings"),
+      {
+        version: canonicalBuildings.version,
+        buildings: canonicalBuildings.buildings,
+        updatedAt: now,
+        createdAt: buildingSettings.raw?.createdAt || now,
+      },
+      { merge: true },
+    ),
+    DEFAULT_COMMIT_TIMEOUT_MS,
+    "writing settings/buildings",
   );
   applyBuildingConfig({
     version: canonicalBuildings.version,
@@ -676,6 +781,7 @@ export const applyCanonicalLocationMigration = async () => {
   });
 
   // 2) Canonicalize rooms (docId == spaceKey).
+  progress({ step: "rooms", message: "Canonicalizing rooms..." });
   const rooms = await loadRooms();
   const roomIdToCanonical = new Map();
   const canonicalToDocs = new Map();
@@ -726,6 +832,7 @@ export const applyCanonicalLocationMigration = async () => {
   await batchWriter.flush();
 
   // 3) Ensure referenced spaces exist.
+  progress({ step: "seed", message: "Seeding missing referenced spaces..." });
   const canonicalRoomKeys = new Set(Array.from(canonicalToDocs.keys()));
   const scheduleReferenced = new Set();
   const peopleReferenced = new Set();
@@ -749,7 +856,14 @@ export const applyCanonicalLocationMigration = async () => {
   const missingRoomKeys = Array.from(new Set([...scheduleReferenced, ...peopleReferenced]))
     .filter((k) => k && !canonicalRoomKeys.has(k));
 
-  const seedBatchWriter = createBatchWriter();
+  const seedBatchWriter = createBatchWriter({
+    label: "seed",
+    onCommit: (info) =>
+      progress({
+        step: "seed",
+        message: `Committed ${info.ops} ops (${info.label})`,
+      }),
+  });
   for (const key of missingRoomKeys) {
     const parsed = parseSpaceKey(key);
     if (!parsed?.buildingCode || !parsed?.spaceNumber) continue;
@@ -771,7 +885,16 @@ export const applyCanonicalLocationMigration = async () => {
   await seedBatchWriter.flush();
 
   // 4) Rewrite schedules to canonical spaceIds.
-  const scheduleBatchWriter = createBatchWriter();
+  progress({ step: "schedules", message: "Rewriting schedules..." });
+  const scheduleBatchWriter = createBatchWriter({
+    label: "schedules",
+    onCommit: (info) =>
+      progress({
+        step: "schedules",
+        message: `Committed ${info.ops} ops (${info.label})`,
+      }),
+  });
+  let schedulesTouched = 0;
   for (const item of schedules) {
     const schedule = { id: item.id, ...item.data };
     const nextSpaceIds = collectSpaceKeysFromSchedule({
@@ -805,11 +928,27 @@ export const applyCanonicalLocationMigration = async () => {
     await scheduleBatchWriter.add((batch) => {
       batch.update(doc(db, "schedules", schedule.id), payload);
     });
+    schedulesTouched += 1;
+    if (schedulesTouched % 250 === 0) {
+      progress({
+        step: "schedules",
+        message: `Queued ${schedulesTouched} schedule update(s)...`,
+      });
+    }
   }
   await scheduleBatchWriter.flush();
 
   // 5) Rewrite people officeSpaceIds (and remove legacy fields).
-  const peopleBatchWriter = createBatchWriter();
+  progress({ step: "people", message: "Rewriting people office references..." });
+  const peopleBatchWriter = createBatchWriter({
+    label: "people",
+    onCommit: (info) =>
+      progress({
+        step: "people",
+        message: `Committed ${info.ops} ops (${info.label})`,
+      }),
+  });
+  let peopleTouched = 0;
   for (const item of people) {
     const person = { id: item.id, ...item.data };
     const nextOfficeSpaceIds = collectOfficeSpaceKeysFromPerson({
@@ -848,11 +987,26 @@ export const applyCanonicalLocationMigration = async () => {
     await peopleBatchWriter.add((batch) => {
       batch.update(doc(db, "people", person.id), payload);
     });
+    peopleTouched += 1;
+    if (peopleTouched % 250 === 0) {
+      progress({
+        step: "people",
+        message: `Queued ${peopleTouched} people update(s)...`,
+      });
+    }
   }
   await peopleBatchWriter.flush();
 
   // 6) Temperature collections.
-  const temperatureBatchWriter = createBatchWriter();
+  progress({ step: "temperature", message: "Updating temperature collections..." });
+  const temperatureBatchWriter = createBatchWriter({
+    label: "temperature",
+    onCommit: (info) =>
+      progress({
+        step: "temperature",
+        message: `Committed ${info.ops} ops (${info.label})`,
+      }),
+  });
 
   const tempDevices = await loadTemperatureCollection("temperatureDevices");
   for (const device of tempDevices) {
@@ -895,8 +1049,19 @@ export const applyCanonicalLocationMigration = async () => {
   await temperatureBatchWriter.flush();
 
   const moveTemperatureDocs = async (collectionName) => {
+    progress({
+      step: "temperature",
+      message: `Migrating ${collectionName} doc ids...`,
+    });
     const items = await loadTemperatureCollection(collectionName);
-    const mover = createBatchWriter();
+    const mover = createBatchWriter({
+      label: collectionName,
+      onCommit: (info) =>
+        progress({
+          step: "temperature",
+          message: `Committed ${info.ops} ops (${info.label})`,
+        }),
+    });
     for (const item of items) {
       const parsed = parseTemperatureDocId({
         collectionName,
@@ -940,10 +1105,21 @@ export const applyCanonicalLocationMigration = async () => {
   await moveTemperatureDocs("temperatureRoomSnapshots");
   await moveTemperatureDocs("temperatureRoomAggregates");
 
+  progress({
+    step: "temperature",
+    message: "Updating temperatureBuildingSettings markers...",
+  });
   const tempBuildingSettings = await loadTemperatureCollection(
     "temperatureBuildingSettings",
   );
-  const settingsBatch = createBatchWriter();
+  const settingsBatch = createBatchWriter({
+    label: "temperatureBuildingSettings",
+    onCommit: (info) =>
+      progress({
+        step: "temperature",
+        message: `Committed ${info.ops} ops (${info.label})`,
+      }),
+  });
   for (const setting of tempBuildingSettings) {
     const markers = setting.data?.markers;
     if (!markers || typeof markers !== "object") continue;
@@ -973,17 +1149,28 @@ export const applyCanonicalLocationMigration = async () => {
   await settingsBatch.flush();
 
   // 7) Set system version marker.
-  await updateDoc(doc(db, "settings", "app"), {
-    locationModelVersion: 2,
-    locationModelUpdatedAt: now,
-  }).catch(async () => {
-    await setDoc(doc(db, "settings", "app"), {
+  progress({ step: "finalize", message: "Writing settings/app marker..." });
+  await withTimeout(
+    updateDoc(doc(db, "settings", "app"), {
       locationModelVersion: 2,
       locationModelUpdatedAt: now,
-      updatedAt: now,
-      createdAt: now,
-    }, { merge: true });
-  });
+    }).catch(async () => {
+      await setDoc(
+        doc(db, "settings", "app"),
+        {
+          locationModelVersion: 2,
+          locationModelUpdatedAt: now,
+          updatedAt: now,
+          createdAt: now,
+        },
+        { merge: true },
+      );
+    }),
+    DEFAULT_COMMIT_TIMEOUT_MS,
+    "writing settings/app",
+  );
+
+  progress({ step: "done", message: "Migration complete." });
 
   return {
     buildingsUpdated: preview.buildings.changes.length,

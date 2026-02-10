@@ -1510,6 +1510,23 @@ const DataHygieneManager = () => {
     useState(false);
   const [isCanonicalLocationApplyRunning, setIsCanonicalLocationApplyRunning] =
     useState(false);
+  const [canonicalLocationApplyProgress, setCanonicalLocationApplyProgress] =
+    useState(null);
+  const [canonicalLocationApplyClock, setCanonicalLocationApplyClock] =
+    useState(Date.now());
+
+  useEffect(() => {
+    if (!isCanonicalLocationApplyRunning) return;
+    const id = setInterval(() => setCanonicalLocationApplyClock(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isCanonicalLocationApplyRunning]);
+
+  const formatElapsed = (ms) => {
+    const total = Math.max(0, Math.floor((ms || 0) / 1000));
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  };
 
   // Expanded sections
   const [expandedSection, setExpandedSection] = useState(null);
@@ -1663,6 +1680,7 @@ const DataHygieneManager = () => {
       const preview = await previewCanonicalLocationMigration();
       setCanonicalLocationPreview(preview);
       setCanonicalLocationResult(null);
+      setCanonicalLocationApplyProgress(null);
       setShowCanonicalLocationPreviewDetails(true);
       const buildingChanges = preview?.buildings?.changes?.length || 0;
       const roomMoves = preview?.rooms?.moves?.length || 0;
@@ -1706,8 +1724,24 @@ const DataHygieneManager = () => {
       confirmDisabled: isCanonicalLocationApplyRunning,
       onConfirm: async () => {
         setIsCanonicalLocationApplyRunning(true);
+        const startedAt = Date.now();
+        setCanonicalLocationApplyProgress({
+          startedAt,
+          at: startedAt,
+          step: "starting",
+          message: "Starting migration...",
+        });
         try {
-          const result = await applyCanonicalLocationMigration();
+          const result = await applyCanonicalLocationMigration({
+            onProgress: (p) => {
+              setCanonicalLocationApplyProgress((prev) => ({
+                ...(prev || {}),
+                ...(p || {}),
+                // Preserve the first startedAt so elapsed is stable.
+                startedAt: (prev && prev.startedAt) || p?.startedAt || startedAt,
+              }));
+            },
+          });
           setCanonicalLocationResult(result);
           showNotification(
             "success",
@@ -2267,13 +2301,33 @@ const DataHygieneManager = () => {
             >
               {isCanonicalLocationApplyRunning ? "Applying..." : "Apply"}
             </button>
-          </div>
-        </div>
+	          </div>
+	        </div>
 
-        {canonicalLocationPreview && (
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-            <div className="p-3 rounded-lg bg-gray-50 border">
-              <div className="text-gray-500">Buildings</div>
+	        {isCanonicalLocationApplyRunning && (
+	          <div className="mt-3 text-xs bg-gray-50 border rounded-lg p-3 flex flex-wrap items-center justify-between gap-2">
+	            <div className="text-gray-800">
+	              <span className="font-medium">Applying:</span>{" "}
+	              {canonicalLocationApplyProgress?.message ||
+	                canonicalLocationApplyProgress?.step ||
+	                "Working..."}
+	            </div>
+	            {canonicalLocationApplyProgress?.startedAt && (
+	              <div className="text-gray-500">
+	                Elapsed:{" "}
+	                {formatElapsed(
+	                  canonicalLocationApplyClock -
+	                    (canonicalLocationApplyProgress?.startedAt || 0),
+	                )}
+	              </div>
+	            )}
+	          </div>
+	        )}
+
+	        {canonicalLocationPreview && (
+	          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+	            <div className="p-3 rounded-lg bg-gray-50 border">
+	              <div className="text-gray-500">Buildings</div>
               <div className="text-gray-900 font-semibold">
                 {canonicalLocationPreview?.buildings?.changes?.length || 0} code
                 change(s)

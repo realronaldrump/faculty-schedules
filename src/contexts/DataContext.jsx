@@ -88,6 +88,7 @@ export const DataProvider = ({ children }) => {
   const [roomsLoaded, setRoomsLoaded] = useState(false);
   const [roomsLoading, setRoomsLoading] = useState(false);
   const roomsUnsubscribeRef = useRef(null);
+  const warnedRoomDocIdMismatchRef = useRef(new Set());
   const [editHistoryLoaded, setEditHistoryLoaded] = useState(false);
   const [recentChangesLoaded, setRecentChangesLoaded] = useState(false);
 
@@ -561,10 +562,14 @@ export const DataProvider = ({ children }) => {
       const key = (normalized.spaceKey || "").toString().trim();
       if (key) {
         if (docSnap.id && docSnap.id !== key) {
-          console.warn("Room doc id does not match canonical spaceKey:", {
-            docId: docSnap.id,
-            spaceKey: key,
-          });
+          const warnKey = `${docSnap.id}=>${key}`;
+          if (!warnedRoomDocIdMismatchRef.current.has(warnKey)) {
+            warnedRoomDocIdMismatchRef.current.add(warnKey);
+            console.warn("Room doc id does not match canonical spaceKey:", {
+              docId: docSnap.id,
+              spaceKey: key,
+            });
+          }
         }
         byKey.set(key, normalized);
       }

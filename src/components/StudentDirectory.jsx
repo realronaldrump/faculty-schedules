@@ -244,6 +244,11 @@ const StudentDirectory = () => {
   const [nameSort, setNameSort] = useState("firstName");
   const [selectedStudentForCard, setSelectedStudentForCard] = useState(null);
 
+  const selectedStudentAssignments = useMemo(() => {
+    if (!selectedStudentForCard) return [];
+    return getStudentAssignments(selectedStudentForCard);
+  }, [selectedStudentForCard]);
+
   // Modal states
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
@@ -1197,16 +1202,13 @@ const StudentDirectory = () => {
 
             {/* Contact Card Modal */}
             {selectedStudentForCard && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-                  <FacultyContactCard
-                    person={selectedStudentForCard}
-                    onClose={() => setSelectedStudentForCard(null)}
-                    personType="student"
-                    onUpdate={handleStudentUpdate}
-                  />
-                </div>
-              </div>
+              <FacultyContactCard
+                person={selectedStudentForCard}
+                onClose={() => setSelectedStudentForCard(null)}
+                personType="student"
+                showStudentSchedule
+                studentAssignments={selectedStudentAssignments}
+              />
             )}
 
             {/* Delete Confirmation */}
@@ -1234,6 +1236,7 @@ const StudentDirectory = () => {
           </>
         }
         tableProps={{
+          onRowClick: (student) => setSelectedStudentForCard(student),
           renderActions: (student) => (
             <div className="flex gap-1">
               <button

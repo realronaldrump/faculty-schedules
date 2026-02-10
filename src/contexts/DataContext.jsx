@@ -553,15 +553,26 @@ export const DataProvider = ({ children }) => {
     const byKey = new Map();
 
     snapshot.docs.forEach((docSnap) => {
-      const normalized = normalizeSpaceRecord(docSnap.data(), docSnap.id);
+      const raw = docSnap.data() || {};
+      const normalized = normalizeSpaceRecord(raw, docSnap.id);
       rooms[docSnap.id] = normalized;
       list.push(normalized);
-      if (normalized.spaceKey) {
-        const existing = byKey.get(normalized.spaceKey);
+
+      const addIndex = (key) => {
+        const k = (key || "").toString().trim();
+        if (!k) return;
+        const existing = byKey.get(k);
         if (!existing || existing.isActive === false) {
-          byKey.set(normalized.spaceKey, normalized);
+          byKey.set(k, normalized);
         }
-      }
+      };
+
+      // Primary canonical index.
+      addIndex(normalized.spaceKey);
+      // Also index by document id (legacy schedules/people sometimes reference doc ids).
+      addIndex(docSnap.id);
+      // And by the raw stored spaceKey for backwards compatibility/debugging.
+      addIndex(raw.spaceKey);
     });
 
     setRoomsData(rooms);

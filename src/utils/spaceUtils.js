@@ -26,6 +26,21 @@ export const normalizeSpaceRecord = (space = {}, docId = '') => {
   let spaceNumber = (base.spaceNumber || '').toString().trim();
   let buildingDisplayName = (base.buildingDisplayName || '').toString().trim();
 
+  // If we have a spaceKey, canonicalize it immediately so downstream logic
+  // (indexes, lookups, comparisons) doesn't depend on legacy formatting.
+  if (spaceKey) {
+    const parsedKey = parseSpaceKey(spaceKey);
+    const canonicalKey = parsedKey?.buildingCode && parsedKey?.spaceNumber
+      ? buildSpaceKey(parsedKey.buildingCode, parsedKey.spaceNumber)
+      : '';
+    if (canonicalKey) {
+      spaceKey = canonicalKey;
+      const canonicalParts = parseSpaceKey(canonicalKey);
+      if (canonicalParts?.buildingCode) buildingCode = canonicalParts.buildingCode.toUpperCase();
+      if (canonicalParts?.spaceNumber) spaceNumber = canonicalParts.spaceNumber;
+    }
+  }
+
   if (spaceKey && (!buildingCode || !spaceNumber)) {
     const parsedKey = parseSpaceKey(spaceKey);
     if (parsedKey?.buildingCode) buildingCode = parsedKey.buildingCode.toUpperCase();
@@ -48,8 +63,19 @@ export const normalizeSpaceRecord = (space = {}, docId = '') => {
   }
 
   const normalizedNumber = normalizeSpaceNumber(spaceNumber);
-  if (!spaceKey && buildingCode && normalizedNumber) {
-    spaceKey = buildSpaceKey(buildingCode, normalizedNumber);
+  const canonicalSpaceKey = buildingCode && normalizedNumber
+    ? buildSpaceKey(buildingCode, normalizedNumber)
+    : '';
+  if (!spaceKey && canonicalSpaceKey) {
+    spaceKey = canonicalSpaceKey;
+  } else if (spaceKey && canonicalSpaceKey && spaceKey !== canonicalSpaceKey) {
+    // Keep the canonical key in-memory even if the stored record is legacy.
+    spaceKey = canonicalSpaceKey;
+  }
+  if (canonicalSpaceKey) {
+    const parts = parseSpaceKey(canonicalSpaceKey);
+    if (parts?.buildingCode) buildingCode = parts.buildingCode.toUpperCase();
+    if (parts?.spaceNumber) spaceNumber = parts.spaceNumber;
   }
 
   const resolvedFromConfig = buildingCode ? resolveBuildingDisplayName(buildingCode) : '';
@@ -76,14 +102,22 @@ export const normalizeSpaceRecord = (space = {}, docId = '') => {
 
 export const resolveSpaceDisplayName = (spaceKey, spacesByKey) => {
   if (!spaceKey) return '';
+  const raw = (spaceKey || '').toString().trim();
+  const parsedInput = parseSpaceKey(raw);
+  const canonicalKey = parsedInput?.buildingCode && parsedInput?.spaceNumber
+    ? buildSpaceKey(parsedInput.buildingCode, parsedInput.spaceNumber)
+    : '';
+  const lookupKey = canonicalKey || raw;
   const map = spacesByKey instanceof Map ? spacesByKey : null;
-  const space = map ? map.get(spaceKey) : spacesByKey?.[spaceKey];
+  const space = map
+    ? (map.get(lookupKey) || (lookupKey !== raw ? map.get(raw) : null))
+    : (spacesByKey?.[lookupKey] || (lookupKey !== raw ? spacesByKey?.[raw] : null));
   if (space) {
     const normalized = normalizeSpaceRecord(space, space.id);
     return normalized.displayName || normalized.spaceKey || '';
   }
 
-  const parsed = parseSpaceKey(spaceKey);
+  const parsed = parsedInput || parseSpaceKey(lookupKey);
   if (!parsed?.buildingCode || !parsed?.spaceNumber) return spaceKey;
   return formatSpaceDisplayName({
     buildingCode: parsed.buildingCode,
@@ -163,9 +197,16 @@ export const resolveOfficeLocations = (person, spacesByKey) => {
 
   // Helper to resolve a single space ID
   const resolveOne = (spaceId, officeStr) => {
-    const id = (spaceId || '').toString().trim();
+    const rawId = (spaceId || '').toString().trim();
+    const parsedKey = parseSpaceKey(rawId);
+    const canonicalId = parsedKey?.buildingCode && parsedKey?.spaceNumber
+      ? buildSpaceKey(parsedKey.buildingCode, parsedKey.spaceNumber)
+      : '';
+    const id = canonicalId || rawId;
     if (id) {
-      const space = map ? map.get(id) : spacesByKey?.[id];
+      const space = map
+        ? (map.get(id) || (id !== rawId ? map.get(rawId) : null))
+        : (spacesByKey?.[id] || (id !== rawId ? spacesByKey?.[rawId] : null));
       if (space) {
         const normalized = normalizeSpaceRecord(space, space.id);
         return {

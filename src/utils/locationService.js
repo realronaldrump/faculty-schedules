@@ -173,12 +173,21 @@ export const applyBuildingConfig = (config) => {
     if (building.code) {
       buildingsByCode.set(building.code.toUpperCase(), building);
       aliasToBuilding.set(building.code.toLowerCase(), building);
+      // Also index a slugified code form so "GOEBEL_BUILDING" resolves even if
+      // the stored code is "Goebel Building" (or vice versa).
+      const codeSlug = slugify(building.code);
+      if (codeSlug) aliasToBuilding.set(codeSlug.toLowerCase(), building);
     }
     if (building.displayName) {
       aliasToBuilding.set(building.displayName.toLowerCase(), building);
+      const nameSlug = slugify(building.displayName);
+      if (nameSlug) aliasToBuilding.set(nameSlug.toLowerCase(), building);
     }
     (building.aliases || []).forEach((alias) => {
-      if (alias) aliasToBuilding.set(alias.toLowerCase(), building);
+      if (!alias) return;
+      aliasToBuilding.set(alias.toLowerCase(), building);
+      const aliasSlug = slugify(alias);
+      if (aliasSlug) aliasToBuilding.set(aliasSlug.toLowerCase(), building);
     });
   });
 
@@ -530,8 +539,10 @@ export const parseRoomLabel = (label) => {
   }
 
   // Build the canonical space key
-  const buildingCode = building.code || slugify(building.displayName).toUpperCase();
-  const spaceKey = `${buildingCode}:${spaceNumber}`;
+  const rawBuildingCode = building.code || slugify(building.displayName).toUpperCase();
+  const spaceKey = buildSpaceKey(rawBuildingCode, spaceNumber);
+  const normalizedKey = spaceKey ? parseSpaceKey(spaceKey) : null;
+  const buildingCode = normalizedKey?.buildingCode || rawBuildingCode;
   const displayName = `${building.displayName} ${spaceNumber}`;
 
   return {
@@ -641,7 +652,9 @@ export const parseMultiRoom = (value) => {
  * @returns {string} Space key (e.g., "GOEBEL:101")
  */
 export const buildSpaceKey = (buildingCode, spaceNumber) => {
-  const code = (buildingCode || '').toString().toUpperCase().trim().replace(/\s+/g, '_');
+  // Use slugify to ensure we never generate keys with spaces or punctuation in the
+  // building segment (older data may still contain these, but new keys should not).
+  const code = slugify((buildingCode || '').toString().trim()).toUpperCase();
   const number = normalizeSpaceNumber(spaceNumber);
   if (!code || !number) return '';
   return `${code}:${number}`;
@@ -654,11 +667,13 @@ export const buildSpaceKey = (buildingCode, spaceNumber) => {
  */
 export const parseSpaceKey = (spaceKey) => {
   if (!spaceKey || typeof spaceKey !== 'string') return null;
-  const parts = spaceKey.split(':');
+  const trimmed = spaceKey.trim();
+  if (!trimmed) return null;
+  const parts = trimmed.split(':');
   if (parts.length !== 2) return null;
   return {
-    buildingCode: parts[0],
-    spaceNumber: parts[1]
+    buildingCode: parts[0].trim(),
+    spaceNumber: parts[1].trim()
   };
 };
 

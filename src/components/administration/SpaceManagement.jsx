@@ -60,7 +60,14 @@ import SpaceUsageDetailModal from "./SpaceUsageDetailModal";
 const getCanonicalSpaceKeyFromSpace = (space) => {
   if (!space) return "";
   const existing = (space.spaceKey || "").toString().trim();
-  if (existing) return existing;
+  if (existing) {
+    const parsed = parseSpaceKey(existing);
+    const canonical =
+      parsed?.buildingCode && parsed?.spaceNumber
+        ? buildSpaceKey(parsed.buildingCode, parsed.spaceNumber)
+        : "";
+    return canonical || existing;
+  }
   const buildingCode = (space.buildingCode || space.building || "")
     .toString()
     .trim()

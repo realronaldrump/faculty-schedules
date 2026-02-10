@@ -24,7 +24,6 @@ import {
   RefreshCw,
   Calendar,
   Briefcase,
-  Thermometer,
   ChevronDown,
   ChevronUp,
   Layers,
@@ -44,6 +43,22 @@ import { generateSpaceId, validateSpace } from "../../utils/canonicalSchema";
 import { standardizeRoom } from "../../utils/hygieneCore";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "../../firebase";
+import SpaceUsageDetailModal from "./SpaceUsageDetailModal";
+
+const getCanonicalSpaceKeyFromSpace = (space) => {
+  if (!space) return "";
+  const existing = (space.spaceKey || "").toString().trim();
+  if (existing) return existing;
+  const buildingCode = (space.buildingCode || space.building || "")
+    .toString()
+    .trim()
+    .toUpperCase();
+  const spaceNumber = normalizeSpaceNumber(
+    (space.spaceNumber || space.roomNumber || "").toString().trim(),
+  );
+  const built = buildSpaceKey(buildingCode, spaceNumber);
+  return built || space.id || "";
+};
 
 const SpaceManagement = () => {
   const {
@@ -69,6 +84,7 @@ const SpaceManagement = () => {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showStats, setShowStats] = useState(true);
+  const [usageDetail, setUsageDetail] = useState(null); // { space, tab: 'scheduled' | 'office' }
 
   // Load rooms and people on mount
   useEffect(() => {
@@ -108,34 +124,77 @@ const SpaceManagement = () => {
   const spaceUsage = useMemo(() => {
     const usage = {};
 
+    const ensure = (spaceKey) => {
+      if (!spaceKey) return null;
+      if (!usage[spaceKey]) {
+        usage[spaceKey] = {
+          scheduled: 0,
+          offices: 0,
+          temperature: false,
+          schedules: [],
+          officePeople: [],
+        };
+      }
+      return usage[spaceKey];
+    };
+
     // Check schedules for room usage
     (scheduleData || []).forEach((schedule) => {
       const rooms = Array.isArray(schedule.spaceIds) ? schedule.spaceIds : [];
 
       rooms.forEach((spaceKey) => {
         if (!spaceKey) return;
-        if (!usage[spaceKey])
-          usage[spaceKey] = { scheduled: 0, offices: 0, temperature: false };
-        usage[spaceKey].scheduled++;
+        const record = ensure(spaceKey);
+        if (!record) return;
+        record.schedules.push(schedule);
       });
     });
 
     // Check people for office assignments
     (people || []).forEach((person) => {
       if (person?.isActive === false) return;
-      const officeIds =
-        person.officeSpaceIds ||
-        (person.officeSpaceId ? [person.officeSpaceId] : []);
-      officeIds.forEach((spaceKey) => {
+      const uniqueOfficeIds = new Set();
+      (Array.isArray(person.officeSpaceIds) ? person.officeSpaceIds : [])
+        .filter(Boolean)
+        .forEach((id) => uniqueOfficeIds.add(id));
+      if (person.officeSpaceId) uniqueOfficeIds.add(person.officeSpaceId);
+
+      Array.from(uniqueOfficeIds).forEach((spaceKey) => {
         if (!spaceKey) return;
-        if (!usage[spaceKey])
-          usage[spaceKey] = { scheduled: 0, offices: 0, temperature: false };
-        usage[spaceKey].offices++;
+        const record = ensure(spaceKey);
+        if (!record) return;
+        record.officePeople.push(person);
       });
     });
 
+    Object.values(usage).forEach((record) => {
+      // Keep counts consistent with the unique items we can display.
+      const uniqueSchedules = new Map();
+      (Array.isArray(record.schedules) ? record.schedules : []).forEach((s) => {
+        const key = s?.id || s?._originalId;
+        if (!key) return;
+        if (!uniqueSchedules.has(key)) uniqueSchedules.set(key, s);
+      });
+      record.schedules = Array.from(uniqueSchedules.values());
+      record.scheduled = record.schedules.length;
+
+      const uniquePeople = new Map();
+      (Array.isArray(record.officePeople) ? record.officePeople : []).forEach(
+        (p) => {
+          const key =
+            p?.id ||
+            p?.email ||
+            `${p?.firstName || ""} ${p?.lastName || ""}`.trim();
+          if (!key) return;
+          if (!uniquePeople.has(key)) uniquePeople.set(key, p);
+        },
+      );
+      record.officePeople = Array.from(uniquePeople.values());
+      record.offices = record.officePeople.length;
+    });
+
     return usage;
-  }, [scheduleData, people, spacesList, roomsData]);
+  }, [scheduleData, people]);
 
   // Filter and search spaces
   const filteredSpaces = useMemo(() => {
@@ -166,7 +225,7 @@ const SpaceManagement = () => {
     // Apply usage filter
     if (usageFilter !== "all") {
       spaces = spaces.filter((s) => {
-        const key = s.spaceKey || s.id;
+        const key = getCanonicalSpaceKeyFromSpace(s);
         const usage = spaceUsage[key] || { scheduled: 0, offices: 0 };
 
         switch (usageFilter) {
@@ -235,7 +294,7 @@ const SpaceManagement = () => {
     let unused = 0;
 
     activeSpaces.forEach((s) => {
-      const key = s.spaceKey || s.id;
+      const key = getCanonicalSpaceKeyFromSpace(s);
       const usage = spaceUsage[key] || { scheduled: 0, offices: 0 };
 
       if (s.type) byType[s.type] = (byType[s.type] || 0) + 1;
@@ -700,28 +759,32 @@ const SpaceManagement = () => {
   };
 
   const renderUsageIndicators = (space) => {
-    const key = space.spaceKey || space.id;
+    const key = getCanonicalSpaceKeyFromSpace(space);
     const usage = spaceUsage[key] || { scheduled: 0, offices: 0 };
 
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center justify-center gap-2">
         {usage.scheduled > 0 && (
-          <span
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs"
+          <button
+            type="button"
+            onClick={() => setUsageDetail({ space, tab: "scheduled" })}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs hover:bg-blue-100 transition-colors"
             title={`${usage.scheduled} scheduled class${usage.scheduled !== 1 ? "es" : ""}`}
           >
             <Calendar size={10} />
             {usage.scheduled}
-          </span>
+          </button>
         )}
         {usage.offices > 0 && (
-          <span
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-50 text-green-700 rounded text-xs"
+          <button
+            type="button"
+            onClick={() => setUsageDetail({ space, tab: "office" })}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-50 text-green-700 rounded text-xs hover:bg-green-100 transition-colors"
             title={`${usage.offices} office assignment${usage.offices !== 1 ? "s" : ""}`}
           >
             <Briefcase size={10} />
             {usage.offices}
-          </span>
+          </button>
         )}
         {usage.scheduled === 0 && usage.offices === 0 && (
           <span className="text-xs text-gray-400">—</span>
@@ -1303,14 +1366,42 @@ const SpaceManagement = () => {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center text-sm text-gray-600">
-                      {space.capacity ? (
-                        <span className="flex items-center justify-center gap-1">
-                          <Users size={14} />
-                          {space.capacity}
-                        </span>
-                      ) : (
-                        "-"
-                      )}
+                      {(() => {
+                        const key = getCanonicalSpaceKeyFromSpace(space);
+                        const usage = spaceUsage[key] || {};
+                        const hasOfficeOccupant =
+                          space.type === SPACE_TYPE.Office &&
+                          Array.isArray(usage.officePeople) &&
+                          usage.officePeople.length > 0;
+                        const effectiveCapacity = hasOfficeOccupant
+                          ? 1
+                          : space.capacity;
+
+                        if (!effectiveCapacity) return "-";
+
+                        if (hasOfficeOccupant) {
+                          return (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setUsageDetail({ space, tab: "office" })
+                              }
+                              className="flex items-center justify-center gap-1 w-full hover:underline"
+                              title="Occupied office (click to view occupant)"
+                            >
+                              <Users size={14} />
+                              {effectiveCapacity}
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <span className="flex items-center justify-center gap-1">
+                            <Users size={14} />
+                            {effectiveCapacity}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-center">
                       {renderUsageIndicators(space)}
@@ -1338,6 +1429,19 @@ const SpaceManagement = () => {
           </div>
         )}
       </div>
+
+      <SpaceUsageDetailModal
+        isOpen={!!usageDetail}
+        space={usageDetail?.space || null}
+        usage={
+          usageDetail?.space
+            ? spaceUsage[getCanonicalSpaceKeyFromSpace(usageDetail.space)] ||
+              null
+            : null
+        }
+        initialTab={usageDetail?.tab || "scheduled"}
+        onClose={() => setUsageDetail(null)}
+      />
 
       {/* Delete Confirmation */}
       <ConfirmDialog

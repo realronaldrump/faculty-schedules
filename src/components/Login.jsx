@@ -185,7 +185,7 @@ function Login({ onLogin }) {
                 Faculty System Access
               </h2>
               <p className="text-gray-600 mb-6">
-                Secure login required for Davis's Big Beautiful Dashboard
+                Secure login required for Davis's Administrative Dashboard
               </p>
             </div>
 

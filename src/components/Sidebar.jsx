@@ -288,7 +288,7 @@ const Sidebar = ({
               Human Sciences & Design
             </div>
             <div className="text-xs text-gray-400 mt-2 font-['DM_Sans']">
-              Davis's Big Beautiful Dashboard
+              Davis's Administrative Dashboard
             </div>
           </div>
         ) : (

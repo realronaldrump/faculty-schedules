@@ -558,21 +558,16 @@ export const DataProvider = ({ children }) => {
       rooms[docSnap.id] = normalized;
       list.push(normalized);
 
-      const addIndex = (key) => {
-        const k = (key || "").toString().trim();
-        if (!k) return;
-        const existing = byKey.get(k);
-        if (!existing || existing.isActive === false) {
-          byKey.set(k, normalized);
+      const key = (normalized.spaceKey || "").toString().trim();
+      if (key) {
+        if (docSnap.id && docSnap.id !== key) {
+          console.warn("Room doc id does not match canonical spaceKey:", {
+            docId: docSnap.id,
+            spaceKey: key,
+          });
         }
-      };
-
-      // Primary canonical index.
-      addIndex(normalized.spaceKey);
-      // Also index by document id (legacy schedules/people sometimes reference doc ids).
-      addIndex(docSnap.id);
-      // And by the raw stored spaceKey for backwards compatibility/debugging.
-      addIndex(raw.spaceKey);
+        byKey.set(key, normalized);
+      }
     });
 
     setRoomsData(rooms);

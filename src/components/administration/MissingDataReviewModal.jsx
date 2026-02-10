@@ -21,11 +21,16 @@ import {
   where,
 } from "firebase/firestore";
 import { db, COLLECTIONS } from "../../firebase";
-import { DEFAULT_PERSON_SCHEMA } from "../../utils/dataHygiene";
 import { logUpdate } from "../../utils/changeLogger";
-import { parseRoomLabel } from "../../utils/locationService";
+import {
+  formatSpaceDisplayName,
+  parseSpaceKey,
+  resolveBuildingDisplayName,
+} from "../../utils/locationService";
 import { usePermissions } from "../../utils/permissions";
 import { isStudentWorker } from "../../utils/peopleUtils";
+import { useData } from "../../contexts/DataContext";
+import MultiSelectDropdown from "../MultiSelectDropdown";
 
 const MissingDataReviewModal = ({
   isOpen,
@@ -33,12 +38,40 @@ const MissingDataReviewModal = ({
   onDataUpdated,
   missingDataType = "email",
 }) => {
+  const { spacesByKey, spacesList } = useData();
   const [records, setRecords] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveResults, setSaveResults] = useState(null);
+
+  const spacePicker = React.useMemo(() => {
+    const list = Array.isArray(spacesList) ? spacesList : [];
+    const seen = new Set();
+    const options = [];
+    const displayMap = {};
+    const typeMap = {};
+
+    list.forEach((space) => {
+      if (!space || space.isActive === false) return;
+      const key = (space.spaceKey || space.id || "").toString().trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      options.push(key);
+      displayMap[key] = (space.displayName || space.name || key).toString().trim() || key;
+      typeMap[key] = (space.type || "").toString().trim().toLowerCase();
+    });
+
+    options.sort((a, b) => {
+      const aOffice = typeMap[a] === "office";
+      const bOffice = typeMap[b] === "office";
+      if (aOffice !== bOffice) return aOffice ? -1 : 1;
+      return (displayMap[a] || a).localeCompare(displayMap[b] || b);
+    });
+
+    return { options, displayMap };
+  }, [spacesList]);
 
   useEffect(() => {
     if (isOpen) {
@@ -91,7 +124,8 @@ const MissingDataReviewModal = ({
           missingRecords = people.filter(
             (person) =>
               !isStudentWorker(person) &&
-              (!person.office || person.office.trim() === "") &&
+              (!Array.isArray(person.officeSpaceIds) ||
+                person.officeSpaceIds.filter(Boolean).length === 0) &&
               !person.hasNoOffice,
           );
           break;
@@ -123,7 +157,8 @@ const MissingDataReviewModal = ({
               !person.hasNoPhone;
             const missingOffice =
               !isStudentWorker(person) &&
-              (!person.office || person.office.trim() === "") &&
+              (!Array.isArray(person.officeSpaceIds) ||
+                person.officeSpaceIds.filter(Boolean).length === 0) &&
               !person.hasNoOffice;
             const missingJob =
               !person.jobTitle || person.jobTitle.trim() === "";
@@ -151,11 +186,16 @@ const MissingDataReviewModal = ({
   };
 
   const startEditing = (record) => {
+    const existingOfficeSpaceIds = Array.isArray(record.officeSpaceIds)
+      ? record.officeSpaceIds.filter(Boolean)
+      : record.officeSpaceId
+        ? [record.officeSpaceId]
+        : [];
     setEditingRecord({
       ...record,
       newEmail: record.email || "",
       newPhone: record.phone || "",
-      newOffice: record.office || "",
+      newOfficeSpaceIds: existingOfficeSpaceIds,
       newJobTitle: record.jobTitle || "",
       newTitle: record.title || "",
       newProgramId: record.programId || "",
@@ -184,12 +224,31 @@ const MissingDataReviewModal = ({
     setEditingRecord((prev) => ({
       ...prev,
       newHasNoOffice,
-      newOffice: newHasNoOffice ? "" : prev.newOffice,
+      newOfficeSpaceIds: newHasNoOffice ? [] : prev.newOfficeSpaceIds,
     }));
   };
 
   const { canEdit } = usePermissions();
   const canEditHere = canEdit("admin/data-hygiene");
+
+  const resolveSpaceLabel = (spaceKey) => {
+    const raw = (spaceKey || "").toString().trim();
+    if (!raw) return "";
+    const space =
+      spacesByKey instanceof Map ? spacesByKey.get(raw) : spacesByKey?.[raw];
+    const label = (space?.displayName || space?.name || "").toString().trim();
+    if (label) return label;
+
+    const parsed = parseSpaceKey(raw);
+    if (!parsed?.buildingCode || !parsed?.spaceNumber) return raw;
+    const buildingName =
+      resolveBuildingDisplayName(parsed.buildingCode) || parsed.buildingCode;
+    return formatSpaceDisplayName({
+      buildingCode: parsed.buildingCode,
+      buildingDisplayName: buildingName,
+      spaceNumber: parsed.spaceNumber,
+    });
+  };
 
   const saveRecord = async () => {
     if (!canEditHere) {
@@ -228,31 +287,24 @@ const MissingDataReviewModal = ({
         updates.officeSpaceId = "";
         updates.offices = [];
         updates.officeSpaceIds = [];
-      } else if (editingRecord.newOffice.trim()) {
-        const nextOffice = editingRecord.newOffice.trim();
-        const parsed = parseRoomLabel(nextOffice);
-        const nextOfficeSpaceId = parsed?.spaceKey || "";
-
-        updates.office = nextOffice;
-        updates.hasNoOffice = false;
-
-        // Keep array fields in sync with the primary office.
-        const existingOffices = Array.isArray(editingRecord.offices)
-          ? editingRecord.offices.filter(Boolean)
-          : [];
-        const existingOfficeSpaceIds = Array.isArray(editingRecord.officeSpaceIds)
-          ? editingRecord.officeSpaceIds.filter((v) => v !== undefined && v !== null)
+      } else {
+        const nextOfficeSpaceIds = Array.isArray(editingRecord.newOfficeSpaceIds)
+          ? editingRecord.newOfficeSpaceIds
+              .map((v) => (v || "").toString().trim())
+              .filter(Boolean)
+              .slice(0, 3)
           : [];
 
-        updates.offices =
-          existingOffices.length > 0
-            ? [nextOffice, ...existingOffices.slice(1)]
-            : [nextOffice];
-        updates.officeSpaceIds =
-          existingOfficeSpaceIds.length > 0
-            ? [nextOfficeSpaceId, ...existingOfficeSpaceIds.slice(1)]
-            : [nextOfficeSpaceId];
-        updates.officeSpaceId = nextOfficeSpaceId;
+        if (nextOfficeSpaceIds.length > 0) {
+          const offices = nextOfficeSpaceIds
+            .map(resolveSpaceLabel)
+            .filter(Boolean);
+          updates.hasNoOffice = false;
+          updates.officeSpaceIds = nextOfficeSpaceIds;
+          updates.officeSpaceId = nextOfficeSpaceIds[0] || "";
+          updates.offices = offices;
+          updates.office = offices[0] || "";
+        }
       }
 
       if (editingRecord.newJobTitle.trim()) {
@@ -544,20 +596,43 @@ const MissingDataReviewModal = ({
                               <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Office Location
                               </label>
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="text"
-                                  value={editingRecord.newOffice}
-                                  onChange={(e) =>
-                                    setEditingRecord((prev) => ({
-                                      ...prev,
-                                      newOffice: e.target.value,
-                                    }))
-                                  }
-                                  disabled={editingRecord.newHasNoOffice}
-                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:border-baylor-green focus:outline-none focus:ring-2 focus:ring-baylor-green/20 disabled:bg-gray-100 disabled:text-gray-500"
-                                  placeholder="Building Room#"
-                                />
+                              <div className="flex items-start gap-2">
+                                <div className="flex-1">
+                                  <MultiSelectDropdown
+                                    options={spacePicker.options}
+                                    selected={
+                                      Array.isArray(editingRecord.newOfficeSpaceIds)
+                                        ? editingRecord.newOfficeSpaceIds
+                                        : []
+                                    }
+                                    onChange={(next) => {
+                                      const cleaned = Array.isArray(next)
+                                        ? next
+                                            .map((v) => (v || "").toString().trim())
+                                            .filter(Boolean)
+                                            .slice(0, 3)
+                                        : [];
+                                      setEditingRecord((prev) => ({
+                                        ...prev,
+                                        newOfficeSpaceIds: cleaned,
+                                        newHasNoOffice:
+                                          cleaned.length > 0
+                                            ? false
+                                            : prev.newHasNoOffice,
+                                      }));
+                                    }}
+                                    placeholder="Select office(s)..."
+                                    displayMap={spacePicker.displayMap}
+                                    showSelectedLabels
+                                    menuPortal
+                                    enableSearch
+                                    searchPlaceholder="Search spaces..."
+                                    disabled={editingRecord.newHasNoOffice}
+                                  />
+                                  <p className="text-gray-600 text-xs mt-1">
+                                    Select up to 3 spaces.
+                                  </p>
+                                </div>
                                 <button
                                   type="button"
                                   onClick={toggleOfficeState}

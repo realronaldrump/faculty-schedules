@@ -83,6 +83,26 @@ const formatStudentWorkerDate = (value) => {
   return parsed ? parsed.toLocaleDateString() : "";
 };
 
+const getStudentJobTitles = (student) => {
+  const titles = [];
+  const seen = new Set();
+  const addTitle = (value) => {
+    const trimmed = trimValue(value);
+    if (!trimmed) return;
+    if (seen.has(trimmed)) return;
+    seen.add(trimmed);
+    titles.push(trimmed);
+  };
+
+  if (Array.isArray(student?.jobs)) {
+    student.jobs.forEach((job) => addTitle(job?.jobTitle));
+  }
+  // Back-compat: some records still have a top-level jobTitle.
+  addTitle(student?.jobTitle);
+
+  return titles;
+};
+
 const prepareStudentPayload = (
   student,
   { supervisorIndex = null, peopleIndex = null } = {},
@@ -243,6 +263,11 @@ const StudentDirectory = () => {
   });
   const [nameSort, setNameSort] = useState("firstName");
   const [selectedStudentForCard, setSelectedStudentForCard] = useState(null);
+
+  const selectedStudentAssignments = useMemo(() => {
+    if (!selectedStudentForCard) return [];
+    return getStudentAssignments(selectedStudentForCard);
+  }, [selectedStudentForCard]);
 
   // Modal states
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -461,6 +486,11 @@ const StudentDirectory = () => {
             aValue = a.lastName || a.name?.split(" ").slice(-1)[0] || "";
             bValue = b.lastName || b.name?.split(" ").slice(-1)[0] || "";
           }
+          break;
+        case "jobTitle":
+          // Student workers can have multiple jobs; sort by all unique titles.
+          aValue = getStudentJobTitles(a).join(" ");
+          bValue = getStudentJobTitles(b).join(" ");
           break;
         case "email":
           aValue = a.email || "";
@@ -853,13 +883,23 @@ const StudentDirectory = () => {
       label: "Job Title",
       headerClassName: "w-[15%]",
       render: (student) => {
-        const primaryJobTitle =
-          student.jobs && student.jobs.length > 0
-            ? student.jobs[0]?.jobTitle
-            : student.jobTitle;
+        const titles = getStudentJobTitles(student);
+
+        if (titles.length === 0) {
+          return <div className="text-sm text-gray-700">-</div>;
+        }
+
+        if (titles.length === 1) {
+          return <div className="text-sm text-gray-700">{titles[0]}</div>;
+        }
+
         return (
-          <div className="text-sm text-gray-700">
-            {primaryJobTitle || "-"}
+          <div className="text-sm text-gray-700 space-y-1">
+            {titles.map((title) => (
+              <div key={title} className="leading-snug">
+                {title}
+              </div>
+            ))}
           </div>
         );
       },
@@ -903,7 +943,7 @@ const StudentDirectory = () => {
       headerClassName: "w-[25%]",
       render: (student) => {
         const jobs = student.jobs || [];
-        const primaryJob = jobs[0];
+        const titles = getStudentJobTitles(student);
         const totalHours = jobs.reduce(
           (sum, job) => sum + calculateWeeklyHoursFromSchedule(job.weeklySchedule),
           0,
@@ -917,9 +957,9 @@ const StudentDirectory = () => {
                 {totalHours > 0 ? `${totalHours.toFixed(1)} hrs/week` : "-"}
               </span>
             </div>
-            {primaryJob?.jobTitle && (
+            {titles.length > 0 && (
               <p className="text-xs text-gray-500 mt-1">
-                {primaryJob.jobTitle}
+                {titles.length === 1 ? titles[0] : titles.join(" + ")}
               </p>
             )}
           </div>
@@ -1197,16 +1237,13 @@ const StudentDirectory = () => {
 
             {/* Contact Card Modal */}
             {selectedStudentForCard && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-                  <FacultyContactCard
-                    person={selectedStudentForCard}
-                    onClose={() => setSelectedStudentForCard(null)}
-                    personType="student"
-                    onUpdate={handleStudentUpdate}
-                  />
-                </div>
-              </div>
+              <FacultyContactCard
+                person={selectedStudentForCard}
+                onClose={() => setSelectedStudentForCard(null)}
+                personType="student"
+                showStudentSchedule
+                studentAssignments={selectedStudentAssignments}
+              />
             )}
 
             {/* Delete Confirmation */}
@@ -1234,6 +1271,7 @@ const StudentDirectory = () => {
           </>
         }
         tableProps={{
+          onRowClick: (student) => setSelectedStudentForCard(student),
           renderActions: (student) => (
             <div className="flex gap-1">
               <button

@@ -8,7 +8,6 @@
  * - StudentDirectory
  */
 
-import { getBuildingDisplay } from './locationService';
 import { resolveOfficeLocation } from './spaceUtils';
 
 /**
@@ -29,46 +28,6 @@ export const formatPhoneNumber = (phoneStr) => {
 };
 
 /**
- * Extract building name from an office location string
- * @param {string} officeLocation - Full office location (e.g., "CASHION BUILDING 123")
- * @returns {string} Building name only, or 'No Building' if not provided
- */
-export const extractBuildingName = (officeLocation) => {
-    if (!officeLocation || officeLocation.trim() === '') {
-        return 'No Building';
-    }
-
-    const building = getBuildingDisplay(officeLocation);
-    if (!building || !building.trim()) return 'No Building';
-    return building;
-};
-
-/**
- * Extract room number from an office location string
- * @param {string} officeLocation
- * @returns {string}
- */
-export const extractRoomNumberFromOffice = (officeLocation) => {
-    if (!officeLocation || officeLocation.trim() === '') {
-        return '';
-    }
-
-    const office = officeLocation.trim();
-
-    const roomMatch = office.match(/(\d+[A-Za-z]?)$/);
-    if (roomMatch) {
-        return roomMatch[1];
-    }
-
-    const complexMatch = office.match(/\s+(\d{2,4}[A-Za-z]?)\s*$/);
-    if (complexMatch) {
-        return complexMatch[1];
-    }
-
-    return '';
-};
-
-/**
  * Resolve office building + room using canonical space references when available.
  * @param {Object} person
  * @param {Map|Object} spacesByKey
@@ -82,11 +41,9 @@ export const resolveOfficeDetails = (person, spacesByKey) => {
             roomNumber: resolved.spaceNumber || ''
         };
     }
-
-    const office = person?.office || '';
     return {
-        buildingName: extractBuildingName(office),
-        roomNumber: extractRoomNumberFromOffice(office)
+        buildingName: 'No Building',
+        roomNumber: ''
     };
 };
 

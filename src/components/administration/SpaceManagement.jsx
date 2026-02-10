@@ -41,13 +41,12 @@ import {
   formatSpaceDisplayName,
   normalizeSpaceNumber,
   parseRoomLabel,
-  parseMultiRoom,
   parseSpaceKey,
   resolveBuilding,
   resolveBuildingDisplayName,
 } from "../../utils/locationService";
 import { normalizeSpaceRecord } from "../../utils/spaceUtils";
-import { generateSpaceId, validateSpace } from "../../utils/canonicalSchema";
+import { validateSpace } from "../../utils/canonicalSchema";
 import { standardizeRoom } from "../../utils/hygieneCore";
 import {
   collection,
@@ -64,24 +63,11 @@ import SpaceUsageDetailModal from "./SpaceUsageDetailModal";
 
 const getCanonicalSpaceKeyFromSpace = (space) => {
   if (!space) return "";
-  const existing = (space.spaceKey || "").toString().trim();
-  if (existing) {
-    const parsed = parseSpaceKey(existing);
-    const canonical =
-      parsed?.buildingCode && parsed?.spaceNumber
-        ? buildSpaceKey(parsed.buildingCode, parsed.spaceNumber)
-        : "";
-    return canonical || existing;
-  }
-  const buildingCode = (space.buildingCode || space.building || "")
-    .toString()
-    .trim()
-    .toUpperCase();
-  const spaceNumber = normalizeSpaceNumber(
-    (space.spaceNumber || space.roomNumber || "").toString().trim(),
-  );
-  const built = buildSpaceKey(buildingCode, spaceNumber);
-  return built || space.id || "";
+  const raw = (space.spaceKey || space.id || "").toString().trim();
+  if (!raw) return "";
+  const parsed = parseSpaceKey(raw);
+  if (!parsed?.buildingCode || !parsed?.spaceNumber) return "";
+  return buildSpaceKey(parsed.buildingCode, parsed.spaceNumber);
 };
 
 const SpaceManagement = () => {
@@ -196,40 +182,14 @@ const SpaceManagement = () => {
       return usage[spaceKey];
     };
 
-    const normalizeReferencedSpaceKey = (value) => {
+    const canonicalizeSpaceKey = (value) => {
       const raw = (value || "").toString().trim();
       if (!raw) return "";
 
-      // Already a canonical spaceKey (normalize case/spacing).
       const parsed = parseSpaceKey(raw);
       if (parsed?.buildingCode && parsed?.spaceNumber) {
         return buildSpaceKey(parsed.buildingCode, parsed.spaceNumber);
       }
-
-      // Legacy: some records store a Firestore rooms doc id instead of spaceKey.
-      const room = roomsData?.[raw];
-      if (room?.spaceKey) {
-        const roomKey = (room.spaceKey || "").toString().trim();
-        const parsedRoomKey = parseSpaceKey(roomKey);
-        if (parsedRoomKey?.buildingCode && parsedRoomKey?.spaceNumber) {
-          return buildSpaceKey(parsedRoomKey.buildingCode, parsedRoomKey.spaceNumber);
-        }
-        return roomKey;
-      }
-
-      return "";
-    };
-
-    const normalizeOfficeSpaceKey = (value, officeLabel = "") => {
-      const normalizedId = normalizeReferencedSpaceKey(value);
-      if (normalizedId) return normalizedId;
-
-      const label = (officeLabel || "").toString().trim();
-      if (!label) return "";
-
-      const parsed = parseRoomLabel(label);
-      if (parsed?.spaceKey) return parsed.spaceKey;
-
       return "";
     };
 
@@ -237,46 +197,14 @@ const SpaceManagement = () => {
     (scheduleData || []).forEach((schedule) => {
       const keys = [];
       const seen = new Set();
-      const addKey = (key) => {
-        const k = (key || "").toString().trim();
-        if (!k || seen.has(k)) return;
-        seen.add(k);
-        keys.push(k);
-      };
 
-      // Prefer canonical ids if present.
       const roomIds = Array.isArray(schedule.spaceIds) ? schedule.spaceIds : [];
-      roomIds.forEach((rawSpaceId) => addKey(normalizeReferencedSpaceKey(rawSpaceId)));
-
-      // Fall back to display-name parsing for legacy schedules missing spaceIds.
-      if (keys.length === 0) {
-        const displayNames = Array.isArray(schedule.spaceDisplayNames)
-          ? schedule.spaceDisplayNames
-          : [];
-        displayNames.forEach((name) => {
-          const parsed = parseRoomLabel((name || "").toString());
-          if (parsed?.spaceKey) addKey(parsed.spaceKey);
-        });
-      }
-
-      // Last resort: parse the raw "Room" label if we have it.
-      if (keys.length === 0) {
-        const rawRoom = (
-          schedule.Room ||
-          schedule.room ||
-          schedule.locationLabel ||
-          schedule.locationDisplay ||
-          ""
-        )
-          .toString()
-          .trim();
-        if (rawRoom) {
-          const parsed = parseMultiRoom(rawRoom);
-          (Array.isArray(parsed?.spaceKeys) ? parsed.spaceKeys : []).forEach((k) =>
-            addKey(k),
-          );
-        }
-      }
+      roomIds.forEach((rawSpaceId) => {
+        const key = canonicalizeSpaceKey(rawSpaceId);
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        keys.push(key);
+      });
 
       keys.forEach((spaceKey) => {
         const record = ensure(spaceKey);
@@ -290,22 +218,15 @@ const SpaceManagement = () => {
       if (person?.isActive === false) return;
       if (person?.hasNoOffice === true || person?.isRemote === true) return;
 
-      const uniqueOfficeKeys = new Set();
       const officeSpaceIds = Array.isArray(person.officeSpaceIds)
         ? person.officeSpaceIds
         : [];
-      const offices = Array.isArray(person.offices) ? person.offices : [];
 
-      if (officeSpaceIds.length > 0 || offices.length > 0) {
-        const maxLen = Math.max(officeSpaceIds.length, offices.length);
-        for (let idx = 0; idx < maxLen; idx += 1) {
-          const key = normalizeOfficeSpaceKey(officeSpaceIds[idx], offices[idx]);
-          if (key) uniqueOfficeKeys.add(key);
-        }
-      }
-
-      const primaryKey = normalizeOfficeSpaceKey(person.officeSpaceId, person.office);
-      if (primaryKey) uniqueOfficeKeys.add(primaryKey);
+      const uniqueOfficeKeys = new Set();
+      officeSpaceIds.forEach((rawSpaceId) => {
+        const key = canonicalizeSpaceKey(rawSpaceId);
+        if (key) uniqueOfficeKeys.add(key);
+      });
 
       Array.from(uniqueOfficeKeys).forEach((spaceKey) => {
         if (!spaceKey) return;
@@ -342,7 +263,7 @@ const SpaceManagement = () => {
     });
 
     return usage;
-  }, [scheduleData, people, roomsData]);
+  }, [scheduleData, people]);
 
   // Filter and search spaces
   const filteredSpaces = useMemo(() => {
@@ -395,9 +316,9 @@ const SpaceManagement = () => {
       spaces = spaces.filter(
         (s) =>
           (s.spaceKey || "").toLowerCase().includes(query) ||
-          (s.displayName || s.name || "").toLowerCase().includes(query) ||
-          (s.spaceNumber || s.roomNumber || "").toLowerCase().includes(query) ||
-          (s.building || "").toLowerCase().includes(query),
+          (s.displayName || "").toLowerCase().includes(query) ||
+          (s.spaceNumber || "").toLowerCase().includes(query) ||
+          (s.buildingDisplayName || "").toLowerCase().includes(query),
       );
     }
 
@@ -409,8 +330,8 @@ const SpaceManagement = () => {
         bNorm.buildingCode || "",
       );
       if (buildingCompare !== 0) return buildingCompare;
-      return (aNorm.spaceNumber || a.roomNumber || "").localeCompare(
-        bNorm.spaceNumber || b.roomNumber || "",
+      return (aNorm.spaceNumber || "").localeCompare(
+        bNorm.spaceNumber || "",
         undefined,
         { numeric: true },
       );
@@ -655,7 +576,7 @@ const SpaceManagement = () => {
 
       // Build new space document
       const spaceDoc = {
-        // New canonical fields
+        // Canonical fields (no legacy duplicates)
         spaceKey,
         spaceNumber,
         buildingCode,
@@ -666,12 +587,7 @@ const SpaceManagement = () => {
         equipment: formData.equipment,
         notes: formData.notes.trim(),
         isActive: true,
-
-        // Legacy fields for backward compatibility
-        building: buildingDisplayName,
-        roomNumber: spaceNumber,
-        name: displayName,
-        displayName: displayName,
+        displayName,
 
         // Timestamps
         updatedAt: new Date().toISOString(),
@@ -690,12 +606,8 @@ const SpaceManagement = () => {
         return;
       }
 
-      let docId;
       if (isAddingNew) {
-        docId = generateSpaceId({ buildingCode, spaceNumber }) || spaceKey;
         standardizedDoc.createdAt = new Date().toISOString();
-      } else {
-        docId = editingSpace.id;
       }
 
       // If the canonical spaceKey changes, move the room document to the new deterministic ID.
@@ -706,9 +618,8 @@ const SpaceManagement = () => {
           editingSpace?.createdAt || standardizedDoc.createdAt || new Date().toISOString();
         await setDoc(doc(db, "rooms", spaceKey), standardizedDoc, { merge: true });
         await deleteDoc(doc(db, "rooms", editingSpace.id));
-        docId = spaceKey;
       } else {
-        await setDoc(doc(db, "rooms", docId), standardizedDoc, { merge: true });
+        await setDoc(doc(db, "rooms", spaceKey), standardizedDoc, { merge: true });
       }
 
       // If the canonical spaceKey changed, update references in schedules/people.
@@ -955,11 +866,9 @@ const SpaceManagement = () => {
           buildingDisplayName,
           spaceNumber,
         });
-        const docId =
-          generateSpaceId({ buildingCode, spaceNumber }) || spaceKey;
 
         spacesToCreate.push({
-          docId,
+          docId: spaceKey,
           data: {
             spaceKey,
             spaceNumber,
@@ -971,10 +880,7 @@ const SpaceManagement = () => {
             equipment: [],
             notes: "",
             isActive: true,
-            building: buildingDisplayName,
-            roomNumber: spaceNumber,
-            name: displayName,
-            displayName: displayName,
+            displayName,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           },
@@ -1042,7 +948,7 @@ const SpaceManagement = () => {
         showNotification(
           "success",
           "Space Deactivated",
-          `${space.spaceKey || space.name} has been deactivated.`,
+          `${space.spaceKey || "Space"} has been deactivated.`,
         );
         setDeleteConfirm(null);
 

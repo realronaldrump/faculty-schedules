@@ -84,7 +84,7 @@ const SpaceManagement = () => {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showStats, setShowStats] = useState(true);
-  const [usageDetail, setUsageDetail] = useState(null); // { space, tab: 'scheduled' | 'office' }
+  const [usageDetail, setUsageDetail] = useState(null); // { space, mode: 'scheduled' | 'office' }
 
   // Load rooms and people on mount
   useEffect(() => {
@@ -767,7 +767,7 @@ const SpaceManagement = () => {
         {usage.scheduled > 0 && (
           <button
             type="button"
-            onClick={() => setUsageDetail({ space, tab: "scheduled" })}
+            onClick={() => setUsageDetail({ space, mode: "scheduled" })}
             className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs hover:bg-blue-100 transition-colors"
             title={`${usage.scheduled} scheduled class${usage.scheduled !== 1 ? "es" : ""}`}
           >
@@ -778,7 +778,7 @@ const SpaceManagement = () => {
         {usage.offices > 0 && (
           <button
             type="button"
-            onClick={() => setUsageDetail({ space, tab: "office" })}
+            onClick={() => setUsageDetail({ space, mode: "office" })}
             className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-50 text-green-700 rounded text-xs hover:bg-green-100 transition-colors"
             title={`${usage.offices} office assignment${usage.offices !== 1 ? "s" : ""}`}
           >
@@ -1384,7 +1384,7 @@ const SpaceManagement = () => {
                             <button
                               type="button"
                               onClick={() =>
-                                setUsageDetail({ space, tab: "office" })
+                                setUsageDetail({ space, mode: "office" })
                               }
                               className="flex items-center justify-center gap-1 w-full hover:underline"
                               title="Occupied office (click to view occupant)"
@@ -1439,7 +1439,7 @@ const SpaceManagement = () => {
               null
             : null
         }
-        initialTab={usageDetail?.tab || "scheduled"}
+        mode={usageDetail?.mode || "scheduled"}
         onClose={() => setUsageDetail(null)}
       />
 

@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Briefcase, Calendar, Mail, Users, X } from "lucide-react";
+import React, { useEffect, useMemo } from "react";
+import { Mail, Users, X } from "lucide-react";
 
 const getPersonDisplayName = (person) => {
   if (!person) return "Unknown";
@@ -48,21 +48,14 @@ const getScheduleMeta = (schedule) => {
   return { term, when, instructor, crn };
 };
 
-const normalizeTab = (value) => (value === "office" ? "office" : "scheduled");
-
 const SpaceUsageDetailModal = ({
   isOpen,
   space,
   usage,
-  initialTab = "scheduled",
+  mode = "scheduled", // 'scheduled' | 'office'
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState(normalizeTab(initialTab));
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setActiveTab(normalizeTab(initialTab));
-  }, [isOpen, initialTab]);
+  const view = mode === "office" ? "office" : "scheduled";
 
   useEffect(() => {
     if (!isOpen) return;
@@ -113,13 +106,19 @@ const SpaceUsageDetailModal = ({
     (space.displayName || space.name || "") + ""
   ).trim();
   const type = ((space.type || "") + "").trim();
+  const heading =
+    view === "office"
+      ? `Office Occupant${officeCount === 1 ? "" : "s"}`
+      : `Class${scheduledCount === 1 ? "" : "es"}`;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-xs text-gray-500">Usage Details</div>
+            <div className="text-xs text-gray-500">
+              Usage Details: {heading}
+            </div>
             <h3 className="modal-title truncate">{spaceKey || "Space"}</h3>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               {displayName ? (
@@ -143,34 +142,7 @@ const SpaceUsageDetailModal = ({
         </div>
 
         <div className="modal-body space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveTab("scheduled")}
-              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-                activeTab === "scheduled"
-                  ? "bg-blue-50 border-blue-200 text-blue-800"
-                  : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
-              }`}
-            >
-              <Calendar size={16} />
-              Classes ({scheduledCount})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("office")}
-              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-                activeTab === "office"
-                  ? "bg-green-50 border-green-200 text-green-800"
-                  : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
-              }`}
-            >
-              <Briefcase size={16} />
-              Office ({officeCount})
-            </button>
-          </div>
-
-          {activeTab === "scheduled" ? (
+          {view === "scheduled" ? (
             scheduledCount === 0 ? (
               <div className="text-sm text-gray-600">
                 No scheduled classes reference this space.
@@ -283,4 +255,3 @@ const SpaceUsageDetailModal = ({
 };
 
 export default SpaceUsageDetailModal;
-

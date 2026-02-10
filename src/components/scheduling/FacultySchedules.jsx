@@ -24,7 +24,12 @@ import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 
 const FacultySchedules = ({ embedded = false }) => {
-  const { scheduleData = [], facultyData = [] } = useData();
+  const {
+    scheduleData = [],
+    facultyData = [],
+    loadPrograms,
+    programsLoaded,
+  } = useData();
   const { loadPeople } = usePeople();
   const [selectedFaculty, setSelectedFaculty] = useState([]);
   const [viewMode, setViewMode] = useState("timeline");
@@ -51,6 +56,12 @@ const FacultySchedules = ({ embedded = false }) => {
   useEffect(() => {
     loadPeople();
   }, [loadPeople]);
+
+  useEffect(() => {
+    if (!programsLoaded) {
+      loadPrograms();
+    }
+  }, [programsLoaded, loadPrograms]);
 
   const handleDayToggle = (dayCode) => {
     setSelectedDays((prev) =>
@@ -611,9 +622,11 @@ const FacultySchedules = ({ embedded = false }) => {
                       <div className="px-3 py-2 text-sm text-gray-500">
                         {programSearchTerm
                           ? "No programs found matching your search."
-                          : !showAdjuncts
-                            ? "No programs with full-time faculty available."
-                            : "No programs available."}
+                          : !programsLoaded
+                            ? "Loading programs..."
+                            : !showAdjuncts
+                              ? "No programs with full-time faculty available."
+                              : "No programs available."}
                       </div>
                     ) : (
                       filteredPrograms.map((program) => {

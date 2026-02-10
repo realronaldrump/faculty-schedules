@@ -15,7 +15,12 @@ import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 
 const GroupMeetings = ({ embedded = false }) => {
-  const { scheduleData = [], facultyData = [] } = useData();
+  const {
+    scheduleData = [],
+    facultyData = [],
+    loadPrograms,
+    programsLoaded,
+  } = useData();
   const { loadPeople } = usePeople();
   const [selectedProfessors, setSelectedProfessors] = useState([]);
   const [meetingDuration, setMeetingDuration] = useState(60);
@@ -35,6 +40,12 @@ const GroupMeetings = ({ embedded = false }) => {
   useEffect(() => {
     loadPeople();
   }, [loadPeople]);
+
+  useEffect(() => {
+    if (!programsLoaded) {
+      loadPrograms();
+    }
+  }, [programsLoaded, loadPrograms]);
 
   // Close room modal when clicking outside
   useEffect(() => {
@@ -496,9 +507,11 @@ const GroupMeetings = ({ embedded = false }) => {
                           <div className="px-3 py-2 text-sm text-gray-500">
                             {programSearchTerm
                               ? "No programs found matching your search."
-                              : !showAdjuncts
-                                ? "No programs with full-time faculty available."
-                                : "No programs available."}
+                              : !programsLoaded
+                                ? "Loading programs..."
+                                : !showAdjuncts
+                                  ? "No programs with full-time faculty available."
+                                  : "No programs available."}
                           </div>
                         ) : (
                           filteredPrograms.map((program) => {

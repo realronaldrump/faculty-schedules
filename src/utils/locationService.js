@@ -730,6 +730,20 @@ export const resolveBuilding = (input) => {
   const building = buildingConfig.aliasToBuilding.get(lowered);
   if (building) return building;
 
+  // Normalize common suffix patterns (e.g., department codes in parentheses)
+  // and retry using both raw and slugified forms, since the alias map indexes slugs.
+  const stripped = stripDepartmentCode(trimmed);
+  if (stripped && stripped.toLowerCase() !== lowered) {
+    const byStripped = buildingConfig.aliasToBuilding.get(stripped.toLowerCase());
+    if (byStripped) return byStripped;
+  }
+
+  const slug = slugify(stripped || trimmed);
+  if (slug) {
+    const bySlug = buildingConfig.aliasToBuilding.get(slug.toLowerCase());
+    if (bySlug) return bySlug;
+  }
+
   // Check code (case-insensitive)
   const byCode = buildingConfig.buildingsByCode.get(trimmed.toUpperCase());
   if (byCode) return byCode;

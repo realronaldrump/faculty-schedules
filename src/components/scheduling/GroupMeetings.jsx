@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
 import { parseTime, formatMinutesToTime } from "../../utils/timeUtils";
+import { splitMultiRoom } from "../../utils/locationService";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 
@@ -147,7 +148,7 @@ const GroupMeetings = ({ embedded = false }) => {
 
   const uniqueRooms = useMemo(() => {
     const allRooms = scheduleData.flatMap((item) =>
-      (item.Room || "").split(";").map((r) => r.trim()),
+      splitMultiRoom(item.Room || ""),
     );
     return [...new Set(allRooms)]
       .filter(
@@ -307,10 +308,7 @@ const GroupMeetings = ({ embedded = false }) => {
     const availableRooms = uniqueRooms.filter((room) => {
       return !scheduleData.some((item) => {
         if (item.Day !== dayCode) return false;
-        const itemRooms = (item.Room || "")
-          .split(";")
-          .map((r) => r.trim())
-          .filter((r) => r);
+        const itemRooms = splitMultiRoom(item.Room || "");
         if (!itemRooms.includes(room)) return false;
         const itemStart = parseTime(item["Start Time"]);
         const itemEnd = parseTime(item["End Time"]);

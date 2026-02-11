@@ -24,7 +24,11 @@ import { useSchedules } from "../contexts/ScheduleContext";
 import { useUI } from "../contexts/UIContext";
 import { useAuth } from "../contexts/AuthContext";
 import { normalizeTermLabel, termCodeFromLabel } from "../utils/termUtils";
-import { parseMultiRoom, buildSpaceKey } from "../utils/locationService";
+import {
+  parseMultiRoom,
+  buildSpaceKey,
+  splitMultiRoom,
+} from "../utils/locationService";
 import { getMaxEnrollment } from "../utils/enrollmentUtils";
 import { standardizeSchedule } from "../utils/hygieneCore";
 import { deriveScheduleIdentity } from "../utils/importIdentityUtils";
@@ -318,10 +322,7 @@ const useScheduleOperations = () => {
               : "");
         const locationNames = Array.isArray(roomInput)
           ? roomInput.map((name) => String(name || "").trim()).filter(Boolean)
-          : String(roomInput || "")
-              .split(";")
-              .map((name) => name.trim())
-              .filter(Boolean);
+          : splitMultiRoom(String(roomInput || ""));
         const hasRoomlessLabel = locationNames.some((name) => {
           const upper = name.toUpperCase();
           return upper === "NO ROOM NEEDED" || upper.includes("ONLINE");

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { MapPin, Download, Printer } from 'lucide-react';
 import CourseDetailModal from './CourseDetailModal';
 import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
-import { getBuildingDisplay } from '../../utils/locationService';
+import { getBuildingDisplay, splitMultiRoom } from '../../utils/locationService';
 import { useAppConfig } from '../../contexts/AppConfigContext';
 
 const WeekView = ({
@@ -94,7 +94,7 @@ const WeekView = ({
       daysToShow.forEach(day => {
         schedules[room][day] = scheduleData
           .filter(item => {
-            const roomMatch = (item.Room || '').split(';').map(r => r.trim()).includes(room);
+            const roomMatch = splitMultiRoom(item.Room || '').includes(room);
             const dayMatch = item.Day === day;
             const timeMatch = item['Start Time'] && item['End Time'];
             return roomMatch && dayMatch && timeMatch;
@@ -149,7 +149,7 @@ const WeekView = ({
   const openCourseCard = (item) => {
     if (!item) return;
     const pattern = item.__pattern || normalizePattern(getMeetingPattern(item.Course, item['Start Time'], item['End Time']) || item.Day || '');
-    const room = item.__room || ((item.Room || '').split(';')[0] || '').trim();
+    const room = item.__room || splitMultiRoom(item.Room || '')[0] || '';
     const building = getBuildingDisplay(room);
     setSelectedCourse({ item, pattern, room, building });
   };
@@ -256,10 +256,8 @@ const WeekView = ({
     scheduleData.forEach(item => {
       if (!item || !item['Start Time'] || !item['End Time']) return;
 
-      const itemRooms = (item.Room || '')
-        .split(';')
-        .map(r => r.trim())
-        .filter(r => r && roomsToShow.includes(r));
+      const itemRooms = splitMultiRoom(item.Room || '')
+        .filter(r => roomsToShow.includes(r));
 
       if (itemRooms.length === 0) return;
 

@@ -8,6 +8,7 @@ import {
   normalizeSpaceNumber,
   parseSpaceKey,
   resolveBuildingDisplayName,
+  splitMultiRoom,
   validateSpaceKey,
 } from './locationService';
 
@@ -57,13 +58,18 @@ export const normalizeSpaceRecord = (space = {}, docId = '') => {
     : '';
   const resolvedBuildingName =
     resolvedFromConfig || buildingDisplayName || buildingCode;
+  const rawDisplayName = (base.displayName || '').toString().trim();
+  const hasCombinedDisplayName = splitMultiRoom(rawDisplayName).length > 1;
+  const canonicalDisplayName = formatSpaceDisplayName({
+    buildingCode,
+    buildingDisplayName: resolvedBuildingName,
+    spaceNumber: normalizedNumber,
+  });
   const displayName =
-    (base.displayName || '').toString().trim() ||
-    formatSpaceDisplayName({
-      buildingCode,
-      buildingDisplayName: resolvedBuildingName,
-      spaceNumber: normalizedNumber,
-    });
+    (hasCombinedDisplayName && canonicalDisplayName
+      ? canonicalDisplayName
+      : rawDisplayName) ||
+    canonicalDisplayName;
 
   return {
     ...base,

@@ -507,6 +507,22 @@ export const parseRoomLabel = (label) => {
   const raw = label.trim();
   if (!raw) return null;
 
+  // Guardrail: a combined room label should never be interpreted as one room.
+  const parts = splitMultiRoom(raw);
+  const explicitMultiDelimiter = /[;\n]/.test(raw);
+  const roomLikePartCount = parts.filter((part) => /\d/.test(part)).length;
+  if (parts.length > 1 && (explicitMultiDelimiter || roomLikePartCount > 1)) {
+    return {
+      raw,
+      locationType: LOCATION_TYPE.UNKNOWN,
+      building: null,
+      spaceNumber: '',
+      spaceKey: '',
+      displayName: raw,
+      parseError: 'Multiple rooms detected; use parseMultiRoom for semicolon-delimited labels'
+    };
+  }
+
   // Check if this is a non-physical location
   const locationType = detectLocationType(raw);
   if (locationType !== LOCATION_TYPE.PHYSICAL) {
@@ -639,6 +655,36 @@ export const parseMultiRoom = (value) => {
     displayNames,
     errors: errors.length > 0 ? errors : undefined
   };
+};
+
+/**
+ * Resolve a location-like value into one canonical spaceKey.
+ * - Returns canonical key when input is already a key.
+ * - Returns canonical key for a single room label.
+ * - Returns empty string when input resolves to multiple rooms or cannot be resolved.
+ */
+export const normalizeSingleSpaceKey = (value) => {
+  if (!value || typeof value !== 'string') return '';
+  const raw = value.trim();
+  if (!raw) return '';
+
+  const parsedKey = parseSpaceKey(raw);
+  if (parsedKey?.buildingCode && parsedKey?.spaceNumber) {
+    return buildSpaceKey(parsedKey.buildingCode, parsedKey.spaceNumber);
+  }
+
+  const singleParsed = parseRoomLabel(raw);
+  if (
+    singleParsed?.locationType === LOCATION_TYPE.PHYSICAL &&
+    singleParsed?.spaceKey
+  ) {
+    return singleParsed.spaceKey;
+  }
+
+  const multiParsed = parseMultiRoom(raw);
+  const uniqueKeys = [...new Set((multiParsed?.spaceKeys || []).filter(Boolean))];
+  if (uniqueKeys.length === 1) return uniqueKeys[0];
+  return '';
 };
 
 // ============================================================================
@@ -922,6 +968,7 @@ export default {
   extractBuilding,
   parseRoomLabel,
   parseMultiRoom,
+  normalizeSingleSpaceKey,
 
   // Space Keys
   buildSpaceKey,

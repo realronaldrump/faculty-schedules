@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { MapPin, Download, Printer, Clock, Calendar } from 'lucide-react';
 import CourseDetailModal from './CourseDetailModal';
 import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
-import { getBuildingDisplay } from '../../utils/locationService';
+import { getBuildingDisplay, splitMultiRoom } from '../../utils/locationService';
 import { buildCourseSectionKey } from '../../utils/courseUtils';
 
 const RoomCalendarView = ({
@@ -116,7 +116,7 @@ const RoomCalendarView = ({
         dayOrder.forEach(day => {
             schedule[day] = scheduleData
                 .filter(item => {
-                    const roomMatch = (item.Room || '').split(';').map(r => r.trim()).includes(selectedRoom);
+                    const roomMatch = splitMultiRoom(item.Room || '').includes(selectedRoom);
                     const dayMatch = item.Day === day;
                     const timeMatch = item['Start Time'] && item['End Time'];
                     return roomMatch && dayMatch && timeMatch;

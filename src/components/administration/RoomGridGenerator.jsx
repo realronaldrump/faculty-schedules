@@ -34,7 +34,7 @@ import { logCreate, logDelete } from "../../utils/changeLogger";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import { usePermissions } from "../../utils/permissions";
 import { fetchSchedulesByTerm } from "../../utils/dataImportUtils";
-import { getBuildingDisplay } from "../../utils/locationService";
+import { getBuildingDisplay, splitMultiRoom } from "../../utils/locationService";
 import { useSchedules } from "../../contexts/ScheduleContext";
 
 const RoomGridGenerator = () => {
@@ -418,7 +418,7 @@ const RoomGridGenerator = () => {
           return [];
         }
 
-        const roomsList = roomRaw.split(";").map((r) => r.trim());
+        const roomsList = splitMultiRoom(roomRaw);
         const patternsList = meetingPatternRaw.split(";").map((p) => p.trim());
 
         const baseInfo = {

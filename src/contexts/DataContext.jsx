@@ -43,6 +43,7 @@ import {
   normalizeSpaceRecord,
   resolveScheduleSpaces,
 } from "../utils/spaceUtils";
+import { splitMultiRoom } from "../utils/locationService";
 
 // Import new contexts
 import { usePeople } from "./PeopleContext";
@@ -379,15 +380,11 @@ export const DataProvider = ({ children }) => {
       names.forEach((name) => {
         if (name) instructors.add(name);
       });
-      const roomLabel = s.Room || "";
-      const lowerRoom = roomLabel.toLowerCase();
-      if (
-        roomLabel &&
-        lowerRoom !== "online" &&
-        !lowerRoom.includes("no room needed")
-      ) {
-        rooms.add(roomLabel);
-      }
+      const roomLabels = splitMultiRoom(s.Room || "").filter((roomLabel) => {
+        const lowerRoom = roomLabel.toLowerCase();
+        return lowerRoom !== "online" && !lowerRoom.includes("no room needed");
+      });
+      roomLabels.forEach((roomLabel) => rooms.add(roomLabel));
       const courseKey = buildCourseSectionKey(s);
       if (courseKey) courses.add(courseKey);
       if (s.Day && daySchedules[s.Day] !== undefined) daySchedules[s.Day]++;
@@ -433,11 +430,7 @@ export const DataProvider = ({ children }) => {
       }
 
       // Calculate room utilization
-      if (
-        roomLabel &&
-        lowerRoom !== "online" &&
-        !lowerRoom.includes("no room needed")
-      ) {
+      roomLabels.forEach((roomLabel) => {
         if (!roomUtilization[roomLabel]) {
           roomUtilization[roomLabel] = {
             classes: 0,
@@ -453,7 +446,7 @@ export const DataProvider = ({ children }) => {
         if (isAdjunctTaught) {
           roomUtilization[roomLabel].adjunctTaughtClasses++;
         }
-      }
+      });
     });
 
     // Convert faculty workload courses Set to count

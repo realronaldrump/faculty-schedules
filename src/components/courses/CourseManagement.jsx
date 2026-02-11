@@ -21,7 +21,11 @@ import FacultyContactCard from "../FacultyContactCard";
 import { formatChangeForDisplay } from "../../utils/recentChanges";
 import { buildCourseSectionKey, parseCourseCode } from "../../utils/courseUtils";
 import { parseTime } from "../../utils/timeUtils";
-import { getBuildingDisplay, SPACE_TYPE } from "../../utils/locationService";
+import {
+  getBuildingDisplay,
+  SPACE_TYPE,
+  splitMultiRoom,
+} from "../../utils/locationService";
 import { getMaxEnrollment } from "../../utils/enrollmentUtils";
 import { normalizeTermLabel, termCodeFromLabel } from "../../utils/termUtils";
 import { linkSchedules, unlinkSchedules } from "../../utils/scheduleLinkUtils";
@@ -397,10 +401,7 @@ const CourseManagement = ({ embedded = false }) => {
     scheduleData.forEach((item) => {
       if (!item) return;
       if (item.Room && typeof item.Room === "string") {
-        item.Room.split(";")
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .forEach((room) => addRoom(room));
+        splitMultiRoom(item.Room).forEach((room) => addRoom(room));
       }
     });
 
@@ -498,9 +499,7 @@ const CourseManagement = ({ embedded = false }) => {
       }
 
       if (item.Room) {
-        const rooms = item.Room.split(";")
-          .map((s) => s.trim())
-          .filter(Boolean);
+        const rooms = splitMultiRoom(item.Room);
         if (rooms.length > 0) {
           rooms.forEach((room) => {
             const buildingName = extractBuildingNameFromLocation(room);
@@ -706,9 +705,7 @@ const CourseManagement = ({ embedded = false }) => {
     ) {
       data = data.filter((item) => {
         if (!item || !item.Room) return false;
-        const rooms = item.Room.split(";")
-          .map((s) => s.trim())
-          .filter(Boolean);
+        const rooms = splitMultiRoom(item.Room);
         return rooms.some((r) => filters.room.includes(r));
       });
     }
@@ -781,9 +778,7 @@ const CourseManagement = ({ embedded = false }) => {
           return filters.buildings.include.length === 0;
         }
 
-        const rooms = item.Room.split(";")
-          .map((s) => s.trim())
-          .filter(Boolean);
+        const rooms = splitMultiRoom(item.Room);
         if (rooms.length === 0) {
           return filters.buildings.include.length === 0;
         }
@@ -2388,10 +2383,7 @@ const CourseManagement = ({ embedded = false }) => {
                         <td className="p-1">
                           <MultiSelectDropdown
                             options={uniqueRooms}
-                            selected={(editFormData.Room || "")
-                              .split(";")
-                              .map((s) => s.trim())
-                              .filter(Boolean)}
+                            selected={splitMultiRoom(editFormData.Room || "")}
                             onChange={(selected) =>
                               setEditFormData((prev) => ({
                                 ...prev,

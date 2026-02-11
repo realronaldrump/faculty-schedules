@@ -1,4 +1,5 @@
 import { zonedTimeToUtc } from "./temperatureUtils";
+import { normalizeSingleSpaceKey } from "./locationService";
 
 export const TEMPERATURE_GRANULARITY = {
   RAW: "raw",
@@ -85,7 +86,8 @@ export const buildAggregateSeries = ({
 }) => {
   const bySpace = new Map();
   aggregates.forEach((doc) => {
-    const spaceKey = doc.spaceKey || "unknown";
+    const spaceKey = normalizeSingleSpaceKey(doc.spaceKey || "");
+    if (!spaceKey) return;
     if (!bySpace.has(spaceKey)) {
       bySpace.set(spaceKey, {
         spaceKey,

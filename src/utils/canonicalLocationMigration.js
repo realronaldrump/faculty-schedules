@@ -15,6 +15,7 @@ import {
   detectLocationType,
   formatSpaceDisplayName,
   normalizeBuildingConfig,
+  normalizeSingleSpaceKey,
   normalizeSpaceNumber,
   parseMultiRoom,
   parseRoomLabel,
@@ -135,10 +136,7 @@ const canonicalizeSpaceKey = (value) => {
     return buildSpaceKey(buildingCode, parsedKey.spaceNumber);
   }
 
-  const parsedLabel = parseRoomLabel(raw);
-  if (parsedLabel?.spaceKey) return parsedLabel.spaceKey;
-
-  return "";
+  return normalizeSingleSpaceKey(raw);
 };
 
 const isNonPhysicalSchedule = (schedule) => {

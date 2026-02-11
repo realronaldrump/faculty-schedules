@@ -21,6 +21,7 @@ import CourseDetailModal from "./CourseDetailModal";
 import {
   getBuildingDisplay,
   getCanonicalBuildingList,
+  splitMultiRoom,
 } from "../../utils/locationService";
 import { parseTime, formatMinutesToTime } from "../../utils/timeUtils";
 import { useData } from "../../contexts/DataContext";
@@ -107,7 +108,7 @@ const RoomSchedules = ({ embedded = false }) => {
   // Get unique rooms
   const uniqueRooms = useMemo(() => {
     const allRooms = scheduleData.flatMap((item) =>
-      (item.Room || "").split(";").map((r) => r.trim()),
+      splitMultiRoom(item.Room || ""),
     );
     return [...new Set(allRooms)]
       .filter(
@@ -157,10 +158,7 @@ const RoomSchedules = ({ embedded = false }) => {
       schedules[room] = scheduleData
         .filter(
           (item) =>
-            (item.Room || "")
-              .split(";")
-              .map((r) => r.trim())
-              .includes(room) &&
+            splitMultiRoom(item.Room || "").includes(room) &&
             item.Day === roomScheduleDay &&
             item["Start Time"] &&
             item["End Time"],
@@ -208,10 +206,7 @@ const RoomSchedules = ({ embedded = false }) => {
       daysToShow.forEach((day) => {
         schedules[room][day] = scheduleData
           .filter((item) => {
-            const roomMatch = (item.Room || "")
-              .split(";")
-              .map((r) => r.trim())
-              .includes(room);
+            const roomMatch = splitMultiRoom(item.Room || "").includes(room);
             const dayMatch = item.Day === day;
             const timeMatch = item["Start Time"] && item["End Time"];
             return roomMatch && dayMatch && timeMatch;
@@ -267,7 +262,8 @@ const RoomSchedules = ({ embedded = false }) => {
     const room =
       roomOverride ||
       item.__room ||
-      ((item.Room || "").split(";")[0] || "").trim();
+      splitMultiRoom(item.Room || "")[0] ||
+      "";
     const building = getBuildingDisplay(room);
     setSelectedCourseForModal({ item, pattern, room, building });
   };

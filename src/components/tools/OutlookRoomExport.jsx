@@ -21,6 +21,7 @@ import {
   normalizeTermLabel,
   sortTerms,
 } from "../../utils/termUtils";
+import { splitMultiRoom } from "../../utils/locationService";
 import { useAuth } from "../../contexts/AuthContext";
 import { db, COLLECTIONS } from "../../firebase";
 
@@ -193,10 +194,7 @@ const getMeetingPatterns = (schedule) => {
 
 const splitRoomString = (value) => {
   if (!value || typeof value !== "string") return [];
-  return value
-    .split(";")
-    .map((part) => part.trim())
-    .filter(Boolean);
+  return splitMultiRoom(value);
 };
 
 const extractRoomNames = (schedule) => {

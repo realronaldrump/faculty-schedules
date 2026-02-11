@@ -10,6 +10,7 @@ import {
   resolveTemperatureGranularity,
 } from "./temperatureAggregation";
 import { formatDateInTimeZone } from "./temperatureUtils";
+import { normalizeSingleSpaceKey } from "./locationService";
 
 const chunkArray = (items, size) => {
   const chunks = [];
@@ -22,7 +23,9 @@ const chunkArray = (items, size) => {
 const buildDeviceSpaceMap = (deviceDocs = {}) => {
   const map = new Map();
   Object.values(deviceDocs).forEach((device) => {
-    const spaceKey = device?.mapping?.spaceKey;
+    const spaceKey = normalizeSingleSpaceKey(
+      device?.mapping?.spaceKey || device?.spaceKey || "",
+    );
     if (!spaceKey || !device?.id) return;
     map.set(device.id, spaceKey);
   });
@@ -111,7 +114,13 @@ export const fetchTemperatureSeries = async ({
   granularity = "auto",
   unit = "F",
 }) => {
-  if (!db || !buildingCode || spaceKeys.length === 0 || !start || !end) {
+  const normalizedSpaceKeys = Array.from(
+    new Set((Array.isArray(spaceKeys) ? spaceKeys : [])
+      .map((value) => normalizeSingleSpaceKey(value || ""))
+      .filter(Boolean)),
+  );
+
+  if (!db || !buildingCode || normalizedSpaceKeys.length === 0 || !start || !end) {
     return {
       series: [],
       granularity: resolveTemperatureGranularity({ start, end, requested: granularity }),
@@ -132,9 +141,11 @@ export const fetchTemperatureSeries = async ({
 
   if (resolvedGranularity === TEMPERATURE_GRANULARITY.RAW) {
     const deviceSpaceMap = buildDeviceSpaceMap(deviceDocs);
-    const spaceKeySet = new Set(spaceKeys);
+    const spaceKeySet = new Set(normalizedSpaceKeys);
     Object.values(deviceDocs).forEach((device) => {
-      const spaceKey = device?.mapping?.spaceKey;
+      const spaceKey = normalizeSingleSpaceKey(
+        device?.mapping?.spaceKey || device?.spaceKey || "",
+      );
       if (!spaceKey || !spaceKeySet.has(spaceKey)) return;
       spaceLabelMap.set(spaceKey, device?.mapping?.spaceLabel || device?.label || spaceKey);
     });
@@ -176,7 +187,7 @@ export const fetchTemperatureSeries = async ({
     };
   }
 
-  const spaceChunks = chunkArray(spaceKeys, 10);
+  const spaceChunks = chunkArray(normalizedSpaceKeys, 10);
   const aggregateDocs = [];
   try {
     for (const chunk of spaceChunks) {

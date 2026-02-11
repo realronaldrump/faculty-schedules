@@ -5,7 +5,7 @@ import FacultyContactCard from "../FacultyContactCard";
 import CourseDetailModal from "../scheduling/CourseDetailModal";
 import { parseCourseCode } from "../../utils/courseUtils";
 import { parseTime } from "../../utils/timeUtils";
-import { getBuildingDisplay } from "../../utils/locationService";
+import { getBuildingDisplay, splitMultiRoom } from "../../utils/locationService";
 import { getMaxEnrollment } from "../../utils/enrollmentUtils";
 import { useData } from "../../contexts/DataContext";
 import { useAppConfig } from "../../contexts/AppConfigContext";
@@ -83,10 +83,7 @@ const CourseBrowser = ({ embedded = false }) => {
     scheduleData.forEach((item) => {
       if (!item) return;
       if (item.Room && typeof item.Room === "string") {
-        item.Room.split(";")
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .forEach((r) => all.push(r));
+        splitMultiRoom(item.Room).forEach((r) => all.push(r));
       }
     });
     return [...new Set(all)]
@@ -218,7 +215,7 @@ const CourseBrowser = ({ embedded = false }) => {
     if (filters.room.length > 0) {
       data = data.filter((item) => {
         if (!item || !item.Room) return false;
-        const itemRooms = item.Room.split(";").map((s) => s.trim());
+        const itemRooms = splitMultiRoom(item.Room);
         return itemRooms.some((r) => filters.room.includes(r));
       });
     }

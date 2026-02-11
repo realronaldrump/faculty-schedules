@@ -45,7 +45,13 @@ import { db, storage } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { useData } from "../../contexts/DataContext.jsx";
 import { useUI } from "../../contexts/UIContext.jsx";
-import { resolveBuildingDisplayName, SPACE_TYPE } from "../../utils/locationService";
+import {
+  normalizeSingleSpaceKey,
+  parseSpaceKey,
+  resolveBuildingDisplayName,
+  SPACE_TYPE,
+  splitMultiRoom,
+} from "../../utils/locationService";
 import { resolveSpaceDisplayName } from "../../utils/spaceUtils";
 import {
   formatMinutesToLabel,
@@ -123,16 +129,15 @@ const sortRooms = (a, b) => {
 
 const getSpaceLabel = (room, spacesByKey) => {
   if (!room) return "Unknown";
-  const key = room.spaceKey || room.id || "";
+  const rawKey = room.spaceKey || room.id || "";
+  const key = normalizeSingleSpaceKey(rawKey);
   const resolved = key ? resolveSpaceDisplayName(key, spacesByKey) : "";
-  return (
-    resolved ||
-    room.displayName ||
-    room.name ||
-    room.roomNumber ||
-    room.id ||
-    "Unknown"
-  );
+  if (resolved) return resolved;
+  if (room.displayName) return room.displayName;
+  if (room.name) return room.name;
+  if (room.roomNumber) return room.roomNumber;
+  if (splitMultiRoom(rawKey).length > 1) return "Multiple rooms (legacy)";
+  return key || room.id || "Unknown";
 };
 
 const toCsvSafe = (value) => {
@@ -337,7 +342,10 @@ const TemperatureMonitoring = () => {
     const seenByBuilding = {};
     (spacesList || []).forEach((room) => {
       if (room?.isActive === false) return;
-      const buildingCode = (room.buildingCode || room.building || "")
+      const spaceKey = normalizeSingleSpaceKey(room.spaceKey || room.id || "");
+      if (!spaceKey) return;
+      const parsedKey = parseSpaceKey(spaceKey);
+      const buildingCode = (room.buildingCode || parsedKey?.buildingCode || room.building || "")
         .toString()
         .trim()
         .toUpperCase();
@@ -351,11 +359,13 @@ const TemperatureMonitoring = () => {
         grouped[buildingCode] = [];
         seenByBuilding[buildingCode] = new Set();
       }
-      const spaceKey = room.spaceKey || room.id;
       const seen = seenByBuilding[buildingCode];
       if (spaceKey && seen.has(spaceKey)) return;
       if (spaceKey) seen.add(spaceKey);
-      grouped[buildingCode].push(room);
+      grouped[buildingCode].push({
+        ...room,
+        spaceKey,
+      });
     });
     Object.keys(grouped).forEach((key) => {
       grouped[key].sort(sortRooms);
@@ -400,7 +410,7 @@ const TemperatureMonitoring = () => {
   const roomLookup = useMemo(() => {
     const lookup = {};
     roomsForBuilding.forEach((room) => {
-      const key = room.spaceKey || room.id;
+      const key = normalizeSingleSpaceKey(room.spaceKey || room.id || "");
       if (key) lookup[key] = room;
     });
     return lookup;
@@ -409,25 +419,35 @@ const TemperatureMonitoring = () => {
   const spaceKeysForBuilding = useMemo(() => {
     return new Set(
       roomsForBuilding
-        .map((room) => room.spaceKey || room.id)
+        .map((room) => normalizeSingleSpaceKey(room.spaceKey || room.id || ""))
         .filter(Boolean),
     );
   }, [roomsForBuilding]);
 
   const resolveImportSpaceKey = (item) => {
     if (!item) return "";
-    return (
+    return normalizeSingleSpaceKey(
       item.spaceKey ||
       deviceDocs[item.deviceId]?.mapping?.spaceKey ||
-      ""
+      "",
     );
   };
 
   const resolveImportSpaceLabel = (item, spaceKey) => {
-    const itemKey = item?.spaceKey || "";
-    if (item?.spaceLabel && itemKey && spaceKey === itemKey) return item.spaceLabel;
     if (!spaceKey) return "Unassigned";
-    return getSpaceLabel(roomLookup[spaceKey] || { id: spaceKey }, spacesByKey);
+    const canonicalLabel = getSpaceLabel(
+      roomLookup[spaceKey] || { id: spaceKey },
+      spacesByKey,
+    );
+    const fallbackLabel = (item?.spaceLabel || "").toString().trim();
+    if (
+      canonicalLabel === spaceKey &&
+      fallbackLabel &&
+      splitMultiRoom(fallbackLabel).length === 1
+    ) {
+      return fallbackLabel;
+    }
+    return canonicalLabel;
   };
 
   const spaceTypeOptions = useMemo(() => {
@@ -453,7 +473,7 @@ const TemperatureMonitoring = () => {
   const snapshotLookup = useMemo(() => {
     const map = {};
     snapshotDocs.forEach((docData) => {
-      const spaceKey = docData.spaceKey;
+      const spaceKey = normalizeSingleSpaceKey(docData.spaceKey || "");
       if (!spaceKey) return;
       if (!map[spaceKey]) map[spaceKey] = {};
       map[spaceKey][docData.snapshotTimeId] = docData;
@@ -762,7 +782,24 @@ const TemperatureMonitoring = () => {
         const map = {};
         snap.docs.forEach((docSnap) => {
           const data = docSnap.data();
-          map[docSnap.id] = { id: docSnap.id, ...data };
+          const canonicalSpaceKey = normalizeSingleSpaceKey(
+            data?.mapping?.spaceKey || data?.spaceKey || "",
+          );
+          map[docSnap.id] = {
+            id: docSnap.id,
+            ...data,
+            ...(data?.mapping
+              ? {
+                  mapping: {
+                    ...data.mapping,
+                    ...(canonicalSpaceKey
+                      ? { spaceKey: canonicalSpaceKey }
+                      : {}),
+                  },
+                }
+              : {}),
+            ...(canonicalSpaceKey ? { spaceKey: canonicalSpaceKey } : {}),
+          };
         });
         setDeviceDocs(map);
       } catch (error) {
@@ -1050,7 +1087,16 @@ const TemperatureMonitoring = () => {
       const importItem = importHistory.find((item) => item.id === deleteImportId);
 
       if (importItem) {
-        const { deviceId, spaceKey, buildingCode, dateRange } = importItem;
+        const deviceId = importItem.deviceId;
+        const spaceKey = normalizeSingleSpaceKey(importItem.spaceKey || "");
+        const buildingCode = (
+          importItem.buildingCode ||
+          selectedBuilding ||
+          ""
+        )
+          .toString()
+          .trim();
+        const { dateRange } = importItem;
         const startDate = dateRange?.start ? dateRange.start.split(" ")[0] : null;
         const endDate = dateRange?.end ? dateRange.end.split(" ")[0] : null;
 
@@ -1468,7 +1514,11 @@ const TemperatureMonitoring = () => {
         const deviceLabel = parseDeviceLabelFromFilename(file.name);
         const deviceId = toDeviceId(selectedBuilding, deviceLabel);
         const existingDevice = deviceDocs[deviceId];
-        const existingSpaceKey = existingDevice?.mapping?.spaceKey || "";
+        const existingSpaceKey = normalizeSingleSpaceKey(
+          existingDevice?.mapping?.spaceKey ||
+            existingDevice?.spaceKey ||
+            "",
+        );
         const suggestion = existingSpaceKey
           ? {
             spaceKey: existingSpaceKey,
@@ -1833,11 +1883,12 @@ const TemperatureMonitoring = () => {
         const deviceLabel = item.deviceLabel || deviceId;
         const existingDevice = deviceCache[deviceId];
         const latestLocal = existingDevice?.latestLocalTimestamp || "";
-        const spaceKey =
+        const spaceKey = normalizeSingleSpaceKey(
           mappingOverrides[deviceId] ||
-          item.suggestedSpaceKey ||
-          existingDevice?.mapping?.spaceKey ||
-          "";
+            item.suggestedSpaceKey ||
+            existingDevice?.mapping?.spaceKey ||
+            "",
+        );
         if (!spaceKey) continue;
         const timezone = buildingSettings.timezone || DEFAULT_TIMEZONE;
         const manualOverride = Boolean(mappingOverrides[deviceId]);
@@ -2027,7 +2078,9 @@ const TemperatureMonitoring = () => {
         }
 
         const existingMapping = existingDevice?.mapping || {};
-        const existingSpaceKey = existingMapping.spaceKey || "";
+        const existingSpaceKey = normalizeSingleSpaceKey(
+          existingMapping.spaceKey || "",
+        );
         const mappingChanged =
           existingSpaceKey !== mappingPayload.spaceKey ||
           Boolean(existingMapping.manual) !== Boolean(mappingPayload.manual) ||
@@ -2381,7 +2434,9 @@ const TemperatureMonitoring = () => {
       for (const docSnap of snap.docs) {
         const data = docSnap.data();
         const device = deviceDocs[data.deviceId];
-        const spaceKey = device?.mapping?.spaceKey;
+        const spaceKey = normalizeSingleSpaceKey(
+          device?.mapping?.spaceKey || device?.spaceKey || "",
+        );
         if (!spaceKey) continue;
         const samples = data.samples || {};
         await recomputeSnapshotsForDay({
@@ -2475,7 +2530,17 @@ const TemperatureMonitoring = () => {
         id: docSnap.id,
         ...docSnap.data(),
       }));
-      setHistoricalDocs(docs);
+      const normalizedDocs = docs
+        .map((docData) => {
+          const spaceKey = normalizeSingleSpaceKey(docData.spaceKey || "");
+          if (!spaceKey) return null;
+          return {
+            ...docData,
+            spaceKey,
+          };
+        })
+        .filter(Boolean);
+      setHistoricalDocs(normalizedDocs);
     } catch (error) {
       console.error("Historical load error:", error);
       showNotification(
@@ -2500,6 +2565,11 @@ const TemperatureMonitoring = () => {
     }
     setExporting(true);
     try {
+      const exportSpaceSet = new Set(
+        (exportSpaceKeys || [])
+          .map((value) => normalizeSingleSpaceKey(value || ""))
+          .filter(Boolean),
+      );
       const buildingName = selectedBuildingName || selectedBuilding;
       let snap = await getDocs(
         query(
@@ -2523,17 +2593,29 @@ const TemperatureMonitoring = () => {
         id: docSnap.id,
         ...docSnap.data(),
       }));
-      const filtered = docs.filter((docData) => {
-        const spaceKey = docData.spaceKey;
-        if (exportSpaceKeys.length > 0 && !exportSpaceKeys.includes(spaceKey))
-          return false;
-        if (
-          exportSnapshotIds.length > 0 &&
-          !exportSnapshotIds.includes(docData.snapshotTimeId)
-        )
-          return false;
-        return true;
-      });
+      const filtered = docs
+        .map((docData) => {
+          const spaceKey = normalizeSingleSpaceKey(docData.spaceKey || "");
+          if (!spaceKey) return null;
+          return {
+            ...docData,
+            spaceKey,
+          };
+        })
+        .filter(Boolean)
+        .filter((docData) => {
+          const spaceKey = docData.spaceKey;
+          if (exportSpaceSet.size > 0 && !exportSpaceSet.has(spaceKey)) {
+            return false;
+          }
+          if (
+            exportSnapshotIds.length > 0 &&
+            !exportSnapshotIds.includes(docData.snapshotTimeId)
+          ) {
+            return false;
+          }
+          return true;
+        });
       const headers = [
         "Building",
         "Room",
@@ -2553,8 +2635,9 @@ const TemperatureMonitoring = () => {
         const spaceKey = docData.spaceKey;
         return [
           docData.buildingName || selectedBuildingName || selectedBuilding,
-          docData.spaceLabel ||
-          getSpaceLabel(roomLookup[spaceKey] || { id: spaceKey }, spacesByKey),
+          getSpaceLabel(roomLookup[spaceKey] || { id: spaceKey }, spacesByKey) ||
+            docData.spaceLabel ||
+            "",
           docData.dateLocal || "",
           docData.snapshotLabel || "",
           docData.temperatureF ?? "",
@@ -2610,6 +2693,11 @@ const TemperatureMonitoring = () => {
     }
     setExporting(true);
     try {
+      const exportSpaceSet = new Set(
+        (exportSpaceKeys || [])
+          .map((value) => normalizeSingleSpaceKey(value || ""))
+          .filter(Boolean),
+      );
       const buildingName = selectedBuildingName || selectedBuilding;
       let snap = await getDocs(
         query(
@@ -2633,13 +2721,12 @@ const TemperatureMonitoring = () => {
       snap.docs.forEach((docSnap) => {
         const data = docSnap.data();
         const device = deviceDocs[data.deviceId] || {};
-        const spaceKey = device?.mapping?.spaceKey || "";
-        if (
-          exportSpaceKeys.length > 0 &&
-          spaceKey &&
-          !exportSpaceKeys.includes(spaceKey)
-        )
-          return;
+        const spaceKey = normalizeSingleSpaceKey(
+          device?.mapping?.spaceKey || device?.spaceKey || "",
+        );
+        if (exportSpaceSet.size > 0) {
+          if (!spaceKey || !exportSpaceSet.has(spaceKey)) return;
+        }
         const spaceLabel = spaceKey
           ? getSpaceLabel(roomLookup[spaceKey] || { id: spaceKey }, spacesByKey)
           : "";

@@ -69,6 +69,19 @@ import { buildLinkedSchedulePairSet } from "./scheduleLinkUtils";
 
 const MAX_BATCH_OPERATIONS = 450;
 
+const getLocationModelVersion = async () => {
+  try {
+    const appSettingsSnap = await getDoc(doc(db, "settings", "app"));
+    if (!appSettingsSnap.exists()) return 0;
+    const rawVersion = appSettingsSnap.data()?.locationModelVersion;
+    const parsedVersion = Number(rawVersion);
+    return Number.isFinite(parsedVersion) ? parsedVersion : 0;
+  } catch (error) {
+    console.warn("Unable to read settings/app location model version:", error);
+    return 0;
+  }
+};
+
 const createBatchWriter = () => {
   let batch = writeBatch(db);
   let opCount = 0;
@@ -4144,26 +4157,41 @@ export const autoFixAllIssues = async (options = {}) => {
     // 4. Fix location data
     if (fixLocations) {
       try {
-        const locationResult = await applyLocationMigration({
-          splitMultiRooms: true,
-          backfillSpaceKeys: true,
-          seedRoomsFromSchedules: false,
-          seedRoomsFromPeople: false,
-          backfillScheduleSpaceIds: true,
-          repairInvalidScheduleSpaceIds: true,
-          normalizeRoomDisplayNames: true,
-          backfillPeopleOfficeSpaceIds: true,
-        });
-        results.locations = {
-          roomsUpdated:
-            (locationResult.roomsUpdated || 0) +
-            (locationResult.roomsSplit || 0) +
-            (locationResult.roomsSeeded || 0),
-          schedulesUpdated: locationResult.schedulesUpdated || 0,
-          peopleUpdated: locationResult.peopleUpdated || 0,
-        };
-        if (locationResult.errors?.length > 0) {
-          results.errors.push(...locationResult.errors);
+        const locationModelVersion = await getLocationModelVersion();
+
+        // Location model v2+: prefer targeted canonical repairs and avoid
+        // running the broader legacy migration pipeline on every auto-fix.
+        if (locationModelVersion >= 2) {
+          const repairResult = await repairScheduleSpaceLinks({
+            normalizeRoomDisplayNames: true,
+          });
+          results.locations = {
+            roomsUpdated: repairResult.roomsUpdated || 0,
+            schedulesUpdated: repairResult.schedulesUpdated || 0,
+            peopleUpdated: 0,
+          };
+        } else {
+          const locationResult = await applyLocationMigration({
+            splitMultiRooms: true,
+            backfillSpaceKeys: true,
+            seedRoomsFromSchedules: false,
+            seedRoomsFromPeople: false,
+            backfillScheduleSpaceIds: true,
+            repairInvalidScheduleSpaceIds: true,
+            normalizeRoomDisplayNames: true,
+            backfillPeopleOfficeSpaceIds: true,
+          });
+          results.locations = {
+            roomsUpdated:
+              (locationResult.roomsUpdated || 0) +
+              (locationResult.roomsSplit || 0) +
+              (locationResult.roomsSeeded || 0),
+            schedulesUpdated: locationResult.schedulesUpdated || 0,
+            peopleUpdated: locationResult.peopleUpdated || 0,
+          };
+          if (locationResult.errors?.length > 0) {
+            results.errors.push(...locationResult.errors);
+          }
         }
       } catch (error) {
         results.errors.push(`Location fix failed: ${error.message}`);

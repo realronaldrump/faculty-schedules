@@ -18,7 +18,9 @@ import {
   parseRoomLabel,
   splitMultiRoom,
   buildSpaceKey,
-  normalizeSpaceNumber
+  normalizeSingleSpaceKey,
+  normalizeSpaceNumber,
+  parseSpaceKey
 } from './locationService';
 import { normalizeSectionNumber } from './canonicalSchema';
 import { hashRecord } from './hashUtils';
@@ -561,7 +563,30 @@ const buildRoomBackfillUpdates = (existingRoom, parsedRoom) => {
 
 const buildRoomNameKeys = (roomData) => {
   const keys = new Set();
-  const candidates = [roomData.displayName];
+  const candidates = [
+    roomData?.displayName,
+    roomData?.name
+  ];
+
+  const spaceKey = normalizeSingleSpaceKey(roomData?.spaceKey || roomData?.id || '');
+  if (spaceKey) {
+    candidates.push(spaceKey);
+    const parsedSpaceKey = parseSpaceKey(spaceKey);
+    if (parsedSpaceKey?.buildingCode && parsedSpaceKey?.spaceNumber) {
+      candidates.push(`${parsedSpaceKey.buildingCode} ${parsedSpaceKey.spaceNumber}`);
+    }
+  }
+
+  const buildingDisplayName = (roomData?.buildingDisplayName || '').toString().trim();
+  const buildingCode = (roomData?.buildingCode || '').toString().trim();
+  const spaceNumber = normalizeSpaceNumber(roomData?.spaceNumber || roomData?.roomNumber || '');
+  if (buildingDisplayName && spaceNumber) {
+    candidates.push(`${buildingDisplayName} ${spaceNumber}`);
+  }
+  if (buildingCode && spaceNumber) {
+    candidates.push(`${buildingCode} ${spaceNumber}`);
+  }
+
   candidates.forEach((candidate) => {
     const key = normalizeRoomName(candidate);
     if (key) keys.add(key);

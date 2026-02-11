@@ -27,6 +27,7 @@ import { normalizeTermLabel, termCodeFromLabel } from "../utils/termUtils";
 import {
   parseMultiRoom,
   buildSpaceKey,
+  normalizeSingleSpaceKey,
   splitMultiRoom,
 } from "../utils/locationService";
 import { getMaxEnrollment } from "../utils/enrollmentUtils";
@@ -39,6 +40,7 @@ const useScheduleOperations = () => {
     rawPeople,
     allPeople,
     peopleIndex,
+    spacesByKey,
     canCreateSchedule,
     canEditSchedule,
     canDeleteSchedule,
@@ -365,16 +367,31 @@ const useScheduleOperations = () => {
             ? parsedRooms.rooms
             : [];
           parsedList.forEach((parsed) => {
-            const spaceKey =
-              parsed.spaceKey ||
+            const parsedSpaceKey =
+              normalizeSingleSpaceKey(parsed.spaceKey || "") ||
               (parsed.buildingCode && parsed.spaceNumber
                 ? buildSpaceKey(parsed.buildingCode, parsed.spaceNumber)
                 : "");
-            if (spaceKey) {
-              spaceIds.push(spaceKey);
-              if (parsed.displayName) {
-                spaceDisplayNames.push(parsed.displayName);
-              }
+            if (!parsedSpaceKey) return;
+
+            const existingRoom =
+              spacesByKey instanceof Map
+                ? spacesByKey.get(parsedSpaceKey)
+                : spacesByKey?.[parsedSpaceKey];
+            const canonicalSpaceKey = normalizeSingleSpaceKey(
+              existingRoom?.spaceKey || existingRoom?.id || parsedSpaceKey,
+            );
+            if (canonicalSpaceKey) {
+              spaceIds.push(canonicalSpaceKey);
+            }
+
+            const canonicalDisplayName = (
+              existingRoom?.displayName ||
+              parsed.displayName ||
+              ""
+            ).trim();
+            if (canonicalDisplayName) {
+              spaceDisplayNames.push(canonicalDisplayName);
             }
           });
         }
@@ -630,6 +647,7 @@ const useScheduleOperations = () => {
     [
       rawScheduleData,
       rawPeople,
+      spacesByKey,
       refreshSchedules,
       canCreateSchedule,
       canEditSchedule,

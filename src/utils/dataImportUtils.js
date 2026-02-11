@@ -43,6 +43,7 @@ import {
   isSkippableLocation,
   LOCATION_TYPE,
   buildSpaceKey,
+  normalizeSingleSpaceKey,
   normalizeSpaceNumber,
   resolveBuildingDisplayName
 } from "./locationService";
@@ -1016,6 +1017,33 @@ export const processScheduleImport = async (csvData) => {
     `📊 Found ${existingPeople.length} existing people, ${existingRooms.length} rooms`,
   );
 
+  const normalizeRoomLookupToken = (value) =>
+    (value || "")
+      .toString()
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+
+  const roomBySpaceKey = new Map();
+  const roomByDisplayName = new Map();
+  const addRoomToLookup = (room) => {
+    if (!room || typeof room !== "object") return;
+    const canonicalSpaceKey = normalizeSingleSpaceKey(
+      room.spaceKey || room.id || "",
+    );
+    if (canonicalSpaceKey && !roomBySpaceKey.has(canonicalSpaceKey)) {
+      roomBySpaceKey.set(canonicalSpaceKey, room);
+    }
+    const displayNameKey = normalizeRoomLookupToken(
+      room.displayName || room.name || "",
+    );
+    if (displayNameKey && !roomByDisplayName.has(displayNameKey)) {
+      roomByDisplayName.set(displayNameKey, room);
+    }
+  };
+
+  existingRooms.forEach(addRoomToLookup);
+
   const { index: scheduleIdentityIndex, collisions: scheduleIdentityCollisions } =
     buildScheduleIdentityIndex(existingSchedules);
   if (scheduleIdentityCollisions.length > 0) {
@@ -1268,15 +1296,18 @@ export const processScheduleImport = async (csvData) => {
             || resolveBuildingDisplayName(buildingCode)
             || buildingCode;
           const displayName = roomData.displayName || `${buildingDisplayName} ${spaceNumber}`.trim();
+          const canonicalLookupSpaceKey = normalizeSingleSpaceKey(spaceKey);
+          const existingRoom =
+            (canonicalLookupSpaceKey
+              ? roomBySpaceKey.get(canonicalLookupSpaceKey)
+              : null) ||
+            roomByDisplayName.get(normalizeRoomLookupToken(displayName)) ||
+            null;
 
-          const existingRoom = existingRooms.find(
-            (r) =>
-              r.spaceKey === spaceKey ||
-              r.id === spaceKey ||
-              r.displayName === displayName,
+          const canonicalSpaceKey = normalizeSingleSpaceKey(
+            existingRoom?.spaceKey || existingRoom?.id || canonicalLookupSpaceKey,
           );
-
-          const canonicalSpaceKey = existingRoom?.spaceKey || spaceKey;
+          if (!canonicalSpaceKey) continue;
           const canonicalDisplayName = existingRoom?.displayName || displayName;
 
           spaceDisplayNames.push(canonicalDisplayName);
@@ -1303,7 +1334,9 @@ export const processScheduleImport = async (csvData) => {
             ).catch((err) =>
               console.error("Change logging error (room):", err),
             );
-            existingRooms.push({ ...newRoom, id: roomRef.id });
+            const createdRoom = { ...newRoom, id: roomRef.id };
+            existingRooms.push(createdRoom);
+            addRoomToLookup(createdRoom);
             results.roomsCreated++;
             console.log(`🏛️ Created new room: ${canonicalDisplayName} (spaceKey: ${canonicalSpaceKey})`);
           }

@@ -56,6 +56,36 @@ const stripDepartmentCode = (value = '') => {
     .trim();
 };
 
+const humanizeBuildingToken = (value = '') => {
+  const trimmed = (value || '').toString().trim();
+  if (!trimmed) return '';
+
+  // Preserve concise building codes (e.g., MGBJ, FCS, ELLA2).
+  if (/^[A-Z0-9]{1,6}$/.test(trimmed)) return trimmed;
+
+  return trimmed
+    .split(/\s+/)
+    .map((token) => {
+      if (!token) return '';
+      if (/^[A-Z0-9]{1,6}$/.test(token)) return token;
+      if (/^\d+[A-Z]?$/.test(token)) return token.toUpperCase();
+      return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
+    })
+    .filter(Boolean)
+    .join(' ');
+};
+
+const formatBuildingFallback = (input = '') => {
+  const stripped = stripDepartmentCode((input || '').toString().trim());
+  if (!stripped) return '';
+
+  const withSpaces = stripped
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return humanizeBuildingToken(withSpaces);
+};
+
 /**
  * Patterns that indicate virtual/no-room locations
  */
@@ -814,7 +844,7 @@ export const normalizeBuildingName = (input) => {
  */
 export const resolveBuildingDisplayName = (input) => {
   const building = resolveBuilding(input);
-  return building?.displayName || input?.trim() || '';
+  return building?.displayName || formatBuildingFallback(input);
 };
 
 /**
@@ -826,7 +856,11 @@ export const resolveBuildingDisplayName = (input) => {
  * @returns {string}
  */
 export const formatSpaceDisplayName = ({ buildingCode, buildingDisplayName, spaceNumber } = {}) => {
-  const resolvedBuilding = buildingDisplayName || resolveBuildingDisplayName(buildingCode) || buildingCode || '';
+  const resolvedBuilding =
+    resolveBuildingDisplayName(buildingDisplayName || '') ||
+    resolveBuildingDisplayName(buildingCode) ||
+    formatBuildingFallback(buildingCode) ||
+    '';
   const normalizedNumber = normalizeSpaceNumber(spaceNumber || '');
   return [resolvedBuilding, normalizedNumber].filter(Boolean).join(' ').trim();
 };

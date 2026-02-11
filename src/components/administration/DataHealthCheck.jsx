@@ -7,10 +7,19 @@ import {
   CheckCircle2,
   AlertTriangle,
   Loader2,
-  ArrowRight,
   ShieldCheck,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
-import { scanDataHealth, autoFixAllIssues } from "../../utils/dataHygiene";
+import {
+  scanDataHealth,
+  autoFixAllIssues,
+  mergePeople,
+  mergeRoomRecords,
+  mergeScheduleRecords,
+  markNotDuplicate,
+  repairScheduleSpaceLinksForSchedule,
+} from "../../utils/dataHygiene";
 import { useUI } from "../../contexts/UIContext";
 
 const STEP_COPY = {
@@ -41,6 +50,44 @@ const formatTimestamp = (value) => {
   return date.toLocaleString();
 };
 
+const toArray = (value) => (Array.isArray(value) ? value : []);
+
+const getPersonLabel = (person = {}) => {
+  const explicitName = (person?.name || "").toString().trim();
+  if (explicitName) return explicitName;
+  const composedName = `${person?.firstName || ""} ${person?.lastName || ""}`.trim();
+  if (composedName) return composedName;
+  return person?.email || person?.id || "Unknown person";
+};
+
+const getScheduleLabel = (schedule = {}) => {
+  const term = schedule?.term || schedule?.termCode || "No term";
+  const courseId = [schedule?.courseCode, schedule?.section].filter(Boolean).join(" ");
+  if (courseId) return `${courseId} (${term})`;
+  if (schedule?.courseTitle) return `${schedule.courseTitle} (${term})`;
+  if (schedule?.id) return `Schedule ${schedule.id} (${term})`;
+  return `Unlabeled schedule (${term})`;
+};
+
+const getRoomLabel = (room = {}) =>
+  room?.displayName || room?.spaceKey || room?.id || "Unknown room";
+
+const formatConfidence = (confidence) =>
+  `${Math.round(Number(confidence || 0) * 100)}%`;
+
+const getDuplicatePairKey = (duplicate = {}) => {
+  const [primary, secondary] = toArray(duplicate.records);
+  return `${duplicate?.entityType || "unknown"}:${primary?.id || "none"}:${secondary?.id || "none"}`;
+};
+
+const getSpaceRepairKey = (issue = {}) =>
+  `repair-space:${issue?.record?.id || "unknown"}`;
+
+const getTeachingConflictKey = (conflict = {}) => {
+  const [scheduleA, scheduleB] = toArray(conflict.schedules);
+  return `teaching-conflict:${scheduleA?.id || "none"}:${scheduleB?.id || "none"}`;
+};
+
 const DataHealthCheck = () => {
   const navigate = useNavigate();
   const { showNotification } = useUI();
@@ -49,31 +96,28 @@ const DataHealthCheck = () => {
   const [safeFixResult, setSafeFixResult] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isFixingSafe, setIsFixingSafe] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState({});
+  const [pendingActionKey, setPendingActionKey] = useState("");
+  const [pendingMergeConfirmationKey, setPendingMergeConfirmationKey] = useState("");
 
   const blockingCategories = useMemo(() => {
     if (!scanResult?.issues) {
       return [];
     }
 
-    const orphaned = Array.isArray(scanResult.issues.orphaned)
-      ? scanResult.issues.orphaned
-      : [];
+    const orphaned = toArray(scanResult.issues.orphaned);
     const duplicates = scanResult.issues.duplicates || {};
-    const scheduleDuplicates = Array.isArray(duplicates.schedules)
-      ? duplicates.schedules.filter((entry) => Number(entry?.confidence || 0) >= 0.98)
-      : [];
-    const peopleDuplicates = Array.isArray(duplicates.people)
-      ? duplicates.people.filter((entry) => Number(entry?.confidence || 0) >= 0.95)
-      : [];
-    const roomDuplicates = Array.isArray(duplicates.rooms)
-      ? duplicates.rooms.filter((entry) => Number(entry?.confidence || 0) >= 0.95)
-      : [];
-    const unresolvedImportIssues = Array.isArray(scanResult.issues.unresolvedImportIssues)
-      ? scanResult.issues.unresolvedImportIssues
-      : [];
-    const teachingConflicts = Array.isArray(scanResult.issues.teachingConflicts)
-      ? scanResult.issues.teachingConflicts
-      : [];
+    const scheduleDuplicates = toArray(duplicates.schedules).filter(
+      (entry) => Number(entry?.confidence || 0) >= 0.98,
+    );
+    const peopleDuplicates = toArray(duplicates.people).filter(
+      (entry) => Number(entry?.confidence || 0) >= 0.95,
+    );
+    const roomDuplicates = toArray(duplicates.rooms).filter(
+      (entry) => Number(entry?.confidence || 0) >= 0.95,
+    );
+    const unresolvedImportIssues = toArray(scanResult.issues.unresolvedImportIssues);
+    const teachingConflicts = toArray(scanResult.issues.teachingConflicts);
 
     const orphanedInstructorReferences = orphaned.filter(
       (issue) => issue?.type === "orphaned_schedule",
@@ -81,6 +125,11 @@ const DataHealthCheck = () => {
     const orphanedSpaceReferences = orphaned.filter(
       (issue) => issue?.type === "orphaned_space",
     );
+    const highConfidenceDuplicates = [
+      ...scheduleDuplicates.map((entry) => ({ ...entry, entityType: "schedules" })),
+      ...peopleDuplicates.map((entry) => ({ ...entry, entityType: "people" })),
+      ...roomDuplicates.map((entry) => ({ ...entry, entityType: "rooms" })),
+    ];
 
     return [
       {
@@ -89,20 +138,22 @@ const DataHealthCheck = () => {
         count: orphanedInstructorReferences.length,
         description:
           "Schedules with missing or invalid instructor links.",
+        items: orphanedInstructorReferences,
       },
       {
         id: "orphaned-spaces",
         label: "Orphaned space references",
         count: orphanedSpaceReferences.length,
         description: "Schedules that reference spaces not available in rooms.",
+        items: orphanedSpaceReferences,
       },
       {
         id: "high-confidence-duplicates",
         label: "High-confidence duplicates",
-        count:
-          scheduleDuplicates.length + peopleDuplicates.length + roomDuplicates.length,
+        count: highConfidenceDuplicates.length,
         description:
           "Records that look like the same entity and can cause duplicate/conflict noise.",
+        items: highConfidenceDuplicates,
       },
       {
         id: "unresolved-import-issues",
@@ -110,6 +161,7 @@ const DataHealthCheck = () => {
         count: unresolvedImportIssues.length,
         description:
           "Import runs in queue-for-review that still need link/create/exclude decisions.",
+        items: unresolvedImportIssues,
       },
       {
         id: "teaching-conflicts",
@@ -117,6 +169,7 @@ const DataHealthCheck = () => {
         count: teachingConflicts.length,
         description:
           "Potential instructor overlaps not already suppressed by link groups.",
+        items: teachingConflicts,
       },
     ];
   }, [scanResult]);
@@ -137,6 +190,12 @@ const DataHealthCheck = () => {
     );
   }, [scanResult]);
 
+  const refreshScanResult = async () => {
+    const refreshed = await scanDataHealth();
+    setScanResult(refreshed);
+    return refreshed;
+  };
+
   const handleScan = async () => {
     setIsScanning(true);
     try {
@@ -144,6 +203,8 @@ const DataHealthCheck = () => {
       setScanResult(result);
       setSafeFixResult(null);
       setActiveStep(result?.canAutoFix ? 2 : 3);
+      setExpandedCategories({});
+      setPendingMergeConfirmationKey("");
       showNotification?.(
         "success",
         "Scan Complete",
@@ -172,9 +233,10 @@ const DataHealthCheck = () => {
         fixLocations: true,
       });
       setSafeFixResult(result);
-      const refreshed = await scanDataHealth();
-      setScanResult(refreshed);
+      await refreshScanResult();
       setActiveStep(3);
+      setExpandedCategories({});
+      setPendingMergeConfirmationKey("");
       showNotification?.(
         "success",
         "Safe Fixes Applied",
@@ -189,6 +251,196 @@ const DataHealthCheck = () => {
     } finally {
       setIsFixingSafe(false);
     }
+  };
+
+  const handleCopyValue = async (value, label = "ID") => {
+    if (!value) return;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(String(value));
+        showNotification?.("success", "Copied", `${label} copied to clipboard.`);
+      } else {
+        throw new Error("Clipboard is not available in this browser.");
+      }
+    } catch (error) {
+      showNotification?.(
+        "warning",
+        "Copy Failed",
+        error?.message || "Could not copy to clipboard.",
+      );
+    }
+  };
+
+  const handleMergeDuplicate = async (duplicate) => {
+    const [primary, secondary] = toArray(duplicate?.records);
+    if (!primary?.id || !secondary?.id || !duplicate?.entityType) {
+      showNotification?.(
+        "error",
+        "Merge Failed",
+        "This duplicate entry does not contain two valid records.",
+      );
+      return;
+    }
+
+    const duplicatePairKey = getDuplicatePairKey(duplicate);
+    if (pendingMergeConfirmationKey !== duplicatePairKey) {
+      setPendingMergeConfirmationKey(duplicatePairKey);
+      showNotification?.(
+        "warning",
+        "Confirm Merge",
+        "Click Merge Records again to confirm this merge.",
+      );
+      return;
+    }
+
+    const actionKey = `merge:${duplicatePairKey}`;
+    setPendingActionKey(actionKey);
+    setPendingMergeConfirmationKey("");
+    try {
+      if (duplicate.entityType === "people") {
+        await mergePeople(primary.id, secondary.id);
+      } else if (duplicate.entityType === "schedules") {
+        await mergeScheduleRecords(duplicate);
+      } else if (duplicate.entityType === "rooms") {
+        await mergeRoomRecords(duplicate);
+      } else {
+        throw new Error("Unsupported duplicate type.");
+      }
+      await refreshScanResult();
+      showNotification?.(
+        "success",
+        "Duplicate Merged",
+        "The duplicate records were merged successfully.",
+      );
+    } catch (error) {
+      showNotification?.(
+        "error",
+        "Merge Failed",
+        error?.message || "Could not merge duplicate records.",
+      );
+    } finally {
+      setPendingActionKey("");
+    }
+  };
+
+  const handleMarkDuplicateAsDistinct = async (duplicate) => {
+    const [primary, secondary] = toArray(duplicate?.records);
+    if (!primary?.id || !secondary?.id || !duplicate?.entityType) {
+      showNotification?.(
+        "error",
+        "Action Failed",
+        "This duplicate entry does not contain two valid records.",
+      );
+      return;
+    }
+
+    const actionKey = `distinct:${getDuplicatePairKey(duplicate)}`;
+    setPendingActionKey(actionKey);
+    try {
+      await markNotDuplicate({
+        entityType: duplicate.entityType,
+        idA: primary.id,
+        idB: secondary.id,
+        reason: "Marked from Data Health Check",
+      });
+      await refreshScanResult();
+      showNotification?.(
+        "success",
+        "Marked Not Duplicate",
+        "This pair will be suppressed from duplicate/conflict checks.",
+      );
+      setPendingMergeConfirmationKey("");
+    } catch (error) {
+      showNotification?.(
+        "error",
+        "Action Failed",
+        error?.message || "Could not mark this pair as not duplicate.",
+      );
+    } finally {
+      setPendingActionKey("");
+    }
+  };
+
+  const handleRepairSpaceIssue = async (issue) => {
+    const scheduleId = issue?.record?.id;
+    if (!scheduleId) {
+      showNotification?.(
+        "error",
+        "Repair Failed",
+        "This issue does not include a schedule ID.",
+      );
+      return;
+    }
+
+    const actionKey = getSpaceRepairKey(issue);
+    setPendingActionKey(actionKey);
+    try {
+      const result = await repairScheduleSpaceLinksForSchedule(scheduleId);
+      await refreshScanResult();
+      showNotification?.(
+        "success",
+        "Space Link Repair Complete",
+        `Updated ${result?.schedulesUpdated || 0} schedule record${
+          (result?.schedulesUpdated || 0) === 1 ? "" : "s"
+        }.`,
+      );
+    } catch (error) {
+      showNotification?.(
+        "error",
+        "Repair Failed",
+        error?.message || "Could not repair schedule space links.",
+      );
+    } finally {
+      setPendingActionKey("");
+    }
+  };
+
+  const handleMarkConflictAsDistinct = async (conflict) => {
+    const [scheduleA, scheduleB] = toArray(conflict?.schedules);
+    if (!scheduleA?.id || !scheduleB?.id) {
+      showNotification?.(
+        "error",
+        "Action Failed",
+        "This conflict does not include two valid schedules.",
+      );
+      return;
+    }
+
+    const actionKey = `distinct:${getTeachingConflictKey(conflict)}`;
+    setPendingActionKey(actionKey);
+    try {
+      await markNotDuplicate({
+        entityType: "schedules",
+        idA: scheduleA.id,
+        idB: scheduleB.id,
+        reason: "Marked from teaching conflict review in Data Health Check",
+      });
+      await refreshScanResult();
+      showNotification?.(
+        "success",
+        "Conflict Suppressed",
+        "The selected schedule pair was marked as not duplicate.",
+      );
+      setPendingMergeConfirmationKey("");
+    } catch (error) {
+      showNotification?.(
+        "error",
+        "Action Failed",
+        error?.message || "Could not suppress this conflict pair.",
+      );
+    } finally {
+      setPendingActionKey("");
+    }
+  };
+
+  const toggleCategory = (categoryId) => {
+    setExpandedCategories((prev) => {
+      const nextValue = !(prev[categoryId] ?? true);
+      return {
+        ...prev,
+        [categoryId]: nextValue,
+      };
+    });
   };
 
   const openMaintenance = () => {
@@ -355,8 +607,7 @@ const DataHealthCheck = () => {
               Step 3: Review Required Decisions
             </h3>
             <p className="mt-1 text-sm text-gray-600">
-              If any issues remain, they are true decision points and should be
-              reviewed by an admin.
+              Expand each category to review specific items and resolve them directly.
             </p>
           </div>
         </div>
@@ -365,25 +616,314 @@ const DataHealthCheck = () => {
           <div className="mt-4 space-y-3">
             {blockingCategories
               .filter((category) => category.count > 0)
-              .map((category) => (
-                <div
-                  key={category.id}
-                  className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div>
-                    <div className="text-sm font-semibold text-gray-900">
-                      {category.label}
-                    </div>
-                    <div className="text-xs text-gray-600 mt-0.5">
-                      {category.description}
-                    </div>
+              .map((category) => {
+                const isExpanded = expandedCategories[category.id] ?? true;
+                return (
+                  <div
+                    key={category.id}
+                    className="rounded-lg border border-gray-200 bg-gray-50 p-3"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleCategory(category.id)}
+                      className="w-full text-left flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">
+                          {category.label}
+                        </div>
+                        <div className="text-xs text-gray-600 mt-0.5">
+                          {category.description}
+                        </div>
+                      </div>
+                      <div className="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                        {category.count} item{category.count === 1 ? "" : "s"}
+                        {isExpanded ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </div>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="mt-3 space-y-2">
+                        {category.items.map((item, index) => {
+                          if (category.id === "orphaned-instructors") {
+                            const schedule = item?.record || {};
+                            const missingInstructorIds = toArray(item?.missingInstructorIds);
+                            return (
+                              <div
+                                key={`${schedule?.id || "orphaned-instructor"}:${index}`}
+                                className="rounded-md border border-gray-200 bg-white p-3"
+                              >
+                                <div className="text-sm font-medium text-gray-900">
+                                  {getScheduleLabel(schedule)}
+                                </div>
+                                <div className="mt-1 text-xs text-gray-600">
+                                  {item?.reason || "Instructor assignment is missing or invalid."}
+                                </div>
+                                {missingInstructorIds.length > 0 && (
+                                  <div className="mt-1 text-xs text-gray-500">
+                                    Missing instructor IDs: {missingInstructorIds.join(", ")}
+                                  </div>
+                                )}
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => navigate("/courses/manage")}
+                                    className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                                  >
+                                    Open Courses Manage
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyValue(schedule?.id, "Schedule ID")}
+                                    disabled={!schedule?.id}
+                                    className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                  >
+                                    Copy Schedule ID
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          if (category.id === "orphaned-spaces") {
+                            const schedule = item?.record || {};
+                            const missingSpaceIds = toArray(item?.missingSpaceIds);
+                            const repairActionKey = getSpaceRepairKey(item);
+                            const isRepairing = pendingActionKey === repairActionKey;
+                            return (
+                              <div
+                                key={`${schedule?.id || "orphaned-space"}:${index}`}
+                                className="rounded-md border border-gray-200 bg-white p-3"
+                              >
+                                <div className="text-sm font-medium text-gray-900">
+                                  {getScheduleLabel(schedule)}
+                                </div>
+                                <div className="mt-1 text-xs text-gray-600">
+                                  {item?.reason || "Schedule references one or more invalid spaces."}
+                                </div>
+                                {missingSpaceIds.length > 0 && (
+                                  <div className="mt-1 text-xs text-gray-500">
+                                    Missing space IDs: {missingSpaceIds.join(", ")}
+                                  </div>
+                                )}
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRepairSpaceIssue(item)}
+                                    disabled={Boolean(pendingActionKey)}
+                                    className="inline-flex items-center rounded-md bg-baylor-green px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-baylor-green/90 disabled:opacity-50"
+                                  >
+                                    {isRepairing ? "Repairing..." : "Repair Space Link"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => navigate("/facilities/spaces")}
+                                    className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                                  >
+                                    Open Space Management
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyValue(schedule?.id, "Schedule ID")}
+                                    disabled={!schedule?.id}
+                                    className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                  >
+                                    Copy Schedule ID
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          if (category.id === "high-confidence-duplicates") {
+                            const [primary, secondary] = toArray(item?.records);
+                            const entityLabel =
+                              item?.entityType === "people"
+                                ? "People"
+                                : item?.entityType === "rooms"
+                                  ? "Rooms"
+                                  : "Schedules";
+                            const primaryLabel =
+                              item?.entityType === "people"
+                                ? getPersonLabel(primary)
+                                : item?.entityType === "rooms"
+                                  ? getRoomLabel(primary)
+                                  : getScheduleLabel(primary);
+                            const secondaryLabel =
+                              item?.entityType === "people"
+                                ? getPersonLabel(secondary)
+                                : item?.entityType === "rooms"
+                                  ? getRoomLabel(secondary)
+                                  : getScheduleLabel(secondary);
+                            const duplicatePairKey = getDuplicatePairKey(item);
+                            const mergeActionKey = `merge:${duplicatePairKey}`;
+                            const distinctActionKey = `distinct:${duplicatePairKey}`;
+                            const isMerging = pendingActionKey === mergeActionKey;
+                            const isMarkingDistinct = pendingActionKey === distinctActionKey;
+                            const isAwaitingMergeConfirmation =
+                              pendingMergeConfirmationKey === duplicatePairKey;
+
+                            return (
+                              <div
+                                key={`${duplicatePairKey}:${index}`}
+                                className="rounded-md border border-gray-200 bg-white p-3"
+                              >
+                                <div className="text-sm font-medium text-gray-900">
+                                  {entityLabel}: {primaryLabel} + {secondaryLabel}
+                                </div>
+                                <div className="mt-1 text-xs text-gray-600">
+                                  {formatConfidence(item?.confidence)} match
+                                  {item?.reason ? ` • ${item.reason}` : ""}
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMergeDuplicate(item)}
+                                    disabled={Boolean(pendingActionKey)}
+                                    className="inline-flex items-center rounded-md bg-baylor-green px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-baylor-green/90 disabled:opacity-50"
+                                  >
+                                    {isMerging
+                                      ? "Merging..."
+                                      : isAwaitingMergeConfirmation
+                                        ? "Confirm Merge"
+                                        : "Merge Records"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMarkDuplicateAsDistinct(item)}
+                                    disabled={Boolean(pendingActionKey)}
+                                    className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                  >
+                                    {isMarkingDistinct ? "Saving..." : "Mark Not Duplicate"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleCopyValue(
+                                        [primary?.id, secondary?.id].filter(Boolean).join(", "),
+                                        "Record IDs",
+                                      )
+                                    }
+                                    disabled={!primary?.id && !secondary?.id}
+                                    className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                  >
+                                    Copy IDs
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          if (category.id === "unresolved-import-issues") {
+                            const issueId = item?.issueId || "";
+                            const transactionId = item?.transactionId || "";
+                            const semester = item?.semester || "Unknown semester";
+                            return (
+                              <div
+                                key={`${transactionId || "import"}:${issueId || index}`}
+                                className="rounded-md border border-gray-200 bg-white p-3"
+                              >
+                                <div className="text-sm font-medium text-gray-900">
+                                  Transaction {transactionId || "Unknown"} • {semester}
+                                </div>
+                                <div className="mt-1 text-xs text-gray-600">
+                                  {(item?.importType || "schedule").toString()} issue
+                                  {issueId ? ` • ${issueId}` : ""}
+                                  {item?.reason ? ` • ${item.reason}` : ""}
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => navigate("/admin-tools/import-wizard")}
+                                    className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                                  >
+                                    Open Import Wizard
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleCopyValue(transactionId, "Transaction ID")
+                                    }
+                                    disabled={!transactionId}
+                                    className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                  >
+                                    Copy Transaction ID
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          if (category.id === "teaching-conflicts") {
+                            const [scheduleA, scheduleB] = toArray(item?.schedules);
+                            const conflictKey = getTeachingConflictKey(item);
+                            const markDistinctActionKey = `distinct:${conflictKey}`;
+                            const isMarkingDistinct =
+                              pendingActionKey === markDistinctActionKey;
+                            return (
+                              <div
+                                key={`${conflictKey}:${index}`}
+                                className="rounded-md border border-gray-200 bg-white p-3"
+                              >
+                                <div className="text-sm font-medium text-gray-900">
+                                  {getScheduleLabel(scheduleA)} vs {getScheduleLabel(scheduleB)}
+                                </div>
+                                <div className="mt-1 text-xs text-gray-600">
+                                  {item?.day ? `${item.day}: ` : ""}
+                                  {item?.overlapDescription || item?.reason || "Overlapping meeting times"}
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMarkConflictAsDistinct(item)}
+                                    disabled={Boolean(pendingActionKey)}
+                                    className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                  >
+                                    {isMarkingDistinct ? "Saving..." : "Mark Not Duplicate"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => navigate("/courses/manage")}
+                                    className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                                  >
+                                    Open Courses Manage
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleCopyValue(
+                                        [scheduleA?.id, scheduleB?.id].filter(Boolean).join(", "),
+                                        "Schedule IDs",
+                                      )
+                                    }
+                                    disabled={!scheduleA?.id && !scheduleB?.id}
+                                    className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                  >
+                                    Copy Schedule IDs
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div
+                              key={`${category.id}:fallback:${index}`}
+                              className="rounded-md border border-gray-200 bg-white p-3 text-xs text-gray-600"
+                            >
+                              Unknown issue format.
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                  <div className="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
-                    {category.count} item{category.count === 1 ? "" : "s"}
-                    <ArrowRight className="h-4 w-4" />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
 
             {totalBlockingIssues === 0 && (
               <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-900">

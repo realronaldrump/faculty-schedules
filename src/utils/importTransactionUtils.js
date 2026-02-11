@@ -1,4 +1,4 @@
-import { collection, getDocs, getDoc, doc, updateDoc, addDoc, deleteDoc, writeBatch, query, orderBy, setDoc, where, documentId } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, updateDoc, addDoc, deleteDoc, writeBatch, query, orderBy, setDoc, where, documentId, deleteField } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { logCreate, logUpdate, logDelete, logBulkUpdate, logImport } from './changeLogger';
 import {
@@ -47,6 +47,7 @@ import {
   extractScheduleRowBaseData,
   projectSchedulePreviewRow
 } from './importScheduleRowUtils';
+import { runPostImportCleanup } from './dataHygiene';
 
 // Import transaction model for tracking changes
 export class ImportTransaction {
@@ -56,7 +57,7 @@ export class ImportTransaction {
     this.description = description;
     this.semester = semester;
     this.timestamp = new Date().toISOString();
-    this.status = 'preview'; // 'preview' | 'committed' | 'rolled_back'
+    this.status = 'preview'; // 'preview' | 'committed' | 'rolled_back' | 'partial' | 'failed' | 'failed_integrity'
     this.changes = {
       schedules: {
         added: [],
@@ -1437,6 +1438,12 @@ const previewScheduleChanges = async (
           to: formatDiffValue(value, key)
         }));
       }
+      matchIssuesForSchedule.forEach((issue) => {
+        if (!issue) return;
+        issue.scheduleChangeIds = Array.isArray(issue.scheduleChangeIds)
+          ? Array.from(new Set([...issue.scheduleChangeIds, changeId]))
+          : [changeId];
+      });
       transaction.addRowLineage({
         ...rowLineageIdentity,
         action: 'update',
@@ -1849,7 +1856,16 @@ const persistImportRunTracking = async (transaction) => {
 };
 
 // Commit transaction changes to database
-export const commitTransaction = async (transactionId, selectedChanges = null, selectedFieldMap = null, matchResolutions = null) => {
+export const commitTransaction = async (
+  transactionId,
+  selectedChanges = null,
+  selectedFieldMap = null,
+  matchResolutions = null,
+  options = {},
+) => {
+  const {
+    autoFinalizeIntegrity = true,
+  } = options || {};
   const transactions = await getImportTransactions();
   const transaction = transactions.find(t => t.id === transactionId);
 
@@ -1863,9 +1879,24 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
 
   const matchingIssues = Array.isArray(transaction.matchingIssues) ? transaction.matchingIssues : [];
   const resolutionMap = matchResolutions || {};
-  const unresolvedIssues = matchingIssues.filter(issue => !resolutionMap[issue.id]);
+  const allowedResolutionActions = new Set(['link', 'create', 'exclude']);
+  const unresolvedIssues = matchingIssues.filter((issue) => {
+    const action = resolutionMap?.[issue.id]?.action;
+    return !allowedResolutionActions.has(action);
+  });
   if (unresolvedIssues.length > 0) {
-    throw new Error(`Resolve ${unresolvedIssues.length} person match${unresolvedIssues.length === 1 ? '' : 'es'} before committing.`);
+    throw new Error(
+      `Resolve ${unresolvedIssues.length} person match${unresolvedIssues.length === 1 ? '' : 'es'} before committing. Required actions: link, create, or exclude.`,
+    );
+  }
+
+  const invalidLinkIssues = matchingIssues.filter((issue) => (
+    resolutionMap?.[issue.id]?.action === 'link' && !resolutionMap?.[issue.id]?.personId
+  ));
+  if (invalidLinkIssues.length > 0) {
+    throw new Error(
+      `Select an existing person for ${invalidLinkIssues.length} link resolution${invalidLinkIssues.length === 1 ? '' : 's'} before committing.`,
+    );
   }
 
   const invalidCreateIssues = matchingIssues.filter((issue) => (
@@ -1879,6 +1910,49 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
 
   const selectedChangeIds = selectedChanges ? new Set(selectedChanges) : null;
   const resolutionChangeIds = new Set();
+  const allChanges = transaction.getAllChanges();
+  const allChangesById = new Map(allChanges.map((change) => [change.id, change]));
+
+  const excludedIssueSummaries = [];
+  const excludedChangeIds = new Set();
+
+  matchingIssues.forEach((issue) => {
+    const resolution = resolutionMap?.[issue.id];
+    if (resolution?.action !== 'exclude') return;
+
+    const directExcludedIds = new Set([
+      ...(Array.isArray(issue.scheduleChangeIds) ? issue.scheduleChangeIds : []),
+      issue.pendingPersonChangeId,
+    ].filter(Boolean));
+    const relatedGroupKeys = new Set();
+
+    directExcludedIds.forEach((changeId) => {
+      const change = allChangesById.get(changeId);
+      if (change?.groupKey) {
+        relatedGroupKeys.add(change.groupKey);
+      }
+    });
+
+    allChanges.forEach((change) => {
+      if (!change?.id) return;
+      if (directExcludedIds.has(change.id)) {
+        excludedChangeIds.add(change.id);
+        return;
+      }
+      if (change.groupKey && relatedGroupKeys.has(change.groupKey)) {
+        excludedChangeIds.add(change.id);
+      }
+    });
+
+    excludedIssueSummaries.push({
+      issueId: issue.id,
+      action: 'exclude',
+      reason: (resolution?.reason || '').toString().trim(),
+      impactedScheduleRows: Array.isArray(issue.scheduleChangeIds)
+        ? issue.scheduleChangeIds.length
+        : 0,
+    });
+  });
 
   const chunkItems = (items, size = 10) => {
     const chunks = [];
@@ -2167,16 +2241,26 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
       forcedChangeIds.add(issue.pendingPersonChangeId);
     }
   });
+  const latestChanges = transaction.getAllChanges();
   const initialChanges = selectedChangeIds
-    ? transaction.getAllChanges().filter(change => selectedChangeIds.has(change.id) || forcedChangeIds.has(change.id))
-    : transaction.getAllChanges();
+    ? latestChanges.filter((change) => selectedChangeIds.has(change.id) || forcedChangeIds.has(change.id))
+    : latestChanges;
   const changesToApply = initialChanges.filter(change => {
+    if (excludedChangeIds.has(change.id)) {
+      return false;
+    }
     if (change.pendingResolution && change.matchIssueId) {
       const resolution = resolutionMap[change.matchIssueId];
       return resolution && resolution.action === 'create';
     }
     return true;
   });
+
+  const excludedScheduleRowCount = matchingIssues
+    .filter((issue) => resolutionMap?.[issue.id]?.action === 'exclude')
+    .reduce((total, issue) => (
+      total + (Array.isArray(issue.scheduleChangeIds) ? issue.scheduleChangeIds.length : 0)
+    ), 0);
 
   const buildValidationSubset = (changes = []) => {
     const subset = {
@@ -2487,9 +2571,6 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
 
     await batchWriter.flush();
 
-    transaction.status = 'committed';
-    transaction.lastModified = new Date().toISOString();
-
     const changeIdToDocId = new Map();
     changesToApply.forEach((change) => {
       if (change?.id && change.documentId) {
@@ -2505,6 +2586,86 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
         return entry;
       });
     }
+
+    const committedResolutions = {};
+    matchingIssues.forEach((issue) => {
+      const resolution = resolutionMap?.[issue.id];
+      if (!resolution) return;
+      committedResolutions[issue.id] = {
+        action: resolution.action,
+        personId: resolution.personId || '',
+        reason: (resolution.reason || '').toString().trim(),
+      };
+    });
+
+    const exclusionSummary = {
+      issueCount: excludedIssueSummaries.length,
+      excludedRowCount: excludedScheduleRowCount,
+      excludedChangeCount: excludedChangeIds.size,
+      issues: excludedIssueSummaries.map((entry) => ({
+        ...entry,
+        reason: entry.reason || 'No reason provided',
+      })),
+    };
+
+    const touchedTermCodes = new Set();
+    const touchedScheduleIds = new Set();
+    changesToApply.forEach((change) => {
+      if (change?.collection !== 'schedules') return;
+      if (change?.action === 'delete') return;
+      const termCode = (
+        change?.newData?.termCode ||
+        change?.originalData?.termCode ||
+        ''
+      ).toString().trim();
+      if (termCode) touchedTermCodes.add(termCode);
+
+      const scheduleId = (change?.documentId || change?.originalData?.id || '').toString().trim();
+      if (scheduleId) touchedScheduleIds.add(scheduleId);
+    });
+
+    if (touchedScheduleIds.size > 0 && touchedTermCodes.size === 0) {
+      const fallbackTermCode = termCodeFromLabel(transaction.semester || '');
+      if (fallbackTermCode) {
+        touchedTermCodes.add(fallbackTermCode);
+      }
+    }
+
+    const shouldRunIntegrityFinalize =
+      transaction.type === 'schedule' &&
+      autoFinalizeIntegrity &&
+      touchedScheduleIds.size > 0 &&
+      touchedTermCodes.size > 0;
+
+    let integrityFinalizeReport = null;
+    if (shouldRunIntegrityFinalize) {
+      try {
+        integrityFinalizeReport = await runPostImportCleanup({
+          termCodes: Array.from(touchedTermCodes),
+          touchedScheduleIds: Array.from(touchedScheduleIds),
+          transactionId: transaction.id,
+          autoLinkCrossLists: true,
+        });
+      } catch (finalizeError) {
+        transaction.status = 'failed_integrity';
+        transaction.integrityFinalizeReport = {
+          error: finalizeError?.message || String(finalizeError),
+        };
+        transaction.matchResolutions = committedResolutions;
+        transaction.exclusionSummary = exclusionSummary;
+        transaction.lastModified = new Date().toISOString();
+        await updateTransactionInStorage(transaction);
+        throw new Error(
+          `Import changes were applied, but automatic integrity finalization failed: ${finalizeError?.message || finalizeError}`,
+        );
+      }
+    }
+
+    transaction.status = 'committed';
+    transaction.matchResolutions = committedResolutions;
+    transaction.exclusionSummary = exclusionSummary;
+    transaction.integrityFinalizeReport = integrityFinalizeReport;
+    transaction.lastModified = new Date().toISOString();
 
     try {
       await persistImportRunTracking(transaction);
@@ -2653,8 +2814,14 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
       const appliedChanges = transaction?.getAllChanges
         ? transaction.getAllChanges().filter((change) => change.applied)
         : [];
-      if (appliedChanges.length > 0 && transaction) {
-        transaction.status = 'partial';
+      if (transaction) {
+        const shouldPreserveFailureStatus =
+          transaction.status === 'failed_integrity' || transaction.status === 'failed';
+        if (!shouldPreserveFailureStatus) {
+          transaction.status = appliedChanges.length > 0 ? 'partial' : 'failed';
+        }
+        transaction.lastModified = new Date().toISOString();
+        transaction.commitError = error?.message || String(error);
         await updateTransactionInStorage(transaction);
       }
     } catch (updateError) {
@@ -2664,201 +2831,165 @@ export const commitTransaction = async (transactionId, selectedChanges = null, s
   }
 };
 
+const toRollbackPayload = (value) => {
+  const cleaned = cleanObject(value);
+  if (!cleaned || typeof cleaned !== 'object' || Array.isArray(cleaned)) {
+    return cleaned;
+  }
+  const payload = { ...cleaned };
+  delete payload.id;
+  return payload;
+};
+
+const buildRollbackModifyUpdates = (change = {}) => {
+  const rollbackUpdates = {};
+  const pendingUpdates =
+    change?.newData && typeof change.newData === 'object' ? change.newData : {};
+
+  Object.keys(pendingUpdates).forEach((key) => {
+    if (!key || key === 'updatedAt') return;
+    const originalValue = getValueByPath(change.originalData || {}, key);
+    if (originalValue === undefined) {
+      rollbackUpdates[key] = deleteField();
+      return;
+    }
+    rollbackUpdates[key] = cleanObject(originalValue);
+  });
+
+  return rollbackUpdates;
+};
+
+const verifyRollbackResult = async (appliedChanges = []) => {
+  const verification = {
+    checked: appliedChanges.length,
+    remainingCreatedDocs: [],
+    missingRestoredDocs: [],
+    verified: true,
+    timestamp: new Date().toISOString(),
+  };
+
+  for (const change of appliedChanges) {
+    const collectionName = change?.collection;
+    const targetId = (change?.documentId || change?.originalData?.id || '').toString().trim();
+    if (!collectionName || !targetId) continue;
+
+    const targetSnap = await getDoc(doc(db, collectionName, targetId));
+    if (change.action === 'add') {
+      if (targetSnap.exists()) {
+        verification.remainingCreatedDocs.push(`${collectionName}/${targetId}`);
+      }
+      continue;
+    }
+
+    if ((change.action === 'modify' || change.action === 'delete') && !targetSnap.exists()) {
+      verification.missingRestoredDocs.push(`${collectionName}/${targetId}`);
+    }
+  }
+
+  verification.verified =
+    verification.remainingCreatedDocs.length === 0 &&
+    verification.missingRestoredDocs.length === 0;
+  return verification;
+};
+
 // Rollback committed transaction
 export const rollbackTransaction = async (transactionId) => {
-  console.log('🔄 Starting rollback for transaction:', transactionId);
-
   const transactions = await getImportTransactions();
-  console.log('📋 Found transactions:', transactions.length);
-
   const transaction = transactions.find(t => t.id === transactionId);
-  console.log('🎯 Transaction found:', transaction ? 'YES' : 'NO');
 
   if (!transaction) {
     throw new Error('Transaction not found');
   }
 
-  console.log('📊 Transaction status:', transaction.status);
-  console.log('📊 Transaction stats:', transaction.stats);
-
-  if (transaction.status !== 'committed' && transaction.status !== 'partial') {
-    throw new Error('Transaction is not committed');
+  const allowedRollbackStatuses = new Set([
+    'committed',
+    'partial',
+    'failed',
+    'failed_integrity',
+  ]);
+  if (!allowedRollbackStatuses.has(transaction.status)) {
+    throw new Error('Transaction is not eligible for rollback');
   }
 
   const allChanges = transaction.getAllChanges();
-  console.log('📋 Total changes in transaction:', allChanges.length);
-
   const appliedChanges = allChanges.filter(change => change.applied);
-  console.log('✅ Applied changes to rollback:', appliedChanges.length);
-
-  // Log details of applied changes
-  appliedChanges.forEach(change => {
-    console.log(`   - ${change.action} ${change.collection}: ${change.documentId || 'no-doc-id'}`);
-  });
 
   if (appliedChanges.length === 0) {
-    console.warn('⚠️ No applied changes found to rollback!');
-    // Still mark as rolled back to prevent further attempts
     transaction.status = 'rolled_back';
+    transaction.rollbackVerification = {
+      checked: 0,
+      remainingCreatedDocs: [],
+      missingRestoredDocs: [],
+      verified: true,
+      timestamp: new Date().toISOString(),
+    };
+    transaction.lastModified = new Date().toISOString();
     await updateTransactionInStorage(transaction);
     return transaction;
   }
 
-  const batch = writeBatch(db);
+  let batch = writeBatch(db);
+  let opCount = 0;
+  const commitBatch = async () => {
+    if (opCount === 0) return;
+    await batch.commit();
+    batch = writeBatch(db);
+    opCount = 0;
+  };
 
   try {
-    console.log('🔄 Processing changes in reverse order...');
+    for (const change of [...appliedChanges].reverse()) {
+      const collectionName = change?.collection;
+      const targetId = (change?.documentId || change?.originalData?.id || '').toString().trim();
+      if (!collectionName || !targetId) continue;
 
-    // Reverse changes in opposite order
-    for (const change of appliedChanges.reverse()) {
-      console.log(`   Processing ${change.action} on ${change.collection}/${change.documentId}`);
+      const targetRef = doc(db, collectionName, targetId);
+      let didQueueOperation = false;
 
-      if (change.action === 'add' && change.documentId) {
-        // Delete added documents
-        const collectionName = change.collection;
-        const docRef = doc(db, collectionName, change.documentId);
-        console.log(`     🗑️ Deleting ${collectionName}/${change.documentId}`);
-        batch.delete(docRef);
-      } else if (change.action === 'modify' && change.originalData) {
-        // Restore original data
-        const collectionName = change.collection;
-        console.log(`     🔄 Restoring ${collectionName}/${change.documentId}`);
-        batch.update(doc(db, collectionName, change.documentId), change.originalData);
-      } else if (change.action === 'delete' && change.originalData) {
-        // Re-add deleted documents
-        const collectionName = change.collection;
-        console.log(`     ➕ Re-adding ${collectionName}/${change.originalData.id}`);
-        batch.set(doc(db, collectionName, change.originalData.id), change.originalData);
+      if (change.action === 'add') {
+        batch.delete(targetRef);
+        didQueueOperation = true;
+      } else if (change.action === 'modify') {
+        const rollbackUpdates = buildRollbackModifyUpdates(change);
+        if (Object.keys(rollbackUpdates).length > 0) {
+          batch.update(targetRef, rollbackUpdates);
+          didQueueOperation = true;
+        }
+      } else if (change.action === 'delete') {
+        const originalPayload = toRollbackPayload(change.originalData || {});
+        batch.set(targetRef, originalPayload || {}, { merge: false });
+        didQueueOperation = true;
+      }
+
+      if (!didQueueOperation) continue;
+      opCount += 1;
+      if (opCount >= MAX_BATCH_OPERATIONS) {
+        await commitBatch();
       }
     }
 
-    console.log('💾 Committing rollback batch...');
-    await batch.commit();
-    console.log('✅ Rollback batch committed successfully');
+    await commitBatch();
 
-    transaction.status = 'rolled_back';
-    console.log('💾 Updating transaction status...');
+    const verification = await verifyRollbackResult(appliedChanges);
+    transaction.rollbackVerification = verification;
+    transaction.status = verification.verified ? 'rolled_back' : 'failed';
+    transaction.lastModified = new Date().toISOString();
     await updateTransactionInStorage(transaction);
 
-    console.log('🎉 Rollback completed successfully');
+    if (!verification.verified) {
+      throw new Error(
+        `Rollback verification failed. Remaining created docs: ${verification.remainingCreatedDocs.length}; missing restored docs: ${verification.missingRestoredDocs.length}.`,
+      );
+    }
+
     return transaction;
   } catch (error) {
-    console.error('❌ Error rolling back transaction:', error);
-    console.error('Error details:', error.message);
-    console.error('Error stack:', error.stack);
+    transaction.status = 'failed';
+    transaction.rollbackError = error?.message || String(error);
+    transaction.lastModified = new Date().toISOString();
+    await updateTransactionInStorage(transaction);
     throw error;
   }
-};
-
-// Database-backed utility functions
-
-// Diagnostic function to check rollback effectiveness
-export const diagnoseRollbackEffectiveness = async (transactionId) => {
-  console.log('🔍 Diagnosing rollback effectiveness for transaction:', transactionId);
-
-  const transactions = await getImportTransactions();
-  const transaction = transactions.find(t => t.id === transactionId);
-
-  if (!transaction) {
-    console.log('❌ Transaction not found');
-    return;
-  }
-
-  console.log('📊 Transaction status:', transaction.status);
-  console.log('📊 Transaction stats:', transaction.stats);
-
-  const appliedChanges = transaction.getAllChanges().filter(change => change.applied);
-  console.log('✅ Applied changes:', appliedChanges.length);
-
-  // Check if documents still exist in database
-  console.log('🔍 Checking if rolled back documents still exist...');
-
-  for (const change of appliedChanges) {
-    if (change.action === 'add' && change.documentId) {
-      try {
-        const collectionName = change.collection;
-        const docRef = doc(db, collectionName, change.documentId);
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-          console.log(`❌ Document still exists: ${collectionName}/${change.documentId}`);
-          console.log('   Data:', docSnap.data());
-        } else {
-          console.log(`✅ Document successfully deleted: ${collectionName}/${change.documentId}`);
-        }
-      } catch (error) {
-        console.log(`❌ Error checking document ${change.collection}/${change.documentId}:`, error.message);
-      }
-    }
-  }
-
-  return appliedChanges;
-};
-
-// Manual cleanup function for failed rollbacks
-export const manualCleanupImportedData = async (transactionId) => {
-  console.log('🧹 Starting manual cleanup for transaction:', transactionId);
-
-  const transactions = await getImportTransactions();
-  const transaction = transactions.find(t => t.id === transactionId);
-
-  if (!transaction) {
-    throw new Error('Transaction not found');
-  }
-
-  const appliedChanges = transaction.getAllChanges().filter(change => change.applied);
-  console.log('🗑️ Found', appliedChanges.length, 'applied changes to clean up');
-
-  if (appliedChanges.length === 0) {
-    console.log('✅ No applied changes to clean up');
-    return { cleaned: 0, errors: 0 };
-  }
-
-  const batch = writeBatch(db);
-  let cleanedCount = 0;
-  let errorCount = 0;
-
-  console.log('🔄 Processing manual cleanup...');
-
-  for (const change of appliedChanges) {
-    if (change.action === 'add' && change.documentId) {
-      try {
-        const collectionName = change.collection;
-        const docRef = doc(db, collectionName, change.documentId);
-
-        // Check if document exists before attempting to delete
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          console.log(`   🗑️ Deleting ${collectionName}/${change.documentId}`);
-          batch.delete(docRef);
-          cleanedCount++;
-        } else {
-          console.log(`   ✅ Already deleted: ${collectionName}/${change.documentId}`);
-        }
-      } catch (error) {
-        console.error(`❌ Error deleting ${change.collection}/${change.documentId}:`, error.message);
-        errorCount++;
-      }
-    }
-  }
-
-  if (cleanedCount > 0) {
-    console.log('💾 Committing manual cleanup batch...');
-    await batch.commit();
-    console.log('✅ Manual cleanup completed successfully');
-  }
-
-  return { cleaned: cleanedCount, errors: errorCount };
-};
-
-// Get all transactions and their current status
-export const getAllTransactionStatuses = async () => {
-  const transactions = await getImportTransactions();
-  console.log('📋 All transaction statuses:');
-  transactions.forEach(t => {
-    console.log(`   ${t.id}: ${t.status} (${t.stats.totalChanges} changes, ${t.semester})`);
-  });
-  return transactions;
 };
 
 // Orphaned data cleanup functions for when transaction records are deleted

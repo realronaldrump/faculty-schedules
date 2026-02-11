@@ -24,6 +24,7 @@ import { CoursesHub, CourseManagement } from "./components/courses";
 import ImportWizard from "./components/administration/ImportWizard";
 import AppSettings from "./components/administration/AppSettings";
 import DataHygieneManager from "./components/administration/DataHygieneManager";
+import MaintenanceCenter from "./components/administration/MaintenanceCenter";
 import BaylorSystems from "./components/resources/BaylorSystems";
 import BaylorAcronyms from "./components/administration/BaylorAcronyms";
 import CRNQualityTools from "./components/administration/CRNQualityTools";
@@ -386,6 +387,12 @@ function App() {
         return (
           <ProtectedContent pageId="admin/data-hygiene">
             <DataHygieneManager />
+          </ProtectedContent>
+        );
+      case "admin/maintenance":
+        return (
+          <ProtectedContent pageId="admin/maintenance">
+            <MaintenanceCenter />
           </ProtectedContent>
         );
       // Facilities Hub

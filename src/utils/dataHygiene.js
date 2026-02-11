@@ -65,7 +65,10 @@ import {
   detectTeachingConflicts,
   detectAllDataIssues,
 } from "./hygieneCore";
-import { buildLinkedSchedulePairSet } from "./scheduleLinkUtils";
+import {
+  buildLinkedSchedulePairSet,
+  computeCrossListAutoLinkGroups,
+} from "./scheduleLinkUtils";
 
 const MAX_BATCH_OPERATIONS = 450;
 
@@ -942,494 +945,6 @@ export const standardizeAllData = async (options = {}) => {
 };
 
 /**
- * Backfill `rooms` from people.office and link via `people.officeSpaceId`.
- *
- * - Creates missing office rooms as `type: "Office"` using deterministic IDs (spaceKey).
- * - Links people to an existing room when a matching spaceKey is found.
- */
-export const backfillOfficeRooms = async () => {
-  const batchWriter = createBatchWriter();
-  const stats = {
-    roomsCreated: 0,
-    roomsUpdated: 0,
-    peopleUpdated: 0,
-    skipped: 0,
-    duplicateRoomKeys: 0,
-    errors: [],
-  };
-
-  const [roomsSnapshot, peopleSnapshot] = await Promise.all([
-    getDocs(collection(db, "rooms")),
-    getDocs(collection(db, "people")),
-  ]);
-
-  const roomsByKey = new Map();
-  const addRoomToIndex = (key, room) => {
-    if (!key) return;
-    if (!roomsByKey.has(key)) {
-      roomsByKey.set(key, room);
-    } else {
-      stats.duplicateRoomKeys += 1;
-    }
-  };
-  roomsSnapshot.docs.forEach((docSnap) => {
-    const room = { id: docSnap.id, ...docSnap.data() };
-    const parsed = parseRoomLabel(room.displayName || "");
-    const spaceKey = room.spaceKey || parsed?.spaceKey || "";
-    addRoomToIndex(spaceKey, room);
-  });
-
-  // First: ensure every room has spaceKey/spaceNumber when parseable
-  for (const docSnap of roomsSnapshot.docs) {
-    const room = { id: docSnap.id, ...docSnap.data() };
-    const parsed = parseRoomLabel(room.displayName || "");
-    if (!parsed?.spaceKey) continue;
-
-    const updates = {};
-    const buildingCode = (parsed.buildingCode || "")
-      .toString()
-      .trim()
-      .toUpperCase();
-    const spaceNumber = normalizeSpaceNumber(parsed.spaceNumber || "");
-    const resolvedBuilding = resolveBuilding(buildingCode);
-    const buildingDisplayName =
-      parsed.building ||
-      resolvedBuilding?.displayName ||
-      resolveBuildingDisplayName(buildingCode);
-    if (!room.spaceKey) updates.spaceKey = parsed.spaceKey;
-    if (!room.spaceNumber && spaceNumber) updates.spaceNumber = spaceNumber;
-    if (!room.buildingCode && buildingCode) updates.buildingCode = buildingCode;
-    if (!room.buildingDisplayName && buildingDisplayName)
-      updates.buildingDisplayName = buildingDisplayName;
-    if (!room.displayName && parsed.displayName)
-      updates.displayName = parsed.displayName;
-    if (!room.buildingId && resolvedBuilding?.id)
-      updates.buildingId = resolvedBuilding.id;
-
-    if (Object.keys(updates).length > 0) {
-      updates.updatedAt = new Date().toISOString();
-      await batchWriter.add((batch) =>
-        batch.set(docSnap.ref, updates, { merge: true }),
-      );
-      stats.roomsUpdated += 1;
-
-      const merged = { ...room, ...updates };
-      const spaceKey = merged.spaceKey || parsed.spaceKey;
-      addRoomToIndex(spaceKey, { id: docSnap.id, ...merged });
-    }
-  }
-
-  // Second: create/link office rooms from people
-  for (const personSnap of peopleSnapshot.docs) {
-    const person = { id: personSnap.id, ...personSnap.data() };
-    const office = (person.office || "").toString().trim();
-    const hasNoOffice =
-      person.hasNoOffice === true ||
-      person.isRemote === true ||
-      isStudentWorker(person);
-
-    if (hasNoOffice || !office) {
-      if (person.officeSpaceId) {
-        await batchWriter.add((batch) =>
-          batch.update(personSnap.ref, {
-            officeSpaceId: "",
-            updatedAt: new Date().toISOString(),
-          }),
-        );
-        stats.peopleUpdated += 1;
-      } else {
-        stats.skipped += 1;
-      }
-      continue;
-    }
-
-    const parsed = parseRoomLabel(office);
-    if (!parsed?.spaceKey) {
-      stats.skipped += 1;
-      continue;
-    }
-
-    const existingRoom = roomsByKey.get(parsed.spaceKey);
-    const officeSpaceId = parsed.spaceKey;
-
-    if (!existingRoom) {
-      const now = new Date().toISOString();
-      const buildingCode = (parsed.buildingCode || "")
-        .toString()
-        .trim()
-        .toUpperCase();
-      const spaceNumber = normalizeSpaceNumber(parsed.spaceNumber || "");
-      const resolvedBuilding = resolveBuilding(buildingCode);
-      const buildingDisplayName =
-        parsed.building ||
-        resolvedBuilding?.displayName ||
-        resolveBuildingDisplayName(buildingCode) ||
-        buildingCode;
-      const displayName =
-        parsed.displayName ||
-        formatSpaceDisplayName({
-          buildingCode,
-          buildingDisplayName,
-          spaceNumber,
-        }) ||
-        office;
-      const newRoom = {
-        displayName: displayName,
-        spaceKey: parsed.spaceKey,
-        spaceNumber,
-        buildingCode,
-        buildingDisplayName,
-        buildingId: resolvedBuilding?.id || "",
-        capacity: null,
-        type: "Office",
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      };
-      try {
-        await batchWriter.add((batch) =>
-          batch.set(doc(db, "rooms", parsed.spaceKey), newRoom, {
-            merge: true,
-          }),
-        );
-        addRoomToIndex(parsed.spaceKey, { id: parsed.spaceKey, ...newRoom });
-        stats.roomsCreated += 1;
-      } catch (error) {
-        stats.errors.push(
-          `Room create failed (${parsed.displayName}): ${error.message}`,
-        );
-        continue;
-      }
-    }
-
-    if ((person.officeSpaceId || "") !== officeSpaceId) {
-      await batchWriter.add((batch) =>
-        batch.update(personSnap.ref, {
-          officeSpaceId,
-          updatedAt: new Date().toISOString(),
-        }),
-      );
-      stats.peopleUpdated += 1;
-    } else {
-      stats.skipped += 1;
-    }
-  }
-
-  await batchWriter.flush();
-  return stats;
-};
-
-/**
- * Preview changes for backfilling office rooms (no writes).
- *
- * Returns a plan consumable by OfficeRoomBackfillPreviewModal.
- */
-export const previewOfficeRoomBackfill = async () => {
-  const generatedAt = new Date().toISOString();
-
-  const plan = {
-    generatedAt,
-    stats: {
-      roomsCreated: 0,
-      roomsUpdated: 0,
-      peopleUpdated: 0,
-      peopleCleared: 0,
-      skipped: 0,
-      duplicateRoomKeys: 0,
-    },
-    changes: [],
-  };
-
-  const [roomsSnapshot, peopleSnapshot] = await Promise.all([
-    getDocs(collection(db, "rooms")),
-    getDocs(collection(db, "people")),
-  ]);
-
-  const roomsByKey = new Map();
-  const addRoomToIndex = (key, room) => {
-    if (!key) return;
-    if (!roomsByKey.has(key)) {
-      roomsByKey.set(key, room);
-    } else {
-      plan.stats.duplicateRoomKeys += 1;
-    }
-  };
-  roomsSnapshot.docs.forEach((docSnap) => {
-    const room = { id: docSnap.id, ...docSnap.data() };
-    const parsed = parseRoomLabel(room.displayName || "");
-    const spaceKey = room.spaceKey || parsed?.spaceKey || "";
-    addRoomToIndex(spaceKey, room);
-  });
-
-  // First: ensure every room has spaceKey/spaceNumber when parseable
-  for (const docSnap of roomsSnapshot.docs) {
-    const room = { id: docSnap.id, ...docSnap.data() };
-    const parsed = parseRoomLabel(room.displayName || "");
-    if (!parsed?.spaceKey) continue;
-
-    const updates = {};
-    const buildingCode = (parsed.buildingCode || "")
-      .toString()
-      .trim()
-      .toUpperCase();
-    const spaceNumber = normalizeSpaceNumber(parsed.spaceNumber || "");
-    const resolvedBuilding = resolveBuilding(buildingCode);
-    const buildingDisplayName =
-      parsed.building ||
-      resolvedBuilding?.displayName ||
-      resolveBuildingDisplayName(buildingCode);
-    if (!room.spaceKey) updates.spaceKey = parsed.spaceKey;
-    if (!room.spaceNumber && spaceNumber) updates.spaceNumber = spaceNumber;
-    if (!room.buildingCode && buildingCode) updates.buildingCode = buildingCode;
-    if (!room.buildingDisplayName && buildingDisplayName)
-      updates.buildingDisplayName = buildingDisplayName;
-    if (!room.displayName && parsed.displayName)
-      updates.displayName = parsed.displayName;
-    if (!room.buildingId && resolvedBuilding?.id)
-      updates.buildingId = resolvedBuilding.id;
-
-    if (Object.keys(updates).length === 0) continue;
-
-    const changeId = `rooms:${docSnap.id}:metadata`;
-    plan.changes.push({
-      id: changeId,
-      collection: "rooms",
-      action: "merge",
-      documentId: docSnap.id,
-      label: `Room: backfill metadata · ${parsed.displayName || room.displayName || docSnap.id}`,
-      before: {
-        spaceKey: room.spaceKey || "",
-        spaceNumber: room.spaceNumber || "",
-        buildingCode: room.buildingCode || "",
-        buildingDisplayName: room.buildingDisplayName || "",
-        displayName: room.displayName || "",
-      },
-      data: updates,
-    });
-    plan.stats.roomsUpdated += 1;
-
-    const merged = { ...room, ...updates };
-    const spaceKey = merged.spaceKey || parsed.spaceKey;
-    addRoomToIndex(spaceKey, { id: docSnap.id, ...merged });
-  }
-
-  // Second: create/link office rooms from people
-  const roomCreateChangeIds = new Map();
-
-  for (const personSnap of peopleSnapshot.docs) {
-    const person = { id: personSnap.id, ...personSnap.data() };
-    const office = (person.office || "").toString().trim();
-    const hasNoOffice =
-      person.hasNoOffice === true ||
-      person.isRemote === true ||
-      isStudentWorker(person);
-
-    if (hasNoOffice || !office) {
-      if (person.officeSpaceId) {
-        plan.changes.push({
-          id: `people:${personSnap.id}:officeSpaceId:clear`,
-          collection: "people",
-          action: "update",
-          documentId: personSnap.id,
-          label:
-            `Person: clear office location · ${person.firstName || ""} ${person.lastName || ""}`.trim(),
-          before: {
-            office: person.office || "",
-            officeSpaceId: person.officeSpaceId || "",
-            hasNoOffice: person.hasNoOffice === true,
-            isRemote: person.isRemote === true,
-          },
-          data: {
-            officeSpaceId: "",
-          },
-        });
-        plan.stats.peopleUpdated += 1;
-        plan.stats.peopleCleared += 1;
-      } else {
-        plan.stats.skipped += 1;
-      }
-      continue;
-    }
-
-    const parsed = parseRoomLabel(office);
-    if (!parsed?.spaceKey) {
-      plan.stats.skipped += 1;
-      continue;
-    }
-
-    const existingRoom = roomsByKey.get(parsed.spaceKey);
-    const officeSpaceId = parsed.spaceKey;
-
-    const dependsOn = [];
-    if (!existingRoom) {
-      const existingCreateId = roomCreateChangeIds.get(parsed.spaceKey);
-      const createId = existingCreateId || `rooms:${parsed.spaceKey}:create`;
-
-      if (!existingCreateId) {
-        const buildingCode = (parsed.buildingCode || "")
-          .toString()
-          .trim()
-          .toUpperCase();
-        const spaceNumber = normalizeSpaceNumber(parsed.spaceNumber || "");
-        const resolvedBuilding = resolveBuilding(buildingCode);
-        const buildingDisplayName =
-          parsed.building ||
-          resolvedBuilding?.displayName ||
-          resolveBuildingDisplayName(buildingCode) ||
-          buildingCode;
-        const displayName =
-          parsed.displayName ||
-          formatSpaceDisplayName({
-            buildingCode,
-            buildingDisplayName,
-            spaceNumber,
-          }) ||
-          office;
-        const newRoom = {
-          displayName: displayName,
-          spaceKey: parsed.spaceKey,
-          spaceNumber,
-          buildingCode,
-          buildingDisplayName,
-          buildingId: resolvedBuilding?.id || "",
-          capacity: null,
-          type: "Office",
-          isActive: true,
-        };
-
-        plan.changes.push({
-          id: createId,
-          collection: "rooms",
-          action: "upsert",
-          documentId: parsed.spaceKey,
-          label: `Room: create office · ${displayName}`,
-          before: null,
-          data: newRoom,
-        });
-        plan.stats.roomsCreated += 1;
-        roomCreateChangeIds.set(parsed.spaceKey, createId);
-        roomsByKey.set(parsed.spaceKey, { id: parsed.spaceKey, ...newRoom });
-      }
-
-      dependsOn.push(createId);
-    }
-
-    if ((person.officeSpaceId || "") !== officeSpaceId) {
-      plan.changes.push({
-        id: `people:${personSnap.id}:officeSpaceId:set`,
-        collection: "people",
-        action: "update",
-        documentId: personSnap.id,
-        label:
-          `Person: set office location · ${person.firstName || ""} ${person.lastName || ""}`.trim(),
-        before: {
-          office: person.office || "",
-          officeSpaceId: person.officeSpaceId || "",
-          hasNoOffice: person.hasNoOffice === true,
-          isRemote: person.isRemote === true,
-        },
-        data: {
-          officeSpaceId,
-        },
-        ...(dependsOn.length > 0 ? { dependsOn } : {}),
-      });
-      plan.stats.peopleUpdated += 1;
-    } else {
-      plan.stats.skipped += 1;
-    }
-  }
-
-  return plan;
-};
-
-/**
- * Apply a preview plan returned by previewOfficeRoomBackfill().
- */
-export const applyOfficeRoomBackfillPlan = async (plan, selectedIds = []) => {
-  const changes = Array.isArray(plan?.changes) ? plan.changes : [];
-  const selectedSet = new Set(Array.isArray(selectedIds) ? selectedIds : []);
-
-  // Ensure dependencies are applied even if caller omitted them.
-  const changeById = new Map(changes.map((change) => [change.id, change]));
-  const queue = Array.from(selectedSet);
-  while (queue.length > 0) {
-    const id = queue.pop();
-    const change = changeById.get(id);
-    const deps = Array.isArray(change?.dependsOn) ? change.dependsOn : [];
-    deps.forEach((depId) => {
-      if (!selectedSet.has(depId)) {
-        selectedSet.add(depId);
-        queue.push(depId);
-      }
-    });
-  }
-
-  const batchWriter = createBatchWriter();
-  const now = new Date().toISOString();
-
-  const stats = {
-    roomsCreated: 0,
-    roomsUpdated: 0,
-    peopleUpdated: 0,
-    skipped: 0,
-    errors: [],
-  };
-
-  const selectedChanges = changes
-    .filter((change) => change && selectedSet.has(change.id))
-    .sort((a, b) => {
-      const order = { rooms: 0, people: 1 };
-      const aOrder = order[a.collection] ?? 99;
-      const bOrder = order[b.collection] ?? 99;
-      if (aOrder !== bOrder) return aOrder - bOrder;
-      return (a.label || "").localeCompare(b.label || "", undefined, {
-        numeric: true,
-      });
-    });
-
-  for (const change of selectedChanges) {
-    try {
-      if (change.collection === "rooms") {
-        const ref = doc(db, "rooms", change.documentId);
-        const data = { ...(change.data || {}) };
-        if (change.action === "upsert") {
-          data.createdAt = data.createdAt || now;
-          data.updatedAt = now;
-          await batchWriter.add((batch) =>
-            batch.set(ref, data, { merge: true }),
-          );
-          stats.roomsCreated += 1;
-        } else {
-          data.updatedAt = now;
-          await batchWriter.add((batch) =>
-            batch.set(ref, data, { merge: true }),
-          );
-          stats.roomsUpdated += 1;
-        }
-        continue;
-      }
-
-      if (change.collection === "people") {
-        const ref = doc(db, "people", change.documentId);
-        const data = { ...(change.data || {}), updatedAt: now };
-        await batchWriter.add((batch) => batch.update(ref, data));
-        stats.peopleUpdated += 1;
-        continue;
-      }
-
-      stats.skipped += 1;
-    } catch (error) {
-      stats.errors.push(
-        `${change.collection}/${change.documentId}: ${error.message}`,
-      );
-    }
-  }
-
-  await batchWriter.flush();
-  return stats;
-};
-
-/**
  * Automatically merge obvious duplicates (high confidence only)
  * Returns a report of what was merged
  */
@@ -1543,112 +1058,59 @@ export const autoMergeObviousDuplicates = async () => {
   return results;
 };
 
-/**
- * Run scoped post-import cleanup (user-triggered).
- *
- * Scope is intentionally limited to the specified term(s):
- * - Merge high-confidence schedule duplicates (>= 0.98)
- * - Create missing room docs for referenced spaceKeys
- * - Repair schedule space links / normalize display names (term schedules only)
- */
-export const runPostImportCleanup = async ({
-  termCode,
-  termCodes,
+const chunkTermCodes = (items, size = 10) => {
+  const chunks = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+};
+
+const fetchSchedulesForTermCodes = async (termCodeList = []) => {
+  const uniqueCodes = Array.from(
+    new Set((Array.isArray(termCodeList) ? termCodeList : []).map((code) => String(code || "").trim()).filter(Boolean)),
+  );
+  if (uniqueCodes.length === 0) return [];
+
+  const snapshots = await Promise.all(
+    chunkTermCodes(uniqueCodes).map((chunk) =>
+      getDocs(query(collection(db, "schedules"), where("termCode", "in", chunk))),
+    ),
+  );
+
+  const seen = new Set();
+  const schedules = [];
+  snapshots.forEach((snapshot) => {
+    snapshot.docs.forEach((docSnap) => {
+      if (seen.has(docSnap.id)) return;
+      seen.add(docSnap.id);
+      schedules.push({ id: docSnap.id, ...docSnap.data() });
+    });
+  });
+  return schedules;
+};
+
+const ensureMissingRoomsFromSchedules = async ({
+  schedules = [],
   transactionId = "",
 } = {}) => {
-  const codes = Array.isArray(termCodes)
-    ? termCodes.filter(Boolean)
-    : termCode
-      ? [termCode]
-      : [];
-  const uniqueTermCodes = Array.from(new Set(codes.map((code) => String(code).trim()).filter(Boolean)));
-
-  if (uniqueTermCodes.length === 0) {
-    throw new Error("runPostImportCleanup requires a termCode (or termCodes).");
-  }
-
-  const chunkArray = (items, size = 10) => {
-    const chunks = [];
-    for (let i = 0; i < items.length; i += size) {
-      chunks.push(items.slice(i, i + size));
-    }
-    return chunks;
-  };
-
-  const fetchSchedulesForTerms = async (termCodeList) => {
-    const queries = chunkArray(termCodeList).map((chunk) =>
-      getDocs(query(collection(db, "schedules"), where("termCode", "in", chunk))),
-    );
-    const snapshots = await Promise.all(queries);
-    const seen = new Set();
-    const schedules = [];
-    snapshots.forEach((snapshot) => {
-      snapshot.docs.forEach((docSnap) => {
-        if (seen.has(docSnap.id)) return;
-        seen.add(docSnap.id);
-        schedules.push({ id: docSnap.id, ...docSnap.data() });
-      });
-    });
-    return schedules;
-  };
-
   const report = {
-    transactionId: transactionId || "",
-    termCodes: uniqueTermCodes,
-    schedulesFetched: 0,
-    scheduleDuplicatesDetected: 0,
-    scheduleDuplicatesMerged: 0,
-    scheduleMergeErrors: [],
     roomsCreated: 0,
     roomCreateErrors: [],
-    spaceLinkRepairs: null,
-    timestamp: new Date().toISOString(),
+    createdRoomIds: [],
   };
 
-  // 1) Fetch term schedules
-  let schedules = await fetchSchedulesForTerms(uniqueTermCodes);
-  report.schedulesFetched = schedules.length;
-
-  // 2) Merge high-confidence schedule duplicates (respect dedupe decisions + link groups)
-  const [scheduleDecisions] = await Promise.all([
-    fetchDedupeDecisions("schedules"),
-  ]);
-  const linkedPairs = buildLinkedSchedulePairSet(schedules);
-  const blockedPairs = new Set([...scheduleDecisions, ...linkedPairs]);
-  const scheduleDuplicates = detectScheduleDuplicates(schedules, {
-    blockedPairs,
-  });
-  report.scheduleDuplicatesDetected = scheduleDuplicates.length;
-
-  // Greedy merge: avoid attempting to merge schedules already removed in this run.
-  const mergedSecondaryIds = new Set();
-  for (const dup of scheduleDuplicates) {
-    if (dup.confidence < 0.98) continue;
-    const [primary, secondary] = dup.records || [];
-    if (!primary?.id || !secondary?.id) continue;
-    if (mergedSecondaryIds.has(primary.id) || mergedSecondaryIds.has(secondary.id)) continue;
-    try {
-      await mergeScheduleRecords(dup);
-      report.scheduleDuplicatesMerged += 1;
-      mergedSecondaryIds.add(secondary.id);
-    } catch (error) {
-      report.scheduleMergeErrors.push(error?.message || String(error));
-    }
+  if (!Array.isArray(schedules) || schedules.length === 0) {
+    return report;
   }
 
-  if (report.scheduleDuplicatesMerged > 0) {
-    schedules = await fetchSchedulesForTerms(uniqueTermCodes);
-  }
-
-  // 3) Create missing room docs for referenced spaceKeys (term schedules only)
   const roomsSnapshot = await getDocs(collection(db, "rooms"));
-  const rooms = roomsSnapshot.docs.map((docSnap) => ({
-    id: docSnap.id,
-    ...docSnap.data(),
-  }));
   const existingRoomKeys = new Set(
-    rooms
-      .map((room) => (room?.spaceKey || room?.id || "").toString().trim())
+    roomsSnapshot.docs
+      .map((docSnap) => {
+        const room = docSnap.data() || {};
+        return (room.spaceKey || docSnap.id || "").toString().trim();
+      })
       .filter(Boolean),
   );
 
@@ -1668,8 +1130,8 @@ export const runPostImportCleanup = async ({
     if (names.length > 0) {
       const parsed = parseMultiRoom(names.join("; "));
       const parsedKeys = Array.isArray(parsed?.spaceKeys) ? parsed.spaceKeys : [];
-      parsedKeys.forEach((key) => {
-        const value = (key || "").toString().trim();
+      parsedKeys.forEach((spaceKey) => {
+        const value = (spaceKey || "").toString().trim();
         if (!value) return;
         const validation = validateSpaceKey(value);
         if (validation.valid) referencedSpaceKeys.add(value);
@@ -1687,12 +1149,10 @@ export const runPostImportCleanup = async ({
     const buildingCode = (parsedKey?.buildingCode || "").toString().trim().toUpperCase();
     const spaceNumber = normalizeSpaceNumber(parsedKey?.spaceNumber || "");
     const canonicalKey = buildingCode && spaceNumber ? buildSpaceKey(buildingCode, spaceNumber) : "";
-    if (!canonicalKey) continue;
-    if (existingRoomKeys.has(canonicalKey)) continue;
+    if (!canonicalKey || existingRoomKeys.has(canonicalKey)) continue;
 
     try {
-      const buildingDisplayName =
-        resolveBuildingDisplayName(buildingCode) || buildingCode;
+      const buildingDisplayName = resolveBuildingDisplayName(buildingCode) || buildingCode;
       const resolvedBuilding = resolveBuilding(buildingCode);
       const displayName = formatSpaceDisplayName({
         buildingCode,
@@ -1715,11 +1175,11 @@ export const runPostImportCleanup = async ({
         updatedAt: now,
         createdBy,
       };
-
       await batchWriter.add((batch) => {
         batch.set(doc(db, "rooms", canonicalKey), payload, { merge: true });
       });
       report.roomsCreated += 1;
+      report.createdRoomIds.push(canonicalKey);
       existingRoomKeys.add(canonicalKey);
     } catch (error) {
       report.roomCreateErrors.push(error?.message || String(error));
@@ -1727,15 +1187,281 @@ export const runPostImportCleanup = async ({
   }
 
   await batchWriter.flush();
+  return report;
+};
 
-  // 4) Repair schedule space links/display names (term schedules only)
+const applyCrossListAutoLinkingForSchedules = async ({
+  schedules = [],
+} = {}) => {
+  const report = {
+    groupsDetected: 0,
+    schedulesUpdated: 0,
+    linkedScheduleIds: [],
+    clearedScheduleIds: [],
+    errors: [],
+  };
+
+  if (!Array.isArray(schedules) || schedules.length === 0) {
+    return report;
+  }
+
+  const groups = computeCrossListAutoLinkGroups(schedules);
+  report.groupsDetected = groups.length;
+
+  const desiredGroupByScheduleId = new Map();
+  groups.forEach((group) => {
+    (Array.isArray(group.scheduleIds) ? group.scheduleIds : []).forEach((scheduleId) => {
+      desiredGroupByScheduleId.set(scheduleId, group.linkGroupId);
+    });
+  });
+
+  const batchWriter = createBatchWriter();
+  const now = new Date().toISOString();
+
+  for (const schedule of schedules) {
+    const scheduleId = (schedule?.id || "").toString().trim();
+    if (!scheduleId) continue;
+
+    const desiredGroupId = desiredGroupByScheduleId.get(scheduleId) || "";
+    const currentGroupId = (schedule?.linkGroupId || "").toString().trim();
+
+    if (desiredGroupId && currentGroupId !== desiredGroupId) {
+      await batchWriter.add((batch) => {
+        batch.update(doc(db, "schedules", scheduleId), {
+          linkGroupId: desiredGroupId,
+          updatedAt: now,
+        });
+      });
+      report.schedulesUpdated += 1;
+      report.linkedScheduleIds.push(scheduleId);
+      continue;
+    }
+
+    if (!desiredGroupId && currentGroupId && currentGroupId.startsWith("xlist_")) {
+      await batchWriter.add((batch) => {
+        batch.update(doc(db, "schedules", scheduleId), {
+          linkGroupId: deleteField(),
+          updatedAt: now,
+        });
+      });
+      report.schedulesUpdated += 1;
+      report.clearedScheduleIds.push(scheduleId);
+    }
+  }
+
+  await batchWriter.flush();
+  return report;
+};
+
+/**
+ * Run scoped post-import finalization.
+ *
+ * Deterministic finalize order:
+ * 1) Create missing referenced rooms for touched schedules
+ * 2) Repair schedule spaceIds / display names for touched schedules
+ * 3) Normalize canonical room fields touched during repairs
+ * 4) Merge high-confidence schedule duplicates in touched terms
+ * 5) Auto-link cross-listed schedules with deterministic linkGroupId
+ */
+export const runPostImportCleanup = async ({
+  termCode,
+  termCodes,
+  touchedScheduleIds = [],
+  transactionId = "",
+  autoLinkCrossLists = true,
+} = {}) => {
+  const codes = Array.isArray(termCodes)
+    ? termCodes
+    : termCode
+      ? [termCode]
+      : [];
+  const uniqueTermCodes = Array.from(
+    new Set(codes.map((code) => String(code || "").trim()).filter(Boolean)),
+  );
+
+  if (uniqueTermCodes.length === 0) {
+    throw new Error("runPostImportCleanup requires a termCode (or termCodes).");
+  }
+
+  const touchedSet = new Set(
+    (Array.isArray(touchedScheduleIds) ? touchedScheduleIds : [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean),
+  );
+
+  const report = {
+    transactionId: transactionId || "",
+    termCodes: uniqueTermCodes,
+    touchedScheduleIds: Array.from(touchedSet),
+    schedulesFetched: 0,
+    roomsCreated: 0,
+    roomCreateErrors: [],
+    createdRoomIds: [],
+    spaceLinkRepairs: null,
+    scheduleDuplicatesDetected: 0,
+    scheduleDuplicatesMerged: 0,
+    scheduleMergeErrors: [],
+    mergedScheduleIds: [],
+    crossListAutoLink: {
+      groupsDetected: 0,
+      schedulesUpdated: 0,
+      linkedScheduleIds: [],
+      clearedScheduleIds: [],
+      errors: [],
+    },
+    blockers: [],
+    timestamp: new Date().toISOString(),
+  };
+
+  let schedules = await fetchSchedulesForTermCodes(uniqueTermCodes);
+  report.schedulesFetched = schedules.length;
+
+  const targetSchedules =
+    touchedSet.size > 0
+      ? schedules.filter((schedule) => touchedSet.has(schedule.id))
+      : schedules;
+
+  // 1) Ensure missing rooms from touched schedule references
+  const roomSeedResult = await ensureMissingRoomsFromSchedules({
+    schedules: targetSchedules,
+    transactionId,
+  });
+  report.roomsCreated = roomSeedResult.roomsCreated;
+  report.roomCreateErrors = roomSeedResult.roomCreateErrors;
+  report.createdRoomIds = roomSeedResult.createdRoomIds;
+
+  // 2/3) Repair touched schedule space links and normalize canonical room fields
   try {
     report.spaceLinkRepairs = await repairScheduleSpaceLinks({
-      schedules,
+      schedules: targetSchedules,
       normalizeRoomDisplayNames: true,
     });
   } catch (error) {
     report.spaceLinkRepairs = { error: error?.message || String(error) };
+    report.blockers.push(`Space link repair failed: ${error?.message || error}`);
+  }
+
+  // Refresh after repairs before duplicate/link operations.
+  schedules = await fetchSchedulesForTermCodes(uniqueTermCodes);
+
+  // 4) Merge high-confidence duplicates in touched terms
+  const scheduleDecisions = await fetchDedupeDecisions("schedules");
+  const linkedPairs = buildLinkedSchedulePairSet(schedules);
+  const blockedPairs = new Set([...scheduleDecisions, ...linkedPairs]);
+  const scheduleDuplicates = detectScheduleDuplicates(schedules, { blockedPairs });
+  report.scheduleDuplicatesDetected = scheduleDuplicates.length;
+
+  const mergedSecondaryIds = new Set();
+  for (const dup of scheduleDuplicates) {
+    if (dup.confidence < 0.98) continue;
+    const [primary, secondary] = dup.records || [];
+    if (!primary?.id || !secondary?.id) continue;
+    if (mergedSecondaryIds.has(primary.id) || mergedSecondaryIds.has(secondary.id)) continue;
+    try {
+      await mergeScheduleRecords(dup);
+      report.scheduleDuplicatesMerged += 1;
+      report.mergedScheduleIds.push({
+        kept: primary.id,
+        removed: secondary.id,
+      });
+      mergedSecondaryIds.add(secondary.id);
+    } catch (error) {
+      report.scheduleMergeErrors.push(error?.message || String(error));
+    }
+  }
+
+  if (report.scheduleDuplicatesMerged > 0) {
+    schedules = await fetchSchedulesForTermCodes(uniqueTermCodes);
+  }
+
+  // 5) Apply deterministic cross-list auto-linking
+  if (autoLinkCrossLists) {
+    try {
+      report.crossListAutoLink = await applyCrossListAutoLinkingForSchedules({
+        schedules,
+      });
+    } catch (error) {
+      report.crossListAutoLink.errors.push(error?.message || String(error));
+      report.blockers.push(`Cross-list auto-linking failed: ${error?.message || error}`);
+    }
+  }
+
+  if (report.roomCreateErrors.length > 0) {
+    report.blockers.push(`Room creation errors: ${report.roomCreateErrors.length}`);
+  }
+  if (report.scheduleMergeErrors.length > 0) {
+    report.blockers.push(`Schedule merge errors: ${report.scheduleMergeErrors.length}`);
+  }
+
+  return report;
+};
+
+export const runHistoricalBaselineBackfill = async ({ saveReport = true } = {}) => {
+  const schedulesSnapshot = await getDocs(collection(db, "schedules"));
+  const schedules = schedulesSnapshot.docs.map((docSnap) => ({
+    id: docSnap.id,
+    ...docSnap.data(),
+  }));
+  const allTermCodes = Array.from(
+    new Set(schedules.map((schedule) => (schedule?.termCode || "").toString().trim()).filter(Boolean)),
+  ).sort();
+
+  const identityPreview = await previewScheduleIdentityBackfill();
+  const identityApply = await applyScheduleIdentityBackfill(identityPreview.changes || []);
+  const finalizeReport =
+    allTermCodes.length > 0
+      ? await runPostImportCleanup({
+          termCodes: allTermCodes,
+          transactionId: `baseline_${Date.now()}`,
+          autoLinkCrossLists: true,
+        })
+      : {
+          termCodes: [],
+          blockers: [],
+          scheduleDuplicatesMerged: 0,
+          roomsCreated: 0,
+          spaceLinkRepairs: { schedulesUpdated: 0, roomsUpdated: 0 },
+          crossListAutoLink: { schedulesUpdated: 0, linkedScheduleIds: [], clearedScheduleIds: [] },
+          mergedScheduleIds: [],
+          createdRoomIds: [],
+        };
+
+  const report = {
+    type: "historical_baseline",
+    createdAt: new Date().toISOString(),
+    summary: {
+      totalTermsProcessed: allTermCodes.length,
+      totalSchedulesProcessed: schedules.length,
+      identityBackfillUpdated: identityApply?.updated || 0,
+      scheduleDuplicatesMerged: finalizeReport?.scheduleDuplicatesMerged || 0,
+      roomsCreated: finalizeReport?.roomsCreated || 0,
+      schedulesSpaceRepaired: finalizeReport?.spaceLinkRepairs?.schedulesUpdated || 0,
+      roomsNormalized: finalizeReport?.spaceLinkRepairs?.roomsUpdated || 0,
+      crossListLinked: finalizeReport?.crossListAutoLink?.schedulesUpdated || 0,
+      blockerCount: Array.isArray(finalizeReport?.blockers)
+        ? finalizeReport.blockers.length
+        : 0,
+    },
+    changedIds: {
+      identityBackfill: (identityPreview?.changes || []).map((item) => item.id),
+      mergedSchedules: finalizeReport?.mergedScheduleIds || [],
+      createdRooms: finalizeReport?.createdRoomIds || [],
+      crossListLinkedSchedules: finalizeReport?.crossListAutoLink?.linkedScheduleIds || [],
+      crossListClearedSchedules: finalizeReport?.crossListAutoLink?.clearedScheduleIds || [],
+    },
+    blockers: finalizeReport?.blockers || [],
+    details: {
+      identityTotalRecords: identityPreview?.totalRecords || 0,
+      identityRecordsToUpdate: identityPreview?.recordsToUpdate || 0,
+      finalizeTimestamp: finalizeReport?.timestamp || "",
+      finalizeTermCount: Array.isArray(finalizeReport?.termCodes)
+        ? finalizeReport.termCodes.length
+        : 0,
+    },
+  };
+
+  if (saveReport) {
+    await addDoc(collection(db, "maintenanceReports"), report);
   }
 
   return report;
@@ -1833,654 +1559,6 @@ const findPeopleByBaylorId = async (baylorId) => {
     query(collection(db, "people"), where("baylorId", "==", baylorId)),
   );
   return peopleSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-};
-
-// ==================== HEALTH CHECK ====================
-
-/**
- * Get a simple health report of the data
- */
-export const getDataHealthReport = async () => {
-  const [peopleSnapshot, schedulesSnapshot, peopleDecisions] =
-    await Promise.all([
-      getDocs(collection(db, "people")),
-      getDocs(collection(db, "schedules")),
-      fetchDedupeDecisions("people"),
-    ]);
-
-  const people = peopleSnapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  }));
-  const schedules = schedulesSnapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  }));
-  const duplicates = detectPeopleDuplicates(people, {
-    blockedPairs: peopleDecisions,
-  });
-
-  const peopleIds = new Set(people.map((person) => person.id));
-  const getScheduleInstructorIds = (schedule) => {
-    const ids = new Set();
-    if (schedule?.instructorId) ids.add(schedule.instructorId);
-    if (Array.isArray(schedule?.instructorIds)) {
-      schedule.instructorIds.forEach((id) => ids.add(id));
-    }
-    if (Array.isArray(schedule?.instructorAssignments)) {
-      schedule.instructorAssignments.forEach((assignment) => {
-        if (assignment?.personId) ids.add(assignment.personId);
-      });
-    }
-    return Array.from(ids).filter(Boolean);
-  };
-  const orphaned = schedules.filter((schedule) => {
-    const instructorIds = getScheduleInstructorIds(schedule);
-    if (instructorIds.length === 0) return true;
-    return !instructorIds.some((id) => peopleIds.has(id));
-  });
-
-  const totalPeople = peopleSnapshot.size;
-  const totalSchedules = schedulesSnapshot.size;
-
-  // Count people missing key info (excluding those intentionally marked as not having them)
-  const missingEmail = people.filter(
-    (p) => !p.email || p.email.trim() === "",
-  ).length;
-  const missingPhone = people.filter(
-    (p) => (!p.phone || p.phone.trim() === "") && !p.hasNoPhone,
-  ).length;
-  const missingOffice = people.filter(
-    (p) =>
-      !isStudentWorker(p) &&
-      (!p.office || p.office.trim() === "") &&
-      !p.hasNoOffice,
-  ).length;
-  const missingJobTitle = people.filter(
-    (p) => !p.jobTitle || p.jobTitle.trim() === "",
-  ).length;
-  const missingProgram = people.filter((p) => {
-    // Only check for missing program if the person is faculty
-    const roles = p.roles || [];
-    const isFaculty = Array.isArray(roles)
-      ? roles.includes("faculty")
-      : !!roles.faculty;
-    return isFaculty && !p.programId;
-  }).length;
-
-  return {
-    summary: {
-      totalPeople,
-      totalSchedules,
-      duplicatePeople: duplicates.length,
-      orphanedSchedules: orphaned.length,
-      missingEmail,
-      missingPhone,
-      missingOffice,
-      missingJobTitle,
-      missingProgram,
-      healthScore: calculateHealthScore(
-        totalPeople,
-        duplicates.length,
-        orphaned.length,
-        missingEmail,
-      ),
-    },
-    duplicates,
-    orphaned,
-    lastChecked: new Date().toISOString(),
-  };
-};
-
-/**
- * Generate comprehensive data hygiene report
- */
-export const generateDataHygieneReport = async () => {
-  const [
-    peopleSnapshot,
-    schedulesSnapshot,
-    roomsSnapshot,
-    peopleDecisions,
-    scheduleDecisions,
-    roomDecisions,
-  ] = await Promise.all([
-    getDocs(collection(db, "people")),
-    getDocs(collection(db, "schedules")),
-    getDocs(collection(db, "rooms")),
-    fetchDedupeDecisions("people"),
-    fetchDedupeDecisions("schedules"),
-    fetchDedupeDecisions("rooms"),
-  ]);
-
-  const people = peopleSnapshot.docs.map((docSnap) => ({
-    id: docSnap.id,
-    ...docSnap.data(),
-  }));
-  const canonicalPeople = people.filter((person) => !person?.mergedInto);
-  const schedules = schedulesSnapshot.docs.map((docSnap) => ({
-    id: docSnap.id,
-    ...docSnap.data(),
-  }));
-  const rooms = roomsSnapshot.docs.map((docSnap) => ({
-    id: docSnap.id,
-    ...docSnap.data(),
-  }));
-
-  const peopleDuplicates = detectPeopleDuplicates(canonicalPeople, {
-    blockedPairs: peopleDecisions,
-  });
-  const linkedPairs = buildLinkedSchedulePairSet(schedules);
-  const scheduleBlocks = new Set([...scheduleDecisions, ...linkedPairs]);
-  const scheduleDuplicates = detectScheduleDuplicates(schedules, {
-    blockedPairs: scheduleBlocks,
-  });
-  const roomDuplicates = detectRoomDuplicates(rooms, {
-    blockedPairs: roomDecisions,
-  });
-  const crossCollection = detectCrossCollectionIssues(people, schedules, rooms);
-
-  const details = {
-    people: {
-      total: people.length,
-      duplicates: peopleDuplicates,
-      duplicateCount: peopleDuplicates.length,
-      ignoredPairs: peopleDecisions.size,
-    },
-    schedules: {
-      total: schedules.length,
-      duplicates: scheduleDuplicates,
-      duplicateCount: scheduleDuplicates.length,
-      ignoredPairs: scheduleDecisions.size,
-    },
-    rooms: {
-      total: rooms.length,
-      duplicates: roomDuplicates,
-      duplicateCount: roomDuplicates.length,
-      ignoredPairs: roomDecisions.size,
-    },
-    crossCollection,
-  };
-
-  const summary = {
-    totalDuplicates:
-      details.people.duplicateCount +
-      details.schedules.duplicateCount +
-      details.rooms.duplicateCount,
-    totalIssues:
-      details.people.duplicateCount +
-      details.schedules.duplicateCount +
-      details.rooms.duplicateCount +
-      crossCollection.length,
-  };
-
-  const report = {
-    timestamp: new Date().toISOString(),
-    summary,
-    details,
-    recommendations: generateRecommendations({ ...details, crossCollection }),
-    dataQualityScore: calculateDataQualityScore({
-      ...details,
-      summary,
-      crossCollection,
-    }),
-  };
-
-  return report;
-};
-
-const generateRecommendations = (results) => {
-  const recommendations = [];
-
-  if (results.people.duplicateCount > 0) {
-    recommendations.push({
-      priority: "high",
-      action: "Merge duplicate people records",
-      count: results.people.duplicateCount,
-      description:
-        "You have people listed multiple times. Merging them will create one accurate record for each person.",
-      benefit: "Eliminates confusion when looking up faculty and staff",
-    });
-  }
-
-  if (results.schedules.duplicateCount > 0) {
-    recommendations.push({
-      priority: "medium",
-      action: "Merge duplicate schedule records",
-      count: results.schedules.duplicateCount,
-      description:
-        "Some courses appear to be scheduled multiple times. Merging removes the duplicates.",
-      benefit: "Accurate course schedules without duplicates",
-    });
-  }
-
-  if (results.rooms.duplicateCount > 0) {
-    recommendations.push({
-      priority: "low",
-      action: "Merge duplicate room records",
-      count: results.rooms.duplicateCount,
-      description:
-        "Some rooms are listed multiple times with slight variations in name.",
-      benefit: "Consistent room names across all schedules",
-    });
-  }
-
-  if (results.crossCollection.length > 0) {
-    recommendations.push({
-      priority: "high",
-      action: "Fix broken connections",
-      count: results.crossCollection.length,
-      description:
-        "Some schedules reference people or rooms that no longer exist in the system.",
-      benefit: "Ensures all schedule data is properly connected",
-    });
-  }
-
-  return recommendations;
-};
-
-const calculateDataQualityScore = (results) => {
-  const totalRecords =
-    results.people.total + results.schedules.total + results.rooms.total;
-  const totalIssues = results.summary.totalIssues;
-
-  if (totalRecords === 0) return 100;
-
-  const qualityScore = Math.max(0, 100 - (totalIssues / totalRecords) * 100);
-  return Math.round(qualityScore);
-};
-
-/**
- * Calculate a simple health score (0-100)
- */
-const calculateHealthScore = (total, duplicates, orphaned, missingEmail) => {
-  if (total === 0) return 100;
-
-  const issues = duplicates + orphaned + missingEmail;
-  const score = Math.max(0, 100 - (issues / total) * 100);
-  return Math.round(score);
-};
-
-/**
- * Preview what standardization would change without making actual changes
- */
-export const previewStandardization = async () => {
-  try {
-    const peopleSnapshot = await getDocs(collection(db, "people"));
-    const people = peopleSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-
-    const changes = [];
-
-    people.forEach((person) => {
-      const original = { ...person };
-      const standardized = standardizePerson(person);
-
-      // Find actual differences
-      const differences = [];
-
-      // Check name parsing issues
-      if ((!original.firstName || !original.lastName) && original.name) {
-        if (standardized.firstName && standardized.lastName) {
-          differences.push({
-            field: "name_parsing",
-            description: `Parse "${original.name}" into firstName: "${standardized.firstName}" and lastName: "${standardized.lastName}"`,
-            before: {
-              firstName: original.firstName || "",
-              lastName: original.lastName || "",
-              name: original.name || "",
-            },
-            after: {
-              firstName: standardized.firstName,
-              lastName: standardized.lastName,
-              name: standardized.name,
-            },
-          });
-        }
-      }
-
-      // Check for undefined name construction
-      if (
-        original.name === "undefined undefined" ||
-        original.name === " " ||
-        original.name === ""
-      ) {
-        if (
-          standardized.name &&
-          standardized.name !== "undefined undefined" &&
-          standardized.name.trim() !== ""
-        ) {
-          differences.push({
-            field: "fix_broken_name",
-            description: `Fix broken name "${original.name}" to "${standardized.name}"`,
-            before: { name: original.name },
-            after: { name: standardized.name },
-          });
-        }
-      }
-
-      // Check phone standardization
-      if (original.phone && original.phone !== standardized.phone) {
-        differences.push({
-          field: "phone_format",
-          description: `Standardize phone from "${original.phone}" to "${standardized.phone}"`,
-          before: { phone: original.phone },
-          after: { phone: standardized.phone },
-        });
-      }
-
-      // Check email standardization
-      if (original.email && original.email !== standardized.email) {
-        differences.push({
-          field: "email_format",
-          description: `Standardize email from "${original.email}" to "${standardized.email}"`,
-          before: { email: original.email },
-          after: { email: standardized.email },
-        });
-      }
-
-      // Check roles standardization
-      if (
-        original.roles &&
-        !Array.isArray(original.roles) &&
-        typeof original.roles === "object"
-      ) {
-        differences.push({
-          field: "roles_format",
-          description: `Convert roles from object to array format`,
-          before: { roles: original.roles },
-          after: { roles: standardized.roles },
-        });
-      }
-
-      if (differences.length > 0) {
-        changes.push({
-          personId: person.id,
-          personName:
-            original.name ||
-            `${original.firstName} ${original.lastName}`.trim() ||
-            "Unknown",
-          differences,
-        });
-      }
-    });
-
-    return {
-      totalRecords: people.length,
-      recordsToChange: changes.length,
-      changes,
-      summary: {
-        nameParsingFixes: changes.filter((c) =>
-          c.differences.some((d) => d.field === "name_parsing"),
-        ).length,
-        brokenNameFixes: changes.filter((c) =>
-          c.differences.some((d) => d.field === "fix_broken_name"),
-        ).length,
-        phoneFormatFixes: changes.filter((c) =>
-          c.differences.some((d) => d.field === "phone_format"),
-        ).length,
-        emailFormatFixes: changes.filter((c) =>
-          c.differences.some((d) => d.field === "email_format"),
-        ).length,
-        rolesFormatFixes: changes.filter((c) =>
-          c.differences.some((d) => d.field === "roles_format"),
-        ).length,
-      },
-    };
-  } catch (error) {
-    console.error("Error previewing standardization:", error);
-    throw error;
-  }
-};
-
-/**
- * Preview standardization changes across people, schedules, and rooms.
- */
-export const previewStandardizationPlan = async ({
-  limitPerType = 200,
-} = {}) => {
-  const limit = Number.isFinite(limitPerType) ? Math.max(1, limitPerType) : 200;
-  const [peopleSnapshot, schedulesSnapshot, roomsSnapshot] = await Promise.all([
-    getDocs(collection(db, "people")),
-    getDocs(collection(db, "schedules")),
-    getDocs(collection(db, "rooms")),
-  ]);
-
-  const diffFields = (before, after, fields) => {
-    const diffs = [];
-    fields.forEach((field) => {
-      const prior = before[field];
-      const next = after[field];
-      const priorString =
-        Array.isArray(prior) || typeof prior === "object"
-          ? JSON.stringify(prior || null)
-          : String(prior ?? "");
-      const nextString =
-        Array.isArray(next) || typeof next === "object"
-          ? JSON.stringify(next || null)
-          : String(next ?? "");
-      if (priorString !== nextString) {
-        diffs.push({ field, before: prior, after: next });
-      }
-    });
-    return diffs;
-  };
-
-  const changes = {
-    people: [],
-    schedules: [],
-    rooms: [],
-  };
-  const changeCounts = {
-    people: 0,
-    schedules: 0,
-    rooms: 0,
-  };
-
-  peopleSnapshot.docs.forEach((docSnap) => {
-    const original = docSnap.data() || {};
-    const standardized = standardizePerson(
-      { ...original, id: docSnap.id },
-      { updateTimestamp: false },
-    );
-    const diffs = diffFields(original, standardized, [
-      "firstName",
-      "lastName",
-      "name",
-      "email",
-      "phone",
-      "roles",
-      "office",
-      "department",
-      "externalIds",
-      "baylorId",
-      "hasNoPhone",
-      "hasNoOffice",
-    ]);
-    if (diffs.length > 0) {
-      changeCounts.people += 1;
-      if (changes.people.length < limit) {
-        changes.people.push({
-          id: docSnap.id,
-          label:
-            standardized.name ||
-            `${standardized.firstName || ""} ${standardized.lastName || ""}`.trim() ||
-            "Unknown",
-          diffs,
-        });
-      }
-    }
-  });
-
-  schedulesSnapshot.docs.forEach((docSnap) => {
-    const original = docSnap.data() || {};
-    const standardized = standardizeSchedule({ ...original, id: docSnap.id });
-    const diffs = diffFields(original, standardized, [
-      "term",
-      "termCode",
-      "courseCode",
-      "section",
-      "crn",
-      "spaceIds",
-      "spaceDisplayNames",
-      "locationType",
-      "locationLabel",
-      "instructorIds",
-      "instructorAssignments",
-      "instructionMethod",
-      "scheduleType",
-      "status",
-    ]);
-    if (diffs.length > 0) {
-      changeCounts.schedules += 1;
-      if (changes.schedules.length < limit) {
-        changes.schedules.push({
-          id: docSnap.id,
-          label:
-            `${standardized.courseCode || ""} ${standardized.section || ""} ${standardized.term || ""}`.trim() ||
-            docSnap.id,
-          diffs,
-        });
-      }
-    }
-  });
-
-  roomsSnapshot.docs.forEach((docSnap) => {
-    const original = docSnap.data() || {};
-    const standardized = standardizeRoom({ ...original, id: docSnap.id });
-    const diffs = diffFields(original, standardized, [
-      "displayName",
-      "buildingCode",
-      "buildingDisplayName",
-      "spaceNumber",
-      "spaceKey",
-      "type",
-    ]);
-    if (diffs.length > 0) {
-      changeCounts.rooms += 1;
-      if (changes.rooms.length < limit) {
-        changes.rooms.push({
-          id: docSnap.id,
-          label: standardized.displayName || standardized.name || docSnap.id,
-          diffs,
-        });
-      }
-    }
-  });
-
-  return {
-    counts: {
-      people: peopleSnapshot.size,
-      schedules: schedulesSnapshot.size,
-      rooms: roomsSnapshot.size,
-    },
-    changeCounts,
-    samples: changes,
-  };
-};
-
-/**
- * Apply targeted standardization changes with logging for undo capability
- */
-export const applyTargetedStandardization = async (changeIds = null) => {
-  try {
-    const preview = await previewStandardization();
-
-    // If changeIds provided, only apply those changes
-    const changesToApply = changeIds
-      ? preview.changes.filter((change) => changeIds.includes(change.personId))
-      : preview.changes;
-
-    if (changesToApply.length === 0) {
-      return { applied: 0, skipped: 0, errors: [] };
-    }
-
-    const batch = writeBatch(db);
-    const changeLog = [];
-    let applied = 0;
-    let errors = [];
-
-    for (const change of changesToApply) {
-      try {
-        // Get current data
-        const personRef = doc(db, "people", change.personId);
-        const personSnapshot = await getDoc(personRef);
-
-        if (!personSnapshot.exists()) {
-          errors.push(`Person ${change.personId} not found`);
-          continue;
-        }
-
-        const currentData = personSnapshot.data();
-        const standardizedData = standardizePerson(currentData);
-
-        // Only update if there are actual changes
-        if (JSON.stringify(currentData) !== JSON.stringify(standardizedData)) {
-          batch.update(personRef, standardizedData);
-
-          // Log the change for potential undo
-          changeLog.push({
-            personId: change.personId,
-            personName: change.personName,
-            timestamp: new Date().toISOString(),
-            originalData: currentData,
-            updatedData: standardizedData,
-            changes: change.differences,
-          });
-
-          applied++;
-        }
-      } catch (error) {
-        errors.push(`Error updating ${change.personName}: ${error.message}`);
-      }
-    }
-
-    // Commit all changes
-    if (applied > 0) {
-      await batch.commit();
-
-      // Save change log for potential undo
-      if (changeLog.length > 0) {
-        await addDoc(collection(db, "standardizationHistory"), {
-          timestamp: new Date().toISOString(),
-          operation: "targeted_standardization",
-          changes: changeLog,
-          summary: `Applied ${applied} standardization changes`,
-        });
-      }
-    }
-
-    return {
-      applied,
-      skipped: changesToApply.length - applied,
-      errors,
-      changeLogId: changeLog.length > 0 ? "saved" : null,
-    };
-  } catch (error) {
-    console.error("Error applying targeted standardization:", error);
-    throw error;
-  }
-};
-
-/**
- * Get recent standardization history for undo capability
- */
-export const getStandardizationHistory = async (limitCount = 10) => {
-  try {
-    const historySnapshot = await getDocs(
-      query(
-        collection(db, "standardizationHistory"),
-        orderBy("timestamp", "desc"),
-        limit(limitCount),
-      ),
-    );
-
-    return historySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-  } catch (error) {
-    console.error("Error getting standardization history:", error);
-    return [];
-  }
 };
 
 // ---------------------------------------------------------------------------
@@ -3871,17 +2949,6 @@ export const getLocationHealthStats = async () => {
 // ONE-CLICK SCAN AND FIX
 // ============================================================================
 
-/**
- * Comprehensive data scan - detects all issues including teaching conflicts
- *
- * This replaces the complex multi-step wizard with a single scan that:
- * 1. Loads all data
- * 2. Detects duplicates across all collections
- * 3. Detects orphaned records
- * 4. Detects teaching conflicts (faculty double-booked)
- * 5. Detects missing data
- * 6. Returns a complete health report
- */
 export const scanDataHealth = async () => {
   const [
     peopleSnapshot,
@@ -3928,31 +2995,60 @@ export const scanDataHealth = async () => {
     blockedSchedulePairs: scheduleBlocks,
   });
 
-  // Count missing data
-  const missingData = {
-    email: people.filter((p) => !p.email || p.email.trim() === "").length,
-    phone: people.filter(
-      (p) => (!p.phone || p.phone.trim() === "") && !p.hasNoPhone,
-    ).length,
-    office: people.filter(
-      (p) =>
-        !isStudentWorker(p) &&
-        (!p.office || p.office.trim() === "") &&
-        !p.hasNoOffice &&
-        !p.isRemote,
-    ).length,
-    jobTitle: people.filter((p) => !p.jobTitle || p.jobTitle.trim() === "")
-      .length,
-  };
+  const highConfidencePeopleDuplicates = peopleDuplicates.filter(
+    (entry) => Number(entry?.confidence || 0) >= 0.95,
+  );
+  const highConfidenceScheduleDuplicates = scheduleDuplicates.filter(
+    (entry) => Number(entry?.confidence || 0) >= 0.98,
+  );
+  const highConfidenceRoomDuplicates = roomDuplicates.filter(
+    (entry) => Number(entry?.confidence || 0) >= 0.95,
+  );
+
+  const unresolvedImportIssues = [];
+  try {
+    const importTransactionsSnapshot = await getDocs(
+      collection(db, "importTransactions"),
+    );
+    importTransactionsSnapshot.docs.forEach((docSnap) => {
+      const data = docSnap.data() || {};
+      const status = (data.status || "").toString().trim();
+      if (!["preview", "partial", "failed", "failed_integrity"].includes(status))
+        return;
+      const matchIssues = Array.isArray(data.matchingIssues)
+        ? data.matchingIssues
+        : [];
+      const resolutionMap =
+        data.matchResolutions && typeof data.matchResolutions === "object"
+          ? data.matchResolutions
+          : {};
+      matchIssues.forEach((issue) => {
+        const action = resolutionMap?.[issue.id]?.action;
+        if (!action) {
+          unresolvedImportIssues.push({
+            transactionId: docSnap.id,
+            status,
+            issueId: issue.id,
+            reason: issue.reason || "",
+            importType: issue.importType || data.type || "schedule",
+            semester: data.semester || "",
+          });
+        }
+      });
+    });
+  } catch (error) {
+    console.warn("Unable to read importTransactions for unresolved issues:", error);
+  }
 
   // Calculate health score
   const totalRecords = people.length + schedules.length + rooms.length;
   const totalIssues =
-    peopleDuplicates.length +
-    scheduleDuplicates.length +
-    roomDuplicates.length +
+    highConfidencePeopleDuplicates.length +
+    highConfidenceScheduleDuplicates.length +
+    highConfidenceRoomDuplicates.length +
     orphanedIssues.length +
-    teachingConflicts.length;
+    teachingConflicts.length +
+    unresolvedImportIssues.length;
 
   const healthScore =
     totalRecords === 0
@@ -3961,15 +3057,9 @@ export const scanDataHealth = async () => {
 
   // Count auto-fixable issues
   const autoFixable = {
-    highConfidencePeopleDuplicates: peopleDuplicates.filter(
-      (d) => d.confidence >= 0.95,
-    ).length,
-    highConfidenceScheduleDuplicates: scheduleDuplicates.filter(
-      (d) => d.confidence >= 0.98,
-    ).length,
-    highConfidenceRoomDuplicates: roomDuplicates.filter(
-      (d) => d.confidence >= 0.95,
-    ).length,
+    highConfidencePeopleDuplicates: highConfidencePeopleDuplicates.length,
+    highConfidenceScheduleDuplicates: highConfidenceScheduleDuplicates.length,
+    highConfidenceRoomDuplicates: highConfidenceRoomDuplicates.length,
     orphanedSchedulesWithName: orphanedIssues.filter(
       (i) =>
         i.type === "orphaned_schedule" &&
@@ -3979,6 +3069,26 @@ export const scanDataHealth = async () => {
       (i) => i.type === "orphaned_space",
     ).length,
   };
+
+  const blockingSummary = {
+    orphanedInstructorReferences: orphanedIssues.filter(
+      (issue) => issue.type === "orphaned_schedule",
+    ).length,
+    orphanedSpaceReferences: orphanedIssues.filter(
+      (issue) => issue.type === "orphaned_space",
+    ).length,
+    highConfidenceDuplicates:
+      highConfidencePeopleDuplicates.length +
+      highConfidenceScheduleDuplicates.length +
+      highConfidenceRoomDuplicates.length,
+    unresolvedImportIssues: unresolvedImportIssues.length,
+    teachingConflicts: teachingConflicts.length,
+  };
+
+  const blockingIssues = Object.values(blockingSummary).reduce(
+    (total, count) => total + Number(count || 0),
+    0,
+  );
 
   return {
     timestamp: new Date().toISOString(),
@@ -3990,19 +3100,23 @@ export const scanDataHealth = async () => {
     },
     issues: {
       duplicates: {
-        people: peopleDuplicates,
-        schedules: scheduleDuplicates,
-        rooms: roomDuplicates,
+        people: highConfidencePeopleDuplicates,
+        schedules: highConfidenceScheduleDuplicates,
+        rooms: highConfidenceRoomDuplicates,
         total:
-          peopleDuplicates.length +
-          scheduleDuplicates.length +
-          roomDuplicates.length,
+          highConfidencePeopleDuplicates.length +
+          highConfidenceScheduleDuplicates.length +
+          highConfidenceRoomDuplicates.length,
       },
       orphaned: orphanedIssues,
       teachingConflicts,
-      missingData,
+      unresolvedImportIssues,
     },
     autoFixable,
+    summary: {
+      blockingIssues,
+      ...blockingSummary,
+    },
     canAutoFix:
       autoFixable.highConfidencePeopleDuplicates > 0 ||
       autoFixable.highConfidenceScheduleDuplicates > 0 ||
@@ -4232,34 +3346,6 @@ export const autoFixAllIssues = async (options = {}) => {
     results.success = false;
     return results;
   }
-};
-
-/**
- * Get remaining issues after auto-fix
- * These require human decision (low confidence duplicates, ambiguous links, etc.)
- */
-export const getRemainingIssues = async () => {
-  const scan = await scanDataHealth();
-
-  // Filter to only issues that need human review
-  return {
-    lowConfidenceDuplicates: {
-      people: scan.issues.duplicates.people.filter((d) => d.confidence < 0.95),
-      schedules: scan.issues.duplicates.schedules.filter(
-        (d) => d.confidence < 0.98,
-      ),
-      rooms: scan.issues.duplicates.rooms.filter((d) => d.confidence < 0.95),
-    },
-    orphanedWithoutMatch: scan.issues.orphaned.filter(
-      (i) =>
-        i.type === "orphaned_schedule" &&
-        !i.record?.instructorName &&
-        !i.record?.Instructor,
-    ),
-    teachingConflicts: scan.issues.teachingConflicts,
-    missingData: scan.issues.missingData,
-    healthScore: scan.healthScore,
-  };
 };
 
 export {

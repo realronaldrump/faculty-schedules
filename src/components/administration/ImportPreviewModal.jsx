@@ -120,6 +120,16 @@ const formatValue = (value) => {
   return String(value);
 };
 
+const isValidMatchResolution = (issue, resolution) => {
+  if (!resolution || typeof resolution !== 'object') return false;
+  const action = resolution.action;
+  if (!action) return false;
+  if (action === 'link') return Boolean(resolution.personId);
+  if (action === 'create') return true;
+  if (action === 'exclude') return true;
+  return false;
+};
+
 const ImportPreviewModal = ({
   transaction,
   onClose,
@@ -307,7 +317,16 @@ const ImportPreviewModal = ({
   };
 
   const unresolvedMatchCount = useMemo(
-    () => matchingIssues.filter(issue => !matchResolutions[issue.id]).length,
+    () => matchingIssues.filter((issue) => !isValidMatchResolution(issue, matchResolutions[issue.id])).length,
+    [matchingIssues, matchResolutions]
+  );
+
+  const excludedScheduleRows = useMemo(
+    () => matchingIssues.reduce((count, issue) => {
+      const resolution = matchResolutions[issue.id];
+      if (resolution?.action !== 'exclude') return count;
+      return count + (Array.isArray(issue.scheduleChangeIds) ? issue.scheduleChangeIds.length : 0);
+    }, 0),
     [matchingIssues, matchResolutions]
   );
 
@@ -712,7 +731,7 @@ const ImportPreviewModal = ({
                   </div>
                   <p className="text-xs text-yellow-700 mt-1">
                     {collisionSummary.total} schedule identity collisions were detected (same CRN/section/meeting/room).
-                    Imports will update the preferred record for each key. Consider resolving duplicates in Data Hygiene.
+                    Imports will update the preferred record for each key. Use Data Health Check or Maintenance Center for follow-up cleanup.
                   </p>
                   {collisionSummary.byType && Object.keys(collisionSummary.byType).length > 0 && (
                     <div className="mt-2 text-xs text-yellow-700">
@@ -753,9 +772,9 @@ const ImportPreviewModal = ({
             <div className="p-6 border-b border-gray-200 bg-white">
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Resolve People Matches</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">Resolve Queue for Review</h3>
                   <p className="text-sm text-gray-600">
-                    Link imported instructors to existing people or explicitly create new records.
+                    Each issue must be resolved as link, create, or exclude before commit.
                   </p>
                 </div>
                 {unresolvedMatchCount > 0 && (
@@ -789,6 +808,9 @@ const ImportPreviewModal = ({
                     ? people.find((person) => person.id === resolution.personId) ||
                       issue.candidates?.find((candidate) => candidate.id === resolution.personId)
                     : null;
+                  const excludedRowCount = Array.isArray(issue.scheduleChangeIds)
+                    ? issue.scheduleChangeIds.length
+                    : 0;
 
                   return (
                     <div key={issue.id} className="border border-gray-200 rounded-lg p-4">
@@ -811,7 +833,11 @@ const ImportPreviewModal = ({
                         <div className="text-xs">
                           {resolution ? (
                             <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-800">
-                              {resolution.action === 'create' ? 'Create new' : 'Linked'}
+                              {resolution.action === 'create'
+                                ? 'Create new'
+                                : resolution.action === 'exclude'
+                                  ? 'Excluded'
+                                  : 'Linked'}
                             </span>
                           ) : (
                             <span className="inline-flex items-center px-2 py-1 rounded-full bg-yellow-100 text-yellow-800">
@@ -825,6 +851,15 @@ const ImportPreviewModal = ({
                         <div className="mt-2 text-xs text-gray-600">
                           Linked to {resolvedPerson.firstName} {resolvedPerson.lastName}
                           {resolvedPerson.baylorId ? ` • ${resolvedPerson.baylorId}` : ''}
+                        </div>
+                      )}
+
+                      {resolution?.action === 'exclude' && (
+                        <div className="mt-2 text-xs text-red-700 bg-red-50 border border-red-100 rounded-md px-2 py-2">
+                          Excluding {excludedRowCount} row{excludedRowCount === 1 ? '' : 's'} from commit.
+                          <div className="mt-1">
+                            Reason: {resolution.reason?.trim() || 'No reason provided'}
+                          </div>
                         </div>
                       )}
 
@@ -908,6 +943,30 @@ const ImportPreviewModal = ({
                             <div className="mt-1 text-xs text-gray-500">
                               Create disabled: missing identifier in import data.
                             </div>
+                          )}
+                          <button
+                            onClick={() => applyResolution(issue, {
+                              action: 'exclude',
+                              reason: resolution?.action === 'exclude'
+                                ? (resolution.reason || '')
+                                : 'Excluded by reviewer during import preview',
+                            })}
+                            className="mt-2 text-sm px-3 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50"
+                          >
+                            Exclude affected rows
+                          </button>
+                          {resolution?.action === 'exclude' && (
+                            <input
+                              type="text"
+                              value={resolution.reason || ''}
+                              onChange={(event) => applyResolution(issue, {
+                                ...resolution,
+                                action: 'exclude',
+                                reason: event.target.value,
+                              })}
+                              placeholder="Optional reason (saved with commit summary)"
+                              className="mt-2 w-full px-3 py-2 border border-red-300 rounded-md text-sm"
+                            />
                           )}
                         </div>
                         {resolution && (
@@ -1043,7 +1102,8 @@ const ImportPreviewModal = ({
               <div className="flex items-center space-x-2 text-sm text-gray-600">
                 <AlertTriangle className="w-4 h-4" />
                 <span>
-                  Changes will be applied to the database and can be rolled back later if needed.
+                  Changes will be applied to the database with automatic integrity finalization.
+                  {excludedScheduleRows > 0 ? ` ${excludedScheduleRows} row${excludedScheduleRows === 1 ? '' : 's'} will be excluded.` : ''}
                 </span>
               </div>
             )}

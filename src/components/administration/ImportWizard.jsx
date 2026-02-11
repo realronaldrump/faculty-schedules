@@ -17,7 +17,6 @@ import {
   projectSchedulePreviewRow,
 } from "../../utils/importTransactionUtils";
 import { parseCSVRecords } from "../../utils/csvUtils";
-import { runPostImportCleanup } from "../../utils/dataHygiene";
 import ImportPreviewModal from "./ImportPreviewModal";
 import ImportHistoryModal from "./ImportHistoryModal";
 import { useSchedules } from "../../contexts/ScheduleContext";
@@ -48,8 +47,6 @@ const ImportWizard = ({ embedded = false }) => {
   const [showHistory, setShowHistory] = useState(false);
   const [resultsSummary, setResultsSummary] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isCleanupRunning, setIsCleanupRunning] = useState(false);
-  const [cleanupReport, setCleanupReport] = useState(null);
 
   const handleDataRefresh = async () => {
     await Promise.all([
@@ -297,6 +294,8 @@ const ImportWizard = ({ embedded = false }) => {
         peopleAdded: stats.peopleAdded,
         roomsAdded: stats.roomsAdded,
         semester: result.getSummary().semester,
+        exclusionSummary: result.exclusionSummary || null,
+        integrityFinalizeReport: result.integrityFinalizeReport || null,
       });
       showNotification?.(
         "success",
@@ -306,7 +305,6 @@ const ImportWizard = ({ embedded = false }) => {
       setShowPreviewModal(false);
       setPreviewTransaction(null);
       setStep(4);
-      setCleanupReport(null);
       if (importType === "schedule") {
         await refreshSchedules();
         await refreshTerms?.();
@@ -341,47 +339,6 @@ const ImportWizard = ({ embedded = false }) => {
     setResultsSummary(null);
     setFileHash("");
     setFileSize(0);
-    setIsCleanupRunning(false);
-    setCleanupReport(null);
-  };
-
-  const handlePostImportCleanup = async () => {
-    if (!resultsSummary?.transactionId) return;
-    const termCodes = Array.isArray(resultsSummary.termCodes)
-      ? resultsSummary.termCodes
-      : [];
-    if (termCodes.length === 0) {
-      showNotification?.(
-        "warning",
-        "Cleanup Unavailable",
-        "No term codes were detected for this import.",
-      );
-      return;
-    }
-
-    setIsCleanupRunning(true);
-    try {
-      const report = await runPostImportCleanup({
-        termCodes,
-        transactionId: resultsSummary.transactionId,
-      });
-      setCleanupReport(report);
-      const repaired = report?.spaceLinkRepairs?.schedulesUpdated || 0;
-      showNotification?.(
-        "success",
-        "Cleanup Complete",
-        `Merged ${report.scheduleDuplicatesMerged || 0} schedule duplicates, created ${report.roomsCreated || 0} rooms, repaired ${repaired} schedules.`,
-      );
-    } catch (e) {
-      console.error("Post-import cleanup failed:", e);
-      showNotification?.(
-        "error",
-        "Cleanup Failed",
-        e.message || "Post-import cleanup failed.",
-      );
-    } finally {
-      setIsCleanupRunning(false);
-    }
   };
 
   return (
@@ -605,17 +562,6 @@ const ImportWizard = ({ embedded = false }) => {
               <History className="w-4 h-4" />
               <span>View Import History</span>
             </button>
-            {importType === "schedule" && (
-              <button
-                onClick={handlePostImportCleanup}
-                disabled={isCleanupRunning}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
-              >
-                {isCleanupRunning
-                  ? "Running Cleanup..."
-                  : "Run Post-Import Cleanup"}
-              </button>
-            )}
             <button
               onClick={resetWizard}
               className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90"
@@ -623,15 +569,45 @@ const ImportWizard = ({ embedded = false }) => {
               Import Another File
             </button>
           </div>
-          {cleanupReport && (
-            <details className="mt-4">
-              <summary className="cursor-pointer text-sm font-medium text-gray-700">
-                Cleanup Details
-              </summary>
-              <pre className="mt-2 text-xs bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-x-auto">
-                {JSON.stringify(cleanupReport, null, 2)}
-              </pre>
-            </details>
+          {importType === "schedule" && (
+            <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4">
+              <div className="text-sm font-semibold text-green-900">
+                Automatic integrity checks completed
+              </div>
+              <div className="mt-2 text-sm text-green-900 space-y-1">
+                <div>
+                  Rooms created: {resultsSummary?.integrityFinalizeReport?.roomsCreated || 0}
+                </div>
+                <div>
+                  Schedule space links repaired: {resultsSummary?.integrityFinalizeReport?.spaceLinkRepairs?.schedulesUpdated || 0}
+                </div>
+                <div>
+                  Cross-list links updated: {resultsSummary?.integrityFinalizeReport?.crossListAutoLink?.schedulesUpdated || 0}
+                </div>
+                <div>
+                  High-confidence duplicates merged: {resultsSummary?.integrityFinalizeReport?.scheduleDuplicatesMerged || 0}
+                </div>
+                <div>
+                  Excluded rows: {resultsSummary?.exclusionSummary?.excludedRowCount || 0}
+                </div>
+              </div>
+              <details className="mt-3">
+                <summary className="cursor-pointer text-xs font-medium text-green-800">
+                  Technical details
+                </summary>
+                <pre className="mt-2 text-xs bg-white border border-green-100 rounded-lg p-3 overflow-x-auto text-green-900">
+                  {JSON.stringify(
+                    {
+                      exclusionSummary: resultsSummary.exclusionSummary || null,
+                      integrityFinalizeReport:
+                        resultsSummary.integrityFinalizeReport || null,
+                    },
+                    null,
+                    2,
+                  )}
+                </pre>
+              </details>
+            </div>
           )}
         </div>
       )}

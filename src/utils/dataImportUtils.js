@@ -471,25 +471,47 @@ export const parseInstructorFieldList = (instructorField) => {
 };
 
 /**
- * Extract cross-listed CRNs from CLSS row (if present)
- * Looks at fields like "Cross-listings", "Cross-list Enrollment", and textual hints like "Also ... (CRN)"
+ * Extract cross-listed CRNs from CLSS row (if present).
+ *
+ * Supports fixed CLSS fields and a defensive fallback that scans any key
+ * containing "cross-list". Returns a sorted, unique CRN array.
  */
-export const parseCrossListCrns = (row) => {
-  const fields = [
+export const parseCrossListCrns = (row, options = {}) => {
+  const { includePrimaryCrn = true } = options;
+  const crns = new Set();
+  const addCrnsFromValue = (value) => {
+    if (!value) return;
+    const text = String(value);
+    const matches = text.match(/\b(\d{5,6})\b/g);
+    if (matches) {
+      matches.forEach((token) => {
+        const normalized = String(token).trim();
+        if (normalized) crns.add(normalized);
+      });
+    }
+  };
+
+  if (includePrimaryCrn) {
+    addCrnsFromValue(row?.CRN);
+  }
+
+  const fixedFields = [
     "Cross-listings",
     "Cross-list Enrollment",
     "Cross-list Maximum",
     "Cross-list Wait Total",
     "Also",
   ];
-  const crns = new Set();
-  for (const f of fields) {
-    const val = row && row[f];
-    if (!val || typeof val !== "string") continue;
-    const matches = val.match(/\b(\d{5})\b/g);
-    if (matches) matches.forEach((m) => crns.add(m));
+  fixedFields.forEach((field) => addCrnsFromValue(row?.[field]));
+
+  if (row && typeof row === "object") {
+    Object.entries(row).forEach(([key, value]) => {
+      if (!key || !/cross[-\s]?list/i.test(String(key))) return;
+      addCrnsFromValue(value);
+    });
   }
-  return Array.from(crns);
+
+  return Array.from(crns).sort();
 };
 
 // ==================== ROLE DETERMINATION ====================

@@ -20,7 +20,11 @@ import {
   parseMultiRoom,
   splitMultiRoom,
 } from "./locationService";
-import { parseInstructorField, parseInstructorFieldList } from "./dataImportUtils";
+import {
+  parseInstructorField,
+  parseInstructorFieldList,
+  parseCrossListCrns,
+} from "./dataImportUtils";
 
 export const normalizeSectionIdentifier = (sectionField) =>
   normalizeSectionNumber(sectionField);
@@ -192,6 +196,7 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = "") => {
       : parsedRoomNames.length > 0
         ? parsedRoomNames
         : filteredRoomNames;
+  const crossListCrns = parseCrossListCrns(row, { includePrimaryCrn: false });
 
   return {
     courseCode,
@@ -219,6 +224,7 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = "") => {
     roomRaw,
     spaceIds,
     spaceDisplayNames,
+    crossListCrns,
     locationType,
     locationLabel,
     isOnline: inferredIsOnline,
@@ -271,6 +277,9 @@ export const projectSchedulePreviewRow = (row, fallbackTerm = "") => {
       Array.isArray(base.spaceDisplayNames) && base.spaceDisplayNames.length > 0
         ? base.spaceDisplayNames.join("; ")
         : base.locationLabel,
+    "Cross-list CRNs": Array.isArray(base.crossListCrns)
+      ? base.crossListCrns.join(", ")
+      : "",
     Status: base.status,
     "Inst. Method": base.instructionMethod,
     Enrollment: base.enrollment ?? "",

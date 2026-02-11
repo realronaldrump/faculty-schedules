@@ -41,6 +41,171 @@ const chunkArray = (items, size = 10) => {
   return chunks;
 };
 
+const normalizeCrn = (value) => {
+  const normalized = normalizeString(value);
+  if (!normalized) return "";
+  const match = normalized.match(/\b(\d{5,6})\b/);
+  return match ? match[1] : "";
+};
+
+const normalizeTermKey = (value) =>
+  normalizeString(value).replace(/[^A-Za-z0-9]+/g, "").toLowerCase();
+
+export const buildDeterministicLinkGroupId = ({
+  termCode = "",
+  term = "",
+  crns = [],
+} = {}) => {
+  const normalizedTerm =
+    normalizeTermKey(termCode || term) || normalizeTermKey(term) || "term";
+  const normalizedCrns = Array.from(
+    new Set((Array.isArray(crns) ? crns : []).map(normalizeCrn).filter(Boolean)),
+  ).sort();
+  const seed = `${normalizedTerm}:${normalizedCrns.join("|") || "group"}`;
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
+  }
+  const hashToken = hash.toString(36);
+  const anchor = normalizedCrns[0] || "group";
+  return `xlist_${normalizedTerm}_${anchor}_${hashToken}`;
+};
+
+const getScheduleCrossListCrns = (schedule = {}) => {
+  const tokens = new Set();
+  const addCrn = (value) => {
+    const normalized = normalizeCrn(value);
+    if (normalized) tokens.add(normalized);
+  };
+
+  addCrn(schedule?.crn);
+
+  const fieldCandidates = [
+    schedule?.crossListCrns,
+    schedule?.crossLists,
+    schedule?.crossListingCrns,
+    schedule?.crossListing,
+  ];
+
+  fieldCandidates.forEach((candidate) => {
+    if (Array.isArray(candidate)) {
+      candidate.forEach(addCrn);
+      return;
+    }
+    if (typeof candidate === "string" && candidate.trim()) {
+      const matches = candidate.match(/\b\d{5,6}\b/g);
+      if (matches) matches.forEach(addCrn);
+    }
+  });
+
+  return Array.from(tokens);
+};
+
+export const computeCrossListAutoLinkGroups = (schedules = []) => {
+  const scheduleById = new Map();
+  const scheduleIdsByTermCrn = new Map();
+  const adjacencyByTermCrn = new Map();
+
+  const getTermCrnKey = (termKey, crn) => `${termKey}::${crn}`;
+  const ensureAdjacency = (termCrnKey) => {
+    if (!adjacencyByTermCrn.has(termCrnKey)) {
+      adjacencyByTermCrn.set(termCrnKey, new Set());
+    }
+    return adjacencyByTermCrn.get(termCrnKey);
+  };
+  const connect = (left, right) => {
+    if (!left || !right || left === right) return;
+    ensureAdjacency(left).add(right);
+    ensureAdjacency(right).add(left);
+  };
+
+  schedules.forEach((schedule) => {
+    const scheduleId = normalizeString(schedule?.id);
+    if (!scheduleId) return;
+
+    const termKey = getScheduleTermKey(schedule);
+    const crns = getScheduleCrossListCrns(schedule);
+    if (!termKey || crns.length === 0) return;
+
+    scheduleById.set(scheduleId, schedule);
+
+    crns.forEach((crn) => {
+      const termCrnKey = getTermCrnKey(termKey, crn);
+      if (!scheduleIdsByTermCrn.has(termCrnKey)) {
+        scheduleIdsByTermCrn.set(termCrnKey, new Set());
+      }
+      scheduleIdsByTermCrn.get(termCrnKey).add(scheduleId);
+      ensureAdjacency(termCrnKey);
+    });
+
+    const primaryCrn = crns[0];
+    const primaryKey = getTermCrnKey(termKey, primaryCrn);
+    crns.slice(1).forEach((relatedCrn) => {
+      connect(primaryKey, getTermCrnKey(termKey, relatedCrn));
+    });
+  });
+
+  const visited = new Set();
+  const groups = [];
+
+  adjacencyByTermCrn.forEach((_, termCrnKey) => {
+    if (visited.has(termCrnKey)) return;
+    const [termKey] = termCrnKey.split("::");
+    const queue = [termCrnKey];
+    const component = [];
+    visited.add(termCrnKey);
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      component.push(current);
+      const neighbors = adjacencyByTermCrn.get(current) || new Set();
+      neighbors.forEach((neighbor) => {
+        if (visited.has(neighbor)) return;
+        visited.add(neighbor);
+        queue.push(neighbor);
+      });
+    }
+
+    const componentCrns = component
+      .map((entry) => entry.split("::")[1])
+      .filter(Boolean);
+    const uniqueCrns = Array.from(new Set(componentCrns)).sort();
+    if (uniqueCrns.length < 2) return;
+
+    const scheduleIds = new Set();
+    component.forEach((entry) => {
+      const ids = scheduleIdsByTermCrn.get(entry);
+      if (!ids) return;
+      ids.forEach((id) => scheduleIds.add(id));
+    });
+    if (scheduleIds.size < 2) return;
+
+    const termCode =
+      Array.from(scheduleIds)
+        .map((id) => scheduleById.get(id)?.termCode)
+        .find((value) => normalizeString(value)) || "";
+    const termLabel =
+      Array.from(scheduleIds)
+        .map((id) => scheduleById.get(id)?.term)
+        .find((value) => normalizeString(value)) || "";
+
+    groups.push({
+      termKey,
+      termCode: normalizeString(termCode),
+      term: normalizeString(termLabel),
+      crns: uniqueCrns,
+      linkGroupId: buildDeterministicLinkGroupId({
+        termCode,
+        term: termLabel,
+        crns: uniqueCrns,
+      }),
+      scheduleIds: Array.from(scheduleIds).sort(),
+    });
+  });
+
+  return groups;
+};
+
 export const buildLinkedSchedulePairSet = (schedules = []) => {
   const pairs = new Set();
   const groups = new Map();
@@ -245,6 +410,8 @@ export const unlinkSchedules = async ({
 };
 
 export default {
+  buildDeterministicLinkGroupId,
+  computeCrossListAutoLinkGroups,
   buildLinkedSchedulePairSet,
   linkSchedules,
   unlinkSchedules,

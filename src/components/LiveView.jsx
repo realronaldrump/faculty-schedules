@@ -188,29 +188,43 @@ const LiveView = () => {
 
   // getBuildingDisplay is imported from locationService
 
-  // Helper to check if schedule meets on a given day
+  // Helper to check if schedule meets on a given day.
+  // scheduleData is already flattened by meeting pattern in DataContext, so prefer
+  // row-level day fields first to avoid matching the same section multiple times.
   const scheduleMeetsOnDay = (schedule, dayCode) => {
+    const days =
+      schedule.Day || schedule.day || schedule.days || schedule.meetingDays || "";
+    if (days) {
+      return String(days).toUpperCase().includes(dayCode);
+    }
+
     if (schedule.meetingPatterns && Array.isArray(schedule.meetingPatterns)) {
       return schedule.meetingPatterns.some(
         (pattern) => pattern.day === dayCode,
       );
     }
-    const days = schedule.Day || schedule.days || schedule.meetingDays || "";
-    return days.includes(dayCode);
+
+    return false;
   };
 
-  // Helper to get start/end times for schedule
+  // Helper to get start/end times for schedule.
+  // Prefer row-level fields from flattened scheduleData before reading patterns.
   const getScheduleTimes = (schedule, dayCode) => {
+    const directStart =
+      schedule["Start Time"] || schedule.startTime || schedule.start;
+    const directEnd = schedule["End Time"] || schedule.endTime || schedule.end;
+    if (directStart || directEnd) {
+      return { startTime: directStart, endTime: directEnd };
+    }
+
     if (schedule.meetingPatterns && Array.isArray(schedule.meetingPatterns)) {
       const pattern = schedule.meetingPatterns.find((p) => p.day === dayCode);
       if (pattern) {
         return { startTime: pattern.startTime, endTime: pattern.endTime };
       }
     }
-    return {
-      startTime: schedule["Start Time"] || schedule.startTime,
-      endTime: schedule["End Time"] || schedule.endTime,
-    };
+
+    return { startTime: "", endTime: "" };
   };
 
   // Helper to get room from schedule

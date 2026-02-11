@@ -29,9 +29,13 @@ import { usePeople } from "../contexts/PeopleContext";
 import { useAppConfig } from "../contexts/AppConfigContext";
 import { useSchedules } from "../contexts/ScheduleContext";
 import { parseTermDate } from "../utils/termUtils";
-import { isAssignmentActiveOnDate } from "../utils/studentWorkers";
+import {
+  getStudentAssignments,
+  isAssignmentActiveOnDate,
+} from "../utils/studentWorkers";
 import { getActiveFacultyList } from "../utils/facultyFinderUtils";
 import { getFacultyLocationAtTime } from "../utils/facultyLocationUtils";
+import FacultyContactCard from "./FacultyContactCard";
 import FacultyExplorer from "./today/FacultyExplorer";
 import FacultySpotlightCard from "./today/FacultySpotlightCard";
 
@@ -59,6 +63,8 @@ const LiveView = () => {
   const [searchFocused, setSearchFocused] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [selectedFaculty, setSelectedFaculty] = useState(null);
+  const [selectedStudentForCard, setSelectedStudentForCard] = useState(null);
+  const [selectedStudentAssignments, setSelectedStudentAssignments] = useState([]);
   const [isExplorerOpen, setIsExplorerOpen] = useState(() => {
     const params = new URLSearchParams(location.search);
     return params.get("explore") === "1";
@@ -334,6 +340,17 @@ const LiveView = () => {
 
   const handleClearSelection = useCallback(() => {
     setSelectedFaculty(null);
+  }, []);
+
+  const handleOpenStudentContactCard = useCallback((student) => {
+    if (!student) return;
+    setSelectedStudentForCard(student);
+    setSelectedStudentAssignments(getStudentAssignments(student));
+  }, []);
+
+  const handleCloseStudentContactCard = useCallback(() => {
+    setSelectedStudentForCard(null);
+    setSelectedStudentAssignments([]);
   }, []);
 
   const handleOpenExplorer = useCallback(
@@ -1036,9 +1053,11 @@ const LiveView = () => {
             {studentsOnDutyNow.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {studentsOnDutyNow.map((student, idx) => (
-                  <div
+                  <button
+                    type="button"
                     key={student.id || idx}
-                    className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg"
+                    onClick={() => handleOpenStudentContactCard(student)}
+                    className="w-full text-left flex items-start gap-3 p-3 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors"
                   >
                     <div className="w-10 h-10 bg-amber-200 rounded-full flex items-center justify-center flex-shrink-0">
                       <span className="text-amber-800 font-medium text-sm">
@@ -1073,7 +1092,7 @@ const LiveView = () => {
                         )}
                       </div>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             ) : (
@@ -1193,6 +1212,16 @@ const LiveView = () => {
           </div>
         )}
       </div>
+
+      {selectedStudentForCard && (
+        <FacultyContactCard
+          person={selectedStudentForCard}
+          onClose={handleCloseStudentContactCard}
+          personType="student"
+          showStudentSchedule
+          studentAssignments={selectedStudentAssignments}
+        />
+      )}
     </div>
   );
 };

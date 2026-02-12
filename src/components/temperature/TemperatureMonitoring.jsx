@@ -266,6 +266,9 @@ const TemperatureMonitoring = () => {
   const importProgressRef = useRef({
     lastUpdate: 0,
     lastRows: 0,
+    lastReadings: 0,
+    lastSkippedExisting: 0,
+    lastConflicts: 0,
   });
 
   const [editingPositions, setEditingPositions] = useState(false);
@@ -646,6 +649,7 @@ const TemperatureMonitoring = () => {
           totalRows: 0,
           totalParsedRows: 0,
           totalNewReadings: 0,
+          totalSkippedExisting: 0,
           totalConflicts: 0,
           deviceIds: new Set(),
           dateStart: "",
@@ -662,6 +666,7 @@ const TemperatureMonitoring = () => {
       stats.totalRows += Number(item?.rowCount) || 0;
       stats.totalParsedRows += Number(item?.parsedCount) || 0;
       stats.totalNewReadings += Number(item?.newReadings) || 0;
+      stats.totalSkippedExisting += Number(item?.skippedExistingCount) || 0;
       stats.totalConflicts += Number(item?.conflictCount) || 0;
       if (item?.deviceId) stats.deviceIds.add(item.deviceId);
 
@@ -2083,7 +2088,13 @@ const TemperatureMonitoring = () => {
   const createImportJob = async ({ totalFiles, totalRows }) => {
     if (!selectedBuilding) return null;
     const jobId = uuidv4();
-    importProgressRef.current = { lastUpdate: 0, lastRows: 0 };
+    importProgressRef.current = {
+      lastUpdate: 0,
+      lastRows: 0,
+      lastReadings: 0,
+      lastSkippedExisting: 0,
+      lastConflicts: 0,
+    };
     await setDoc(
       doc(db, "temperatureImportJobs", jobId),
       {
@@ -2096,6 +2107,7 @@ const TemperatureMonitoring = () => {
         totalRows,
         processedRows: 0,
         processedReadings: 0,
+        skippedExistingReadings: 0,
         conflictCount: 0,
         currentFile: null,
         createdBy: user?.uid || null,
@@ -2114,13 +2126,36 @@ const TemperatureMonitoring = () => {
     const now = Date.now();
     const lastUpdate = importProgressRef.current.lastUpdate || 0;
     const lastRows = importProgressRef.current.lastRows || 0;
+    const lastReadings = importProgressRef.current.lastReadings || 0;
+    const lastSkippedExisting = importProgressRef.current.lastSkippedExisting || 0;
+    const lastConflicts = importProgressRef.current.lastConflicts || 0;
     const nextRows =
       updates.processedRows != null ? updates.processedRows : lastRows;
-    if (!force && now - lastUpdate < 1500 && nextRows - lastRows < 250) {
+    const nextReadings =
+      updates.processedReadings != null
+        ? updates.processedReadings
+        : lastReadings;
+    const nextSkippedExisting =
+      updates.skippedExistingReadings != null
+        ? updates.skippedExistingReadings
+        : lastSkippedExisting;
+    const nextConflicts =
+      updates.conflictCount != null ? updates.conflictCount : lastConflicts;
+    if (
+      !force &&
+      now - lastUpdate < 1500 &&
+      nextRows - lastRows < 250 &&
+      nextReadings - lastReadings < 50 &&
+      nextSkippedExisting - lastSkippedExisting < 50 &&
+      nextConflicts - lastConflicts < 25
+    ) {
       return;
     }
     importProgressRef.current.lastUpdate = now;
     importProgressRef.current.lastRows = nextRows;
+    importProgressRef.current.lastReadings = nextReadings;
+    importProgressRef.current.lastSkippedExisting = nextSkippedExisting;
+    importProgressRef.current.lastConflicts = nextConflicts;
     try {
       await updateDoc(doc(db, "temperatureImportJobs", jobId), {
         ...updates,
@@ -2267,10 +2302,12 @@ const TemperatureMonitoring = () => {
     let jobId = null;
     const deviceCache = { ...deviceDocs };
     let totalNewReadings = 0;
+    let totalSkippedExisting = 0;
     let totalConflicts = 0;
     let totalImportLogs = 0;
     let processedFiles = 0;
     let processedRows = 0;
+    const dayDocCache = new Map();
     try {
       jobId = await createImportJob({ totalFiles, totalRows });
       await updateImportJob(
@@ -2281,6 +2318,9 @@ const TemperatureMonitoring = () => {
           processedRows,
           totalFiles,
           totalRows,
+          processedReadings: totalNewReadings,
+          skippedExistingReadings: totalSkippedExisting,
+          conflictCount: totalConflicts,
         },
         { force: true },
       );
@@ -2328,6 +2368,9 @@ const TemperatureMonitoring = () => {
             currentFile: item.fileName || deviceLabel,
             processedFiles,
             processedRows,
+            processedReadings: totalNewReadings,
+            skippedExistingReadings: totalSkippedExisting,
+            conflictCount: totalConflicts,
           },
           { force: true },
         );
@@ -2350,13 +2393,16 @@ const TemperatureMonitoring = () => {
             : null;
         item.samples.forEach((sample) => {
           processedRows += 1;
-          // Note: duplicate detection happens per-minute at lines 1801-1812
-          // which allows backfill of old data while still preventing duplicates
+          // Duplicate detection is minute-based, so backfilled dates are allowed
+          // while already imported minute buckets are skipped.
           if (processedRows % 500 === 0) {
             void updateImportJob(jobId, {
               processedFiles,
               processedRows,
               stage: "Writing readings",
+              processedReadings: totalNewReadings,
+              skippedExistingReadings: totalSkippedExisting,
+              conflictCount: totalConflicts,
             });
           }
           if (sample.localTimestamp > newLatestLocal)
@@ -2387,15 +2433,40 @@ const TemperatureMonitoring = () => {
         const updatedDates = new Set();
         const daySamplesCache = {};
         let deviceNewReadings = 0;
+        let deviceSkippedExisting = 0;
         let deviceConflicts = 0;
 
         for (const [dateKey, entries] of Object.entries(samplesByDate)) {
           const docId = toDeviceDayId(deviceId, dateKey);
           const dayRef = doc(db, "temperatureDeviceReadings", docId);
-          const daySnap = await getDoc(dayRef);
-          const existingData = daySnap.exists() ? daySnap.data() : null;
-          const existingSamples = existingData?.samples || {};
+          const cachedDay = dayDocCache.get(docId);
+          let dayExists = Boolean(cachedDay?.exists);
+          let existingSamples = cachedDay?.samples || {};
+          let existingSampleCount = Number(cachedDay?.sampleCount) || 0;
+
+          if (!cachedDay) {
+            const daySnap = await getDoc(dayRef);
+            if (daySnap.exists()) {
+              const existingData = daySnap.data();
+              existingSamples = existingData?.samples || {};
+              existingSampleCount =
+                Number(existingData?.sampleCount) ||
+                Object.keys(existingSamples).length;
+              dayExists = true;
+            } else {
+              existingSamples = {};
+              existingSampleCount = 0;
+              dayExists = false;
+            }
+            dayDocCache.set(docId, {
+              exists: dayExists,
+              samples: existingSamples,
+              sampleCount: existingSampleCount,
+            });
+          }
+
           const newEntries = {};
+          let skippedExisting = 0;
           let conflicts = 0;
           Object.entries(entries).forEach(([minuteKey, sample]) => {
             const existing = existingSamples[minuteKey];
@@ -2405,7 +2476,11 @@ const TemperatureMonitoring = () => {
                 existing.temperatureC === sample.temperatureC &&
                 existing.humidity === sample.humidity &&
                 existing.rawLocal === sample.rawLocal;
-              if (!same) conflicts += 1;
+              if (same) {
+                skippedExisting += 1;
+              } else {
+                conflicts += 1;
+              }
               return;
             }
             newEntries[minuteKey] = sample;
@@ -2413,6 +2488,7 @@ const TemperatureMonitoring = () => {
           const newCount = Object.keys(newEntries).length;
           if (newCount === 0) {
             daySamplesCache[dateKey] = existingSamples;
+            deviceSkippedExisting += skippedExisting;
             deviceConflicts += conflicts;
             continue;
           }
@@ -2425,15 +2501,13 @@ const TemperatureMonitoring = () => {
             timezone,
             updatedAt: serverTimestamp(),
           };
-          if (!daySnap.exists()) metadata.createdAt = serverTimestamp();
+          if (!dayExists) metadata.createdAt = serverTimestamp();
           const updatePayload = { ...metadata };
-          if (daySnap.exists()) {
+          if (dayExists) {
             Object.entries(newEntries).forEach(([minuteKey, sample]) => {
               updatePayload[`samples.${minuteKey}`] = sample;
             });
-            updatePayload.sampleCount =
-              (existingData?.sampleCount ||
-                Object.keys(existingSamples).length) + newCount;
+            updatePayload.sampleCount = existingSampleCount + newCount;
             await updateDoc(dayRef, updatePayload);
           } else {
             await setDoc(
@@ -2446,12 +2520,30 @@ const TemperatureMonitoring = () => {
               { merge: true },
             );
           }
+          const mergedSamples = { ...existingSamples, ...newEntries };
+          const mergedSampleCount = existingSampleCount + newCount;
+          dayDocCache.set(docId, {
+            exists: true,
+            samples: mergedSamples,
+            sampleCount: mergedSampleCount,
+          });
           deviceNewReadings += newCount;
+          deviceSkippedExisting += skippedExisting;
           deviceConflicts += conflicts;
           updatedDates.add(dateKey);
-          daySamplesCache[dateKey] = { ...existingSamples, ...newEntries };
+          daySamplesCache[dateKey] = mergedSamples;
+
+          void updateImportJob(jobId, {
+            processedFiles,
+            processedRows,
+            stage: "Writing readings",
+            processedReadings: totalNewReadings + deviceNewReadings,
+            skippedExistingReadings: totalSkippedExisting + deviceSkippedExisting,
+            conflictCount: totalConflicts + deviceConflicts,
+          });
         }
 
+        totalSkippedExisting += deviceSkippedExisting;
         totalConflicts += deviceConflicts;
         if (deviceNewReadings > 0) {
           totalNewReadings += deviceNewReadings;
@@ -2479,6 +2571,7 @@ const TemperatureMonitoring = () => {
           rowCount: item.rowCount || 0,
           parsedCount: item.parsedCount || 0,
           newReadings: deviceNewReadings,
+          skippedExistingCount: deviceSkippedExisting,
           conflictCount: deviceConflicts,
           updatedDates: Array.from(updatedDates).sort(),
           dateRange: {
@@ -2550,6 +2643,9 @@ const TemperatureMonitoring = () => {
               stage: "Aggregating",
               processedFiles,
               processedRows,
+              processedReadings: totalNewReadings,
+              skippedExistingReadings: totalSkippedExisting,
+              conflictCount: totalConflicts,
             },
             { force: true },
           );
@@ -2593,6 +2689,9 @@ const TemperatureMonitoring = () => {
               stage: "Updating snapshots",
               processedFiles,
               processedRows,
+              processedReadings: totalNewReadings,
+              skippedExistingReadings: totalSkippedExisting,
+              conflictCount: totalConflicts,
             },
             { force: true },
           );
@@ -2619,6 +2718,9 @@ const TemperatureMonitoring = () => {
             processedRows,
             currentFile: null,
             stage: "Writing readings",
+            processedReadings: totalNewReadings,
+            skippedExistingReadings: totalSkippedExisting,
+            conflictCount: totalConflicts,
           },
           { force: true },
         );
@@ -2629,6 +2731,9 @@ const TemperatureMonitoring = () => {
           stage: "Finalizing",
           processedFiles,
           processedRows,
+          processedReadings: totalNewReadings,
+          skippedExistingReadings: totalSkippedExisting,
+          conflictCount: totalConflicts,
         },
         { force: true },
       );
@@ -2640,6 +2745,7 @@ const TemperatureMonitoring = () => {
           processedFiles,
           processedRows,
           processedReadings: totalNewReadings,
+          skippedExistingReadings: totalSkippedExisting,
           conflictCount: totalConflicts,
           finishedAt: serverTimestamp(),
           currentFile: null,
@@ -2648,18 +2754,28 @@ const TemperatureMonitoring = () => {
       );
       setDeviceDocs(deviceCache);
       if (totalNewReadings === 0) {
+        const skippedNote =
+          totalSkippedExisting > 0
+            ? ` ${totalSkippedExisting} existing readings were skipped.`
+            : "";
+        const conflictNote =
+          totalConflicts > 0 ? ` ${totalConflicts} conflicts were skipped.` : "";
         showNotification(
           "success",
           "No New Readings",
-          `No new readings were added. Logged ${totalImportLogs} import file${totalImportLogs === 1 ? "" : "s"}.`,
+          `No new readings were added.${skippedNote}${conflictNote} Logged ${totalImportLogs} import file${totalImportLogs === 1 ? "" : "s"}.`,
         );
       } else {
         const conflictNote =
           totalConflicts > 0 ? ` (${totalConflicts} conflicts skipped)` : "";
+        const skippedNote =
+          totalSkippedExisting > 0
+            ? ` (${totalSkippedExisting} existing readings skipped)`
+            : "";
         showNotification(
           "success",
           "Import Complete",
-          `${totalNewReadings} new readings added${conflictNote}. Logged ${totalImportLogs} import file${totalImportLogs === 1 ? "" : "s"}.`,
+          `${totalNewReadings} new readings added${skippedNote}${conflictNote}. Logged ${totalImportLogs} import file${totalImportLogs === 1 ? "" : "s"}.`,
         );
       }
       setImportItems([]);
@@ -2682,6 +2798,11 @@ const TemperatureMonitoring = () => {
           {
             status: "failed",
             stage: "Failed",
+            processedFiles,
+            processedRows,
+            processedReadings: totalNewReadings,
+            skippedExistingReadings: totalSkippedExisting,
+            conflictCount: totalConflicts,
             errorSummary: error?.message || "Import failed",
             errorDetails: details,
             finishedAt: serverTimestamp(),
@@ -3780,11 +3901,17 @@ const TemperatureMonitoring = () => {
               </div>
             )}
             {(activeImportJob.processedReadings != null ||
+              activeImportJob.skippedExistingReadings != null ||
               activeImportJob.conflictCount != null) && (
                 <div className="text-xs text-gray-600 flex flex-wrap gap-3">
                   {activeImportJob.processedReadings != null && (
                     <span>
                       New readings: {activeImportJob.processedReadings}
+                    </span>
+                  )}
+                  {activeImportJob.skippedExistingReadings != null && (
+                    <span>
+                      Existing skipped: {activeImportJob.skippedExistingReadings}
                     </span>
                   )}
                   {activeImportJob.conflictCount != null && (
@@ -4057,6 +4184,9 @@ const TemperatureMonitoring = () => {
                     New Readings
                   </th>
                   <th className="table-header-cell">
+                    Existing Skipped
+                  </th>
+                  <th className="table-header-cell">
                     Source Rows
                   </th>
                   <th className="table-header-cell">
@@ -4090,6 +4220,9 @@ const TemperatureMonitoring = () => {
                       </td>
                       <td className="table-cell text-gray-700">
                         {stats.totalNewReadings}
+                      </td>
+                      <td className="table-cell text-gray-700">
+                        {stats.totalSkippedExisting}
                       </td>
                       <td className="table-cell text-gray-700">
                         {stats.totalParsedRows}/{stats.totalRows}
@@ -4138,6 +4271,9 @@ const TemperatureMonitoring = () => {
                     New Readings
                   </th>
                   <th className="table-header-cell">
+                    Existing Skipped
+                  </th>
+                  <th className="table-header-cell">
                     Date Range
                   </th>
                 </tr>
@@ -4167,6 +4303,9 @@ const TemperatureMonitoring = () => {
                       <td className="table-cell text-gray-700">{spaceLabel}</td>
                       <td className="table-cell text-gray-700">
                         {item.newReadings ?? 0}
+                      </td>
+                      <td className="table-cell text-gray-700">
+                        {item.skippedExistingCount ?? 0}
                       </td>
                       <td className="table-cell text-gray-700">
                         {dateRangeLabel}

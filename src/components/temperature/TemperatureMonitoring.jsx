@@ -36,7 +36,6 @@ import {
   updateDoc,
   where,
   serverTimestamp,
-  deleteDoc,
   orderBy,
   writeBatch,
 } from "firebase/firestore";
@@ -50,7 +49,6 @@ import {
   parseSpaceKey,
   resolveBuildingDisplayName,
   SPACE_TYPE,
-  splitMultiRoom,
 } from "../../utils/locationService";
 import {
   formatMinutesToLabel,
@@ -184,8 +182,6 @@ const TemperatureMonitoring = () => {
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [deviceDocs, setDeviceDocs] = useState({});
   const [importHistory, setImportHistory] = useState([]);
-  const [importMappingDrafts, setImportMappingDrafts] = useState({});
-  const [importMappingSaving, setImportMappingSaving] = useState({});
 
   const [importItems, setImportItems] = useState([]);
   const [importing, setImporting] = useState(false);
@@ -226,8 +222,6 @@ const TemperatureMonitoring = () => {
 
   const [showDeleteFloorplanConfirm, setShowDeleteFloorplanConfirm] =
     useState(false);
-  const [deleteImportId, setDeleteImportId] = useState(null);
-  const [deletingImport, setDeletingImport] = useState(false);
   const [deleteRoomSpaceKey, setDeleteRoomSpaceKey] = useState("");
   const [showDeleteRoomDataConfirm, setShowDeleteRoomDataConfirm] =
     useState(false);
@@ -407,14 +401,6 @@ const TemperatureMonitoring = () => {
     return lookup;
   }, [roomsForBuilding]);
 
-  const spaceKeysForBuilding = useMemo(() => {
-    return new Set(
-      roomsForBuilding
-        .map((room) => normalizeSingleSpaceKey(room.spaceKey || room.id || ""))
-        .filter(Boolean),
-    );
-  }, [roomsForBuilding]);
-
   const deleteRoomLabel = useMemo(() => {
     const spaceKey = normalizeSingleSpaceKey(deleteRoomSpaceKey || "");
     if (!spaceKey) return "";
@@ -437,13 +423,7 @@ const TemperatureMonitoring = () => {
       spacesByKey,
     );
     const fallbackLabel = (item?.spaceLabel || "").toString().trim();
-    if (
-      canonicalLabel === spaceKey &&
-      fallbackLabel &&
-      splitMultiRoom(fallbackLabel).length === 1
-    ) {
-      return fallbackLabel;
-    }
+    if (canonicalLabel === spaceKey && fallbackLabel) return fallbackLabel;
     return canonicalLabel;
   };
 
@@ -511,6 +491,85 @@ const TemperatureMonitoring = () => {
     summary.deviceCount = deviceIds.size;
     return summary;
   }, [importItems]);
+
+  const roomImportStats = useMemo(() => {
+    const bySpace = new Map();
+    importHistory.forEach((item) => {
+      const spaceKey = normalizeSingleSpaceKey(
+        item?.spaceKey || deviceDocs[item?.deviceId]?.mapping?.spaceKey || "",
+      );
+      if (!spaceKey) return;
+
+      const canonicalRoomLabel = getSpaceLabel(
+        roomLookup[spaceKey] || { id: spaceKey },
+        spacesByKey,
+      );
+      const fallbackRoomLabel = (item?.spaceLabel || "").toString().trim();
+      const roomLabel =
+        canonicalRoomLabel === spaceKey && fallbackRoomLabel
+          ? fallbackRoomLabel
+          : canonicalRoomLabel;
+
+      if (!bySpace.has(spaceKey)) {
+        bySpace.set(spaceKey, {
+          spaceKey,
+          roomLabel,
+          importCount: 0,
+          totalRows: 0,
+          totalParsedRows: 0,
+          totalNewReadings: 0,
+          totalConflicts: 0,
+          deviceIds: new Set(),
+          dateStart: "",
+          dateEnd: "",
+          lastImportedAt: null,
+        });
+      }
+
+      const stats = bySpace.get(spaceKey);
+      if (stats.roomLabel === spaceKey && roomLabel !== spaceKey) {
+        stats.roomLabel = roomLabel;
+      }
+      stats.importCount += 1;
+      stats.totalRows += Number(item?.rowCount) || 0;
+      stats.totalParsedRows += Number(item?.parsedCount) || 0;
+      stats.totalNewReadings += Number(item?.newReadings) || 0;
+      stats.totalConflicts += Number(item?.conflictCount) || 0;
+      if (item?.deviceId) stats.deviceIds.add(item.deviceId);
+
+      const range = parseImportDateRange(item);
+      if (range) {
+        if (!stats.dateStart || range.start < stats.dateStart) {
+          stats.dateStart = range.start;
+        }
+        if (!stats.dateEnd || range.end > stats.dateEnd) {
+          stats.dateEnd = range.end;
+        }
+      }
+
+      const createdAt = item?.createdAt?.toDate
+        ? item.createdAt.toDate()
+        : item?.createdAt?.seconds
+          ? new Date(item.createdAt.seconds * 1000)
+          : null;
+      if (createdAt && (!stats.lastImportedAt || createdAt > stats.lastImportedAt)) {
+        stats.lastImportedAt = createdAt;
+      }
+    });
+
+    return Array.from(bySpace.values())
+      .map((stats) => ({
+        ...stats,
+        deviceCount: stats.deviceIds.size,
+      }))
+      .sort((a, b) => {
+        const readingDelta = b.totalNewReadings - a.totalNewReadings;
+        if (readingDelta !== 0) return readingDelta;
+        return a.roomLabel.localeCompare(b.roomLabel, undefined, {
+          numeric: true,
+        });
+      });
+  }, [importHistory, deviceDocs, roomLookup, spacesByKey]);
 
   const activeImportJob =
     importJob && importJob.buildingCode === selectedBuilding ? importJob : null;
@@ -1076,32 +1135,6 @@ const TemperatureMonitoring = () => {
     }
   };
 
-  const handleDeleteImport = async () => {
-    if (!deleteImportId) return;
-    setDeletingImport(true);
-    try {
-      await deleteDoc(doc(db, "temperatureImports", deleteImportId));
-      setImportHistory((prev) =>
-        prev.filter((item) => item.id !== deleteImportId),
-      );
-      showNotification(
-        "success",
-        "Import Log Deleted",
-        "The selected import history record was removed.",
-      );
-    } catch (error) {
-      console.error("Error deleting import log:", error);
-      showNotification(
-        "error",
-        "Delete Failed",
-        "Unable to delete the selected import history record.",
-      );
-    } finally {
-      setDeleteImportId(null);
-      setDeletingImport(false);
-    }
-  };
-
   const deleteDocRefsInBatches = async (docRefs = []) => {
     const uniqueRefs = [];
     const seenPaths = new Set();
@@ -1355,20 +1388,6 @@ const TemperatureMonitoring = () => {
             normalizeSingleSpaceKey(item?.spaceKey || "") !== targetSpaceKey,
         ),
       );
-      setImportMappingDrafts((prev) => {
-        const next = { ...prev };
-        roomImports.forEach((item) => {
-          delete next[item.id];
-        });
-        return next;
-      });
-      setImportMappingSaving((prev) => {
-        const next = { ...prev };
-        roomImports.forEach((item) => {
-          delete next[item.id];
-        });
-        return next;
-      });
       setDeleteRoomSpaceKey("");
       setImportHistoryRefresh((prev) => prev + 1);
       setSnapshotRefreshKey((prev) => prev + 1);
@@ -2526,111 +2545,6 @@ const TemperatureMonitoring = () => {
       );
     } finally {
       setImporting(false);
-    }
-  };
-
-  const handleImportHistoryMappingUpdate = async (item, nextSpaceKey) => {
-    if (!item?.deviceId || !nextSpaceKey) return;
-    const currentSpaceKey = resolveImportSpaceKey(item);
-    if (nextSpaceKey === currentSpaceKey) return;
-    if (!selectedBuilding) return;
-
-    const deviceId = item.deviceId;
-    const deviceLabel =
-      deviceDocs[deviceId]?.label || item.deviceLabel || deviceId;
-    const spaceLabel = getSpaceLabel(
-      roomLookup[nextSpaceKey] || { id: nextSpaceKey },
-      spacesByKey,
-    );
-    const mappingPayload = {
-      spaceKey: nextSpaceKey,
-      method: "manual",
-      confidence: 1,
-      updatedAt: serverTimestamp(),
-      manual: true,
-    };
-
-    setImportMappingDrafts((prev) => ({ ...prev, [item.id]: nextSpaceKey }));
-    setImportMappingSaving((prev) => ({ ...prev, [item.id]: true }));
-    try {
-      await setDoc(
-        doc(db, "temperatureDevices", deviceId),
-        {
-          buildingCode: selectedBuilding,
-          buildingName: selectedBuildingName || selectedBuilding,
-          label: deviceLabel,
-          labelNormalized: normalizeMatchText(deviceLabel),
-          mapping: mappingPayload,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
-      await setDoc(
-        doc(db, "temperatureImports", item.id),
-        {
-          spaceKey: nextSpaceKey,
-          spaceLabel,
-          mappingMethod: mappingPayload.method,
-          mappingConfidence: mappingPayload.confidence,
-          mappingManual: mappingPayload.manual,
-          mappingUpdatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
-      setDeviceDocs((prev) => ({
-        ...prev,
-        [deviceId]: {
-          ...(prev[deviceId] || {}),
-          id: deviceId,
-          buildingCode: selectedBuilding,
-          buildingName: selectedBuildingName || selectedBuilding,
-          label: deviceLabel,
-          labelNormalized: normalizeMatchText(deviceLabel),
-          mapping: {
-            spaceKey: nextSpaceKey,
-            method: mappingPayload.method,
-            confidence: mappingPayload.confidence,
-            manual: mappingPayload.manual,
-          },
-        },
-      }));
-      setImportHistory((prev) =>
-        prev.map((entry) =>
-          entry.id === item.id
-            ? {
-              ...entry,
-              spaceKey: nextSpaceKey,
-              spaceLabel,
-              mappingMethod: mappingPayload.method,
-              mappingConfidence: mappingPayload.confidence,
-              mappingManual: mappingPayload.manual,
-            }
-            : entry,
-        ),
-      );
-      showNotification(
-        "success",
-        "Mapping Updated",
-        "Device mapping updated. Recompute snapshots for affected dates if needed.",
-      );
-    } catch (error) {
-      console.error("Failed to update import mapping:", error);
-      showNotification(
-        "error",
-        "Mapping Update Failed",
-        "Unable to update the room assignment.",
-      );
-    } finally {
-      setImportMappingSaving((prev) => {
-        const next = { ...prev };
-        delete next[item.id];
-        return next;
-      });
-      setImportMappingDrafts((prev) => {
-        const next = { ...prev };
-        delete next[item.id];
-        return next;
-      });
     }
   };
 
@@ -3999,28 +3913,113 @@ const TemperatureMonitoring = () => {
         </div>
       </div>
 
-      {/* Import History Section */}
-      {importHistory.length > 0 && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-gray-900">Past Imports</h3>
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <h3 className="text-sm font-semibold text-gray-900">
+            Room Import Statistics
+          </h3>
+          <span className="text-xs text-gray-500">
+            {roomImportStats.length} rooms with imported data
+          </span>
+        </div>
+        {roomImportStats.length === 0 ? (
+          <div className="text-sm text-gray-600">
+            No imported room data for this building yet.
+          </div>
+        ) : (
           <div className="overflow-x-auto">
             <table className="university-table min-w-full">
               <thead>
                 <tr>
                   <th className="table-header-cell">
-                    Date
+                    Room
+                  </th>
+                  <th className="table-header-cell">
+                    New Readings
+                  </th>
+                  <th className="table-header-cell">
+                    Source Rows
+                  </th>
+                  <th className="table-header-cell">
+                    Imports
+                  </th>
+                  <th className="table-header-cell">
+                    Devices
+                  </th>
+                  <th className="table-header-cell">
+                    Date Coverage
+                  </th>
+                  <th className="table-header-cell">
+                    Last Import
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {roomImportStats.map((stats) => {
+                  const dateCoverage = stats.dateStart
+                    ? stats.dateStart === stats.dateEnd
+                      ? stats.dateStart
+                      : `${stats.dateStart} to ${stats.dateEnd}`
+                    : "-";
+                  const lastImport = stats.lastImportedAt
+                    ? stats.lastImportedAt.toLocaleString()
+                    : "-";
+                  return (
+                    <tr key={stats.spaceKey}>
+                      <td className="table-cell font-medium text-gray-800">
+                        {stats.roomLabel}
+                      </td>
+                      <td className="table-cell text-gray-700">
+                        {stats.totalNewReadings}
+                      </td>
+                      <td className="table-cell text-gray-700">
+                        {stats.totalParsedRows}/{stats.totalRows}
+                      </td>
+                      <td className="table-cell text-gray-700">
+                        {stats.importCount}
+                      </td>
+                      <td className="table-cell text-gray-700">
+                        {stats.deviceCount}
+                      </td>
+                      <td className="table-cell text-gray-700">{dateCoverage}</td>
+                      <td className="table-cell text-gray-700">{lastImport}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {importHistory.length > 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <h3 className="text-sm font-semibold text-gray-900">
+              Recent Import Files
+            </h3>
+            <span className="text-xs text-gray-500">
+              {importHistory.length} logged files
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="university-table min-w-full">
+              <thead>
+                <tr>
+                  <th className="table-header-cell">
+                    Imported
                   </th>
                   <th className="table-header-cell">
                     File
                   </th>
                   <th className="table-header-cell">
-                    Room/Space
+                    Room
                   </th>
                   <th className="table-header-cell">
-                    Rows
+                    New Readings
                   </th>
                   <th className="table-header-cell">
-                    Action
+                    Date Range
                   </th>
                 </tr>
               </thead>
@@ -4030,79 +4029,28 @@ const TemperatureMonitoring = () => {
                     ? new Date(item.createdAt.seconds * 1000).toLocaleString()
                     : "Unknown";
                   const mappedSpaceKey = resolveImportSpaceKey(item);
-                  const selectValue =
-                    importMappingDrafts[item.id] ?? mappedSpaceKey ?? "";
-                  const selectLabel = resolveImportSpaceLabel(
-                    item,
-                    selectValue || mappedSpaceKey,
-                  );
-                  const showMissingRoomOption =
-                    selectValue && !spaceKeysForBuilding.has(selectValue);
-                  const isMappingSaving = Boolean(importMappingSaving[item.id]);
+                  const spaceLabel = resolveImportSpaceLabel(item, mappedSpaceKey);
+                  const dateRange = parseImportDateRange(item);
+                  const dateRangeLabel = dateRange
+                    ? dateRange.start === dateRange.end
+                      ? dateRange.start
+                      : `${dateRange.start} to ${dateRange.end}`
+                    : "-";
                   return (
                     <tr key={item.id}>
                       <td className="table-cell text-gray-700">{importDate}</td>
                       <td
-                        className="table-cell text-gray-700 truncate max-w-[200px]"
+                        className="table-cell text-gray-700 truncate max-w-[220px]"
                         title={item.fileName}
                       >
                         {item.fileName || "-"}
                       </td>
+                      <td className="table-cell text-gray-700">{spaceLabel}</td>
                       <td className="table-cell text-gray-700">
-                        {item.deviceId ? (
-                          <select
-                            className="form-input text-xs min-w-[180px]"
-                            value={selectValue}
-                            onChange={(e) =>
-                              handleImportHistoryMappingUpdate(
-                                item,
-                                e.target.value,
-                              )
-                            }
-                            title={selectLabel}
-                            disabled={
-                              roomsLoading ||
-                              isMappingSaving ||
-                              importing ||
-                              deletingImport ||
-                              deletingRoomData
-                            }
-                          >
-                            <option value="" disabled>
-                              Select room...
-                            </option>
-                            {showMissingRoomOption && (
-                              <option value={selectValue}>
-                                {`${selectLabel} (inactive)`}
-                              </option>
-                            )}
-                            {roomsForBuilding.map((room) => {
-                              const spaceKey = room.spaceKey || room.id;
-                              if (!spaceKey) return null;
-                              return (
-                                <option key={spaceKey} value={spaceKey}>
-                                  {getSpaceLabel(room, spacesByKey)}
-                                </option>
-                              );
-                            })}
-                          </select>
-                        ) : (
-                          <span className="text-xs text-gray-500">
-                            {selectLabel}
-                          </span>
-                        )}
+                        {item.newReadings ?? 0}
                       </td>
                       <td className="table-cell text-gray-700">
-                        {item.rowCount ?? "-"}
-                      </td>
-                      <td className="table-cell">
-                        <button
-                          className="text-red-600 hover:text-red-800 text-xs font-medium flex items-center gap-1"
-                          onClick={() => setDeleteImportId(item.id)}
-                          disabled={deletingImport || deletingRoomData}
-                        >
-                          <Trash2 className="w-3 h-3" /> Delete Log
-                        </button>
+                        {dateRangeLabel}
                       </td>
                     </tr>
                   );
@@ -4583,16 +4531,6 @@ const TemperatureMonitoring = () => {
         onConfirm={confirmDeleteFloorplan}
         onCancel={() => setShowDeleteFloorplanConfirm(false)}
         confirmText="Delete"
-        variant="danger"
-      />
-
-      <ConfirmDialog
-        isOpen={!!deleteImportId}
-        title="Delete Import Log"
-        message="Are you sure you want to delete this import log entry? Temperature readings are not deleted by this action."
-        onConfirm={handleDeleteImport}
-        onCancel={() => setDeleteImportId(null)}
-        confirmText="Delete Log"
         variant="danger"
       />
 

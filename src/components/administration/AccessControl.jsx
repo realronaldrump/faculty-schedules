@@ -52,6 +52,10 @@ const AccessControl = () => {
   const [pendingPages, setPendingPages] = useState([]);
   const [search, setSearch] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [userSort, setUserSort] = useState({
+    key: "email",
+    direction: "asc",
+  });
 
   const allPages = useMemo(() => getAllPageIds(), [getAllPageIds]);
   const navigationEntries = useMemo(
@@ -423,6 +427,108 @@ const AccessControl = () => {
     return users.filter((u) => (u.email || "").toLowerCase().includes(q));
   }, [users, search]);
 
+  const getTimestampValue = (value) => {
+    if (!value) return 0;
+    if (typeof value?.toDate === "function") {
+      return value.toDate().getTime();
+    }
+    if (typeof value?.seconds === "number") {
+      return value.seconds * 1000;
+    }
+    const dateParsed = Date.parse(value);
+    if (!Number.isNaN(dateParsed)) {
+      return dateParsed;
+    }
+    const numberParsed = Number(value);
+    return Number.isNaN(numberParsed) ? 0 : numberParsed;
+  };
+
+  const getStatusSortRank = (status) => {
+    switch (status) {
+      case USER_STATUS.ACTIVE:
+        return 0;
+      case USER_STATUS.PENDING:
+        return 1;
+      case USER_STATUS.DISABLED:
+        return 2;
+      default:
+        return 3;
+    }
+  };
+
+  const getSortValue = (userRow, sortKey) => {
+    switch (sortKey) {
+      case "email":
+        return (userRow.email || "").toLowerCase();
+      case "roles": {
+        const roles = normalizeRoleList(userRow.roles);
+        return roles.length ? roles.join(",") : "~";
+      }
+      case "status":
+        return getStatusSortRank(resolveUserStatus(userRow));
+      case "lastActivity":
+        return getTimestampValue(userRow.lastActiveAt || userRow.lastLoginAt);
+      case "createdAt":
+        return getTimestampValue(userRow.createdAt);
+      case "actions":
+        return resolveUserStatus(userRow) === USER_STATUS.DISABLED ? 0 : 1;
+      default:
+        return "";
+    }
+  };
+
+  const sortedUsers = useMemo(() => {
+    const sorted = [...filteredUsers];
+    const directionMultiplier = userSort.direction === "asc" ? 1 : -1;
+
+    sorted.sort((a, b) => {
+      const aValue = getSortValue(a, userSort.key);
+      const bValue = getSortValue(b, userSort.key);
+
+      let compareResult = 0;
+      if (typeof aValue === "string" || typeof bValue === "string") {
+        compareResult = String(aValue).localeCompare(String(bValue));
+      } else if (aValue > bValue) {
+        compareResult = 1;
+      } else if (aValue < bValue) {
+        compareResult = -1;
+      }
+
+      if (compareResult !== 0) {
+        return compareResult * directionMultiplier;
+      }
+
+      return (a.email || "").localeCompare(b.email || "");
+    });
+
+    return sorted;
+  }, [filteredUsers, userSort]);
+
+  const toggleUserSort = (key) => {
+    setUserSort((prev) =>
+      prev.key === key
+        ? {
+          key,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        }
+        : {
+          key,
+          direction: "asc",
+        },
+    );
+  };
+
+  const renderSortArrow = (key) => {
+    if (userSort.key !== key) {
+      return <span className="text-gray-300">↕</span>;
+    }
+    return (
+      <span className="text-baylor-green">
+        {userSort.direction === "asc" ? "↑" : "↓"}
+      </span>
+    );
+  };
+
   const quickToggleRole = async (uid, role) => {
     try {
       const uRef = doc(db, "users", uid);
@@ -737,27 +843,69 @@ const AccessControl = () => {
                       <thead>
                       <tr>
                         <th className="table-header-cell">
-                          User
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 hover:text-baylor-green"
+                            onClick={() => toggleUserSort("email")}
+                          >
+                            User
+                            {renderSortArrow("email")}
+                          </button>
                         </th>
                         <th className="table-header-cell">
-                          Roles
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 hover:text-baylor-green"
+                            onClick={() => toggleUserSort("roles")}
+                          >
+                            Roles
+                            {renderSortArrow("roles")}
+                          </button>
                         </th>
                         <th className="table-header-cell">
-                          Status
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 hover:text-baylor-green"
+                            onClick={() => toggleUserSort("status")}
+                          >
+                            Status
+                            {renderSortArrow("status")}
+                          </button>
                         </th>
                         <th className="table-header-cell">
-                          Last Activity
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 hover:text-baylor-green"
+                            onClick={() => toggleUserSort("lastActivity")}
+                          >
+                            Last Activity
+                            {renderSortArrow("lastActivity")}
+                          </button>
                         </th>
                         <th className="table-header-cell">
-                          Date Created
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 hover:text-baylor-green"
+                            onClick={() => toggleUserSort("createdAt")}
+                          >
+                            Date Created
+                            {renderSortArrow("createdAt")}
+                          </button>
                         </th>
                         <th className="table-header-cell">
-                          Actions
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 hover:text-baylor-green"
+                            onClick={() => toggleUserSort("actions")}
+                          >
+                            Actions
+                            {renderSortArrow("actions")}
+                          </button>
                         </th>
                       </tr>
                       </thead>
                       <tbody>
-                      {filteredUsers.map((u) => {
+                      {sortedUsers.map((u) => {
                         const roles = normalizeRoleList(u.roles);
                         const status = resolveUserStatus(u);
                         const isDisabled = status === USER_STATUS.DISABLED;

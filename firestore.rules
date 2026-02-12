@@ -289,7 +289,7 @@ service cloud.firestore {
     function isSelfProfileUpdateAllowed(userId) {
       return isSelf(userId) &&
         request.resource.data.diff(resource.data).changedKeys()
-          .hasOnly(['displayName', 'photoURL', 'lastLoginAt', 'updatedAt']);
+          .hasOnly(['displayName', 'photoURL', 'lastLoginAt', 'lastActiveAt', 'updatedAt']);
     }
 
     function isNonEmptyString(value) {

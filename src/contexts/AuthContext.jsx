@@ -2,6 +2,7 @@ import React, {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { auth, db } from "../firebase";
@@ -39,6 +40,10 @@ import {
 
 const AuthContext = createContext(null);
 
+const USER_ACTIVITY_HEARTBEAT_INTERVAL_MS = 60 * 1000; // 60 seconds
+const USER_ACTIVITY_MIN_UPDATE_INTERVAL_MS = 30 * 1000; // 30 seconds
+const USER_ACTIVITY_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
@@ -46,6 +51,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [loadedProfile, setLoadedProfile] = useState(false);
   const [loadedAccess, setLoadedAccess] = useState(false);
+  const activityTrackerRef = useRef(null);
 
   // Removed insecure .env based admin check. Admin access is now strictly role-based.
 
@@ -57,11 +63,11 @@ export const AuthProvider = ({ children }) => {
       const ref = getAccessControlRef();
       const snap = await getDoc(ref);
       if (!snap.exists()) {
-        const defaults = {
-          rolePermissions: {
-            admin: { pages: { "*": true } },
-            staff: { pages: {} },
-            faculty: { pages: {} },
+    const defaults = {
+      rolePermissions: {
+        admin: { pages: { "*": true } },
+        staff: { pages: {} },
+        faculty: { pages: {} },
           },
           updatedAt: serverTimestamp(),
         };
@@ -111,6 +117,7 @@ export const AuthProvider = ({ children }) => {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         lastLoginAt: serverTimestamp(),
+        lastActiveAt: serverTimestamp(),
       };
       await setDoc(userRef, newProfile);
       logCreate(
@@ -129,12 +136,107 @@ export const AuthProvider = ({ children }) => {
       const existing = snap.data();
       // Update last login timestamp
       try {
-        await updateDoc(userRef, { lastLoginAt: serverTimestamp() });
+        await updateDoc(userRef, {
+          lastLoginAt: serverTimestamp(),
+          lastActiveAt: serverTimestamp(),
+        });
       } catch (error) {
         console.warn(error);
       }
       setUserProfile(existing);
     }
+  };
+
+  const stopUserActivityTracking = () => {
+    const tracker = activityTrackerRef.current;
+    if (!tracker) return;
+
+    if (tracker.intervalId) {
+      clearInterval(tracker.intervalId);
+    }
+    if (tracker.visibilityListener) {
+      document.removeEventListener(
+        "visibilitychange",
+        tracker.visibilityListener,
+      );
+    }
+    if (tracker.pageHideListener) {
+      window.removeEventListener("pagehide", tracker.pageHideListener);
+    }
+    if (Array.isArray(tracker.events)) {
+      tracker.events.forEach(({ type, handler }) =>
+        window.removeEventListener(type, handler),
+      );
+    }
+
+    activityTrackerRef.current = null;
+  };
+
+  const startUserActivityTracking = (uid) => {
+    stopUserActivityTracking();
+    if (!uid || typeof window === "undefined" || typeof document === "undefined")
+      return;
+
+    const userRef = doc(db, "users", uid);
+    const tracked = { events: [] };
+    let lastUpdateMs = Date.now();
+    let lastInteractionMs = Date.now();
+
+    const refreshLastActive = async ({ force = false, includeHidden = false } = {}) => {
+      if (!includeHidden && document.hidden) return;
+
+      const nowMs = Date.now();
+      const isIdle = nowMs - lastInteractionMs > USER_ACTIVITY_IDLE_TIMEOUT_MS;
+      if (!force && isIdle) return;
+      if (!force && nowMs - lastUpdateMs < USER_ACTIVITY_MIN_UPDATE_INTERVAL_MS)
+        return;
+
+      lastUpdateMs = nowMs;
+      try {
+        await updateDoc(userRef, { lastActiveAt: serverTimestamp() });
+      } catch (error) {
+        console.warn(error);
+      }
+    };
+
+    const markActivity = () => {
+      lastInteractionMs = Date.now();
+      void refreshLastActive();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        // Persist the final "last seen" moment when the app is backgrounded.
+        void refreshLastActive({ force: true, includeHidden: true });
+        return;
+      }
+      lastInteractionMs = Date.now();
+      void refreshLastActive({ force: true });
+    };
+
+    const onPageHide = () => {
+      lastInteractionMs = Date.now();
+      void refreshLastActive({ force: true, includeHidden: true });
+    };
+
+    const activityEvents = ["pointerdown", "touchstart", "keydown", "scroll"];
+    activityEvents.forEach((eventType) => {
+      window.addEventListener(eventType, markActivity, { passive: true });
+      tracked.events.push({ type: eventType, handler: markActivity });
+    });
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    tracked.visibilityListener = onVisibilityChange;
+    window.addEventListener("pagehide", onPageHide);
+    tracked.pageHideListener = onPageHide;
+    tracked.intervalId = setInterval(
+      () => {
+        void refreshLastActive();
+      },
+      USER_ACTIVITY_HEARTBEAT_INTERVAL_MS,
+    );
+
+    activityTrackerRef.current = tracked;
   };
 
   useEffect(() => {
@@ -162,6 +264,7 @@ export const AuthProvider = ({ children }) => {
       try {
         if (u) {
           await loadUserProfile(u);
+          startUserActivityTracking(u.uid);
         }
       } catch (error) {
         console.error("Failed to load/create user profile:", error);
@@ -183,6 +286,7 @@ export const AuthProvider = ({ children }) => {
       } else {
         setUserProfile(null);
         setLoadedProfile(true);
+        stopUserActivityTracking();
       }
     });
     return () => {
@@ -191,6 +295,7 @@ export const AuthProvider = ({ children }) => {
       } catch (error) {
         console.warn(error);
       }
+      stopUserActivityTracking();
       if (typeof stopUserProfile === "function") {
         try {
           stopUserProfile();

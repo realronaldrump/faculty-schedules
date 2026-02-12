@@ -117,6 +117,21 @@ const AccessControl = () => {
       });
   }, [navigationEntries]);
 
+  const formatFirestoreDate = (value) => {
+    if (!value) return "-";
+    if (typeof value?.toDate === "function") {
+      return value.toDate().toLocaleString();
+    }
+    if (typeof value.seconds === "number") {
+      return new Date(value.seconds * 1000).toLocaleString();
+    }
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed)) {
+      return new Date(parsed).toLocaleString();
+    }
+    return "-";
+  };
+
   const getPermissionLabel = (pageId) =>
     permissionDescriptorLookup.get(pageId)?.label || pageId;
 
@@ -731,7 +746,7 @@ const AccessControl = () => {
                           Status
                         </th>
                         <th className="table-header-cell">
-                          Last Login
+                          Last Activity
                         </th>
                         <th className="table-header-cell">
                           Date Created
@@ -748,6 +763,7 @@ const AccessControl = () => {
                         const isDisabled = status === USER_STATUS.DISABLED;
                         const isPending = status === USER_STATUS.PENDING;
                         const isSelected = selectedUserId === u.id;
+                        const lastActivity = u.lastActiveAt || u.lastLoginAt;
 
                         return (
                           <tr
@@ -810,13 +826,7 @@ const AccessControl = () => {
                               )}
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-600">
-                              {u.lastLoginAt
-                                ? new Date(
-                                  u.lastLoginAt.seconds
-                                    ? u.lastLoginAt.seconds * 1000
-                                    : u.lastLoginAt,
-                                ).toLocaleString()
-                                : "-"}
+                              {formatFirestoreDate(lastActivity)}
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-600">
                               {u.createdAt

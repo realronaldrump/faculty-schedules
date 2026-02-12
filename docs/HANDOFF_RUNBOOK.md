@@ -4,7 +4,7 @@ This runbook is for maintainers taking ownership of the Faculty Schedules dashbo
 
 ## 1) Access You Need
 
-- GitHub repo admin on `realronaldrump/faculty-schedules`
+- GitHub repo admin on `<org-or-account>/faculty-schedules`
 - Vercel project admin for production deployment
 - Firebase project editor/admin (Firestore, Storage, Auth)
 - Access to production environment variables
@@ -15,7 +15,7 @@ Use `docs/ACCESS_TRANSFER_CHECKLIST.md` to verify transfer completion.
 
 1. Clone and install:
    ```bash
-   git clone https://github.com/realronaldrump/faculty-schedules.git
+   git clone https://github.com/<org-or-account>/faculty-schedules.git
    cd faculty-schedules
    npm install
    ```

@@ -60,7 +60,10 @@ const ProtectedContent = ({ pageId, children }) => {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <p className="text-gray-700">You do not have access to this page. Please contact Davis (davis_deaton1@baylor.edu) to request access.</p>
+          <p className="text-gray-700">
+            You do not have access to this page. Please contact an
+            administrator to request access.
+          </p>
         </div>
       </div>
     );
@@ -70,4 +73,3 @@ const ProtectedContent = ({ pageId, children }) => {
 };
 
 export default ProtectedContent;
-

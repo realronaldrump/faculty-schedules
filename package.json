@@ -95,11 +95,7 @@
     "baylor",
     "dashboard"
   ],
-  "author": {
-    "name": "Davis Deaton",
-    "email": "davis_deaton1@baylor.edu",
-    "affiliation": "Baylor University - Human Sciences & Design"
-  },
+  "author": "Private Maintainer",
   "repository": {
     "type": "git",
     "url": "https://github.com/your-org/hsd-faculty-dashboard.git"

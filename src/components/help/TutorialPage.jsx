@@ -294,7 +294,7 @@ const TutorialPage = () => {
         <QuickTipCard
           icon={Mail}
           title="Need More Help?"
-          description="Contact Davis for additional assistance with the dashboard."
+          description="Contact your dashboard administrator for additional assistance."
         />
       </div>
 

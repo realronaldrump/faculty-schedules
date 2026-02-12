@@ -38,7 +38,7 @@ import {
   serverTimestamp,
   deleteDoc,
   orderBy,
-  limit,
+  writeBatch,
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "../../firebase";
@@ -111,6 +111,58 @@ import SnapshotPanel from "./monitoring/SnapshotPanel";
 import ImportPanel from "./monitoring/ImportPanel";
 import SettingsPanel from "./monitoring/SettingsPanel";
 
+const MAX_FIRESTORE_BATCH_WRITES = 400;
+
+const toLocalDateToken = (value) => {
+  if (!value || typeof value !== "string") return "";
+  const token = value.split(" ")[0]?.trim() || "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(token)) return "";
+  return token;
+};
+
+const parseImportDateRange = (importItem) => {
+  const start = toLocalDateToken(importItem?.dateRange?.start || "");
+  const end = toLocalDateToken(importItem?.dateRange?.end || "");
+  if (!start && !end) return null;
+  const safeStart = start || end;
+  const safeEnd = end || start;
+  if (!safeStart || !safeEnd) return null;
+  return safeStart <= safeEnd
+    ? { start: safeStart, end: safeEnd }
+    : { start: safeEnd, end: safeStart };
+};
+
+const mergeDateRanges = (ranges = []) => {
+  const normalized = ranges
+    .filter((range) => range?.start && range?.end)
+    .map((range) =>
+      range.start <= range.end
+        ? { start: range.start, end: range.end }
+        : { start: range.end, end: range.start },
+    )
+    .sort((a, b) => a.start.localeCompare(b.start));
+
+  if (normalized.length === 0) return [];
+  const merged = [normalized[0]];
+  for (let i = 1; i < normalized.length; i += 1) {
+    const current = normalized[i];
+    const previous = merged[merged.length - 1];
+    if (current.start <= previous.end) {
+      if (current.end > previous.end) previous.end = current.end;
+    } else {
+      merged.push({ ...current });
+    }
+  }
+  return merged;
+};
+
+const buildImportItemMergeKey = (item) => {
+  const fileHash = (item?.fileHash || "").toString();
+  const fileName = (item?.fileName || "").toString().toLowerCase();
+  if (fileHash) return `hash:${fileHash}`;
+  return `name:${fileName}`;
+};
+
 const TemperatureMonitoring = () => {
   const { loading: authLoading, user } = useAuth();
   const { spacesList = [], spacesByKey, roomsLoading } = useData();
@@ -176,6 +228,10 @@ const TemperatureMonitoring = () => {
     useState(false);
   const [deleteImportId, setDeleteImportId] = useState(null);
   const [deletingImport, setDeletingImport] = useState(false);
+  const [deleteRoomSpaceKey, setDeleteRoomSpaceKey] = useState("");
+  const [showDeleteRoomDataConfirm, setShowDeleteRoomDataConfirm] =
+    useState(false);
+  const [deletingRoomData, setDeletingRoomData] = useState(false);
   const [importHistoryRefresh, setImportHistoryRefresh] = useState(0);
   const [snapshotRefreshKey, setSnapshotRefreshKey] = useState(0);
 
@@ -359,6 +415,12 @@ const TemperatureMonitoring = () => {
     );
   }, [roomsForBuilding]);
 
+  const deleteRoomLabel = useMemo(() => {
+    const spaceKey = normalizeSingleSpaceKey(deleteRoomSpaceKey || "");
+    if (!spaceKey) return "";
+    return getSpaceLabel(roomLookup[spaceKey] || { id: spaceKey }, spacesByKey);
+  }, [deleteRoomSpaceKey, roomLookup, spacesByKey]);
+
   const resolveImportSpaceKey = (item) => {
     if (!item) return "";
     return normalizeSingleSpaceKey(
@@ -440,7 +502,6 @@ const TemperatureMonitoring = () => {
       if (item.duplicate) summary.duplicateCount += 1;
       if (item.deviceId) deviceIds.add(item.deviceId);
       if (
-        !item.duplicate &&
         (item.errorCount ?? 0) === 0 &&
         (item.parsedCount ?? 0) > 0
       ) {
@@ -531,6 +592,8 @@ const TemperatureMonitoring = () => {
     setExportSnapshotIds([]);
     setHistoricalSpaceKey("");
     setHistoricalDocs([]);
+    setDeleteRoomSpaceKey("");
+    setShowDeleteRoomDataConfirm(false);
   }, [selectedBuilding]);
 
   useEffect(() => {
@@ -665,7 +728,6 @@ const TemperatureMonitoring = () => {
           collection(db, "temperatureImports"),
           where("buildingCode", "==", selectedBuilding),
           orderBy("createdAt", "desc"),
-          limit(20),
         );
         const snap = await getDocs(q);
         const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -1018,88 +1080,317 @@ const TemperatureMonitoring = () => {
     if (!deleteImportId) return;
     setDeletingImport(true);
     try {
-      // Find the import record from history to get metadata for deletion
-      const importItem = importHistory.find((item) => item.id === deleteImportId);
-
-      if (importItem) {
-        const deviceId = importItem.deviceId;
-        const spaceKey = normalizeSingleSpaceKey(importItem.spaceKey || "");
-        const buildingCode = (
-          importItem.buildingCode ||
-          selectedBuilding ||
-          ""
-        )
-          .toString()
-          .trim();
-        const { dateRange } = importItem;
-        const startDate = dateRange?.start ? dateRange.start.split(" ")[0] : null;
-        const endDate = dateRange?.end ? dateRange.end.split(" ")[0] : null;
-
-        // Delete device readings for this device within the date range
-        if (deviceId && startDate && endDate) {
-          const readingsQuery = query(
-            collection(db, "temperatureDeviceReadings"),
-            where("deviceId", "==", deviceId),
-            where("dateLocal", ">=", startDate),
-            where("dateLocal", "<=", endDate),
-          );
-          const readingsSnap = await getDocs(readingsQuery);
-          for (const docSnap of readingsSnap.docs) {
-            await deleteDoc(docSnap.ref);
-          }
-        }
-
-        // Delete room aggregates for this room within the date range
-        if (spaceKey && buildingCode && startDate && endDate) {
-          const aggregatesQuery = query(
-            collection(db, "temperatureRoomAggregates"),
-            where("buildingCode", "==", buildingCode),
-            where("spaceKey", "==", spaceKey),
-            where("dateLocal", ">=", startDate),
-            where("dateLocal", "<=", endDate),
-          );
-          const aggregatesSnap = await getDocs(aggregatesQuery);
-          for (const docSnap of aggregatesSnap.docs) {
-            await deleteDoc(docSnap.ref);
-          }
-        }
-
-        // Delete room snapshots for this room within the date range
-        if (spaceKey && buildingCode && startDate && endDate) {
-          const snapshotsQuery = query(
-            collection(db, "temperatureRoomSnapshots"),
-            where("buildingCode", "==", buildingCode),
-            where("spaceKey", "==", spaceKey),
-            where("dateLocal", ">=", startDate),
-            where("dateLocal", "<=", endDate),
-          );
-          const snapshotsSnap = await getDocs(snapshotsQuery);
-          for (const docSnap of snapshotsSnap.docs) {
-            await deleteDoc(docSnap.ref);
-          }
-        }
-      }
-
-      // Delete the import record itself
       await deleteDoc(doc(db, "temperatureImports", deleteImportId));
       setImportHistory((prev) =>
         prev.filter((item) => item.id !== deleteImportId),
       );
       showNotification(
         "success",
-        "Import Deleted",
-        "The import and all associated temperature data have been removed.",
+        "Import Log Deleted",
+        "The selected import history record was removed.",
       );
     } catch (error) {
-      console.error("Error deleting import:", error);
+      console.error("Error deleting import log:", error);
       showNotification(
         "error",
         "Delete Failed",
-        "Unable to delete import and temperature data.",
+        "Unable to delete the selected import history record.",
       );
     } finally {
       setDeleteImportId(null);
       setDeletingImport(false);
+    }
+  };
+
+  const deleteDocRefsInBatches = async (docRefs = []) => {
+    const uniqueRefs = [];
+    const seenPaths = new Set();
+    docRefs.forEach((refItem) => {
+      if (!refItem?.path) return;
+      if (seenPaths.has(refItem.path)) return;
+      seenPaths.add(refItem.path);
+      uniqueRefs.push(refItem);
+    });
+    if (uniqueRefs.length === 0) return 0;
+
+    let batch = writeBatch(db);
+    let operationCount = 0;
+    let deletedCount = 0;
+    for (const refItem of uniqueRefs) {
+      batch.delete(refItem);
+      operationCount += 1;
+      deletedCount += 1;
+      if (operationCount >= MAX_FIRESTORE_BATCH_WRITES) {
+        await batch.commit();
+        batch = writeBatch(db);
+        operationCount = 0;
+      }
+    }
+    if (operationCount > 0) {
+      await batch.commit();
+    }
+    return deletedCount;
+  };
+
+  const refreshDeviceDateBounds = async (deviceId) => {
+    if (!deviceId) return;
+    const readingsSnap = await getDocs(
+      query(
+        collection(db, "temperatureDeviceReadings"),
+        where("deviceId", "==", deviceId),
+      ),
+    );
+
+    let earliestLocalTimestamp = "";
+    let latestLocalTimestamp = "";
+    let earliestUtcDate = null;
+    let latestUtcDate = null;
+
+    readingsSnap.docs.forEach((docSnap) => {
+      const samples = docSnap.data()?.samples || {};
+      Object.values(samples).forEach((sample) => {
+        const rawLocal = (sample?.rawLocal || "").toString();
+        if (rawLocal) {
+          if (!earliestLocalTimestamp || rawLocal < earliestLocalTimestamp) {
+            earliestLocalTimestamp = rawLocal;
+          }
+          if (!latestLocalTimestamp || rawLocal > latestLocalTimestamp) {
+            latestLocalTimestamp = rawLocal;
+          }
+        }
+        const utcValue = sample?.utc?.toDate
+          ? sample.utc.toDate()
+          : sample?.utc instanceof Date
+            ? sample.utc
+            : null;
+        if (utcValue) {
+          if (!earliestUtcDate || utcValue < earliestUtcDate) {
+            earliestUtcDate = utcValue;
+          }
+          if (!latestUtcDate || utcValue > latestUtcDate) {
+            latestUtcDate = utcValue;
+          }
+        }
+      });
+    });
+
+    await setDoc(
+      doc(db, "temperatureDevices", deviceId),
+      {
+        earliestLocalTimestamp: earliestLocalTimestamp || null,
+        latestLocalTimestamp: latestLocalTimestamp || null,
+        earliestUtc: earliestUtcDate ? Timestamp.fromDate(earliestUtcDate) : null,
+        latestUtc: latestUtcDate ? Timestamp.fromDate(latestUtcDate) : null,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+  };
+
+  const handleDeleteRoomData = async () => {
+    const targetSpaceKey = normalizeSingleSpaceKey(deleteRoomSpaceKey || "");
+    if (!selectedBuilding || !targetSpaceKey) return;
+
+    setShowDeleteRoomDataConfirm(false);
+    setDeletingRoomData(true);
+    try {
+      const buildingName = selectedBuildingName || selectedBuilding;
+      const roomLabel = getSpaceLabel(
+        roomLookup[targetSpaceKey] || { id: targetSpaceKey },
+        spacesByKey,
+      );
+
+      let roomImportsSnap = await getDocs(
+        query(
+          collection(db, "temperatureImports"),
+          where("buildingCode", "==", selectedBuilding),
+        ),
+      );
+      if (roomImportsSnap.empty && buildingName) {
+        roomImportsSnap = await getDocs(
+          query(
+            collection(db, "temperatureImports"),
+            where("buildingName", "==", buildingName),
+          ),
+        );
+      }
+      const roomImports = roomImportsSnap.docs
+        .map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+        }))
+        .filter(
+          (item) =>
+            normalizeSingleSpaceKey(item?.spaceKey || "") === targetSpaceKey,
+        );
+
+      const roomImportRefs = roomImports.map((item) =>
+        doc(db, "temperatureImports", item.id),
+      );
+
+      let aggregateSnap = await getDocs(
+        query(
+          collection(db, "temperatureRoomAggregates"),
+          where("buildingCode", "==", selectedBuilding),
+          where("spaceKey", "==", targetSpaceKey),
+        ),
+      );
+      if (aggregateSnap.empty && buildingName) {
+        aggregateSnap = await getDocs(
+          query(
+            collection(db, "temperatureRoomAggregates"),
+            where("buildingName", "==", buildingName),
+            where("spaceKey", "==", targetSpaceKey),
+          ),
+        );
+      }
+
+      let snapshotSnap = await getDocs(
+        query(
+          collection(db, "temperatureRoomSnapshots"),
+          where("buildingCode", "==", selectedBuilding),
+          where("spaceKey", "==", targetSpaceKey),
+        ),
+      );
+      if (snapshotSnap.empty && buildingName) {
+        snapshotSnap = await getDocs(
+          query(
+            collection(db, "temperatureRoomSnapshots"),
+            where("buildingName", "==", buildingName),
+            where("spaceKey", "==", targetSpaceKey),
+          ),
+        );
+      }
+
+      let mappedDevicesSnap = await getDocs(
+        query(
+          collection(db, "temperatureDevices"),
+          where("buildingCode", "==", selectedBuilding),
+          where("mapping.spaceKey", "==", targetSpaceKey),
+        ),
+      );
+      if (mappedDevicesSnap.empty && buildingName) {
+        mappedDevicesSnap = await getDocs(
+          query(
+            collection(db, "temperatureDevices"),
+            where("buildingName", "==", buildingName),
+            where("mapping.spaceKey", "==", targetSpaceKey),
+          ),
+        );
+      }
+
+      const deviceDateRanges = new Map();
+      const deviceIdsFromImports = new Set();
+      roomImports.forEach((item) => {
+        const deviceId = (item?.deviceId || "").toString().trim();
+        if (!deviceId) return;
+        deviceIdsFromImports.add(deviceId);
+        const nextRanges = deviceDateRanges.get(deviceId) || [];
+        const dateRange = parseImportDateRange(item);
+        if (dateRange) {
+          nextRanges.push(dateRange);
+        }
+        deviceDateRanges.set(deviceId, nextRanges);
+      });
+
+      const readingsRefMap = new Map();
+      const affectedDeviceIds = new Set();
+      for (const deviceId of deviceIdsFromImports) {
+        const mergedRanges = mergeDateRanges(deviceDateRanges.get(deviceId) || []);
+        if (mergedRanges.length === 0) {
+          const readingsSnap = await getDocs(
+            query(
+              collection(db, "temperatureDeviceReadings"),
+              where("deviceId", "==", deviceId),
+            ),
+          );
+          readingsSnap.docs.forEach((docSnap) => {
+            readingsRefMap.set(docSnap.ref.path, docSnap.ref);
+            affectedDeviceIds.add(deviceId);
+          });
+          continue;
+        }
+
+        for (const range of mergedRanges) {
+          const readingsSnap = await getDocs(
+            query(
+              collection(db, "temperatureDeviceReadings"),
+              where("deviceId", "==", deviceId),
+              where("dateLocal", ">=", range.start),
+              where("dateLocal", "<=", range.end),
+            ),
+          );
+          readingsSnap.docs.forEach((docSnap) => {
+            readingsRefMap.set(docSnap.ref.path, docSnap.ref);
+            affectedDeviceIds.add(deviceId);
+          });
+        }
+      }
+
+      const deletedImports = await deleteDocRefsInBatches(roomImportRefs);
+      const deletedAggregates = await deleteDocRefsInBatches(
+        aggregateSnap.docs.map((docSnap) => docSnap.ref),
+      );
+      const deletedSnapshots = await deleteDocRefsInBatches(
+        snapshotSnap.docs.map((docSnap) => docSnap.ref),
+      );
+      const deletedReadings = await deleteDocRefsInBatches(
+        Array.from(readingsRefMap.values()),
+      );
+
+      const mappedDeviceIds = new Set(
+        mappedDevicesSnap.docs.map((docSnap) => docSnap.id).filter(Boolean),
+      );
+      const devicesToRefresh = new Set([
+        ...Array.from(affectedDeviceIds),
+        ...Array.from(mappedDeviceIds),
+      ]);
+      for (const deviceId of devicesToRefresh) {
+        await refreshDeviceDateBounds(deviceId);
+      }
+
+      setImportHistory((prev) =>
+        prev.filter(
+          (item) =>
+            normalizeSingleSpaceKey(item?.spaceKey || "") !== targetSpaceKey,
+        ),
+      );
+      setImportMappingDrafts((prev) => {
+        const next = { ...prev };
+        roomImports.forEach((item) => {
+          delete next[item.id];
+        });
+        return next;
+      });
+      setImportMappingSaving((prev) => {
+        const next = { ...prev };
+        roomImports.forEach((item) => {
+          delete next[item.id];
+        });
+        return next;
+      });
+      setDeleteRoomSpaceKey("");
+      setImportHistoryRefresh((prev) => prev + 1);
+      setSnapshotRefreshKey((prev) => prev + 1);
+      emitTemperatureDataRefresh({
+        buildingCode: selectedBuilding,
+        updatedAt: new Date().toISOString(),
+      });
+
+      showNotification(
+        "success",
+        "Room Data Deleted",
+        `${roomLabel}: removed ${deletedImports} import logs, ${deletedReadings} reading docs, ${deletedAggregates} aggregate docs, and ${deletedSnapshots} snapshot docs.`,
+      );
+    } catch (error) {
+      console.error("Failed to delete room temperature data:", error);
+      showNotification(
+        "error",
+        "Delete Failed",
+        "Unable to delete room temperature data.",
+      );
+    } finally {
+      setDeletingRoomData(false);
     }
   };
 
@@ -1372,20 +1663,19 @@ const TemperatureMonitoring = () => {
   const processFiles = async (files) => {
     if (!selectedBuilding || files.length === 0) return;
 
-    // Current behavior: replace list on new selection
-    setImportItems([]);
-    setPendingMappings([]);
-    setMappingOverrides({});
-
     const nextItems = [];
     for (const file of files) {
       try {
         const fileHash = await hashFile(file);
-        const importDocId = `${toBuildingKey(selectedBuilding)}__${fileHash}`;
-        const importDoc = await getDoc(
-          doc(db, "temperatureImports", importDocId),
+        const duplicateSnap = await getDocs(
+          query(
+            collection(db, "temperatureImports"),
+            where("buildingCode", "==", selectedBuilding),
+            where("fileHash", "==", fileHash),
+          ),
         );
-        const duplicate = importDoc.exists();
+        const duplicate = !duplicateSnap.empty;
+        const duplicateCount = duplicateSnap.size;
         const parsed = await parseCsvFile(file);
         const {
           timestampIndex,
@@ -1400,6 +1690,7 @@ const TemperatureMonitoring = () => {
             fileName: file.name,
             fileHash,
             duplicate,
+            duplicateCount,
             errors: ["Missing required timestamp or temperature columns."],
             errorCount: 1,
             samples: [],
@@ -1470,6 +1761,7 @@ const TemperatureMonitoring = () => {
           fileName: file.name,
           fileHash,
           duplicate,
+          duplicateCount,
           deviceLabel,
           deviceId,
           temperatureUnit: temperatureUnit || "F",
@@ -1495,8 +1787,18 @@ const TemperatureMonitoring = () => {
         });
       }
     }
-    setImportItems(nextItems);
-    setPendingMappings(buildPendingMappings(nextItems));
+    setImportItems((prevItems) => {
+      const mergedByKey = new Map();
+      [...prevItems, ...nextItems].forEach((item) => {
+        mergedByKey.set(buildImportItemMergeKey(item), item);
+      });
+      const mergedItems = Array.from(mergedByKey.values());
+      setPendingMappings(buildPendingMappings(mergedItems));
+      setMappingOverrides((prevOverrides) =>
+        pruneMappingOverrides(prevOverrides, mergedItems),
+      );
+      return mergedItems;
+    });
   };
 
   const extractCsvsFromZip = async (zipFile) => {
@@ -1772,7 +2074,6 @@ const TemperatureMonitoring = () => {
     }
     const importQueue = importItems.filter(
       (item) =>
-        !item.duplicate &&
         (item.errorCount ?? 0) === 0 &&
         item.deviceId &&
         Array.isArray(item.samples) &&
@@ -1796,6 +2097,7 @@ const TemperatureMonitoring = () => {
     const deviceCache = { ...deviceDocs };
     let totalNewReadings = 0;
     let totalConflicts = 0;
+    let totalImportLogs = 0;
     let processedFiles = 0;
     let processedRows = 0;
     try {
@@ -1979,38 +2281,43 @@ const TemperatureMonitoring = () => {
           daySamplesCache[dateKey] = { ...existingSamples, ...newEntries };
         }
 
+        totalConflicts += deviceConflicts;
         if (deviceNewReadings > 0) {
           totalNewReadings += deviceNewReadings;
-          totalConflicts += deviceConflicts;
-          const importDocId = `${toBuildingKey(selectedBuilding)}__${item.fileHash}`;
-          await setDoc(
-            doc(db, "temperatureImports", importDocId),
-            {
-              buildingCode: selectedBuilding,
-              buildingName: selectedBuildingName || selectedBuilding,
-              deviceId,
-              deviceLabel,
-              spaceKey,
-              spaceLabel: mappedSpaceLabel,
-              mappingMethod: mappingPayload.method,
-              mappingConfidence: mappingPayload.confidence,
-              mappingManual: mappingPayload.manual,
-              mappingUpdatedAt: serverTimestamp(),
-              fileName: item.fileName,
-              fileHash: item.fileHash,
-              rowCount: item.rowCount || 0,
-              parsedCount: item.parsedCount || 0,
-              newReadings: deviceNewReadings,
-              dateRange: {
-                start: item.minTimestamp,
-                end: item.maxTimestamp,
-              },
-              temperatureUnit: item.temperatureUnit || "F",
-              createdAt: serverTimestamp(),
-            },
-            { merge: true },
-          );
         }
+
+        const importDocId = uuidv4();
+        await setDoc(doc(db, "temperatureImports", importDocId), {
+          buildingCode: selectedBuilding,
+          buildingName: selectedBuildingName || selectedBuilding,
+          importRunId: jobId || null,
+          status: deviceNewReadings > 0 ? "completed" : "no_new_readings",
+          importedBy: user?.uid || null,
+          deviceId,
+          deviceLabel,
+          spaceKey,
+          spaceLabel: mappedSpaceLabel,
+          mappingMethod: mappingPayload.method,
+          mappingConfidence: mappingPayload.confidence,
+          mappingManual: mappingPayload.manual,
+          mappingUpdatedAt: serverTimestamp(),
+          fileName: item.fileName,
+          fileHash: item.fileHash,
+          duplicateFileHash: Boolean(item.duplicate),
+          duplicateFileHashCount: item.duplicateCount || 0,
+          rowCount: item.rowCount || 0,
+          parsedCount: item.parsedCount || 0,
+          newReadings: deviceNewReadings,
+          conflictCount: deviceConflicts,
+          updatedDates: Array.from(updatedDates).sort(),
+          dateRange: {
+            start: item.minTimestamp,
+            end: item.maxTimestamp,
+          },
+          temperatureUnit: item.temperatureUnit || "F",
+          createdAt: serverTimestamp(),
+        });
+        totalImportLogs += 1;
 
         const existingMapping = existingDevice?.mapping || {};
         const existingSpaceKey = normalizeSingleSpaceKey(
@@ -2173,7 +2480,7 @@ const TemperatureMonitoring = () => {
         showNotification(
           "success",
           "No New Readings",
-          "All selected files were already imported.",
+          `No new readings were added. Logged ${totalImportLogs} import file${totalImportLogs === 1 ? "" : "s"}.`,
         );
       } else {
         const conflictNote =
@@ -2181,7 +2488,7 @@ const TemperatureMonitoring = () => {
         showNotification(
           "success",
           "Import Complete",
-          `${totalNewReadings} new readings added${conflictNote}.`,
+          `${totalNewReadings} new readings added${conflictNote}. Logged ${totalImportLogs} import file${totalImportLogs === 1 ? "" : "s"}.`,
         );
       }
       setImportItems([]);
@@ -3327,7 +3634,7 @@ const TemperatureMonitoring = () => {
             </label>
             {importItems.length > 0 && (
               <span className="text-xs text-gray-500">
-                Selecting new files replaces the current list.
+                Additional selections are added to this list.
               </span>
             )}
           </div>
@@ -3366,7 +3673,7 @@ const TemperatureMonitoring = () => {
               </div>
             </div>
             <div className="rounded-lg bg-white border border-gray-200 p-3">
-              <div className="text-xs text-gray-500">Duplicates</div>
+              <div className="text-xs text-gray-500">Seen Before</div>
               <div className="text-lg font-semibold text-gray-600">
                 {importSummary.duplicateCount}
               </div>
@@ -3471,35 +3778,19 @@ const TemperatureMonitoring = () => {
         </div>
       )}
 
-      {importItems.length === 0 ? (
-        <div className="border-2 border-dashed border-gray-200 rounded-xl p-10 text-center bg-gray-50/50">
-          <div className="w-14 h-14 rounded-full bg-baylor-green/10 flex items-center justify-center mx-auto mb-4">
-            <FileUp className="w-7 h-7 text-baylor-green" />
-          </div>
-          <p className="text-base font-medium text-gray-900 mb-1">
-            No files selected
-          </p>
-          <p className="text-sm text-gray-500 mb-4">
-            Choose one or more Govee CSV or ZIP exports to import temperature data.
-          </p>
-          <label
-            htmlFor="temperature-import-csvs"
-            className="btn-primary cursor-pointer inline-flex items-center gap-2"
-          >
-            <FileUp className="w-4 h-4" />
-            Select CSV or ZIP Files
-          </label>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-900">Selected Files</h3>
+          <span className="text-xs text-gray-500">
+            {importSummary.fileCount} files
+          </span>
         </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-900">
-              Selected Files
-            </h3>
-            <span className="text-xs text-gray-500">
-              {importSummary.fileCount} files
-            </span>
+        {importItems.length === 0 ? (
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+            No files selected yet. Use the upload area above to add CSV or ZIP
+            files.
           </div>
+        ) : (
           <div className="overflow-x-auto">
             <table className="university-table min-w-full">
               <thead>
@@ -3549,14 +3840,15 @@ const TemperatureMonitoring = () => {
                           : "-"}
                       </td>
                       <td className="table-cell text-gray-700">
-                        {item.duplicate ? (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-2 py-1 text-xs text-gray-600">
-                            <AlertTriangle className="w-3 h-3" /> Duplicate
-                          </span>
-                        ) : item.errorCount > 0 ? (
+                        {item.errorCount > 0 ? (
                           <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
                             <AlertTriangle className="w-3 h-3" />{" "}
                             {item.errorCount} errors
+                          </span>
+                        ) : item.duplicate ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-700">
+                            <CheckCircle2 className="w-3 h-3" />
+                            Seen before ({item.duplicateCount || 1})
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-full border border-baylor-green/20 bg-baylor-green/10 px-2 py-1 text-xs text-baylor-green">
@@ -3582,76 +3874,80 @@ const TemperatureMonitoring = () => {
               </tbody>
             </table>
           </div>
+        )}
 
-          {pendingMappings.length > 0 && (
-            <div className="bg-baylor-gold/10 border border-baylor-gold/30 rounded-lg p-4 space-y-3">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900">
-                  Device → Room Mapping
-                </h3>
-                <p className="text-xs text-gray-500">
-                  Review and correct room assignments before importing. Multiple files from the same device will share a mapping. Changes are saved for future imports.
-                </p>
-              </div>
-              <div className="space-y-2">
-                {pendingMappings.map((item) => (
-                  <div
-                    key={item.deviceId}
-                    className="flex flex-col md:flex-row md:items-center md:justify-between gap-2"
-                  >
-                    <div>
-                      <div className="text-sm font-medium text-gray-800">
-                        {item.deviceLabel}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        Suggested:{" "}
-                        {item.suggestedSpaceKey
-                          ? getSpaceLabel(
-                            roomLookup[item.suggestedSpaceKey] || {
-                              id: item.suggestedSpaceKey,
-                            },
-                            spacesByKey,
-                          )
-                          : "None"}{" "}
-                        | Confidence{" "}
-                        {Math.round((item.matchConfidence || 0) * 100)}%
-                      </div>
-                    </div>
-                    <select
-                      className="form-input md:max-w-xs"
-                      value={
-                        mappingOverrides[item.deviceId] ||
-                        item.suggestedSpaceKey ||
-                        ""
-                      }
-                      onChange={(e) =>
-                        setMappingOverrides((prev) => ({
-                          ...prev,
-                          [item.deviceId]: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Select room...</option>
-                      {roomsForBuilding.map((room) => {
-                        const spaceKey = room.spaceKey || room.id;
-                        if (!spaceKey) return null;
-                        return (
-                          <option key={spaceKey} value={spaceKey}>
-                            {getSpaceLabel(room, spacesByKey)}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-                ))}
-              </div>
+        {importItems.length > 0 && pendingMappings.length > 0 && (
+          <div className="bg-baylor-gold/10 border border-baylor-gold/30 rounded-lg p-4 space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">
+                Device → Room Mapping
+              </h3>
+              <p className="text-xs text-gray-500">
+                Review and correct room assignments before importing. Multiple
+                files from the same device will share a mapping. Changes are
+                saved for future imports.
+              </p>
             </div>
-          )}
+            <div className="space-y-2">
+              {pendingMappings.map((item) => (
+                <div
+                  key={item.deviceId}
+                  className="flex flex-col md:flex-row md:items-center md:justify-between gap-2"
+                >
+                  <div>
+                    <div className="text-sm font-medium text-gray-800">
+                      {item.deviceLabel}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      Suggested:{" "}
+                      {item.suggestedSpaceKey
+                        ? getSpaceLabel(
+                          roomLookup[item.suggestedSpaceKey] || {
+                            id: item.suggestedSpaceKey,
+                          },
+                          spacesByKey,
+                        )
+                        : "None"}{" "}
+                      | Confidence {Math.round((item.matchConfidence || 0) * 100)}
+                      %
+                    </div>
+                  </div>
+                  <select
+                    className="form-input md:max-w-xs"
+                    value={
+                      mappingOverrides[item.deviceId] ||
+                      item.suggestedSpaceKey ||
+                      ""
+                    }
+                    onChange={(e) =>
+                      setMappingOverrides((prev) => ({
+                        ...prev,
+                        [item.deviceId]: e.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">Select room...</option>
+                    {roomsForBuilding.map((room) => {
+                      const spaceKey = room.spaceKey || room.id;
+                      if (!spaceKey) return null;
+                      return (
+                        <option key={spaceKey} value={spaceKey}>
+                          {getSpaceLabel(room, spacesByKey)}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
+        {importItems.length > 0 && (
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="text-sm text-gray-600">
-              Duplicates are skipped automatically. Resolve any mapping prompts
-              before importing.
+              Existing readings are skipped automatically; only new readings are
+              added. Resolve any mapping prompts before importing.
             </div>
             <button
               className="btn-primary"
@@ -3661,8 +3957,47 @@ const TemperatureMonitoring = () => {
               {importing ? "Import in progress" : "Import Now"}
             </button>
           </div>
+        )}
+      </div>
+
+      <div className="bg-rose-50 border border-rose-200 rounded-lg p-4 space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold text-rose-900">
+            Delete Room Import Data
+          </h3>
+          <p className="text-xs text-rose-700">
+            This removes all import logs and stored temperature data for the
+            selected room in this building.
+          </p>
         </div>
-      )}
+        <div className="flex flex-col md:flex-row md:items-center gap-3">
+          <select
+            className="form-input md:max-w-sm"
+            value={deleteRoomSpaceKey}
+            onChange={(e) => setDeleteRoomSpaceKey(e.target.value)}
+            disabled={deletingRoomData || importing}
+          >
+            <option value="">Select room...</option>
+            {roomsForBuilding.map((room) => {
+              const spaceKey = room.spaceKey || room.id;
+              if (!spaceKey) return null;
+              return (
+                <option key={spaceKey} value={spaceKey}>
+                  {getSpaceLabel(room, spacesByKey)}
+                </option>
+              );
+            })}
+          </select>
+          <button
+            className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => setShowDeleteRoomDataConfirm(true)}
+            disabled={!deleteRoomSpaceKey || deletingRoomData || importing}
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            {deletingRoomData ? "Deleting..." : "Delete Room Data"}
+          </button>
+        </div>
+      </div>
 
       {/* Import History Section */}
       {importHistory.length > 0 && (
@@ -3729,7 +4064,8 @@ const TemperatureMonitoring = () => {
                               roomsLoading ||
                               isMappingSaving ||
                               importing ||
-                              deletingImport
+                              deletingImport ||
+                              deletingRoomData
                             }
                           >
                             <option value="" disabled>
@@ -3763,9 +4099,9 @@ const TemperatureMonitoring = () => {
                         <button
                           className="text-red-600 hover:text-red-800 text-xs font-medium flex items-center gap-1"
                           onClick={() => setDeleteImportId(item.id)}
-                          disabled={deletingImport}
+                          disabled={deletingImport || deletingRoomData}
                         >
-                          <Trash2 className="w-3 h-3" /> Delete
+                          <Trash2 className="w-3 h-3" /> Delete Log
                         </button>
                       </td>
                     </tr>
@@ -4252,11 +4588,21 @@ const TemperatureMonitoring = () => {
 
       <ConfirmDialog
         isOpen={!!deleteImportId}
-        title="Delete Import"
-        message="Are you sure you want to delete this import record? This removes the import log but does not delete any temperature data that was imported."
+        title="Delete Import Log"
+        message="Are you sure you want to delete this import log entry? Temperature readings are not deleted by this action."
         onConfirm={handleDeleteImport}
         onCancel={() => setDeleteImportId(null)}
-        confirmText="Delete"
+        confirmText="Delete Log"
+        variant="danger"
+      />
+
+      <ConfirmDialog
+        isOpen={showDeleteRoomDataConfirm}
+        title="Delete Room Data"
+        message={`Delete all import logs, readings, aggregates, and snapshots for ${deleteRoomLabel || "this room"} in ${selectedBuildingName || selectedBuilding}?`}
+        onConfirm={handleDeleteRoomData}
+        onCancel={() => setShowDeleteRoomDataConfirm(false)}
+        confirmText="Delete Room Data"
         variant="danger"
       />
     </div>

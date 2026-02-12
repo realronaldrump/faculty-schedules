@@ -1,50 +1,38 @@
-# Node
-node_modules
+# Dependencies and logs
+node_modules/
 npm-debug.log*
 yarn-error.log*
 
 # System files
 .DS_Store
 
-# Vite build output
-dist
-dist-ssr
-
-# Firebase - IMPORTANT
-# Contains sensitive private keys and should never be committed.
-firebase-service-account.json
+# Build output
+dist/
+dist-ssr/
 
 # Environment variables
 .env
 .env.*
-import-data.js
-# data-samples/CLSS-export-sample.csv
-# data-samples/directory-export.csv
-# data-samples/export.csv
-# data-samples/Filemaker.csv
-# data-samples/directoryexporttest2.csv
-# data-samples/CLSSFall2025.csv
 
-# data-samples/CLSSSpring2025.csv
+# Local scripts/config
+import-data.js
+.codex/config.toml
+.claude/CLAUDE.md
+CLAUDE.md
+
+# Firebase and key material
+firebase-service-account.json
+*serviceAccountKey*.json
+*service-account*.json
+firestore-export/
+
+# Local datasets and exports
 data-samples/*.csv
 !data-samples/sanitized-temperature-readings-example.csv
 !data-samples/sanitized-clss-example.csv
 temperature_examples/
-firestore-export/
-# local firestore export artifacts
-firestore-export/
-firebase-service-account.json
-*serviceAccountKey*.json
-*service-account*.json
 
-.env.local
-.codex/config.toml
-data-samples/CLSSExportSpring2026.csv
-.claude/CLAUDE.md
-
+# Project-specific local files
 docs/student-worker-audit.md
-
-# Tests
 src/utils/__tests__/
-CLAUDE.md
 functions/package-lock.json

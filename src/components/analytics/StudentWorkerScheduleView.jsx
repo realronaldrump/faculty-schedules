@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Building, Clock } from 'lucide-react';
+import { Building, Clock, MapPin } from 'lucide-react';
 import { formatHoursValue } from '../../utils/studentWorkers';
 
 const DAY_ORDER = ['M', 'T', 'W', 'R', 'F', 'S', 'U'];
@@ -21,16 +21,26 @@ const DAY_SHORT_LABELS = {
   S: 'Sat',
   U: 'Sun',
 };
+const DAY_ABBR = {
+  M: 'M',
+  T: 'T',
+  W: 'W',
+  R: 'R',
+  F: 'F',
+  S: 'S',
+  U: 'U',
+};
 
 const ACCENTS = [
-  { border: '#154734', background: 'rgba(21, 71, 52, 0.12)' },
-  { border: '#1F7A1F', background: 'rgba(31, 122, 31, 0.12)' },
-  { border: '#B68B00', background: 'rgba(182, 139, 0, 0.15)' },
-  { border: '#0E6E6E', background: 'rgba(14, 110, 110, 0.12)' },
-  { border: '#3F4C5A', background: 'rgba(63, 76, 90, 0.12)' },
+  { border: '#154734', background: 'rgba(21, 71, 52, 0.10)', text: '#154734' },
+  { border: '#1F7A1F', background: 'rgba(31, 122, 31, 0.10)', text: '#1a6b1a' },
+  { border: '#B68B00', background: 'rgba(182, 139, 0, 0.10)', text: '#8a6a00' },
+  { border: '#0E6E6E', background: 'rgba(14, 110, 110, 0.10)', text: '#0a5555' },
+  { border: '#3F4C5A', background: 'rgba(63, 76, 90, 0.08)', text: '#3F4C5A' },
 ];
 
-const PIXELS_PER_MINUTE = 1.8;
+/* Dynamic scale: target ~400px for the grid body so the whole card fits */
+const TARGET_GRID_HEIGHT = 400;
 
 const accentForKey = (key) => {
   const stringKey = String(key || 'schedule-accent');
@@ -55,13 +65,27 @@ const formatMinutesToLabel = (minutes) => {
   if (minutes === null || minutes === undefined) return '';
   const hour24 = Math.floor(minutes / 60);
   const minute = minutes % 60;
+  const suffix = hour24 >= 12 ? 'p' : 'a';
+  const hour12 = ((hour24 + 11) % 12) + 1;
+  if (minute === 0) return `${hour12}${suffix}`;
+  return `${hour12}:${minute.toString().padStart(2, '0')}${suffix}`;
+};
+
+const formatMinutesToLabelFull = (minutes) => {
+  if (minutes === null || minutes === undefined) return '';
+  const hour24 = Math.floor(minutes / 60);
+  const minute = minutes % 60;
   const suffix = hour24 >= 12 ? 'PM' : 'AM';
   const hour12 = ((hour24 + 11) % 12) + 1;
   return `${hour12}:${minute.toString().padStart(2, '0')} ${suffix}`;
 };
 
 const formatEventRange = (event) => (
-  `${formatMinutesToLabel(event.startMinutes)} - ${formatMinutesToLabel(event.endMinutes)}`
+  `${formatMinutesToLabelFull(event.startMinutes)} – ${formatMinutesToLabelFull(event.endMinutes)}`
+);
+
+const formatEventRangeShort = (event) => (
+  `${formatMinutesToLabel(event.startMinutes)} – ${formatMinutesToLabel(event.endMinutes)}`
 );
 
 const layoutDayEvents = (events = []) => {
@@ -175,8 +199,9 @@ const StudentWorkerScheduleView = ({ student, assignments = [] }) => {
       max = Math.max(max, event.endMinutes);
     });
 
-    const clampedMin = Math.max(6 * 60, Math.min(min, 9 * 60));
-    const clampedMax = Math.min(22 * 60, Math.max(max, 17 * 60));
+    /* Snap to whole hours with 30-min breathing room */
+    const clampedMin = Math.floor(Math.max(6 * 60, min - 30) / 60) * 60;
+    const clampedMax = Math.ceil(Math.min(22 * 60, max + 30) / 60) * 60;
 
     return {
       minStart: clampedMin,
@@ -185,6 +210,8 @@ const StudentWorkerScheduleView = ({ student, assignments = [] }) => {
   }, [events]);
 
   const totalMinutes = Math.max(60, maxEnd - minStart);
+  /* Dynamically scale so the grid fits ~TARGET_GRID_HEIGHT pixels */
+  const pxPerMinute = Math.min(1.6, Math.max(0.6, TARGET_GRID_HEIGHT / totalMinutes));
   const totalShiftCount = events.length;
 
   const hourTicks = useMemo(() => {
@@ -238,9 +265,9 @@ const StudentWorkerScheduleView = ({ student, assignments = [] }) => {
 
   if (events.length === 0) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <div className="flex items-center gap-2 text-sm text-gray-600">
-          <Clock size={16} className="text-baylor-green" />
+      <div className="rounded-lg border border-gray-200 bg-gray-50/50 px-4 py-3">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <Clock size={15} className="text-gray-400" />
           <span>No weekly schedule has been recorded for this student.</span>
         </div>
       </div>
@@ -248,83 +275,85 @@ const StudentWorkerScheduleView = ({ student, assignments = [] }) => {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h4 className="flex items-center gap-2 text-lg font-semibold text-baylor-green">
-          <Clock size={18} />
-          Weekly Shift Schedule
+    <div className="space-y-3">
+      {/* ── Header row: title + inline stats ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="flex items-center gap-2 text-base font-semibold text-baylor-green">
+          <Clock size={16} />
+          Weekly Schedule
         </h4>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-baylor-green/20 bg-baylor-green/5 px-4 py-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-baylor-green">Total Weekly Hours</div>
-          <div className="mt-1 text-2xl font-semibold text-gray-900">
-            {formatHoursValue(totalWeeklyHours)}
-            <span className="ml-1 text-base font-medium text-gray-600">hrs</span>
-          </div>
-        </div>
-        <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Shift Coverage</div>
-          <div className="mt-1 text-lg font-semibold text-gray-900">
-            {totalShiftCount} shift{totalShiftCount === 1 ? '' : 's'} across {daysWithEvents.length} day{daysWithEvents.length === 1 ? '' : 's'}
-          </div>
+        <div className="flex items-center gap-3 text-xs text-gray-500">
+          <span className="inline-flex items-center gap-1 rounded-full border border-baylor-green/15 bg-baylor-green/5 px-2.5 py-1 font-medium text-baylor-green">
+            <Clock size={11} />
+            {formatHoursValue(totalWeeklyHours)} hrs/wk
+          </span>
+          <span className="hidden sm:inline">
+            {totalShiftCount} shift{totalShiftCount === 1 ? '' : 's'} · {daysWithEvents.length} day{daysWithEvents.length === 1 ? '' : 's'}
+          </span>
         </div>
       </div>
 
+      {/* ── Assignment legend (compact inline pills) ── */}
       {assignmentSummaries.length > 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white p-3">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Assignments</div>
-          <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-            {assignmentSummaries.map((assignment) => (
-              <div
-                key={assignment.id}
-                className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2"
-                style={{ borderLeftWidth: '4px', borderLeftColor: assignment.accent.border }}
-              >
-                <div className="text-sm font-semibold text-gray-900">{assignment.title}</div>
-                <div className="mt-1 flex items-center gap-1 text-xs text-gray-600">
-                  <Clock size={12} className="text-gray-500" />
-                  {formatHoursValue(assignment.weeklyHours)} hrs/week
-                </div>
-                <div className="mt-1 flex items-center gap-1 text-xs text-gray-600">
-                  <Building size={12} className="text-gray-500" />
-                  {assignment.buildings.length > 0 ? assignment.buildings.join(', ') : 'Location not specified'}
-                </div>
-              </div>
-            ))}
-          </div>
+        <div className="flex flex-wrap gap-2">
+          {assignmentSummaries.map((assignment) => (
+            <div
+              key={assignment.id}
+              className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-1.5 text-xs"
+              style={{ borderColor: `${assignment.accent.border}40` }}
+            >
+              <span
+                className="h-2.5 w-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: assignment.accent.border }}
+              />
+              <span className="font-medium text-gray-800">{assignment.title}</span>
+              <span className="text-gray-400">·</span>
+              <span className="text-gray-500">{formatHoursValue(assignment.weeklyHours)} hrs</span>
+              {assignment.buildings.length > 0 && (
+                <>
+                  <span className="text-gray-400">·</span>
+                  <span className="inline-flex items-center gap-0.5 text-gray-500">
+                    <MapPin size={10} />
+                    {assignment.buildings.join(', ')}
+                  </span>
+                </>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
-      <div className="space-y-3 md:hidden">
+      {/* ── Mobile: card list view ── */}
+      <div className="space-y-2 md:hidden">
         {daysWithEvents.map((day) => {
           const dayEvents = [...(eventsByDay[day] || [])].sort((a, b) => a.startMinutes - b.startMinutes);
           return (
-            <div key={`mobile-${day}`} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-              <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-2">
-                <div className="text-sm font-semibold text-baylor-green">{DAY_LABELS[day]}</div>
-                <div className="text-xs font-medium text-gray-600">
+            <div key={`mobile-${day}`} className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+              <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-3 py-1.5">
+                <span className="text-xs font-semibold text-baylor-green tracking-wide">{DAY_LABELS[day]}</span>
+                <span className="text-[11px] font-medium text-gray-400">
                   {formatHoursValue(dailyTotals[day] || 0)} hrs
-                </div>
+                </span>
               </div>
-              <div className="space-y-2 p-3">
+              <div className="divide-y divide-gray-100">
                 {dayEvents.map((event) => (
                   <div
                     key={`mobile-event-${event.id}`}
-                    className="rounded-lg border px-3 py-2"
-                    style={{
-                      borderColor: event.accent.border,
-                      background: event.accent.background,
-                    }}
+                    className="flex items-start gap-2.5 px-3 py-2"
                   >
-                    <div className="text-sm font-semibold text-gray-900">{event.assignment?.jobTitle || 'Assignment'}</div>
-                    <div className="mt-1 text-xs text-gray-700">{formatEventRange(event)}</div>
-                    {event.assignment?.buildings?.length > 0 && (
-                      <div className="mt-1 text-xs text-gray-600">
-                        {(event.assignment.buildings || []).join(', ')}
-                      </div>
-                    )}
+                    <span
+                      className="mt-1 h-2 w-2 rounded-full shrink-0"
+                      style={{ backgroundColor: event.accent.border }}
+                    />
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-900 leading-tight">{event.assignment?.jobTitle || 'Assignment'}</div>
+                      <div className="text-xs text-gray-500">{formatEventRange(event)}</div>
+                      {event.assignment?.buildings?.length > 0 && (
+                        <div className="text-xs text-gray-400">
+                          {(event.assignment.buildings || []).join(', ')}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -333,97 +362,115 @@ const StudentWorkerScheduleView = ({ student, assignments = [] }) => {
         })}
       </div>
 
-      <div className="hidden md:block rounded-xl border border-gray-200 bg-white overflow-hidden">
-        <div className="grid grid-cols-[104px_1fr] border-b border-gray-200 bg-gray-50">
-          <div className="p-3 text-sm font-semibold text-baylor-green font-serif border-r border-gray-200">
-            Time
-          </div>
-          <div className="grid min-w-0" style={{ gridTemplateColumns: `repeat(${daysWithEvents.length}, minmax(0, 1fr))` }}>
-            {daysWithEvents.map((day, dayIndex) => (
-              <div
-                key={`header-${day}`}
-                className={`min-w-0 p-2 md:p-3 text-center ${dayIndex === daysWithEvents.length - 1 ? '' : 'border-r border-gray-200'}`}
-              >
-                <div className="text-xs md:text-sm font-semibold text-baylor-green font-serif truncate">
-                  <span className="lg:hidden">{DAY_SHORT_LABELS[day]}</span>
-                  <span className="hidden lg:inline">{DAY_LABELS[day]}</span>
-                </div>
-                <div className="text-xs text-gray-500">
-                  {formatHoursValue(dailyTotals[day] || 0)} hrs
-                </div>
+      {/* ── Desktop: timeline grid ── */}
+      <div className="hidden md:block rounded-lg border border-gray-200 bg-white overflow-hidden">
+        {/* Column headers */}
+        <div className="grid border-b border-gray-200" style={{ gridTemplateColumns: `56px repeat(${daysWithEvents.length}, minmax(0, 1fr))` }}>
+          <div className="border-r border-gray-100" />
+          {daysWithEvents.map((day, dayIndex) => (
+            <div
+              key={`header-${day}`}
+              className={`py-2 text-center ${dayIndex < daysWithEvents.length - 1 ? 'border-r border-gray-100' : ''}`}
+            >
+              <div className="text-xs font-semibold text-baylor-green leading-tight">
+                <span className="lg:hidden">{DAY_ABBR[day]}</span>
+                <span className="hidden lg:inline">{DAY_SHORT_LABELS[day]}</span>
               </div>
-            ))}
-          </div>
+              <div className="text-[10px] text-gray-400 leading-tight mt-0.5">
+                {formatHoursValue(dailyTotals[day] || 0)}h
+              </div>
+            </div>
+          ))}
         </div>
 
-        <div className="grid grid-cols-[104px_1fr]">
-          <div className="relative border-r border-gray-200 bg-white" style={{ height: `${totalMinutes * PIXELS_PER_MINUTE}px` }}>
-            {hourTicks.map((tick) => (
-              <div
-                key={`tick-${tick}`}
-                className="absolute w-full"
-                style={{
-                  top: `${(tick - minStart) * PIXELS_PER_MINUTE}px`,
-                  height: `${60 * PIXELS_PER_MINUTE}px`,
-                }}
-              >
-                <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-white px-2 text-xs font-medium text-gray-600">
-                  {formatMinutesToLabel(tick)}
-                </div>
-                <div className="h-full border-b border-dashed border-gray-200" />
-              </div>
-            ))}
+        {/* Timeline body */}
+        <div className="grid" style={{ gridTemplateColumns: `56px repeat(${daysWithEvents.length}, minmax(0, 1fr))` }}>
+          {/* Time gutter */}
+          <div className="relative border-r border-gray-100" style={{ height: `${totalMinutes * pxPerMinute}px` }}>
+            {hourTicks.map((tick) => {
+              const topPx = (tick - minStart) * pxPerMinute;
+              return (
+                <React.Fragment key={`tick-${tick}`}>
+                  <span
+                    className="absolute right-2 text-[10px] font-medium text-gray-400 leading-none select-none"
+                    style={{ top: `${topPx}px`, transform: 'translateY(-50%)' }}
+                  >
+                    {formatMinutesToLabel(tick)}
+                  </span>
+                </React.Fragment>
+              );
+            })}
           </div>
 
-          <div
-            className="grid min-w-0"
-            style={{
-              gridTemplateColumns: `repeat(${daysWithEvents.length}, minmax(0, 1fr))`,
-            }}
-          >
-            {daysWithEvents.map((day, dayIndex) => (
-              <div
-                key={`day-${day}`}
-                className={`relative min-w-0 ${dayIndex === daysWithEvents.length - 1 ? '' : 'border-r border-gray-200'}`}
-                style={{ height: `${totalMinutes * PIXELS_PER_MINUTE}px` }}
-              >
-                {(eventsByDay[day] || []).map((event) => {
-                  const durationMinutes = event.endMinutes - event.startMinutes;
-                  const top = (event.startMinutes - minStart) * PIXELS_PER_MINUTE;
-                  const height = Math.max(durationMinutes * PIXELS_PER_MINUTE, 24);
-                  const widthPercent = 100 / event.lanes;
-                  const leftPercent = widthPercent * event.lane;
+          {/* Day columns */}
+          {daysWithEvents.map((day, dayIndex) => (
+            <div
+              key={`day-${day}`}
+              className={`relative ${dayIndex < daysWithEvents.length - 1 ? 'border-r border-gray-100' : ''}`}
+              style={{ height: `${totalMinutes * pxPerMinute}px` }}
+            >
+              {/* Hour grid lines */}
+              {hourTicks.map((tick) => (
+                <div
+                  key={`gridline-${day}-${tick}`}
+                  className="absolute inset-x-0 border-t border-gray-100"
+                  style={{ top: `${(tick - minStart) * pxPerMinute}px` }}
+                />
+              ))}
 
-                  return (
-                    <div
-                      key={event.id}
-                      className="absolute rounded-md border shadow-sm px-2 py-1.5 md:px-3 md:py-2 text-xs text-gray-800 overflow-hidden"
-                      style={{
-                        top,
-                        height,
-                        left: `calc(${leftPercent}% + 3px)`,
-                        width: `calc(${widthPercent}% - 6px)`,
-                        borderColor: event.accent.border,
-                        background: event.accent.background,
-                      }}
-                    >
-                      <div className="font-semibold text-xs md:text-sm text-gray-900 truncate">
-                        {event.assignment?.jobTitle || 'Assignment'}
+              {/* Event blocks */}
+              {(eventsByDay[day] || []).map((event) => {
+                const durationMinutes = event.endMinutes - event.startMinutes;
+                const top = (event.startMinutes - minStart) * pxPerMinute;
+                const height = Math.max(durationMinutes * pxPerMinute, 20);
+                const widthPercent = 100 / event.lanes;
+                const leftPercent = widthPercent * event.lane;
+                const isCompact = height < 42;
+
+                return (
+                  <div
+                    key={event.id}
+                    className="absolute rounded-[5px] border overflow-hidden transition-shadow hover:shadow-md"
+                    style={{
+                      top: `${top}px`,
+                      height: `${height}px`,
+                      left: `calc(${leftPercent}% + 2px)`,
+                      width: `calc(${widthPercent}% - 4px)`,
+                      borderColor: event.accent.border,
+                      background: event.accent.background,
+                      borderLeftWidth: '3px',
+                    }}
+                    title={`${event.assignment?.jobTitle || 'Assignment'}\n${formatEventRange(event)}`}
+                  >
+                    {isCompact ? (
+                      <div className="flex items-center gap-1 px-1.5 h-full">
+                        <span className="text-[10px] font-semibold truncate" style={{ color: event.accent.text }}>
+                          {event.assignment?.jobTitle || 'Assignment'}
+                        </span>
+                        <span className="text-[9px] text-gray-500 shrink-0">
+                          {formatEventRangeShort(event)}
+                        </span>
                       </div>
-                      <div className="text-[10px] md:text-[11px] text-gray-600 truncate">
-                        {formatEventRange(event)}
-                      </div>
-                      {event.assignment?.buildings?.length > 0 && (
-                        <div className="text-[10px] md:text-[11px] text-gray-500 truncate">
-                          {(event.assignment.buildings || []).join(', ')}
+                    ) : (
+                      <div className="px-2 py-1">
+                        <div className="text-[11px] font-semibold leading-tight truncate" style={{ color: event.accent.text }}>
+                          {event.assignment?.jobTitle || 'Assignment'}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
+                        <div className="text-[10px] text-gray-500 leading-tight mt-0.5 truncate">
+                          {formatEventRangeShort(event)}
+                        </div>
+                        {!isCompact && height > 56 && event.assignment?.buildings?.length > 0 && (
+                          <div className="text-[9px] text-gray-400 leading-tight mt-0.5 truncate">
+                            {(event.assignment.buildings || []).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </div>
       </div>
     </div>

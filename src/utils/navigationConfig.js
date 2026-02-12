@@ -350,6 +350,15 @@ export const navigationItems = [
         description: "Guided checks, safe repairs, and advanced cleanup tools.",
         icon: FileText,
       },
+      {
+        id: "data-exports",
+        label: "Data Exports",
+        path: "admin/data-exports",
+        canonicalId: "admin/data-exports",
+        adminOnly: true,
+        description: "Export operational data to Excel workbooks.",
+        icon: FileText,
+      },
     ],
   },
 ];

@@ -21,6 +21,8 @@ const PAGE_ID_ALIASES = {
   "tools/outlook-export": "scheduling/rooms",
   "administration/app-settings": "admin/settings",
   "administration/access-control": "admin/access-control",
+  "administration/data-exports": "admin/data-exports",
+  "admin/data-export": "admin/data-exports",
   "resources/baylor-acronyms": "help/acronyms",
   "resources/baylor-systems": "help/baylor-systems",
   "data/schedule-data": "courses/manage",

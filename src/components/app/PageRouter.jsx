@@ -15,6 +15,7 @@ import BaylorSystems from "../resources/BaylorSystems";
 import BaylorAcronyms from "../administration/BaylorAcronyms";
 import CRNQualityTools from "../administration/CRNQualityTools";
 import RecentChangesPage from "../administration/RecentChangesPage";
+import AdminDataExportsPage from "../administration/AdminDataExportsPage.jsx";
 import LiveView from "../LiveView";
 import FacilitiesHub from "../facilities/FacilitiesHub";
 import OutlookRoomExport from "../tools/OutlookRoomExport.jsx";
@@ -164,6 +165,12 @@ const PageRouter = ({ currentPage, loading }) => {
       return (
         <ProtectedContent pageId="admin/data-hygiene">
           <DataCleanupRepairsPage />
+        </ProtectedContent>
+      );
+    case "admin/data-exports":
+      return (
+        <ProtectedContent pageId="admin/data-exports">
+          <AdminDataExportsPage />
         </ProtectedContent>
       );
     case "facilities/spaces":

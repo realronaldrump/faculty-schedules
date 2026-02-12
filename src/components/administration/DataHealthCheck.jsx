@@ -30,9 +30,9 @@ const STEP_COPY = {
     icon: Search,
   },
   2: {
-    title: "Fix Safe Issues",
+    title: "Canonicalize",
     description:
-      "Apply safe automatic repairs for room links and high-confidence duplicates.",
+      "Run full automatic canonicalization: legacy cleanup, standardization, linking, and safe integrity fixes.",
     icon: Wrench,
   },
   3: {
@@ -88,6 +88,9 @@ const getTeachingConflictKey = (conflict = {}) => {
   return `teaching-conflict:${scheduleA?.id || "none"}:${scheduleB?.id || "none"}`;
 };
 
+const getLegacyIssueKey = (issue = {}) =>
+  `legacy:${issue?.recordType || "unknown"}:${issue?.record?.id || issue?.id || "unknown"}`;
+
 const DataHealthCheck = () => {
   const navigate = useNavigate();
   const { showNotification } = useUI();
@@ -118,6 +121,7 @@ const DataHealthCheck = () => {
     );
     const unresolvedImportIssues = toArray(scanResult.issues.unresolvedImportIssues);
     const teachingConflicts = toArray(scanResult.issues.teachingConflicts);
+    const legacyModelIssues = toArray(scanResult.issues.legacyModelIssues);
 
     const orphanedInstructorReferences = orphaned.filter(
       (issue) => issue?.type === "orphaned_schedule",
@@ -171,6 +175,14 @@ const DataHealthCheck = () => {
           "Potential instructor overlaps not already suppressed by link groups.",
         items: teachingConflicts,
       },
+      {
+        id: "legacy-model-issues",
+        label: "Legacy model issues",
+        count: legacyModelIssues.length,
+        description:
+          "Records with legacy mirrored fields that should be normalized to canonical format.",
+        items: legacyModelIssues,
+      },
     ];
   }, [scanResult]);
 
@@ -186,7 +198,9 @@ const DataHealthCheck = () => {
       Number(auto.highConfidencePeopleDuplicates || 0) +
       Number(auto.highConfidenceScheduleDuplicates || 0) +
       Number(auto.highConfidenceRoomDuplicates || 0) +
-      Number(auto.orphanedSpaceLinks || 0)
+      Number(auto.orphanedSchedulesWithName || 0) +
+      Number(auto.orphanedSpaceLinks || 0) +
+      Number(auto.legacyModelIssues || 0)
     );
   }, [scanResult]);
 
@@ -226,27 +240,56 @@ const DataHealthCheck = () => {
   const handleSafeFix = async () => {
     setIsFixingSafe(true);
     try {
-      const result = await autoFixAllIssues({
-        standardizeData: false,
-        backfillInstructorIds: false,
-        mergeHighConfidenceDuplicates: true,
-        fixLocations: true,
+      let result = null;
+      let refreshed = null;
+      let passCount = 0;
+      const maxPasses = 2;
+
+      while (passCount < maxPasses) {
+        passCount += 1;
+        result = await autoFixAllIssues({
+          fixLegacyModel: true,
+          standardizeData: true,
+          backfillInstructorIds: true,
+          mergeHighConfidenceDuplicates: true,
+          fixLocations: true,
+        });
+        refreshed = await refreshScanResult();
+        const remainingLegacy = Array.isArray(refreshed?.issues?.legacyModelIssues)
+          ? refreshed.issues.legacyModelIssues.length
+          : 0;
+        if (remainingLegacy === 0) break;
+      }
+
+      setSafeFixResult({
+        ...(result || {}),
+        passes: passCount,
+        postScan: refreshed || null,
       });
-      setSafeFixResult(result);
-      await refreshScanResult();
       setActiveStep(3);
       setExpandedCategories({});
       setPendingMergeConfirmationKey("");
-      showNotification?.(
-        "success",
-        "Safe Fixes Applied",
-        "Automatic integrity repairs are complete.",
-      );
+      const remainingLegacy = Array.isArray(refreshed?.issues?.legacyModelIssues)
+        ? refreshed.issues.legacyModelIssues.length
+        : 0;
+      if (remainingLegacy === 0) {
+        showNotification?.(
+          "success",
+          "Canonicalization Complete",
+          "Automatic canonical cleanup and integrity repairs are complete.",
+        );
+      } else {
+        showNotification?.(
+          "warning",
+          "Canonicalization Partially Complete",
+          `${remainingLegacy} legacy-model issue${remainingLegacy === 1 ? "" : "s"} still need manual review.`,
+        );
+      }
     } catch (error) {
       showNotification?.(
         "error",
-        "Safe Fix Failed",
-        error?.message || "Could not apply automatic fixes.",
+        "Canonicalization Failed",
+        error?.message || "Could not run automatic canonicalization.",
       );
     } finally {
       setIsFixingSafe(false);
@@ -505,7 +548,7 @@ const DataHealthCheck = () => {
             <h3 className="text-lg font-semibold text-gray-900">Step 1: Scan</h3>
             <p className="text-sm text-gray-600 mt-1">
               Check orphaned references, blocking duplicates, unresolved import issues,
-              and teaching conflicts.
+              teaching conflicts, and legacy model drift.
             </p>
           </div>
           <button
@@ -557,9 +600,10 @@ const DataHealthCheck = () => {
       <section className="rounded-xl border border-gray-200 bg-white p-5 sm:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">Step 2: Fix Safe Issues</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Step 2: Run Canonicalization</h3>
             <p className="text-sm text-gray-600 mt-1">
-              Only automatic, low-risk repairs are run here.
+              One-click canonicalization runs legacy cleanup, standardization,
+              instructor linking, duplicate merge, and location repairs.
             </p>
           </div>
           <button
@@ -576,7 +620,7 @@ const DataHealthCheck = () => {
             ) : (
               <>
                 <Wrench className="h-4 w-4" />
-                Fix Safe Issues ({safeFixableCount})
+                Run Canonicalization ({safeFixableCount})
               </>
             )}
           </button>
@@ -586,14 +630,18 @@ const DataHealthCheck = () => {
           <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4">
             <div className="flex items-center gap-2 text-green-800">
               <CheckCircle2 className="h-4 w-4" />
-              <span className="text-sm font-semibold">Safe fixes complete</span>
+              <span className="text-sm font-semibold">Canonicalization complete</span>
             </div>
             <div className="mt-2 text-sm text-green-900">
               Merged {safeFixResult?.duplicates?.peopleMerged || 0} people duplicates,
               {` `}
               {safeFixResult?.duplicates?.schedulesMerged || 0} schedule
-              duplicates, repaired {safeFixResult?.locations?.schedulesUpdated || 0} schedule
-              space links, and updated {safeFixResult?.locations?.roomsUpdated || 0} rooms.
+              duplicates, standardized {safeFixResult?.standardization?.updated || 0} records,
+              linked {safeFixResult?.instructorLinks?.linked || 0} instructor references,
+              repaired {safeFixResult?.locations?.schedulesUpdated || 0} schedule space links,
+              fixed {safeFixResult?.legacyModel?.fixed || 0} legacy records, and updated
+              {` `}{safeFixResult?.locations?.roomsUpdated || 0} rooms
+              {safeFixResult?.passes ? ` in ${safeFixResult.passes} pass${safeFixResult.passes === 1 ? "" : "es"}` : ""}.
             </div>
           </div>
         )}
@@ -904,6 +952,43 @@ const DataHealthCheck = () => {
                                     className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                                   >
                                     Copy Schedule IDs
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          if (category.id === "legacy-model-issues") {
+                            const issueKey = getLegacyIssueKey(item);
+                            const recordType = (item?.recordType || "record")
+                              .toString()
+                              .replace(/s$/, "");
+                            const recordId = item?.record?.id || "";
+                            const touchedFields = toArray(item?.touchedFields);
+                            return (
+                              <div
+                                key={`${issueKey}:${index}`}
+                                className="rounded-md border border-gray-200 bg-white p-3"
+                              >
+                                <div className="text-sm font-medium text-gray-900">
+                                  Legacy {recordType} cleanup: {recordId || "Unknown ID"}
+                                </div>
+                                <div className="mt-1 text-xs text-gray-600">
+                                  {item?.message || "Legacy mirrored fields detected."}
+                                </div>
+                                {touchedFields.length > 0 && (
+                                  <div className="mt-1 text-xs text-gray-500">
+                                    Fields: {touchedFields.join(", ")}
+                                  </div>
+                                )}
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyValue(recordId, "Record ID")}
+                                    disabled={!recordId}
+                                    className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                  >
+                                    Copy Record ID
                                   </button>
                                 </div>
                               </div>

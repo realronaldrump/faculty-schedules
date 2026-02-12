@@ -531,7 +531,7 @@ const BuildingDirectory = ({ embedded = false }) => {
       {/* Contact Card Modal */}
       {selectedPersonForCard && (
         <FacultyContactCard
-          faculty={selectedPersonForCard}
+          person={selectedPersonForCard}
           onClose={() => setSelectedPersonForCard(null)}
         />
       )}

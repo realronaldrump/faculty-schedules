@@ -30,44 +30,10 @@ export const calculateWeeklyHoursFromSchedule = (schedule) => {
 export const getStudentAssignments = (student) => {
   if (!student) return [];
 
-  const fallbackSchedule = Array.isArray(student.weeklySchedule)
-    ? student.weeklySchedule
-    : [];
-  const fallbackBuildings = Array.isArray(student.primaryBuildings)
-    ? student.primaryBuildings.filter(Boolean)
-    : student.primaryBuilding
-      ? [student.primaryBuilding]
-      : [];
-
-  // Check if there's any meaningful legacy data (schedule, title, pay, location, or supervisor)
-  const hasLegacyData =
-    (student.jobTitle && student.jobTitle.trim()) ||
-    (student.supervisor && student.supervisor.trim()) ||
-    (student.supervisorId && student.supervisorId.trim()) ||
-    (student.hourlyRate !== undefined &&
-      student.hourlyRate !== null &&
-      student.hourlyRate !== "") ||
-    fallbackSchedule.length > 0 ||
-    fallbackBuildings.length > 0;
-
-  // If no jobs array and no meaningful legacy data, return empty array
   const jobs =
     Array.isArray(student.jobs) && student.jobs.length > 0
       ? student.jobs
-      : hasLegacyData
-        ? [
-            {
-              jobTitle: student.jobTitle || "",
-              supervisor: student.supervisor || "",
-              supervisorId: student.supervisorId || "",
-              hourlyRate: student.hourlyRate,
-              location: fallbackBuildings,
-              weeklySchedule: fallbackSchedule,
-              startDate: student.startDate || "",
-              endDate: student.endDate || "",
-            },
-          ]
-        : [];
+      : [];
 
   if (jobs.length === 0) return [];
 
@@ -75,7 +41,7 @@ export const getStudentAssignments = (student) => {
     const schedule =
       Array.isArray(job.weeklySchedule) && job.weeklySchedule.length > 0
         ? job.weeklySchedule
-        : fallbackSchedule;
+        : [];
 
     // Check both job.location and job.buildings for building info
     const jobBuildings = Array.isArray(job.location)
@@ -86,25 +52,23 @@ export const getStudentAssignments = (student) => {
           ? [job.location]
           : job.buildings
             ? [job.buildings]
-            : fallbackBuildings;
+            : [];
 
-    const hourlyRateNumber = parseHourlyRate(
-      job.hourlyRate ?? student.hourlyRate,
-    );
+    const hourlyRateNumber = parseHourlyRate(job.hourlyRate);
     const weeklyHours = calculateWeeklyHoursFromSchedule(schedule);
     const weeklyPay = hourlyRateNumber * weeklyHours;
 
     return {
       ...job,
-      jobTitle: job.jobTitle || student.jobTitle || `Assignment ${index + 1}`,
-      supervisor: job.supervisor || student.supervisor || "",
-      supervisorId: job.supervisorId || student.supervisorId || "",
+      jobTitle: job.jobTitle || `Assignment ${index + 1}`,
+      supervisor: job.supervisor || "",
+      supervisorId: job.supervisorId || "",
       schedule,
       buildings: jobBuildings,
       hourlyRateNumber,
       hourlyRateDisplay: hourlyRateNumber
         ? `$${hourlyRateNumber.toFixed(2)}`
-        : job.hourlyRate || student.hourlyRate || "",
+        : job.hourlyRate || "",
       weeklyHours,
       weeklyPay,
     };
@@ -416,15 +380,10 @@ const summarizeJobs = (jobs) => {
       ),
     ),
   );
-  const primaryJob = safeJobs[0] || {};
   return {
     weeklySchedule,
     primaryBuildings,
     primaryBuilding: primaryBuildings[0] || "",
-    jobTitle: primaryJob.jobTitle || "",
-    supervisor: primaryJob.supervisor || "",
-    supervisorId: primaryJob.supervisorId || "",
-    hourlyRate: primaryJob.hourlyRate || "",
   };
 };
 
@@ -447,10 +406,6 @@ export const applySemesterSchedule = (student, semesterLabel) => {
       weeklySchedule: [],
       primaryBuildings: [],
       primaryBuilding: "",
-      jobTitle: "",
-      supervisor: "",
-      supervisorId: "",
-      hourlyRate: "",
     };
   }
 
@@ -471,9 +426,5 @@ export const applySemesterSchedule = (student, semesterLabel) => {
         ? scheduleEntry.primaryBuildings
         : summary.primaryBuildings,
     primaryBuilding: scheduleEntry.primaryBuilding || summary.primaryBuilding,
-    jobTitle: scheduleEntry.jobTitle || summary.jobTitle,
-    supervisor: scheduleEntry.supervisor || summary.supervisor,
-    supervisorId: scheduleEntry.supervisorId || summary.supervisorId,
-    hourlyRate: scheduleEntry.hourlyRate || summary.hourlyRate,
   };
 };

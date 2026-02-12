@@ -12,10 +12,10 @@ const PAGE_ID_ALIASES = {
   "scheduling/faculty-schedules": "scheduling/faculty",
   "scheduling/room-schedules": "scheduling/rooms",
   "scheduling/student-schedules": "scheduling/student-workers",
-  "analytics/course-management": "data/schedule-data",
+  "analytics/course-management": "courses/manage",
   "analytics/program-management": "people/programs",
-  "tools/import-wizard": "data/import-wizard",
-  "tools/crn-tools": "data/crn-tools",
+  "tools/import-wizard": "admin-tools/import-wizard",
+  "tools/crn-tools": "admin-tools/crn-tools",
   "tools/data-hygiene": "admin/data-hygiene",
   "tools/room-grid-generator": "scheduling/rooms",
   "tools/outlook-export": "scheduling/rooms",
@@ -23,6 +23,9 @@ const PAGE_ID_ALIASES = {
   "administration/access-control": "admin/access-control",
   "resources/baylor-acronyms": "help/acronyms",
   "resources/baylor-systems": "help/baylor-systems",
+  "data/schedule-data": "courses/manage",
+  "data/import-wizard": "admin-tools/import-wizard",
+  "data/crn-tools": "admin-tools/crn-tools",
 };
 
 export const normalizePageId = (pageId) => {
@@ -134,6 +137,16 @@ export const canAccessPage = ({ userProfile, rolePermissions, pageId }) => {
     rawId && rawId !== normalizedId ? [normalizedId, rawId] : [normalizedId];
   if (isUserAdmin(userProfile)) return true;
   if (!isUserActive(userProfile)) return false;
+
+  const normalizedUserPermissions = normalizePagePermissions(
+    userProfile.permissions,
+  );
+  const normalizedUserPerm = pageIds.find((pid) =>
+    Object.prototype.hasOwnProperty.call(normalizedUserPermissions, pid),
+  );
+  if (normalizedUserPerm) {
+    return Boolean(normalizedUserPermissions[normalizedUserPerm]);
+  }
 
   const userPerm =
     userProfile.permissions &&

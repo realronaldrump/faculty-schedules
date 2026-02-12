@@ -1,18 +1,18 @@
 import React, { useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Edit, Save, X, Trash2, Phone, PhoneOff, Building, BuildingIcon, ExternalLink } from 'lucide-react';
-import { useDirectoryState, useDirectoryHandlers } from '../hooks';
-import { useData } from '../contexts/DataContext';
-import ConfirmDialog from './shared/ConfirmDialog';
-import { UniversalDirectory } from './shared';
-import MultiSelectDropdown from './MultiSelectDropdown';
+import { useDirectoryState, useDirectoryHandlers } from '../../hooks';
+import { useData } from '../../contexts/DataContext';
+import ConfirmDialog from '../shared/ConfirmDialog';
+import { UniversalDirectory } from '../shared';
+import MultiSelectDropdown from '../MultiSelectDropdown';
 import {
   buildDirectoryFilterOptions,
   dedupeDirectoryRecords,
   formatPhoneNumber,
   resolveOfficeDetails
-} from '../utils/directoryUtils';
-import { resolveOfficeLocations } from '../utils/spaceUtils';
+} from '../../utils/directoryUtils';
+import { resolveOfficeLocations } from '../../utils/spaceUtils';
 
 const getNameSortValue = (person, nameSort) => {
   if (nameSort === 'firstName') {

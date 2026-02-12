@@ -177,7 +177,10 @@ const normalizeSemesterSchedules = (semesterSchedules) => {
   );
 };
 
-const normalizeExternalIds = (externalIds, { email, baylorId } = {}) => {
+const normalizeExternalIds = (
+  externalIds,
+  { email, baylorId, clssInstructorId } = {},
+) => {
   const base =
     externalIds && typeof externalIds === "object" ? { ...externalIds } : {};
   const emails = new Set(
@@ -192,6 +195,9 @@ const normalizeExternalIds = (externalIds, { email, baylorId } = {}) => {
   };
 
   if (emails.size > 0) normalized.emails = Array.from(emails);
+  if (!normalized.clssInstructorId && clssInstructorId) {
+    normalized.clssInstructorId = clssInstructorId;
+  }
   if (!normalized.clssInstructorId) normalized.clssInstructorId = null;
   if (baylorId && !normalized.baylorId) normalized.baylorId = baylorId;
 
@@ -225,6 +231,9 @@ export const standardizePerson = (person = {}, options = {}) => {
   const email = normalizeEmail(source.email);
   const phone = standardizePhone(source.phone);
   const baylorId = standardizeBaylorId(source.baylorId);
+  const clssInstructorId = normalizeString(
+    source.clssInstructorId || source.externalIds?.clssInstructorId,
+  );
 
   const primaryBuildings = normalizeBuildings(
     source.primaryBuildings && source.primaryBuildings.length > 0
@@ -261,9 +270,17 @@ export const standardizePerson = (person = {}, options = {}) => {
       ? source.weeklySchedule
       : [],
     baylorId,
-    externalIds: normalizeExternalIds(source.externalIds, { email, baylorId }),
+    externalIds: normalizeExternalIds(source.externalIds, {
+      email,
+      baylorId,
+      clssInstructorId,
+    }),
     updatedAt: updateTimestamp ? new Date().toISOString() : source.updatedAt,
   };
+
+  if (Object.prototype.hasOwnProperty.call(standardized, "clssInstructorId")) {
+    delete standardized.clssInstructorId;
+  }
 
   const isStudentOnly =
     standardized.roles.includes("student") &&

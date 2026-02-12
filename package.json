@@ -8,7 +8,6 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
-    "check:copy": "node scripts/check-academic-term-copy.mjs",
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",

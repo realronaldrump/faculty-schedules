@@ -244,7 +244,7 @@ const DepartmentInsights = () => {
             Import schedule data to view department analytics and insights
           </p>
           <button
-            onClick={() => handleNavigate("data/import-wizard")}
+            onClick={() => handleNavigate("admin-tools/import-wizard")}
             className="px-6 py-3 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors font-medium"
           >
             Import Schedule Data
@@ -593,7 +593,7 @@ const DepartmentInsights = () => {
       {/* Faculty Contact Card Modal */}
       {selectedFacultyForCard && (
         <FacultyContactCard
-          faculty={selectedFacultyForCard}
+          person={selectedFacultyForCard}
           onClose={() => setSelectedFacultyForCard(null)}
         />
       )}

@@ -1,10 +1,8 @@
 /**
  * Directory Utilities
- * 
+ *
  * Shared helper functions for directory components:
- * - FacultyDirectory
- * - StaffDirectory
- * - AdjunctDirectory
+ * - PeopleDirectory / PersonDirectory
  * - StudentDirectory
  */
 

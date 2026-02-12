@@ -30,7 +30,6 @@ import { parseMeetingPatterns, normalizeTime } from "./meetingPatternUtils";
 import { findPersonMatch } from "./personMatchUtils";
 import { fetchTermOptions } from "./termDataUtils";
 import {
-  buildTermLabelRegex,
   deriveTermInfo,
   getTermConfig,
   normalizeTermLabel,
@@ -56,7 +55,7 @@ import {
   deriveScheduleIdentityFromSchedule,
   resolveScheduleIdentityMatch,
 } from "./importIdentityUtils";
-import { parseCSVRecords } from "./csvUtils";
+import { parseClssFile } from "./import/clss/parse-clss-file";
 
 // ==================== PROGRAM MAPPING ====================
 
@@ -1694,141 +1693,16 @@ const findBestInstructorMatch = async (instructorInfo, existingPeople) => {
  */
 export const parseCLSSCSV = (csvText) => {
   console.log("🔍 Starting CLSS CSV parsing...");
-
-  const rows = parseCSVRecords(csvText || "");
-  let headerRowIndex = -1;
-  const scheduleData = [];
-  let detectedSemester = null;
-
-  if (rows.length === 0) {
-    console.log("⚠️ No rows detected in CSV payload.");
-    return scheduleData;
-  }
-
-  // Extract semester from the very first cell (CLSS exports typically include it)
-  const firstCell = (rows[0]?.[0] || "").replace(/"/g, "").trim();
-  const semesterPattern = buildTermLabelRegex(getTermConfig());
-  if (semesterPattern.test(firstCell)) {
-    detectedSemester = normalizeTermLabel(firstCell);
-    console.log("🎓 Detected semester from first line:", detectedSemester);
-  }
-
-  // Find the actual header row (contains column definitions)
-  for (let i = 0; i < rows.length; i++) {
-    const rowValues = rows[i].map((cell) => (cell || "").toLowerCase());
-    const includesRequiredHeaders =
-      rowValues.some((cell) => cell.includes("clss id")) &&
-      rowValues.some((cell) => cell.includes("instructor")) &&
-      rowValues.some((cell) => cell.includes("course"));
-    if (includesRequiredHeaders) {
-      headerRowIndex = i;
-      console.log("📋 Found header row at index:", i);
-      break;
-    }
-  }
-
-  if (headerRowIndex === -1) {
-    throw new Error(
-      "Could not find CLSS header row. Expected headers: CLSS ID, Instructor, Course",
-    );
-  }
-
-  // Parse header row
-  const normalizeHeader = (value) =>
-    (value || "")
-      .toString()
-      .replace(/"/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-  const headers = rows[headerRowIndex].map((h) => normalizeHeader(h));
-  console.log(
-    "📊 CLSS Headers found:",
-    headers.slice(0, 10),
-    "... (showing first 10)",
-  );
-
-  // Process data rows (skip header and any rows before it)
-  for (let i = headerRowIndex + 1; i < rows.length; i++) {
-    const values = rows[i];
-    const isCompletelyEmpty = values.every(
-      (value) => !String(value || "").trim(),
-    );
-    if (isCompletelyEmpty) continue;
-
-    if (isCourseTitleRow(values)) {
-      console.log(
-        "📚 Skipping course title row:",
-        values[0]?.substring(0, 50) || "",
-      );
-      continue;
-    }
-
-    const rowData = {};
-    headers.forEach((header, index) => {
-      const rawValue = values[index] ?? "";
-      rowData[header] = String(rawValue).replace(/\r/g, "").trim();
-    });
-    rowData.__rowIndex = i + 1;
-    const rowHashInput = { ...rowData };
-    delete rowHashInput.__rowIndex;
-    rowData.__rowHash = hashRecord(rowHashInput);
-
-    const rawSemester = rowData["Semester"] || rowData["Term"] || "";
-    if (rawSemester) {
-      const normalizedSemester = normalizeTermLabel(rawSemester);
-      rowData["Term"] = normalizedSemester;
-      if (rowData["Semester"] !== undefined) {
-        rowData["Semester"] = normalizedSemester;
-      }
-    } else if (detectedSemester) {
-      rowData["Term"] = detectedSemester;
-      if (rowData["Semester"] !== undefined) {
-        rowData["Semester"] = detectedSemester;
-      }
-    }
-
-    if (isValidScheduleRow(rowData)) {
-      scheduleData.push(rowData);
-    }
-  }
-
+  const result = parseClssFile(csvText, { strict: true });
   console.log(
     "✅ CLSS CSV parsing complete. Found",
-    scheduleData.length,
+    result.rows.length,
     "schedule records",
   );
-  console.log("🎓 All records tagged with semester:", detectedSemester);
-  return scheduleData;
-};
-
-/**
- * Check if a line is a course title row (not actual schedule data)
- */
-const isCourseTitleRow = (values) => {
-  if (!Array.isArray(values) || values.length === 0) return false;
-
-  const firstValue = (values[0] || "").trim();
-  if (firstValue && firstValue.match(/^[A-Z]{2,4}\s+\d{4}\s*-/)) {
-    const nonEmptyCount = values.filter((v) => v && String(v).trim()).length;
-    return nonEmptyCount < 5;
+  if (result?.schemaReport?.headerRowIndex >= 0) {
+    console.log("📋 Found header row at index:", result.schemaReport.headerRowIndex);
   }
-
-  return false;
-};
-
-/**
- * Check if a row contains valid schedule data
- */
-const isValidScheduleRow = (rowData) => {
-  // Must have course information; instructor required unless cancelled
-  const hasInstructor = rowData["Instructor"] && rowData["Instructor"].trim();
-  const hasCourse = rowData["Course"] && rowData["Course"].trim();
-  const hasValidCRN =
-    rowData["CRN"] && rowData["CRN"].trim() && !isNaN(rowData["CRN"]);
-  const status = (rowData["Status"] || "").toString().trim();
-  const isCancelled = isCancelledStatus(status);
-
-  return hasCourse && hasValidCRN && (hasInstructor || isCancelled);
+  return result.rows;
 };
 
 // ==================== RELATIONAL DATA FETCHING ====================
@@ -2176,8 +2050,6 @@ export default {
   determineRoles,
   findMatchingPerson,
   cleanDirectoryData,
-  processDirectoryImport,
-  processScheduleImport,
   parseCLSSCSV,
   fetchSchedulesWithRelationalData,
   fetchSchedulesByTerms,

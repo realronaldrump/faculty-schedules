@@ -813,7 +813,7 @@ const GroupMeetings = ({ embedded = false }) => {
       {renderRoomModal()}
       {selectedFacultyForCard && (
         <FacultyContactCard
-          faculty={selectedFacultyForCard}
+          person={selectedFacultyForCard}
           onClose={() => setSelectedFacultyForCard(null)}
         />
       )}

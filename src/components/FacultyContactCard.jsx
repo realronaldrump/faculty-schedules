@@ -24,14 +24,12 @@ const formatPhoneNumber = (phoneStr) => {
 
 const FacultyContactCard = ({
     person,
-    faculty,
     onClose,
     personType = 'faculty',
     showStudentSchedule = false,
     studentAssignments = [],
 }) => {
-    // Use either person or faculty prop (for backwards compatibility)
-    const contactPerson = person || faculty;
+    const contactPerson = person;
     const { termConfig, termConfigVersion } = useAppConfig();
 
     const [externalSchedules, setExternalSchedules] = useState([]);

@@ -52,6 +52,26 @@ const normalizeNumericField = (value) => {
   return Number.isNaN(parsed) ? null : parsed;
 };
 
+const readCanonicalValue = (row, fieldId) => {
+  const canonical = row?.__clssCanonical;
+  if (!canonical || typeof canonical !== "object") return "";
+  const value = canonical[fieldId];
+  return value === undefined || value === null ? "" : String(value).trim();
+};
+
+const readField = (row, fieldId, legacyKeys = []) => {
+  const canonicalValue = readCanonicalValue(row, fieldId);
+  if (canonicalValue) return canonicalValue;
+
+  for (const key of legacyKeys) {
+    const value = row?.[key];
+    if (value === undefined || value === null) continue;
+    const trimmed = String(value).trim();
+    if (trimmed) return trimmed;
+  }
+  return "";
+};
+
 /**
  * Extract normalized schedule data from a raw CLSS row (or CLSS-like object).
  *
@@ -64,14 +84,20 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = "") => {
   delete rowHashInput.__rowHash;
   const rowHash = row?.__rowHash || hashRecord(rowHashInput);
 
-  const courseCode = standardizeCourseCode(row.Course || "");
-  const courseTitle =
-    row["Course Title"] || row["Long Title"] || row["Title/Topic"] || "";
-  const section = normalizeSectionIdentifier(row["Section #"] || "");
+  const courseCode = standardizeCourseCode(
+    readField(row, "course_code", ["Course", "Course Code"]),
+  );
+  const courseTitle = readField(row, "course_title", [
+    "Course Title",
+    "Long Title",
+    "Title/Topic",
+  ]);
+  const sectionRaw = readField(row, "section", ["Section #", "Section"]);
+  const section = normalizeSectionIdentifier(sectionRaw);
 
-  const clssId = (row["CLSS ID"] || "").toString().trim();
-  const directCrn = (row["CRN"] || "").toString().trim();
-  const sectionCrn = extractCrnFromSectionField(row["Section #"] || "");
+  const clssId = readField(row, "clss_id", ["CLSS ID"]);
+  const directCrn = readField(row, "crn", ["CRN"]);
+  const sectionCrn = extractCrnFromSectionField(sectionRaw);
   const crn = /^\d{5,6}$/.test(directCrn)
     ? directCrn
     : /^\d{5,6}$/.test(sectionCrn)
@@ -79,13 +105,13 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = "") => {
       : "";
 
   const rawCredits =
-    row["Credit Hrs"] ??
-    row["Credit Hrs Min"] ??
-    row["Credit Hrs Max"] ??
-    null;
-  const catalogNumber = (row["Catalog Number"] || "")
-    .toString()
-    .trim()
+    readField(row, "credit_hours", [
+      "Credit Hrs",
+      "Credit Hrs Min",
+      "Credit Hrs Max",
+      "Credits",
+    ]) || null;
+  const catalogNumber = readField(row, "catalog_number", ["Catalog Number"])
     .toUpperCase();
   const parsedCourse = parseCourseCode(courseCode || "");
   const catalogForCredits = catalogNumber || parsedCourse?.catalogNumber || "";
@@ -103,33 +129,46 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = "") => {
     (parsedCourse?.credits ?? null);
   const parsedProgram = parsedCourse?.error ? "" : parsedCourse?.program || "";
   const subjectCode =
-    (row["Subject Code"] || "").toString().trim().toUpperCase() || parsedProgram;
+    readField(row, "subject_code", ["Subject Code"]).toUpperCase() ||
+    parsedProgram;
   const program = parsedProgram || subjectCode;
-  const departmentCode = (row["Department Code"] || "")
-    .toString()
-    .trim()
-    .toUpperCase();
+  const departmentCode = readField(row, "department_code", [
+    "Department Code",
+  ]).toUpperCase();
   const courseLevel = Number.isFinite(parsedCourse?.level) ? parsedCourse.level : 0;
-  const enrollment = normalizeNumericField(row["Enrollment"]);
-  const maxEnrollment = normalizeNumericField(row["Maximum Enrollment"]);
-  const waitCap = normalizeNumericField(row["Wait Cap"]);
-  const waitTotal = normalizeNumericField(row["Wait Total"]);
-  const openSeats = normalizeNumericField(row["Open Seats"]);
-  const waitAvailable = normalizeNumericField(row["Wait Available"]);
-  const reservedSeats = normalizeNumericField(row["Reserved Seats"]);
+  const enrollment = normalizeNumericField(
+    readField(row, "enrollment", ["Enrollment"]),
+  );
+  const maxEnrollment = normalizeNumericField(
+    readField(row, "maximum_enrollment", ["Maximum Enrollment", "Max Enrollment"]),
+  );
+  const waitCap = normalizeNumericField(readField(row, "wait_cap", ["Wait Cap"]));
+  const waitTotal = normalizeNumericField(
+    readField(row, "wait_total", ["Wait Total"]),
+  );
+  const openSeats = normalizeNumericField(
+    readField(row, "open_seats", ["Open Seats"]),
+  );
+  const waitAvailable = normalizeNumericField(
+    readField(row, "wait_available", ["Wait Available"]),
+  );
+  const reservedSeats = normalizeNumericField(
+    readField(row, "reserved_seats", ["Reserved Seats"]),
+  );
   const reservedSeatsEnrollment = normalizeNumericField(
-    row["Reserved Seats - Enrollment"],
+    readField(row, "reserved_seats_enrollment", ["Reserved Seats - Enrollment"]),
   );
 
-  const rawTerm = row.Semester || row.Term || fallbackTerm || "";
+  const rawTerm =
+    readField(row, "term", ["Semester", "Term"]) || fallbackTerm || "";
   const normalizedTerm = normalizeTermLabel(rawTerm);
   const term = normalizedTerm || rawTerm;
   const termCode = termCodeFromLabel(
-    row["Semester Code"] || row["Term Code"] || normalizedTerm,
+    readField(row, "term_code", ["Semester Code", "Term Code"]) || normalizedTerm,
   );
   const academicYear = extractAcademicYear(term);
 
-  const instructorField = row.Instructor || "";
+  const instructorField = readField(row, "instructor", ["Instructor", "Faculty"]);
   const parsedInstructors = parseInstructorFieldList(instructorField);
   const primaryInstructor =
     parsedInstructors.find((info) => info.isPrimary) ||
@@ -151,16 +190,18 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = "") => {
     primaryInstructor ||
     parseInstructorField(instructorField) || { firstName: "", lastName: "", id: "" };
 
-  const meetingPatternRaw = (row["Meeting Pattern"] || row["Meetings"] || "")
-    .toString()
-    .trim();
+  const meetingPatternRaw = readField(row, "meeting_pattern", [
+    "Meeting Pattern",
+    "Meetings",
+  ]);
   const meetingPatterns = parseMeetingPatterns(row);
 
-  const instructionMethod = (row["Inst. Method"] || row["Instruction Method"] || "")
-    .toString()
-    .trim();
+  const instructionMethod = readField(row, "instruction_method", [
+    "Inst. Method",
+    "Instruction Method",
+  ]);
 
-  const roomRaw = (row.Room || "").toString().trim();
+  const roomRaw = readField(row, "room", ["Room", "Location"]);
   const parsedRooms = parseMultiRoom(roomRaw);
   const parsedRoomNames = Array.isArray(parsedRooms.displayNames)
     ? parsedRooms.displayNames
@@ -236,13 +277,14 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = "") => {
     waitAvailable,
     reservedSeats,
     reservedSeatsEnrollment,
-    scheduleType: row["Schedule Type"] || "Class Instruction",
-    status: row.Status || "Active",
-    partOfTerm: row["Part of Semester"] || row["Part of Term"] || "",
+    scheduleType:
+      readField(row, "schedule_type", ["Schedule Type"]) || "Class Instruction",
+    status: readField(row, "status", ["Status"]) || "Active",
+    partOfTerm: readField(row, "part_of_term", ["Part of Semester", "Part of Term"]) || "",
     instructionMethod,
-    campus: row.Campus || "",
-    visibleOnWeb: row["Visible on Web"] || "",
-    specialApproval: row["Special Approval"] || "",
+    campus: readField(row, "campus", ["Campus"]) || "",
+    visibleOnWeb: readField(row, "visible_on_web", ["Visible on Web"]) || "",
+    specialApproval: readField(row, "special_approval", ["Special Approval"]) || "",
     rowHash,
   };
 };

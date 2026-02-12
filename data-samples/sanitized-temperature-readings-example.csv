@@ -1,0 +1,5 @@
+Date Time,Device Name,Temperature(F),Humidity(%)
+2026-01-15 08:30:00,Demo Building Room 101,71.8,45
+2026-01-15 08:30:00,Demo Building Room 102,70.9,47
+2026-01-15 16:30:00,Demo Building Room 101,73.2,42
+2026-01-15 16:30:00,Demo Building Room 102,72.1,44

@@ -149,6 +149,32 @@ const usePeopleOperations = () => {
     return next;
   }, []);
 
+  const stripLegacyStudentMirrors = useCallback((studentData) => {
+    if (!studentData || typeof studentData !== "object") return studentData;
+    const next = { ...studentData };
+
+    delete next.jobTitle;
+    delete next.supervisor;
+    delete next.supervisorId;
+    delete next.hourlyRate;
+
+    if (next.semesterSchedules && typeof next.semesterSchedules === "object") {
+      next.semesterSchedules = Object.fromEntries(
+        Object.entries(next.semesterSchedules).map(([key, entry]) => {
+          if (!entry || typeof entry !== "object") return [key, entry];
+          const cleanedEntry = { ...entry };
+          delete cleanedEntry.jobTitle;
+          delete cleanedEntry.supervisor;
+          delete cleanedEntry.supervisorId;
+          delete cleanedEntry.hourlyRate;
+          return [key, cleanedEntry];
+        }),
+      );
+    }
+
+    return next;
+  }, []);
+
   const applyActiveMetadata = (nextData, originalData = null, hasStatusOverride = false) => {
     const now = new Date().toISOString();
 
@@ -675,6 +701,9 @@ const usePeopleOperations = () => {
         const normalizedStudentWithSchedules = normalizeStudentSchedules(
           normalizedStudentData,
         );
+        const canonicalStudentData = stripLegacyStudentMirrors(
+          normalizedStudentWithSchedules,
+        );
 
         const existingStudent = !isNewStudent
           ? rawPeople.find((p) => p.id === studentToUpdate.id) || null
@@ -682,7 +711,7 @@ const usePeopleOperations = () => {
         const fallbackIsActive = existingStudent?.isActive ?? true;
 
         const updateData = {
-          ...normalizedStudentWithSchedules,
+          ...canonicalStudentData,
           roles: ["student"],
           hasNoOffice: true,
           office: "",
@@ -811,6 +840,7 @@ const usePeopleOperations = () => {
       canEditStudent,
       showNotification,
       normalizeStudentSchedules,
+      stripLegacyStudentMirrors,
     ],
   );
 

@@ -1389,7 +1389,7 @@ const ProgramManagement = ({ embedded = false }) => {
       {/* Faculty Contact Card Modal */}
       {selectedFacultyForCard && (
         <FacultyContactCard
-          faculty={selectedFacultyForCard}
+          person={selectedFacultyForCard}
           onClose={() => setSelectedFacultyForCard(null)}
           onUpdate={handleFacultyUpdate}
           showNotification={showNotification}

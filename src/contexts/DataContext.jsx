@@ -123,19 +123,6 @@ export const DataProvider = ({ children }) => {
     return new Map((rawPeople || []).map((person) => [person.id, person]));
   }, [rawPeople]);
 
-  const splitInstructorNames = (value) => {
-    if (!value) return [];
-    return String(value)
-      .split(/;|\/|\s+&\s+|\s+and\s+/i)
-      .map((part) =>
-        part
-          .replace(/\[[^\]]*\]/g, "")
-          .replace(/\([^)]*\)/g, "")
-          .trim(),
-      )
-      .filter(Boolean);
-  };
-
   const buildInstructorInfo = useCallback(
     (schedule) => {
       if (!schedule) {
@@ -174,15 +161,7 @@ export const DataProvider = ({ children }) => {
       const resolvedNames = instructors
         .map((person) => getInstructorDisplayName(person))
         .filter((name) => name && name !== UNASSIGNED);
-      const fallbackName = (
-        schedule.instructorName ||
-        schedule.Instructor ||
-        ""
-      ).trim();
-      const instructorNames =
-        resolvedNames.length > 0
-          ? resolvedNames
-          : splitInstructorNames(fallbackName);
+      const instructorNames = resolvedNames;
 
       const primaryInstructorId =
         schedule.instructorId ||
@@ -256,7 +235,7 @@ export const DataProvider = ({ children }) => {
         return "";
       };
 
-      const courseCode = schedule.courseCode || schedule.Course || "";
+      const courseCode = schedule.courseCode || "";
       const courseFromId = schedule.courseId
         ? coursesById.get(schedule.courseId) ||
           coursesById.get(normalizeCourseId(schedule.courseId))
@@ -266,19 +245,13 @@ export const DataProvider = ({ children }) => {
           coursesById.get(normalizeCourseId(courseCode))
         : null;
       const resolvedCourse = courseFromId || courseFromCode;
-      const baseCourseTitle =
-        schedule.courseTitle ||
-        schedule["Course Title"] ||
-        schedule.Title ||
-        schedule.title ||
-        "";
+      const baseCourseTitle = schedule.courseTitle || schedule.title || "";
       const courseTitle =
         baseCourseTitle ||
         resolvedCourse?.title ||
         resolvedCourse?.courseTitle ||
-        resolvedCourse?.["Course Title"] ||
         "";
-      const crn = schedule.crn || schedule.CRN || "";
+      const crn = schedule.crn || "";
 
       const commonProps = {
         ...schedule,
@@ -373,10 +346,8 @@ export const DataProvider = ({ children }) => {
 
     scheduleData.forEach((s) => {
       const names = Array.isArray(s.instructorNames)
-        ? s.instructorNames
-        : s.Instructor
-          ? [s.Instructor]
-          : [];
+        ? s.instructorNames.filter(Boolean)
+        : [];
       names.forEach((name) => {
         if (name) instructors.add(name);
       });
@@ -401,8 +372,8 @@ export const DataProvider = ({ children }) => {
       }
 
       // Calculate faculty workload (credit hours per course section)
-      const displayName = s.Instructor || "Unassigned";
-      if (displayName && displayName !== "Unassigned") {
+      const displayName = s.instructorName || UNASSIGNED;
+      if (displayName && displayName !== UNASSIGNED) {
         if (!facultyWorkload[displayName]) {
           facultyWorkload[displayName] = {
             courses: new Set(),
@@ -419,9 +390,7 @@ export const DataProvider = ({ children }) => {
           !workloadCourseKey ||
           !facultyWorkload[displayName].creditedCourses.has(workloadCourseKey)
         ) {
-          const credits = parseCreditHours(
-            s.Credits ?? s.credits ?? s["Credit Hrs"],
-          );
+          const credits = parseCreditHours(s.Credits ?? s.credits);
           facultyWorkload[displayName].totalHours += credits;
           if (workloadCourseKey) {
             facultyWorkload[displayName].creditedCourses.add(workloadCourseKey);

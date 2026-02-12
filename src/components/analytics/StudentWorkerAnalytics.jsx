@@ -135,13 +135,13 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
               : [];
 
       const supervisorId = resolveSupervisorId({
-        supervisorId: assignment.supervisorId || student.supervisorId,
-        supervisorName: assignment.supervisor || student.supervisor,
+        supervisorId: assignment.supervisorId,
+        supervisorName: assignment.supervisor,
         supervisorIndex,
       });
       const supervisorName = resolveSupervisorLabel({
         supervisorId,
-        supervisorName: assignment.supervisor || student.supervisor,
+        supervisorName: assignment.supervisor,
         peopleIndex,
         supervisorIndex,
       });

@@ -33,31 +33,17 @@ import { useTutorial } from "../../contexts/TutorialContext";
 import { HelpTooltip, HintBanner } from "../help/Tooltip";
 import { resolveOfficeDetails } from "../../utils/directoryUtils";
 import { buildCourseSectionKey } from "../../utils/courseUtils";
-import { normalizeTermLabel, termCodeFromLabel } from "../../utils/termUtils";
-
-const filterSchedulesBySelectedTerm = (scheduleData = [], selectedSemester = "") => {
-  if (!Array.isArray(scheduleData)) return [];
-  if (!selectedSemester) return scheduleData;
-
-  const normalizedSelected = normalizeTermLabel(selectedSemester) || String(selectedSemester).trim();
-  const selectedCode = termCodeFromLabel(normalizedSelected) || termCodeFromLabel(selectedSemester);
-
-  return scheduleData.filter((schedule) => {
-    const scheduleTerm = schedule.term || schedule.Term || schedule.semester || schedule.Semester || "";
-    const normalizedScheduleTerm = normalizeTermLabel(scheduleTerm) || String(scheduleTerm).trim();
-    if (normalizedScheduleTerm && normalizedScheduleTerm === normalizedSelected) return true;
-
-    const scheduleCode =
-      schedule.termCode ||
-      schedule.TermCode ||
-      schedule.semesterCode ||
-      schedule.SemesterCode ||
-      termCodeFromLabel(scheduleTerm);
-    if (selectedCode && scheduleCode && String(scheduleCode) === String(selectedCode)) return true;
-
-    return false;
-  });
-};
+import {
+  createDefaultDirectoryFilters,
+  createDefaultStudentFilters,
+  filterSchedulesBySelectedTerm,
+} from "./email-lists/filters";
+import {
+  buildDirectoryCsv,
+  buildGmailEmailFormat,
+  buildOutlookEmailFormat,
+  buildStudentWorkersCsv,
+} from "./email-lists/export-utils";
 
 const EmailLists = ({ embedded = false }) => {
   const {
@@ -88,18 +74,7 @@ const EmailLists = ({ embedded = false }) => {
     direction: "ascending",
   });
   const [nameSort, setNameSort] = useState("firstName");
-  const [filters, setFilters] = useState({
-    programs: [],
-    jobTitles: [],
-    buildings: [],
-    // Role filters - simplified to radio buttons
-    roleFilter: "all", // 'all', 'faculty', 'staff', 'both'
-    // Boolean filters with include/exclude options
-    adjunct: "exclude", // 'all', 'include', 'exclude'
-    tenured: "all", // 'all', 'include', 'exclude'
-    upd: "all", // 'all', 'include', 'exclude' - NEW UPD filter
-    isRemote: "all", // 'all', 'include', 'exclude' - Remote filter
-  });
+  const [filters, setFilters] = useState(createDefaultDirectoryFilters);
   const [showFilters, setShowFilters] = useState(false);
   const [notification, setNotification] = useState({
     show: false,
@@ -125,10 +100,7 @@ const EmailLists = ({ embedded = false }) => {
   const [activeTab, setActiveTab] = useState("faculty-staff"); // 'faculty-staff' | 'student-workers'
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [studentSearchTerm, setStudentSearchTerm] = useState("");
-  const [studentFilters, setStudentFilters] = useState({
-    buildings: [],
-    jobTitles: [],
-  });
+  const [studentFilters, setStudentFilters] = useState(createDefaultStudentFilters);
   const [studentSortConfig, setStudentSortConfig] = useState({
     key: "name",
     direction: "ascending",
@@ -148,26 +120,14 @@ const EmailLists = ({ embedded = false }) => {
     // Clear search
     setSearchTerm("");
     // Reset filters to defaults
-    setFilters({
-      programs: [],
-      jobTitles: [],
-      buildings: [],
-      roleFilter: "all",
-      adjunct: "exclude",
-      tenured: "all",
-      upd: "all",
-      isRemote: "all",
-    });
+    setFilters(createDefaultDirectoryFilters());
     // Clear selections
     setSelectedPeople([]);
     setSelectedPresetId("");
     // Reset student filters too
     setStudentSearchTerm("");
     setSelectedStudents([]);
-    setStudentFilters({
-      buildings: [],
-      jobTitles: [],
-    });
+    setStudentFilters(createDefaultStudentFilters());
     // Reset other options
     setShowOnlyWithCourses(false);
   };
@@ -319,7 +279,6 @@ const EmailLists = ({ embedded = false }) => {
 
       // Extract Job Titles
       const jobTitles = new Set();
-      if (student.jobTitle) jobTitles.add(student.jobTitle);
       if (Array.isArray(student.jobs)) {
         student.jobs.forEach((job) => {
           if (job.jobTitle) jobTitles.add(job.jobTitle);
@@ -443,10 +402,7 @@ const EmailLists = ({ embedded = false }) => {
   };
 
   const clearStudentFilters = () => {
-    setStudentFilters({
-      buildings: [],
-      jobTitles: [],
-    });
+    setStudentFilters(createDefaultStudentFilters());
     setStudentSearchTerm("");
     setSelectedStudents([]);
   };
@@ -751,11 +707,11 @@ const EmailLists = ({ embedded = false }) => {
 
     switch (format) {
       case "outlook":
-        emailString = generateOutlookFormat(selectedData);
+        emailString = buildOutlookEmailFormat(selectedData);
         break;
       case "gmail":
       default:
-        emailString = generateGmailFormat(selectedData);
+        emailString = buildGmailEmailFormat(selectedData, outlookVersion);
         break;
     }
 
@@ -764,23 +720,6 @@ const EmailLists = ({ embedded = false }) => {
     showNotification(
       `Email list copied to clipboard with ${selectedData.length} contacts`,
     );
-  };
-
-  const generateOutlookFormat = (peopleData) => {
-    const emails = peopleData
-      .filter((person) => person.email && person.email.trim() !== "")
-      .map((person) => `"${person.name}" <${person.email}>`)
-      .join("; ");
-
-    return emails;
-  };
-
-  const generateGmailFormat = (peopleData) => {
-    const emails = peopleData
-      .filter((person) => person.email && person.email.trim() !== "")
-      .map((person) => person.email);
-    const separator = outlookVersion === "old" ? "; " : ", ";
-    return emails.join(separator);
   };
 
   const copyToClipboard = async (text) => {
@@ -803,25 +742,7 @@ const EmailLists = ({ embedded = false }) => {
     }
 
     if (activeTab === "student-workers") {
-      // Student Worker CSV
-      const headers = ["Name", "Email", "Phone", "Job Titles", "Buildings"];
-      const rows = peopleToExport.map((p) => ({
-        Name: p.name || "",
-        Email: p.email || "",
-        Phone: p.phone || "",
-        "Job Titles": p.allJobTitles.join("; "),
-        Buildings: p.buildings.join("; "),
-      }));
-
-      const csvContent = [
-        headers.join(","),
-        ...rows.map((row) =>
-          Object.values(row)
-            .map((val) => `"${val || ""}"`)
-            .join(","),
-        ),
-      ].join("\n");
-
+      const csvContent = buildStudentWorkersCsv(peopleToExport);
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -833,59 +754,9 @@ const EmailLists = ({ embedded = false }) => {
       return;
     }
 
-    // CSV Headers
-    const headers = [
-      "Name",
-      "Email",
-      "Phone",
-      "Role",
-      "Job Title",
-      "Program",
-      "Office",
-      "Building",
-      "Is Adjunct",
-      "Is Tenured",
-      "Is UPD",
-      "Is Remote",
-      "Course Count (current semester)",
-      "Courses Taught (current semester)",
-    ];
-
-    // CSV Rows
-    const rows = peopleToExport.map((p) => ({
-      Name: p.name || "",
-      Email: p.email || "",
-      Phone: p.phone || "",
-      Role: p.role || "",
-      "Job Title": p.jobTitle || "",
-      Program: p.program?.name || "",
-      Office: p.office || "",
-      Building:
-        resolveOfficeDetails(p, spacesByKey).buildingName || "No Building",
-      "Is Adjunct": p.isAdjunct ? "Yes" : "No",
-      "Is Tenured": p.isTenured ? "Yes" : "No",
-      "Is UPD": p.isUPD ? "Yes" : "No",
-      "Is Remote": p.isRemote ? "Yes" : "No",
-      "Course Count (current semester)": p.courseCount || 0,
-      "Courses Taught (current semester)":
-        p.courses && p.courses.length > 0
-          ? p.courses
-              .map(
-                (c) => `${c.courseCode} (${c.credits} cr) - ${c.courseTitle}`,
-              )
-              .join("; ")
-          : "",
-    }));
-
-    // Convert to CSV string
-    const csvContent = [
-      headers.join(","),
-      ...rows.map((row) =>
-        Object.values(row)
-          .map((val) => `"${val || ""}"`)
-          .join(","),
-      ),
-    ].join("\n");
+    const csvContent = buildDirectoryCsv(peopleToExport, (person) =>
+      resolveOfficeDetails(person, spacesByKey).buildingName,
+    );
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -899,16 +770,7 @@ const EmailLists = ({ embedded = false }) => {
   };
 
   const clearFilters = () => {
-    setFilters({
-      programs: [],
-      jobTitles: [],
-      buildings: [],
-      roleFilter: "all",
-      adjunct: "exclude",
-      tenured: "all",
-      upd: "all",
-      isRemote: "all",
-    });
+    setFilters(createDefaultDirectoryFilters());
     setSearchTerm("");
     setSelectedPeople([]);
     setSelectedPresetId("");
@@ -1012,16 +874,7 @@ const EmailLists = ({ embedded = false }) => {
       const hasAdjuncts = selectedPeopleData.some((p) => p.isAdjunct);
 
       // 2. Reset filters to ensure visibility, but handle adjuncts dynamically
-      setFilters({
-        programs: [],
-        jobTitles: [],
-        buildings: [],
-        roleFilter: "all",
-        adjunct: "exclude",
-        tenured: "all",
-        upd: "all",
-        isRemote: "all",
-      });
+      setFilters(createDefaultDirectoryFilters());
       setSearchTerm("");
 
       // 3. Set the selection
@@ -1745,7 +1598,7 @@ const EmailLists = ({ embedded = false }) => {
 
           {selectedFacultyForCard && (
             <FacultyContactCard
-              faculty={selectedFacultyForCard}
+              person={selectedFacultyForCard}
               onClose={() => setSelectedFacultyForCard(null)}
             />
           )}

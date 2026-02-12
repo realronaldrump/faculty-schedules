@@ -518,7 +518,7 @@ const LiveView = () => {
             results.push({
               ...student,
               currentJob: {
-                title: job.jobTitle || student.jobTitle || "",
+                title: job.jobTitle || "",
                 location,
                 shiftStart: start,
                 shiftEnd: end,
@@ -551,7 +551,7 @@ const LiveView = () => {
           results.push({
             ...student,
             currentJob: {
-              title: student.jobTitle || "",
+              title: "",
               location,
               shiftStart: start,
               shiftEnd: end,
@@ -796,7 +796,7 @@ const LiveView = () => {
       {selectedFaculty && selectedFacultyLocation && (
         <div className="mb-6">
           <FacultySpotlightCard
-            faculty={selectedFaculty}
+            person={selectedFaculty}
             locationStatus={selectedFacultyLocation}
             onClose={handleClearSelection}
           />

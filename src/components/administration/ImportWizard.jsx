@@ -10,13 +10,13 @@ import {
   Calendar,
   Users,
 } from "lucide-react";
-import { parseCLSSCSV } from "../../utils/dataImportUtils";
 import {
   previewImportChanges,
   commitTransaction,
   projectSchedulePreviewRow,
 } from "../../utils/importTransactionUtils";
 import { parseCSVRecords } from "../../utils/csvUtils";
+import { parseClssFile } from "../../utils/import/clss/parse-clss-file";
 import ImportPreviewModal from "./ImportPreviewModal";
 import ImportHistoryModal from "./ImportHistoryModal";
 import { useSchedules } from "../../contexts/ScheduleContext";
@@ -31,8 +31,8 @@ const ImportWizard = ({ embedded = false }) => {
   const { loadPeople } = usePeople();
   const { showNotification } = useUI();
   const { canImport, canEdit } = usePermissions();
-  const canImportHere = canImport("data/import-wizard");
-  const canEditHere = canEdit("data/import-wizard");
+  const canImportHere = canImport("admin-tools/import-wizard");
+  const canEditHere = canEdit("admin-tools/import-wizard");
   const [step, setStep] = useState(1);
   const [fileName, setFileName] = useState("");
   const [fileHash, setFileHash] = useState("");
@@ -47,6 +47,7 @@ const ImportWizard = ({ embedded = false }) => {
   const [showHistory, setShowHistory] = useState(false);
   const [resultsSummary, setResultsSummary] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [clssSchemaReport, setClssSchemaReport] = useState(null);
 
   const handleDataRefresh = async () => {
     await Promise.all([
@@ -56,15 +57,7 @@ const ImportWizard = ({ embedded = false }) => {
     ]);
   };
 
-  const isCLSS = useMemo(() => {
-    if (!rawText) return false;
-    const has =
-      rawText.includes("CLSS ID") &&
-      rawText.includes("CRN") &&
-      rawText.includes("Course") &&
-      rawText.includes("Section #");
-    return has;
-  }, [rawText]);
+  const isCLSS = useMemo(() => importType === "schedule", [importType]);
 
   const parsedPreviewRows = useMemo(() => {
     if (!csvData || csvData.length === 0) return [];
@@ -113,14 +106,13 @@ const ImportWizard = ({ embedded = false }) => {
       setRawText(text);
       setFileHash(hashString(text));
       try {
-        if (
-          text.includes("CLSS ID") &&
-          text.includes("CRN") &&
-          text.includes("Course")
-        ) {
-          const clssRows = parseCLSSCSV(text);
+        const clssResult = parseClssFile(text, { strict: false });
+
+        if (clssResult?.isClss) {
+          const clssRows = Array.isArray(clssResult.rows) ? clssResult.rows : [];
           setCsvData(clssRows);
           setImportType("schedule");
+          setClssSchemaReport(clssResult.schemaReport || null);
           const term = (
             clssRows[0]?.Semester ||
             clssRows[0]?.Term ||
@@ -128,6 +120,7 @@ const ImportWizard = ({ embedded = false }) => {
           ).trim();
           setDetectedTerm(term);
         } else {
+          setClssSchemaReport(null);
           // Robust CSV parse for directory imports (supports commas, quotes, multiline fields)
           const rows = parseCSVRecords(text);
           if (!rows || rows.length < 2) throw new Error("CSV has no data rows");
@@ -166,6 +159,7 @@ const ImportWizard = ({ embedded = false }) => {
         setRawText("");
         setCsvData([]);
         setImportType(null);
+        setClssSchemaReport(null);
       }
     };
     reader.readAsText(file);
@@ -174,11 +168,10 @@ const ImportWizard = ({ embedded = false }) => {
   const validateDetected = () => {
     if (!csvData || csvData.length === 0) return false;
     if (importType === "schedule") {
-      const headers = Object.keys(csvData[0] || {});
-      const required = ["Instructor", "Course", "Section #", "CRN"];
-      const hasSemester =
-        headers.includes("Semester") || headers.includes("Term");
-      return hasSemester && required.every((h) => headers.includes(h));
+      const missingRequired = Array.isArray(clssSchemaReport?.missingRequired)
+        ? clssSchemaReport.missingRequired
+        : [];
+      return missingRequired.length === 0;
     }
     if (importType === "directory") {
       const headers = Object.keys(csvData[0] || {});
@@ -189,6 +182,20 @@ const ImportWizard = ({ embedded = false }) => {
   };
 
   const startPreview = async () => {
+    if (importType === "schedule") {
+      const missingRequired = Array.isArray(clssSchemaReport?.missingRequired)
+        ? clssSchemaReport.missingRequired
+        : [];
+      if (missingRequired.length > 0) {
+        showNotification?.(
+          "warning",
+          "CLSS Schema Validation Failed",
+          `Missing required CLSS columns: ${missingRequired.join(", ")}`,
+        );
+        return;
+      }
+    }
+
     if (!validateDetected()) {
       showNotification?.(
         "warning",
@@ -205,6 +212,14 @@ const ImportWizard = ({ embedded = false }) => {
         fileHash,
         fileSize,
       };
+      if (importType === "schedule" && clssSchemaReport) {
+        importMetadata.clssProfileId = clssSchemaReport.profileId || "";
+        importMetadata.clssProfileVersion = clssSchemaReport.profileVersion || "";
+        importMetadata.headerMap = clssSchemaReport.headerMap || {};
+        importMetadata.unknownColumns = clssSchemaReport.unknownColumns || [];
+        importMetadata.missingRequired = clssSchemaReport.missingRequired || [];
+        importMetadata.clssSchemaConfidence = clssSchemaReport.confidence || 0;
+      }
       if (importType === "schedule") {
         const tx = await previewImportChanges(csvData, "schedule", semester, {
           persist: true,
@@ -339,7 +354,16 @@ const ImportWizard = ({ embedded = false }) => {
     setResultsSummary(null);
     setFileHash("");
     setFileSize(0);
+    setClssSchemaReport(null);
   };
+
+  const clssMissingRequired = Array.isArray(clssSchemaReport?.missingRequired)
+    ? clssSchemaReport.missingRequired
+    : [];
+  const clssUnknownColumns = Array.isArray(clssSchemaReport?.unknownColumns)
+    ? clssSchemaReport.unknownColumns
+    : [];
+  const clssHeaderMappings = Object.entries(clssSchemaReport?.headerMap || {});
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -444,18 +468,69 @@ const ImportWizard = ({ embedded = false }) => {
             </div>
             <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
               {isCLSS ? (
-                <div>
-                  <div className="font-semibold mb-1">
-                    Column mapping (auto):
-                  </div>
-                  <div>CRN → CRN (5-digit enforced)</div>
-                  <div>
-                    Section # → Section (strips redundant CRN e.g., "01 (33038)"
-                    → "01")
+                <div className="space-y-3">
+                  <div className="font-semibold">
+                    CLSS schema diagnostics (profile-driven)
                   </div>
                   <div>
-                    Instructor, Course, Course Title, Meeting Pattern, Room,
-                    Semester
+                    Profile:{" "}
+                    <span className="font-medium">
+                      {clssSchemaReport?.profileId || "unknown"}
+                    </span>{" "}
+                    (v{clssSchemaReport?.profileVersion || "n/a"})
+                  </div>
+                  <div>
+                    Parser confidence:{" "}
+                    <span className="font-medium">
+                      {Math.round(Number(clssSchemaReport?.confidence || 0) * 100)}%
+                    </span>
+                  </div>
+                  <div>
+                    Header row index:{" "}
+                    <span className="font-medium">
+                      {clssSchemaReport?.headerRowIndex ?? "n/a"}
+                    </span>
+                  </div>
+
+                  <div className="rounded-lg border border-gray-200 bg-white p-3">
+                    <div className="font-medium mb-1">Required fields status</div>
+                    {clssMissingRequired.length === 0 ? (
+                      <div className="text-green-700">
+                        All required CLSS fields are mapped.
+                      </div>
+                    ) : (
+                      <div className="text-red-700">
+                        Missing required fields: {clssMissingRequired.join(", ")}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border border-gray-200 bg-white p-3">
+                    <div className="font-medium mb-1">Unknown extra columns</div>
+                    {clssUnknownColumns.length === 0 ? (
+                      <div className="text-gray-600">None</div>
+                    ) : (
+                      <div className="text-gray-700">
+                        {clssUnknownColumns.join(", ")}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border border-gray-200 bg-white p-3">
+                    <div className="font-medium mb-1">Effective header mapping</div>
+                    {clssHeaderMappings.length === 0 ? (
+                      <div className="text-gray-600">No mapped headers detected.</div>
+                    ) : (
+                      <div className="space-y-1">
+                        {clssHeaderMappings.map(([fieldId, header]) => (
+                          <div key={fieldId} className="text-xs sm:text-sm">
+                            <span className="font-mono">{fieldId}</span>
+                            {" → "}
+                            <span className="font-medium">{header}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -519,8 +594,10 @@ const ImportWizard = ({ embedded = false }) => {
                   </div>
                 ) : (
                   <div className="flex items-center p-2 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-                    <AlertCircle className="w-4 h-4 mr-2" /> CSV columns don’t
-                    match expected format
+                    <AlertCircle className="w-4 h-4 mr-2" />
+                    {isCLSS && clssMissingRequired.length > 0
+                      ? `Import blocked: missing required CLSS columns (${clssMissingRequired.join(", ")})`
+                      : "CSV columns don’t match expected format"}
                   </div>
                 )}
               </div>

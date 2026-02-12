@@ -12,34 +12,11 @@
 import React, { useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
-import Dashboard from "./components/Dashboard";
-import FacultyHub from "./components/scheduling/FacultyHub.jsx";
-import RoomsHub from "./components/scheduling/RoomsHub.jsx";
-import StudentWorkersHub from "./components/scheduling/StudentWorkersHub.jsx";
-import PeopleHub from "./components/people/PeopleHub.jsx";
-import PAFWorkflow from "./components/people/PAFWorkflow.jsx";
-import DepartmentInsights from "./components/analytics/DepartmentInsights.jsx";
-import StudentWorkerAnalytics from "./components/analytics/StudentWorkerAnalytics.jsx";
-import { CoursesHub, CourseManagement } from "./components/courses";
-import ImportWizard from "./components/administration/ImportWizard";
-import AppSettings from "./components/administration/AppSettings";
-import DataHygieneManager from "./components/administration/DataHygieneManager";
-import MaintenanceCenter from "./components/administration/MaintenanceCenter";
-import BaylorSystems from "./components/resources/BaylorSystems";
-import BaylorAcronyms from "./components/administration/BaylorAcronyms";
-import CRNQualityTools from "./components/administration/CRNQualityTools";
-import RecentChangesPage from "./components/administration/RecentChangesPage";
-import LiveView from "./components/LiveView";
-import TemperatureMonitoring from "./components/temperature/TemperatureMonitoring";
-import FacilitiesHub from "./components/facilities/FacilitiesHub";
-import OutlookRoomExport from "./components/tools/OutlookRoomExport.jsx";
-import RoomGridGenerator from "./components/administration/RoomGridGenerator.jsx";
+import PageRouter from "./components/app/PageRouter.jsx";
 import Login from "./components/Login";
-import ProtectedContent from "./components/ProtectedContent.jsx";
-import AccessControl from "./components/administration/AccessControl.jsx";
 import MaintenancePage from "./components/MaintenancePage";
 import Notification from "./components/Notification";
-import { TutorialPage, TutorialOverlay } from "./components/help";
+import { TutorialOverlay } from "./components/help";
 
 import { useAuth } from "./contexts/AuthContext.jsx";
 import { useUI } from "./contexts/UIContext.jsx";
@@ -221,206 +198,6 @@ function App() {
       }
     }
     return currentPage;
-  };
-
-  // Page content renderer
-  const renderPageContent = () => {
-    if (loading) {
-      return (
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="loading-shimmer w-16 h-16 rounded-full mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading system data...</p>
-          </div>
-        </div>
-      );
-    }
-
-    switch (currentPage) {
-      case "dashboard":
-        return (
-          <ProtectedContent pageId="dashboard">
-            <Dashboard />
-          </ProtectedContent>
-        );
-      case "live-view":
-        return (
-          <ProtectedContent pageId="live-view">
-            <LiveView />
-          </ProtectedContent>
-        );
-      case "faculty-finder":
-        navigate("/live-view?explore=1&tab=faculty", { replace: true });
-        return null;
-      // Scheduling Hubs
-      case "scheduling/faculty":
-        return (
-          <ProtectedContent pageId="scheduling/faculty">
-            <FacultyHub />
-          </ProtectedContent>
-        );
-      case "scheduling/rooms":
-        return (
-          <ProtectedContent pageId="scheduling/rooms">
-            <RoomsHub />
-          </ProtectedContent>
-        );
-      case "tools/outlook-export":
-        return (
-          <ProtectedContent pageId="tools/outlook-export">
-            <OutlookRoomExport />
-          </ProtectedContent>
-        );
-      case "tools/room-grid-generator":
-        return (
-          <ProtectedContent pageId="tools/room-grid-generator">
-            <RoomGridGenerator />
-          </ProtectedContent>
-        );
-      case "scheduling/student-workers":
-        return (
-          <ProtectedContent pageId="scheduling/student-workers">
-            <StudentWorkersHub />
-          </ProtectedContent>
-        );
-      // People Hub
-      case "people/directory":
-      case "people/email-lists":
-      case "people/offices":
-      case "people/programs":
-      case "people/baylor-ids":
-        return (
-          <ProtectedContent pageId={currentPage}>
-            <PeopleHub />
-          </ProtectedContent>
-        );
-      case "workflows/paf":
-      case "people/paf-workflow":
-        return (
-          <ProtectedContent pageId="people/directory">
-            <PAFWorkflow />
-          </ProtectedContent>
-        );
-      // Courses Hub
-      case "courses/browse":
-      case "courses/manage":
-        return (
-          <ProtectedContent pageId={currentPage}>
-            <CoursesHub />
-          </ProtectedContent>
-        );
-      // Analytics
-      case "analytics/department-insights":
-        return (
-          <ProtectedContent pageId="analytics/department-insights">
-            <DepartmentInsights />
-          </ProtectedContent>
-        );
-      case "analytics/student-worker-analytics":
-        return (
-          <ProtectedContent pageId="analytics/student-worker-analytics">
-            <StudentWorkerAnalytics />
-          </ProtectedContent>
-        );
-      // Admin Tools
-      case "admin-tools/import-wizard":
-        return (
-          <ProtectedContent pageId="admin-tools/import-wizard">
-            <ImportWizard />
-          </ProtectedContent>
-        );
-      case "admin-tools/crn-tools":
-        return (
-          <ProtectedContent pageId="admin-tools/crn-tools">
-            <CRNQualityTools />
-          </ProtectedContent>
-        );
-      // Legacy redirects for old Data Tools paths
-      case "data/schedule-data":
-        navigate("/courses/manage", { replace: true });
-        return null;
-      case "data/import-wizard":
-        navigate("/admin-tools/import-wizard", { replace: true });
-        return null;
-      case "data/crn-tools":
-        navigate("/admin-tools/crn-tools", { replace: true });
-        return null;
-      // Help & Resources
-      case "help/tutorials":
-        return (
-          <ProtectedContent pageId="help/tutorials">
-            <TutorialPage />
-          </ProtectedContent>
-        );
-      case "help/baylor-systems":
-        return (
-          <ProtectedContent pageId="help/baylor-systems">
-            <BaylorSystems />
-          </ProtectedContent>
-        );
-      case "help/acronyms":
-        return (
-          <ProtectedContent pageId="help/acronyms">
-            <BaylorAcronyms />
-          </ProtectedContent>
-        );
-      // Administration
-      case "admin/access-control":
-        return (
-          <ProtectedContent pageId="admin/access-control">
-            <AccessControl />
-          </ProtectedContent>
-        );
-      case "admin/settings":
-        return (
-          <ProtectedContent pageId="admin/settings">
-            <AppSettings />
-          </ProtectedContent>
-        );
-      case "admin/recent-changes":
-        return (
-          <ProtectedContent pageId="admin/recent-changes">
-            <RecentChangesPage />
-          </ProtectedContent>
-        );
-      case "admin/data-hygiene":
-        return (
-          <ProtectedContent pageId="admin/data-hygiene">
-            <DataHygieneManager />
-          </ProtectedContent>
-        );
-      case "admin/maintenance":
-        return (
-          <ProtectedContent pageId="admin/maintenance">
-            <MaintenanceCenter />
-          </ProtectedContent>
-        );
-      // Facilities Hub
-      case "facilities/spaces":
-        return (
-          <ProtectedContent pageId="facilities/spaces">
-            <FacilitiesHub initialTab="spaces" />
-          </ProtectedContent>
-        );
-      case "facilities/buildings":
-        return (
-          <ProtectedContent pageId="facilities/buildings">
-            <FacilitiesHub initialTab="buildings" />
-          </ProtectedContent>
-        );
-      case "facilities/temperature":
-        return (
-          <ProtectedContent pageId="facilities/temperature">
-            <FacilitiesHub initialTab="temperature" />
-          </ProtectedContent>
-        );
-      default:
-        return (
-          <ProtectedContent pageId="dashboard">
-            <Dashboard />
-          </ProtectedContent>
-        );
-    }
   };
 
   // ==================== RENDER ====================
@@ -657,7 +434,10 @@ function App() {
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-7xl px-4 md:px-6 py-6">
-            {renderPageContent()}
+            <PageRouter
+              currentPage={currentPage}
+              loading={loading}
+            />
           </div>
         </main>
       </div>

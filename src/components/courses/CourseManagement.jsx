@@ -19,15 +19,13 @@ import {
 import MultiSelectDropdown from "../MultiSelectDropdown";
 import FacultyContactCard from "../FacultyContactCard";
 import { formatChangeForDisplay } from "../../utils/recentChanges";
-import { buildCourseSectionKey, parseCourseCode } from "../../utils/courseUtils";
+import { buildCourseSectionKey } from "../../utils/courseUtils";
 import { parseTime } from "../../utils/timeUtils";
 import {
-  getBuildingDisplay,
   SPACE_TYPE,
   splitMultiRoom,
 } from "../../utils/locationService";
 import { getMaxEnrollment } from "../../utils/enrollmentUtils";
-import { normalizeTermLabel, termCodeFromLabel } from "../../utils/termUtils";
 import { linkSchedules, unlinkSchedules } from "../../utils/scheduleLinkUtils";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
@@ -35,17 +33,22 @@ import { useScheduleOperations, usePeopleOperations } from "../../hooks";
 import { useUI } from "../../contexts/UIContext";
 import { useAppConfig } from "../../contexts/AppConfigContext";
 import { useSchedules } from "../../contexts/ScheduleContext";
-
-const MAX_ENROLLMENT_EXPORT_KEY = "Max Enrollment";
-const MAX_ENROLLMENT_FIELD_KEYS = new Set([
-  "maxEnrollment",
-  "maximumEnrollment",
-  "Maximum Enrollment",
-  "MaxEnrollment",
-  "max_enrollment",
-  "Max Enrollment",
-]);
-const ROOM_MENU_MIN_WIDTH = "min(20rem, 90vw)";
+import {
+  COURSE_FILTER_PRESETS,
+  cloneCourseFilters,
+  createDefaultCourseFilters,
+  DAY_NAMES,
+  MAX_ENROLLMENT_EXPORT_KEY,
+  MAX_ENROLLMENT_FIELD_KEYS,
+  ROOM_MENU_MIN_WIDTH,
+} from "./course-management/constants";
+import {
+  computeCourseMetadata,
+  extractBuildingNameFromLocation,
+  getTimeOfDay,
+  normalizeEnrollmentInput,
+  resolveScheduleTermKey,
+} from "./course-management/helpers";
 
 const CourseManagement = ({ embedded = false }) => {
   const {
@@ -70,24 +73,7 @@ const CourseManagement = ({ embedded = false }) => {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [showAddCourseForm, setShowAddCourseForm] = useState(false);
   const [newCourseData, setNewCourseData] = useState({});
-  const [filters, setFilters] = useState({
-    // Basic filters
-    instructor: [],
-    day: [],
-    room: [],
-    searchTerm: "",
-    // Advanced filters
-    programs: { include: [], exclude: [] },
-    sections: [],
-    buildings: { include: [], exclude: [] },
-    adjunct: "all", // 'all', 'include', 'exclude'
-    tenured: "all", // 'all', 'include', 'exclude'
-    credits: "all", // 'all', '1', '2', '3', '4+'
-    timeOfDay: "all", // 'all', 'morning', 'afternoon', 'evening'
-    status: "all", // 'all', 'Active', 'Cancelled', etc.
-    maxEnrollmentMin: "",
-    maxEnrollmentMax: "",
-  });
+  const [filters, setFilters] = useState(createDefaultCourseFilters);
 
   const [activeFilterPreset, setActiveFilterPreset] = useState("");
   const [sortConfig, setSortConfig] = useState({
@@ -195,46 +181,6 @@ const CourseManagement = ({ embedded = false }) => {
     } finally {
       setIsLinking(false);
     }
-  };
-
-  const computeCourseMetadata = (courseCode) => {
-    if (!courseCode || typeof courseCode !== "string") {
-      return { credits: "", program: "", catalogNumber: "" };
-    }
-    const parsed = parseCourseCode(courseCode);
-    if (parsed?.error) {
-      return { credits: "", program: "", catalogNumber: "" };
-    }
-    const programCode = parsed.program ? parsed.program.toUpperCase() : "";
-    return {
-      credits: parsed.credits,
-      program: programCode,
-      catalogNumber: parsed.catalogNumber || "",
-    };
-  };
-
-  const resolveScheduleTermKey = (schedule) => {
-    if (!schedule) return "";
-    const term = normalizeTermLabel(schedule.term || schedule.Term || "");
-    const termCode =
-      schedule.termCode ||
-      schedule.TermCode ||
-      termCodeFromLabel(term) ||
-      termCodeFromLabel(schedule.term || "") ||
-      "";
-    return termCode || term || "";
-  };
-
-  const extractBuildingNameFromLocation = (locationLabel) => {
-    if (!locationLabel || typeof locationLabel !== "string") {
-      return "Other";
-    }
-    const lowered = locationLabel.toLowerCase();
-    if (lowered.includes("no room needed")) {
-      return "No Room Needed";
-    }
-    const building = getBuildingDisplay(locationLabel);
-    return building || "Other";
   };
 
   const computedNewCourseCredits = useMemo(
@@ -519,131 +465,9 @@ const CourseManagement = ({ embedded = false }) => {
     };
   }, [scheduleData, buildingConfigVersion]);
 
-  // Filter presets for common use cases
-  const filterPresets = {
-    "all-courses": {
-      name: "All Courses",
-      filters: {
-        instructor: [],
-        day: [],
-        room: [],
-        searchTerm: "",
-        programs: { include: [], exclude: [] },
-        sections: [],
-        buildings: { include: [], exclude: [] },
-        adjunct: "all",
-        tenured: "all",
-        credits: "all",
-        timeOfDay: "all",
-        status: "all",
-        maxEnrollmentMin: "",
-        maxEnrollmentMax: "",
-      },
-    },
-    "adjunct-courses": {
-      name: "Adjunct-Taught",
-      filters: {
-        instructor: [],
-        day: [],
-        room: [],
-        searchTerm: "",
-        programs: { include: [], exclude: [] },
-        sections: [],
-        buildings: { include: [], exclude: [] },
-        adjunct: "include",
-        tenured: "all",
-        credits: "all",
-        timeOfDay: "all",
-        status: "all",
-        maxEnrollmentMin: "",
-        maxEnrollmentMax: "",
-      },
-    },
-    "active-courses": {
-      name: "Active Courses Only",
-      filters: {
-        instructor: [],
-        day: [],
-        room: [],
-        searchTerm: "",
-        programs: { include: [], exclude: [] },
-        sections: [],
-        buildings: { include: [], exclude: [] },
-        adjunct: "all",
-        tenured: "all",
-        credits: "all",
-        timeOfDay: "all",
-        status: "Active",
-        maxEnrollmentMin: "",
-        maxEnrollmentMax: "",
-      },
-    },
-    "morning-classes": {
-      name: "Morning Classes",
-      filters: {
-        instructor: [],
-        day: [],
-        room: [],
-        searchTerm: "",
-        programs: { include: [], exclude: [] },
-        sections: [],
-        buildings: { include: [], exclude: [] },
-        adjunct: "all",
-        tenured: "all",
-        credits: "all",
-        timeOfDay: "morning",
-        status: "all",
-        maxEnrollmentMin: "",
-        maxEnrollmentMax: "",
-      },
-    },
-    "high-credit": {
-      name: "High Credit Hours",
-      filters: {
-        instructor: [],
-        day: [],
-        room: [],
-        searchTerm: "",
-        programs: { include: [], exclude: [] },
-        sections: [],
-        buildings: { include: [], exclude: [] },
-        adjunct: "all",
-        tenured: "all",
-        credits: "4+",
-        timeOfDay: "all",
-        status: "all",
-        maxEnrollmentMin: "",
-        maxEnrollmentMax: "",
-      },
-    },
-  };
-
-  const dayNames = {
-    M: "Monday",
-    T: "Tuesday",
-    W: "Wednesday",
-    R: "Thursday",
-    F: "Friday",
-  };
-
-  const normalizeEnrollmentInput = (value) => {
-    if (value === null || value === undefined || value === "") return null;
-    const parsed = Number.parseInt(String(value), 10);
-    return Number.isNaN(parsed) ? null : parsed;
-  };
-
   const getMaxEnrollmentDisplay = (item) => {
     const value = getMaxEnrollment(item);
     return value === null ? "—" : value;
-  };
-
-  // Helper function to get time of day
-  const getTimeOfDay = (timeStr) => {
-    const minutes = parseTime(timeStr);
-    if (!minutes) return "unknown";
-    if (minutes < 12 * 60) return "morning"; // Before noon
-    if (minutes < 17 * 60) return "afternoon"; // Before 5 PM
-    return "evening"; // After 5 PM
   };
 
   // Filter and sort data
@@ -1222,31 +1046,15 @@ const CourseManagement = ({ embedded = false }) => {
       return;
     }
 
-    const preset = filterPresets[presetKey];
+    const preset = COURSE_FILTER_PRESETS[presetKey];
     if (preset) {
-      setFilters(preset.filters);
+      setFilters(cloneCourseFilters(preset.filters));
       setActiveFilterPreset(presetKey);
     }
   };
 
   const clearFilters = () => {
-    const clearedFilters = {
-      instructor: [],
-      day: [],
-      room: [],
-      searchTerm: "",
-      programs: { include: [], exclude: [] },
-      sections: [],
-      buildings: { include: [], exclude: [] },
-      adjunct: "all",
-      tenured: "all",
-      credits: "all",
-      timeOfDay: "all",
-      status: "all",
-      maxEnrollmentMin: "",
-      maxEnrollmentMax: "",
-    };
-    setFilters(clearedFilters);
+    setFilters(createDefaultCourseFilters());
     setActiveFilterPreset("");
   };
 
@@ -1642,13 +1450,13 @@ const CourseManagement = ({ embedded = false }) => {
                   Days *
                 </label>
                 <MultiSelectDropdown
-                  options={Object.keys(dayNames)}
+                  options={Object.keys(DAY_NAMES)}
                   selected={newCourseData.Day || []}
                   onChange={(selected) =>
                     setNewCourseData((prev) => ({ ...prev, Day: selected }))
                   }
                   placeholder="Select days..."
-                  displayMap={dayNames}
+                  displayMap={DAY_NAMES}
                 />
               </div>
               <div>
@@ -1813,7 +1621,7 @@ const CourseManagement = ({ embedded = false }) => {
                 className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
               >
                 <option value="">Quick filters...</option>
-                {Object.entries(filterPresets).map(([key, preset]) => (
+                {Object.entries(COURSE_FILTER_PRESETS).map(([key, preset]) => (
                   <option key={key} value={key}>
                     {preset.name}
                   </option>
@@ -1875,11 +1683,11 @@ const CourseManagement = ({ embedded = false }) => {
               placeholder="Filter by Instructor..."
             />
             <MultiSelectDropdown
-              options={Object.keys(dayNames)}
+              options={Object.keys(DAY_NAMES)}
               selected={filters.day}
               onChange={(selected) => setFilters({ ...filters, day: selected })}
               placeholder="Filter by Day..."
-              displayMap={dayNames}
+              displayMap={DAY_NAMES}
             />
             <MultiSelectDropdown
               options={uniqueRooms}
@@ -2348,7 +2156,7 @@ const CourseManagement = ({ embedded = false }) => {
                         </td>
                         <td className="p-1">
                           <MultiSelectDropdown
-                            options={Object.keys(dayNames)}
+                            options={Object.keys(DAY_NAMES)}
                             selected={
                               editFormData.Day ? editFormData.Day.split("") : []
                             }
@@ -2359,7 +2167,7 @@ const CourseManagement = ({ embedded = false }) => {
                               }))
                             }
                             placeholder="Days..."
-                            displayMap={dayNames}
+                            displayMap={DAY_NAMES}
                           />
                         </td>
                         <td className="p-1">
@@ -2802,7 +2610,7 @@ const CourseManagement = ({ embedded = false }) => {
 
       {selectedFacultyForCard && (
         <FacultyContactCard
-          faculty={selectedFacultyForCard}
+          person={selectedFacultyForCard}
           onClose={() => setSelectedFacultyForCard(null)}
         />
       )}

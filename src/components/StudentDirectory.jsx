@@ -15,7 +15,7 @@ import {
 import MultiSelectDropdown from "./MultiSelectDropdown";
 import FacultyContactCard from "./FacultyContactCard";
 import ConfirmDialog from "./shared/ConfirmDialog";
-import PersonDirectory from "./PersonDirectory";
+import PersonDirectory from "./people/PersonDirectory";
 import SortableHeader from "./shared/SortableHeader";
 import {
   StudentAddWizard,
@@ -97,8 +97,6 @@ const getStudentJobTitles = (student) => {
   if (Array.isArray(student?.jobs)) {
     student.jobs.forEach((job) => addTitle(job?.jobTitle));
   }
-  // Back-compat: some records still have a top-level jobTitle.
-  addTitle(student?.jobTitle);
 
   return titles;
 };
@@ -123,16 +121,6 @@ const prepareStudentPayload = (
       peopleIndex,
       supervisorIndex,
     });
-
-  const fallbackSupervisorName = trimValue(student.supervisor || "");
-  const fallbackSupervisorId = resolveSupervisorIdFor(
-    student.supervisorId,
-    fallbackSupervisorName,
-  );
-  const resolvedSupervisorName = resolveSupervisorNameFor(
-    fallbackSupervisorId,
-    fallbackSupervisorName,
-  );
 
   const jobsArray = Array.isArray(student.jobs) ? student.jobs : [];
   const normalizedJobs = jobsArray
@@ -188,7 +176,6 @@ const prepareStudentPayload = (
     ? Array.from(new Set(normalizedJobs.flatMap((job) => job.location)))
     : fallbackBuildings;
 
-  const primaryJob = normalizedJobs[0] || {};
   const primaryBuildings = aggregatedBuildings;
   const primaryBuilding = primaryBuildings[0] || "";
 
@@ -201,16 +188,10 @@ const prepareStudentPayload = (
     weeklySchedule: aggregatedWeeklySchedule,
     primaryBuildings,
     primaryBuilding,
-    jobTitle: hasJobs ? primaryJob.jobTitle || "" : trimValue(student.jobTitle || ""),
-    supervisor: hasJobs
-      ? primaryJob.supervisor || ""
-      : resolvedSupervisorName,
-    supervisorId: hasJobs
-      ? primaryJob.supervisorId || ""
-      : fallbackSupervisorId,
-    hourlyRate: hasJobs
-      ? primaryJob.hourlyRate || ""
-      : trimValue(student.hourlyRate || ""),
+    jobTitle: undefined,
+    supervisor: undefined,
+    supervisorId: undefined,
+    hourlyRate: undefined,
   };
 };
 
@@ -333,16 +314,11 @@ const StudentDirectory = () => {
     (student) => {
       const names = new Set();
       if (!student) return [];
-      const baseName = resolveSupervisorName(
-        student.supervisorId,
-        student.supervisor,
-      );
-      if (baseName) names.add(baseName);
       if (Array.isArray(student.jobs)) {
         student.jobs.forEach((job) => {
           const resolved = resolveSupervisorName(
-            job?.supervisorId || student.supervisorId,
-            job?.supervisor || student.supervisor,
+            job?.supervisorId,
+            job?.supervisor,
           );
           if (resolved) names.add(resolved);
         });
@@ -366,7 +342,6 @@ const StudentDirectory = () => {
   const availableJobTitles = useMemo(() => {
     const titles = new Set();
     studentData.forEach((student) => {
-      if (student.jobTitle) titles.add(student.jobTitle);
       if (Array.isArray(student.jobs)) {
         student.jobs.forEach((j) => {
           if (j?.jobTitle) titles.add(j.jobTitle);
@@ -392,14 +367,13 @@ const StudentDirectory = () => {
           supervisorNames.some((name) =>
             name.toLowerCase().includes(searchText),
           ) ||
-          student.jobTitle?.toLowerCase().includes(searchText) ||
           (Array.isArray(student.jobs) &&
             student.jobs.some(
               (j) =>
                 (j?.jobTitle || "").toLowerCase().includes(searchText) ||
                 resolveSupervisorName(
-                  j?.supervisorId || student.supervisorId,
-                  j?.supervisor || student.supervisor,
+                  j?.supervisorId,
+                  j?.supervisor,
                 )
                   .toLowerCase()
                   .includes(searchText),
@@ -420,7 +394,6 @@ const StudentDirectory = () => {
       // Job Titles filter
       if ((filters.jobTitles || []).length > 0) {
         const titlesSet = new Set();
-        if (student.jobTitle) titlesSet.add(student.jobTitle);
         if (Array.isArray(student.jobs)) {
           student.jobs.forEach((j) => {
             if (j?.jobTitle) titlesSet.add(j.jobTitle);
@@ -556,10 +529,6 @@ const StudentDirectory = () => {
         weeklySchedule: payload.weeklySchedule,
         primaryBuildings: payload.primaryBuildings,
         primaryBuilding: payload.primaryBuilding,
-        jobTitle: payload.jobTitle,
-        supervisor: payload.supervisor,
-        supervisorId: payload.supervisorId,
-        hourlyRate: payload.hourlyRate,
         updatedAt: new Date().toISOString(),
       };
 
@@ -656,10 +625,6 @@ const StudentDirectory = () => {
         weeklySchedule: payload.weeklySchedule,
         primaryBuildings: payload.primaryBuildings,
         primaryBuilding: payload.primaryBuilding,
-        jobTitle: payload.jobTitle,
-        supervisor: payload.supervisor,
-        supervisorId: payload.supervisorId,
-        hourlyRate: payload.hourlyRate,
         updatedAt: new Date().toISOString(),
       };
 
@@ -781,8 +746,8 @@ const StudentDirectory = () => {
 
       assignments.forEach((assignment) => {
         const supervisorName = resolveSupervisorName(
-          assignment.supervisorId || student.supervisorId,
-          assignment.supervisor || student.supervisor,
+          assignment.supervisorId,
+          assignment.supervisor,
         );
         rows.push([
           "Student Worker",

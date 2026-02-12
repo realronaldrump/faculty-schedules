@@ -636,7 +636,7 @@ const FacultyExplorer = ({
                   {sortedLocations.map(({ faculty, locationStatus }) => (
                     <FacultyRow
                       key={faculty.id}
-                      faculty={faculty}
+                      person={faculty}
                       locationStatus={locationStatus}
                       onSelect={handleSelectFaculty}
                       isSelected={effectiveSelectedFaculty?.id === faculty.id}

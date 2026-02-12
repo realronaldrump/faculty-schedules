@@ -111,7 +111,7 @@ export const adaptPeopleToFaculty = (
       return hasFacultyRole || person.isAdjunct === true || person.isUPD === true;
     })
     .map(person => {
-      const facultyName = `${person.firstName} ${person.lastName}`.trim() || person.name || '';
+      const facultyName = `${person.firstName || ""} ${person.lastName || ""}`.trim();
       const isAdjunct = person.isAdjunct === true;
 
       // Single source of truth for program: use programId to lookup program
@@ -191,7 +191,7 @@ export const adaptPeopleToStaff = (people, _scheduleData = [], _programs = [], o
         return false;
       };
 
-      const staffName = `${person.firstName || ''} ${person.lastName || ''}`.trim() || person.name || '';
+      const staffName = `${person.firstName || ""} ${person.lastName || ""}`.trim();
       const isAdjunct = person.isAdjunct === true;
 
       return {
@@ -416,8 +416,7 @@ export const getFullName = (person) => {
 export const getInstructorDisplayName = (person) => {
   if (!person) return UNASSIGNED;
   const name = `${person.firstName || ''} ${person.lastName || ''}`.trim();
-  const fallback = (person.name || '').trim();
-  return name || fallback || UNASSIGNED;
+  return name || UNASSIGNED;
 };
 
 /**

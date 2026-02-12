@@ -52,7 +52,6 @@ import {
   SPACE_TYPE,
   splitMultiRoom,
 } from "../../utils/locationService";
-import { resolveSpaceDisplayName } from "../../utils/spaceUtils";
 import {
   formatMinutesToLabel,
   formatMinutesToTime,
@@ -90,91 +89,27 @@ import {
 } from "../../utils/temperatureRangeUtils";
 import { emitTemperatureDataRefresh } from "../../utils/temperatureEvents";
 import ConfirmDialog from "../shared/ConfirmDialog";
-import TemperatureTrends from "./TemperatureTrends";
-
-const DEFAULT_TIMEZONE = "America/Chicago";
-const AUTO_MATCH_THRESHOLD = 0.85;
-const DEFAULT_SNAPSHOT_TIMES = [
-  { label: "8:30 AM", minutes: 8 * 60 + 30, toleranceMinutes: 15 },
-  { label: "4:30 PM", minutes: 16 * 60 + 30, toleranceMinutes: 15 },
-];
-
-const buildDefaultSettings = ({ buildingCode, buildingName }) => ({
-  buildingCode,
-  buildingName,
-  timezone: DEFAULT_TIMEZONE,
-  idealTempFMin: null,
-  idealTempFMax: null,
-  idealTempRangesBySpaceType: {},
-  snapshotTimes: DEFAULT_SNAPSHOT_TIMES.map((slot) => ({
-    id: uuidv4(),
-    ...slot,
-  })),
-  floorplan: null,
-  markers: {},
-});
-
-const sortRooms = (a, b) => {
-  const aNum = parseInt(a.spaceNumber || a.roomNumber || "", 10);
-  const bNum = parseInt(b.spaceNumber || b.roomNumber || "", 10);
-  if (!Number.isNaN(aNum) && !Number.isNaN(bNum) && aNum !== bNum) {
-    return aNum - bNum;
-  }
-  return (a.displayName || a.name || "").localeCompare(
-    b.displayName || b.name || "",
-    undefined,
-    { numeric: true },
-  );
-};
-
-const getSpaceLabel = (room, spacesByKey) => {
-  if (!room) return "Unknown";
-  const rawKey = room.spaceKey || room.id || "";
-  const key = normalizeSingleSpaceKey(rawKey);
-  const resolved = key ? resolveSpaceDisplayName(key, spacesByKey) : "";
-  if (resolved) return resolved;
-  if (room.displayName) return room.displayName;
-  if (room.name) return room.name;
-  if (room.roomNumber) return room.roomNumber;
-  if (splitMultiRoom(rawKey).length > 1) return "Multiple rooms (legacy)";
-  return key || room.id || "Unknown";
-};
-
-const toCsvSafe = (value) => {
-  const str = value == null ? "" : String(value);
-  return `"${str.replace(/"/g, '""')}"`;
-};
-
-const isValidTimeZone = (timeZone) => {
-  if (!timeZone) return false;
-  try {
-    Intl.DateTimeFormat("en-US", { timeZone }).format(new Date());
-    return true;
-  } catch (_) {
-    return false;
-  }
-};
-
-const formatTimezoneLabel = (timeZone) => {
-  const resolved = isValidTimeZone(timeZone) ? timeZone : DEFAULT_TIMEZONE;
-  try {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone: resolved,
-      timeZoneName: "long",
-    }).formatToParts(new Date());
-    const namePart = parts.find((part) => part.type === "timeZoneName");
-    if (!namePart || !namePart.value) return resolved;
-    return namePart.value.replace(/\s+(Standard|Daylight)\s+Time$/, " Time");
-  } catch (_) {
-    return resolved;
-  }
-};
-
-const coerceNumber = (value) => {
-  if (value == null || value === "") return null;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-};
+import {
+  ACTION_TABS,
+  AUTO_MATCH_THRESHOLD,
+  DATA_VIEW_TABS,
+  DEFAULT_TIMEZONE,
+} from "./monitoring/constants";
+import {
+  buildDefaultSettings,
+  coerceNumber,
+  formatTimezoneLabel,
+  getSpaceLabel,
+  isValidTimeZone,
+  sortRooms,
+  toCsvSafe,
+} from "./monitoring/helpers";
+import Toolbar from "./monitoring/Toolbar";
+import ViewTabs from "./monitoring/ViewTabs";
+import QuickStats from "./monitoring/QuickStats";
+import SnapshotPanel from "./monitoring/SnapshotPanel";
+import ImportPanel from "./monitoring/ImportPanel";
+import SettingsPanel from "./monitoring/SettingsPanel";
 
 const TemperatureMonitoring = () => {
   const { loading: authLoading, user } = useAuth();
@@ -4229,21 +4164,6 @@ const TemperatureMonitoring = () => {
     </div>
   );
 
-  // Data view tabs (always visible)
-  const dataViewTabs = [
-    { id: "floorplan", label: "Floorplan", icon: MapIcon },
-    { id: "daily", label: "Daily", icon: LayoutGrid },
-    { id: "historical", label: "Historical", icon: History },
-    { id: "trends", label: "Trends", icon: LineChart },
-  ];
-
-  // Action tabs
-  const actionTabs = [
-    { id: "import", label: "Import", icon: FileUp },
-    { id: "export", label: "Export", icon: Download },
-    { id: "settings", label: "Settings", icon: Thermometer },
-  ];
-
   // Calculate quick stats
   const roomCount = roomsForBuilding.length;
   const roomsWithData = Object.keys(snapshotLookup).length;
@@ -4270,231 +4190,55 @@ const TemperatureMonitoring = () => {
 
       {/* Filter Bar - Sticky */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm sticky top-0 z-10">
-        <div className="p-4 border-b border-gray-100">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-            {/* Building Selector - More Prominent */}
-            <div className="flex-1 min-w-0" data-tutorial="building-selector">
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                Building
-              </label>
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <MapIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10 pointer-events-none" />
-                  <select
-                    className="form-select pl-9 w-full font-medium"
-                    value={selectedBuilding}
-                    onChange={(e) => setSelectedBuilding(e.target.value)}
-                  >
-                    <option value="">Select building...</option>
-                    {buildingOptions.map((building) => (
-                      <option key={building.code} value={building.code}>
-                        {building.name}
-                        {hiddenBuildingCodes.has(building.code)
-                          ? " (hidden)"
-                          : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {hiddenBuildingCodes.size > 0 && (
-                  <button
-                    onClick={() => setShowHidden(!showHidden)}
-                    className="p-2 rounded-lg text-sm font-medium flex items-center gap-1 transition bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    title={
-                      showHidden
-                        ? "Hide hidden buildings"
-                        : "Show hidden buildings"
-                    }
-                  >
-                    {showHidden ? (
-                      <Eye className="w-4 h-4" />
-                    ) : (
-                      <EyeOff className="w-4 h-4" />
-                    )}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {showSnapshotControls && (
-              <>
-                {/* Divider */}
-                <div className="hidden lg:block w-px h-10 bg-gray-200" />
-
-                {/* Date Selector */}
-                <div data-tutorial="date-selector">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">
-                    Date
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-gray-400" />
-                    <input
-                      type="date"
-                      className="form-input"
-                      value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                {/* Time Selector */}
-                <div data-tutorial="snapshot-time-selector">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">
-                    Snapshot Time
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <Thermometer className="w-4 h-4 text-gray-400" />
-                    <select
-                      className="form-select"
-                      value={selectedSnapshotId}
-                      onChange={(e) => setSelectedSnapshotId(e.target.value)}
-                    >
-                      {snapshotTimes.map((slot) => (
-                        <option key={slot.id} value={slot.id}>
-                          {slot.label || formatMinutesToLabel(slot.minutes)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Tab Navigation - Split into Data Views and Admin Actions */}
-        <div className="p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          {/* Data View Tabs */}
-          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg" data-tutorial="data-view-tabs">
-            {dataViewTabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = viewMode === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setViewMode(tab.id)}
-                  className={`px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${isActive
-                    ? "bg-white text-baylor-green shadow-sm"
-                    : "text-gray-600 hover:text-gray-900"
-                    }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Action tabs */}
-          <div className="flex items-center gap-2" data-tutorial="action-tabs">
-            {actionTabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = viewMode === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setViewMode(tab.id)}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition border ${isActive
-                    ? "bg-baylor-green text-white border-baylor-green"
-                    : "bg-white text-gray-700 border-gray-200 hover:border-baylor-green/50 hover:text-baylor-green"
-                    }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <Toolbar
+          selectedBuilding={selectedBuilding}
+          buildingOptions={buildingOptions}
+          hiddenBuildingCodes={hiddenBuildingCodes}
+          showHidden={showHidden}
+          onToggleShowHidden={() => setShowHidden(!showHidden)}
+          onBuildingChange={setSelectedBuilding}
+          showSnapshotControls={showSnapshotControls}
+          selectedDate={selectedDate}
+          onDateChange={setSelectedDate}
+          selectedSnapshotId={selectedSnapshotId}
+          onSnapshotChange={setSelectedSnapshotId}
+          snapshotTimes={snapshotTimes}
+        />
+        <ViewTabs
+          dataViewTabs={DATA_VIEW_TABS}
+          actionTabs={ACTION_TABS}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+        />
       </div>
 
-      {/* Quick Stats Card */}
-      {selectedBuilding &&
-        !snapshotLoading &&
-        (viewMode === "floorplan" ||
-          viewMode === "daily" ||
-          viewMode === "historical") && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-tutorial="quick-stats">
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-baylor-green/10 flex items-center justify-center">
-                  <MapIcon className="w-5 h-5 text-baylor-green" />
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-gray-900">
-                    {roomCount}
-                  </div>
-                  <div className="text-xs text-gray-500">Total Rooms</div>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-baylor-green/10 flex items-center justify-center">
-                  <Thermometer className="w-5 h-5 text-baylor-green" />
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-gray-900">
-                    {roomsWithData}
-                  </div>
-                  <div className="text-xs text-gray-500">With Data</div>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-10 h-10 rounded-lg flex items-center justify-center ${coveragePercent >= 80 ? "bg-green-100" : coveragePercent >= 50 ? "bg-yellow-100" : "bg-red-100"}`}
-                >
-                  <CheckCircle2
-                    className={`w-5 h-5 ${coveragePercent >= 80 ? "text-green-600" : coveragePercent >= 50 ? "text-yellow-600" : "text-red-600"}`}
-                  />
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-gray-900">
-                    {coveragePercent}%
-                  </div>
-                  <div className="text-xs text-gray-500">Coverage</div>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
-                  <Calendar className="w-5 h-5 text-gray-600" />
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-gray-900">
-                    {timezoneLabel}
-                  </div>
-                  <div className="text-xs text-gray-500">Timezone</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+      <QuickStats
+        selectedBuilding={selectedBuilding}
+        snapshotLoading={snapshotLoading}
+        viewMode={viewMode}
+        roomCount={roomCount}
+        roomsWithData={roomsWithData}
+        coveragePercent={coveragePercent}
+        timezoneLabel={timezoneLabel}
+      />
 
-      {snapshotLoading && isSnapshotView && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 text-gray-600">
-          Loading snapshot data...
-        </div>
-      )}
+      <SnapshotPanel
+        viewMode={viewMode}
+        snapshotLoading={snapshotLoading}
+        isSnapshotView={isSnapshotView}
+        renderFloorplan={renderFloorplan}
+        renderDailyTable={renderDailyTable}
+        renderHistorical={renderHistorical}
+        selectedBuilding={selectedBuilding}
+        buildingSettings={buildingSettings}
+        roomsForBuilding={roomsForBuilding}
+        spacesByKey={spacesByKey}
+        deviceDocs={deviceDocs}
+      />
 
-      {!snapshotLoading && viewMode === "floorplan" && renderFloorplan()}
-      {!snapshotLoading && viewMode === "daily" && renderDailyTable()}
-      {!snapshotLoading && viewMode === "historical" && renderHistorical()}
-      {viewMode === "trends" && (
-        <TemperatureTrends
-          selectedBuilding={selectedBuilding}
-          buildingSettings={buildingSettings}
-          roomsForBuilding={roomsForBuilding}
-          spacesByKey={spacesByKey}
-          deviceDocs={deviceDocs}
-        />
-      )}
-      {viewMode === "import" && renderImport()}
+      <ImportPanel viewMode={viewMode} renderImport={renderImport} />
       {viewMode === "export" && renderExport()}
-      {viewMode === "settings" && renderSettings()}
+      <SettingsPanel viewMode={viewMode} renderSettings={renderSettings} />
 
       <ConfirmDialog
         isOpen={showDeleteFloorplanConfirm}

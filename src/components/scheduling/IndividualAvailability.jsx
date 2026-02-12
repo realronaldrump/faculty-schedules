@@ -501,7 +501,7 @@ const IndividualAvailability = ({ embedded = false }) => {
       {/* Faculty Contact Card Modal */}
       {selectedFacultyForCard && (
         <FacultyContactCard
-          faculty={selectedFacultyForCard}
+          person={selectedFacultyForCard}
           onClose={() => setSelectedFacultyForCard(null)}
         />
       )}

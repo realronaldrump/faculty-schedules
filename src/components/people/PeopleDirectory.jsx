@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import FacultyDirectory from "../FacultyDirectory";
-import StaffDirectory from "../StaffDirectory";
-import AdjunctDirectory from "../AdjunctDirectory";
 import StudentDirectory from "../StudentDirectory";
+import PersonDirectory from "./PersonDirectory";
+import {
+  adjunctDirectoryConfig,
+  facultyDirectoryConfig,
+  staffDirectoryConfig,
+} from "../person-directory-configs/configs-core";
 import {
   Users,
   GraduationCap,
@@ -15,6 +18,7 @@ import {
 import { usePeople } from "../../contexts/PeopleContext";
 import { useData } from "../../contexts/DataContext";
 import { useTutorial } from "../../contexts/TutorialContext";
+import { usePeopleOperations } from "../../hooks";
 
 // Local tab definitions to switch between directory views
 const tabs = [
@@ -48,8 +52,14 @@ const PeopleDirectory = ({ embedded = false, initialTab = "faculty" }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { loadPeople } = usePeople();
-  const { loadPrograms } = useData();
+  const { loadPrograms, directoryData, scheduleData, programs } = useData();
   const { startTutorial } = useTutorial();
+  const {
+    handleFacultyUpdate,
+    handleStaffUpdate,
+    handleFacultyDelete,
+    handleStaffDelete,
+  } = usePeopleOperations();
 
   // Get tab from URL parameter or use initialTab
   const getInitialTab = () => {
@@ -195,9 +205,38 @@ const PeopleDirectory = ({ embedded = false, initialTab = "faculty" }) => {
 
           {/* Content */}
           <div className="mt-6">
-            {activeTab === "faculty" && <FacultyDirectory />}
-            {activeTab === "staff" && <StaffDirectory />}
-            {activeTab === "adjunct" && <AdjunctDirectory />}
+            {activeTab === "faculty" && (
+              <PersonDirectory
+                config={facultyDirectoryConfig}
+                data={directoryData}
+                scheduleData={scheduleData}
+                programs={programs}
+                onUpdate={handleFacultyUpdate}
+                onRelatedUpdate={handleStaffUpdate}
+                onDelete={handleFacultyDelete}
+              />
+            )}
+            {activeTab === "staff" && (
+              <PersonDirectory
+                config={staffDirectoryConfig}
+                data={directoryData}
+                programs={programs}
+                onUpdate={handleStaffUpdate}
+                onRelatedUpdate={handleFacultyUpdate}
+                onDelete={handleStaffDelete}
+              />
+            )}
+            {activeTab === "adjunct" && (
+              <PersonDirectory
+                config={adjunctDirectoryConfig}
+                data={directoryData}
+                scheduleData={scheduleData}
+                programs={programs}
+                onUpdate={handleFacultyUpdate}
+                onRelatedUpdate={handleStaffUpdate}
+                onDelete={handleFacultyDelete}
+              />
+            )}
             {activeTab === "student" && <StudentDirectory />}
           </div>
         </div>

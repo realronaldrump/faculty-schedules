@@ -11,12 +11,12 @@ import {
   Wifi,
   X
 } from 'lucide-react';
-import FacultyContactCard from './FacultyContactCard';
-import MultiSelectDropdown from './MultiSelectDropdown';
-import { adaptPeopleToFaculty, adaptPeopleToStaff } from '../utils/dataAdapter';
-import { formatPhoneNumber, validateDirectoryEntry } from '../utils/directoryUtils';
-import { buildCourseSectionKey } from '../utils/courseUtils';
-import { normalizeTermLabel, termCodeFromLabel } from '../utils/termUtils';
+import FacultyContactCard from '../FacultyContactCard';
+import MultiSelectDropdown from '../MultiSelectDropdown';
+import { adaptPeopleToFaculty, adaptPeopleToStaff } from '../../utils/dataAdapter';
+import { formatPhoneNumber, validateDirectoryEntry } from '../../utils/directoryUtils';
+import { buildCourseSectionKey } from '../../utils/courseUtils';
+import { normalizeTermLabel, termCodeFromLabel } from '../../utils/termUtils';
 
 const canUseWindow = typeof window !== 'undefined';
 
@@ -990,7 +990,7 @@ const facultyDirectoryConfig = {
     extraState.setShowOnlyWithCourses(false);
   },
   renderContactCard: ({ record, onClose }) => (
-    <FacultyContactCard faculty={record} onClose={onClose} />
+    <FacultyContactCard person={record} onClose={onClose} />
   )
 };
 
@@ -1304,7 +1304,7 @@ const staffDirectoryConfig = {
     });
   },
   renderContactCard: ({ record, onClose }) => (
-    <FacultyContactCard faculty={record} onClose={onClose} />
+    <FacultyContactCard person={record} onClose={onClose} />
   )
 };
 
@@ -1670,8 +1670,10 @@ const adjunctDirectoryConfig = {
     });
   },
   renderContactCard: ({ record, onClose }) => (
-    <FacultyContactCard faculty={record} onClose={onClose} />
+    <FacultyContactCard person={record} onClose={onClose} />
   )
 };
 
 export { facultyDirectoryConfig, staffDirectoryConfig, adjunctDirectoryConfig };
+export { ExportColumnsModal, renderHistoryPanel };
+export { buildCSVContent, triggerCSVDownload, resolveExportColumns };

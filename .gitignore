@@ -26,6 +26,9 @@ import-data.js
 # data-samples/CLSSFall2025.csv
 
 # data-samples/CLSSSpring2025.csv
+data-samples/*.csv
+!data-samples/sanitized-temperature-readings-example.csv
+!data-samples/sanitized-clss-example.csv
 temperature_examples/
 firestore-export/
 # local firestore export artifacts

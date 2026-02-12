@@ -840,7 +840,7 @@ const FacultySchedules = ({ embedded = false }) => {
 
       {selectedFacultyForCard && (
         <FacultyContactCard
-          faculty={selectedFacultyForCard}
+          person={selectedFacultyForCard}
           onClose={() => setSelectedFacultyForCard(null)}
           showNotification={() => {}}
         />

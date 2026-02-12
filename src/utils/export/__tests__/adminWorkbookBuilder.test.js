@@ -37,13 +37,13 @@ describe("adminWorkbookBuilder", () => {
 
   it("builds workbook definition with summary and selected sheets", () => {
     const workbookDefinition = buildWorkbookDefinition({
-      sheetIds: [SHEET_IDS.courses],
+      sheetIds: [SHEET_IDS.programs],
       summaryRows: [{ metric: "Generated At", value: "2026-02-12" }],
       rowsBySheetId: {
-        [SHEET_IDS.courses]: [
+        [SHEET_IDS.programs]: [
           {
-            courseCode: "ADM 1300",
-            courseTitle: "Foundations",
+            programName: "Administration",
+            programCode: "ADM",
           },
         ],
       },
@@ -54,7 +54,7 @@ describe("adminWorkbookBuilder", () => {
     expect(workbookDefinition[0].rows).toEqual([
       { metric: "Generated At", value: "2026-02-12" },
     ]);
-    expect(workbookDefinition[1].id).toBe(SHEET_IDS.courses);
+    expect(workbookDefinition[1].id).toBe(SHEET_IDS.programs);
     expect(workbookDefinition[1].rows).toHaveLength(1);
   });
 });

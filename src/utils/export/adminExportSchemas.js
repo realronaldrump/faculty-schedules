@@ -19,7 +19,6 @@ export const BULK_EXPORT_SHEET_IDS = Object.freeze([
   SHEET_IDS.studentWorkerAssignments,
   SHEET_IDS.courseSections,
   SHEET_IDS.sectionMeetings,
-  SHEET_IDS.courses,
   SHEET_IDS.programs,
   SHEET_IDS.spaces,
   SHEET_IDS.buildings,
@@ -265,12 +264,6 @@ export const INDIVIDUAL_EXPORT_OPTIONS = Object.freeze([
     label: "Section Meetings",
     description: "Meeting-pattern rows by day and time.",
     sheetIds: [SHEET_IDS.sectionMeetings],
-  },
-  {
-    id: SHEET_IDS.courses,
-    label: "Courses",
-    description: "Catalog-level course definitions.",
-    sheetIds: [SHEET_IDS.courses],
   },
   {
     id: SHEET_IDS.programs,

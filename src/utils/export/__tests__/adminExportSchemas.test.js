@@ -14,7 +14,8 @@ describe("adminExportSchemas", () => {
   });
 
   it("defines all bulk export sheets", () => {
-    expect(BULK_EXPORT_SHEET_IDS).toHaveLength(10);
+    expect(BULK_EXPORT_SHEET_IDS).toHaveLength(9);
+    expect(BULK_EXPORT_SHEET_IDS).not.toContain(SHEET_IDS.courses);
     BULK_EXPORT_SHEET_IDS.forEach((sheetId) => {
       expect(SHEET_DEFINITIONS[sheetId]).toBeTruthy();
       expect(Array.isArray(SHEET_DEFINITIONS[sheetId].columns)).toBe(true);

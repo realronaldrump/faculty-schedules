@@ -684,7 +684,7 @@ const FacultyContactCard = ({
                             )}
                         </div>
                     </div>
-                    {personType !== 'student' && (
+                    {personType !== 'student' && hasCourses && (
                         <div className="mt-4 flex items-center justify-center gap-2 rounded-lg bg-baylor-green/5 px-3 py-2 text-sm text-baylor-green">
                             <BookOpen size={16} />
                             <span>{totalCourseCount} course{totalCourseCount !== 1 ? 's' : ''}</span>
@@ -693,150 +693,139 @@ const FacultyContactCard = ({
                 </div>
 
                 {/* Courses Section - only for faculty/adjunct */}
-                {personType !== 'student' && (
+                {personType !== 'student' && hasCourses && (
                     <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
                         <h4 className="text-lg font-semibold text-baylor-green mb-3 flex items-center gap-2">
                             <BookOpen size={20} />
                             Courses Teaching
                         </h4>
-                        {loadingSchedules && totalCourseCount === 0 ? (
-                            <div className="text-sm text-gray-500">Loading courses…</div>
-                        ) : hasCourses ? (
-                            <div className="space-y-6">
-                                {sortedTerms.map((term, tIdx) => {
-                                    const termCourses = coursesByTerm[term] || [];
-                                    return (
-                                        <div key={term}>
-                                            {tIdx > 0 && <div className="border-t border-gray-200 my-2"></div>}
-                                            <div className="flex items-center justify-between mb-2">
-                                                <span className="text-sm font-semibold text-gray-700">{term}</span>
-                                            </div>
-                                            <div className="space-y-3">
-                                                {termCourses.map((course) => {
-                                                    const isExpanded = expandedCourseKey === course.id;
-                                                    const detailPanelId = `course-detail-${course.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
-                                                    const formattedCredits = formatCredits(course.credits);
-                                                    const instructionLabel = getInstructionLabel(course);
-                                                    return (
-                                                        <div key={course.id} className="overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setExpandedCourseKey((prev) => (prev === course.id ? null : course.id))}
-                                                                aria-expanded={isExpanded}
-                                                                aria-controls={detailPanelId}
-                                                                className="group w-full min-h-11 px-3 py-3 text-left transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-baylor-green/60 focus-visible:ring-offset-1 sm:px-4"
-                                                            >
-                                                                <div className="flex items-start justify-between gap-3">
-                                                                    <div className="min-w-0">
-                                                                        <div className="flex flex-wrap items-center gap-2">
-                                                                            <span className="text-sm font-semibold text-baylor-green break-words">
-                                                                                {course.courseCode || 'Course'}
+                        <div className="space-y-6">
+                            {sortedTerms.map((term, tIdx) => {
+                                const termCourses = coursesByTerm[term] || [];
+                                return (
+                                    <div key={term}>
+                                        {tIdx > 0 && <div className="border-t border-gray-200 my-2"></div>}
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-sm font-semibold text-gray-700">{term}</span>
+                                        </div>
+                                        <div className="space-y-3">
+                                            {termCourses.map((course) => {
+                                                const isExpanded = expandedCourseKey === course.id;
+                                                const detailPanelId = `course-detail-${course.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+                                                const formattedCredits = formatCredits(course.credits);
+                                                const instructionLabel = getInstructionLabel(course);
+                                                return (
+                                                    <div key={course.id} className="overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setExpandedCourseKey((prev) => (prev === course.id ? null : course.id))}
+                                                            aria-expanded={isExpanded}
+                                                            aria-controls={detailPanelId}
+                                                            className="group w-full min-h-11 px-3 py-3 text-left transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-baylor-green/60 focus-visible:ring-offset-1 sm:px-4"
+                                                        >
+                                                            <div className="flex items-start justify-between gap-3">
+                                                                <div className="min-w-0">
+                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                        <span className="text-sm font-semibold text-baylor-green break-words">
+                                                                            {course.courseCode || 'Course'}
+                                                                        </span>
+                                                                        {course.section && (
+                                                                            <span className="rounded bg-white px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                                                                                Sec {course.section}
                                                                             </span>
-                                                                            {course.section && (
-                                                                                <span className="rounded bg-white px-2 py-0.5 text-[11px] font-medium text-gray-600">
-                                                                                    Sec {course.section}
-                                                                                </span>
-                                                                            )}
-                                                                            {formattedCredits && (
-                                                                                <span className="rounded bg-white px-2 py-0.5 text-[11px] font-medium text-gray-500">
-                                                                                    {formattedCredits}
-                                                                                </span>
-                                                                            )}
-                                                                        </div>
-                                                                        {course.courseTitle && (
-                                                                            <p className="mt-1 text-sm text-gray-700 break-words">
-                                                                                {course.courseTitle}
+                                                                        )}
+                                                                        {formattedCredits && (
+                                                                            <span className="rounded bg-white px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                                                                                {formattedCredits}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    {course.courseTitle && (
+                                                                        <p className="mt-1 text-sm text-gray-700 break-words">
+                                                                            {course.courseTitle}
+                                                                        </p>
+                                                                    )}
+                                                                    <div className="mt-2 text-xs font-medium text-baylor-green/80">
+                                                                        {isExpanded ? 'Hide details' : 'View details'}
+                                                                    </div>
+                                                                </div>
+                                                                <ChevronDown
+                                                                    size={18}
+                                                                    className={`mt-0.5 shrink-0 text-baylor-green transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                                                    aria-hidden="true"
+                                                                />
+                                                            </div>
+                                                        </button>
+
+                                                        {isExpanded && (
+                                                            <div id={detailPanelId} className="border-t border-gray-200 bg-white px-3 py-3 sm:px-4">
+                                                                <div className="space-y-3">
+                                                                    <div>
+                                                                        <h5 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                                                            <Clock size={14} className="text-baylor-green" />
+                                                                            Schedule
+                                                                        </h5>
+                                                                        {course.meetings.length > 0 ? (
+                                                                            <ul className="mt-2 space-y-2">
+                                                                                {course.meetings.map((meeting, idx) => (
+                                                                                    <li
+                                                                                        key={`${course.id}-meeting-${idx}-${meeting.dayCode}-${meeting.startTime}-${meeting.endTime}`}
+                                                                                        className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2 text-sm text-gray-700"
+                                                                                    >
+                                                                                        {`${meeting.dayLabel} • ${meeting.timeLabel} • ${meeting.location || 'Location TBD'}`}
+                                                                                    </li>
+                                                                                ))}
+                                                                            </ul>
+                                                                        ) : (
+                                                                            <p className="mt-2 text-sm text-gray-500">
+                                                                                No scheduled meeting times listed.
                                                                             </p>
                                                                         )}
-                                                                        <div className="mt-2 text-xs font-medium text-baylor-green/80">
-                                                                            {isExpanded ? 'Hide details' : 'View details'}
-                                                                        </div>
                                                                     </div>
-                                                                    <ChevronDown
-                                                                        size={18}
-                                                                        className={`mt-0.5 shrink-0 text-baylor-green transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                                                                        aria-hidden="true"
-                                                                    />
-                                                                </div>
-                                                            </button>
 
-                                                            {isExpanded && (
-                                                                <div id={detailPanelId} className="border-t border-gray-200 bg-white px-3 py-3 sm:px-4">
-                                                                    <div className="space-y-3">
-                                                                        <div>
-                                                                            <h5 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                                                                <Clock size={14} className="text-baylor-green" />
-                                                                                Schedule
-                                                                            </h5>
-                                                                            {course.meetings.length > 0 ? (
-                                                                                <ul className="mt-2 space-y-2">
-                                                                                    {course.meetings.map((meeting, idx) => (
-                                                                                        <li
-                                                                                            key={`${course.id}-meeting-${idx}-${meeting.dayCode}-${meeting.startTime}-${meeting.endTime}`}
-                                                                                            className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2 text-sm text-gray-700"
-                                                                                        >
-                                                                                            {`${meeting.dayLabel} • ${meeting.timeLabel} • ${meeting.location || 'Location TBD'}`}
-                                                                                        </li>
-                                                                                    ))}
-                                                                                </ul>
-                                                                            ) : (
-                                                                                <p className="mt-2 text-sm text-gray-500">
-                                                                                    No scheduled meeting times listed.
-                                                                                </p>
-                                                                            )}
+                                                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                                        <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
+                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Term</p>
+                                                                            <p className="text-sm font-medium text-gray-700">{course.term || 'Other'}</p>
                                                                         </div>
-
-                                                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                                                            <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
-                                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Term</p>
-                                                                                <p className="text-sm font-medium text-gray-700">{course.term || 'Other'}</p>
-                                                                            </div>
-                                                                            <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
-                                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Section</p>
-                                                                                <p className="text-sm font-medium text-gray-700">{course.section || '—'}</p>
-                                                                            </div>
-                                                                            <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
-                                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">CRN</p>
-                                                                                <p className="text-sm font-medium text-gray-700">{course.crn || '—'}</p>
-                                                                            </div>
-                                                                            <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
-                                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Credits</p>
-                                                                                <p className="text-sm font-medium text-gray-700">{formattedCredits || '—'}</p>
-                                                                            </div>
-                                                                            <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
-                                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Instruction</p>
-                                                                                <p className="text-sm font-medium text-gray-700">{instructionLabel}</p>
-                                                                            </div>
-                                                                            <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
-                                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Status</p>
-                                                                                <p className="text-sm font-medium text-gray-700">{course.status || 'Not specified'}</p>
-                                                                            </div>
-                                                                            {course.scheduleType && (
-                                                                                <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2 sm:col-span-2">
-                                                                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Schedule Type</p>
-                                                                                    <p className="text-sm font-medium text-gray-700">{course.scheduleType}</p>
-                                                                                </div>
-                                                                            )}
+                                                                        <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
+                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Section</p>
+                                                                            <p className="text-sm font-medium text-gray-700">{course.section || '—'}</p>
                                                                         </div>
+                                                                        <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
+                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">CRN</p>
+                                                                            <p className="text-sm font-medium text-gray-700">{course.crn || '—'}</p>
+                                                                        </div>
+                                                                        <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
+                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Credits</p>
+                                                                            <p className="text-sm font-medium text-gray-700">{formattedCredits || '—'}</p>
+                                                                        </div>
+                                                                        <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
+                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Instruction</p>
+                                                                            <p className="text-sm font-medium text-gray-700">{instructionLabel}</p>
+                                                                        </div>
+                                                                        <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
+                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Status</p>
+                                                                            <p className="text-sm font-medium text-gray-700">{course.status || 'Not specified'}</p>
+                                                                        </div>
+                                                                        {course.scheduleType && (
+                                                                            <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2 sm:col-span-2">
+                                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Schedule Type</p>
+                                                                                <p className="text-sm font-medium text-gray-700">{course.scheduleType}</p>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 </div>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                })}
-                                                {termCourses.length === 0 && (
-                                                    <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-500">
-                                                        No courses listed for this term.
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                )}
-                                            </div>
+                                                );
+                                            })}
                                         </div>
-                                    );
-                                })}
-                            </div>
-                        ) : (
-                            <div className="text-sm text-gray-500">No courses found.</div>
-                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 )}
 

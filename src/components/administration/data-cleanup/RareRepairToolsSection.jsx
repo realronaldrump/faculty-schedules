@@ -118,9 +118,11 @@ const RareRepairToolsSection = ({
         <div className="flex items-start gap-3">
           <ShieldAlert className="mt-0.5 h-5 w-5 text-amber-600" />
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">Rare repair tools</h3>
+            <h3 className="text-lg font-semibold text-gray-900">
+              Rare repair tools
+            </h3>
             <p className="mt-1 text-sm text-gray-600">
-              Use these only for unusual issues. They can update many records at once.
+              Use these only for unusual issues. Most users should not need them.
             </p>
           </div>
         </div>
@@ -133,7 +135,7 @@ const RareRepairToolsSection = ({
 
       {!isOpen && (
         <p className="mt-3 text-sm text-gray-500">
-          Keep this collapsed during routine use.
+          Most of the time, you can keep this closed.
         </p>
       )}
 
@@ -144,7 +146,8 @@ const RareRepairToolsSection = ({
             <div>
               <p className="text-sm font-semibold">Advanced actions are locked</p>
               <p className="mt-1 text-sm">
-                Unlock to reveal tools that can apply large-scale repairs and deletions.
+                Unlock to reveal high-impact tools that can update or delete many
+                records at once.
               </p>
             </div>
           </div>
@@ -165,11 +168,10 @@ const RareRepairToolsSection = ({
               <Database className="mt-0.5 h-4 w-4 text-red-700" />
               <div>
                 <h4 className="text-sm font-semibold text-red-900">
-                  Full baseline repair (all terms)
+                  Full system repair (all terms)
                 </h4>
                 <p className="mt-1 text-xs text-red-800">
-                  One-time global repair for identity cleanup, room links, cross-list links,
-                  and legacy normalization.
+                  One-time cleanup across the full database. This touches many records.
                 </p>
               </div>
             </div>
@@ -189,7 +191,7 @@ const RareRepairToolsSection = ({
                 ) : (
                   <>
                     <Search className="h-4 w-4" />
-                    Preview Baseline Repair
+                    Preview Impact
                   </>
                 )}
               </button>
@@ -213,26 +215,29 @@ const RareRepairToolsSection = ({
 
             {!hasBaselinePreview && (
               <p className="text-xs text-red-800">
-                Generate a preview first. Run is enabled only after preview is available.
+                Run is enabled only after you preview the expected impact.
               </p>
             )}
 
             <SummaryCard summary={baselinePreviewSummary} tone="blue" />
             <SummaryCard summary={baselineSummary} tone="amber" />
             <TechnicalDetailsPanel
-              title="Baseline preview details"
+              title="Detailed impact breakdown (optional)"
               data={baselinePreviewReport}
             />
-            <TechnicalDetailsPanel title="Baseline technical details" data={baselineReport} />
+            <TechnicalDetailsPanel
+              title="Detailed run results (optional)"
+              data={baselineReport}
+            />
           </section>
 
           <section className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
             <div>
               <h4 className="text-sm font-semibold text-gray-900">
-                Term-specific repair
+                Repair one term
               </h4>
               <p className="mt-1 text-xs text-gray-600">
-                Run targeted cleanup for one term code.
+                Run targeted cleanup for a single term.
               </p>
             </div>
 
@@ -265,7 +270,7 @@ const RareRepairToolsSection = ({
                 ) : (
                   <>
                     <Search className="h-4 w-4" />
-                    Preview Term Repair
+                    Preview Changes
                   </>
                 )}
               </button>
@@ -284,7 +289,7 @@ const RareRepairToolsSection = ({
                 ) : (
                   <>
                     <Wrench className="h-4 w-4" />
-                    Run Term Repair
+                    Apply Term Repair
                   </>
                 )}
               </button>
@@ -292,27 +297,29 @@ const RareRepairToolsSection = ({
 
             {!hasTermRepairPreview && termCode && (
               <p className="text-xs text-gray-700">
-                Generate a term preview first. Run is enabled only after preview is available.
+                Run is enabled only after you preview the expected changes.
               </p>
             )}
 
             <SummaryCard summary={termPreviewSummary} tone="blue" />
             <SummaryCard summary={termSummary} tone="green" />
             <TechnicalDetailsPanel
-              title="Term repair preview details"
+              title="Detailed term preview (optional)"
               data={termRepairPreviewReport}
             />
-            <TechnicalDetailsPanel title="Term repair technical details" data={termRepairReport} />
+            <TechnicalDetailsPanel
+              title="Detailed term run results (optional)"
+              data={termRepairReport}
+            />
           </section>
 
           <section className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
             <div>
               <h4 className="text-sm font-semibold text-gray-900">
-                Location migration
+                Fix room and location links
               </h4>
               <p className="mt-1 text-xs text-gray-600">
-                Use Preview Migration first to see exact impacted counts, then apply if
-                everything looks correct.
+                Preview first, then apply only if the counts look correct.
               </p>
             </div>
 
@@ -331,7 +338,7 @@ const RareRepairToolsSection = ({
                 ) : (
                   <>
                     <Search className="h-4 w-4" />
-                    Preview Migration
+                    Preview Location Fixes
                   </>
                 )}
               </button>
@@ -348,7 +355,7 @@ const RareRepairToolsSection = ({
                     Applying...
                   </>
                 ) : (
-                  "Apply Migration"
+                  "Apply Location Fixes"
                 )}
               </button>
             </div>
@@ -356,21 +363,22 @@ const RareRepairToolsSection = ({
             <SummaryCard summary={locationPreviewSummary} tone="blue" />
             <SummaryCard summary={locationApplySummary} tone="green" />
             <TechnicalDetailsPanel
-              title="Location preview details"
+              title="Detailed location preview (optional)"
               data={locationPreview}
             />
             <TechnicalDetailsPanel
-              title="Location migration details"
+              title="Detailed location run results (optional)"
               data={locationApplyReport}
             />
           </section>
 
           <section className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
             <div>
-              <h4 className="text-sm font-semibold text-gray-900">Orphan cleanup by term</h4>
+              <h4 className="text-sm font-semibold text-gray-900">
+                Delete orphaned records (one term)
+              </h4>
               <p className="mt-1 text-xs text-gray-600">
-                Scan one term first, review exact orphan counts, then delete only what the
-                scan reports.
+                Scan one term first, then delete only records confirmed by that scan.
               </p>
             </div>
 
@@ -402,7 +410,7 @@ const RareRepairToolsSection = ({
                 ) : (
                   <>
                     <Search className="h-4 w-4" />
-                    Scan For Orphans
+                    Scan Orphaned Records
                   </>
                 )}
               </button>
@@ -419,16 +427,19 @@ const RareRepairToolsSection = ({
                     Deleting...
                   </>
                 ) : (
-                  "Delete Orphaned Records"
+                  "Delete Scanned Records"
                 )}
               </button>
             </div>
 
             <SummaryCard summary={orphanScanSummary} tone="blue" />
             <SummaryCard summary={orphanCleanupSummary} tone="green" />
-            <TechnicalDetailsPanel title="Orphan scan details" data={orphanScan} />
             <TechnicalDetailsPanel
-              title="Orphan cleanup details"
+              title="Detailed orphan scan results (optional)"
+              data={orphanScan}
+            />
+            <TechnicalDetailsPanel
+              title="Detailed orphan cleanup results (optional)"
               data={orphanCleanupResult}
             />
           </section>

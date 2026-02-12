@@ -136,6 +136,14 @@ export const DataProvider = ({ children }) => {
         };
       }
 
+      const splitInstructorText = (value) => {
+        if (!value || typeof value !== "string") return [];
+        return value
+          .split(/\s*(?:;|\n|\s+\/\s+|\s+and\s+|\s+&\s+)\s*/i)
+          .map((name) => name.trim())
+          .filter((name) => name && name !== UNASSIGNED);
+      };
+
       const assignments = Array.isArray(schedule.instructorAssignments)
         ? schedule.instructorAssignments
         : [];
@@ -161,7 +169,20 @@ export const DataProvider = ({ children }) => {
       const resolvedNames = instructors
         .map((person) => getInstructorDisplayName(person))
         .filter((name) => name && name !== UNASSIGNED);
-      const instructorNames = resolvedNames;
+      const fallbackNames = Array.from(
+        new Set([
+          ...(Array.isArray(schedule.instructorNames)
+            ? schedule.instructorNames
+                .map((name) => (name == null ? "" : String(name).trim()))
+                .filter(Boolean)
+            : []),
+          ...splitInstructorText(schedule.instructorName),
+          ...splitInstructorText(schedule.Instructor),
+        ]),
+      );
+      const instructorNames = Array.from(
+        new Set([...resolvedNames, ...fallbackNames]),
+      ).filter((name) => name && name !== UNASSIGNED);
 
       const primaryInstructorId =
         schedule.instructorId ||

@@ -66,14 +66,20 @@ const DecisionReviewSection = ({
             3. Review items needing decisions
           </h3>
           <p className="mt-1 text-sm text-gray-600">
-            Open each section and resolve only the items that cannot be fixed
-            automatically.
+            Each item below should have a clear action button. Work top-to-bottom
+            and resolve what safe fixes cannot handle automatically.
           </p>
         </div>
       </div>
 
       {scanResult ? (
         <div className="mt-4 space-y-3">
+          {totalBlockingIssues > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              {totalBlockingIssues} item{totalBlockingIssues === 1 ? "" : "s"} still need
+              decisions. Use the action buttons in each card.
+            </div>
+          )}
           {blockingCategories
             .filter((category) => category.count > 0)
             .map((category) => {
@@ -293,6 +299,7 @@ const DecisionReviewSection = ({
                           const semester = item?.semester || "Unknown semester";
                           const status = (item?.status || "").toString().trim();
                           const canResumeDecisionQueue = status === "preview";
+                          const canOpenHistory = Boolean(transactionId);
 
                           return (
                             <div
@@ -321,6 +328,17 @@ const DecisionReviewSection = ({
                                     className="inline-flex items-center rounded-md bg-baylor-green px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-baylor-green/90 disabled:opacity-50"
                                   >
                                     Resume Decision Queue
+                                  </button>
+                                ) : null}
+                                {canOpenHistory ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openImportWizard(transactionId, "history")
+                                    }
+                                    className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                                  >
+                                    Open Import History
                                   </button>
                                 ) : null}
                               </div>

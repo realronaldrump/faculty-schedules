@@ -218,7 +218,7 @@ export const summarizeSafeFixResult = (result) => {
   ];
   const nextStep =
     Number(result?.errors?.length || 0) > 0
-      ? "Some items still need review. Open technical details for exact errors."
+      ? "Some items still need review. Check the optional detail panel for error notes."
       : "Safe repairs completed. Review any remaining decision items below.";
   return buildSummary("Safe repair run complete", items, nextStep);
 };
@@ -254,7 +254,7 @@ export const summarizeBaselinePreview = (report) => {
   return buildSummary(
     "Baseline preview ready",
     items,
-    "Review technical details, then run full baseline repair to apply these exact actions.",
+    "If these counts look right, run the full system repair.",
   );
 };
 
@@ -338,7 +338,7 @@ export const summarizeTermRepairReport = (report, termCode = "") => {
   const blockerCount = toArray(report?.blockers).length;
   const nextStep =
     blockerCount > 0
-      ? "Check blockers in technical details before repeating this repair."
+      ? "Check blocker details before running this repair again."
       : "Term repair finished successfully.";
   return buildSummary("Term repair complete", items, nextStep);
 };
@@ -381,7 +381,7 @@ export const summarizeLocationApplyReport = (report) => {
   const errorCount = toArray(report?.errors).length;
   const nextStep =
     errorCount > 0
-      ? "Some location updates failed. Review technical details before running again."
+      ? "Some location updates failed. Check details before running again."
       : "Location migration completed successfully.";
   return buildSummary("Location migration complete", items, nextStep);
 };
@@ -411,7 +411,7 @@ export const summarizeOrphanCleanup = (result, termLabel = "") => {
   ];
   const nextStep =
     Number(result?.errors || 0) > 0
-      ? "Some records could not be deleted. Review technical details."
+      ? "Some records could not be deleted. Check details for the failures."
       : "Cleanup finished. Run one more scan to confirm everything is clear.";
   return buildSummary("Orphan cleanup complete", items, nextStep);
 };

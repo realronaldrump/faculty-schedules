@@ -161,6 +161,45 @@ export const summarizeScanResult = (scanResult) => {
   return buildSummary("Data check complete", items, nextStep);
 };
 
+export const summarizeSafeFixPlan = (scanResult) => {
+  if (!scanResult?.autoFixable) return null;
+  const auto = scanResult.autoFixable;
+  const items = [
+    {
+      label: "People duplicates to merge",
+      value: Number(auto.highConfidencePeopleDuplicates || 0),
+    },
+    {
+      label: "Schedule duplicates to merge",
+      value: Number(auto.highConfidenceScheduleDuplicates || 0),
+    },
+    {
+      label: "Room duplicates to merge",
+      value: Number(auto.highConfidenceRoomDuplicates || 0),
+    },
+    {
+      label: "Instructor links to backfill",
+      value: Number(auto.orphanedSchedulesWithName || 0),
+    },
+    {
+      label: "Room links to repair",
+      value: Number(auto.orphanedSpaceLinks || 0),
+    },
+    {
+      label: "Legacy-format records to normalize",
+      value: Number(auto.legacyModelIssues || 0),
+    },
+  ];
+  const total = items.reduce((sum, item) => sum + Number(item.value || 0), 0);
+  return buildSummary(
+    "Safe fix preview",
+    [{ label: "Estimated records to touch", value: total }, ...items],
+    total > 0
+      ? "Run Safe Fixes to apply these repairs automatically."
+      : "No safe repairs are currently needed.",
+  );
+};
+
 export const summarizeSafeFixResult = (result) => {
   if (!result) return null;
   const items = [

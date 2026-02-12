@@ -159,6 +159,11 @@ const RareRepairToolsSection = ({
               </div>
             </div>
 
+            <div className="rounded-md border border-red-200 bg-white p-3 text-xs text-red-800">
+              This tool has no dry-run preview. After confirmation, it immediately runs
+              global cleanup across every term.
+            </div>
+
             <button
               type="button"
               onClick={onRequestBaselineConfirm}
@@ -187,6 +192,11 @@ const RareRepairToolsSection = ({
               <p className="mt-1 text-xs text-gray-600">
                 Run targeted cleanup for one term code.
               </p>
+            </div>
+
+            <div className="rounded-md border border-gray-200 bg-white p-3 text-xs text-gray-700">
+              This tool has no dry-run preview. It immediately applies term repair for the
+              selected term after you click run.
             </div>
 
             <select
@@ -232,7 +242,8 @@ const RareRepairToolsSection = ({
                 Location migration
               </h4>
               <p className="mt-1 text-xs text-gray-600">
-                Preview changes first, then apply if everything looks correct.
+                Use Preview Migration first to see exact impacted counts, then apply if
+                everything looks correct.
               </p>
             </div>
 
@@ -289,7 +300,8 @@ const RareRepairToolsSection = ({
             <div>
               <h4 className="text-sm font-semibold text-gray-900">Orphan cleanup by term</h4>
               <p className="mt-1 text-xs text-gray-600">
-                Scan one term for orphaned records, then delete only what the scan reports.
+                Scan one term first, review exact orphan counts, then delete only what the
+                scan reports.
               </p>
             </div>
 

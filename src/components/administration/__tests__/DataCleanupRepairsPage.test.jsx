@@ -241,4 +241,74 @@ describe("DataCleanupRepairsPage", () => {
     expect(mockActions.handleMergeDuplicate).toHaveBeenCalledTimes(1);
     expect(mockActions.handleMergeDuplicate).toHaveBeenCalledWith(duplicateItem);
   });
+
+  it("uses actionable unresolved import controls", () => {
+    mockActions.scanResult = { timestamp: new Date().toISOString() };
+    mockActions.totalBlockingIssues = 2;
+    mockActions.blockingCategories = [
+      {
+        id: "unresolved-import-issues",
+        label: "Unfinished import decisions",
+        count: 2,
+        description: "Needs link/create/exclude decisions.",
+        items: [
+          {
+            transactionId: "import_preview_1",
+            status: "preview",
+            issueId: "issue_1",
+            importType: "schedule",
+            semester: "Spring 2026",
+          },
+          {
+            transactionId: "import_failed_1",
+            status: "failed",
+            issueId: "issue_2",
+            importType: "schedule",
+            semester: "Spring 2026",
+          },
+        ],
+      },
+    ];
+
+    render(<DataCleanupRepairsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /resume decision queue/i }));
+    expect(navigateMock).toHaveBeenCalledWith(
+      "/admin-tools/import-wizard?transaction=import_preview_1&view=resolve",
+    );
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /open import history/i })[0],
+    );
+    expect(navigateMock).toHaveBeenCalledWith(
+      "/admin-tools/import-wizard?transaction=import_preview_1&view=history",
+    );
+  });
+
+  it("re-runs safe fixes from legacy model issue cards", () => {
+    mockActions.scanResult = { timestamp: new Date().toISOString() };
+    mockActions.totalBlockingIssues = 1;
+    mockActions.blockingCategories = [
+      {
+        id: "legacy-model-issues",
+        label: "Older field format records",
+        count: 1,
+        description: "Legacy mirrored fields are present.",
+        items: [
+          {
+            recordType: "people",
+            touchedFields: ["jobTitle"],
+            message: "Legacy mirrored fields detected.",
+          },
+        ],
+      },
+    ];
+
+    render(<DataCleanupRepairsPage />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /^run safe fixes$/i }),
+    );
+    expect(mockActions.handleSafeFix).toHaveBeenCalledTimes(1);
+  });
 });

@@ -14,7 +14,12 @@ import {
 } from 'lucide-react';
 import { getImportTransactions, rollbackTransaction, deleteTransaction } from '../../utils/importTransactionUtils';
 
-const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
+const ImportHistoryModal = ({
+  onClose,
+  showNotification,
+  onDataRefresh,
+  initialSelectedTransactionId = "",
+}) => {
   const [transactions, setTransactions] = useState([]);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [isRollingBack, setIsRollingBack] = useState(false);
@@ -23,6 +28,31 @@ const ImportHistoryModal = ({ onClose, showNotification, onDataRefresh }) => {
   useEffect(() => {
     loadTransactions();
   }, []);
+
+  useEffect(() => {
+    if (!Array.isArray(transactions) || transactions.length === 0) {
+      setSelectedTransaction(null);
+      return;
+    }
+
+    if (initialSelectedTransactionId) {
+      const initialMatch = transactions.find(
+        (transaction) => transaction.id === initialSelectedTransactionId,
+      );
+      if (initialMatch) {
+        setSelectedTransaction(initialMatch);
+        return;
+      }
+    }
+
+    setSelectedTransaction((current) => {
+      if (!current?.id) return transactions[0];
+      const refreshedCurrent = transactions.find(
+        (transaction) => transaction.id === current.id,
+      );
+      return refreshedCurrent || transactions[0];
+    });
+  }, [transactions, initialSelectedTransactionId]);
 
   const loadTransactions = async () => {
     try {

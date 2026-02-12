@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import {
   formatTimestamp,
+  summarizeSafeFixPlan,
   summarizeSafeFixResult,
   summarizeScanResult,
 } from "./reportFormatters";
@@ -72,6 +73,7 @@ const RoutineWorkflowSection = ({
   onRunSafeFix,
 }) => {
   const scanSummary = summarizeScanResult(scanResult);
+  const safeFixPlan = summarizeSafeFixPlan(scanResult);
   const safeFixSummary = summarizeSafeFixResult(safeFixResult);
 
   return (
@@ -182,6 +184,7 @@ const RoutineWorkflowSection = ({
           </button>
         </div>
 
+        <SummaryCard summary={safeFixPlan} />
         <SummaryCard summary={safeFixSummary} />
       </section>
     </section>

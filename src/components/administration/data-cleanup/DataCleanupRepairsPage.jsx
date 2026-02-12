@@ -129,7 +129,9 @@ const DataCleanupRepairsPage = () => {
         expandedCategories={actions.expandedCategories}
         pendingActionKey={actions.pendingActionKey}
         pendingMergeConfirmationKey={actions.pendingMergeConfirmationKey}
+        isFixingSafe={actions.isFixingSafe}
         onToggleCategory={actions.toggleCategory}
+        onRunSafeFix={actions.handleSafeFix}
         onMergeDuplicate={actions.handleMergeDuplicate}
         onMarkDuplicateAsDistinct={actions.handleMarkDuplicateAsDistinct}
         onRepairSpaceIssue={actions.handleRepairSpaceIssue}

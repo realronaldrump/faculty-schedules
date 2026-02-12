@@ -24,7 +24,9 @@ const DecisionReviewSection = ({
   expandedCategories,
   pendingActionKey,
   pendingMergeConfirmationKey,
+  isFixingSafe,
   onToggleCategory,
+  onRunSafeFix,
   onMergeDuplicate,
   onMarkDuplicateAsDistinct,
   onRepairSpaceIssue,
@@ -32,6 +34,28 @@ const DecisionReviewSection = ({
   onCopyValue,
 }) => {
   const navigate = useNavigate();
+
+  const openImportWizard = (transactionId, view = "resolve") => {
+    const params = new URLSearchParams();
+    if (transactionId) params.set("transaction", transactionId);
+    params.set("view", view);
+    navigate(`/admin-tools/import-wizard?${params.toString()}`);
+  };
+
+  const importStatusLabel = (status = "") => {
+    switch ((status || "").toString().trim()) {
+      case "preview":
+        return "Preview Pending";
+      case "partial":
+        return "Partially Applied";
+      case "failed":
+        return "Failed";
+      case "failed_integrity":
+        return "Integrity Finalization Failed";
+      default:
+        return "Needs Review";
+    }
+  };
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-5 sm:p-6">
@@ -267,6 +291,8 @@ const DecisionReviewSection = ({
                           const issueId = item?.issueId || "";
                           const transactionId = item?.transactionId || "";
                           const semester = item?.semester || "Unknown semester";
+                          const status = (item?.status || "").toString().trim();
+                          const canResumeDecisionQueue = status === "preview";
 
                           return (
                             <div
@@ -281,25 +307,31 @@ const DecisionReviewSection = ({
                                 {issueId ? ` • ${issueId}` : ""}
                                 {item?.reason ? ` • ${item.reason}` : ""}
                               </div>
+                              <div className="mt-1 text-xs text-gray-500">
+                                Status: {importStatusLabel(status)}
+                              </div>
                               <div className="mt-2 flex flex-wrap gap-2">
+                                {canResumeDecisionQueue ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openImportWizard(transactionId, "resolve")
+                                    }
+                                    disabled={!transactionId}
+                                    className="inline-flex items-center rounded-md bg-baylor-green px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-baylor-green/90 disabled:opacity-50"
+                                  >
+                                    Resume Decision Queue
+                                  </button>
+                                ) : null}
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    navigate("/admin-tools/import-wizard")
-                                  }
-                                  className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                                >
-                                  Open Import Wizard
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    onCopyValue(transactionId, "Transaction ID")
+                                    openImportWizard(transactionId, "history")
                                   }
                                   disabled={!transactionId}
                                   className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                                 >
-                                  Copy Transaction ID
+                                  Open Import History
                                 </button>
                               </div>
                             </div>
@@ -370,7 +402,6 @@ const DecisionReviewSection = ({
                           const recordType = (item?.recordType || "record")
                             .toString()
                             .replace(/s$/, "");
-                          const recordId = item?.record?.id || "";
                           const touchedFields = toArray(item?.touchedFields);
 
                           return (
@@ -379,7 +410,7 @@ const DecisionReviewSection = ({
                               className="rounded-md border border-gray-200 bg-white p-3"
                             >
                               <div className="text-sm font-medium text-gray-900">
-                                Legacy {recordType} cleanup: {recordId || "Unknown ID"}
+                                Legacy {recordType} cleanup needed
                               </div>
                               <div className="mt-1 text-xs text-gray-600">
                                 {item?.message || "Legacy mirrored fields detected."}
@@ -392,11 +423,13 @@ const DecisionReviewSection = ({
                               <div className="mt-2 flex flex-wrap gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => onCopyValue(recordId, "Record ID")}
-                                  disabled={!recordId}
-                                  className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                  onClick={onRunSafeFix}
+                                  disabled={isFixingSafe}
+                                  className="inline-flex items-center rounded-md border border-baylor-green px-2.5 py-1.5 text-xs font-semibold text-baylor-green hover:bg-baylor-green/5 disabled:opacity-50"
                                 >
-                                  Copy Record ID
+                                  {isFixingSafe
+                                    ? "Running Safe Fixes..."
+                                    : "Run Safe Fixes"}
                                 </button>
                               </div>
                             </div>

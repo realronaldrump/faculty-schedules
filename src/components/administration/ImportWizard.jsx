@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { usePermissions } from "../../utils/permissions";
 import {
   Upload,
@@ -14,6 +15,7 @@ import {
   previewImportChanges,
   commitTransaction,
   projectSchedulePreviewRow,
+  getImportTransactions,
 } from "../../utils/importTransactionUtils";
 import { parseCSVRecords } from "../../utils/csvUtils";
 import { parseClssFile } from "../../utils/import/clss/parse-clss-file";
@@ -26,6 +28,7 @@ import { normalizeTermLabel, termCodeFromLabel } from "../../utils/termUtils";
 import { hashString, hashRecord } from "../../utils/hashUtils";
 
 const ImportWizard = ({ embedded = false }) => {
+  const location = useLocation();
   const { selectedSemester, refreshSchedules, refreshTerms, isTermLocked } =
     useSchedules();
   const { loadPeople } = usePeople();
@@ -45,9 +48,11 @@ const ImportWizard = ({ embedded = false }) => {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [historyTransactionId, setHistoryTransactionId] = useState("");
   const [resultsSummary, setResultsSummary] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [clssSchemaReport, setClssSchemaReport] = useState(null);
+  const [handledRouteIntent, setHandledRouteIntent] = useState("");
 
   const handleDataRefresh = async () => {
     await Promise.all([
@@ -58,6 +63,77 @@ const ImportWizard = ({ embedded = false }) => {
   };
 
   const isCLSS = useMemo(() => importType === "schedule", [importType]);
+
+  useEffect(() => {
+    const search = location.search || "";
+    if (!search || handledRouteIntent === search) return;
+
+    const params = new URLSearchParams(search);
+    const transactionId = (params.get("transaction") || "").trim();
+    const view = (params.get("view") || "").trim().toLowerCase();
+    if (!transactionId) {
+      setHandledRouteIntent(search);
+      return;
+    }
+
+    let cancelled = false;
+
+    const resolveRouteIntent = async () => {
+      try {
+        const transactions = await getImportTransactions();
+        if (cancelled) return;
+
+        const matchingTransaction = transactions.find(
+          (transaction) => transaction.id === transactionId,
+        );
+
+        if (!matchingTransaction) {
+          showNotification?.(
+            "warning",
+            "Import Transaction Not Found",
+            `Could not find transaction ${transactionId}.`,
+          );
+          return;
+        }
+
+        if (view === "history" || matchingTransaction.status !== "preview") {
+          setHistoryTransactionId(matchingTransaction.id);
+          setShowHistory(true);
+          if (matchingTransaction.status !== "preview") {
+            showNotification?.(
+              "info",
+              "Open Transaction History",
+              "This import is no longer in preview. Use history tools for rollback/review.",
+            );
+          }
+          return;
+        }
+
+        setPreviewTransaction(matchingTransaction);
+        setImportType(matchingTransaction.type || null);
+        setDetectedTerm(matchingTransaction.semester || "");
+        setStep(3);
+        setShowPreviewModal(true);
+      } catch (error) {
+        console.error("Failed to resolve import transaction intent:", error);
+        showNotification?.(
+          "error",
+          "Unable To Open Transaction",
+          error?.message || "Could not load the requested import transaction.",
+        );
+      } finally {
+        if (!cancelled) {
+          setHandledRouteIntent(search);
+        }
+      }
+    };
+
+    resolveRouteIntent();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [handledRouteIntent, location.search, showNotification]);
 
   const parsedPreviewRows = useMemo(() => {
     if (!csvData || csvData.length === 0) return [];
@@ -383,7 +459,10 @@ const ImportWizard = ({ embedded = false }) => {
           </p>
         </div>
         <button
-          onClick={() => setShowHistory(true)}
+          onClick={() => {
+            setHistoryTransactionId("");
+            setShowHistory(true);
+          }}
           className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
         >
           <History className="w-4 h-4" />
@@ -633,7 +712,10 @@ const ImportWizard = ({ embedded = false }) => {
           </div>
           <div className="mt-4 flex items-center space-x-3">
             <button
-              onClick={() => setShowHistory(true)}
+              onClick={() => {
+                setHistoryTransactionId("");
+                setShowHistory(true);
+              }}
               className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center space-x-2"
             >
               <History className="w-4 h-4" />
@@ -704,6 +786,7 @@ const ImportWizard = ({ embedded = false }) => {
           onClose={() => setShowHistory(false)}
           showNotification={showNotification}
           onDataRefresh={handleDataRefresh}
+          initialSelectedTransactionId={historyTransactionId}
         />
       )}
     </div>

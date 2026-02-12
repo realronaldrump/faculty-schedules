@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from "uuid";
 import {
   normalizeSingleSpaceKey,
   splitMultiRoom,
@@ -14,7 +13,7 @@ export const buildDefaultSettings = ({ buildingCode, buildingName }) => ({
   idealTempFMax: null,
   idealTempRangesBySpaceType: {},
   snapshotTimes: DEFAULT_SNAPSHOT_TIMES.map((slot) => ({
-    id: uuidv4(),
+    id: slot.id || `default_${slot.minutes}`,
     ...slot,
   })),
   floorplan: null,

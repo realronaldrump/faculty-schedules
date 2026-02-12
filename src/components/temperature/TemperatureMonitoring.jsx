@@ -30,6 +30,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   onSnapshot,
   query,
   setDoc,
@@ -161,6 +162,76 @@ const buildImportItemMergeKey = (item) => {
   return `name:${fileName}`;
 };
 
+const toMillis = (value) => {
+  if (!value) return 0;
+  if (typeof value?.toMillis === "function") return value.toMillis();
+  if (typeof value?.seconds === "number") return value.seconds * 1000;
+  if (value instanceof Date) return value.getTime();
+  return 0;
+};
+
+const mergeDocSnapshots = (snapshots = []) => {
+  const docsById = new Map();
+  snapshots.forEach((snap) => {
+    if (!snap?.docs) return;
+    snap.docs.forEach((docSnap) => {
+      docsById.set(docSnap.id, docSnap);
+    });
+  });
+  return Array.from(docsById.values());
+};
+
+const loadBuildingScopedDocs = async ({
+  collectionName,
+  buildingCode,
+  buildingName,
+  codeConstraints = [],
+  nameConstraints = codeConstraints,
+}) => {
+  const runQuery = async (queryRef, scope) => {
+    try {
+      return await getDocs(queryRef);
+    } catch (error) {
+      console.warn(
+        `Temperature query failed for ${collectionName} (${scope})`,
+        error,
+      );
+      return null;
+    }
+  };
+
+  const requests = [
+    runQuery(
+      query(
+        collection(db, collectionName),
+        where("buildingCode", "==", buildingCode),
+        ...codeConstraints,
+      ),
+      "buildingCode",
+    ),
+  ];
+
+  if (buildingName) {
+    requests.push(
+      runQuery(
+        query(
+          collection(db, collectionName),
+          where("buildingName", "==", buildingName),
+          ...nameConstraints,
+        ),
+        "buildingName",
+      ),
+    );
+  }
+
+  const snapshots = await Promise.all(requests);
+  const successfulSnapshots = snapshots.filter(Boolean);
+  if (successfulSnapshots.length === 0) {
+    throw new Error(`Failed to query ${collectionName} for building.`);
+  }
+  return mergeDocSnapshots(successfulSnapshots);
+};
+
 const TemperatureMonitoring = () => {
   const { loading: authLoading, user } = useAuth();
   const { spacesList = [], spacesByKey, roomsLoading } = useData();
@@ -182,6 +253,7 @@ const TemperatureMonitoring = () => {
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [deviceDocs, setDeviceDocs] = useState({});
   const [importHistory, setImportHistory] = useState([]);
+  const [importHistoryLoaded, setImportHistoryLoaded] = useState(false);
 
   const [importItems, setImportItems] = useState([]);
   const [importing, setImporting] = useState(false);
@@ -458,6 +530,62 @@ const TemperatureMonitoring = () => {
     return map;
   }, [snapshotDocs]);
 
+  const snapshotDocsBySpace = useMemo(() => {
+    const map = {};
+    snapshotDocs.forEach((docData) => {
+      const spaceKey = normalizeSingleSpaceKey(docData.spaceKey || "");
+      if (!spaceKey) return;
+      if (!map[spaceKey]) map[spaceKey] = [];
+      map[spaceKey].push(docData);
+    });
+    Object.values(map).forEach((items) => {
+      items.sort((a, b) => (a?.targetMinutes || 0) - (b?.targetMinutes || 0));
+    });
+    return map;
+  }, [snapshotDocs]);
+
+  const selectedSnapshotSlot = useMemo(
+    () => snapshotTimes.find((slot) => slot.id === selectedSnapshotId) || null,
+    [snapshotTimes, selectedSnapshotId],
+  );
+
+  const normalizeSnapshotLabel = (value) =>
+    (value || "").toString().trim().toLowerCase();
+
+  const resolveSnapshotForSlot = (spaceKey, slot) => {
+    const stableSpaceKey = normalizeSingleSpaceKey(spaceKey || "");
+    if (!stableSpaceKey) return null;
+    if (!slot) return snapshotDocsBySpace[stableSpaceKey]?.[0] || null;
+
+    const exactMatch = snapshotLookup[stableSpaceKey]?.[slot.id];
+    if (exactMatch) return exactMatch;
+
+    const candidates = snapshotDocsBySpace[stableSpaceKey] || [];
+    if (candidates.length === 0) return null;
+
+    if (Number.isFinite(slot.minutes)) {
+      const byMinutes = candidates.find(
+        (docData) =>
+          Number.isFinite(docData?.targetMinutes) &&
+          docData.targetMinutes === slot.minutes,
+      );
+      if (byMinutes) return byMinutes;
+    }
+
+    const slotLabel = normalizeSnapshotLabel(
+      slot.label || formatMinutesToLabel(slot.minutes),
+    );
+    if (slotLabel) {
+      const byLabel = candidates.find(
+        (docData) =>
+          normalizeSnapshotLabel(docData?.snapshotLabel || "") === slotLabel,
+      );
+      if (byLabel) return byLabel;
+    }
+
+    return candidates[0] || null;
+  };
+
   const hasUnresolvedMappings = useMemo(() => {
     return pendingMappings.some(
       (item) => !mappingOverrides[item.deviceId] && !item.suggestedSpaceKey,
@@ -644,6 +772,8 @@ const TemperatureMonitoring = () => {
 
   useEffect(() => {
     if (!selectedBuilding) return;
+    setImportHistoryLoaded(false);
+    setSelectedDate("");
     setImportItems([]);
     setPendingMappings([]);
     setMappingOverrides({});
@@ -783,16 +913,21 @@ const TemperatureMonitoring = () => {
 
     const loadImportHistory = async () => {
       try {
-        const q = query(
-          collection(db, "temperatureImports"),
-          where("buildingCode", "==", selectedBuilding),
-          orderBy("createdAt", "desc"),
-        );
-        const snap = await getDocs(q);
-        const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const buildingName =
+          resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
+        const docs = await loadBuildingScopedDocs({
+          collectionName: "temperatureImports",
+          buildingCode: selectedBuilding,
+          buildingName,
+        });
+        const items = docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
         setImportHistory(items);
       } catch (err) {
         console.error("Failed to load history", err);
+      } finally {
+        if (active) setImportHistoryLoaded(true);
       }
     };
 
@@ -805,12 +940,63 @@ const TemperatureMonitoring = () => {
   }, [selectedBuilding, showNotification, authLoading, user, importHistoryRefresh]);
 
   useEffect(() => {
-    if (!selectedDate && buildingSettings?.timezone) {
-      setSelectedDate(
-        formatDateInTimeZone(new Date(), buildingSettings.timezone),
-      );
-    }
-  }, [buildingSettings?.timezone, selectedDate]);
+    if (selectedDate || !selectedBuilding || !importHistoryLoaded) return;
+    let active = true;
+
+    const initializeSelectedDate = async () => {
+      const latestImportDate = importHistory
+        .map((item) => parseImportDateRange(item)?.end || "")
+        .filter(Boolean)
+        .sort()
+        .pop();
+      if (latestImportDate) {
+        if (active) setSelectedDate(latestImportDate);
+        return;
+      }
+
+      try {
+        const buildingName =
+          resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
+        const latestSnapshotDocs = await loadBuildingScopedDocs({
+          collectionName: "temperatureRoomSnapshots",
+          buildingCode: selectedBuilding,
+          buildingName,
+          codeConstraints: [orderBy("dateLocal", "desc"), limit(1)],
+        });
+        const latestSnapshotDate = latestSnapshotDocs
+          .map((docSnap) => toLocalDateToken(docSnap.data()?.dateLocal || ""))
+          .filter(Boolean)
+          .sort()
+          .pop();
+        if (latestSnapshotDate) {
+          if (active) setSelectedDate(latestSnapshotDate);
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to determine latest snapshot date:", error);
+      }
+
+      if (active) {
+        setSelectedDate(
+          formatDateInTimeZone(
+            new Date(),
+            buildingSettings?.timezone || DEFAULT_TIMEZONE,
+          ),
+        );
+      }
+    };
+
+    void initializeSelectedDate();
+    return () => {
+      active = false;
+    };
+  }, [
+    selectedDate,
+    selectedBuilding,
+    importHistoryLoaded,
+    importHistory,
+    buildingSettings?.timezone,
+  ]);
 
   useEffect(() => {
     if (snapshotTimes.length === 0) return;
@@ -828,15 +1014,14 @@ const TemperatureMonitoring = () => {
       try {
         const buildingName =
           resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
-        const snap = await getDocs(
-          query(
-            collection(db, "temperatureDevices"),
-            where("buildingCode", "==", selectedBuilding),
-          ),
-        );
+        const docs = await loadBuildingScopedDocs({
+          collectionName: "temperatureDevices",
+          buildingCode: selectedBuilding,
+          buildingName,
+        });
         if (!active) return;
         const map = {};
-        snap.docs.forEach((docSnap) => {
+        docs.forEach((docSnap) => {
           const data = docSnap.data();
           const canonicalSpaceKey = normalizeSingleSpaceKey(
             data?.mapping?.spaceKey || data?.spaceKey || "",
@@ -877,15 +1062,14 @@ const TemperatureMonitoring = () => {
       try {
         const buildingName =
           resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
-        const snap = await getDocs(
-          query(
-            collection(db, "temperatureRoomSnapshots"),
-            where("buildingCode", "==", selectedBuilding),
-            where("dateLocal", "==", selectedDate),
-          ),
-        );
+        const docs = await loadBuildingScopedDocs({
+          collectionName: "temperatureRoomSnapshots",
+          buildingCode: selectedBuilding,
+          buildingName,
+          codeConstraints: [where("dateLocal", "==", selectedDate)],
+        });
         if (!active) return;
-        const items = snap.docs.map((docSnap) => ({
+        const items = docs.map((docSnap) => ({
           id: docSnap.id,
           ...docSnap.data(),
         }));
@@ -1233,21 +1417,12 @@ const TemperatureMonitoring = () => {
         spacesByKey,
       );
 
-      let roomImportsSnap = await getDocs(
-        query(
-          collection(db, "temperatureImports"),
-          where("buildingCode", "==", selectedBuilding),
-        ),
-      );
-      if (roomImportsSnap.empty && buildingName) {
-        roomImportsSnap = await getDocs(
-          query(
-            collection(db, "temperatureImports"),
-            where("buildingName", "==", buildingName),
-          ),
-        );
-      }
-      const roomImports = roomImportsSnap.docs
+      const roomImportDocs = await loadBuildingScopedDocs({
+        collectionName: "temperatureImports",
+        buildingCode: selectedBuilding,
+        buildingName,
+      });
+      const roomImports = roomImportDocs
         .map((docSnap) => ({
           id: docSnap.id,
           ...docSnap.data(),
@@ -1261,56 +1436,26 @@ const TemperatureMonitoring = () => {
         doc(db, "temperatureImports", item.id),
       );
 
-      let aggregateSnap = await getDocs(
-        query(
-          collection(db, "temperatureRoomAggregates"),
-          where("buildingCode", "==", selectedBuilding),
-          where("spaceKey", "==", targetSpaceKey),
-        ),
-      );
-      if (aggregateSnap.empty && buildingName) {
-        aggregateSnap = await getDocs(
-          query(
-            collection(db, "temperatureRoomAggregates"),
-            where("buildingName", "==", buildingName),
-            where("spaceKey", "==", targetSpaceKey),
-          ),
-        );
-      }
+      const aggregateDocs = await loadBuildingScopedDocs({
+        collectionName: "temperatureRoomAggregates",
+        buildingCode: selectedBuilding,
+        buildingName,
+        codeConstraints: [where("spaceKey", "==", targetSpaceKey)],
+      });
 
-      let snapshotSnap = await getDocs(
-        query(
-          collection(db, "temperatureRoomSnapshots"),
-          where("buildingCode", "==", selectedBuilding),
-          where("spaceKey", "==", targetSpaceKey),
-        ),
-      );
-      if (snapshotSnap.empty && buildingName) {
-        snapshotSnap = await getDocs(
-          query(
-            collection(db, "temperatureRoomSnapshots"),
-            where("buildingName", "==", buildingName),
-            where("spaceKey", "==", targetSpaceKey),
-          ),
-        );
-      }
+      const snapshotDocsForRoom = await loadBuildingScopedDocs({
+        collectionName: "temperatureRoomSnapshots",
+        buildingCode: selectedBuilding,
+        buildingName,
+        codeConstraints: [where("spaceKey", "==", targetSpaceKey)],
+      });
 
-      let mappedDevicesSnap = await getDocs(
-        query(
-          collection(db, "temperatureDevices"),
-          where("buildingCode", "==", selectedBuilding),
-          where("mapping.spaceKey", "==", targetSpaceKey),
-        ),
-      );
-      if (mappedDevicesSnap.empty && buildingName) {
-        mappedDevicesSnap = await getDocs(
-          query(
-            collection(db, "temperatureDevices"),
-            where("buildingName", "==", buildingName),
-            where("mapping.spaceKey", "==", targetSpaceKey),
-          ),
-        );
-      }
+      const mappedDeviceDocs = await loadBuildingScopedDocs({
+        collectionName: "temperatureDevices",
+        buildingCode: selectedBuilding,
+        buildingName,
+        codeConstraints: [where("mapping.spaceKey", "==", targetSpaceKey)],
+      });
 
       const deviceDateRanges = new Map();
       const deviceIdsFromImports = new Set();
@@ -1362,17 +1507,17 @@ const TemperatureMonitoring = () => {
 
       const deletedImports = await deleteDocRefsInBatches(roomImportRefs);
       const deletedAggregates = await deleteDocRefsInBatches(
-        aggregateSnap.docs.map((docSnap) => docSnap.ref),
+        aggregateDocs.map((docSnap) => docSnap.ref),
       );
       const deletedSnapshots = await deleteDocRefsInBatches(
-        snapshotSnap.docs.map((docSnap) => docSnap.ref),
+        snapshotDocsForRoom.map((docSnap) => docSnap.ref),
       );
       const deletedReadings = await deleteDocRefsInBatches(
         Array.from(readingsRefMap.values()),
       );
 
       const mappedDeviceIds = new Set(
-        mappedDevicesSnap.docs.map((docSnap) => docSnap.id).filter(Boolean),
+        mappedDeviceDocs.map((docSnap) => docSnap.id).filter(Boolean),
       );
       const devicesToRefresh = new Set([
         ...Array.from(affectedDeviceIds),
@@ -1683,18 +1828,25 @@ const TemperatureMonitoring = () => {
     if (!selectedBuilding || files.length === 0) return;
 
     const nextItems = [];
+    const buildingName =
+      resolveBuildingDisplayName(selectedBuilding) || selectedBuilding;
     for (const file of files) {
       try {
         const fileHash = await hashFile(file);
-        const duplicateSnap = await getDocs(
-          query(
-            collection(db, "temperatureImports"),
-            where("buildingCode", "==", selectedBuilding),
-            where("fileHash", "==", fileHash),
-          ),
-        );
-        const duplicate = !duplicateSnap.empty;
-        const duplicateCount = duplicateSnap.size;
+        let duplicate = false;
+        let duplicateCount = 0;
+        try {
+          const duplicateDocs = await loadBuildingScopedDocs({
+            collectionName: "temperatureImports",
+            buildingCode: selectedBuilding,
+            buildingName,
+            codeConstraints: [where("fileHash", "==", fileHash)],
+          });
+          duplicateCount = duplicateDocs.length;
+          duplicate = duplicateCount > 0;
+        } catch (duplicateError) {
+          console.warn("Failed to check duplicate file hash:", duplicateError);
+        }
         const parsed = await parseCsvFile(file);
         const {
           timestampIndex,
@@ -2569,25 +2721,16 @@ const TemperatureMonitoring = () => {
     setRecomputing(true);
     try {
       const buildingName = selectedBuildingName || selectedBuilding;
-      let snap = await getDocs(
-        query(
-          collection(db, "temperatureDeviceReadings"),
-          where("buildingCode", "==", selectedBuilding),
+      const docs = await loadBuildingScopedDocs({
+        collectionName: "temperatureDeviceReadings",
+        buildingCode: selectedBuilding,
+        buildingName,
+        codeConstraints: [
           where("dateLocal", ">=", recomputeStart),
           where("dateLocal", "<=", recomputeEnd),
-        ),
-      );
-      if (snap.empty && buildingName) {
-        snap = await getDocs(
-          query(
-            collection(db, "temperatureDeviceReadings"),
-            where("buildingName", "==", buildingName),
-            where("dateLocal", ">=", recomputeStart),
-            where("dateLocal", "<=", recomputeEnd),
-          ),
-        );
-      }
-      for (const docSnap of snap.docs) {
+        ],
+      });
+      for (const docSnap of docs) {
         const data = docSnap.data();
         const device = deviceDocs[data.deviceId];
         const spaceKey = normalizeSingleSpaceKey(
@@ -2664,25 +2807,17 @@ const TemperatureMonitoring = () => {
     setHistoricalLoading(true);
     try {
       const buildingName = selectedBuildingName || selectedBuilding;
-      let snap = await getDocs(
-        query(
-          collection(db, "temperatureRoomSnapshots"),
-          where("buildingCode", "==", selectedBuilding),
-          where("dateLocal", ">=", historicalStart),
-          where("dateLocal", "<=", historicalEnd),
-        ),
-      );
-      if (snap.empty && buildingName) {
-        snap = await getDocs(
-          query(
-            collection(db, "temperatureRoomSnapshots"),
-            where("buildingName", "==", buildingName),
+      const docs = (
+        await loadBuildingScopedDocs({
+          collectionName: "temperatureRoomSnapshots",
+          buildingCode: selectedBuilding,
+          buildingName,
+          codeConstraints: [
             where("dateLocal", ">=", historicalStart),
             where("dateLocal", "<=", historicalEnd),
-          ),
-        );
-      }
-      const docs = snap.docs.map((docSnap) => ({
+          ],
+        })
+      ).map((docSnap) => ({
         id: docSnap.id,
         ...docSnap.data(),
       }));
@@ -2727,25 +2862,17 @@ const TemperatureMonitoring = () => {
           .filter(Boolean),
       );
       const buildingName = selectedBuildingName || selectedBuilding;
-      let snap = await getDocs(
-        query(
-          collection(db, "temperatureRoomSnapshots"),
-          where("buildingCode", "==", selectedBuilding),
-          where("dateLocal", ">=", exportStart),
-          where("dateLocal", "<=", exportEnd),
-        ),
-      );
-      if (snap.empty && buildingName) {
-        snap = await getDocs(
-          query(
-            collection(db, "temperatureRoomSnapshots"),
-            where("buildingName", "==", buildingName),
+      const docs = (
+        await loadBuildingScopedDocs({
+          collectionName: "temperatureRoomSnapshots",
+          buildingCode: selectedBuilding,
+          buildingName,
+          codeConstraints: [
             where("dateLocal", ">=", exportStart),
             where("dateLocal", "<=", exportEnd),
-          ),
-        );
-      }
-      const docs = snap.docs.map((docSnap) => ({
+          ],
+        })
+      ).map((docSnap) => ({
         id: docSnap.id,
         ...docSnap.data(),
       }));
@@ -2855,26 +2982,17 @@ const TemperatureMonitoring = () => {
           .filter(Boolean),
       );
       const buildingName = selectedBuildingName || selectedBuilding;
-      let snap = await getDocs(
-        query(
-          collection(db, "temperatureDeviceReadings"),
-          where("buildingCode", "==", selectedBuilding),
+      const docs = await loadBuildingScopedDocs({
+        collectionName: "temperatureDeviceReadings",
+        buildingCode: selectedBuilding,
+        buildingName,
+        codeConstraints: [
           where("dateLocal", ">=", exportStart),
           where("dateLocal", "<=", exportEnd),
-        ),
-      );
-      if (snap.empty && buildingName) {
-        snap = await getDocs(
-          query(
-            collection(db, "temperatureDeviceReadings"),
-            where("buildingName", "==", buildingName),
-            where("dateLocal", ">=", exportStart),
-            where("dateLocal", "<=", exportEnd),
-          ),
-        );
-      }
+        ],
+      });
       const rows = [];
-      snap.docs.forEach((docSnap) => {
+      docs.forEach((docSnap) => {
         const data = docSnap.data();
         const device = deviceDocs[data.deviceId] || {};
         const spaceKey = normalizeSingleSpaceKey(
@@ -2947,8 +3065,7 @@ const TemperatureMonitoring = () => {
     return !markerMap[spaceKey];
   });
 
-  const currentSnapshotLabel =
-    snapshotTimes.find((slot) => slot.id === selectedSnapshotId)?.label || "";
+  const currentSnapshotLabel = selectedSnapshotSlot?.label || "";
 
   const floorplanData = buildingSettings?.floorplan;
 
@@ -3057,8 +3174,10 @@ const TemperatureMonitoring = () => {
                   if (!spaceKey) return null;
                   const marker = markerMap[spaceKey];
                   if (!marker) return null;
-                  const snapshot =
-                    snapshotLookup[spaceKey]?.[selectedSnapshotId];
+                  const snapshot = resolveSnapshotForSlot(
+                    spaceKey,
+                    selectedSnapshotSlot,
+                  );
                   const isMissing = !snapshot || snapshot.status === "missing";
                   const tempLabel = formatSnapshotTemp(snapshot);
                   const tempValueF = resolveSnapshotTempF(snapshot);
@@ -3161,7 +3280,7 @@ const TemperatureMonitoring = () => {
                     .filter((room) => {
                       const spaceKey = room.spaceKey || room.id;
                       const snapshot = spaceKey
-                        ? snapshotLookup[spaceKey]?.[selectedSnapshotId]
+                        ? resolveSnapshotForSlot(spaceKey, selectedSnapshotSlot)
                         : null;
                       return !snapshot || snapshot.status === "missing";
                     })
@@ -3193,7 +3312,7 @@ const TemperatureMonitoring = () => {
 
       const readings = [];
       snapshotTimes.forEach((slot) => {
-        const snapshot = snapshotLookup[spaceKey]?.[slot.id];
+        const snapshot = resolveSnapshotForSlot(spaceKey, slot);
         const isMissing = !snapshot || snapshot.status === "missing";
 
         if (!isMissing) {
@@ -3287,7 +3406,7 @@ const TemperatureMonitoring = () => {
                     {getSpaceLabel(room, spacesByKey)}
                   </td>
                   {snapshotTimes.map((slot) => {
-                    const snapshot = snapshotLookup[spaceKey]?.[slot.id];
+                    const snapshot = resolveSnapshotForSlot(spaceKey, slot);
                     const isMissing =
                       !snapshot || snapshot.status === "missing";
                     const tempValueF = resolveSnapshotTempF(snapshot);

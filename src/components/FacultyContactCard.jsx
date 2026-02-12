@@ -6,6 +6,7 @@ import { logUpdate } from '../utils/changeLogger';
 import StudentWorkerScheduleView from './analytics/StudentWorkerScheduleView';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { formatTermFromCode, formatTermLabel, sortTerms } from '../utils/termUtils';
+import { resolveOfficeLocations } from '../utils/spaceUtils';
 
 // Simple in-memory cache to avoid re-fetching schedules between openings
 const scheduleCache = new Map();
@@ -231,11 +232,37 @@ const FacultyContactCard = ({
             .toUpperCase() || '?'
     ), [contactPerson?.name]);
     const emailValue = (contactPerson?.email || '').trim();
+    const officeLocations = useMemo(() => {
+        if (personType === 'student') return [];
+        if (contactPerson?.hasNoOffice) return ['No office'];
+
+        const uniqueLocations = [];
+        const seen = new Set();
+        const addLocation = (value) => {
+            const normalized = (value || '').toString().trim();
+            if (!normalized || seen.has(normalized)) return;
+            seen.add(normalized);
+            uniqueLocations.push(normalized);
+        };
+
+        if (Array.isArray(contactPerson?.offices)) {
+            contactPerson.offices.forEach(addLocation);
+        }
+        addLocation(contactPerson?.office);
+
+        if (uniqueLocations.length === 0) {
+            const resolved = resolveOfficeLocations(contactPerson);
+            resolved.forEach((location) => addLocation(location?.displayName));
+        }
+
+        return uniqueLocations;
+    }, [contactPerson, personType]);
+    const officeHeadingLabel = officeLocations.length > 1 ? 'Offices' : 'Office';
     const locationValue = personType === 'student'
         ? (Array.isArray(contactPerson.primaryBuildings) && contactPerson.primaryBuildings.length > 0
             ? contactPerson.primaryBuildings.join(', ')
             : 'Not specified')
-        : (contactPerson.office || 'Not specified');
+        : (officeLocations[0] || 'Not specified');
 
     return (
         <div className="fixed inset-0 z-50 bg-slate-900/55 backdrop-blur-[2px] p-3 sm:p-6" onClick={onClose}>
@@ -330,9 +357,20 @@ const FacultyContactCard = ({
                         <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
                             <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
                                 <Building size={14} className="text-baylor-green" />
-                                {personType === 'student' ? 'Buildings' : 'Office'}
+                                {personType === 'student' ? 'Buildings' : officeHeadingLabel}
                             </div>
-                            <span className="text-sm font-medium text-gray-800">{locationValue}</span>
+                            {personType !== 'student' && officeLocations.length > 1 ? (
+                                <ul className="space-y-1">
+                                    {officeLocations.map((location) => (
+                                        <li key={location} className="flex items-start gap-2 text-sm font-medium text-gray-800">
+                                            <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-gray-500" />
+                                            <span className="break-words">{location}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <span className="text-sm font-medium text-gray-800">{locationValue}</span>
+                            )}
                         </div>
                         <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
                             <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">

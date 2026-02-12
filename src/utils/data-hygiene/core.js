@@ -3314,10 +3314,10 @@ const buildPersonLegacyFixUpdates = (person = {}) => {
     }
 
     const hasStudentMirrorField =
-      Object.prototype.hasOwnProperty.call(person, "jobTitle") ||
-      Object.prototype.hasOwnProperty.call(person, "supervisor") ||
-      Object.prototype.hasOwnProperty.call(person, "supervisorId") ||
-      Object.prototype.hasOwnProperty.call(person, "hourlyRate");
+      hasNonEmptyValue(person.jobTitle) ||
+      hasNonEmptyValue(person.supervisor) ||
+      hasNonEmptyValue(person.supervisorId) ||
+      hasNonEmptyValue(person.hourlyRate);
     if (hasStudentMirrorField) {
       updates.jobTitle = deleteField();
       updates.supervisor = deleteField();
@@ -3475,8 +3475,7 @@ export const scanDataHealth = async () => {
     importTransactionsSnapshot.docs.forEach((docSnap) => {
       const data = docSnap.data() || {};
       const status = (data.status || "").toString().trim();
-      if (!["preview", "partial", "failed", "failed_integrity"].includes(status))
-        return;
+      if (status !== "preview") return;
       const matchIssues = Array.isArray(data.matchingIssues)
         ? data.matchingIssues
         : [];
@@ -3639,7 +3638,19 @@ export const autoFixAllIssues = async (options = {}) => {
   };
 
   try {
-    // 0. Normalize legacy model mirrors and identity shadow fields
+    // 0. Standardize all data formats first.
+    // Legacy cleanup runs after this so standardization does not reintroduce
+    // fields that were just removed by cleanup.
+    if (standardizeData) {
+      try {
+        const standardResult = await standardizeAllData();
+        results.standardization.updated = standardResult.updatedRecords || 0;
+      } catch (error) {
+        results.errors.push(`Standardization failed: ${error.message}`);
+      }
+    }
+
+    // 1. Normalize legacy model mirrors and identity shadow fields.
     if (fixLegacyModel) {
       try {
         const [peopleSnapshot, schedulesSnapshot] = await Promise.all([
@@ -3665,16 +3676,6 @@ export const autoFixAllIssues = async (options = {}) => {
         }
       } catch (error) {
         results.errors.push(`Legacy model cleanup failed: ${error.message}`);
-      }
-    }
-
-    // 1. Standardize all data formats
-    if (standardizeData) {
-      try {
-        const standardResult = await standardizeAllData();
-        results.standardization.updated = standardResult.updatedRecords || 0;
-      } catch (error) {
-        results.errors.push(`Standardization failed: ${error.message}`);
       }
     }
 

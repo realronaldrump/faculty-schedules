@@ -323,16 +323,6 @@ const DecisionReviewSection = ({
                                     Resume Decision Queue
                                   </button>
                                 ) : null}
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    openImportWizard(transactionId, "history")
-                                  }
-                                  disabled={!transactionId}
-                                  className="inline-flex items-center rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                                >
-                                  Open Import History
-                                </button>
                               </div>
                             </div>
                           );

@@ -96,16 +96,20 @@ const ImportWizard = ({ embedded = false }) => {
           return;
         }
 
-        if (view === "history" || matchingTransaction.status !== "preview") {
+        if (view === "history") {
           setHistoryTransactionId(matchingTransaction.id);
           setShowHistory(true);
-          if (matchingTransaction.status !== "preview") {
-            showNotification?.(
-              "info",
-              "Open Transaction History",
-              "This import is no longer in preview. Use history tools for rollback/review.",
-            );
-          }
+          return;
+        }
+
+        if (matchingTransaction.status !== "preview") {
+          setHistoryTransactionId(matchingTransaction.id);
+          setShowHistory(true);
+          showNotification?.(
+            "warning",
+            "Decision Queue Closed",
+            "This import is no longer in preview. Opened Import History instead.",
+          );
           return;
         }
 
@@ -336,11 +340,11 @@ const ImportWizard = ({ embedded = false }) => {
     selectedFieldMap = null,
     matchResolutions = null,
   ) => {
-    if (!canImportHere || !canEditHere) {
+    if (!canImportHere) {
       showNotification?.(
         "warning",
         "Permission Denied",
-        "You do not have permission to import data.",
+        "Your account can open this page but cannot apply import changes.",
       );
       return;
     }

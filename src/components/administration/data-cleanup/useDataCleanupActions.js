@@ -154,6 +154,9 @@ export const useDataCleanupActions = ({ showNotification } = {}) => {
       const remainingLegacy = Array.isArray(refreshed?.issues?.legacyModelIssues)
         ? refreshed.issues.legacyModelIssues.length
         : 0;
+      const errorCount = Array.isArray(result?.errors) ? result.errors.length : 0;
+      const firstError =
+        errorCount > 0 ? String(result.errors[0] || "").trim() : "";
 
       if (remainingLegacy === 0) {
         notify(
@@ -163,11 +166,22 @@ export const useDataCleanupActions = ({ showNotification } = {}) => {
           "Automatic cleanup and canonical repairs completed.",
         );
       } else {
+        const summaryParts = [
+          `${remainingLegacy} legacy item${remainingLegacy === 1 ? "" : "s"} still need review.`,
+        ];
+        if (errorCount > 0) {
+          summaryParts.push(
+            `${errorCount} fix error${errorCount === 1 ? "" : "s"} occurred.`,
+          );
+        }
+        if (firstError) {
+          summaryParts.push(`First error: ${firstError}`);
+        }
         notify(
           showNotification,
           "warning",
           "Safe Repairs Partially Complete",
-          `${remainingLegacy} legacy item${remainingLegacy === 1 ? "" : "s"} still need review.`,
+          summaryParts.join(" "),
         );
       }
     } catch (error) {

@@ -289,13 +289,6 @@ describe("DataCleanupRepairsPage", () => {
     expect(navigateMock).toHaveBeenCalledWith(
       "/admin-tools/import-wizard?transaction=import_preview_1&view=resolve",
     );
-
-    fireEvent.click(
-      screen.getAllByRole("button", { name: /open import history/i })[0],
-    );
-    expect(navigateMock).toHaveBeenCalledWith(
-      "/admin-tools/import-wizard?transaction=import_preview_1&view=history",
-    );
   });
 
   it("re-runs safe fixes from legacy model issue cards", () => {

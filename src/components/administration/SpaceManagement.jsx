@@ -282,7 +282,19 @@ const SpaceManagement = () => {
       const target = buildingFilter.toUpperCase();
       spaces = spaces.filter((s) => {
         const normalized = normalizeSpaceRecord(s, s?.id || "");
-        return (normalized.buildingCode || "").toUpperCase() === target;
+        const rawCode = (normalized.buildingCode || "").toString().trim();
+        const rawName = (normalized.buildingDisplayName || "")
+          .toString()
+          .trim();
+        const resolved = resolveBuilding(rawCode) || resolveBuilding(rawName);
+        const canonicalCode = (
+          resolved?.code ||
+          rawCode
+        )
+          .toString()
+          .trim()
+          .toUpperCase();
+        return canonicalCode === target;
       });
     }
 
@@ -381,20 +393,41 @@ const SpaceManagement = () => {
     };
   }, [spacesList, roomsData, spaceUsage]);
 
-  // Get unique building codes from actual data
-  const dataBuildings = useMemo(() => {
-    const codes = new Set();
+  // Get unique canonical building options from actual data
+  const dataBuildingOptions = useMemo(() => {
+    const optionsByCode = new Map();
     const source =
       Array.isArray(spacesList) && spacesList.length > 0
         ? spacesList
         : Object.values(roomsData || {});
+
     source.forEach((room) => {
       if (!room || room.isActive === false) return;
       const normalized = normalizeSpaceRecord(room, room.id || "");
-      const code = normalized.buildingCode;
-      if (code) codes.add(code.toUpperCase());
+      const rawCode = (normalized.buildingCode || "").toString().trim();
+      const rawName = (normalized.buildingDisplayName || "").toString().trim();
+      const resolved = resolveBuilding(rawCode) || resolveBuilding(rawName);
+      const code = (
+        resolved?.code ||
+        rawCode
+      )
+        .toString()
+        .trim()
+        .toUpperCase();
+      if (!code) return;
+      const displayName =
+        resolved?.displayName ||
+        resolveBuildingDisplayName(code) ||
+        rawName ||
+        code;
+      if (!optionsByCode.has(code)) {
+        optionsByCode.set(code, { code, displayName });
+      }
     });
-    return Array.from(codes).sort();
+
+    return Array.from(optionsByCode.values()).sort((a, b) =>
+      (a.displayName || "").localeCompare(b.displayName || ""),
+    );
   }, [roomsData, spacesList]);
 
   const resetForm = useCallback(() => {
@@ -1515,11 +1548,10 @@ const SpaceManagement = () => {
           className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
         >
           <option value="all">All Buildings</option>
-          {dataBuildings.map((code) => {
-            const resolvedName = resolveBuildingDisplayName(code);
+          {dataBuildingOptions.map(({ code, displayName }) => {
             return (
               <option key={code} value={code}>
-                {resolvedName || code}
+                {displayName || code}
               </option>
             );
           })}

@@ -34,7 +34,11 @@ import { logCreate, logDelete } from "../../utils/changeLogger";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import { usePermissions } from "../../utils/permissions";
 import { fetchSchedulesByTerm } from "../../utils/dataImportUtils";
-import { getBuildingDisplay, splitMultiRoom } from "../../utils/locationService";
+import {
+  extractSpaceNumber,
+  getBuildingDisplay,
+  splitMultiRoom,
+} from "../../utils/locationService";
 import { useSchedules } from "../../contexts/ScheduleContext";
 
 const RoomGridGenerator = () => {
@@ -115,6 +119,38 @@ const RoomGridGenerator = () => {
       "5:00 pm - 6:15 pm",
     ],
   };
+
+  const BUILDING_NAME_OVERRIDES = Object.freeze({
+    MGJFCS: "Mary Gibbs Jones",
+  });
+
+  const parseRoomAssignment = useCallback((roomString) => {
+    if (!roomString || typeof roomString !== "string") return null;
+    const trimmed = roomString.trim();
+    if (!trimmed) return null;
+
+    const buildingName = getBuildingDisplay(trimmed);
+    const normalizedBuilding = buildingName.trim();
+    const normalizedBuildingToken = normalizedBuilding
+      .replace(/[^A-Za-z0-9]/g, "")
+      .toUpperCase();
+    const canonicalBuildingName =
+      BUILDING_NAME_OVERRIDES[normalizedBuildingToken] || normalizedBuilding;
+
+    if (
+      !canonicalBuildingName ||
+      canonicalBuildingName.toLowerCase().includes("general") ||
+      canonicalBuildingName.toLowerCase() === "online" ||
+      canonicalBuildingName.toLowerCase() === "off campus"
+    ) {
+      return null;
+    }
+
+    return {
+      buildingName: canonicalBuildingName,
+      roomNumber: extractSpaceNumber(trimmed) || "N/A",
+    };
+  }, []);
 
   const showMessage = (text, type = "error") => {
     setMessage({ text, type });
@@ -220,25 +256,11 @@ const RoomGridGenerator = () => {
 
         // Create entries for each room/pattern combination
         return spaceLabels.flatMap((roomString) => {
-          // Use centralized building utility for consistent naming
-          const buildingName = getBuildingDisplay(roomString);
-
-          // Extract room number (last word that contains digits)
-          let roomNumber = "N/A";
-          const roomMatch = roomString.match(/([\w\d\-/]+)\s*$/);
-          if (roomMatch && /\d/.test(roomMatch[1])) {
-            roomNumber = roomMatch[1].trim();
-          }
-
-          // Skip general assignment rooms, empty buildings, online
-          if (
-            !buildingName ||
-            buildingName.toLowerCase().includes("general") ||
-            buildingName.toLowerCase() === "online" ||
-            buildingName.toLowerCase() === "off campus"
-          ) {
+          const parsedRoom = parseRoomAssignment(roomString);
+          if (!parsedRoom) {
             return [];
           }
+          const { buildingName, roomNumber } = parsedRoom;
 
           return meetingPatterns
             .map((pattern) => {
@@ -304,7 +326,7 @@ const RoomGridGenerator = () => {
         );
       }
     },
-    [dashboardSchedules],
+    [dashboardSchedules, parseRoomAssignment],
   );
 
   // When semester changes in auto mode, reload and reprocess data
@@ -430,17 +452,9 @@ const RoomGridGenerator = () => {
         return roomsList
           .map((roomString, i) => {
             const patternString = patternsList[i] || patternsList[0];
-            let buildingName, roomNumber;
-            const roomMatch = roomString.match(/(.+?)\s+([\w\d\-/]+)$/);
-            if (roomMatch) {
-              buildingName = roomMatch[1].trim();
-              roomNumber = roomMatch[2].trim();
-            } else {
-              if (roomString.toLowerCase().includes("general assignment"))
-                return null;
-              buildingName = roomString.trim();
-              roomNumber = "N/A";
-            }
+            const parsedRoom = parseRoomAssignment(roomString);
+            if (!parsedRoom) return null;
+            const { buildingName, roomNumber } = parsedRoom;
 
             const mp = patternString.trim().match(/^([A-Za-z]+)\s+(.+)$/);
             const days = mp ? mp[1] : patternString.split(/\s+/)[0] || "";
@@ -1824,13 +1838,14 @@ const RoomGridGenerator = () => {
 
       {/* Saved Grids - Collapsible Section */}
       <div className="university-card mt-6">
-        <button
-          onClick={() => setSavedGridsExpanded(!savedGridsExpanded)}
-          className="w-full university-card-header flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors"
-          aria-expanded={savedGridsExpanded}
-          aria-controls="saved-grids-content"
-        >
-          <div className="flex items-center gap-3">
+        <div className="w-full university-card-header flex items-center justify-between hover:bg-gray-100 transition-colors">
+          <button
+            type="button"
+            onClick={() => setSavedGridsExpanded(!savedGridsExpanded)}
+            className="flex-1 flex items-center gap-3 text-left"
+            aria-expanded={savedGridsExpanded}
+            aria-controls="saved-grids-content"
+          >
             {savedGridsExpanded ? (
               <ChevronUp className="w-5 h-5 text-baylor-green" aria-hidden="true" />
             ) : (
@@ -1844,18 +1859,16 @@ const RoomGridGenerator = () => {
                 {savedGrids.length} saved schedule{savedGrids.length !== 1 ? "s" : ""}
               </p>
             </div>
-          </div>
+          </button>
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              fetchSavedGrids();
-            }}
+            type="button"
+            onClick={fetchSavedGrids}
             className="btn-ghost text-sm"
             aria-label="Refresh saved grids list"
           >
             Refresh
           </button>
-        </button>
+        </div>
 
         {savedGridsExpanded && (
           <div id="saved-grids-content" className="university-card-content border-t border-gray-200">

@@ -106,7 +106,7 @@ describe("DataCleanupRepairsPage", () => {
   });
 
   it("renders unified routine workflow by default", () => {
-    render(<DataCleanupRepairsPage initialMode="routine" />);
+    render(<DataCleanupRepairsPage />);
 
     expect(
       screen.getByRole("heading", { name: "Data Cleanup & Repairs" }),
@@ -123,7 +123,7 @@ describe("DataCleanupRepairsPage", () => {
   });
 
   it("keeps rare tools hidden until unlocked", () => {
-    render(<DataCleanupRepairsPage initialMode="routine" />);
+    render(<DataCleanupRepairsPage />);
 
     expect(
       screen.queryByRole("button", { name: /run full baseline repair/i }),
@@ -150,7 +150,7 @@ describe("DataCleanupRepairsPage", () => {
   });
 
   it("opens confirmation before destructive baseline action", async () => {
-    render(<DataCleanupRepairsPage initialMode="routine" />);
+    render(<DataCleanupRepairsPage />);
 
     fireEvent.click(
       screen.getAllByRole("button", { name: /rare repair tools/i })[0],
@@ -185,7 +185,13 @@ describe("DataCleanupRepairsPage", () => {
       },
     };
 
-    render(<DataCleanupRepairsPage initialMode="advanced" />);
+    render(<DataCleanupRepairsPage />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /rare repair tools use these only for unusual issues/i,
+      }),
+    );
 
     fireEvent.click(
       screen.getByRole("button", { name: /unlock rare repair tools/i }),
@@ -198,15 +204,12 @@ describe("DataCleanupRepairsPage", () => {
     });
   });
 
-  it("opens advanced section by default for legacy maintenance mode", () => {
-    render(<DataCleanupRepairsPage initialMode="advanced" />);
+  it("starts with rare tools collapsed by default", () => {
+    render(<DataCleanupRepairsPage />);
 
     expect(
-      screen.getAllByText(/legacy maintenance route/i).length,
-    ).toBeGreaterThan(0);
-    expect(
-      screen.getByRole("button", { name: /unlock rare repair tools/i }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /unlock rare repair tools/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders manual decision items and triggers handlers", () => {
@@ -231,7 +234,7 @@ describe("DataCleanupRepairsPage", () => {
       },
     ];
 
-    render(<DataCleanupRepairsPage initialMode="routine" />);
+    render(<DataCleanupRepairsPage />);
 
     fireEvent.click(screen.getByRole("button", { name: /merge records/i }));
 

@@ -163,13 +163,7 @@ const PageRouter = ({ currentPage, loading }) => {
     case "admin/data-hygiene":
       return (
         <ProtectedContent pageId="admin/data-hygiene">
-          <DataCleanupRepairsPage initialMode="routine" />
-        </ProtectedContent>
-      );
-    case "admin/maintenance":
-      return (
-        <ProtectedContent pageId="admin/maintenance">
-          <DataCleanupRepairsPage initialMode="advanced" />
+          <DataCleanupRepairsPage />
         </ProtectedContent>
       );
     case "facilities/spaces":

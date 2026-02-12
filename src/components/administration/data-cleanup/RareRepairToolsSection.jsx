@@ -54,7 +54,6 @@ const RareRepairToolsSection = ({
   onToggleOpen,
   isUnlocked,
   onUnlock,
-  isLegacyMaintenanceMode,
   termOptions,
 
   baselineReport,
@@ -108,11 +107,6 @@ const RareRepairToolsSection = ({
             <p className="mt-1 text-sm text-gray-600">
               Use these only for unusual issues. They can update many records at once.
             </p>
-            {isLegacyMaintenanceMode && (
-              <p className="mt-2 text-xs font-medium text-amber-700">
-                Opened in advanced mode from legacy maintenance route.
-              </p>
-            )}
           </div>
         </div>
         {isOpen ? (

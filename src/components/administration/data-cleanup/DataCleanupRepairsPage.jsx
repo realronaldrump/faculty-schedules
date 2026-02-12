@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ShieldAlert } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useUI } from "../../../contexts/UIContext";
 import { useSchedules } from "../../../contexts/ScheduleContext";
@@ -9,15 +9,14 @@ import RareRepairToolsSection from "./RareRepairToolsSection";
 import RoutineWorkflowSection from "./RoutineWorkflowSection";
 import useDataCleanupActions from "./useDataCleanupActions";
 
-const DataCleanupRepairsPage = ({ initialMode = "routine" }) => {
+const DataCleanupRepairsPage = () => {
   const { isAdmin } = useAuth();
   const { showNotification } = useUI();
   const { termOptions = [], selectedTermMeta } = useSchedules();
 
   const actions = useDataCleanupActions({ showNotification });
 
-  const isLegacyMaintenanceMode = initialMode === "advanced";
-  const [isRareOpen, setIsRareOpen] = useState(isLegacyMaintenanceMode);
+  const [isRareOpen, setIsRareOpen] = useState(false);
   const [isRareUnlocked, setIsRareUnlocked] = useState(false);
   const [confirmType, setConfirmType] = useState("");
 
@@ -111,18 +110,6 @@ const DataCleanupRepairsPage = ({ initialMode = "routine" }) => {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6 lg:p-8">
-      {isLegacyMaintenanceMode && (
-        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-700" />
-            <p className="text-sm text-amber-900">
-              You opened the legacy maintenance route. This now redirects to Data Cleanup &
-              Repairs with advanced tools available in the Rare repair tools section.
-            </p>
-          </div>
-        </section>
-      )}
-
       <RoutineWorkflowSection
         activeStep={actions.activeStep}
         scanResult={actions.scanResult}
@@ -162,7 +149,6 @@ const DataCleanupRepairsPage = ({ initialMode = "routine" }) => {
             "Use these tools only for unusual repair situations.",
           );
         }}
-        isLegacyMaintenanceMode={isLegacyMaintenanceMode}
         termOptions={termOptions}
         baselineReport={actions.baselineReport}
         isRunningBaseline={actions.isRunningBaseline}

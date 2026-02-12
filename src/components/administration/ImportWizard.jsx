@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { usePermissions } from "../../utils/permissions";
+import { useAuth } from "../../contexts/AuthContext";
 import {
   Upload,
   CheckCircle,
@@ -31,6 +32,7 @@ const ImportWizard = ({ embedded = false }) => {
   const location = useLocation();
   const { selectedSemester, refreshSchedules, refreshTerms, isTermLocked } =
     useSchedules();
+  const { isAdmin } = useAuth();
   const { loadPeople } = usePeople();
   const { showNotification } = useUI();
   const { canImport, canEdit } = usePermissions();
@@ -351,7 +353,12 @@ const ImportWizard = ({ embedded = false }) => {
     const importTerm = normalizeTermLabel(
       detectedTerm || selectedSemester || "",
     );
-    if (importType === "schedule" && importTerm && isTermLocked?.(importTerm)) {
+    if (
+      !isAdmin &&
+      importType === "schedule" &&
+      importTerm &&
+      isTermLocked?.(importTerm)
+    ) {
       showNotification?.(
         "warning",
         "Semester Locked",

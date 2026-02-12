@@ -400,13 +400,19 @@ service cloud.firestore {
     // Schedules collection: granular permissions
     match /schedules/{id} {
       allow read: if canReadAppData();
-      allow create: if canManageSchedules() &&
+      allow create: if isAdmin() || (
+        canManageSchedules() &&
         canWriteScheduleTerm(request.resource.data.termCode) &&
-        isValidScheduleCreate(request.resource.data);
-      allow update: if canManageSchedules() &&
-        canWriteScheduleTerm(request.resource.data.termCode);
-      allow delete: if canManageSchedules() &&
-        canWriteScheduleTerm(resource.data.termCode);
+        isValidScheduleCreate(request.resource.data)
+      );
+      allow update: if isAdmin() || (
+        canManageSchedules() &&
+        canWriteScheduleTerm(request.resource.data.termCode)
+      );
+      allow delete: if isAdmin() || (
+        canManageSchedules() &&
+        canWriteScheduleTerm(resource.data.termCode)
+      );
     }
 
     // Programs collection: granular permissions

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   BarChart3,
@@ -16,6 +16,7 @@ import FacultyContactCard from "../FacultyContactCard";
 import { parseTime, formatMinutesToTime } from "../../utils/timeUtils";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
+import { splitMultiRoom, isSkippableLocation } from "../../utils/locationService";
 
 const DepartmentInsights = () => {
   const navigate = useNavigate();
@@ -36,6 +37,10 @@ const DepartmentInsights = () => {
   const [roomSort, setRoomSort] = useState({ key: "hours", direction: "desc" });
   const [hourlyUsageDayFilter, setHourlyUsageDayFilter] = useState("All");
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
+  const [selectedHourPopup, setSelectedHourPopup] = useState(null);
+  const [popupAnchor, setPopupAnchor] = useState(null);
+  const [popupPosition, setPopupPosition] = useState(null);
+  const popupPanelRef = useRef(null);
 
   const dayNames = {
     M: "Monday",
@@ -59,44 +64,90 @@ const DepartmentInsights = () => {
 
   // Calculate hourly usage (specific to this component)
   const filteredHourCounts = useMemo(() => {
+    const isDayMatch = (rawDay) => {
+      if (hourlyUsageDayFilter === "All") return true;
+      if (!rawDay) return false;
+      const normalized = String(rawDay)
+        .toUpperCase()
+        .replace(/[^MTWRF]/g, "");
+      return normalized.includes(hourlyUsageDayFilter);
+    };
+
     const dataToProcess =
       hourlyUsageDayFilter === "All"
         ? scheduleData
-        : scheduleData.filter((item) => item.Day === hourlyUsageDayFilter);
+        : scheduleData.filter((item) => isDayMatch(item.Day));
+
+    const hourCourseMap = {};
 
     if (dataToProcess.length === 0) {
       const emptyCounts = {};
       for (let hour = 8; hour <= 17; hour++) emptyCounts[hour] = 0;
+      for (let hour = 8; hour <= 17; hour++) {
+        hourCourseMap[hour] = [];
+      }
       return {
         hourCounts: emptyCounts,
         latestEndTime: 17 * 60,
         peakHour: { hour: 8, count: 0 },
+        hourCourseMap,
       };
     }
 
     let latestEndTime = 17 * 60;
     dataToProcess.forEach((item) => {
-      const end = parseTime(item["End Time"]);
-      if (end && end > latestEndTime) latestEndTime = end;
-    });
-
-    const hourCounts = {};
-    for (let hour = 8; hour <= Math.ceil(latestEndTime / 60); hour++) {
-      hourCounts[hour] = 0;
-    }
-
-    dataToProcess.forEach((item) => {
       const start = parseTime(item["Start Time"]);
       const end = parseTime(item["End Time"]);
-      if (start && end) {
-        const startHour = Math.floor(start / 60);
-        const endHour = Math.ceil(end / 60);
-        for (let hour = startHour; hour < endHour; hour++) {
-          if (Object.prototype.hasOwnProperty.call(hourCounts, hour))
-            hourCounts[hour]++;
+      if (start == null || end == null || end <= start) return;
+      if (end && end > latestEndTime) latestEndTime = end;
+      const roomCandidates = (splitMultiRoom(item.Room || "")
+        .filter((room) => !isSkippableLocation(room))
+        .filter(Boolean));
+
+      if (roomCandidates.length === 0) return;
+
+      const startHour = Math.floor(start / 60);
+      const endHour = Math.ceil(end / 60);
+      if (endHour < 8 || startHour > 23) return;
+
+      const normalizedCourse = {
+        course: item.Course || "Unknown Course",
+        section: item.Section || "",
+        title: item["Course Title"] || item.Title || "",
+        instructor: item.Instructor || "",
+        startMinutes: start,
+        endMinutes: end,
+        timeRange: `${formatMinutesToTime(start)} - ${formatMinutesToTime(end)}`,
+      };
+
+      roomCandidates.forEach((room) => {
+        for (let hour = Math.max(8, startHour); hour < endHour; hour++) {
+          if (!hourCourseMap[hour]) hourCourseMap[hour] = [];
+          hourCourseMap[hour].push({
+            ...normalizedCourse,
+            room,
+            id: `${normalizedCourse.course}-${normalizedCourse.section}-${start}-${end}-${room}-${hour}`,
+          });
         }
-      }
+      });
     });
+
+    const minHour = 8;
+    const maxHour = Math.max(Math.ceil(latestEndTime / 60), 17);
+    const hourCounts = {};
+    for (let hour = minHour; hour <= maxHour; hour++) {
+      const entries = hourCourseMap[hour] || [];
+      const sorted = [...entries].sort((a, b) => {
+        const roomCompare = (a.room || "").localeCompare(b.room || "", undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+        if (roomCompare !== 0) return roomCompare;
+        return a.startMinutes - b.startMinutes;
+      });
+      hourCourseMap[hour] = sorted;
+      hourCounts[hour] = sorted.length;
+    }
 
     const peakHour = Object.entries(hourCounts).reduce(
       (max, [hour, count]) =>
@@ -104,7 +155,7 @@ const DepartmentInsights = () => {
       { hour: 8, count: 0 },
     );
 
-    return { hourCounts, latestEndTime, peakHour };
+    return { hourCounts, latestEndTime, peakHour, hourCourseMap };
   }, [scheduleData, hourlyUsageDayFilter]);
 
   const adjunctFacultyCount = useMemo(() => {
@@ -198,6 +249,105 @@ const DepartmentInsights = () => {
       setSelectedFacultyForCard(faculty);
     }
   };
+
+  const closeHourPopup = useCallback(() => {
+    setSelectedHourPopup(null);
+    setPopupAnchor(null);
+    setPopupPosition(null);
+  }, []);
+
+  const openHourPopup = useCallback(
+    (hour, items, event) => {
+      if (!event?.currentTarget) {
+        return;
+      }
+      const rect = event.currentTarget.getBoundingClientRect();
+      setSelectedHourPopup({
+        hour,
+        items,
+      });
+      setPopupAnchor({
+        top: rect.top,
+        left: rect.left,
+        right: rect.right,
+        width: rect.width,
+        height: rect.height,
+      });
+      setPopupPosition(null);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!selectedHourPopup || !popupAnchor) return;
+
+    const placePopup = () => {
+      const panel = popupPanelRef.current;
+      if (!panel) return;
+
+      const margin = 12;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const panelRect = panel.getBoundingClientRect();
+      const panelWidth = panelRect.width;
+      const panelHeight = panelRect.height;
+
+      let left;
+      let top;
+
+      if (viewportWidth < 768) {
+        left = margin;
+        top = Math.max(margin, viewportHeight - panelHeight - margin);
+      } else {
+        left = popupAnchor.right + 12;
+        if (left + panelWidth > viewportWidth - margin) {
+          left = popupAnchor.left - panelWidth - 12;
+        }
+        if (left < margin) {
+          left = Math.max(
+            margin,
+            Math.min(
+              popupAnchor.left + (popupAnchor.width - panelWidth) / 2,
+              viewportWidth - panelWidth - margin,
+            ),
+          );
+        }
+
+        top = popupAnchor.top + popupAnchor.height / 2 - panelHeight / 2;
+        top = Math.max(margin, Math.min(top, viewportHeight - panelHeight - margin));
+      }
+
+      setPopupPosition({ left, top });
+    };
+
+    const raf = window.requestAnimationFrame(placePopup);
+    const handleViewportChange = () => placePopup();
+
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [selectedHourPopup, popupAnchor]);
+
+  useEffect(() => {
+    if (!selectedHourPopup) return;
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        closeHourPopup();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [selectedHourPopup, closeHourPopup]);
+
+  useEffect(() => {
+    closeHourPopup();
+  }, [hourlyUsageDayFilter, closeHourPopup]);
 
   const SortableHeader = ({ label, sortKey, currentSort, onSort }) => {
     const isActive = currentSort.key === sortKey;
@@ -416,9 +566,21 @@ const DepartmentInsights = () => {
                 ...Object.values(filteredHourCounts.hourCounts),
                 1,
               );
+              const hourCourses = filteredHourCounts.hourCourseMap?.[hour] || [];
               return (
                 <div
                   key={hour}
+                  role="button"
+                  tabIndex={0}
+                  onClick={(event) =>
+                    openHourPopup(parseInt(hour, 10), hourCourses, event)
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openHourPopup(parseInt(hour, 10), hourCourses, event);
+                    }
+                  }}
                   className="flex items-center w-full text-left group p-2 rounded-md hover:bg-baylor-gold/10 transition-colors"
                 >
                   <div className="w-20 text-sm text-baylor-green font-medium">
@@ -450,6 +612,95 @@ const DepartmentInsights = () => {
           )}
         </div>
       </div>
+
+      {selectedHourPopup ? (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={closeHourPopup}
+          role="presentation"
+        >
+          <div className="absolute inset-0 bg-black/10" />
+          <div
+            ref={popupPanelRef}
+            style={{
+              top: `${popupPosition?.top ?? popupAnchor?.top ?? 16}px`,
+              left: `${popupPosition?.left ?? popupAnchor?.left ?? 16}px`,
+            }}
+            className={`fixed z-50 w-[min(420px,calc(100vw-1.5rem))] max-h-[min(70vh,560px)] bg-white border border-gray-200 rounded-lg shadow-2xl overflow-hidden transition-opacity duration-100 ${popupPosition ? "opacity-100" : "opacity-0"}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="h-1 bg-baylor-gold" />
+            <div className="px-4 py-3 border-b border-gray-200 bg-baylor-green/5 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs uppercase tracking-wide text-gray-500">
+                  Hourly Room Usage
+                </div>
+                <h4 className="text-lg font-serif font-semibold text-baylor-green">
+                  {formatMinutesToTime(selectedHourPopup.hour * 60).replace(":00", "")}
+                </h4>
+                <p className="text-sm text-gray-600 mt-0.5">
+                  {selectedHourPopup.items.length}{" "}
+                  {selectedHourPopup.items.length === 1 ? "course" : "courses"} in rooms
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeHourPopup}
+                className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition-colors"
+                aria-label="Close room usage popup"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4">
+              <div className="mb-3 text-xs text-gray-600">
+                Day filter: {hourlyUsageDayFilter === "All" ? "All days" : hourlyUsageDayFilter}
+              </div>
+
+              {selectedHourPopup.items.length > 0 ? (
+                <div className="max-h-[45vh] overflow-y-auto space-y-2 pr-1">
+                  {selectedHourPopup.items.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2"
+                    >
+                      <div className="flex flex-wrap sm:flex-nowrap items-start sm:items-center justify-between gap-2">
+                        <div className="w-full sm:w-24 shrink-0 text-sm font-semibold text-baylor-green">
+                          {entry.room || "—"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold text-baylor-green truncate">
+                            {entry.course}
+                            {entry.section ? ` Sec ${entry.section}` : null}
+                          </div>
+                          {entry.title ? (
+                            <div className="text-xs text-gray-600 truncate">
+                              {entry.title}
+                            </div>
+                          ) : null}
+                          {entry.instructor ? (
+                            <div className="text-xs text-gray-500 truncate">
+                              {entry.instructor}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="text-xs text-gray-700 font-medium whitespace-nowrap">
+                          {entry.timeRange}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center text-sm text-gray-600 py-8">
+                  No in-room sessions at this hour for this filter.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* Faculty Workload */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">

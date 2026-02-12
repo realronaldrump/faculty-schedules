@@ -11,11 +11,13 @@ import {
 } from "lucide-react";
 import TechnicalDetailsPanel from "./TechnicalDetailsPanel";
 import {
+  summarizeBaselinePreview,
   summarizeBaselineReport,
   summarizeLocationApplyReport,
   summarizeLocationPreview,
   summarizeOrphanCleanup,
   summarizeOrphanScan,
+  summarizeTermRepairPreview,
   summarizeTermRepairReport,
 } from "./reportFormatters";
 
@@ -56,12 +58,18 @@ const RareRepairToolsSection = ({
   onUnlock,
   termOptions,
 
+  baselinePreviewReport,
+  isLoadingBaselinePreview,
+  onLoadBaselinePreview,
   baselineReport,
   isRunningBaseline,
   onRequestBaselineConfirm,
 
   termCode,
   setTermCode,
+  termRepairPreviewReport,
+  isLoadingTermRepairPreview,
+  onLoadTermRepairPreview,
   termRepairReport,
   isRunningTermRepair,
   onRunTermRepair,
@@ -83,7 +91,12 @@ const RareRepairToolsSection = ({
   onScanOrphans,
   onRequestOrphanConfirm,
 }) => {
+  const baselinePreviewSummary = summarizeBaselinePreview(baselinePreviewReport);
   const baselineSummary = summarizeBaselineReport(baselineReport);
+  const termPreviewSummary = summarizeTermRepairPreview(
+    termRepairPreviewReport,
+    termCode,
+  );
   const termSummary = summarizeTermRepairReport(termRepairReport, termCode);
   const locationPreviewSummary = summarizeLocationPreview(locationPreview);
   const locationApplySummary = summarizeLocationApplyReport(locationApplyReport);
@@ -92,6 +105,8 @@ const RareRepairToolsSection = ({
     orphanCleanupResult,
     orphanTermFilter,
   );
+  const hasBaselinePreview = Boolean(baselinePreviewReport);
+  const hasTermRepairPreview = Boolean(termRepairPreviewReport);
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-5 sm:p-6">
@@ -159,28 +174,55 @@ const RareRepairToolsSection = ({
               </div>
             </div>
 
-            <div className="rounded-md border border-red-200 bg-white p-3 text-xs text-red-800">
-              This tool has no dry-run preview. After confirmation, it immediately runs
-              global cleanup across every term.
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={onLoadBaselinePreview}
+                disabled={isLoadingBaselinePreview || isRunningBaseline}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+              >
+                {isLoadingBaselinePreview ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Building Preview...
+                  </>
+                ) : (
+                  <>
+                    <Search className="h-4 w-4" />
+                    Preview Baseline Repair
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={onRequestBaselineConfirm}
+                disabled={isRunningBaseline || !hasBaselinePreview}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50"
+              >
+                {isRunningBaseline ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Running...
+                  </>
+                ) : (
+                  "Run Full Baseline Repair"
+                )}
+              </button>
             </div>
 
-            <button
-              type="button"
-              onClick={onRequestBaselineConfirm}
-              disabled={isRunningBaseline}
-              className="inline-flex items-center gap-2 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50"
-            >
-              {isRunningBaseline ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Running...
-                </>
-              ) : (
-                "Run Full Baseline Repair"
-              )}
-            </button>
+            {!hasBaselinePreview && (
+              <p className="text-xs text-red-800">
+                Generate a preview first. Run is enabled only after preview is available.
+              </p>
+            )}
 
+            <SummaryCard summary={baselinePreviewSummary} tone="blue" />
             <SummaryCard summary={baselineSummary} tone="amber" />
+            <TechnicalDetailsPanel
+              title="Baseline preview details"
+              data={baselinePreviewReport}
+            />
             <TechnicalDetailsPanel title="Baseline technical details" data={baselineReport} />
           </section>
 
@@ -192,11 +234,6 @@ const RareRepairToolsSection = ({
               <p className="mt-1 text-xs text-gray-600">
                 Run targeted cleanup for one term code.
               </p>
-            </div>
-
-            <div className="rounded-md border border-gray-200 bg-white p-3 text-xs text-gray-700">
-              This tool has no dry-run preview. It immediately applies term repair for the
-              selected term after you click run.
             </div>
 
             <select
@@ -213,26 +250,58 @@ const RareRepairToolsSection = ({
               ))}
             </select>
 
-            <button
-              type="button"
-              onClick={onRunTermRepair}
-              disabled={isRunningTermRepair || !termCode}
-              className="inline-flex items-center gap-2 rounded-lg border border-baylor-green px-4 py-2 text-sm font-semibold text-baylor-green hover:bg-baylor-green/5 disabled:opacity-50"
-            >
-              {isRunningTermRepair ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Running...
-                </>
-              ) : (
-                <>
-                  <Wrench className="h-4 w-4" />
-                  Run Term Repair
-                </>
-              )}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={onLoadTermRepairPreview}
+                disabled={isLoadingTermRepairPreview || !termCode || isRunningTermRepair}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+              >
+                {isLoadingTermRepairPreview ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Building Preview...
+                  </>
+                ) : (
+                  <>
+                    <Search className="h-4 w-4" />
+                    Preview Term Repair
+                  </>
+                )}
+              </button>
 
-            <SummaryCard summary={termSummary} tone="blue" />
+              <button
+                type="button"
+                onClick={onRunTermRepair}
+                disabled={isRunningTermRepair || !termCode || !hasTermRepairPreview}
+                className="inline-flex items-center gap-2 rounded-lg border border-baylor-green px-4 py-2 text-sm font-semibold text-baylor-green hover:bg-baylor-green/5 disabled:opacity-50"
+              >
+                {isRunningTermRepair ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Running...
+                  </>
+                ) : (
+                  <>
+                    <Wrench className="h-4 w-4" />
+                    Run Term Repair
+                  </>
+                )}
+              </button>
+            </div>
+
+            {!hasTermRepairPreview && termCode && (
+              <p className="text-xs text-gray-700">
+                Generate a term preview first. Run is enabled only after preview is available.
+              </p>
+            )}
+
+            <SummaryCard summary={termPreviewSummary} tone="blue" />
+            <SummaryCard summary={termSummary} tone="green" />
+            <TechnicalDetailsPanel
+              title="Term repair preview details"
+              data={termRepairPreviewReport}
+            />
             <TechnicalDetailsPanel title="Term repair technical details" data={termRepairReport} />
           </section>
 

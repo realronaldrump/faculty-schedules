@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  summarizeBaselinePreview,
   summarizeBaselineReport,
   summarizeLocationApplyReport,
   summarizeLocationPreview,
   summarizeOrphanCleanup,
   summarizeOrphanScan,
+  summarizeTermRepairPreview,
   summarizeTermRepairReport,
 } from "../reportFormatters";
 
@@ -31,6 +33,31 @@ describe("report formatters", () => {
     expect(summary.nextStep).toMatch(/Baseline is clean/i);
   });
 
+  it("formats baseline preview summary", () => {
+    const summary = summarizeBaselinePreview({
+      summary: {
+        totalTermsProcessed: 4,
+        totalSchedulesProcessed: 340,
+        identityBackfillWouldUpdate: 29,
+        roomsCreated: 3,
+        schedulesSpaceRepaired: 12,
+        scheduleDuplicatesWouldMerge: 5,
+      },
+    });
+
+    expect(summary.title).toBe("Baseline preview ready");
+    expect(summary.items).toEqual(
+      expect.arrayContaining([
+        { label: "Terms in scope", value: 4 },
+        { label: "Schedules in scope", value: 340 },
+        { label: "Identity updates planned", value: 29 },
+        { label: "Rooms to create", value: 3 },
+        { label: "Schedule links to repair", value: 12 },
+        { label: "Schedule merges planned", value: 5 },
+      ]),
+    );
+  });
+
   it("formats term repair summary", () => {
     const summary = summarizeTermRepairReport(
       {
@@ -48,6 +75,31 @@ describe("report formatters", () => {
         { label: "Schedules updated", value: 17 },
         { label: "Rooms updated", value: 8 },
         { label: "Duplicates merged", value: 3 },
+      ]),
+    );
+  });
+
+  it("formats term repair preview summary", () => {
+    const summary = summarizeTermRepairPreview(
+      {
+        termCodes: ["202610"],
+        roomsCreated: 2,
+        spaceLinkRepairs: { schedulesUpdated: 17, roomsUpdated: 8 },
+        scheduleDuplicatesWouldMerge: 3,
+        crossListAutoLink: { schedulesUpdated: 5 },
+      },
+      "202610",
+    );
+
+    expect(summary.title).toBe("Term repair preview ready");
+    expect(summary.items).toEqual(
+      expect.arrayContaining([
+        { label: "Term", value: "202610" },
+        { label: "Rooms to create", value: 2 },
+        { label: "Schedule links to repair", value: 17 },
+        { label: "Room records to normalize", value: 8 },
+        { label: "Schedule merges planned", value: 3 },
+        { label: "Cross-list links to update", value: 5 },
       ]),
     );
   });

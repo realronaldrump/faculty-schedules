@@ -7,7 +7,9 @@ import {
   mergeScheduleRecords,
   markNotDuplicate,
   repairScheduleSpaceLinksForSchedule,
+  previewHistoricalBaselineBackfill,
   runHistoricalBaselineBackfill,
+  previewPostImportCleanup,
   runPostImportCleanup,
   previewLocationMigration,
   applyLocationMigration,
@@ -43,10 +45,14 @@ export const useDataCleanupActions = ({ showNotification } = {}) => {
     useState("");
 
   const [baselineReport, setBaselineReport] = useState(null);
+  const [baselinePreviewReport, setBaselinePreviewReport] = useState(null);
+  const [isLoadingBaselinePreview, setIsLoadingBaselinePreview] = useState(false);
   const [isRunningBaseline, setIsRunningBaseline] = useState(false);
 
   const [termCode, setTermCode] = useState("");
   const [termRepairReport, setTermRepairReport] = useState(null);
+  const [termRepairPreviewReport, setTermRepairPreviewReport] = useState(null);
+  const [isLoadingTermRepairPreview, setIsLoadingTermRepairPreview] = useState(false);
   const [isRunningTermRepair, setIsRunningTermRepair] = useState(false);
 
   const [locationPreview, setLocationPreview] = useState(null);
@@ -390,6 +396,7 @@ export const useDataCleanupActions = ({ showNotification } = {}) => {
     try {
       const report = await runHistoricalBaselineBackfill();
       setBaselineReport(report);
+      setBaselinePreviewReport(report);
       notify(
         showNotification,
         "success",
@@ -410,6 +417,73 @@ export const useDataCleanupActions = ({ showNotification } = {}) => {
     }
   };
 
+  const loadBaselinePreview = async () => {
+    setIsLoadingBaselinePreview(true);
+    try {
+      const preview = await previewHistoricalBaselineBackfill();
+      setBaselinePreviewReport(preview);
+      notify(
+        showNotification,
+        "success",
+        "Baseline Preview Ready",
+        `Previewed ${preview?.summary?.totalSchedulesProcessed || 0} schedules across all terms.`,
+      );
+      return preview;
+    } catch (error) {
+      notify(
+        showNotification,
+        "error",
+        "Baseline Preview Failed",
+        error?.message || "Failed to generate baseline preview.",
+      );
+      throw error;
+    } finally {
+      setIsLoadingBaselinePreview(false);
+    }
+  };
+
+  const updateTermCode = (value) => {
+    setTermCode(value);
+    setTermRepairPreviewReport(null);
+    setTermRepairReport(null);
+  };
+
+  const loadTermRepairPreview = async () => {
+    const normalized = termCode.trim();
+    if (!normalized) {
+      notify(
+        showNotification,
+        "warning",
+        "Term Required",
+        "Choose a term before generating a term repair preview.",
+      );
+      return null;
+    }
+
+    setIsLoadingTermRepairPreview(true);
+    try {
+      const preview = await previewPostImportCleanup({ termCode: normalized });
+      setTermRepairPreviewReport(preview);
+      notify(
+        showNotification,
+        "success",
+        "Term Repair Preview Ready",
+        `Previewed repair actions for ${normalized}.`,
+      );
+      return preview;
+    } catch (error) {
+      notify(
+        showNotification,
+        "error",
+        "Term Preview Failed",
+        error?.message || "Failed to generate term repair preview.",
+      );
+      throw error;
+    } finally {
+      setIsLoadingTermRepairPreview(false);
+    }
+  };
+
   const runTermRepair = async () => {
     const normalized = termCode.trim();
     if (!normalized) {
@@ -426,6 +500,7 @@ export const useDataCleanupActions = ({ showNotification } = {}) => {
     try {
       const report = await runPostImportCleanup({ termCode: normalized });
       setTermRepairReport(report);
+      setTermRepairPreviewReport(report);
       notify(
         showNotification,
         "success",
@@ -592,9 +667,13 @@ export const useDataCleanupActions = ({ showNotification } = {}) => {
     pendingMergeConfirmationKey,
 
     baselineReport,
+    baselinePreviewReport,
+    isLoadingBaselinePreview,
     isRunningBaseline,
     termCode,
     termRepairReport,
+    termRepairPreviewReport,
+    isLoadingTermRepairPreview,
     isRunningTermRepair,
     locationPreview,
     locationApplyReport,
@@ -616,8 +695,10 @@ export const useDataCleanupActions = ({ showNotification } = {}) => {
     handleMarkConflictAsDistinct,
     toggleCategory,
 
+    loadBaselinePreview,
     runBaseline,
-    setTermCode,
+    setTermCode: updateTermCode,
+    loadTermRepairPreview,
     runTermRepair,
     loadLocationPreview,
     applyLocationChanges,

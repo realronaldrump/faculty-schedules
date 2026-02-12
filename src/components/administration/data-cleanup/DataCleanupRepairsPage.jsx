@@ -152,11 +152,17 @@ const DataCleanupRepairsPage = () => {
           );
         }}
         termOptions={termOptions}
+        baselinePreviewReport={actions.baselinePreviewReport}
+        isLoadingBaselinePreview={actions.isLoadingBaselinePreview}
+        onLoadBaselinePreview={actions.loadBaselinePreview}
         baselineReport={actions.baselineReport}
         isRunningBaseline={actions.isRunningBaseline}
         onRequestBaselineConfirm={() => setConfirmType("baseline")}
         termCode={actions.termCode}
         setTermCode={actions.setTermCode}
+        termRepairPreviewReport={actions.termRepairPreviewReport}
+        isLoadingTermRepairPreview={actions.isLoadingTermRepairPreview}
+        onLoadTermRepairPreview={actions.loadTermRepairPreview}
         termRepairReport={actions.termRepairReport}
         isRunningTermRepair={actions.isRunningTermRepair}
         onRunTermRepair={actions.runTermRepair}

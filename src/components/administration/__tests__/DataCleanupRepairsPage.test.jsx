@@ -29,10 +29,16 @@ const createMockActions = () => ({
   pendingMergeConfirmationKey: "",
 
   baselineReport: null,
+  baselinePreviewReport: null,
+  isLoadingBaselinePreview: false,
   isRunningBaseline: false,
+  loadBaselinePreview: vi.fn(),
   termCode: "",
   termRepairReport: null,
+  termRepairPreviewReport: null,
+  isLoadingTermRepairPreview: false,
   isRunningTermRepair: false,
+  loadTermRepairPreview: vi.fn(),
   locationPreview: null,
   locationApplyReport: null,
   isLoadingLocationPreview: false,
@@ -150,6 +156,13 @@ describe("DataCleanupRepairsPage", () => {
   });
 
   it("opens confirmation before destructive baseline action", async () => {
+    mockActions.baselinePreviewReport = {
+      summary: {
+        totalTermsProcessed: 1,
+        totalSchedulesProcessed: 10,
+      },
+    };
+
     render(<DataCleanupRepairsPage />);
 
     fireEvent.click(

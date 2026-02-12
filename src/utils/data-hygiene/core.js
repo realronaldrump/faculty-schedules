@@ -1093,6 +1093,7 @@ const fetchSchedulesForTermCodes = async (termCodeList = []) => {
 const ensureMissingRoomsFromSchedules = async ({
   schedules = [],
   transactionId = "",
+  dryRun = false,
 } = {}) => {
   const report = {
     roomsCreated: 0,
@@ -1139,7 +1140,7 @@ const ensureMissingRoomsFromSchedules = async ({
     }
   });
 
-  const batchWriter = createBatchWriter();
+  const batchWriter = dryRun ? null : createBatchWriter();
   const now = new Date().toISOString();
   const createdBy = transactionId ? `post-import:${transactionId}` : "post-import-cleanup";
 
@@ -1175,9 +1176,11 @@ const ensureMissingRoomsFromSchedules = async ({
         updatedAt: now,
         createdBy,
       };
-      await batchWriter.add((batch) => {
-        batch.set(doc(db, "rooms", canonicalKey), payload, { merge: true });
-      });
+      if (!dryRun) {
+        await batchWriter.add((batch) => {
+          batch.set(doc(db, "rooms", canonicalKey), payload, { merge: true });
+        });
+      }
       report.roomsCreated += 1;
       report.createdRoomIds.push(canonicalKey);
       existingRoomKeys.add(canonicalKey);
@@ -1186,12 +1189,15 @@ const ensureMissingRoomsFromSchedules = async ({
     }
   }
 
-  await batchWriter.flush();
+  if (!dryRun) {
+    await batchWriter.flush();
+  }
   return report;
 };
 
 const applyCrossListAutoLinkingForSchedules = async ({
   schedules = [],
+  dryRun = false,
 } = {}) => {
   const report = {
     groupsDetected: 0,
@@ -1215,7 +1221,7 @@ const applyCrossListAutoLinkingForSchedules = async ({
     });
   });
 
-  const batchWriter = createBatchWriter();
+  const batchWriter = dryRun ? null : createBatchWriter();
   const now = new Date().toISOString();
 
   for (const schedule of schedules) {
@@ -1226,30 +1232,36 @@ const applyCrossListAutoLinkingForSchedules = async ({
     const currentGroupId = (schedule?.linkGroupId || "").toString().trim();
 
     if (desiredGroupId && currentGroupId !== desiredGroupId) {
-      await batchWriter.add((batch) => {
-        batch.update(doc(db, "schedules", scheduleId), {
-          linkGroupId: desiredGroupId,
-          updatedAt: now,
+      if (!dryRun) {
+        await batchWriter.add((batch) => {
+          batch.update(doc(db, "schedules", scheduleId), {
+            linkGroupId: desiredGroupId,
+            updatedAt: now,
+          });
         });
-      });
+      }
       report.schedulesUpdated += 1;
       report.linkedScheduleIds.push(scheduleId);
       continue;
     }
 
     if (!desiredGroupId && currentGroupId && currentGroupId.startsWith("xlist_")) {
-      await batchWriter.add((batch) => {
-        batch.update(doc(db, "schedules", scheduleId), {
-          linkGroupId: deleteField(),
-          updatedAt: now,
+      if (!dryRun) {
+        await batchWriter.add((batch) => {
+          batch.update(doc(db, "schedules", scheduleId), {
+            linkGroupId: deleteField(),
+            updatedAt: now,
+          });
         });
-      });
+      }
       report.schedulesUpdated += 1;
       report.clearedScheduleIds.push(scheduleId);
     }
   }
 
-  await batchWriter.flush();
+  if (!dryRun) {
+    await batchWriter.flush();
+  }
   return report;
 };
 
@@ -1269,6 +1281,7 @@ export const runPostImportCleanup = async ({
   touchedScheduleIds = [],
   transactionId = "",
   autoLinkCrossLists = true,
+  dryRun = false,
 } = {}) => {
   const codes = Array.isArray(termCodes)
     ? termCodes
@@ -1290,6 +1303,7 @@ export const runPostImportCleanup = async ({
   );
 
   const report = {
+    mode: dryRun ? "preview" : "apply",
     transactionId: transactionId || "",
     termCodes: uniqueTermCodes,
     touchedScheduleIds: Array.from(touchedSet),
@@ -1300,8 +1314,10 @@ export const runPostImportCleanup = async ({
     spaceLinkRepairs: null,
     scheduleDuplicatesDetected: 0,
     scheduleDuplicatesMerged: 0,
+    scheduleDuplicatesWouldMerge: 0,
     scheduleMergeErrors: [],
     mergedScheduleIds: [],
+    duplicateMergeCandidates: [],
     crossListAutoLink: {
       groupsDetected: 0,
       schedulesUpdated: 0,
@@ -1325,6 +1341,7 @@ export const runPostImportCleanup = async ({
   const roomSeedResult = await ensureMissingRoomsFromSchedules({
     schedules: targetSchedules,
     transactionId,
+    dryRun,
   });
   report.roomsCreated = roomSeedResult.roomsCreated;
   report.roomCreateErrors = roomSeedResult.roomCreateErrors;
@@ -1332,9 +1349,11 @@ export const runPostImportCleanup = async ({
 
   // 2/3) Repair touched schedule space links and normalize canonical room fields
   try {
-    report.spaceLinkRepairs = await repairScheduleSpaceLinks({
+    report.spaceLinkRepairs = await repairScheduleSpaceLinksInternal({
       schedules: targetSchedules,
       normalizeRoomDisplayNames: true,
+      dryRun,
+      autoCreateMissingRooms: false,
     });
   } catch (error) {
     report.spaceLinkRepairs = { error: error?.message || String(error) };
@@ -1342,7 +1361,9 @@ export const runPostImportCleanup = async ({
   }
 
   // Refresh after repairs before duplicate/link operations.
-  schedules = await fetchSchedulesForTermCodes(uniqueTermCodes);
+  if (!dryRun) {
+    schedules = await fetchSchedulesForTermCodes(uniqueTermCodes);
+  }
 
   // 4) Merge high-confidence duplicates in touched terms
   const scheduleDecisions = await fetchDedupeDecisions("schedules");
@@ -1358,19 +1379,25 @@ export const runPostImportCleanup = async ({
     if (!primary?.id || !secondary?.id) continue;
     if (mergedSecondaryIds.has(primary.id) || mergedSecondaryIds.has(secondary.id)) continue;
     try {
-      await mergeScheduleRecords(dup);
-      report.scheduleDuplicatesMerged += 1;
-      report.mergedScheduleIds.push({
+      const mergePair = {
         kept: primary.id,
         removed: secondary.id,
-      });
+      };
+      if (dryRun) {
+        report.scheduleDuplicatesWouldMerge += 1;
+        report.duplicateMergeCandidates.push(mergePair);
+      } else {
+        await mergeScheduleRecords(dup);
+        report.scheduleDuplicatesMerged += 1;
+        report.mergedScheduleIds.push(mergePair);
+      }
       mergedSecondaryIds.add(secondary.id);
     } catch (error) {
       report.scheduleMergeErrors.push(error?.message || String(error));
     }
   }
 
-  if (report.scheduleDuplicatesMerged > 0) {
+  if (!dryRun && report.scheduleDuplicatesMerged > 0) {
     schedules = await fetchSchedulesForTermCodes(uniqueTermCodes);
   }
 
@@ -1379,6 +1406,7 @@ export const runPostImportCleanup = async ({
     try {
       report.crossListAutoLink = await applyCrossListAutoLinkingForSchedules({
         schedules,
+        dryRun,
       });
     } catch (error) {
       report.crossListAutoLink.errors.push(error?.message || String(error));
@@ -1396,7 +1424,10 @@ export const runPostImportCleanup = async ({
   return report;
 };
 
-export const runHistoricalBaselineBackfill = async ({ saveReport = true } = {}) => {
+export const runHistoricalBaselineBackfill = async ({
+  saveReport = true,
+  dryRun = false,
+} = {}) => {
   const schedulesSnapshot = await getDocs(collection(db, "schedules"));
   const schedules = schedulesSnapshot.docs.map((docSnap) => ({
     id: docSnap.id,
@@ -1407,33 +1438,48 @@ export const runHistoricalBaselineBackfill = async ({ saveReport = true } = {}) 
   ).sort();
 
   const identityPreview = await previewScheduleIdentityBackfill();
-  const identityApply = await applyScheduleIdentityBackfill(identityPreview.changes || []);
+  const identityApply = dryRun
+    ? { updated: 0 }
+    : await applyScheduleIdentityBackfill(identityPreview.changes || []);
   const finalizeReport =
     allTermCodes.length > 0
       ? await runPostImportCleanup({
           termCodes: allTermCodes,
           transactionId: `baseline_${Date.now()}`,
           autoLinkCrossLists: true,
+          dryRun,
         })
       : {
+          mode: dryRun ? "preview" : "apply",
           termCodes: [],
           blockers: [],
           scheduleDuplicatesMerged: 0,
+          scheduleDuplicatesWouldMerge: 0,
           roomsCreated: 0,
-          spaceLinkRepairs: { schedulesUpdated: 0, roomsUpdated: 0 },
+          spaceLinkRepairs: {
+            schedulesUpdated: 0,
+            roomsUpdated: 0,
+            scheduleIdsUpdated: [],
+            roomIdsUpdated: [],
+          },
           crossListAutoLink: { schedulesUpdated: 0, linkedScheduleIds: [], clearedScheduleIds: [] },
           mergedScheduleIds: [],
+          duplicateMergeCandidates: [],
           createdRoomIds: [],
         };
 
   const report = {
     type: "historical_baseline",
+    mode: dryRun ? "preview" : "apply",
     createdAt: new Date().toISOString(),
     summary: {
       totalTermsProcessed: allTermCodes.length,
       totalSchedulesProcessed: schedules.length,
       identityBackfillUpdated: identityApply?.updated || 0,
+      identityBackfillWouldUpdate: identityPreview?.recordsToUpdate || 0,
       scheduleDuplicatesMerged: finalizeReport?.scheduleDuplicatesMerged || 0,
+      scheduleDuplicatesWouldMerge:
+        finalizeReport?.scheduleDuplicatesWouldMerge || 0,
       roomsCreated: finalizeReport?.roomsCreated || 0,
       schedulesSpaceRepaired: finalizeReport?.spaceLinkRepairs?.schedulesUpdated || 0,
       roomsNormalized: finalizeReport?.spaceLinkRepairs?.roomsUpdated || 0,
@@ -1445,7 +1491,10 @@ export const runHistoricalBaselineBackfill = async ({ saveReport = true } = {}) 
     changedIds: {
       identityBackfill: (identityPreview?.changes || []).map((item) => item.id),
       mergedSchedules: finalizeReport?.mergedScheduleIds || [],
+      duplicateMergeCandidates: finalizeReport?.duplicateMergeCandidates || [],
       createdRooms: finalizeReport?.createdRoomIds || [],
+      repairedScheduleLinks: finalizeReport?.spaceLinkRepairs?.scheduleIdsUpdated || [],
+      normalizedRooms: finalizeReport?.spaceLinkRepairs?.roomIdsUpdated || [],
       crossListLinkedSchedules: finalizeReport?.crossListAutoLink?.linkedScheduleIds || [],
       crossListClearedSchedules: finalizeReport?.crossListAutoLink?.clearedScheduleIds || [],
     },
@@ -1460,12 +1509,25 @@ export const runHistoricalBaselineBackfill = async ({ saveReport = true } = {}) 
     },
   };
 
-  if (saveReport) {
+  if (saveReport && !dryRun) {
     await addDoc(collection(db, "maintenanceReports"), report);
   }
 
   return report;
 };
+
+export const previewPostImportCleanup = async (options = {}) =>
+  runPostImportCleanup({
+    ...(options || {}),
+    dryRun: true,
+  });
+
+export const previewHistoricalBaselineBackfill = async (options = {}) =>
+  runHistoricalBaselineBackfill({
+    ...(options || {}),
+    dryRun: true,
+    saveReport: false,
+  });
 
 // ==================== REAL-TIME VALIDATION ====================
 
@@ -2090,6 +2152,7 @@ const repairScheduleSpaceLinksInternal = async ({
   schedules = [],
   normalizeRoomDisplayNames = false,
   autoCreateMissingRooms = false,
+  dryRun = false,
   overrides = {},
 } = {}) => {
   const roomsSnap = await getDocs(collection(db, "rooms"));
@@ -2099,7 +2162,7 @@ const repairScheduleSpaceLinksInternal = async ({
   }));
   const { roomsBySpaceKey, roomsById, roomsByNameKey } =
     buildRoomLookupMaps(rooms);
-  const batchWriter = createBatchWriter();
+  const batchWriter = dryRun ? null : createBatchWriter();
   const pendingRoomUpdates = new Map();
   const now = new Date().toISOString();
 
@@ -2107,6 +2170,8 @@ const repairScheduleSpaceLinksInternal = async ({
     schedulesUpdated: 0,
     roomsCreated: 0,
     roomsUpdated: 0,
+    scheduleIdsUpdated: [],
+    roomIdsUpdated: [],
   };
 
   const queueRoomUpdate = (room, updates) => {
@@ -2163,14 +2228,17 @@ const repairScheduleSpaceLinksInternal = async ({
 
     if (isScheduleNonPhysical(schedule, locationLabel)) {
       if (currentSpaceIds.length > 0 || currentDisplayNames.length > 0) {
-        await batchWriter.add((batch) => {
-          batch.update(doc(db, "schedules", schedule.id), {
-            spaceIds: [],
-            spaceDisplayNames: [],
-            updatedAt: now,
+        if (!dryRun) {
+          await batchWriter.add((batch) => {
+            batch.update(doc(db, "schedules", schedule.id), {
+              spaceIds: [],
+              spaceDisplayNames: [],
+              updatedAt: now,
+            });
           });
-        });
+        }
         results.schedulesUpdated += 1;
+        results.scheduleIdsUpdated.push(schedule.id);
       }
       continue;
     }
@@ -2188,14 +2256,17 @@ const repairScheduleSpaceLinksInternal = async ({
       const overrideNames = overrideIds
         .map((key) => resolveDisplayNameForSpaceKey(key, roomsBySpaceKey))
         .filter(Boolean);
-      await batchWriter.add((batch) => {
-        batch.update(doc(db, "schedules", schedule.id), {
-          spaceIds: overrideIds,
-          spaceDisplayNames: overrideNames,
-          updatedAt: now,
+      if (!dryRun) {
+        await batchWriter.add((batch) => {
+          batch.update(doc(db, "schedules", schedule.id), {
+            spaceIds: overrideIds,
+            spaceDisplayNames: overrideNames,
+            updatedAt: now,
+          });
         });
-      });
+      }
       results.schedulesUpdated += 1;
+      results.scheduleIdsUpdated.push(schedule.id);
       continue;
     }
 
@@ -2230,25 +2301,33 @@ const repairScheduleSpaceLinksInternal = async ({
       nextDisplayNames.some((name, idx) => name !== currentDisplayNames[idx]);
 
     if (spaceIdsChanged || displayNamesChanged) {
-      await batchWriter.add((batch) => {
-        batch.update(doc(db, "schedules", schedule.id), {
-          spaceIds: uniqueSpaceIds,
-          spaceDisplayNames: nextDisplayNames,
-          updatedAt: now,
+      if (!dryRun) {
+        await batchWriter.add((batch) => {
+          batch.update(doc(db, "schedules", schedule.id), {
+            spaceIds: uniqueSpaceIds,
+            spaceDisplayNames: nextDisplayNames,
+            updatedAt: now,
+          });
         });
-      });
+      }
       results.schedulesUpdated += 1;
+      results.scheduleIdsUpdated.push(schedule.id);
     }
   }
 
   for (const [roomId, updates] of pendingRoomUpdates.entries()) {
-    await batchWriter.add((batch) => {
-      batch.update(doc(db, "rooms", roomId), updates);
-    });
+    if (!dryRun) {
+      await batchWriter.add((batch) => {
+        batch.update(doc(db, "rooms", roomId), updates);
+      });
+    }
     results.roomsUpdated += 1;
+    results.roomIdsUpdated.push(roomId);
   }
 
-  await batchWriter.flush();
+  if (!dryRun) {
+    await batchWriter.flush();
+  }
 
   return results;
 };

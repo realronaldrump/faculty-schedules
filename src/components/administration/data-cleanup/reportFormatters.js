@@ -223,6 +223,41 @@ export const summarizeSafeFixResult = (result) => {
   return buildSummary("Safe repair run complete", items, nextStep);
 };
 
+export const summarizeBaselinePreview = (report) => {
+  if (!report) return null;
+  const items = [
+    {
+      label: "Terms in scope",
+      value: Number(report?.summary?.totalTermsProcessed || 0),
+    },
+    {
+      label: "Schedules in scope",
+      value: Number(report?.summary?.totalSchedulesProcessed || 0),
+    },
+    {
+      label: "Identity updates planned",
+      value: Number(report?.summary?.identityBackfillWouldUpdate || 0),
+    },
+    {
+      label: "Rooms to create",
+      value: Number(report?.summary?.roomsCreated || 0),
+    },
+    {
+      label: "Schedule links to repair",
+      value: Number(report?.summary?.schedulesSpaceRepaired || 0),
+    },
+    {
+      label: "Schedule merges planned",
+      value: Number(report?.summary?.scheduleDuplicatesWouldMerge || 0),
+    },
+  ];
+  return buildSummary(
+    "Baseline preview ready",
+    items,
+    "Review technical details, then run full baseline repair to apply these exact actions.",
+  );
+};
+
 export const summarizeBaselineReport = (report) => {
   if (!report) return null;
   const items = [
@@ -249,6 +284,38 @@ export const summarizeBaselineReport = (report) => {
       ? "Review blocker details before running more advanced repairs."
       : "Baseline is clean. Continue only if new issues appear.";
   return buildSummary("Baseline repair complete", items, nextStep);
+};
+
+export const summarizeTermRepairPreview = (report, termCode = "") => {
+  if (!report) return null;
+  const items = [
+    { label: "Term", value: termCode || report?.termCodes?.[0] || "Unknown" },
+    {
+      label: "Rooms to create",
+      value: Number(report?.roomsCreated || 0),
+    },
+    {
+      label: "Schedule links to repair",
+      value: Number(report?.spaceLinkRepairs?.schedulesUpdated || 0),
+    },
+    {
+      label: "Room records to normalize",
+      value: Number(report?.spaceLinkRepairs?.roomsUpdated || 0),
+    },
+    {
+      label: "Schedule merges planned",
+      value: Number(report?.scheduleDuplicatesWouldMerge || 0),
+    },
+    {
+      label: "Cross-list links to update",
+      value: Number(report?.crossListAutoLink?.schedulesUpdated || 0),
+    },
+  ];
+  return buildSummary(
+    "Term repair preview ready",
+    items,
+    "If these counts look correct, run term repair to apply the planned changes.",
+  );
 };
 
 export const summarizeTermRepairReport = (report, termCode = "") => {

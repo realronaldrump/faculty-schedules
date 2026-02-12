@@ -4,7 +4,7 @@ Use this guide when Baylor changes CLSS CSV export headers.
 
 ## Single Edit Point
 
-- `/Users/davis/my-apps/faculty-schedules/src/config/import/clss/default-profile.json`
+- `src/config/import/clss/default-profile.json`
 
 Do not start by editing parser code. The parser is profile-driven by design.
 
@@ -21,7 +21,7 @@ If these required fields are not mapped, import preview and commit are blocked.
 
 ## How to Update Aliases
 
-1. Open `/Users/davis/my-apps/faculty-schedules/src/config/import/clss/default-profile.json`.
+1. Open `src/config/import/clss/default-profile.json`.
 2. Find the `fields.<fieldId>.aliases` array.
 3. Add the new CLSS header text exactly as exported by Baylor.
 4. Keep previous aliases unless you are sure they are retired.

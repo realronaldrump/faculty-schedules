@@ -40,23 +40,23 @@ If any command fails, fix before deploy.
 ### A) CLSS import format changes
 
 - Edit profile aliases only:
-  - `/Users/davis/my-apps/faculty-schedules/src/config/import/clss/default-profile.json`
+  - `src/config/import/clss/default-profile.json`
 - CLSS parser and diagnostics:
-  - `/Users/davis/my-apps/faculty-schedules/src/utils/import/clss/parse-clss-file.js`
-  - `/Users/davis/my-apps/faculty-schedules/src/components/administration/ImportWizard.jsx`
+  - `src/utils/import/clss/parse-clss-file.js`
+  - `src/components/administration/ImportWizard.jsx`
 - Transaction core (preview/commit/rollback):
-  - `/Users/davis/my-apps/faculty-schedules/src/utils/import/core.js`
+  - `src/utils/import/core.js`
 - Reference guide:
-  - `/Users/davis/my-apps/faculty-schedules/docs/CLSS_PROFILE_EDIT_GUIDE.md`
+  - `docs/CLSS_PROFILE_EDIT_GUIDE.md`
 
 ### B) Data health / merge behavior
 
 - Public facade:
-  - `/Users/davis/my-apps/faculty-schedules/src/utils/dataHygiene.js`
+  - `src/utils/dataHygiene.js`
 - Core implementation:
-  - `/Users/davis/my-apps/faculty-schedules/src/utils/data-hygiene/core.js`
+  - `src/utils/data-hygiene/core.js`
 - UI:
-  - `/Users/davis/my-apps/faculty-schedules/src/components/administration/data-cleanup/DataCleanupRepairsPage.jsx`
+  - `src/components/administration/data-cleanup/DataCleanupRepairsPage.jsx`
   - One unified page now covers routine data checks, safe fixes, and rare repair tools.
   - “Fix safe issues” runs full canonicalization (legacy cleanup + standardization + linking + location repair).
 
@@ -67,7 +67,8 @@ If any command fails, fix before deploy.
 
 ### D) Temperature monitoring issues
 
-- Orchestrator: `src/components/temperature/TemperatureMonitoring.jsx`
+- Hub entrypoint: `src/components/facilities/FacilitiesHub.jsx`
+- Temperature orchestrator: `src/components/temperature/TemperatureMonitoring.jsx`
 - Supporting modules: `src/components/temperature/monitoring/`
 
 ## 5) Deployment
@@ -93,11 +94,11 @@ npm run deploy:indexes
 - Data health scan runs and safe fix action succeeds.
 - Data Cleanup & Repairs page loads and Rare repair tools stay locked until explicitly unlocked.
 - Access Control page loads.
-- Temperature page loads and tab switching works.
+- Facilities > Temperature loads and tab switching works.
 
 ## 7) CLSS Format Change Runbook (Quick)
 
-1. Edit aliases in `/Users/davis/my-apps/faculty-schedules/src/config/import/clss/default-profile.json`.
+1. Edit aliases in `src/config/import/clss/default-profile.json`.
 2. Run:
    ```bash
    npm run lint

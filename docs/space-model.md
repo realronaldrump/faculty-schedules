@@ -53,7 +53,7 @@
 
 ## Migration Strategy
 
-- Use Admin → Data Hygiene → Location Migration:
+- Use Administration → Data Cleanup & Repairs → Rare repair tools → Fix room and location links:
   - Split combined room strings into individual spaces.
   - Backfill missing `spaceKey`, `buildingCode`, and `spaceNumber`.
   - Seed missing spaces from schedules and people.

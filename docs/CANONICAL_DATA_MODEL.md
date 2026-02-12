@@ -53,21 +53,21 @@ Legacy examples that should be migrated/removed:
 
 CLSS CSV parsing normalizes rows to a canonical contract in:
 
-- `/Users/davis/my-apps/faculty-schedules/src/utils/import/clss/normalize-row.js`
+- `src/utils/import/clss/normalize-row.js`
 
 And profile-driven parsing in:
 
-- `/Users/davis/my-apps/faculty-schedules/src/utils/import/clss/parse-clss-file.js`
+- `src/utils/import/clss/parse-clss-file.js`
 
 Profile source:
 
-- `/Users/davis/my-apps/faculty-schedules/src/config/import/clss/default-profile.json`
+- `src/config/import/clss/default-profile.json`
 
 ## Migration/Cleanup Path
 
 Run Data Cleanup & Repairs:
 
-- `/Users/davis/my-apps/faculty-schedules/src/components/administration/data-cleanup/DataCleanupRepairsPage.jsx`
+- `src/components/administration/data-cleanup/DataCleanupRepairsPage.jsx`
 
 “Fix safe issues” now runs full canonicalization (not just duplicates):
 
@@ -78,4 +78,4 @@ Run Data Cleanup & Repairs:
 
 It reports `legacyModelIssues` and can auto-fix canonical migrations through:
 
-- `/Users/davis/my-apps/faculty-schedules/src/utils/data-hygiene/core.js`
+- `src/utils/data-hygiene/core.js`

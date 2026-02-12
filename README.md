@@ -4,7 +4,7 @@ Operational dashboard for Baylor Human Sciences & Design scheduling, people dire
 
 ## Status
 
-- Repository visibility: **Private** (verified via GitHub CLI on 2026-02-11).
+- Repository visibility: **Private** (verified via GitHub CLI on 2026-02-12).
 - Hosting target: Vercel (existing deployment).
 - Data backend: Firebase (Firestore + Storage + Auth).
 
@@ -88,6 +88,8 @@ npm test -- --run
 - `docs/ACCESS_TRANSFER_CHECKLIST.md`
 - `docs/CLSS_PROFILE_EDIT_GUIDE.md`
 - `docs/CANONICAL_DATA_MODEL.md`
+- `docs/import-idempotency.md`
+- `docs/space-model.md`
 
 ## Sample Data Policy
 

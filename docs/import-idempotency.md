@@ -39,8 +39,9 @@ These are used to make repeated imports idempotent while preserving auditability
 ## Backfill (in-app)
 
 If existing schedules were imported before identity keys existed, use the
-Data Hygiene page to run the **Schedule Identity Backfill** action. It will
-preview changes and apply them in-app without a terminal step.
+**Data Cleanup & Repairs** workflow to backfill identity fields. In practice,
+run **Fix safe issues** for broad cleanup, or use **Rare repair tools** for a
+previewed term/system repair pass.
 
 ## Linked sections (manual)
 
@@ -49,8 +50,8 @@ represent the same meeting. When this happens, link the sections in the app:
 
 - Schedules may carry a `linkGroupId` field.
 - Sections that share the same `linkGroupId` are treated as linked and will
-  not be flagged as duplicates or teaching conflicts in Data Hygiene.
-- Linking is manual and per-term. Use Data Hygiene or Course Management to
+  not be flagged as duplicates or teaching conflicts in Data Cleanup & Repairs.
+- Linking is manual and per-term. Use Data Cleanup & Repairs or Course Management to
   link/unlink sections.
 
 ## Tests
@@ -59,7 +60,7 @@ Run the import idempotency tests:
 
 ```bash
 npm test -- importIdentityUtils
-npm test -- importMergeRules
+npm test -- importPreprocessor
 ```
 
 Run the full suite:

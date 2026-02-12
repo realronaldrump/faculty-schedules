@@ -4,19 +4,19 @@ This guide is the primary reference for import maintenance after handoff.
 
 ## Import Surface Areas
 
-- Import UI and schema diagnostics: `/Users/davis/my-apps/faculty-schedules/src/components/administration/ImportWizard.jsx`
-- CLSS profile config (single-file maintenance target): `/Users/davis/my-apps/faculty-schedules/src/config/import/clss/default-profile.json`
-- CLSS contract parser: `/Users/davis/my-apps/faculty-schedules/src/utils/import/clss/parse-clss-file.js`
-- Schedule row extraction: `/Users/davis/my-apps/faculty-schedules/src/utils/importScheduleRowUtils.js`
-- Transaction API facade (stable): `/Users/davis/my-apps/faculty-schedules/src/utils/importTransactionUtils.js`
-- Transaction core implementation: `/Users/davis/my-apps/faculty-schedules/src/utils/import/core.js`
-- Data hygiene pipeline (legacy cleanup): `/Users/davis/my-apps/faculty-schedules/src/utils/data-hygiene/core.js`
+- Import UI and schema diagnostics: `src/components/administration/ImportWizard.jsx`
+- CLSS profile config (single-file maintenance target): `src/config/import/clss/default-profile.json`
+- CLSS contract parser: `src/utils/import/clss/parse-clss-file.js`
+- Schedule row extraction: `src/utils/importScheduleRowUtils.js`
+- Transaction API facade (stable): `src/utils/importTransactionUtils.js`
+- Transaction core implementation: `src/utils/import/core.js`
+- Data hygiene pipeline (legacy cleanup): `src/utils/data-hygiene/core.js`
 
 ## CLSS Change Procedure (Config-First)
 
 When Baylor CLSS export headers change, maintainers should only need to edit one file:
 
-1. Edit aliases in `/Users/davis/my-apps/faculty-schedules/src/config/import/clss/default-profile.json`.
+1. Edit aliases in `src/config/import/clss/default-profile.json`.
 2. Keep required fields intact:
    - `clss_id`, `course_code`, `section`, `crn`, `instructor`, `term`
 3. Run checks:
@@ -37,7 +37,7 @@ Fail-fast behavior is intentional: if required CLSS columns are missing, preview
 
 Directory parsing still lives in:
 
-- `/Users/davis/my-apps/faculty-schedules/src/utils/dataImportUtils.js`
+- `src/utils/dataImportUtils.js`
 
 If directory export headers change:
 
@@ -47,15 +47,15 @@ If directory export headers change:
 
 ## Legacy Cleanup and Canonical Model
 
-- Scan/repair UI: `/Users/davis/my-apps/faculty-schedules/src/components/administration/data-cleanup/DataCleanupRepairsPage.jsx`
-- Engine: `/Users/davis/my-apps/faculty-schedules/src/utils/data-hygiene/core.js`
+- Scan/repair UI: `src/components/administration/data-cleanup/DataCleanupRepairsPage.jsx`
+- Engine: `src/utils/data-hygiene/core.js`
 
 Data Cleanup & Repairs reports `legacyModelIssues` and can auto-fix safe legacy mirrors.
 
 ## Regression Test Targets
 
-- `/Users/davis/my-apps/faculty-schedules/src/utils/__tests__/clssProfileContract.test.js`
-- `/Users/davis/my-apps/faculty-schedules/src/utils/__tests__/dataImportUtils.test.js`
-- `/Users/davis/my-apps/faculty-schedules/src/utils/__tests__/importPreprocessor.test.js`
-- `/Users/davis/my-apps/faculty-schedules/src/utils/__tests__/importValidationUtils.test.js`
-- `/Users/davis/my-apps/faculty-schedules/src/utils/__tests__/legacyModelCleanup.test.js`
+- `src/utils/__tests__/clssProfileContract.test.js`
+- `src/utils/__tests__/dataImportUtils.test.js`
+- `src/utils/__tests__/importPreprocessor.test.js`
+- `src/utils/__tests__/importValidationUtils.test.js`
+- `src/utils/__tests__/legacyModelCleanup.test.js`

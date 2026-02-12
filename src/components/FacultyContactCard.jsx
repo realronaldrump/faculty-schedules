@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Mail, Phone, Building, BookOpen, Clock, GraduationCap, User, Wifi } from 'lucide-react';
+import { X, Mail, Phone, Building, BookOpen, Clock, GraduationCap, Wifi, ChevronDown } from 'lucide-react';
 import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { logUpdate } from '../utils/changeLogger';
@@ -7,9 +7,20 @@ import StudentWorkerScheduleView from './analytics/StudentWorkerScheduleView';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { formatTermFromCode, formatTermLabel, sortTerms } from '../utils/termUtils';
 import { resolveOfficeLocations } from '../utils/spaceUtils';
+import { parseTime } from '../utils/timeUtils';
 
 // Simple in-memory cache to avoid re-fetching schedules between openings
 const scheduleCache = new Map();
+const DAY_LABELS = Object.freeze({
+    M: 'Monday',
+    T: 'Tuesday',
+    W: 'Wednesday',
+    R: 'Thursday',
+    F: 'Friday',
+    S: 'Saturday',
+    U: 'Sunday',
+});
+const DAY_ORDER = ['M', 'T', 'W', 'R', 'F', 'S', 'U'];
 
 const formatPhoneNumber = (phoneStr) => {
     if (!phoneStr) return '-';
@@ -21,6 +32,149 @@ const formatPhoneNumber = (phoneStr) => {
         }
     }
     return phoneStr;
+};
+
+const normalizeValue = (value) => (value === undefined || value === null ? '' : String(value).trim());
+
+const isNoRoomLocation = (locationType = '') => {
+    const normalized = locationType.toLowerCase();
+    return normalized === 'no_room' || normalized === 'none';
+};
+
+const getScheduleLocation = (schedule) => {
+    if (!schedule) return '';
+    const locationType = normalizeValue(schedule.locationType).toLowerCase();
+    if (schedule.isOnline === true || locationType === 'virtual') {
+        return normalizeValue(schedule.locationLabel) || 'Online';
+    }
+    if (isNoRoomLocation(locationType)) {
+        return normalizeValue(schedule.locationLabel) || 'No Room Needed';
+    }
+
+    const canonicalSpaces = Array.isArray(schedule.spaceDisplayNames)
+        ? schedule.spaceDisplayNames.map((space) => normalizeValue(space)).filter(Boolean)
+        : [];
+    if (canonicalSpaces.length > 0) {
+        return Array.from(new Set(canonicalSpaces)).join('; ');
+    }
+
+    const legacyRoom = normalizeValue(schedule.Room || schedule.room);
+    return legacyRoom || '';
+};
+
+const parseDayCodes = (dayValue) => {
+    const raw = normalizeValue(dayValue).toUpperCase();
+    if (!raw) return [];
+    const matches = raw.match(/[MTWRFSU]/g);
+    return matches ? Array.from(new Set(matches)) : [];
+};
+
+const formatTimeLabel = (startTime, endTime, onlineMode = '') => {
+    const start = normalizeValue(startTime);
+    const end = normalizeValue(endTime);
+    if (start && end) return `${start} - ${end}`;
+    if (start || end) return start || end;
+    if (normalizeValue(onlineMode).toLowerCase() === 'asynchronous') {
+        return 'Asynchronous';
+    }
+    return 'Time TBD';
+};
+
+const buildMeetingRows = (schedule) => {
+    if (!schedule) return [];
+
+    const resolvedLocation = getScheduleLocation(schedule);
+    const location = resolvedLocation || 'Location TBD';
+    const onlineMode = normalizeValue(schedule.onlineMode);
+    const meetings = [];
+
+    if (Array.isArray(schedule.meetingPatterns) && schedule.meetingPatterns.length > 0) {
+        schedule.meetingPatterns.forEach((pattern) => {
+            const dayCode = normalizeValue(pattern?.day).toUpperCase();
+            meetings.push({
+                dayCode,
+                dayLabel: DAY_LABELS[dayCode] || dayCode || 'Unspecified day',
+                startTime: normalizeValue(pattern?.startTime),
+                endTime: normalizeValue(pattern?.endTime),
+                location,
+                timeLabel: formatTimeLabel(pattern?.startTime, pattern?.endTime, onlineMode),
+            });
+        });
+        return meetings;
+    }
+
+    const legacyStart = schedule['Start Time'] || schedule.startTime || '';
+    const legacyEnd = schedule['End Time'] || schedule.endTime || '';
+    const legacyDayCodes = parseDayCodes(
+        schedule.Day || schedule.day || schedule.days || schedule.meetingDays,
+    );
+
+    if (legacyDayCodes.length > 0) {
+        legacyDayCodes.forEach((dayCode) => {
+            meetings.push({
+                dayCode,
+                dayLabel: DAY_LABELS[dayCode] || dayCode,
+                startTime: normalizeValue(legacyStart),
+                endTime: normalizeValue(legacyEnd),
+                location,
+                timeLabel: formatTimeLabel(legacyStart, legacyEnd, onlineMode),
+            });
+        });
+        return meetings;
+    }
+
+    if (legacyStart || legacyEnd || resolvedLocation || onlineMode.toLowerCase() === 'asynchronous') {
+        meetings.push({
+            dayCode: '',
+            dayLabel: 'Unspecified day',
+            startTime: normalizeValue(legacyStart),
+            endTime: normalizeValue(legacyEnd),
+            location,
+            timeLabel: formatTimeLabel(legacyStart, legacyEnd, onlineMode),
+        });
+    }
+
+    return meetings;
+};
+
+const formatCredits = (value) => {
+    const raw = normalizeValue(value);
+    if (!raw) return '';
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric)) {
+        const displayValue = Number.isInteger(numeric) ? String(numeric) : String(numeric);
+        return `${displayValue} credit${numeric === 1 ? '' : 's'}`;
+    }
+    return raw.toLowerCase().includes('credit') ? raw : `${raw} credits`;
+};
+
+const sortMeetingRows = (rows = []) => {
+    return [...rows].sort((a, b) => {
+        const dayA = DAY_ORDER.indexOf(a.dayCode);
+        const dayB = DAY_ORDER.indexOf(b.dayCode);
+        const dayRankA = dayA === -1 ? 99 : dayA;
+        const dayRankB = dayB === -1 ? 99 : dayB;
+        if (dayRankA !== dayRankB) return dayRankA - dayRankB;
+
+        const startA = parseTime(a.startTime);
+        const startB = parseTime(b.startTime);
+        const startRankA = startA === null ? Number.MAX_SAFE_INTEGER : startA;
+        const startRankB = startB === null ? Number.MAX_SAFE_INTEGER : startB;
+        if (startRankA !== startRankB) return startRankA - startRankB;
+
+        return (a.location || '').localeCompare(b.location || '');
+    });
+};
+
+const getInstructionLabel = (course) => {
+    const instructionMethod = normalizeValue(course?.instructionMethod);
+    if (instructionMethod) return instructionMethod;
+    if (course?.isOnline) {
+        const mode = normalizeValue(course?.onlineMode);
+        return mode ? `Online (${mode})` : 'Online';
+    }
+    if (isNoRoomLocation(course?.locationType || '')) return 'No Room Needed';
+    return 'Not specified';
 };
 
 const FacultyContactCard = ({
@@ -39,12 +193,14 @@ const FacultyContactCard = ({
     const [baylorIdValue, setBaylorIdValue] = useState(contactPerson?.baylorId || '');
     const [baylorIdError, setBaylorIdError] = useState('');
     const [savingBaylorId, setSavingBaylorId] = useState(false);
+    const [expandedCourseKey, setExpandedCourseKey] = useState(null);
 
     // Keep local value in sync when opening different people
     useEffect(() => {
         setBaylorIdValue(contactPerson?.baylorId || '');
         setBaylorIdError('');
         setIsEditingBaylorId(false);
+        setExpandedCourseKey(null);
     }, [contactPerson?.id]);
 
     const getDisplayTerm = (term, termCode) => {
@@ -117,30 +273,137 @@ const FacultyContactCard = ({
         return externalSchedules;
     }, [contactPerson.courses, externalSchedules, personType]);
 
-    // Normalize, group, and sort courses by term for consistent display
-    const normalizedCourses = useMemo(() => {
-        if (!Array.isArray(sourceSchedules)) return [];
-        return sourceSchedules.map((item) => ({
-            courseCode: item.courseCode || item.Course || '',
-            courseTitle: item.courseTitle || item['Course Title'] || '',
-            section: item.section || item.Section || '',
-            term: getDisplayTerm(item.term || item.Term || '', item.termCode || item.termCodeAlt || ''),
-            credits: item.credits || item.Credits || ''
-        }));
-    }, [sourceSchedules, termConfigVersion]);
+    // Normalize, aggregate, and sort courses by term while retaining full schedule detail
+    const { coursesByTerm, sortedTerms, totalCourseCount } = useMemo(() => {
+        const termBuckets = new Map();
 
-    const coursesByTerm = normalizedCourses.reduce((acc, course) => {
-        const termKey = course.term || 'Other';
-        if (!acc[termKey]) acc[termKey] = [];
-        acc[termKey].push(course);
-        return acc;
-    }, {});
-    const sortedTerms = useMemo(() => {
-        const termsSet = new Set();
-        normalizedCourses.forEach(course => { if (course.term) termsSet.add(course.term); });
-        return sortTerms(Array.from(termsSet), termConfig);
-    }, [normalizedCourses, termConfigVersion]);
-    const hasCourses = normalizedCourses.length > 0;
+        if (Array.isArray(sourceSchedules)) {
+            sourceSchedules.forEach((item, index) => {
+                const courseCode = normalizeValue(item?.courseCode || item?.Course);
+                const courseTitle = normalizeValue(
+                    item?.courseTitle || item?.title || item?.['Course Title'] || item?.Title,
+                );
+                const section = normalizeValue(item?.section || item?.Section);
+                const term = getDisplayTerm(
+                    item?.term || item?.Term || '',
+                    item?.termCode || item?.termCodeAlt || '',
+                );
+                const termKey = term || 'Other';
+                const normalizedCodeKey = (courseCode || courseTitle || item?.id || `unknown-${index}`)
+                    .toString()
+                    .trim()
+                    .toUpperCase();
+                const normalizedSectionKey = (section || 'NO_SECTION')
+                    .toString()
+                    .trim()
+                    .toUpperCase();
+                const courseKey = `${normalizedCodeKey}|${normalizedSectionKey}`;
+
+                if (!termBuckets.has(termKey)) {
+                    termBuckets.set(termKey, new Map());
+                }
+
+                const termMap = termBuckets.get(termKey);
+                if (!termMap.has(courseKey)) {
+                    termMap.set(courseKey, {
+                        id: `${termKey}|${courseKey}`,
+                        term: termKey,
+                        courseCode,
+                        courseTitle,
+                        section,
+                        credits: item?.credits ?? item?.Credits ?? '',
+                        crn: normalizeValue(item?.crn || item?.CRN),
+                        instructionMethod: normalizeValue(
+                            item?.instructionMethod || item?.['Instruction Method'] || item?.['Inst. Method'],
+                        ),
+                        status: normalizeValue(item?.status || item?.Status),
+                        scheduleType: normalizeValue(item?.scheduleType || item?.['Schedule Type']),
+                        locationType: normalizeValue(item?.locationType).toLowerCase(),
+                        locationLabel: normalizeValue(item?.locationLabel),
+                        isOnline: item?.isOnline === true || normalizeValue(item?.locationType).toLowerCase() === 'virtual',
+                        onlineMode: normalizeValue(item?.onlineMode),
+                        meetings: [],
+                        _meetingKeys: new Set(),
+                    });
+                }
+
+                const aggregate = termMap.get(courseKey);
+                if (!aggregate.courseCode && courseCode) aggregate.courseCode = courseCode;
+                if (!aggregate.courseTitle && courseTitle) aggregate.courseTitle = courseTitle;
+                if (!aggregate.section && section) aggregate.section = section;
+                if (!normalizeValue(aggregate.credits) && normalizeValue(item?.credits ?? item?.Credits)) {
+                    aggregate.credits = item?.credits ?? item?.Credits;
+                }
+                if (!aggregate.crn) aggregate.crn = normalizeValue(item?.crn || item?.CRN);
+                if (!aggregate.instructionMethod) {
+                    aggregate.instructionMethod = normalizeValue(
+                        item?.instructionMethod || item?.['Instruction Method'] || item?.['Inst. Method'],
+                    );
+                }
+                if (!aggregate.status) aggregate.status = normalizeValue(item?.status || item?.Status);
+                if (!aggregate.scheduleType) {
+                    aggregate.scheduleType = normalizeValue(item?.scheduleType || item?.['Schedule Type']);
+                }
+                if (!aggregate.locationType) {
+                    aggregate.locationType = normalizeValue(item?.locationType).toLowerCase();
+                }
+                if (!aggregate.locationLabel) {
+                    aggregate.locationLabel = normalizeValue(item?.locationLabel);
+                }
+                if (!aggregate.onlineMode) aggregate.onlineMode = normalizeValue(item?.onlineMode);
+                if (item?.isOnline === true || normalizeValue(item?.locationType).toLowerCase() === 'virtual') {
+                    aggregate.isOnline = true;
+                }
+
+                const meetingRows = buildMeetingRows(item);
+                meetingRows.forEach((meeting) => {
+                    const dedupeKey = [
+                        meeting.dayCode,
+                        meeting.startTime,
+                        meeting.endTime,
+                        meeting.location,
+                        meeting.timeLabel,
+                    ].join('|');
+                    if (aggregate._meetingKeys.has(dedupeKey)) return;
+                    aggregate._meetingKeys.add(dedupeKey);
+                    aggregate.meetings.push(meeting);
+                });
+            });
+        }
+
+        const grouped = {};
+        termBuckets.forEach((termMap, termKey) => {
+            grouped[termKey] = Array.from(termMap.values())
+                .map((course) => {
+                    const meetingRows = sortMeetingRows(course.meetings);
+                    const { _meetingKeys, ...rest } = course;
+                    return { ...rest, meetings: meetingRows };
+                })
+                .sort((a, b) => {
+                    const aKey = `${a.courseCode || ''} ${a.section || ''}`.trim();
+                    const bKey = `${b.courseCode || ''} ${b.section || ''}`.trim();
+                    return aKey.localeCompare(bKey);
+                });
+        });
+
+        const termKeys = Array.from(termBuckets.keys());
+        const knownTerms = termKeys.filter((term) => term !== 'Other');
+        const sortedKnownTerms = sortTerms(knownTerms, termConfig);
+        const sorted = termKeys.includes('Other')
+            ? [...sortedKnownTerms, 'Other']
+            : sortedKnownTerms;
+        const total = Object.values(grouped).reduce(
+            (count, courses) => count + (Array.isArray(courses) ? courses.length : 0),
+            0,
+        );
+
+        return {
+            coursesByTerm: grouped,
+            sortedTerms: sorted,
+            totalCourseCount: total,
+        };
+    }, [sourceSchedules, termConfigVersion]);
+    const hasCourses = totalCourseCount > 0;
 
     const getRoleLabel = () => {
         if (personType === 'student') {
@@ -165,17 +428,6 @@ const FacultyContactCard = ({
             return `Dr. ${contactPerson.name}`;
         }
         return contactPerson.name;
-    };
-
-    const getIconForPersonType = () => {
-        switch (personType) {
-            case 'student':
-                return <GraduationCap size={20} />;
-            case 'staff':
-                return <User size={20} />;
-            default:
-                return <BookOpen size={20} />;
-        }
     };
 
     const validateBaylorId = (val) => {
@@ -435,7 +687,7 @@ const FacultyContactCard = ({
                     {personType !== 'student' && (
                         <div className="mt-4 flex items-center justify-center gap-2 rounded-lg bg-baylor-green/5 px-3 py-2 text-sm text-baylor-green">
                             <BookOpen size={16} />
-                            <span>{normalizedCourses.length} course{normalizedCourses.length !== 1 ? 's' : ''}</span>
+                            <span>{totalCourseCount} course{totalCourseCount !== 1 ? 's' : ''}</span>
                         </div>
                     )}
                 </div>
@@ -447,24 +699,12 @@ const FacultyContactCard = ({
                             <BookOpen size={20} />
                             Courses Teaching
                         </h4>
-                        {loadingSchedules && normalizedCourses.length === 0 ? (
+                        {loadingSchedules && totalCourseCount === 0 ? (
                             <div className="text-sm text-gray-500">Loading courses…</div>
                         ) : hasCourses ? (
                             <div className="space-y-6">
                                 {sortedTerms.map((term, tIdx) => {
-                                    const termCourses = (coursesByTerm[term] || []).slice().sort((a, b) => {
-                                        const aKey = `${a.courseCode || ''} ${a.section || ''}`.trim();
-                                        const bKey = `${b.courseCode || ''} ${b.section || ''}`.trim();
-                                        return aKey.localeCompare(bKey);
-                                    });
-                                    // Deduplicate within term by course code + section
-                                    const seen = new Set();
-                                    const uniqueTermCourses = termCourses.filter(c => {
-                                        const key = `${c.courseCode}|${c.section}`;
-                                        if (seen.has(key)) return false;
-                                        seen.add(key);
-                                        return true;
-                                    });
+                                    const termCourses = coursesByTerm[term] || [];
                                     return (
                                         <div key={term}>
                                             {tIdx > 0 && <div className="border-t border-gray-200 my-2"></div>}
@@ -472,30 +712,123 @@ const FacultyContactCard = ({
                                                 <span className="text-sm font-semibold text-gray-700">{term}</span>
                                             </div>
                                             <div className="space-y-3">
-                                                {uniqueTermCourses.map((course, index) => (
-                                                    <div key={`${course.courseCode}-${course.section}-${index}`} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                                                        <div className="flex justify-between items-start mb-1">
-                                                            <span className="font-semibold text-baylor-green text-sm">
-                                                                {course.courseCode}
-                                                            </span>
-                                                            {course.credits && (
-                                                                <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded">
-                                                                    {course.credits} credit{course.credits !== 1 ? 's' : ''}
-                                                                </span>
+                                                {termCourses.map((course) => {
+                                                    const isExpanded = expandedCourseKey === course.id;
+                                                    const detailPanelId = `course-detail-${course.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+                                                    const formattedCredits = formatCredits(course.credits);
+                                                    const instructionLabel = getInstructionLabel(course);
+                                                    return (
+                                                        <div key={course.id} className="overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setExpandedCourseKey((prev) => (prev === course.id ? null : course.id))}
+                                                                aria-expanded={isExpanded}
+                                                                aria-controls={detailPanelId}
+                                                                className="group w-full min-h-11 px-3 py-3 text-left transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-baylor-green/60 focus-visible:ring-offset-1 sm:px-4"
+                                                            >
+                                                                <div className="flex items-start justify-between gap-3">
+                                                                    <div className="min-w-0">
+                                                                        <div className="flex flex-wrap items-center gap-2">
+                                                                            <span className="text-sm font-semibold text-baylor-green break-words">
+                                                                                {course.courseCode || 'Course'}
+                                                                            </span>
+                                                                            {course.section && (
+                                                                                <span className="rounded bg-white px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                                                                                    Sec {course.section}
+                                                                                </span>
+                                                                            )}
+                                                                            {formattedCredits && (
+                                                                                <span className="rounded bg-white px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                                                                                    {formattedCredits}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        {course.courseTitle && (
+                                                                            <p className="mt-1 text-sm text-gray-700 break-words">
+                                                                                {course.courseTitle}
+                                                                            </p>
+                                                                        )}
+                                                                        <div className="mt-2 text-xs font-medium text-baylor-green/80">
+                                                                            {isExpanded ? 'Hide details' : 'View details'}
+                                                                        </div>
+                                                                    </div>
+                                                                    <ChevronDown
+                                                                        size={18}
+                                                                        className={`mt-0.5 shrink-0 text-baylor-green transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                                                        aria-hidden="true"
+                                                                    />
+                                                                </div>
+                                                            </button>
+
+                                                            {isExpanded && (
+                                                                <div id={detailPanelId} className="border-t border-gray-200 bg-white px-3 py-3 sm:px-4">
+                                                                    <div className="space-y-3">
+                                                                        <div>
+                                                                            <h5 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                                                                <Clock size={14} className="text-baylor-green" />
+                                                                                Schedule
+                                                                            </h5>
+                                                                            {course.meetings.length > 0 ? (
+                                                                                <ul className="mt-2 space-y-2">
+                                                                                    {course.meetings.map((meeting, idx) => (
+                                                                                        <li
+                                                                                            key={`${course.id}-meeting-${idx}-${meeting.dayCode}-${meeting.startTime}-${meeting.endTime}`}
+                                                                                            className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2 text-sm text-gray-700"
+                                                                                        >
+                                                                                            {`${meeting.dayLabel} • ${meeting.timeLabel} • ${meeting.location || 'Location TBD'}`}
+                                                                                        </li>
+                                                                                    ))}
+                                                                                </ul>
+                                                                            ) : (
+                                                                                <p className="mt-2 text-sm text-gray-500">
+                                                                                    No scheduled meeting times listed.
+                                                                                </p>
+                                                                            )}
+                                                                        </div>
+
+                                                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                                            <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
+                                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Term</p>
+                                                                                <p className="text-sm font-medium text-gray-700">{course.term || 'Other'}</p>
+                                                                            </div>
+                                                                            <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
+                                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Section</p>
+                                                                                <p className="text-sm font-medium text-gray-700">{course.section || '—'}</p>
+                                                                            </div>
+                                                                            <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
+                                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">CRN</p>
+                                                                                <p className="text-sm font-medium text-gray-700">{course.crn || '—'}</p>
+                                                                            </div>
+                                                                            <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
+                                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Credits</p>
+                                                                                <p className="text-sm font-medium text-gray-700">{formattedCredits || '—'}</p>
+                                                                            </div>
+                                                                            <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
+                                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Instruction</p>
+                                                                                <p className="text-sm font-medium text-gray-700">{instructionLabel}</p>
+                                                                            </div>
+                                                                            <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
+                                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Status</p>
+                                                                                <p className="text-sm font-medium text-gray-700">{course.status || 'Not specified'}</p>
+                                                                            </div>
+                                                                            {course.scheduleType && (
+                                                                                <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2 sm:col-span-2">
+                                                                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Schedule Type</p>
+                                                                                    <p className="text-sm font-medium text-gray-700">{course.scheduleType}</p>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
                                                             )}
                                                         </div>
-                                                        {course.courseTitle && (
-                                                            <p className="text-sm text-gray-700 mb-1">
-                                                                {course.courseTitle}
-                                                            </p>
-                                                        )}
-                                                        <div className="flex gap-4 text-xs text-gray-500">
-                                                            {course.section && (
-                                                                <span>Section: {course.section}</span>
-                                                            )}
-                                                        </div>
+                                                    );
+                                                })}
+                                                {termCourses.length === 0 && (
+                                                    <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-500">
+                                                        No courses listed for this term.
                                                     </div>
-                                                ))}
+                                                )}
                                             </div>
                                         </div>
                                     );

@@ -3234,10 +3234,12 @@ const buildPersonLegacyFixUpdates = (person = {}) => {
     person.externalIds && typeof person.externalIds === "object"
       ? { ...person.externalIds }
       : {};
+  let externalIdsChanged = false;
 
   if (hasNonEmptyValue(person.clssInstructorId)) {
     if (!hasNonEmptyValue(externalIds.clssInstructorId)) {
       externalIds.clssInstructorId = String(person.clssInstructorId).trim();
+      externalIdsChanged = true;
     }
     updates.clssInstructorId = deleteField();
     addTouched("clssInstructorId");
@@ -3245,9 +3247,10 @@ const buildPersonLegacyFixUpdates = (person = {}) => {
 
   if (hasNonEmptyValue(person.baylorId) && !hasNonEmptyValue(externalIds.baylorId)) {
     externalIds.baylorId = String(person.baylorId).trim();
+    externalIdsChanged = true;
   }
 
-  if (Object.keys(externalIds).length > 0) {
+  if (externalIdsChanged) {
     updates.externalIds = externalIds;
   }
 

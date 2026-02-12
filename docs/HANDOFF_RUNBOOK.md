@@ -56,8 +56,9 @@ If any command fails, fix before deploy.
 - Core implementation:
   - `/Users/davis/my-apps/faculty-schedules/src/utils/data-hygiene/core.js`
 - UI:
-  - `/Users/davis/my-apps/faculty-schedules/src/components/administration/DataHealthCheck.jsx`
-  - Step 2 runs full canonicalization (legacy cleanup + standardization + linking + location repair).
+  - `/Users/davis/my-apps/faculty-schedules/src/components/administration/data-cleanup/DataCleanupRepairsPage.jsx`
+  - One unified page now covers routine data checks, safe fixes, and rare repair tools.
+  - “Fix safe issues” runs full canonicalization (legacy cleanup + standardization + linking + location repair).
 
 ### C) Access/permission behavior
 
@@ -90,6 +91,7 @@ npm run deploy:indexes
 - Import Wizard loads and preview works for CLSS + directory test files.
 - CLSS diagnostics panel shows no missing required fields for known-good CLSS sample.
 - Data health scan runs and safe fix action succeeds.
+- Data Cleanup & Repairs page loads and Rare repair tools stay locked until explicitly unlocked.
 - Access Control page loads.
 - Temperature page loads and tab switching works.
 

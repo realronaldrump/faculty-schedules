@@ -10,8 +10,7 @@ import StudentWorkerAnalytics from "../analytics/StudentWorkerAnalytics.jsx";
 import { CoursesHub } from "../courses";
 import ImportWizard from "../administration/ImportWizard";
 import AppSettings from "../administration/AppSettings";
-import DataHygieneManager from "../administration/DataHygieneManager";
-import MaintenanceCenter from "../administration/MaintenanceCenter";
+import DataCleanupRepairsPage from "../administration/data-cleanup/DataCleanupRepairsPage";
 import BaylorSystems from "../resources/BaylorSystems";
 import BaylorAcronyms from "../administration/BaylorAcronyms";
 import CRNQualityTools from "../administration/CRNQualityTools";
@@ -164,13 +163,13 @@ const PageRouter = ({ currentPage, loading }) => {
     case "admin/data-hygiene":
       return (
         <ProtectedContent pageId="admin/data-hygiene">
-          <DataHygieneManager />
+          <DataCleanupRepairsPage initialMode="routine" />
         </ProtectedContent>
       );
     case "admin/maintenance":
       return (
         <ProtectedContent pageId="admin/maintenance">
-          <MaintenanceCenter />
+          <DataCleanupRepairsPage initialMode="advanced" />
         </ProtectedContent>
       );
     case "facilities/spaces":

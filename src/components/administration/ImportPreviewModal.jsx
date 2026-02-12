@@ -731,7 +731,7 @@ const ImportPreviewModal = ({
                   </div>
                   <p className="text-xs text-yellow-700 mt-1">
                     {collisionSummary.total} schedule identity collisions were detected (same CRN/section/meeting/room).
-                    Imports will update the preferred record for each key. Use Data Health Check or Maintenance Center for follow-up cleanup.
+                    Imports will update the preferred record for each key. Use Data Cleanup & Repairs for follow-up cleanup.
                   </p>
                   {collisionSummary.byType && Object.keys(collisionSummary.byType).length > 0 && (
                     <div className="mt-2 text-xs text-yellow-700">

@@ -47,10 +47,10 @@ If directory export headers change:
 
 ## Legacy Cleanup and Canonical Model
 
-- Scan: `/Users/davis/my-apps/faculty-schedules/src/components/administration/DataHealthCheck.jsx`
+- Scan/repair UI: `/Users/davis/my-apps/faculty-schedules/src/components/administration/data-cleanup/DataCleanupRepairsPage.jsx`
 - Engine: `/Users/davis/my-apps/faculty-schedules/src/utils/data-hygiene/core.js`
 
-Data Health Check now reports `legacyModelIssues` and can auto-fix safe legacy mirrors.
+Data Cleanup & Repairs reports `legacyModelIssues` and can auto-fix safe legacy mirrors.
 
 ## Regression Test Targets
 

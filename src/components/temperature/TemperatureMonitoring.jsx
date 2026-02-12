@@ -162,6 +162,8 @@ const buildImportItemMergeKey = (item) => {
   return `name:${fileName}`;
 };
 
+const DAY_CACHE_FETCH_CONCURRENCY = 20;
+
 const toMillis = (value) => {
   if (!value) return 0;
   if (typeof value?.toMillis === "function") return value.toMillis();
@@ -230,6 +232,15 @@ const loadBuildingScopedDocs = async ({
     throw new Error(`Failed to query ${collectionName} for building.`);
   }
   return mergeDocSnapshots(successfulSnapshots);
+};
+
+const chunkArray = (items = [], size = 1) => {
+  if (!Array.isArray(items) || items.length === 0 || size <= 0) return [];
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
 };
 
 const TemperatureMonitoring = () => {
@@ -2255,6 +2266,45 @@ const TemperatureMonitoring = () => {
     }
   };
 
+  const hydrateDeviceDayCache = async ({
+    deviceId,
+    dateKeys,
+    dayDocCache,
+  }) => {
+    if (!deviceId || !Array.isArray(dateKeys) || dateKeys.length === 0) return;
+
+    const uniqueDates = Array.from(new Set(dateKeys.filter(Boolean)));
+    const uncachedDocIds = uniqueDates
+      .map((dateKey) => toDeviceDayId(deviceId, dateKey))
+      .filter((docId) => !dayDocCache.has(docId));
+    if (uncachedDocIds.length === 0) return;
+
+    const chunks = chunkArray(uncachedDocIds, DAY_CACHE_FETCH_CONCURRENCY);
+    for (const docIdChunk of chunks) {
+      await Promise.all(
+        docIdChunk.map(async (docId) => {
+          const daySnap = await getDoc(doc(db, "temperatureDeviceReadings", docId));
+          if (daySnap.exists()) {
+            const data = daySnap.data();
+            const samples = data?.samples || {};
+            dayDocCache.set(docId, {
+              exists: true,
+              samples,
+              sampleCount:
+                Number(data?.sampleCount) || Object.keys(samples).length,
+            });
+            return;
+          }
+          dayDocCache.set(docId, {
+            exists: false,
+            samples: {},
+            sampleCount: 0,
+          });
+        }),
+      );
+    }
+  };
+
   const handleImport = async () => {
     if (!selectedBuilding || !buildingSettings) return;
     if (importItems.length === 0) return;
@@ -2428,6 +2478,12 @@ const TemperatureMonitoring = () => {
             rawLocal: sample.localTimestamp,
             utc: utcDate ? Timestamp.fromDate(utcDate) : null,
           };
+        });
+
+        await hydrateDeviceDayCache({
+          deviceId,
+          dateKeys: Object.keys(samplesByDate),
+          dayDocCache,
         });
 
         const updatedDates = new Set();

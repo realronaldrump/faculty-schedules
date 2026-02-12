@@ -6,7 +6,7 @@ This app now targets canonical storage shapes across imports and UI reads.
 
 1. Write canonical fields only.
 2. Treat legacy mirrored fields as migration targets, not source of truth.
-3. Use Data Health Check for legacy cleanup.
+3. Use Data Cleanup & Repairs for legacy cleanup.
 
 ## Canonical Schedule Fields (Key Examples)
 
@@ -65,11 +65,11 @@ Profile source:
 
 ## Migration/Cleanup Path
 
-Run Data Health Check:
+Run Data Cleanup & Repairs:
 
-- `/Users/davis/my-apps/faculty-schedules/src/components/administration/DataHealthCheck.jsx`
+- `/Users/davis/my-apps/faculty-schedules/src/components/administration/data-cleanup/DataCleanupRepairsPage.jsx`
 
-Step 2 in Data Health Check now runs full canonicalization (not just duplicates):
+“Fix safe issues” now runs full canonicalization (not just duplicates):
 
 - legacy mirror cleanup
 - standardization pass

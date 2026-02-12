@@ -71,6 +71,11 @@ const hasPersonCreateIdentifier = (personData) => {
   return Boolean(email || baylorId || clssInstructorId);
 };
 
+const normalizeProgramCode = (value) => {
+  if (value === undefined || value === null) return "";
+  return String(value).trim().toUpperCase();
+};
+
 const usePeopleOperations = () => {
   const {
     rawPeople,
@@ -944,8 +949,10 @@ const usePeopleOperations = () => {
 
       try {
         const now = new Date().toISOString();
+        const normalizedCode = normalizeProgramCode(programInput.code);
         const programData = {
           name: normalizedName,
+          code: normalizedCode,
           updIds: [],
           createdAt: now,
           updatedAt: now,
@@ -985,7 +992,7 @@ const usePeopleOperations = () => {
 
   // Handle program update (including rename)
   const handleProgramUpdate = useCallback(
-    async (programToUpdate, newName) => {
+    async (programToUpdate, newName, newCode = undefined) => {
       if (!canCreateProgram()) {
         showNotification(
           "warning",
@@ -1031,11 +1038,28 @@ const usePeopleOperations = () => {
       try {
         const now = new Date().toISOString();
         const programRef = doc(db, COLLECTIONS.PROGRAMS, programToUpdate.id);
+        const normalizedCurrentCode = normalizeProgramCode(programToUpdate?.code);
+        const hasCodeOverride = newCode !== undefined;
+        const normalizedCode = hasCodeOverride
+          ? normalizeProgramCode(newCode)
+          : normalizedCurrentCode;
+        const hasNameChange =
+          normalizeProgramName(programToUpdate.name) !== normalizedName;
+        const hasCodeChange = hasCodeOverride
+          ? normalizedCode !== normalizedCurrentCode
+          : false;
+
+        if (!hasNameChange && !hasCodeChange) {
+          return { id: programToUpdate.id, name: normalizedName };
+        }
 
         const updateData = {
           name: normalizedName,
           updatedAt: now,
         };
+        if (hasCodeOverride) {
+          updateData.code = normalizedCode;
+        }
 
         await updateDoc(programRef, updateData);
 
@@ -1044,7 +1068,7 @@ const usePeopleOperations = () => {
           COLLECTIONS.PROGRAMS,
           programToUpdate.id,
           updateData,
-          { name: programToUpdate.name },
+          { name: programToUpdate.name, code: programToUpdate.code || "" },
           "usePeopleOperations - handleProgramUpdate",
         );
 
@@ -1053,9 +1077,17 @@ const usePeopleOperations = () => {
         showNotification(
           "success",
           "Program Updated",
-          `Program renamed to "${normalizedName}" successfully.`,
+          hasNameChange && hasCodeChange
+            ? `Program "${normalizedName}" name and code updated successfully.`
+            : hasCodeChange
+              ? `Program code for "${normalizedName}" updated successfully.`
+              : `Program renamed to "${normalizedName}" successfully.`,
         );
-        return { id: programToUpdate.id, ...updateData };
+        return {
+          id: programToUpdate.id,
+          ...updateData,
+          ...(hasCodeOverride ? { code: normalizedCode } : {}),
+        };
       } catch (error) {
         console.error("❌ Error updating program:", error);
         showNotification(

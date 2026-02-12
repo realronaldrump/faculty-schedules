@@ -48,6 +48,7 @@ const ProgramManagement = ({ embedded = false }) => {
   const [searchText, setSearchText] = useState("");
   const [showCreateProgram, setShowCreateProgram] = useState(false);
   const [newProgramName, setNewProgramName] = useState("");
+  const [newProgramCode, setNewProgramCode] = useState("");
   const [isCreatingProgram, setIsCreatingProgram] = useState(false);
   const [draggedFaculty, setDraggedFaculty] = useState(null);
   const [dragOverProgram, setDragOverProgram] = useState(null);
@@ -56,6 +57,9 @@ const ProgramManagement = ({ embedded = false }) => {
   const [editingProgramName, setEditingProgramName] = useState(null);
   const [editNameValue, setEditNameValue] = useState("");
   const [isUpdatingName, setIsUpdatingName] = useState(false);
+  const [editingProgramCode, setEditingProgramCode] = useState(null);
+  const [editCodeValue, setEditCodeValue] = useState("");
+  const [isUpdatingCode, setIsUpdatingCode] = useState(false);
   const [selectedProgramFilter, setSelectedProgramFilter] = useState("all");
   const [programToDelete, setProgramToDelete] = useState(null);
   const [isDeletingProgram, setIsDeletingProgram] = useState(false);
@@ -512,6 +516,51 @@ const ProgramManagement = ({ embedded = false }) => {
     }
   };
 
+  const startEditingProgramCode = (program) => {
+    if (!canEditHere) {
+      showNotification(
+        "warning",
+        "Permission Denied",
+        "You do not have permission to edit program codes.",
+      );
+      return;
+    }
+
+    setEditingProgramCode(program.programId || program.name);
+    setEditCodeValue(String(program.rawProgram?.code || ""));
+  };
+
+  const saveProgramCode = async (program) => {
+    const currentCode = String(program.rawProgram?.code || "")
+      .trim()
+      .toUpperCase();
+    const nextCode = (editCodeValue || "").trim().toUpperCase();
+
+    if (nextCode === currentCode) {
+      setEditingProgramCode(null);
+      setEditCodeValue("");
+      return;
+    }
+
+    setIsUpdatingCode(true);
+    const result = await handleProgramUpdate(
+      program.rawProgram || { id: program.programId, name: program.name },
+      program.name,
+      nextCode,
+    );
+    setIsUpdatingCode(false);
+
+    if (result) {
+      setEditingProgramCode(null);
+      setEditCodeValue("");
+    }
+  };
+
+  const cancelEditingProgramCode = () => {
+    setEditingProgramCode(null);
+    setEditCodeValue("");
+  };
+
   // Cancel editing program name
   const cancelEditingProgramName = () => {
     setEditingProgramName(null);
@@ -560,9 +609,13 @@ const ProgramManagement = ({ embedded = false }) => {
 
     setIsCreatingProgram(true);
     try {
-      const created = await handleProgramCreate({ name: programName });
+      const created = await handleProgramCreate({
+        name: programName,
+        code: newProgramCode,
+      });
       if (created) {
         setNewProgramName("");
+        setNewProgramCode("");
         setShowCreateProgram(false);
       }
     } catch (error) {
@@ -822,10 +875,15 @@ const ProgramManagement = ({ embedded = false }) => {
               const isDragOver = dragOverProgram === programName;
               const isExpanded = expandedPrograms.has(programName);
               const isEditingName = editingProgramName === programName;
+              const isEditingCode =
+                editingProgramCode === (program.programId || program.name);
               const facultyCount = program.faculty.length;
               const displayFaculty = isExpanded
                 ? program.faculty
                 : program.faculty.slice(0, 4);
+              const programCode = String(program.rawProgram?.code || "")
+                .trim()
+                .toUpperCase();
 
               return (
                 <div
@@ -887,6 +945,62 @@ const ProgramManagement = ({ embedded = false }) => {
                             )}
                           </div>
                         )}
+
+                        <div className="mt-2">
+                          {isEditingCode ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-gray-400 uppercase tracking-wide">
+                                Code
+                              </span>
+                              <input
+                                type="text"
+                                value={editCodeValue}
+                                onChange={(e) => setEditCodeValue(e.target.value)}
+                                className="w-24 px-2 py-1 text-xs font-mono uppercase border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#154734]"
+                                maxLength={12}
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") saveProgramCode(program);
+                                  if (e.key === "Escape")
+                                    cancelEditingProgramCode();
+                                }}
+                              />
+                              <button
+                                onClick={() => saveProgramCode(program)}
+                                disabled={isUpdatingCode}
+                                className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
+                                title="Save program code"
+                              >
+                                <Save size={14} />
+                              </button>
+                              <button
+                                onClick={cancelEditingProgramCode}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Cancel editing program code"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-gray-400 uppercase tracking-wide">
+                                Code
+                              </span>
+                              <code className="text-xs text-gray-500">
+                                {programCode || "None"}
+                              </code>
+                              {canEditHere && (
+                                <button
+                                  onClick={() => startEditingProgramCode(program)}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-[#154734]"
+                                  title="Edit program code"
+                                >
+                                  <Edit size={12} />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
 
                         {/* Stats */}
                         <div className="flex items-center gap-3 mt-2">
@@ -1304,6 +1418,24 @@ const ProgramManagement = ({ embedded = false }) => {
               />
               <p className="mt-2 text-xs text-gray-500">
                 Program names must be unique and cannot be "Unassigned".
+              </p>
+
+              <label className="block text-sm font-medium text-gray-700 mt-4 mb-2">
+                Program Code (optional)
+              </label>
+              <input
+                type="text"
+                value={newProgramCode}
+                onChange={(e) => setNewProgramCode(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#154734] focus:border-transparent font-mono uppercase"
+                placeholder="Example: ADM"
+                maxLength={12}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") createNewProgram();
+                }}
+              />
+              <p className="mt-2 text-xs text-gray-500">
+                Rarely used, but available for exports and filters.
               </p>
             </div>
 

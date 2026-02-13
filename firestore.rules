@@ -195,6 +195,11 @@ service cloud.firestore {
       );
     }
 
+    function isActivityOwner() {
+      return isSignedIn() &&
+        request.auth.uid == 'fjQuh4iAMFYi8URf35Yv5RRijKw2';
+    }
+
     // Admin-only access for sensitive operations
     function canWrite() {
       return isAdmin();
@@ -382,6 +387,28 @@ service cloud.firestore {
       allow create: if canWrite() || isSelfProfileCreateAllowed(userId);
       allow update: if canWrite() || isSelfProfileUpdateAllowed(userId);
       allow delete: if canWrite();
+    }
+
+    // Owner-only activity telemetry
+    match /userPresence/{userId} {
+      allow read: if isActivityOwner();
+      allow create, update: if isSignedIn() &&
+        request.auth.uid == userId &&
+        request.resource.data.uid == request.auth.uid;
+      allow delete: if false;
+    }
+
+    match /userActivityEvents/{id} {
+      allow read: if isActivityOwner();
+      allow create: if isSignedIn() &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.pageId is string;
+      allow update, delete: if false;
+    }
+
+    match /userActivityDaily/{id} {
+      allow read: if isActivityOwner();
+      allow write: if false;
     }
 
     // People collection (faculty, staff, adjunct, students): granular permissions

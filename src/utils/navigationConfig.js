@@ -20,6 +20,7 @@ import {
   Sparkles,
   Target,
   Clock,
+  Activity,
 } from "lucide-react";
 
 export const navigationItems = [
@@ -340,6 +341,16 @@ export const navigationItems = [
         adminOnly: true,
         description: "Review recent updates.",
         icon: Clock,
+      },
+      {
+        id: "user-activity",
+        label: "User Activity",
+        path: "admin/user-activity",
+        canonicalId: "admin/user-activity",
+        adminOnly: true,
+        ownerOnly: true,
+        description: "Owner-only timeline of in-app user activity.",
+        icon: Activity,
       },
       {
         id: "data-hygiene",

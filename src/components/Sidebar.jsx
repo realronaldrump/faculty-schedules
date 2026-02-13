@@ -24,7 +24,7 @@ const Sidebar = ({
   togglePinPage,
 }) => {
   const [expandedSections, setExpandedSections] = useState([]); // Default expanded sections
-  const { canAccess, userProfile, isAdmin } = useAuth();
+  const { canAccess, userProfile, isAdmin, isActivityOwner } = useAuth();
 
   const toggleSection = (sectionId) => {
     setExpandedSections((prev) =>
@@ -73,6 +73,7 @@ const Sidebar = ({
   const shouldHideForRole = (item) => {
     // Hide adminOnly items from non-admins
     if (item?.adminOnly && !isAdmin) return true;
+    if (item?.ownerOnly && !isActivityOwner) return true;
     if (item?.hidden) return true;
     const hiddenRoles = item?.permissions?.hideFromRoles;
     if (!hiddenRoles || hiddenRoles.length === 0) return false;

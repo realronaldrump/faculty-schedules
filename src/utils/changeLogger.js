@@ -6,7 +6,7 @@
  */
 
 import { collection, addDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { auth, db } from '../firebase';
 
 /**
  * Log a data change to the database
@@ -22,6 +22,13 @@ import { db } from '../firebase';
  */
 export const logChange = async (changeData) => {
   try {
+    const currentUser = auth.currentUser;
+    const actor = {
+      uid: currentUser?.uid || "system",
+      email: currentUser?.email || null,
+      displayName: currentUser?.displayName || null,
+    };
+
     const logEntry = {
       timestamp: new Date().toISOString(),
       action: changeData.action,
@@ -32,7 +39,8 @@ export const logChange = async (changeData) => {
       originalData: changeData.originalData || null,
       source: changeData.source || 'Unknown',
       metadata: changeData.metadata || {},
-      userId: 'system' // For now, since no user authentication
+      userId: actor.uid,
+      actor,
     };
 
     await addDoc(collection(db, 'changeLog'), logEntry);
@@ -51,6 +59,13 @@ export const logChange = async (changeData) => {
  */
 export const logBatchChanges = async (changes, batchDescription, source) => {
   try {
+    const currentUser = auth.currentUser;
+    const actor = {
+      uid: currentUser?.uid || "system",
+      email: currentUser?.email || null,
+      displayName: currentUser?.displayName || null,
+    };
+
     const batchLogEntry = {
       timestamp: new Date().toISOString(),
       action: 'BATCH_OPERATION',
@@ -61,7 +76,8 @@ export const logBatchChanges = async (changes, batchDescription, source) => {
         changesCount: changes.length,
         changes: changes
       },
-      userId: 'system'
+      userId: actor.uid,
+      actor,
     };
 
     await addDoc(collection(db, 'changeLog'), batchLogEntry);

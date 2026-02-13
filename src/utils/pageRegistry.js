@@ -27,6 +27,7 @@ export function registerNavigationPages(navigationItems = []) {
         sourceId: item?.id || item?.path || item?.label || pageId,
         path: item?.path,
         accessId: item?.accessId,
+        ownerOnly: item?.ownerOnly === true,
       };
 
       registeredNavigationEntries.push(entry);
@@ -49,6 +50,7 @@ export function registerNavigationPages(navigationItems = []) {
             sourceId: entry.sourceId,
             path: entry.path,
             accessId: entry.accessId,
+            ownerOnly: entry.ownerOnly,
           });
           existing.aliases = aliases;
         }

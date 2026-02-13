@@ -7,7 +7,7 @@ import { navigationItems } from "../utils/navigationConfig";
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { user, userProfile, canAccess, isAdmin } = useAuth();
+  const { user, userProfile, canAccess, isAdmin, isActivityOwner } = useAuth();
   const { pinnedPages, togglePinPage, isPinned } = useUI();
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -35,13 +35,14 @@ const Dashboard = () => {
     (item) => {
       if (!item) return true;
       if (item?.adminOnly && !isAdmin) return true;
+      if (item?.ownerOnly && !isActivityOwner) return true;
       if (item?.hidden) return true;
       const hiddenRoles = item?.permissions?.hideFromRoles;
       if (!hiddenRoles || hiddenRoles.length === 0) return false;
       if (userRoles.length === 0) return false;
       return userRoles.some((role) => hiddenRoles.includes(role));
     },
-    [isAdmin, userRoles],
+    [isActivityOwner, isAdmin, userRoles],
   );
 
   const hasAccess = useCallback(

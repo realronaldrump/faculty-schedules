@@ -24,6 +24,7 @@ import {
 import { logCreate, logUpdate } from "../utils/changeLogger";
 import {
   getAllRegisteredPageIds,
+  getRegisteredPageMeta,
   getRegisteredNavigationEntries,
 } from "../utils/pageRegistry";
 import {
@@ -37,6 +38,7 @@ import {
   isUserDisabled,
   canAccessPage,
 } from "../utils/authz";
+import { isActivityOwnerUid, isOwnerOnlyPageId } from "../utils/activityOwner";
 
 const AuthContext = createContext(null);
 
@@ -361,17 +363,34 @@ export const AuthProvider = ({ children }) => {
   };
 
   const getAllPageIds = () => {
+    const isOwner = isActivityOwnerUid(user?.uid);
+    const fromMeta = getRegisteredPageMeta();
+    if (Array.isArray(fromMeta) && fromMeta.length > 0) {
+      return fromMeta
+        .filter((entry) => !entry?.ownerOnly || isOwner)
+        .map((entry) => entry.id);
+    }
+
     const fromRegistry = getAllRegisteredPageIds();
-    return Array.isArray(fromRegistry) ? fromRegistry : [];
+    if (!Array.isArray(fromRegistry)) return [];
+    return fromRegistry.filter((pageId) =>
+      isOwner ? true : !isOwnerOnlyPageId(pageId),
+    );
   };
 
   const getAllNavigationEntries = () => {
     const fromRegistry = getRegisteredNavigationEntries();
-    return Array.isArray(fromRegistry) ? fromRegistry : [];
+    if (!Array.isArray(fromRegistry)) return [];
+    const isOwner = isActivityOwnerUid(user?.uid);
+    return fromRegistry.filter((entry) => !entry?.ownerOnly || isOwner);
   };
 
-  const canAccess = (pageId) =>
-    canAccessPage({ userProfile, rolePermissions, pageId });
+  const canAccess = (pageId) => {
+    if (!isActivityOwnerUid(user?.uid) && isOwnerOnlyPageId(pageId)) {
+      return false;
+    }
+    return canAccessPage({ userProfile, rolePermissions, pageId });
+  };
 
   const value = {
     user,
@@ -389,6 +408,7 @@ export const AuthProvider = ({ children }) => {
     isActive: isUserActive(userProfile),
     isDisabled: isUserDisabled(userProfile),
     isAdmin: isUserAdmin(userProfile),
+    isActivityOwner: isActivityOwnerUid(user?.uid),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

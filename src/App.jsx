@@ -9,7 +9,7 @@
  * Current size: ~600 lines (focused on layout, routing, and navigation)
  */
 
-import React, { useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import PageRouter from "./components/app/PageRouter.jsx";
@@ -21,6 +21,7 @@ import { TutorialOverlay } from "./components/help";
 import { useAuth } from "./contexts/AuthContext.jsx";
 import { useUI } from "./contexts/UIContext.jsx";
 import { useSchedules } from "./contexts/ScheduleContext.jsx";
+import useUserActivityTracker from "./hooks/useUserActivityTracker";
 import { registerNavigationPages } from "./utils/pageRegistry";
 import { navigationItems } from "./utils/navigationConfig";
 
@@ -43,7 +44,8 @@ const MAINTENANCE_UNTIL = "2025-07-03T08:00:00";
 
 function App() {
   // Context hooks
-  const { signOut, isAdmin } = useAuth();
+  const { signOut, isAdmin, canAccess, isActivityOwner, userProfile } =
+    useAuth();
   const {
     selectedSemester,
     setSelectedSemester,
@@ -83,6 +85,56 @@ function App() {
     return path === "" ? "dashboard" : path;
   }, [location.pathname]);
 
+  const normalizeRoles = (roles) => {
+    if (Array.isArray(roles)) return roles.filter(Boolean);
+    if (roles && typeof roles === "object") {
+      return Object.keys(roles).filter((key) => roles[key]);
+    }
+    if (typeof roles === "string" && roles.trim()) return [roles.trim()];
+    return [];
+  };
+
+  const userRoles = useMemo(
+    () => normalizeRoles(userProfile?.roles),
+    [userProfile?.roles],
+  );
+
+  const shouldHideNavItem = useCallback(
+    (item) => {
+      if (!item) return true;
+      if (item.adminOnly && !isAdmin) return true;
+      if (item.ownerOnly && !isActivityOwner) return true;
+      if (item.hidden) return true;
+      const hiddenRoles = item.permissions?.hideFromRoles;
+      if (!Array.isArray(hiddenRoles) || hiddenRoles.length === 0) return false;
+      if (userRoles.length === 0) return false;
+      return userRoles.some((role) => hiddenRoles.includes(role));
+    },
+    [isActivityOwner, isAdmin, userRoles],
+  );
+
+  const activeSection = useMemo(() => {
+    if (!currentPage) return null;
+    return (
+      navigationItems.find((item) => {
+        if (item.path && item.path === currentPage) return true;
+        if (item.children) {
+          return item.children.some((child) => child.path === currentPage);
+        }
+        return false;
+      }) || null
+    );
+  }, [currentPage]);
+
+  const visibleActiveSectionChildren = useMemo(() => {
+    if (!activeSection?.children) return [];
+    return activeSection.children.filter((child) => {
+      if (shouldHideNavItem(child)) return false;
+      const accessId = child.accessId || child.path || child.id;
+      return accessId ? canAccess(accessId) : true;
+    });
+  }, [activeSection?.children, canAccess, shouldHideNavItem]);
+
   const termMetaByLabel = useMemo(() => {
     const map = new Map();
     (termOptions || []).forEach((term) => {
@@ -117,6 +169,11 @@ function App() {
     }
   }, []);
 
+  useUserActivityTracker({
+    currentPage,
+    isAuthenticated,
+  });
+
   // Click outside handler for semester dropdown
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -150,54 +207,25 @@ function App() {
     const homeCrumb = { label: "Home", path: "dashboard" };
     crumbs.push(homeCrumb);
 
-    const section = getActiveSection();
-    if (!section || currentPage === "dashboard") return crumbs;
+    if (!activeSection || currentPage === "dashboard") return crumbs;
 
     const sectionCrumb = {
-      label: section.label,
+      label: activeSection.label,
       path:
-        section.children && section.children.length > 0
-          ? section.children[0].path
-          : section.path || null,
+        activeSection.children && activeSection.children.length > 0
+          ? activeSection.children[0].path
+          : activeSection.path || null,
     };
     crumbs.push(sectionCrumb);
 
-    const subsection = section.children?.find(
+    const subsection = activeSection.children?.find(
       (child) => child.path === currentPage,
     );
-    if (subsection && subsection.label !== section.label) {
+    if (subsection && subsection.label !== activeSection.label) {
       crumbs.push({ label: subsection.label, path: null });
     }
 
     return crumbs;
-  };
-
-  // Get active section for sub-navigation
-  const getActiveSection = () => {
-    if (!currentPage) return null;
-    return (
-      navigationItems.find((item) => {
-        if (item.path && item.path === currentPage) return true;
-        if (item.children) {
-          return item.children.some((child) => child.path === currentPage);
-        }
-        return false;
-      }) || null
-    );
-  };
-
-  const getCanonicalPageId = () => {
-    if (!currentPage) return currentPage;
-    for (const item of navigationItems) {
-      if (item.path && item.path === currentPage) {
-        return item.canonicalId || item.path;
-      }
-      if (item.children) {
-        const child = item.children.find((c) => c.path === currentPage);
-        if (child) return child.canonicalId || child.path;
-      }
-    }
-    return currentPage;
   };
 
   // ==================== RENDER ====================
@@ -400,11 +428,10 @@ function App() {
           </div>
 
           {/* Section Sub-navigation */}
-          {getActiveSection()?.children &&
-            getActiveSection().children.length > 0 && (
+          {visibleActiveSectionChildren.length > 0 && (
               <div className="px-4 md:px-6 pb-2">
                 <div className="flex flex-wrap gap-2">
-                  {getActiveSection().children.map((child) => (
+                  {visibleActiveSectionChildren.map((child) => (
                     <button
                       key={child.id}
                       onClick={() => handleNavigate(child.path)}

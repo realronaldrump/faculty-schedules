@@ -16,14 +16,18 @@ import BaylorAcronyms from "../administration/BaylorAcronyms";
 import CRNQualityTools from "../administration/CRNQualityTools";
 import RecentChangesPage from "../administration/RecentChangesPage";
 import AdminDataExportsPage from "../administration/AdminDataExportsPage.jsx";
+import UserActivityPage from "../administration/UserActivityPage.jsx";
 import LiveView from "../LiveView";
 import FacilitiesHub from "../facilities/FacilitiesHub";
 import OutlookRoomExport from "../tools/OutlookRoomExport.jsx";
 import RoomGridGenerator from "../administration/RoomGridGenerator.jsx";
 import AccessControl from "../administration/AccessControl.jsx";
 import { TutorialPage } from "../help";
+import { useAuth } from "../../contexts/AuthContext.jsx";
 
 const PageRouter = ({ currentPage, loading }) => {
+  const { isActivityOwner } = useAuth();
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -160,6 +164,18 @@ const PageRouter = ({ currentPage, loading }) => {
         <ProtectedContent pageId="admin/recent-changes">
           <RecentChangesPage />
         </ProtectedContent>
+      );
+    case "admin/user-activity":
+      return (
+        isActivityOwner ? (
+          <ProtectedContent pageId="admin/user-activity">
+            <UserActivityPage />
+          </ProtectedContent>
+        ) : (
+          <ProtectedContent pageId="dashboard">
+            <Dashboard />
+          </ProtectedContent>
+        )
       );
     case "admin/data-hygiene":
       return (

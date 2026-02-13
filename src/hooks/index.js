@@ -5,3 +5,4 @@ export { default as useDirectoryHandlers } from './useDirectoryHandlers';
 // CRUD operation hooks (extracted from App.jsx)
 export { default as useScheduleOperations } from './useScheduleOperations';
 export { default as usePeopleOperations } from './usePeopleOperations';
+export { default as useUserActivityTracker } from './useUserActivityTracker';

@@ -517,7 +517,7 @@ const FacultyContactCard = ({
         : (officeLocations[0] || 'Not specified');
 
     return (
-        <div className="fixed inset-0 z-50 bg-slate-900/55 backdrop-blur-[2px] p-3 sm:p-6" onClick={onClose}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 backdrop-blur-[2px] p-3 sm:p-6" onClick={onClose}>
             <div
                 className={`relative mx-auto w-full ${cardWidthClass} rounded-2xl border border-gray-200 bg-white shadow-2xl max-h-[92vh] overflow-y-auto`}
                 onClick={e => e.stopPropagation()}

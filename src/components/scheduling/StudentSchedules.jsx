@@ -10,7 +10,6 @@ import {
   Clock,
   Briefcase,
   Download,
-  X,
 } from "lucide-react";
 import MultiSelectDropdown from "../MultiSelectDropdown";
 import FacultyContactCard from "../FacultyContactCard";
@@ -807,23 +806,11 @@ const StudentSchedules = ({ embedded = false }) => {
       </div>
 
       {selectedStudentForCard && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 relative">
-            <button
-              onClick={() => setSelectedStudentForCard(null)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-            >
-              <X size={20} />
-            </button>
-            <div className="p-6">
-              <FacultyContactCard
-                person={selectedStudentForCard}
-                onClose={() => setSelectedStudentForCard(null)}
-                personType="student"
-              />
-            </div>
-          </div>
-        </div>
+        <FacultyContactCard
+          person={selectedStudentForCard}
+          onClose={() => setSelectedStudentForCard(null)}
+          personType="student"
+        />
       )}
 
       <ExportModal

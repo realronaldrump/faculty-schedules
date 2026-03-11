@@ -106,6 +106,24 @@ const formatMinutes = (value) => {
   return `${minutes}m`;
 };
 
+const formatHourLabel = (hour, { compact = false } = {}) => {
+  const normalizedHour = ((Number(hour) % 24) + 24) % 24;
+  const meridiem = normalizedHour < 12 ? "AM" : "PM";
+  const displayHour = normalizedHour % 12 || 12;
+  return compact ? `${displayHour} ${meridiem}` : `${displayHour}:00 ${meridiem}`;
+};
+
+const formatActivityLoadError = (error) => {
+  const message = String(error?.message || "").trim();
+  if (
+    error?.code === "permission-denied" ||
+    /missing or insufficient permissions/i.test(message)
+  ) {
+    return "Activity rollups are blocked by Firestore rules. Deploy the latest Firestore rules and indexes, then refresh.";
+  }
+  return message || "Could not load activity analytics right now.";
+};
+
 const getActivityStatus = (lastActiveAt) => {
   const lastActiveDate = toDate(lastActiveAt);
   if (!lastActiveDate) {
@@ -186,9 +204,9 @@ const deriveTimelineDwellMinutes = (events) => {
 const MetricCard = ({ label, value, hint, accentClass, icon: Icon }) => (
   <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
     <div
-      className={`pointer-events-none absolute inset-x-0 top-0 h-1.5 ${accentClass}`}
+      className={`pointer-events-none absolute inset-y-4 left-0 w-1.5 rounded-r-full ${accentClass}`}
     />
-    <div className="flex items-start justify-between gap-4">
+    <div className="flex items-start justify-between gap-4 pl-2">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
           {label}
@@ -207,10 +225,10 @@ const MetricCard = ({ label, value, hint, accentClass, icon: Icon }) => (
 
 const SectionShell = ({ eyebrow, title, description, children, action }) => (
   <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
-    <div className="border-b border-slate-200 bg-[linear-gradient(135deg,rgba(15,118,110,0.08),rgba(255,255,255,0.9)_45%,rgba(30,64,175,0.04))] px-5 py-5 md:px-7">
+    <div className="border-b border-slate-200 bg-stone-50 px-5 py-5 md:px-7">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div className="max-w-3xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-teal-700">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-800">
             {eyebrow}
           </p>
           <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">
@@ -226,7 +244,7 @@ const SectionShell = ({ eyebrow, title, description, children, action }) => (
 );
 
 const RangeSelector = ({ value, onChange }) => (
-  <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-white/90 p-1">
+  <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-slate-300 bg-white p-1">
     {ACTIVITY_RANGE_OPTIONS.map((option) => {
       const selected = value === option;
       return (
@@ -237,7 +255,7 @@ const RangeSelector = ({ value, onChange }) => (
           className={`min-h-[44px] rounded-full px-4 text-sm font-semibold transition ${
             selected
               ? "bg-slate-900 text-white shadow-sm"
-              : "text-slate-600 hover:bg-slate-100"
+              : "text-slate-600 hover:bg-stone-100"
           }`}
         >
           Last {option} days
@@ -280,17 +298,17 @@ const SimpleLineChart = ({ rows, dataKey, stroke, formatter = (value) => value }
     .join(" ");
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-950/95 p-4 text-white">
+    <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-4">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-400">
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
             Trend
           </p>
-          <p className="mt-1 text-sm text-slate-300">
+          <p className="mt-1 text-sm text-slate-600">
             {rows.some((row) => row.isPartial) ? "Today is still in progress." : "Completed daily rollups."}
           </p>
         </div>
-        <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+        <div className="rounded-full border border-slate-200 bg-stone-50 px-3 py-1 text-xs text-slate-600">
           Peak {formatter(maxValue)}
         </div>
       </div>
@@ -305,7 +323,7 @@ const SimpleLineChart = ({ rows, dataKey, stroke, formatter = (value) => value }
                 x2={width - padding.right}
                 y1={y}
                 y2={y}
-                stroke="rgba(255,255,255,0.08)"
+                stroke="rgba(148,163,184,0.28)"
                 strokeDasharray="4 6"
               />
             </g>
@@ -333,7 +351,7 @@ const SimpleLineChart = ({ rows, dataKey, stroke, formatter = (value) => value }
                 <text
                   x={x}
                   y={height - 10}
-                  fill="rgba(255,255,255,0.8)"
+                  fill="rgba(51,65,85,0.86)"
                   fontSize="12"
                   textAnchor="middle"
                 >
@@ -352,31 +370,60 @@ const HourHeatmap = ({ rows }) => {
   const maxValue = Math.max(...rows.map((row) => row.totalMinutesApprox || 0), 1);
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-      <div className="mb-4">
-        <p className="text-sm font-semibold text-slate-900">Hour-of-day intensity</p>
-        <p className="text-sm text-slate-600">
-          Minutes are assigned to the hour where a page visit started.
-        </p>
+    <div className="rounded-3xl border border-slate-200 bg-white p-4">
+      <div className="mb-4 flex items-end justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">Hour-of-day intensity</p>
+          <p className="text-sm text-slate-600">
+            Minutes are assigned to the hour where a page visit started.
+          </p>
+        </div>
+        <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-medium text-slate-600">
+          Local time
+        </div>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {rows.map((row) => {
           const intensity = (row.totalMinutesApprox || 0) / maxValue;
-          const background = `rgba(15, 118, 110, ${0.08 + intensity * 0.82})`;
-          const textClass = intensity > 0.55 ? "text-white" : "text-slate-800";
+          const textClass = intensity > 0.58 ? "text-white" : "text-slate-800";
+          const cardStyle = {
+            backgroundColor:
+              intensity > 0
+                ? `rgba(15, 23, 42, ${0.08 + intensity * 0.72})`
+                : "rgb(248 250 252)",
+            borderColor:
+              intensity > 0.2 ? "rgba(15, 23, 42, 0.14)" : "rgba(226, 232, 240, 1)",
+          };
           return (
             <div
               key={row.hour}
-              className={`rounded-2xl border border-white/60 p-3 shadow-sm ${textClass}`}
-              style={{ background }}
+              className={`rounded-2xl border p-4 shadow-sm transition-colors ${textClass}`}
+              style={cardStyle}
             >
-              <p className="text-xs font-semibold uppercase tracking-[0.2em]">
-                {`${String(row.hour).padStart(2, "0")}:00`}
-              </p>
-              <p className="mt-2 text-2xl font-black tracking-tight">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] opacity-80">
+                  {formatHourLabel(row.hour, { compact: true })}
+                </p>
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{
+                    backgroundColor:
+                      intensity > 0
+                        ? "rgba(255,255,255,0.88)"
+                        : "rgba(100,116,139,0.4)",
+                  }}
+                />
+              </div>
+              <p className="mt-5 text-3xl font-black tracking-tight">
                 {formatMinutes(row.totalMinutesApprox)}
               </p>
-              <p className="mt-2 text-xs opacity-90">
+              <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/30">
+                <div
+                  className="h-full rounded-full bg-white/90"
+                  style={{ width: `${Math.max(intensity * 100, intensity > 0 ? 14 : 0)}%` }}
+                />
+              </div>
+              <p className="mt-3 text-xs opacity-85">
                 {row.pageEnterCount || 0} opens
                 {row.semanticEventCount ? ` • ${row.semanticEventCount} actions` : ""}
               </p>
@@ -410,7 +457,9 @@ const RankedBars = ({
     <div className="rounded-3xl border border-slate-200 bg-white p-4">
       <div className="mb-4">
         <p className="text-sm font-semibold text-slate-900">{title}</p>
-        <p className="text-sm text-slate-600">{subtitle}</p>
+        <p className="text-sm text-slate-600">
+          {subtitle}
+        </p>
       </div>
       <div className="space-y-3">
         {rows.map((row) => {
@@ -425,7 +474,7 @@ const RankedBars = ({
               </div>
               <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-teal-500 via-emerald-500 to-blue-500"
+                  className="h-full rounded-full bg-slate-900"
                   style={{ width: `${Math.max(8, (value / maxValue) * 100)}%` }}
                 />
               </div>
@@ -498,14 +547,14 @@ const UserDrilldownDrawer = ({
                   label="Time in App"
                   value={formatMinutes(detailModel.summary.totalMinutesApprox)}
                   hint={`${detailModel.summary.sessionCount || 0} sessions in range`}
-                  accentClass="bg-gradient-to-r from-teal-500 to-emerald-500"
+                  accentClass="bg-emerald-600"
                   icon={Clock3}
                 />
                 <MetricCard
                   label="Active Days"
                   value={detailModel.summary.activeDays || 0}
                   hint={`${detailModel.summary.pagesVisitedCount || 0} pages visited`}
-                  accentClass="bg-gradient-to-r from-blue-500 to-indigo-500"
+                  accentClass="bg-sky-600"
                   icon={Users}
                 />
               </div>
@@ -639,7 +688,7 @@ const UserActivityPage = () => {
         await Promise.all([loadSummaryData(), loadLiveData()]);
       } catch (error) {
         console.error("Failed to load user activity analytics:", error);
-        setErrorMessage(error?.message || "Could not load activity analytics right now.");
+        setErrorMessage(formatActivityLoadError(error));
       } finally {
         setSummaryLoading(false);
         setLiveLoading(false);
@@ -763,28 +812,28 @@ const UserActivityPage = () => {
         value: liveUsers.filter((user) => user.status.label === "Active now").length,
         hint: `${analyticsModel.overview.uniqueUsers} distinct users in range`,
         icon: Users,
-        accentClass: "bg-gradient-to-r from-emerald-500 to-teal-500",
+        accentClass: "bg-emerald-600",
       },
       {
         label: "Time in App",
         value: formatMinutes(analyticsModel.overview.totalMinutesApprox),
         hint: `${analyticsModel.overview.sessionCount} sessions reconstructed from page enters`,
         icon: Clock3,
-        accentClass: "bg-gradient-to-r from-blue-500 to-cyan-500",
+        accentClass: "bg-sky-600",
       },
       {
         label: "Page Views",
         value: analyticsModel.overview.pageEnterCount,
         hint: `${analyticsModel.overview.avgPagesPerUser} pages per user on average`,
         icon: Activity,
-        accentClass: "bg-gradient-to-r from-indigo-500 to-blue-500",
+        accentClass: "bg-indigo-600",
       },
       {
         label: "Curated Actions",
         value: analyticsModel.overview.semanticEventCount,
         hint: "Semantic events such as navigate, import, save, or search",
         icon: MousePointerClick,
-        accentClass: "bg-gradient-to-r from-amber-500 to-orange-500",
+        accentClass: "bg-amber-500",
       },
     ],
     [analyticsModel.overview, liveUsers],
@@ -824,17 +873,16 @@ const UserActivityPage = () => {
   return (
     <>
       <div className="space-y-6">
-        <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.18),transparent_30%),linear-gradient(135deg,#0f172a,#134e4a_58%,#ffffff_170%)] px-5 py-6 text-white shadow-lg md:px-7 md:py-7">
-          <div className="absolute inset-y-0 right-0 hidden w-1/3 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.16),transparent_62%)] lg:block" />
-          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[#f6f2ea] px-5 py-6 text-slate-900 shadow-sm md:px-7 md:py-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-teal-100/90">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-800">
                 Owner Analytics Console
               </p>
               <h1 className="mt-3 text-3xl font-black tracking-tight md:text-4xl">
                 User Activity Intelligence
               </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200">
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
                 Live presence stays operational. Everything else is rendered from daily
                 rollups so you can spot usage patterns, navigation habits, and
                 concentration windows without making this page a heavy raw-event scanner.
@@ -846,7 +894,7 @@ const UserActivityPage = () => {
               <button
                 type="button"
                 onClick={() => void refreshAll({ silent: true })}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/15"
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
                 disabled={refreshing}
               >
                 <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
@@ -923,7 +971,7 @@ const UserActivityPage = () => {
                   label="Repeat Users"
                   value={analyticsModel.patterns.repeatUsers}
                   hint={`${analyticsModel.patterns.oneTimeUsers} one-time users in the same range`}
-                  accentClass="bg-gradient-to-r from-fuchsia-500 to-indigo-500"
+                  accentClass="bg-violet-600"
                   icon={Users}
                 />
                 <MetricCard
@@ -931,12 +979,13 @@ const UserActivityPage = () => {
                   value={formatMinutes(analyticsModel.overview.avgSessionMinutes)}
                   hint={
                     analyticsModel.patterns.busiestHour
-                      ? `Busiest hour ${String(
+                      ? `Busiest hour ${formatHourLabel(
                           analyticsModel.patterns.busiestHour.hour,
-                        ).padStart(2, "0")}:00`
+                          { compact: true },
+                        )}`
                       : "No hour trend yet"
                   }
-                  accentClass="bg-gradient-to-r from-orange-500 to-amber-500"
+                  accentClass="bg-amber-500"
                   icon={Flame}
                 />
                 <MetricCard
@@ -947,7 +996,7 @@ const UserActivityPage = () => {
                   hint={`${
                     analyticsModel.patterns.topActions[0]?.count || 0
                   } occurrences`}
-                  accentClass="bg-gradient-to-r from-cyan-500 to-sky-500"
+                  accentClass="bg-sky-600"
                   icon={MousePointerClick}
                 />
                 <MetricCard
@@ -960,7 +1009,7 @@ const UserActivityPage = () => {
                       ? `${analyticsModel.patterns.topTransitions[0].fromPageLabel} -> ${analyticsModel.patterns.topTransitions[0].toPageLabel}`
                       : "No page-path data yet"
                   }
-                  accentClass="bg-gradient-to-r from-teal-500 to-emerald-500"
+                  accentClass="bg-emerald-600"
                   icon={ArrowRightLeft}
                 />
               </div>

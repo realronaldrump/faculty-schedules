@@ -144,7 +144,7 @@ export const createWorkbookBuffer = async ({ workbookSheets = [] } = {}) => {
   const ExcelJS = excelModule.default || excelModule;
   const workbook = new ExcelJS.Workbook();
 
-  workbook.creator = "HSD Faculty Dashboard";
+  workbook.creator = "Davis's Big Beautiful Dashboard";
   workbook.company = "Baylor University";
   workbook.created = new Date();
   workbook.modified = new Date();

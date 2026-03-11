@@ -1,7 +1,7 @@
 {
-  "name": "HSD Dashboard",
-  "short_name": "HSD",
-  "description": "Baylor University Human Sciences & Design Administrative Dashboard",
+  "name": "Davis's Big Beautiful Dashboard",
+  "short_name": "Davis's Big Beautiful Dashboard",
+  "description": "Davis's Big Beautiful Dashboard",
   "icons": [
     {
       "src": "/assets/icon-192.png",

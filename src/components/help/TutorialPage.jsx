@@ -193,7 +193,7 @@ const TutorialPage = () => {
             Help & Tutorials
           </h1>
           <p className="text-gray-600 mt-1">
-            Learn how to use the HSD Dashboard with interactive step-by-step
+            Learn how to use Davis&apos;s Big Beautiful Dashboard with interactive step-by-step
             tutorials
           </p>
         </div>
@@ -377,7 +377,7 @@ const TutorialPage = () => {
         </h2>
         <p className="text-gray-600 mb-4">
           I'm working on additional tutorials to help you get the most out of
-          the HSD Dashboard. Check back for tutorials on scheduling, analytics,
+          Davis&apos;s Big Beautiful Dashboard. Check back for tutorials on scheduling, analytics,
           and more.
         </p>
         <div className="flex flex-wrap gap-2">

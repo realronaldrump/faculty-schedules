@@ -185,7 +185,7 @@ function Login({ onLogin }) {
                 Faculty System Access
               </h2>
               <p className="text-gray-600 mb-6">
-                Secure login required for the HSD Administrative Dashboard
+                Secure login required for Davis&apos;s Big Beautiful Dashboard
               </p>
             </div>
 
@@ -342,7 +342,7 @@ function Login({ onLogin }) {
         {/* Footer */}
         <div className="text-center mt-6 text-sm text-gray-500">
           <p>© 2025 Baylor University - Human Sciences & Design</p>
-          <p className="mt-1">Authorized HSD Faculty and Staff only</p>
+          <p className="mt-1">Authorized users of Davis&apos;s Big Beautiful Dashboard only</p>
         </div>
       </div>
     </div>

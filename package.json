@@ -3,7 +3,7 @@
   "private": true,
   "version": "2.0.0",
   "type": "module",
-  "description": "Baylor University Human Sciences & Design Faculty Dashboard with Normalized Database Structure",
+  "description": "Davis's Big Beautiful Dashboard with Normalized Database Structure",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

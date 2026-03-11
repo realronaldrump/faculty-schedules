@@ -233,9 +233,9 @@ const BaylorSystems = () => {
           </div>
           
           <div>
-            <h3 className="font-medium text-gray-900 mb-2">HSD Dashboard Support</h3>
+            <h3 className="font-medium text-gray-900 mb-2">Davis&apos;s Big Beautiful Dashboard Support</h3>
             <p className="text-sm text-gray-600 mb-3">
-              For questions about this HSD Dashboard application, contact your
+              For questions about Davis&apos;s Big Beautiful Dashboard, contact your
               dashboard administrator.
             </p>
             <button 

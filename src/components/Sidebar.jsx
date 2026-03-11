@@ -101,12 +101,12 @@ const Sidebar = ({
             <div className="sidebar-brand">
               <div className="sidebar-logo">
                 <span className="text-white font-bold text-sm font-['DM_Sans']">
-                  HSD
+                  DBBBD
                 </span>
               </div>
               <div>
                 <div className="sidebar-title text-lg font-bold text-white font-['DM_Sans']">
-                  HSD Dashboard
+                  Davis&apos;s Big Beautiful Dashboard
                 </div>
                 <div className="sidebar-subtitle text-sm text-baylor-gold/80 mt-1 font-['DM_Sans']">
                   {selectedSemester || "Select Semester"}
@@ -117,7 +117,7 @@ const Sidebar = ({
           {collapsed && (
             <div className="sidebar-logo mx-auto">
               <span className="text-white font-bold text-sm font-['DM_Sans']">
-                HSD
+                DBBBD
               </span>
             </div>
           )}
@@ -289,7 +289,7 @@ const Sidebar = ({
               Human Sciences & Design
             </div>
             <div className="text-xs text-gray-400 mt-2 font-['DM_Sans']">
-              HSD Departmental Administrative Dashboard
+              Davis&apos;s Big Beautiful Dashboard
             </div>
           </div>
         ) : (

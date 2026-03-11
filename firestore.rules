@@ -411,6 +411,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /userActivityAnalyticsDaily/{id} {
+      allow read: if isActivityOwner();
+      allow write: if false;
+    }
+
+    match /userActivityPageDaily/{id} {
+      allow read: if isActivityOwner();
+      allow write: if false;
+    }
+
     // People collection (faculty, staff, adjunct, students): granular permissions
     match /people/{id} {
       allow read: if canReadAppData();

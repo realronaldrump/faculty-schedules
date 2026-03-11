@@ -1,51 +1,13 @@
 import { useEffect, useMemo, useRef } from "react";
-import {
-  addDoc,
-  collection,
-  doc,
-  serverTimestamp,
-  setDoc,
-  Timestamp,
-} from "firebase/firestore";
-import { db } from "../firebase";
 import { useAuth } from "../contexts/AuthContext.jsx";
+import {
+  buildActivityActor,
+  getActivitySessionId,
+  logUserActivityEvent,
+} from "../utils/activityTracking";
 import { getNavigationMeta } from "../utils/navigationMeta";
 
-const ACTIVITY_EVENT_TTL_DAYS = 90;
 const DUPLICATE_EVENT_WINDOW_MS = 15 * 1000;
-
-const normalizeRoleList = (roles) => {
-  if (Array.isArray(roles)) return roles.filter(Boolean);
-  if (roles && typeof roles === "object") {
-    return Object.keys(roles).filter((key) => roles[key]);
-  }
-  if (typeof roles === "string" && roles.trim()) return [roles.trim()];
-  return [];
-};
-
-const getPrimaryRole = (roles) => {
-  const normalizedRoles = normalizeRoleList(roles);
-  if (normalizedRoles.includes("admin")) return "admin";
-  if (normalizedRoles.includes("staff")) return "staff";
-  if (normalizedRoles.includes("faculty")) return "faculty";
-  return normalizedRoles[0] || "unknown";
-};
-
-const getDisplayName = ({ user, userProfile }) =>
-  userProfile?.displayName ||
-  user?.displayName ||
-  userProfile?.email?.split("@")?.[0] ||
-  user?.email?.split("@")?.[0] ||
-  "Unknown User";
-
-const buildSessionId = (uid) =>
-  `${uid}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-const buildExpiryTimestamp = () => {
-  const now = Date.now();
-  const expiryMs = ACTIVITY_EVENT_TTL_DAYS * 24 * 60 * 60 * 1000;
-  return Timestamp.fromDate(new Date(now + expiryMs));
-};
 
 const defaultLastEvent = { pageId: "", timestampMs: 0 };
 
@@ -58,13 +20,7 @@ export const useUserActivityTracker = ({
   const lastEventRef = useRef(defaultLastEvent);
 
   const actor = useMemo(() => {
-    if (!user?.uid) return null;
-    return {
-      uid: user.uid,
-      email: userProfile?.email || user.email || "",
-      displayName: getDisplayName({ user, userProfile }),
-      role: getPrimaryRole(userProfile?.roles),
-    };
+    return buildActivityActor({ user, userProfile });
   }, [
     user?.uid,
     user?.email,
@@ -82,7 +38,7 @@ export const useUserActivityTracker = ({
     }
 
     if (!sessionIdRef.current) {
-      sessionIdRef.current = buildSessionId(user.uid);
+      sessionIdRef.current = getActivitySessionId(user.uid);
     }
   }, [isAuthenticated, loading, user?.uid]);
 
@@ -105,44 +61,18 @@ export const useUserActivityTracker = ({
     }
     lastEventRef.current = { pageId: currentPage, timestampMs: nowMs };
 
-    const sessionId = sessionIdRef.current || buildSessionId(actor.uid);
-    sessionIdRef.current = sessionId;
-
-    const presencePayload = {
-      uid: actor.uid,
-      email: actor.email,
-      displayName: actor.displayName,
-      role: actor.role,
-      sessionId,
-      currentPageId: pageMeta.pageId,
-      currentPageLabel: pageMeta.pageLabel,
-      currentSectionLabel: pageMeta.sectionLabel,
-      enteredAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-
-    const eventPayload = {
-      uid: actor.uid,
-      email: actor.email,
-      displayName: actor.displayName,
-      role: actor.role,
-      sessionId,
-      eventType: "page_enter",
-      pageId: pageMeta.pageId,
-      pageLabel: pageMeta.pageLabel,
-      sectionLabel: pageMeta.sectionLabel,
-      timestamp: serverTimestamp(),
-      expiresAt: buildExpiryTimestamp(),
-    };
+    sessionIdRef.current = sessionIdRef.current || getActivitySessionId(actor.uid);
 
     const writeActivity = async () => {
       try {
-        await Promise.all([
-          setDoc(doc(db, "userPresence", actor.uid), presencePayload, {
-            merge: true,
-          }),
-          addDoc(collection(db, "userActivityEvents"), eventPayload),
-        ]);
+        await logUserActivityEvent({
+          actor,
+          currentPage,
+          eventType: "page_enter",
+          actionKey: "navigate",
+          metadata: { source: "route-change" },
+          includePresence: true,
+        });
       } catch (error) {
         console.warn("User activity tracking write failed:", error);
       }

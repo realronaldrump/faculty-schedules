@@ -5,22 +5,65 @@ import {
   limit,
   orderBy,
   query,
+  startAfter,
+  where,
 } from "firebase/firestore";
-import { Activity, Clock3, RefreshCw, Shield, Users } from "lucide-react";
+import {
+  Activity,
+  ArrowRightLeft,
+  BarChart3,
+  Clock3,
+  Flame,
+  MousePointerClick,
+  RefreshCw,
+  Shield,
+  Users,
+  X,
+} from "lucide-react";
 import { db } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import {
+  ACTIVITY_RANGE_OPTIONS,
+  buildActivityAnalyticsModel,
+  buildUserDrilldownModel,
+  getDateKeyDaysAgo,
+  toDate,
+} from "../../utils/activityAnalytics";
 import { getNavigationMeta } from "../../utils/navigationMeta";
 
 const LIVE_WINDOW_MINUTES = 2;
 const IDLE_WINDOW_MINUTES = 10;
-const REFRESH_INTERVAL_MS = 60 * 1000;
+const LIVE_REFRESH_INTERVAL_MS = 60 * 1000;
+const SUMMARY_LOOKBACK_DAYS = 90;
+const SUMMARY_QUERY_PAGE_SIZE = 500;
+const TIMELINE_LIMIT = 60;
+const PRESENCE_LIMIT = 120;
+const DRILLDOWN_LIMIT = 120;
 
-const toDate = (value) => {
-  if (!value) return null;
-  if (typeof value?.toDate === "function") return value.toDate();
-  if (typeof value?.seconds === "number") return new Date(value.seconds * 1000);
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+const mapQueryRows = (snapshot) =>
+  snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+
+const fetchPagedRows = async (buildQuery) => {
+  const rows = [];
+  let lastDoc = null;
+  let hasMore = true;
+
+  while (hasMore) {
+    const snapshot = await getDocs(buildQuery(lastDoc));
+    const docs = Array.isArray(snapshot?.docs) ? snapshot.docs : [];
+    rows.push(
+      ...docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })),
+    );
+
+    if (docs.length < SUMMARY_QUERY_PAGE_SIZE) {
+      hasMore = false;
+      continue;
+    }
+
+    lastDoc = docs[docs.length - 1];
+  }
+
+  return rows;
 };
 
 const formatDateTime = (value) => {
@@ -52,10 +95,26 @@ const formatTimeAgo = (value) => {
   return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
 };
 
+const formatMinutes = (value) => {
+  const minutes = Math.round(value || 0);
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const remainder = minutes % 60;
+    if (remainder === 0) return `${hours}h`;
+    return `${hours}h ${remainder}m`;
+  }
+  return `${minutes}m`;
+};
+
 const getActivityStatus = (lastActiveAt) => {
   const lastActiveDate = toDate(lastActiveAt);
   if (!lastActiveDate) {
-    return { label: "Unknown", color: "text-gray-500", rank: 3 };
+    return {
+      label: "Unknown",
+      color: "text-slate-500",
+      badge: "bg-slate-100 text-slate-600",
+      rank: 3,
+    };
   }
 
   const diffMinutes = Math.max(
@@ -64,12 +123,27 @@ const getActivityStatus = (lastActiveAt) => {
   );
 
   if (diffMinutes <= LIVE_WINDOW_MINUTES) {
-    return { label: "Active now", color: "text-green-600", rank: 0 };
+    return {
+      label: "Active now",
+      color: "text-emerald-600",
+      badge: "bg-emerald-100 text-emerald-700",
+      rank: 0,
+    };
   }
   if (diffMinutes <= IDLE_WINDOW_MINUTES) {
-    return { label: "Idle", color: "text-amber-600", rank: 1 };
+    return {
+      label: "Idle",
+      color: "text-amber-600",
+      badge: "bg-amber-100 text-amber-700",
+      rank: 1,
+    };
   }
-  return { label: "Away", color: "text-gray-600", rank: 2 };
+  return {
+    label: "Away",
+    color: "text-slate-600",
+    badge: "bg-slate-100 text-slate-700",
+    rank: 2,
+  };
 };
 
 const deriveTimelineDwellMinutes = (events) => {
@@ -78,7 +152,7 @@ const deriveTimelineDwellMinutes = (events) => {
 
   events.forEach((event) => {
     const timestampDate = toDate(event.timestamp);
-    if (!timestampDate) return;
+    if (!timestampDate || event.eventType !== "page_enter") return;
     const sessionKey = `${event.uid || "unknown"}:${event.sessionId || "default"}`;
     const existing = groupedBySession.get(sessionKey) || [];
     existing.push({ ...event, timestampDate });
@@ -87,7 +161,7 @@ const deriveTimelineDwellMinutes = (events) => {
 
   groupedBySession.forEach((sessionEvents) => {
     const ordered = sessionEvents.sort(
-      (a, b) => a.timestampDate.getTime() - b.timestampDate.getTime(),
+      (left, right) => left.timestampDate.getTime() - right.timestampDate.getTime(),
     );
 
     ordered.forEach((event, index) => {
@@ -109,365 +183,1035 @@ const deriveTimelineDwellMinutes = (events) => {
   return dwellByEventId;
 };
 
+const MetricCard = ({ label, value, hint, accentClass, icon: Icon }) => (
+  <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div
+      className={`pointer-events-none absolute inset-x-0 top-0 h-1.5 ${accentClass}`}
+    />
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+          {label}
+        </p>
+        <p className="mt-3 text-3xl font-black tracking-tight text-slate-900">
+          {value}
+        </p>
+        <p className="mt-2 text-sm text-slate-600">{hint}</p>
+      </div>
+      <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
+        <Icon className="h-5 w-5" />
+      </div>
+    </div>
+  </div>
+);
+
+const SectionShell = ({ eyebrow, title, description, children, action }) => (
+  <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
+    <div className="border-b border-slate-200 bg-[linear-gradient(135deg,rgba(15,118,110,0.08),rgba(255,255,255,0.9)_45%,rgba(30,64,175,0.04))] px-5 py-5 md:px-7">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="max-w-3xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-teal-700">
+            {eyebrow}
+          </p>
+          <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">
+            {title}
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+        </div>
+        {action ? <div>{action}</div> : null}
+      </div>
+    </div>
+    <div className="px-5 py-5 md:px-7 md:py-6">{children}</div>
+  </section>
+);
+
+const RangeSelector = ({ value, onChange }) => (
+  <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-white/90 p-1">
+    {ACTIVITY_RANGE_OPTIONS.map((option) => {
+      const selected = value === option;
+      return (
+        <button
+          key={option}
+          type="button"
+          onClick={() => onChange(option)}
+          className={`min-h-[44px] rounded-full px-4 text-sm font-semibold transition ${
+            selected
+              ? "bg-slate-900 text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          Last {option} days
+        </button>
+      );
+    })}
+  </div>
+);
+
+const SimpleLineChart = ({ rows, dataKey, stroke, formatter = (value) => value }) => {
+  if (!rows.length) {
+    return (
+      <div className="flex h-56 items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500">
+        No summary data for this range yet.
+      </div>
+    );
+  }
+
+  const width = 760;
+  const height = 240;
+  const padding = { top: 22, right: 18, bottom: 34, left: 18 };
+  const values = rows.map((row) => Number(row[dataKey] || 0));
+  const maxValue = Math.max(...values, 1);
+  const minX = 0;
+  const maxX = Math.max(rows.length - 1, 1);
+  const usableWidth = width - padding.left - padding.right;
+  const usableHeight = height - padding.top - padding.bottom;
+
+  const xScale = (index) =>
+    padding.left + ((index - minX) / (maxX - minX || 1)) * usableWidth;
+  const yScale = (value) =>
+    padding.top + usableHeight - (value / maxValue) * usableHeight;
+
+  const path = rows
+    .map((row, index) => {
+      const x = xScale(index);
+      const y = yScale(Number(row[dataKey] || 0));
+      return `${index === 0 ? "M" : "L"} ${x} ${y}`;
+    })
+    .join(" ");
+
+  return (
+    <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-950/95 p-4 text-white">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-400">
+            Trend
+          </p>
+          <p className="mt-1 text-sm text-slate-300">
+            {rows.some((row) => row.isPartial) ? "Today is still in progress." : "Completed daily rollups."}
+          </p>
+        </div>
+        <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+          Peak {formatter(maxValue)}
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-56 w-full">
+        {[0, 0.25, 0.5, 0.75, 1].map((step) => {
+          const value = maxValue * step;
+          const y = yScale(value);
+          return (
+            <g key={step}>
+              <line
+                x1={padding.left}
+                x2={width - padding.right}
+                y1={y}
+                y2={y}
+                stroke="rgba(255,255,255,0.08)"
+                strokeDasharray="4 6"
+              />
+            </g>
+          );
+        })}
+        <path
+          d={path}
+          fill="none"
+          stroke={stroke}
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {rows.map((row, index) => {
+          const x = xScale(index);
+          const y = yScale(Number(row[dataKey] || 0));
+          const showLabel =
+            index === 0 ||
+            index === rows.length - 1 ||
+            index % Math.max(1, Math.ceil(rows.length / 6)) === 0;
+          return (
+            <g key={row.dateKey}>
+              <circle cx={x} cy={y} r="4.5" fill={row.isPartial ? "#f59e0b" : stroke} />
+              {showLabel ? (
+                <text
+                  x={x}
+                  y={height - 10}
+                  fill="rgba(255,255,255,0.8)"
+                  fontSize="12"
+                  textAnchor="middle"
+                >
+                  {row.label}
+                </text>
+              ) : null}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+};
+
+const HourHeatmap = ({ rows }) => {
+  const maxValue = Math.max(...rows.map((row) => row.totalMinutesApprox || 0), 1);
+
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+      <div className="mb-4">
+        <p className="text-sm font-semibold text-slate-900">Hour-of-day intensity</p>
+        <p className="text-sm text-slate-600">
+          Minutes are assigned to the hour where a page visit started.
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        {rows.map((row) => {
+          const intensity = (row.totalMinutesApprox || 0) / maxValue;
+          const background = `rgba(15, 118, 110, ${0.08 + intensity * 0.82})`;
+          const textClass = intensity > 0.55 ? "text-white" : "text-slate-800";
+          return (
+            <div
+              key={row.hour}
+              className={`rounded-2xl border border-white/60 p-3 shadow-sm ${textClass}`}
+              style={{ background }}
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.2em]">
+                {`${String(row.hour).padStart(2, "0")}:00`}
+              </p>
+              <p className="mt-2 text-2xl font-black tracking-tight">
+                {formatMinutes(row.totalMinutesApprox)}
+              </p>
+              <p className="mt-2 text-xs opacity-90">
+                {row.pageEnterCount || 0} opens
+                {row.semanticEventCount ? ` • ${row.semanticEventCount} actions` : ""}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const RankedBars = ({
+  title,
+  subtitle,
+  rows,
+  labelKey,
+  valueKey = "totalMinutesApprox",
+  valueFormatter = formatMinutes,
+}) => {
+  if (!rows.length) {
+    return (
+      <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+        {title}: no data yet.
+      </div>
+    );
+  }
+
+  const maxValue = Math.max(...rows.map((row) => Number(row[valueKey] || 0)), 1);
+
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-4">
+      <div className="mb-4">
+        <p className="text-sm font-semibold text-slate-900">{title}</p>
+        <p className="text-sm text-slate-600">{subtitle}</p>
+      </div>
+      <div className="space-y-3">
+        {rows.map((row) => {
+          const value = Number(row[valueKey] || 0);
+          return (
+            <div key={`${row[labelKey]}-${row.pageId || row.actionKey || ""}`}>
+              <div className="mb-1 flex items-center justify-between gap-3 text-sm">
+                <span className="truncate font-medium text-slate-800">
+                  {row[labelKey]}
+                </span>
+                <span className="text-slate-500">{valueFormatter(value)}</span>
+              </div>
+              <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-teal-500 via-emerald-500 to-blue-500"
+                  style={{ width: `${Math.max(8, (value / maxValue) * 100)}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const SortHeader = ({ label, active, direction, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={`inline-flex min-h-[44px] items-center gap-2 py-2 text-left text-xs font-semibold uppercase tracking-[0.18em] ${
+      active ? "text-slate-900" : "text-slate-500"
+    }`}
+  >
+    <span>{label}</span>
+    <span className="text-[10px]">{active ? (direction === "asc" ? "▲" : "▼") : ""}</span>
+  </button>
+);
+
+const UserDrilldownDrawer = ({
+  user,
+  detailModel,
+  loading,
+  rangeDays,
+  onClose,
+}) => {
+  if (!user) return null;
+
+  return (
+    <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/35 backdrop-blur-sm">
+      <div className="h-full w-full max-w-2xl overflow-y-auto border-l border-slate-200 bg-white shadow-2xl">
+        <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-teal-700">
+                User Drilldown
+              </p>
+              <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900">
+                {user.displayName}
+              </h3>
+              <p className="mt-1 text-sm text-slate-600">
+                {user.email} • last {rangeDays} days
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close user drilldown"
+              className="min-h-[44px] rounded-full border border-slate-200 px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-5 px-5 py-5">
+          {loading ? (
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+              Loading user history...
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <MetricCard
+                  label="Time in App"
+                  value={formatMinutes(detailModel.summary.totalMinutesApprox)}
+                  hint={`${detailModel.summary.sessionCount || 0} sessions in range`}
+                  accentClass="bg-gradient-to-r from-teal-500 to-emerald-500"
+                  icon={Clock3}
+                />
+                <MetricCard
+                  label="Active Days"
+                  value={detailModel.summary.activeDays || 0}
+                  hint={`${detailModel.summary.pagesVisitedCount || 0} pages visited`}
+                  accentClass="bg-gradient-to-r from-blue-500 to-indigo-500"
+                  icon={Users}
+                />
+              </div>
+
+              <SimpleLineChart
+                rows={detailModel.trendRows}
+                dataKey="totalMinutesApprox"
+                stroke="#14b8a6"
+                formatter={formatMinutes}
+              />
+
+              <HourHeatmap rows={detailModel.heatmapRows} />
+
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                <RankedBars
+                  title="Top Pages"
+                  subtitle="Where this user spends the most time."
+                  rows={detailModel.topPages}
+                  labelKey="pageLabel"
+                />
+                <RankedBars
+                  title="Top Actions"
+                  subtitle="Curated semantic actions that have been instrumented."
+                  rows={detailModel.topActions}
+                  labelKey="actionKey"
+                  valueKey="count"
+                  valueFormatter={(value) => `${value}`}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const UserActivityPage = () => {
   const { isActivityOwner } = useAuth();
-  const [loading, setLoading] = useState(true);
+  const [rangeDays, setRangeDays] = useState(30);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [liveLoading, setLiveLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [analyticsRows, setAnalyticsRows] = useState([]);
+  const [pageDailyRows, setPageDailyRows] = useState([]);
+  const [userDailyRows, setUserDailyRows] = useState([]);
   const [presenceRows, setPresenceRows] = useState([]);
   const [eventRows, setEventRows] = useState([]);
-  const [dailyRows, setDailyRows] = useState([]);
-  const [users, setUsers] = useState([]);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [userDetailLoading, setUserDetailLoading] = useState(false);
+  const [userDetailRows, setUserDetailRows] = useState([]);
+  const [userSort, setUserSort] = useState({
+    key: "totalMinutesApprox",
+    direction: "desc",
+  });
 
-  const loadActivityData = useCallback(
+  const loadSummaryData = useCallback(async () => {
+    if (!isActivityOwner) return;
+    const cutoffDateKey = getDateKeyDaysAgo(SUMMARY_LOOKBACK_DAYS - 1);
+
+    const buildPagedQuery = (collectionName, lastDoc = null) =>
+      query(
+        collection(db, collectionName),
+        where("dateKey", ">=", cutoffDateKey),
+        orderBy("dateKey", "desc"),
+        ...(lastDoc ? [startAfter(lastDoc)] : []),
+        limit(SUMMARY_QUERY_PAGE_SIZE),
+      );
+
+    const [analyticsData, pageData, userData] = await Promise.all([
+      fetchPagedRows((lastDoc) =>
+        query(
+          collection(db, "userActivityAnalyticsDaily"),
+          where("dateKey", ">=", cutoffDateKey),
+          orderBy("dateKey", "desc"),
+          ...(lastDoc ? [startAfter(lastDoc)] : []),
+          limit(SUMMARY_QUERY_PAGE_SIZE),
+        ),
+      ),
+      fetchPagedRows((lastDoc) => buildPagedQuery("userActivityPageDaily", lastDoc)),
+      fetchPagedRows((lastDoc) => buildPagedQuery("userActivityDaily", lastDoc)),
+    ]);
+
+    setAnalyticsRows(analyticsData);
+    setPageDailyRows(pageData);
+    setUserDailyRows(userData);
+  }, [isActivityOwner]);
+
+  const loadLiveData = useCallback(async () => {
+    if (!isActivityOwner) return;
+
+    const [presenceSnap, eventsSnap] = await Promise.all([
+      getDocs(
+        query(
+          collection(db, "userPresence"),
+          orderBy("updatedAt", "desc"),
+          limit(PRESENCE_LIMIT),
+        ),
+      ),
+      getDocs(
+        query(
+          collection(db, "userActivityEvents"),
+          orderBy("timestamp", "desc"),
+          limit(TIMELINE_LIMIT),
+        ),
+      ),
+    ]);
+
+    setPresenceRows(
+      mapQueryRows(presenceSnap),
+    );
+    setEventRows(
+      mapQueryRows(eventsSnap),
+    );
+  }, [isActivityOwner]);
+
+  const refreshAll = useCallback(
     async ({ silent = false } = {}) => {
       if (!isActivityOwner) return;
 
-      if (silent) setRefreshing(true);
-      else setLoading(true);
+      if (silent) {
+        setRefreshing(true);
+      } else {
+        setSummaryLoading(true);
+        setLiveLoading(true);
+      }
 
       try {
         setErrorMessage("");
-        const [presenceSnap, eventsSnap, dailySnap, usersSnap] =
-          await Promise.all([
-            getDocs(
-              query(
-                collection(db, "userPresence"),
-                orderBy("updatedAt", "desc"),
-                limit(120),
-              ),
-            ),
-            getDocs(
-              query(
-                collection(db, "userActivityEvents"),
-                orderBy("timestamp", "desc"),
-                limit(300),
-              ),
-            ),
-            getDocs(
-              query(
-                collection(db, "userActivityDaily"),
-                orderBy("dateKey", "desc"),
-                limit(90),
-              ),
-            ),
-            getDocs(query(collection(db, "users"), orderBy("email"), limit(500))),
-          ]);
-
-        setPresenceRows(
-          presenceSnap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })),
-        );
-        setEventRows(
-          eventsSnap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })),
-        );
-        setDailyRows(
-          dailySnap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })),
-        );
-        setUsers(usersSnap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+        await Promise.all([loadSummaryData(), loadLiveData()]);
       } catch (error) {
-        console.error("Failed to load activity data:", error);
-        setErrorMessage(
-          error?.message || "Could not load activity data right now.",
-        );
+        console.error("Failed to load user activity analytics:", error);
+        setErrorMessage(error?.message || "Could not load activity analytics right now.");
       } finally {
-        setLoading(false);
+        setSummaryLoading(false);
+        setLiveLoading(false);
         setRefreshing(false);
       }
     },
-    [isActivityOwner],
+    [isActivityOwner, loadLiveData, loadSummaryData],
   );
 
   useEffect(() => {
     if (!isActivityOwner) return;
+    void refreshAll();
+  }, [isActivityOwner, refreshAll]);
 
-    void loadActivityData();
+  useEffect(() => {
+    if (!isActivityOwner) return;
     const intervalId = setInterval(() => {
-      void loadActivityData({ silent: true });
-    }, REFRESH_INTERVAL_MS);
-
+      void loadLiveData().catch((error) => {
+        console.error("Failed to refresh live activity:", error);
+      });
+    }, LIVE_REFRESH_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [isActivityOwner, loadActivityData]);
+  }, [isActivityOwner, loadLiveData]);
 
-  const usersByUid = useMemo(() => {
-    const map = new Map();
-    users.forEach((row) => map.set(row.id, row));
-    return map;
-  }, [users]);
+  useEffect(() => {
+    if (!selectedUser?.uid || !isActivityOwner) {
+      setUserDetailRows([]);
+      setUserDetailLoading(false);
+      return;
+    }
+
+    const loadUserRows = async () => {
+      setUserDetailLoading(true);
+      try {
+        const cutoffDateKey = getDateKeyDaysAgo(rangeDays - 1);
+        const userSnap = await getDocs(
+          query(
+            collection(db, "userActivityDaily"),
+            where("uid", "==", selectedUser.uid),
+            where("dateKey", ">=", cutoffDateKey),
+            orderBy("dateKey", "desc"),
+            limit(DRILLDOWN_LIMIT),
+          ),
+        );
+        setUserDetailRows(
+          mapQueryRows(userSnap),
+        );
+      } catch (error) {
+        console.error("Failed to load user drilldown:", error);
+        setUserDetailRows(
+          userDailyRows.filter((row) => row.uid === selectedUser.uid),
+        );
+      } finally {
+        setUserDetailLoading(false);
+      }
+    };
+
+    void loadUserRows();
+  }, [isActivityOwner, rangeDays, selectedUser?.uid, userDailyRows]);
+
+  const analyticsModel = useMemo(
+    () =>
+      buildActivityAnalyticsModel({
+        appDailyRows: analyticsRows,
+        pageDailyRows,
+        userDailyRows,
+        rangeDays,
+      }),
+    [analyticsRows, pageDailyRows, rangeDays, userDailyRows],
+  );
+
+  const userDetailModel = useMemo(
+    () => buildUserDrilldownModel({ rows: userDetailRows, rangeDays }),
+    [rangeDays, userDetailRows],
+  );
 
   const liveUsers = useMemo(() => {
-    const rows = presenceRows.map((presence) => {
-      const pageMeta = getNavigationMeta(presence.currentPageId);
-      const userRow = usersByUid.get(presence.uid) || {};
-      const lastActiveAt = userRow.lastActiveAt || userRow.lastLoginAt;
-      const status = getActivityStatus(lastActiveAt);
+    return presenceRows
+      .map((presence) => {
+        const pageMeta = getNavigationMeta(presence.currentPageId);
+        const lastActiveAt = presence.updatedAt || presence.enteredAt;
+        const status = getActivityStatus(lastActiveAt);
 
-      return {
-        ...presence,
-        displayName:
-          presence.displayName ||
-          userRow.displayName ||
-          presence.email ||
-          "Unknown User",
-        email: presence.email || userRow.email || "Unknown email",
-        pageLabel: presence.currentPageLabel || pageMeta.pageLabel,
-        sectionLabel: presence.currentSectionLabel || pageMeta.sectionLabel,
-        lastActiveAt,
-        status,
-      };
-    });
-
-    return rows.sort((a, b) => {
-      const byStatus = a.status.rank - b.status.rank;
-      if (byStatus !== 0) return byStatus;
-      return (a.email || "").localeCompare(b.email || "");
-    });
-  }, [presenceRows, usersByUid]);
+        return {
+          ...presence,
+          displayName:
+            presence.displayName || presence.email || presence.uid || "Unknown User",
+          email: presence.email || "Unknown email",
+          pageLabel: presence.currentPageLabel || pageMeta.pageLabel,
+          sectionLabel: presence.currentSectionLabel || pageMeta.sectionLabel,
+          lastActiveAt,
+          status,
+        };
+      })
+      .sort((left, right) => {
+        const byStatus = left.status.rank - right.status.rank;
+        if (byStatus !== 0) return byStatus;
+        return (left.email || "").localeCompare(right.email || "");
+      });
+  }, [presenceRows]);
 
   const timelineRows = useMemo(() => {
     const dwellByEventId = deriveTimelineDwellMinutes(eventRows);
-    return eventRows
-      .map((event) => {
-        const pageMeta = getNavigationMeta(event.pageId);
-        return {
-          ...event,
-          actorName: event.displayName || event.email || event.uid || "Unknown User",
-          pageLabel: event.pageLabel || pageMeta.pageLabel,
-          sectionLabel: event.sectionLabel || pageMeta.sectionLabel,
-          approxMinutes: dwellByEventId.get(event.id) || 1,
-        };
-      })
-      .sort((a, b) => {
-        const left = toDate(a.timestamp)?.getTime() || 0;
-        const right = toDate(b.timestamp)?.getTime() || 0;
-        return right - left;
-      });
+
+    return eventRows.map((event) => {
+      const pageMeta = getNavigationMeta(event.pageId);
+      return {
+        ...event,
+        actorName: event.displayName || event.email || event.uid || "Unknown User",
+        pageLabel: event.pageLabel || pageMeta.pageLabel,
+        sectionLabel: event.sectionLabel || pageMeta.sectionLabel,
+        approxMinutes: dwellByEventId.get(event.id) || 1,
+      };
+    });
   }, [eventRows]);
 
-  const summaryCards = useMemo(() => {
-    const activeCount = liveUsers.filter(
-      (row) => row.status.label === "Active now",
-    ).length;
-    return {
-      trackedUsers: liveUsers.length,
-      activeNow: activeCount,
-      timelineEntries: timelineRows.length,
-      dailySummaries: dailyRows.length,
-    };
-  }, [dailyRows.length, liveUsers, timelineRows.length]);
+  const summaryCards = useMemo(
+    () => [
+      {
+        label: "Active Users",
+        value: liveUsers.filter((user) => user.status.label === "Active now").length,
+        hint: `${analyticsModel.overview.uniqueUsers} distinct users in range`,
+        icon: Users,
+        accentClass: "bg-gradient-to-r from-emerald-500 to-teal-500",
+      },
+      {
+        label: "Time in App",
+        value: formatMinutes(analyticsModel.overview.totalMinutesApprox),
+        hint: `${analyticsModel.overview.sessionCount} sessions reconstructed from page enters`,
+        icon: Clock3,
+        accentClass: "bg-gradient-to-r from-blue-500 to-cyan-500",
+      },
+      {
+        label: "Page Views",
+        value: analyticsModel.overview.pageEnterCount,
+        hint: `${analyticsModel.overview.avgPagesPerUser} pages per user on average`,
+        icon: Activity,
+        accentClass: "bg-gradient-to-r from-indigo-500 to-blue-500",
+      },
+      {
+        label: "Curated Actions",
+        value: analyticsModel.overview.semanticEventCount,
+        hint: "Semantic events such as navigate, import, save, or search",
+        icon: MousePointerClick,
+        accentClass: "bg-gradient-to-r from-amber-500 to-orange-500",
+      },
+    ],
+    [analyticsModel.overview, liveUsers],
+  );
+
+  const sortedUsers = useMemo(() => {
+    const rows = [...analyticsModel.aggregatedUsers];
+    rows.sort((left, right) => {
+      const leftValue = left[userSort.key] ?? 0;
+      const rightValue = right[userSort.key] ?? 0;
+      if (typeof leftValue === "string" || typeof rightValue === "string") {
+        const result = String(leftValue).localeCompare(String(rightValue));
+        return userSort.direction === "asc" ? result : -result;
+      }
+      const result = Number(leftValue) - Number(rightValue);
+      return userSort.direction === "asc" ? result : -result;
+    });
+    return rows;
+  }, [analyticsModel.aggregatedUsers, userSort.direction, userSort.key]);
+
+  const updateSort = (key) => {
+    setUserSort((current) => ({
+      key,
+      direction:
+        current.key === key && current.direction === "desc" ? "asc" : "desc",
+    }));
+  };
 
   if (!isActivityOwner) {
     return (
-      <div className="bg-white rounded-lg border border-gray-200 p-6 text-gray-700">
+      <div className="rounded-lg border border-gray-200 bg-white p-6 text-gray-700">
         This page is only available to the configured activity owner account.
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">User Activity</h1>
-          <p className="text-gray-600 mt-1">
-            Owner-only timeline of where people are in the app and what pages
-            they opened.
-          </p>
+    <>
+      <div className="space-y-6">
+        <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.18),transparent_30%),linear-gradient(135deg,#0f172a,#134e4a_58%,#ffffff_170%)] px-5 py-6 text-white shadow-lg md:px-7 md:py-7">
+          <div className="absolute inset-y-0 right-0 hidden w-1/3 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.16),transparent_62%)] lg:block" />
+          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-teal-100/90">
+                Owner Analytics Console
+              </p>
+              <h1 className="mt-3 text-3xl font-black tracking-tight md:text-4xl">
+                User Activity Intelligence
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200">
+                Live presence stays operational. Everything else is rendered from daily
+                rollups so you can spot usage patterns, navigation habits, and
+                concentration windows without making this page a heavy raw-event scanner.
+              </p>
+            </div>
+
+            <div className="flex flex-col items-start gap-3 lg:items-end">
+              <RangeSelector value={rangeDays} onChange={setRangeDays} />
+              <button
+                type="button"
+                onClick={() => void refreshAll({ silent: true })}
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/15"
+                disabled={refreshing}
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                <span>{refreshing ? "Refreshing..." : "Refresh analytics"}</span>
+              </button>
+            </div>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => loadActivityData({ silent: true })}
-          className="btn-secondary inline-flex items-center gap-2"
-          disabled={refreshing}
+
+        {errorMessage ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {summaryCards.map((card) => (
+            <MetricCard key={card.label} {...card} />
+          ))}
+        </div>
+
+        <SectionShell
+          eyebrow="Overview"
+          title="Usage volume and timing"
+          description="Daily rollups power these charts. They show how much the app was used, when that use happened, and which destinations absorbed the most attention."
         >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
-          <span>{refreshing ? "Refreshing..." : "Refresh"}</span>
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <div className="university-card">
-          <div className="university-card-content flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Tracked Users</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {summaryCards.trackedUsers}
-              </p>
+          {summaryLoading ? (
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+              Loading rollup summaries...
             </div>
-            <Users className="w-7 h-7 text-baylor-green" />
-          </div>
-        </div>
-        <div className="university-card">
-          <div className="university-card-content flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Active Now</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {summaryCards.activeNow}
-              </p>
-            </div>
-            <Activity className="w-7 h-7 text-green-600" />
-          </div>
-        </div>
-        <div className="university-card">
-          <div className="university-card-content flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Timeline Entries</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {summaryCards.timelineEntries}
-              </p>
-            </div>
-            <Clock3 className="w-7 h-7 text-blue-600" />
-          </div>
-        </div>
-        <div className="university-card">
-          <div className="university-card-content flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Daily Summaries</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {summaryCards.dailySummaries}
-              </p>
-            </div>
-            <Shield className="w-7 h-7 text-amber-600" />
-          </div>
-        </div>
-      </div>
-
-      {errorMessage && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {errorMessage}
-        </div>
-      )}
-
-      <section className="university-card">
-        <div className="university-card-header">
-          <h2 className="university-card-title">Live Now</h2>
-          <span className="text-sm text-gray-500">
-            Updated every minute using last-active heartbeats
-          </span>
-        </div>
-        <div className="university-card-content">
-          {loading ? (
-            <p className="text-sm text-gray-500">Loading live activity...</p>
-          ) : liveUsers.length === 0 ? (
-            <p className="text-sm text-gray-500">No active presence records yet.</p>
           ) : (
-            <div className="space-y-3">
-              {liveUsers.map((row) => (
-                <div
-                  key={row.id}
-                  className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3"
-                >
-                  <p className="text-sm text-gray-900">
-                    <span className="font-semibold">{row.displayName}</span>{" "}
-                    is on <span className="font-medium">{row.pageLabel}</span>{" "}
-                    ({row.sectionLabel}).
-                  </p>
-                  <p className="text-xs text-gray-600 mt-1">
-                    Status:{" "}
-                    <span className={`font-medium ${row.status.color}`}>
-                      {row.status.label}
-                    </span>{" "}
-                    • Last active {formatTimeAgo(row.lastActiveAt)} •{" "}
-                    {row.email}
-                  </p>
+            <div className="space-y-5">
+              <SimpleLineChart
+                rows={analyticsModel.trendRows}
+                dataKey="totalMinutesApprox"
+                stroke="#14b8a6"
+                formatter={formatMinutes}
+              />
+
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+                <HourHeatmap rows={analyticsModel.heatmapRows} />
+                <div className="grid grid-cols-1 gap-4">
+                  <RankedBars
+                    title="Top Pages"
+                    subtitle="Pages with the most time spent in the selected range."
+                    rows={analyticsModel.topPages}
+                    labelKey="pageLabel"
+                  />
+                  <RankedBars
+                    title="Top Sections"
+                    subtitle="Sections generating the most sustained usage."
+                    rows={analyticsModel.topSections}
+                    labelKey="sectionLabel"
+                  />
                 </div>
-              ))}
+              </div>
             </div>
           )}
-        </div>
-      </section>
+        </SectionShell>
 
-      <section className="university-card">
-        <div className="university-card-header">
-          <h2 className="university-card-title">Timeline</h2>
-          <span className="text-sm text-gray-500">
-            Most recent page opens
-          </span>
-        </div>
-        <div className="university-card-content">
-          {loading ? (
-            <p className="text-sm text-gray-500">Loading timeline...</p>
-          ) : timelineRows.length === 0 ? (
-            <p className="text-sm text-gray-500">No timeline entries yet.</p>
+        <SectionShell
+          eyebrow="Patterns"
+          title="Habits, tendencies, and navigation signals"
+          description="These summaries surface whether people come back, where activity concentrates, and which paths through the app repeat most often."
+        >
+          {summaryLoading ? (
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+              Loading pattern summaries...
+            </div>
           ) : (
-            <div className="space-y-2">
-              {timelineRows.map((row) => (
-                <div
-                  key={row.id}
-                  className="rounded-lg border border-gray-200 px-4 py-3 text-sm"
-                >
-                  <p className="text-gray-900">
-                    <span className="font-semibold">{row.actorName}</span> opened{" "}
-                    <span className="font-medium">{row.pageLabel}</span> around{" "}
-                    <span className="font-medium">{formatDateTime(row.timestamp)}</span>{" "}
-                    and stayed about{" "}
-                    <span className="font-medium">
-                      {row.approxMinutes} minute{row.approxMinutes === 1 ? "" : "s"}
-                    </span>
-                    .
-                  </p>
-                  <p className="text-xs text-gray-600 mt-1">
-                    Section: {row.sectionLabel} • Session:{" "}
-                    {row.sessionId || "unknown"} • {row.email || row.uid}
-                  </p>
-                </div>
-              ))}
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <MetricCard
+                  label="Repeat Users"
+                  value={analyticsModel.patterns.repeatUsers}
+                  hint={`${analyticsModel.patterns.oneTimeUsers} one-time users in the same range`}
+                  accentClass="bg-gradient-to-r from-fuchsia-500 to-indigo-500"
+                  icon={Users}
+                />
+                <MetricCard
+                  label="Avg Session"
+                  value={formatMinutes(analyticsModel.overview.avgSessionMinutes)}
+                  hint={
+                    analyticsModel.patterns.busiestHour
+                      ? `Busiest hour ${String(
+                          analyticsModel.patterns.busiestHour.hour,
+                        ).padStart(2, "0")}:00`
+                      : "No hour trend yet"
+                  }
+                  accentClass="bg-gradient-to-r from-orange-500 to-amber-500"
+                  icon={Flame}
+                />
+                <MetricCard
+                  label="Strongest Action"
+                  value={
+                    analyticsModel.patterns.topActions[0]?.actionKey || "None"
+                  }
+                  hint={`${
+                    analyticsModel.patterns.topActions[0]?.count || 0
+                  } occurrences`}
+                  accentClass="bg-gradient-to-r from-cyan-500 to-sky-500"
+                  icon={MousePointerClick}
+                />
+                <MetricCard
+                  label="Top Transition"
+                  value={
+                    analyticsModel.patterns.topTransitions[0]?.toPageLabel || "None"
+                  }
+                  hint={
+                    analyticsModel.patterns.topTransitions[0]
+                      ? `${analyticsModel.patterns.topTransitions[0].fromPageLabel} -> ${analyticsModel.patterns.topTransitions[0].toPageLabel}`
+                      : "No page-path data yet"
+                  }
+                  accentClass="bg-gradient-to-r from-teal-500 to-emerald-500"
+                  icon={ArrowRightLeft}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                <RankedBars
+                  title="Top Actions"
+                  subtitle="Curated activity actions, not generic click noise."
+                  rows={analyticsModel.patterns.topActions}
+                  labelKey="actionKey"
+                  valueKey="count"
+                  valueFormatter={(value) => `${value}`}
+                />
+                <RankedBars
+                  title="Common Transitions"
+                  subtitle="Most repeated page-to-page flows across sessions."
+                  rows={analyticsModel.patterns.topTransitions.map((row) => ({
+                    ...row,
+                    label: `${row.fromPageLabel} -> ${row.toPageLabel}`,
+                  }))}
+                  labelKey="label"
+                  valueKey="count"
+                  valueFormatter={(value) => `${value}`}
+                />
+              </div>
             </div>
           )}
-        </div>
-      </section>
+        </SectionShell>
 
-      <section className="university-card">
-        <div className="university-card-header">
-          <h2 className="university-card-title">Daily Summary</h2>
-          <span className="text-sm text-gray-500">Campus-time rollups</span>
-        </div>
-        <div className="university-card-content">
-          {loading ? (
-            <p className="text-sm text-gray-500">Loading summaries...</p>
-          ) : dailyRows.length === 0 ? (
-            <p className="text-sm text-gray-500">No daily summaries yet.</p>
+        <SectionShell
+          eyebrow="Users"
+          title="Who uses the app and how"
+          description="This table aggregates daily per-user summaries for the selected range. Open a user to inspect their day-by-day pattern, top pages, and activity heatmap."
+        >
+          {summaryLoading ? (
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+              Loading user summaries...
+            </div>
+          ) : sortedUsers.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+              No rolled-up user summaries exist yet for the selected range.
+            </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left text-gray-600 border-b border-gray-200">
-                    <th className="py-2 pr-4">Date</th>
-                    <th className="py-2 pr-4">User</th>
-                    <th className="py-2 pr-4">Time in App</th>
-                    <th className="py-2 pr-4">Pages Visited</th>
-                    <th className="py-2">Top Pages</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dailyRows.map((row) => (
-                    <tr key={row.id} className="border-b border-gray-100 align-top">
-                      <td className="py-2 pr-4 font-medium text-gray-900">
-                        {row.dateKey || "Unknown"}
-                      </td>
-                      <td className="py-2 pr-4 text-gray-700">
-                        {row.displayName || row.email || row.uid}
-                      </td>
-                      <td className="py-2 pr-4 text-gray-700">
-                        {row.totalMinutesApprox || 0} minute
-                        {(row.totalMinutesApprox || 0) === 1 ? "" : "s"}
-                      </td>
-                      <td className="py-2 pr-4 text-gray-700">
-                        {row.pagesVisitedCount || 0}
-                      </td>
-                      <td className="py-2 text-gray-700">
-                        {Array.isArray(row.topPages) && row.topPages.length > 0
-                          ? row.topPages.join(", ")
-                          : "None"}
-                      </td>
+            <div className="overflow-hidden rounded-3xl border border-slate-200">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr className="border-b border-slate-200 text-left">
+                      <th className="px-4">
+                        <SortHeader
+                          label="User"
+                          active={userSort.key === "displayName"}
+                          direction={userSort.direction}
+                          onClick={() => updateSort("displayName")}
+                        />
+                      </th>
+                      <th className="px-4">
+                        <SortHeader
+                          label="Time"
+                          active={userSort.key === "totalMinutesApprox"}
+                          direction={userSort.direction}
+                          onClick={() => updateSort("totalMinutesApprox")}
+                        />
+                      </th>
+                      <th className="px-4">
+                        <SortHeader
+                          label="Sessions"
+                          active={userSort.key === "sessionCount"}
+                          direction={userSort.direction}
+                          onClick={() => updateSort("sessionCount")}
+                        />
+                      </th>
+                      <th className="px-4">
+                        <SortHeader
+                          label="Pages"
+                          active={userSort.key === "pagesVisitedCount"}
+                          direction={userSort.direction}
+                          onClick={() => updateSort("pagesVisitedCount")}
+                        />
+                      </th>
+                      <th className="px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        Signature Pages
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {sortedUsers.map((user) => (
+                      <tr
+                        key={user.uid}
+                        className="cursor-pointer border-b border-slate-100 transition hover:bg-slate-50"
+                        onClick={() => setSelectedUser(user)}
+                      >
+                        <td className="px-4 py-3 align-top">
+                          <p className="font-semibold text-slate-900">{user.displayName}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {user.email} • {user.role || "unknown"}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 align-top text-slate-700">
+                          <p className="font-medium">{formatMinutes(user.totalMinutesApprox)}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {user.avgMinutesPerSession}m avg/session
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 align-top text-slate-700">
+                          <p className="font-medium">{user.sessionCount}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {user.activeDays} active day{user.activeDays === 1 ? "" : "s"}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 align-top text-slate-700">
+                          <p className="font-medium">{user.pagesVisitedCount}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {user.avgPagesPerDay} avg/day
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 align-top text-slate-700">
+                          {(user.topPagesDetailed || []).length === 0 ? (
+                            <span className="text-slate-400">No dominant pages yet</span>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {user.topPagesDetailed.map((page) => (
+                                <span
+                                  key={`${user.uid}-${page.pageId}`}
+                                  className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"
+                                >
+                                  {page.pageLabel}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
-        </div>
-      </section>
-    </div>
+        </SectionShell>
+
+        <SectionShell
+          eyebrow="Live / Timeline"
+          title="Operational activity feed"
+          description="This is the only part of the page still backed by recent raw presence and event documents. It stays intentionally small so operational visibility does not turn into an analytics query."
+          action={
+            <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+              {liveLoading ? "Refreshing live feed..." : "Auto-refresh every minute"}
+            </div>
+          }
+        >
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Live Now</p>
+                  <p className="text-sm text-slate-600">
+                    Presence documents sorted by last heartbeat.
+                  </p>
+                </div>
+                <Shield className="h-5 w-5 text-slate-400" />
+              </div>
+
+              {liveLoading ? (
+                <p className="text-sm text-slate-500">Loading live activity...</p>
+              ) : liveUsers.length === 0 ? (
+                <p className="text-sm text-slate-500">No active presence records yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {liveUsers.map((row) => (
+                    <div
+                      key={row.id}
+                      className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="text-sm text-slate-900">
+                            <span className="font-semibold">{row.displayName}</span> is on{" "}
+                            <span className="font-medium">{row.pageLabel}</span>
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {row.sectionLabel} • {row.email}
+                          </p>
+                        </div>
+                        <span
+                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${row.status.badge}`}
+                        >
+                          {row.status.label}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs text-slate-500">
+                        Last heartbeat {formatTimeAgo(row.lastActiveAt)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-white p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Recent Timeline</p>
+                  <p className="text-sm text-slate-600">
+                    Latest raw events only, capped to keep reads low.
+                  </p>
+                </div>
+                <BarChart3 className="h-5 w-5 text-slate-400" />
+              </div>
+
+              {liveLoading ? (
+                <p className="text-sm text-slate-500">Loading recent events...</p>
+              ) : timelineRows.length === 0 ? (
+                <p className="text-sm text-slate-500">No timeline entries yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {timelineRows.map((row) => (
+                    <div
+                      key={row.id}
+                      className="rounded-2xl border border-slate-200 px-4 py-3"
+                    >
+                      <p className="text-sm text-slate-900">
+                        <span className="font-semibold">{row.actorName}</span>{" "}
+                        {row.eventType === "page_enter"
+                          ? `opened ${row.pageLabel}`
+                          : `triggered ${row.actionKey || row.eventType}`}{" "}
+                        at <span className="font-medium">{formatDateTime(row.timestamp)}</span>
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {row.sectionLabel} • Session {row.sessionId || "unknown"} •{" "}
+                        {row.eventType === "page_enter"
+                          ? `approx ${row.approxMinutes}m on page`
+                          : row.email || row.uid}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </SectionShell>
+      </div>
+
+      <UserDrilldownDrawer
+        user={selectedUser}
+        detailModel={userDetailModel}
+        loading={userDetailLoading}
+        rangeDays={rangeDays}
+        onClose={() => setSelectedUser(null)}
+      />
+    </>
   );
 };
 

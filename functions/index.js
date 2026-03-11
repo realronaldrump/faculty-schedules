@@ -1,6 +1,14 @@
 const admin = require("firebase-admin");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const {
+  ACTIVITY_ROLLUP_TIME_ZONE,
+  addDaysToDateKey,
+  enumerateDateKeys,
+  getDateKeyUtcRange,
+  formatDateKeyInTimeZone,
+  rollupActivityForDateKeys,
+} = require("./activityAnalytics");
 
 admin.initializeApp();
 
@@ -31,62 +39,119 @@ const normalizeRoleList = (roles) => {
   return [];
 };
 
-const ACTIVITY_ROLLUP_TIME_ZONE = "America/Chicago";
-const ACTIVITY_ROLLUP_FETCH_LIMIT = 10000;
-const ACTIVITY_ROLLUP_LOOKBACK_DAYS = 3;
-const MIN_ACTIVITY_MINUTES_PER_EVENT = 1;
-const MAX_ACTIVITY_GAP_MINUTES = 30;
+const ACTIVITY_OWNER_UID = "fjQuh4iAMFYi8URf35Yv5RRijKw2";
+const MAX_BACKFILL_DAYS = 120;
+const QUERY_PAGE_SIZE = 1000;
+const WRITE_BATCH_SIZE = 425;
 
-const formatDateKeyInTimeZone = (date) => {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: ACTIVITY_ROLLUP_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
+const buildPageRollupDocId = (pageDoc) =>
+  `${pageDoc.dateKey}_${encodeURIComponent(pageDoc.pageId || "unknown")}`;
 
-  const year = parts.find((part) => part.type === "year")?.value || "0000";
-  const month = parts.find((part) => part.type === "month")?.value || "00";
-  const day = parts.find((part) => part.type === "day")?.value || "00";
-  return `${year}-${month}-${day}`;
-};
-
-const asDate = (value) => {
-  if (!value) return null;
-  if (typeof value.toDate === "function") return value.toDate();
-  if (typeof value.seconds === "number") return new Date(value.seconds * 1000);
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const buildUserRollupSeed = (event) => ({
-  uid: event.uid,
-  email: event.email || "",
-  displayName: event.displayName || event.email || event.uid || "Unknown User",
-  pageCounts: new Map(),
-  uniquePageIds: new Set(),
-  totalMinutesApprox: 0,
-  firstSeenAt: event.timestampDate,
-  lastSeenAt: event.timestampDate,
-});
-
-const appendPageCount = (summary, event) => {
-  const pageLabel = event.pageLabel || event.pageId || "Unknown Page";
-  const current = summary.pageCounts.get(pageLabel) || 0;
-  summary.pageCounts.set(pageLabel, current + 1);
-  if (event.pageId) {
-    summary.uniquePageIds.add(event.pageId);
-  }
-};
-
-const normalizeEventMinutes = (minutes) => {
-  if (!Number.isFinite(minutes) || minutes <= 0) {
-    return MIN_ACTIVITY_MINUTES_PER_EVENT;
-  }
-  return Math.max(
-    MIN_ACTIVITY_MINUTES_PER_EVENT,
-    Math.min(MAX_ACTIVITY_GAP_MINUTES, Math.round(minutes)),
+const fetchActivityEventsForDateRange = async (startDateKey, endDateKey) => {
+  const { start } = getDateKeyUtcRange(startDateKey, ACTIVITY_ROLLUP_TIME_ZONE);
+  const { start: endExclusive } = getDateKeyUtcRange(
+    addDaysToDateKey(endDateKey, 1),
+    ACTIVITY_ROLLUP_TIME_ZONE,
   );
+
+  const queryRef = db
+    .collection("userActivityEvents")
+    .where("timestamp", ">=", start)
+    .where("timestamp", "<", endExclusive)
+    .orderBy("timestamp", "asc")
+    .limit(QUERY_PAGE_SIZE);
+
+  const events = [];
+  let lastDoc = null;
+  let hasMore = true;
+
+  while (hasMore) {
+    const snapshot = await (lastDoc ? queryRef.startAfter(lastDoc).get() : queryRef.get());
+    if (snapshot.empty) break;
+
+    snapshot.docs.forEach((docSnap) => {
+      events.push({ id: docSnap.id, ...docSnap.data() });
+    });
+
+    if (snapshot.size < QUERY_PAGE_SIZE) {
+      hasMore = false;
+      continue;
+    }
+    lastDoc = snapshot.docs[snapshot.docs.length - 1];
+  }
+
+  return events;
+};
+
+const buildRollupWrites = (dateSummaries) => {
+  const writes = [];
+
+  dateSummaries.forEach((summary) => {
+    writes.push({
+      ref: db.collection("userActivityAnalyticsDaily").doc(summary.analyticsDoc.dateKey),
+      data: {
+        ...summary.analyticsDoc,
+        generatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+    });
+
+    summary.pageDocs.forEach((pageDoc) => {
+      writes.push({
+        ref: db
+          .collection("userActivityPageDaily")
+          .doc(buildPageRollupDocId(pageDoc)),
+        data: {
+          ...pageDoc,
+          generatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+      });
+    });
+
+    summary.userDocs.forEach((userDoc) => {
+      writes.push({
+        ref: db.collection("userActivityDaily").doc(`${userDoc.dateKey}_${userDoc.uid}`),
+        data: {
+          ...userDoc,
+          generatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+      });
+    });
+  });
+
+  return writes;
+};
+
+const commitWritesInChunks = async (writes) => {
+  for (let index = 0; index < writes.length; index += WRITE_BATCH_SIZE) {
+    const chunk = writes.slice(index, index + WRITE_BATCH_SIZE);
+    const batch = db.batch();
+    chunk.forEach(({ ref, data }) => {
+      batch.set(ref, data, { merge: true });
+    });
+    await batch.commit();
+  }
+};
+
+const rebuildAnalyticsDateRange = async (startDateKey, endDateKey) => {
+  const dateKeys = enumerateDateKeys(startDateKey, endDateKey);
+  const events = await fetchActivityEventsForDateRange(startDateKey, endDateKey);
+  const summaries = rollupActivityForDateKeys(events, dateKeys);
+  const writes = buildRollupWrites(summaries);
+  await commitWritesInChunks(writes);
+
+  return {
+    dateKeys,
+    eventCount: events.length,
+    analyticsDocCount: summaries.length,
+    pageDocCount: summaries.reduce(
+      (count, summary) => count + summary.pageDocs.length,
+      0,
+    ),
+    userDocCount: summaries.reduce(
+      (count, summary) => count + summary.userDocs.length,
+      0,
+    ),
+  };
 };
 
 exports.rollupUserActivityDaily = onSchedule(
@@ -97,121 +162,80 @@ exports.rollupUserActivityDaily = onSchedule(
   },
   async () => {
     const now = new Date();
-    const targetDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const targetDateKey = formatDateKeyInTimeZone(targetDate);
-    const lookbackStart = new Date(
-      now.getTime() - ACTIVITY_ROLLUP_LOOKBACK_DAYS * 24 * 60 * 60 * 1000,
+    const previousDateKey = formatDateKeyInTimeZone(
+      new Date(now.getTime() - 24 * 60 * 60 * 1000),
+      ACTIVITY_ROLLUP_TIME_ZONE,
     );
+    await rebuildAnalyticsDateRange(previousDateKey, previousDateKey);
+    return null;
+  },
+);
 
-    const eventsSnapshot = await db
-      .collection("userActivityEvents")
-      .orderBy("timestamp", "desc")
-      .limit(ACTIVITY_ROLLUP_FETCH_LIMIT)
-      .get();
+exports.rollupUserActivityHourly = onSchedule(
+  {
+    region: "us-central1",
+    schedule: "12 * * * *",
+    timeZone: ACTIVITY_ROLLUP_TIME_ZONE,
+  },
+  async () => {
+    const now = new Date();
+    const currentDateKey = formatDateKeyInTimeZone(now, ACTIVITY_ROLLUP_TIME_ZONE);
+    const previousDateKey = formatDateKeyInTimeZone(
+      new Date(now.getTime() - 24 * 60 * 60 * 1000),
+      ACTIVITY_ROLLUP_TIME_ZONE,
+    );
+    await rebuildAnalyticsDateRange(previousDateKey, currentDateKey);
+    return null;
+  },
+);
 
-    const events = [];
-    eventsSnapshot.docs.forEach((docSnap) => {
-      const data = docSnap.data() || {};
-      if (data.eventType !== "page_enter") return;
-      if (!data.uid) return;
-
-      const timestampDate = asDate(data.timestamp);
-      if (!timestampDate || timestampDate < lookbackStart) return;
-      if (formatDateKeyInTimeZone(timestampDate) !== targetDateKey) return;
-
-      events.push({
-        id: docSnap.id,
-        ...data,
-        timestampDate,
-      });
-    });
-
-    if (events.length === 0) {
-      return null;
+exports.rebuildUserActivityAnalytics = onCall(
+  {
+    region: "us-central1",
+    cors: ALLOWED_CALLABLE_ORIGINS,
+    invoker: "public",
+  },
+  async (request) => {
+    const callerUid = request.auth?.uid;
+    if (!callerUid) {
+      throw new HttpsError("unauthenticated", "You must be signed in.");
     }
 
-    const summariesByUid = new Map();
-    const eventsBySession = new Map();
-
-    events.forEach((event) => {
-      const existingSummary = summariesByUid.get(event.uid);
-      const summary = existingSummary || buildUserRollupSeed(event);
-      summary.email = summary.email || event.email || "";
-      summary.displayName =
-        summary.displayName ||
-        event.displayName ||
-        event.email ||
-        event.uid ||
-        "Unknown User";
-      if (event.timestampDate < summary.firstSeenAt) {
-        summary.firstSeenAt = event.timestampDate;
-      }
-      if (event.timestampDate > summary.lastSeenAt) {
-        summary.lastSeenAt = event.timestampDate;
-      }
-      appendPageCount(summary, event);
-      summariesByUid.set(event.uid, summary);
-
-      const sessionKey = `${event.uid}:${event.sessionId || "default"}`;
-      const sessionEvents = eventsBySession.get(sessionKey) || [];
-      sessionEvents.push(event);
-      eventsBySession.set(sessionKey, sessionEvents);
-    });
-
-    eventsBySession.forEach((sessionEvents) => {
-      const ordered = sessionEvents.sort(
-        (left, right) => left.timestampDate.getTime() - right.timestampDate.getTime(),
+    if (callerUid !== ACTIVITY_OWNER_UID) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only the activity owner can rebuild analytics.",
       );
+    }
 
-      ordered.forEach((event, index) => {
-        const nextEvent = ordered[index + 1];
-        const summary = summariesByUid.get(event.uid);
-        if (!summary) return;
-
-        if (!nextEvent) {
-          summary.totalMinutesApprox += MIN_ACTIVITY_MINUTES_PER_EVENT;
-          return;
-        }
-
-        const diffMinutes =
-          (nextEvent.timestampDate.getTime() - event.timestampDate.getTime()) /
-          (1000 * 60);
-        summary.totalMinutesApprox += normalizeEventMinutes(diffMinutes);
-      });
-    });
-
-    const batch = db.batch();
-    summariesByUid.forEach((summary, uid) => {
-      const topPages = Array.from(summary.pageCounts.entries())
-        .sort((left, right) => right[1] - left[1])
-        .slice(0, 5)
-        .map(([page]) => page);
-
-      const docRef = db.collection("userActivityDaily").doc(`${targetDateKey}_${uid}`);
-      batch.set(
-        docRef,
-        {
-          dateKey: targetDateKey,
-          uid,
-          email: summary.email || "",
-          displayName: summary.displayName,
-          totalMinutesApprox: Math.round(summary.totalMinutesApprox),
-          pagesVisitedCount: summary.uniquePageIds.size,
-          pageEnterCount: Array.from(summary.pageCounts.values()).reduce(
-            (count, value) => count + value,
-            0,
-          ),
-          topPages,
-          firstSeenAt: summary.firstSeenAt,
-          lastSeenAt: summary.lastSeenAt,
-          generatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true },
+    const startDateKey = String(request.data?.startDateKey || "").trim();
+    const endDateKey = String(request.data?.endDateKey || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDateKey) || !/^\d{4}-\d{2}-\d{2}$/.test(endDateKey)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "startDateKey and endDateKey must be YYYY-MM-DD strings.",
       );
-    });
+    }
+    if (startDateKey > endDateKey) {
+      throw new HttpsError(
+        "invalid-argument",
+        "startDateKey must be on or before endDateKey.",
+      );
+    }
 
-    await batch.commit();
-    return null;
+    const dateKeys = enumerateDateKeys(startDateKey, endDateKey);
+    if (dateKeys.length > MAX_BACKFILL_DAYS) {
+      throw new HttpsError(
+        "invalid-argument",
+        `Date range cannot exceed ${MAX_BACKFILL_DAYS} days.`,
+      );
+    }
+
+    const result = await rebuildAnalyticsDateRange(startDateKey, endDateKey);
+    return {
+      success: true,
+      ...result,
+    };
   },
 );
 

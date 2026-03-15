@@ -101,7 +101,7 @@ const Sidebar = ({
             <div className="sidebar-brand">
               <div className="sidebar-logo">
                 <span className="text-white font-bold text-sm font-['DM_Sans']">
-                  DBBBD
+                  HSD
                 </span>
               </div>
               <div>
@@ -117,7 +117,7 @@ const Sidebar = ({
           {collapsed && (
             <div className="sidebar-logo mx-auto">
               <span className="text-white font-bold text-sm font-['DM_Sans']">
-                DBBBD
+                HSD
               </span>
             </div>
           )}

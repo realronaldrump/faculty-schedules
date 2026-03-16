@@ -8,11 +8,13 @@ import {
   startAfter,
   where,
 } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import {
   Activity,
   ArrowRightLeft,
   BarChart3,
   Clock3,
+  Database,
   Flame,
   MousePointerClick,
   RefreshCw,
@@ -20,12 +22,13 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { db } from "../../firebase";
+import { db, functions } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import {
   ACTIVITY_RANGE_OPTIONS,
   buildActivityAnalyticsModel,
   buildUserDrilldownModel,
+  formatDateKeyInTimeZone,
   getDateKeyDaysAgo,
   toDate,
 } from "../../utils/activityAnalytics";
@@ -592,6 +595,12 @@ const UserDrilldownDrawer = ({
   );
 };
 
+const REBUILD_RANGE_OPTIONS = [
+  { label: "Last 7 days", days: 7 },
+  { label: "Last 30 days", days: 30 },
+  { label: "Last 90 days", days: 90 },
+];
+
 const UserActivityPage = () => {
   const { isActivityOwner } = useAuth();
   const [rangeDays, setRangeDays] = useState(30);
@@ -611,6 +620,9 @@ const UserActivityPage = () => {
     key: "totalMinutesApprox",
     direction: "desc",
   });
+  const [rebuildBusy, setRebuildBusy] = useState(false);
+  const [rebuildResult, setRebuildResult] = useState(null);
+  const [showRebuildPanel, setShowRebuildPanel] = useState(false);
 
   const loadSummaryData = useCallback(async () => {
     if (!isActivityOwner) return;
@@ -862,6 +874,31 @@ const UserActivityPage = () => {
     }));
   };
 
+  const handleRebuildAnalytics = async (days) => {
+    setRebuildBusy(true);
+    setRebuildResult(null);
+    try {
+      const now = new Date();
+      const endDateKey = formatDateKeyInTimeZone(now);
+      const startDateKey = getDateKeyDaysAgo(days - 1, now);
+      const callable = httpsCallable(functions, "rebuildUserActivityAnalytics");
+      const response = await callable({ startDateKey, endDateKey });
+      setRebuildResult({
+        success: true,
+        message: `Rebuilt ${response.data.eventCount} events into ${response.data.analyticsDocCount} daily summaries, ${response.data.pageDocCount} page docs, and ${response.data.userDocCount} user docs.`,
+      });
+      await refreshAll({ silent: true });
+    } catch (error) {
+      console.error("Rebuild analytics failed:", error);
+      setRebuildResult({
+        success: false,
+        message: String(error?.message || "Rebuild failed. Make sure Cloud Functions are deployed."),
+      });
+    } finally {
+      setRebuildBusy(false);
+    }
+  };
+
   if (!isActivityOwner) {
     return (
       <div className="rounded-lg border border-gray-200 bg-white p-6 text-gray-700">
@@ -891,18 +928,79 @@ const UserActivityPage = () => {
 
             <div className="flex flex-col items-start gap-3 lg:items-end">
               <RangeSelector value={rangeDays} onChange={setRangeDays} />
-              <button
-                type="button"
-                onClick={() => void refreshAll({ silent: true })}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
-                disabled={refreshing}
-              >
-                <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-                <span>{refreshing ? "Refreshing..." : "Refresh analytics"}</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRebuildPanel((v) => !v)}
+                  className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                >
+                  <Database className="h-4 w-4" />
+                  <span>Rebuild Analytics</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void refreshAll({ silent: true })}
+                  className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  disabled={refreshing}
+                >
+                  <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                  <span>{refreshing ? "Refreshing..." : "Refresh analytics"}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
+
+        {showRebuildPanel ? (
+          <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 bg-stone-50 px-5 py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-amber-700">
+                Backfill Rollup Data
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Rebuild the analytics rollup collections from raw events. Run this after
+                deploying Cloud Functions for the first time, or if rollup data appears
+                missing or stale.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 px-5 py-4">
+              {REBUILD_RANGE_OPTIONS.map((option) => (
+                <button
+                  key={option.days}
+                  type="button"
+                  disabled={rebuildBusy}
+                  onClick={() => void handleRebuildAnalytics(option.days)}
+                  className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
+                >
+                  {rebuildBusy ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Database className="h-4 w-4" />
+                  )}
+                  <span>{option.label}</span>
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => { setShowRebuildPanel(false); setRebuildResult(null); }}
+                className="ml-auto min-h-[44px] rounded-full border border-slate-200 px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Close
+              </button>
+            </div>
+            {rebuildResult ? (
+              <div
+                className={`mx-5 mb-4 rounded-2xl border px-4 py-3 text-sm ${
+                  rebuildResult.success
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-rose-200 bg-rose-50 text-rose-700"
+                }`}
+              >
+                {rebuildResult.message}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {errorMessage ? (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">

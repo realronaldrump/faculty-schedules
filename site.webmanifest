@@ -1,7 +1,7 @@
 {
-  "name": "Davis's Big Beautiful Dashboard",
-  "short_name": "Davis's Big Beautiful Dashboard",
-  "description": "Davis's Big Beautiful Dashboard",
+  "name": "HSD Dashboard",
+  "short_name": "HSD Dashboard",
+  "description": "HSD Dashboard",
   "icons": [
     {
       "src": "/assets/icon-192.png",

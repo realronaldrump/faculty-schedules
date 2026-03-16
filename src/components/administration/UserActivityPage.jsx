@@ -8,13 +8,11 @@ import {
   startAfter,
   where,
 } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
 import {
   Activity,
   ArrowRightLeft,
   BarChart3,
   Clock3,
-  Database,
   Flame,
   MousePointerClick,
   RefreshCw,
@@ -22,7 +20,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { db, functions } from "../../firebase";
+import { db } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import {
   ACTIVITY_RANGE_OPTIONS,
@@ -32,6 +30,10 @@ import {
   getDateKeyDaysAgo,
   toDate,
 } from "../../utils/activityAnalytics";
+import {
+  enumerateDateKeys,
+  rollupActivityForDateKeys,
+} from "../../utils/activityRollup";
 import { getNavigationMeta } from "../../utils/navigationMeta";
 
 const LIVE_WINDOW_MINUTES = 2;
@@ -595,11 +597,7 @@ const UserDrilldownDrawer = ({
   );
 };
 
-const REBUILD_RANGE_OPTIONS = [
-  { label: "Last 7 days", days: 7 },
-  { label: "Last 30 days", days: 30 },
-  { label: "Last 90 days", days: 90 },
-];
+const EVENTS_PAGE_SIZE = 1000;
 
 const UserActivityPage = () => {
   const { isActivityOwner } = useAuth();
@@ -620,36 +618,48 @@ const UserActivityPage = () => {
     key: "totalMinutesApprox",
     direction: "desc",
   });
-  const [rebuildBusy, setRebuildBusy] = useState(false);
-  const [rebuildResult, setRebuildResult] = useState(null);
-  const [showRebuildPanel, setShowRebuildPanel] = useState(false);
 
   const loadSummaryData = useCallback(async () => {
     if (!isActivityOwner) return;
-    const cutoffDateKey = getDateKeyDaysAgo(SUMMARY_LOOKBACK_DAYS - 1);
 
-    const buildPagedQuery = (collectionName, lastDoc = null) =>
-      query(
-        collection(db, collectionName),
-        where("dateKey", ">=", cutoffDateKey),
-        orderBy("dateKey", "desc"),
+    const now = new Date();
+    const lookbackMs = SUMMARY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
+    const cutoffDate = new Date(now.getTime() - lookbackMs);
+    const startDateKey = getDateKeyDaysAgo(SUMMARY_LOOKBACK_DAYS - 1, now);
+    const endDateKey = formatDateKeyInTimeZone(now);
+    const dateKeys = enumerateDateKeys(startDateKey, endDateKey);
+
+    // Fetch all raw events for the lookback window (paginated)
+    const allEvents = [];
+    let lastDoc = null;
+    let hasMore = true;
+
+    while (hasMore) {
+      const constraints = [
+        where("timestamp", ">=", cutoffDate),
+        orderBy("timestamp", "asc"),
         ...(lastDoc ? [startAfter(lastDoc)] : []),
-        limit(SUMMARY_QUERY_PAGE_SIZE),
+        limit(EVENTS_PAGE_SIZE),
+      ];
+      const snapshot = await getDocs(
+        query(collection(db, "userActivityEvents"), ...constraints),
       );
+      const docs = Array.isArray(snapshot?.docs) ? snapshot.docs : [];
+      docs.forEach((docSnap) => {
+        allEvents.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      if (docs.length < EVENTS_PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        lastDoc = docs[docs.length - 1];
+      }
+    }
 
-    const [analyticsData, pageData, userData] = await Promise.all([
-      fetchPagedRows((lastDoc) =>
-        query(
-          collection(db, "userActivityAnalyticsDaily"),
-          where("dateKey", ">=", cutoffDateKey),
-          orderBy("dateKey", "desc"),
-          ...(lastDoc ? [startAfter(lastDoc)] : []),
-          limit(SUMMARY_QUERY_PAGE_SIZE),
-        ),
-      ),
-      fetchPagedRows((lastDoc) => buildPagedQuery("userActivityPageDaily", lastDoc)),
-      fetchPagedRows((lastDoc) => buildPagedQuery("userActivityDaily", lastDoc)),
-    ]);
+    // Compute rollups client-side
+    const summaries = rollupActivityForDateKeys(allEvents, dateKeys);
+    const analyticsData = summaries.map((s) => s.analyticsDoc);
+    const pageData = summaries.flatMap((s) => s.pageDocs);
+    const userData = summaries.flatMap((s) => s.userDocs);
 
     setAnalyticsRows(analyticsData);
     setPageDailyRows(pageData);
@@ -732,33 +742,11 @@ const UserActivityPage = () => {
       return;
     }
 
-    const loadUserRows = async () => {
-      setUserDetailLoading(true);
-      try {
-        const cutoffDateKey = getDateKeyDaysAgo(rangeDays - 1);
-        const userSnap = await getDocs(
-          query(
-            collection(db, "userActivityDaily"),
-            where("uid", "==", selectedUser.uid),
-            where("dateKey", ">=", cutoffDateKey),
-            orderBy("dateKey", "desc"),
-            limit(DRILLDOWN_LIMIT),
-          ),
-        );
-        setUserDetailRows(
-          mapQueryRows(userSnap),
-        );
-      } catch (error) {
-        console.error("Failed to load user drilldown:", error);
-        setUserDetailRows(
-          userDailyRows.filter((row) => row.uid === selectedUser.uid),
-        );
-      } finally {
-        setUserDetailLoading(false);
-      }
-    };
-
-    void loadUserRows();
+    // Use the already-loaded userDailyRows instead of querying a rollup collection
+    setUserDetailLoading(true);
+    const filtered = userDailyRows.filter((row) => row.uid === selectedUser.uid);
+    setUserDetailRows(filtered);
+    setUserDetailLoading(false);
   }, [isActivityOwner, rangeDays, selectedUser?.uid, userDailyRows]);
 
   const analyticsModel = useMemo(
@@ -874,31 +862,6 @@ const UserActivityPage = () => {
     }));
   };
 
-  const handleRebuildAnalytics = async (days) => {
-    setRebuildBusy(true);
-    setRebuildResult(null);
-    try {
-      const now = new Date();
-      const endDateKey = formatDateKeyInTimeZone(now);
-      const startDateKey = getDateKeyDaysAgo(days - 1, now);
-      const callable = httpsCallable(functions, "rebuildUserActivityAnalytics");
-      const response = await callable({ startDateKey, endDateKey });
-      setRebuildResult({
-        success: true,
-        message: `Rebuilt ${response.data.eventCount} events into ${response.data.analyticsDocCount} daily summaries, ${response.data.pageDocCount} page docs, and ${response.data.userDocCount} user docs.`,
-      });
-      await refreshAll({ silent: true });
-    } catch (error) {
-      console.error("Rebuild analytics failed:", error);
-      setRebuildResult({
-        success: false,
-        message: String(error?.message || "Rebuild failed. Make sure Cloud Functions are deployed."),
-      });
-    } finally {
-      setRebuildBusy(false);
-    }
-  };
-
   if (!isActivityOwner) {
     return (
       <div className="rounded-lg border border-gray-200 bg-white p-6 text-gray-700">
@@ -920,87 +883,26 @@ const UserActivityPage = () => {
                 User Activity Intelligence
               </h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                Live presence stays operational. Everything else is rendered from daily
-                rollups so you can spot usage patterns, navigation habits, and
-                concentration windows without making this page a heavy raw-event scanner.
+                Analytics are computed directly from raw activity events. Live
+                presence refreshes every minute. Use the range selector and
+                refresh button to explore usage patterns and navigation habits.
               </p>
             </div>
 
             <div className="flex flex-col items-start gap-3 lg:items-end">
               <RangeSelector value={rangeDays} onChange={setRangeDays} />
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowRebuildPanel((v) => !v)}
-                  className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                >
-                  <Database className="h-4 w-4" />
-                  <span>Rebuild Analytics</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void refreshAll({ silent: true })}
-                  className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
-                  disabled={refreshing}
-                >
-                  <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-                  <span>{refreshing ? "Refreshing..." : "Refresh analytics"}</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => void refreshAll({ silent: true })}
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+                disabled={refreshing}
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                <span>{refreshing ? "Refreshing..." : "Refresh analytics"}</span>
+              </button>
             </div>
           </div>
         </div>
-
-        {showRebuildPanel ? (
-          <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 bg-stone-50 px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-amber-700">
-                Backfill Rollup Data
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Rebuild the analytics rollup collections from raw events. Run this after
-                deploying Cloud Functions for the first time, or if rollup data appears
-                missing or stale.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 px-5 py-4">
-              {REBUILD_RANGE_OPTIONS.map((option) => (
-                <button
-                  key={option.days}
-                  type="button"
-                  disabled={rebuildBusy}
-                  onClick={() => void handleRebuildAnalytics(option.days)}
-                  className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
-                >
-                  {rebuildBusy ? (
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Database className="h-4 w-4" />
-                  )}
-                  <span>{option.label}</span>
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => { setShowRebuildPanel(false); setRebuildResult(null); }}
-                className="ml-auto min-h-[44px] rounded-full border border-slate-200 px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100"
-              >
-                Close
-              </button>
-            </div>
-            {rebuildResult ? (
-              <div
-                className={`mx-5 mb-4 rounded-2xl border px-4 py-3 text-sm ${
-                  rebuildResult.success
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : "border-rose-200 bg-rose-50 text-rose-700"
-                }`}
-              >
-                {rebuildResult.message}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
 
         {errorMessage ? (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">

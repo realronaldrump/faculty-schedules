@@ -30,10 +30,6 @@ import {
   getDateKeyDaysAgo,
   toDate,
 } from "../../utils/activityAnalytics";
-import {
-  enumerateDateKeys,
-  rollupActivityForDateKeys,
-} from "../../utils/activityRollup";
 import { getNavigationMeta } from "../../utils/navigationMeta";
 
 const LIVE_WINDOW_MINUTES = 2;
@@ -43,10 +39,24 @@ const SUMMARY_LOOKBACK_DAYS = 90;
 const SUMMARY_QUERY_PAGE_SIZE = 500;
 const TIMELINE_LIMIT = 60;
 const PRESENCE_LIMIT = 120;
-const DRILLDOWN_LIMIT = 120;
 
 const mapQueryRows = (snapshot) =>
   snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+
+const buildRollupQuery = ({
+  collectionName,
+  startDateKey,
+  endDateKey,
+  lastDoc,
+}) =>
+  query(
+    collection(db, collectionName),
+    where("dateKey", ">=", startDateKey),
+    where("dateKey", "<=", endDateKey),
+    orderBy("dateKey", "asc"),
+    ...(lastDoc ? [startAfter(lastDoc)] : []),
+    limit(SUMMARY_QUERY_PAGE_SIZE),
+  );
 
 const fetchPagedRows = async (buildQuery) => {
   const rows = [];
@@ -597,8 +607,6 @@ const UserDrilldownDrawer = ({
   );
 };
 
-const EVENTS_PAGE_SIZE = 1000;
-
 const UserActivityPage = () => {
   const { isActivityOwner } = useAuth();
   const [rangeDays, setRangeDays] = useState(30);
@@ -623,43 +631,34 @@ const UserActivityPage = () => {
     if (!isActivityOwner) return;
 
     const now = new Date();
-    const lookbackMs = SUMMARY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
-    const cutoffDate = new Date(now.getTime() - lookbackMs);
     const startDateKey = getDateKeyDaysAgo(SUMMARY_LOOKBACK_DAYS - 1, now);
     const endDateKey = formatDateKeyInTimeZone(now);
-    const dateKeys = enumerateDateKeys(startDateKey, endDateKey);
-
-    // Fetch all raw events for the lookback window (paginated)
-    const allEvents = [];
-    let lastDoc = null;
-    let hasMore = true;
-
-    while (hasMore) {
-      const constraints = [
-        where("timestamp", ">=", cutoffDate),
-        orderBy("timestamp", "asc"),
-        ...(lastDoc ? [startAfter(lastDoc)] : []),
-        limit(EVENTS_PAGE_SIZE),
-      ];
-      const snapshot = await getDocs(
-        query(collection(db, "userActivityEvents"), ...constraints),
-      );
-      const docs = Array.isArray(snapshot?.docs) ? snapshot.docs : [];
-      docs.forEach((docSnap) => {
-        allEvents.push({ id: docSnap.id, ...docSnap.data() });
-      });
-      if (docs.length < EVENTS_PAGE_SIZE) {
-        hasMore = false;
-      } else {
-        lastDoc = docs[docs.length - 1];
-      }
-    }
-
-    // Compute rollups client-side
-    const summaries = rollupActivityForDateKeys(allEvents, dateKeys);
-    const analyticsData = summaries.map((s) => s.analyticsDoc);
-    const pageData = summaries.flatMap((s) => s.pageDocs);
-    const userData = summaries.flatMap((s) => s.userDocs);
+    const [analyticsData, pageData, userData] = await Promise.all([
+      fetchPagedRows((lastDoc) =>
+        buildRollupQuery({
+          collectionName: "userActivityAnalyticsDaily",
+          startDateKey,
+          endDateKey,
+          lastDoc,
+        }),
+      ),
+      fetchPagedRows((lastDoc) =>
+        buildRollupQuery({
+          collectionName: "userActivityPageDaily",
+          startDateKey,
+          endDateKey,
+          lastDoc,
+        }),
+      ),
+      fetchPagedRows((lastDoc) =>
+        buildRollupQuery({
+          collectionName: "userActivityDaily",
+          startDateKey,
+          endDateKey,
+          lastDoc,
+        }),
+      ),
+    ]);
 
     setAnalyticsRows(analyticsData);
     setPageDailyRows(pageData);

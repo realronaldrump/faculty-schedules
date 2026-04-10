@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Shield, GraduationCap, Users, Calendar, BarChart3, MapPin, Database } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 
-function Login({ onLogin }) {
+function Login() {
   const { signIn, signUp } = useAuth();
   const [mode, setMode] = useState('signin'); // signin | signup
   const [email, setEmail] = useState('');
@@ -148,8 +148,6 @@ function Login({ onLogin }) {
       } else {
         await signUp(email.trim(), password, displayName.trim());
       }
-      onLogin(true);
-      localStorage.setItem('isAuthenticated', 'true');
     } catch (err) {
       setError(getFriendlyErrorMessage(err));
     } finally {

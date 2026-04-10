@@ -9,15 +9,37 @@ import {
   collection,
   getDocs,
   doc,
+  getDoc,
   deleteDoc,
   writeBatch,
   query,
   where,
-  updateDoc,
-  orderBy
+  documentId,
 } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { logBulkUpdate, logDelete } from './changeLogger';
+
+const QUERY_CHUNK_SIZE = 10;
+
+const chunkValues = (values, size = QUERY_CHUNK_SIZE) => {
+  const chunks = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
+};
+
+const mergeSnapshotRows = (snapshots = []) => {
+  const rows = new Map();
+  snapshots.forEach((snapshot) => {
+    snapshot?.docs?.forEach((docSnap) => {
+      if (!rows.has(docSnap.id)) {
+        rows.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+      }
+    });
+  });
+  return Array.from(rows.values());
+};
 
 /**
  * Delete all data associated with a semester import
@@ -124,11 +146,8 @@ export const deleteSemesterImport = async (termCode, options = {}) => {
     // 6. Check if term document exists
     const termRef = doc(db, COLLECTIONS.TERMS, termCode);
     try {
-      const termDoc = await getDocs(query(
-        collection(db, COLLECTIONS.TERMS),
-        where('termCode', '==', termCode)
-      ));
-      report.termDocDeleted = termDoc.docs.length > 0;
+      const termDoc = await getDoc(termRef);
+      report.termDocDeleted = termDoc.exists();
     } catch {
       // Term document check failed, but we can continue
     }
@@ -161,62 +180,95 @@ const findOrphanedRooms = async (usedSpaceIds, excludeTermCode) => {
     return [];
   }
 
-  const spaceIdArray = Array.from(usedSpaceIds);
+  const spaceIdArray = Array.from(usedSpaceIds).filter(Boolean);
+  const candidateIds = new Set(spaceIdArray);
   const orphanedRooms = [];
-
-  // Get all schedules NOT in this term that reference these rooms
-  // We need to check each spaceId against all other schedules
-  const otherSchedulesQuery = query(
-    collection(db, COLLECTIONS.SCHEDULES),
-    where('termCode', '!=', excludeTermCode),
-    orderBy('termCode')
-  );
-
-  const otherSchedulesSnapshot = await getDocs(otherSchedulesQuery);
   const referencedByOtherTerms = new Set();
-
-  otherSchedulesSnapshot.docs.forEach(docSnap => {
-    const schedule = docSnap.data();
-    (schedule.spaceIds || []).forEach(id => referencedByOtherTerms.add(id));
-  });
-
-  // Also check if rooms are used as offices by people
-  const peopleSnapshot = await getDocs(collection(db, COLLECTIONS.PEOPLE));
   const usedAsOffices = new Set();
 
-  peopleSnapshot.docs.forEach(docSnap => {
-    const person = docSnap.data();
-    if (person.officeSpaceId) {
-      usedAsOffices.add(person.officeSpaceId);
-    }
-    (person.officeSpaceIds || []).forEach(id => usedAsOffices.add(id));
-  });
+  for (const chunk of chunkValues(spaceIdArray)) {
+    const scheduleRows = mergeSnapshotRows([
+      await getDocs(
+        query(
+          collection(db, COLLECTIONS.SCHEDULES),
+          where('spaceIds', 'array-contains-any', chunk),
+        ),
+      ),
+    ]);
 
-  // Find rooms that are:
-  // - Used by the semester being deleted
-  // - NOT referenced by any other semester
-  // - NOT used as an office
-  for (const spaceId of spaceIdArray) {
-    if (!referencedByOtherTerms.has(spaceId) && !usedAsOffices.has(spaceId)) {
-      // This room is orphaned - get its data
-      try {
-        const roomsQuery = query(
-          collection(db, COLLECTIONS.ROOMS),
-          where('spaceKey', '==', spaceId)
-        );
-        const roomSnapshot = await getDocs(roomsQuery);
-
-        if (!roomSnapshot.empty) {
-          roomSnapshot.docs.forEach(docSnap => {
-            orphanedRooms.push({
-              id: docSnap.id,
-              ...docSnap.data()
-            });
-          });
+    scheduleRows.forEach((schedule) => {
+      if (schedule.termCode === excludeTermCode) return;
+      (schedule.spaceIds || []).forEach((spaceId) => {
+        if (candidateIds.has(spaceId)) {
+          referencedByOtherTerms.add(spaceId);
         }
-      } catch (err) {
-        console.warn(`Could not check room ${spaceId}:`, err.message);
+      });
+    });
+
+    const peopleRows = mergeSnapshotRows(await Promise.all([
+      getDocs(
+        query(
+          collection(db, COLLECTIONS.PEOPLE),
+          where('officeSpaceId', 'in', chunk),
+        ),
+      ),
+      getDocs(
+        query(
+          collection(db, COLLECTIONS.PEOPLE),
+          where('officeSpaceIds', 'array-contains-any', chunk),
+        ),
+      ),
+    ]));
+
+    peopleRows.forEach((person) => {
+      if (candidateIds.has(person.officeSpaceId)) {
+        usedAsOffices.add(person.officeSpaceId);
       }
+      (person.officeSpaceIds || []).forEach((spaceId) => {
+        if (candidateIds.has(spaceId)) {
+          usedAsOffices.add(spaceId);
+        }
+      });
+    });
+  }
+
+  const orphanedSpaceIds = spaceIdArray.filter(
+    (spaceId) =>
+      !referencedByOtherTerms.has(spaceId) && !usedAsOffices.has(spaceId),
+  );
+
+  if (orphanedSpaceIds.length === 0) {
+    return [];
+  }
+
+  for (const chunk of chunkValues(orphanedSpaceIds)) {
+    try {
+      const roomRows = mergeSnapshotRows(await Promise.all([
+        getDocs(
+          query(
+            collection(db, COLLECTIONS.ROOMS),
+            where('spaceKey', 'in', chunk),
+          ),
+        ),
+        getDocs(
+          query(
+            collection(db, COLLECTIONS.ROOMS),
+            where(documentId(), 'in', chunk),
+          ),
+        ),
+      ]));
+
+      roomRows.forEach((room) => {
+        const resolvedSpaceKey = room.spaceKey || room.id;
+        if (candidateIds.has(resolvedSpaceKey)) {
+          orphanedRooms.push(room);
+        }
+      });
+    } catch (err) {
+      console.warn(
+        `Could not fetch orphaned room details for ${chunk.join(', ')}:`,
+        err.message,
+      );
     }
   }
 
@@ -236,60 +288,71 @@ const findOrphanedPeople = async (usedPersonIds, excludeTermCode) => {
     return [];
   }
 
-  const personIdArray = Array.from(usedPersonIds);
+  const personIdArray = Array.from(usedPersonIds).filter(Boolean);
+  const candidateIds = new Set(personIdArray);
   const orphanedPeople = [];
-
-  // Get all schedules NOT in this term
-  const otherSchedulesQuery = query(
-    collection(db, COLLECTIONS.SCHEDULES),
-    where('termCode', '!=', excludeTermCode),
-    orderBy('termCode')
-  );
-
-  const otherSchedulesSnapshot = await getDocs(otherSchedulesQuery);
   const referencedByOtherTerms = new Set();
 
-  otherSchedulesSnapshot.docs.forEach(docSnap => {
-    const schedule = docSnap.data();
-    if (schedule.instructorId) {
-      referencedByOtherTerms.add(schedule.instructorId);
-    }
-    (schedule.instructorIds || []).forEach(id => referencedByOtherTerms.add(id));
-  });
+  for (const chunk of chunkValues(personIdArray)) {
+    const scheduleRows = mergeSnapshotRows(await Promise.all([
+      getDocs(
+        query(
+          collection(db, COLLECTIONS.SCHEDULES),
+          where('instructorId', 'in', chunk),
+        ),
+      ),
+      getDocs(
+        query(
+          collection(db, COLLECTIONS.SCHEDULES),
+          where('instructorIds', 'array-contains-any', chunk),
+        ),
+      ),
+    ]));
 
-  // Find people that are:
-  // - Used by the semester being deleted
-  // - NOT referenced by any other semester
-  for (const personId of personIdArray) {
-    if (!referencedByOtherTerms.has(personId)) {
-      // This person might be orphaned - get their data and check for other references
-      try {
-        const personDoc = doc(db, COLLECTIONS.PEOPLE, personId);
-        const personSnapshot = await getDocs(query(
-          collection(db, COLLECTIONS.PEOPLE),
-          where('__name__', '==', personId)
-        ));
-
-        if (!personSnapshot.empty) {
-          const personData = personSnapshot.docs[0].data();
-
-          // Additional safety checks - don't delete people with:
-          // - Active status
-          // - Job titles suggesting permanent roles
-          // - Office assignments
-          const hasOffice = personData.officeSpaceId || (personData.officeSpaceIds?.length > 0);
-          const hasPermanentRole = personData.isTenured || personData.isFullTime;
-
-          if (!hasOffice && !hasPermanentRole) {
-            orphanedPeople.push({
-              id: personSnapshot.docs[0].id,
-              ...personData
-            });
-          }
-        }
-      } catch (err) {
-        console.warn(`Could not check person ${personId}:`, err.message);
+    scheduleRows.forEach((schedule) => {
+      if (schedule.termCode === excludeTermCode) return;
+      if (candidateIds.has(schedule.instructorId)) {
+        referencedByOtherTerms.add(schedule.instructorId);
       }
+      (schedule.instructorIds || []).forEach((personId) => {
+        if (candidateIds.has(personId)) {
+          referencedByOtherTerms.add(personId);
+        }
+      });
+    });
+  }
+
+  const orphanedPersonIds = personIdArray.filter(
+    (personId) => !referencedByOtherTerms.has(personId),
+  );
+
+  for (const chunk of chunkValues(orphanedPersonIds)) {
+    try {
+      const peopleSnapshot = await getDocs(
+        query(
+          collection(db, COLLECTIONS.PEOPLE),
+          where(documentId(), 'in', chunk),
+        ),
+      );
+
+      peopleSnapshot.docs.forEach((docSnap) => {
+        const personData = docSnap.data();
+        const hasOffice =
+          personData.officeSpaceId || personData.officeSpaceIds?.length > 0;
+        const hasPermanentRole = personData.isTenured || personData.isFullTime;
+
+        if (!hasOffice && !hasPermanentRole) {
+          orphanedPeople.push({
+            id: docSnap.id,
+            ...personData,
+          });
+        }
+      });
+    } catch (err) {
+      console.warn(
+        `Could not fetch orphaned people for ${chunk.join(', ')}:`,
+        err.message,
+      );
     }
   }
 
@@ -360,7 +423,7 @@ const executeDeleteSemester = async (report) => {
   const BATCH_SIZE = 450;
 
   // Helper to execute a batch of deletes
-  const executeBatch = async (items, collectionName, getRef) => {
+  const executeDeleteBatch = async (items, getRef) => {
     for (let i = 0; i < items.length; i += BATCH_SIZE) {
       const batch = writeBatch(db);
       const chunk = items.slice(i, i + BATCH_SIZE);
@@ -374,12 +437,24 @@ const executeDeleteSemester = async (report) => {
     }
   };
 
+  const executeUpdateBatch = async (items, getRef, buildPayload) => {
+    for (let i = 0; i < items.length; i += BATCH_SIZE) {
+      const batch = writeBatch(db);
+      const chunk = items.slice(i, i + BATCH_SIZE);
+
+      chunk.forEach((item) => {
+        batch.update(getRef(item), buildPayload(item));
+      });
+
+      await batch.commit();
+    }
+  };
+
   try {
     // 1. Delete schedules
     if (schedulesToDelete.length > 0) {
-      await executeBatch(
+      await executeDeleteBatch(
         schedulesToDelete,
-        COLLECTIONS.SCHEDULES,
         (item) => doc(db, COLLECTIONS.SCHEDULES, item.id)
       );
 
@@ -394,9 +469,8 @@ const executeDeleteSemester = async (report) => {
 
     // 2. Delete orphaned rooms
     if (roomsToClean.length > 0) {
-      await executeBatch(
+      await executeDeleteBatch(
         roomsToClean,
-        COLLECTIONS.ROOMS,
         (item) => doc(db, COLLECTIONS.ROOMS, item.id)
       );
 
@@ -411,9 +485,8 @@ const executeDeleteSemester = async (report) => {
 
     // 3. Delete orphaned people (if enabled and found)
     if (peopleToClean.length > 0) {
-      await executeBatch(
+      await executeDeleteBatch(
         peopleToClean,
-        COLLECTIONS.PEOPLE,
         (item) => doc(db, COLLECTIONS.PEOPLE, item.id)
       );
 
@@ -428,17 +501,15 @@ const executeDeleteSemester = async (report) => {
 
     // 4. Mark transactions as deleted
     if (transactionsToMark.length > 0) {
-      for (const transaction of transactionsToMark) {
-        try {
-          await updateDoc(doc(db, 'importTransactions', transaction.id), {
-            status: 'semester_deleted',
-            deletedAt: new Date().toISOString(),
-            deletedTermCode: termCode
-          });
-        } catch (err) {
-          console.warn(`Could not update transaction ${transaction.id}:`, err.message);
-        }
-      }
+      await executeUpdateBatch(
+        transactionsToMark,
+        (transaction) => doc(db, 'importTransactions', transaction.id),
+        () => ({
+          status: 'semester_deleted',
+          deletedAt: new Date().toISOString(),
+          deletedTermCode: termCode
+        }),
+      );
     }
 
     // 5. Delete term document

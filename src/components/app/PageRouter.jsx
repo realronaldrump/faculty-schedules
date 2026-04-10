@@ -1,29 +1,70 @@
-import Dashboard from "../Dashboard";
+import React, { Suspense, lazy } from "react";
 import ProtectedContent from "../ProtectedContent.jsx";
-import FacultyHub from "../scheduling/FacultyHub.jsx";
-import RoomsHub from "../scheduling/RoomsHub.jsx";
-import StudentWorkersHub from "../scheduling/StudentWorkersHub.jsx";
-import PeopleHub from "../people/PeopleHub.jsx";
-import PAFWorkflow from "../people/PAFWorkflow.jsx";
-import DepartmentInsights from "../analytics/DepartmentInsights.jsx";
-import StudentWorkerAnalytics from "../analytics/StudentWorkerAnalytics.jsx";
-import { CoursesHub } from "../courses";
-import ImportWizard from "../administration/ImportWizard";
-import AppSettings from "../administration/AppSettings";
-import DataCleanupRepairsPage from "../administration/data-cleanup/DataCleanupRepairsPage";
-import BaylorSystems from "../resources/BaylorSystems";
-import BaylorAcronyms from "../administration/BaylorAcronyms";
-import CRNQualityTools from "../administration/CRNQualityTools";
-import RecentChangesPage from "../administration/RecentChangesPage";
-import AdminDataExportsPage from "../administration/AdminDataExportsPage.jsx";
-import UserActivityPage from "../administration/UserActivityPage.jsx";
-import LiveView from "../LiveView";
-import FacilitiesHub from "../facilities/FacilitiesHub";
-import OutlookRoomExport from "../tools/OutlookRoomExport.jsx";
-import RoomGridGenerator from "../administration/RoomGridGenerator.jsx";
-import AccessControl from "../administration/AccessControl.jsx";
-import { TutorialPage } from "../help";
 import { useAuth } from "../../contexts/AuthContext.jsx";
+
+const Dashboard = lazy(() => import("../Dashboard"));
+const FacultyHub = lazy(() => import("../scheduling/FacultyHub.jsx"));
+const RoomsHub = lazy(() => import("../scheduling/RoomsHub.jsx"));
+const StudentWorkersHub = lazy(
+  () => import("../scheduling/StudentWorkersHub.jsx"),
+);
+const PeopleHub = lazy(() => import("../people/PeopleHub.jsx"));
+const PAFWorkflow = lazy(() => import("../people/PAFWorkflow.jsx"));
+const DepartmentInsights = lazy(
+  () => import("../analytics/DepartmentInsights.jsx"),
+);
+const StudentWorkerAnalytics = lazy(
+  () => import("../analytics/StudentWorkerAnalytics.jsx"),
+);
+const CoursesHub = lazy(() =>
+  import("../courses").then((module) => ({ default: module.CoursesHub })),
+);
+const ImportWizard = lazy(() => import("../administration/ImportWizard"));
+const AppSettings = lazy(() => import("../administration/AppSettings"));
+const DataCleanupRepairsPage = lazy(
+  () => import("../administration/data-cleanup/DataCleanupRepairsPage"),
+);
+const BaylorSystems = lazy(() => import("../resources/BaylorSystems"));
+const BaylorAcronyms = lazy(
+  () => import("../administration/BaylorAcronyms"),
+);
+const CRNQualityTools = lazy(
+  () => import("../administration/CRNQualityTools"),
+);
+const RecentChangesPage = lazy(
+  () => import("../administration/RecentChangesPage"),
+);
+const AdminDataExportsPage = lazy(
+  () => import("../administration/AdminDataExportsPage.jsx"),
+);
+const UserActivityPage = lazy(
+  () => import("../administration/UserActivityPage.jsx"),
+);
+const LiveView = lazy(() => import("../LiveView"));
+const FacilitiesHub = lazy(() => import("../facilities/FacilitiesHub"));
+const OutlookRoomExport = lazy(() => import("../tools/OutlookRoomExport.jsx"));
+const RoomGridGenerator = lazy(
+  () => import("../administration/RoomGridGenerator.jsx"),
+);
+const AccessControl = lazy(() => import("../administration/AccessControl.jsx"));
+const TutorialPage = lazy(() => import("../help/TutorialPage.jsx"));
+
+const RouteLoadingState = () => (
+  <div className="flex items-center justify-center h-64">
+    <div className="text-center">
+      <div className="loading-shimmer w-16 h-16 rounded-full mx-auto mb-4" />
+      <p className="text-gray-600">Loading page...</p>
+    </div>
+  </div>
+);
+
+const renderProtectedPage = (pageId, Component, componentProps = {}) => (
+  <ProtectedContent pageId={pageId}>
+    <Suspense fallback={<RouteLoadingState />}>
+      <Component {...componentProps} />
+    </Suspense>
+  </ProtectedContent>
+);
 
 const PageRouter = ({ currentPage, loading }) => {
   const { isActivityOwner } = useAuth();
@@ -41,178 +82,91 @@ const PageRouter = ({ currentPage, loading }) => {
 
   switch (currentPage) {
     case "dashboard":
-      return (
-        <ProtectedContent pageId="dashboard">
-          <Dashboard />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("dashboard", Dashboard);
     case "live-view":
-      return (
-        <ProtectedContent pageId="live-view">
-          <LiveView />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("live-view", LiveView);
     case "scheduling/faculty":
-      return (
-        <ProtectedContent pageId="scheduling/faculty">
-          <FacultyHub />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("scheduling/faculty", FacultyHub);
     case "scheduling/rooms":
-      return (
-        <ProtectedContent pageId="scheduling/rooms">
-          <RoomsHub />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("scheduling/rooms", RoomsHub);
     case "tools/outlook-export":
-      return (
-        <ProtectedContent pageId="tools/outlook-export">
-          <OutlookRoomExport />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("tools/outlook-export", OutlookRoomExport);
     case "tools/room-grid-generator":
-      return (
-        <ProtectedContent pageId="tools/room-grid-generator">
-          <RoomGridGenerator />
-        </ProtectedContent>
+      return renderProtectedPage(
+        "tools/room-grid-generator",
+        RoomGridGenerator,
       );
     case "scheduling/student-workers":
-      return (
-        <ProtectedContent pageId="scheduling/student-workers">
-          <StudentWorkersHub />
-        </ProtectedContent>
+      return renderProtectedPage(
+        "scheduling/student-workers",
+        StudentWorkersHub,
       );
     case "people/directory":
     case "people/email-lists":
     case "people/offices":
     case "people/programs":
     case "people/baylor-ids":
-      return (
-        <ProtectedContent pageId={currentPage}>
-          <PeopleHub />
-        </ProtectedContent>
-      );
+      return renderProtectedPage(currentPage, PeopleHub);
     case "workflows/paf":
-      return (
-        <ProtectedContent pageId="people/directory">
-          <PAFWorkflow />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("people/directory", PAFWorkflow);
     case "courses/browse":
     case "courses/manage":
-      return (
-        <ProtectedContent pageId={currentPage}>
-          <CoursesHub />
-        </ProtectedContent>
-      );
+      return renderProtectedPage(currentPage, CoursesHub);
     case "analytics/department-insights":
-      return (
-        <ProtectedContent pageId="analytics/department-insights">
-          <DepartmentInsights />
-        </ProtectedContent>
+      return renderProtectedPage(
+        "analytics/department-insights",
+        DepartmentInsights,
       );
     case "analytics/student-worker-analytics":
-      return (
-        <ProtectedContent pageId="analytics/student-worker-analytics">
-          <StudentWorkerAnalytics />
-        </ProtectedContent>
+      return renderProtectedPage(
+        "analytics/student-worker-analytics",
+        StudentWorkerAnalytics,
       );
     case "admin-tools/import-wizard":
-      return (
-        <ProtectedContent pageId="admin-tools/import-wizard">
-          <ImportWizard />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("admin-tools/import-wizard", ImportWizard);
     case "admin-tools/crn-tools":
-      return (
-        <ProtectedContent pageId="admin-tools/crn-tools">
-          <CRNQualityTools />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("admin-tools/crn-tools", CRNQualityTools);
     case "help/tutorials":
-      return (
-        <ProtectedContent pageId="help/tutorials">
-          <TutorialPage />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("help/tutorials", TutorialPage);
     case "help/baylor-systems":
-      return (
-        <ProtectedContent pageId="help/baylor-systems">
-          <BaylorSystems />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("help/baylor-systems", BaylorSystems);
     case "help/acronyms":
-      return (
-        <ProtectedContent pageId="help/acronyms">
-          <BaylorAcronyms />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("help/acronyms", BaylorAcronyms);
     case "admin/access-control":
-      return (
-        <ProtectedContent pageId="admin/access-control">
-          <AccessControl />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("admin/access-control", AccessControl);
     case "admin/settings":
-      return (
-        <ProtectedContent pageId="admin/settings">
-          <AppSettings />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("admin/settings", AppSettings);
     case "admin/recent-changes":
-      return (
-        <ProtectedContent pageId="admin/recent-changes">
-          <RecentChangesPage />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("admin/recent-changes", RecentChangesPage);
     case "admin/user-activity":
       return (
         isActivityOwner ? (
-          <ProtectedContent pageId="admin/user-activity">
-            <UserActivityPage />
-          </ProtectedContent>
+          renderProtectedPage("admin/user-activity", UserActivityPage)
         ) : (
-          <ProtectedContent pageId="dashboard">
-            <Dashboard />
-          </ProtectedContent>
+          renderProtectedPage("dashboard", Dashboard)
         )
       );
     case "admin/data-hygiene":
-      return (
-        <ProtectedContent pageId="admin/data-hygiene">
-          <DataCleanupRepairsPage />
-        </ProtectedContent>
+      return renderProtectedPage(
+        "admin/data-hygiene",
+        DataCleanupRepairsPage,
       );
     case "admin/data-exports":
-      return (
-        <ProtectedContent pageId="admin/data-exports">
-          <AdminDataExportsPage />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("admin/data-exports", AdminDataExportsPage);
     case "facilities/spaces":
-      return (
-        <ProtectedContent pageId="facilities/spaces">
-          <FacilitiesHub initialTab="spaces" />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("facilities/spaces", FacilitiesHub, {
+        initialTab: "spaces",
+      });
     case "facilities/buildings":
-      return (
-        <ProtectedContent pageId="facilities/buildings">
-          <FacilitiesHub initialTab="buildings" />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("facilities/buildings", FacilitiesHub, {
+        initialTab: "buildings",
+      });
     case "facilities/temperature":
-      return (
-        <ProtectedContent pageId="facilities/temperature">
-          <FacilitiesHub initialTab="temperature" />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("facilities/temperature", FacilitiesHub, {
+        initialTab: "temperature",
+      });
     default:
-      return (
-        <ProtectedContent pageId="dashboard">
-          <Dashboard />
-        </ProtectedContent>
-      );
+      return renderProtectedPage("dashboard", Dashboard);
   }
 };
 

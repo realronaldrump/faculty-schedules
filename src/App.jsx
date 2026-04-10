@@ -44,8 +44,15 @@ const MAINTENANCE_UNTIL = "2025-07-03T08:00:00";
 
 function App() {
   // Context hooks
-  const { signOut, isAdmin, canAccess, isActivityOwner, userProfile } =
-    useAuth();
+  const {
+    user,
+    signOut,
+    isAdmin,
+    canAccess,
+    isActivityOwner,
+    userProfile,
+    loading: authLoading,
+  } = useAuth();
   const {
     selectedSemester,
     setSelectedSemester,
@@ -55,7 +62,7 @@ function App() {
     setIncludeArchived,
     selectedTermMeta,
     isSelectedTermLocked,
-    loading,
+    loading: scheduleLoading,
   } = useSchedules();
 
   const {
@@ -75,8 +82,6 @@ function App() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Authentication state
-  const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [showSemesterDropdown, setShowSemesterDropdown] = React.useState(false);
 
   // Current page from URL
@@ -161,17 +166,9 @@ function App() {
     registerNavigationPages(navigationItems);
   }, []);
 
-  // Check authentication on mount
-  useEffect(() => {
-    const authStatus = localStorage.getItem("isAuthenticated");
-    if (authStatus === "true") {
-      setIsAuthenticated(true);
-    }
-  }, []);
-
   useUserActivityTracker({
     currentPage,
-    isAuthenticated,
+    isAuthenticated: Boolean(user),
   });
 
   // Click outside handler for semester dropdown
@@ -185,18 +182,11 @@ function App() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Login handler
-  const handleLogin = (status) => {
-    setIsAuthenticated(status);
-  };
-
   // Logout handlers
   const handleLogout = () => setShowLogoutConfirm(true);
 
   const confirmLogout = async () => {
     await signOut();
-    setIsAuthenticated(false);
-    localStorage.removeItem("isAuthenticated");
     setShowLogoutConfirm(false);
     navigate("/dashboard");
   };
@@ -240,9 +230,20 @@ function App() {
     );
   }
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="loading-shimmer w-16 h-16 rounded-full mx-auto mb-4" />
+          <p className="text-gray-600">Loading account...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Authentication check
-  if (!isAuthenticated) {
-    return <Login onLogin={handleLogin} />;
+  if (!user) {
+    return <Login />;
   }
 
   return (
@@ -463,7 +464,7 @@ function App() {
           <div className="mx-auto max-w-7xl px-4 md:px-6 py-6">
             <PageRouter
               currentPage={currentPage}
-              loading={loading}
+              loading={scheduleLoading}
             />
           </div>
         </main>

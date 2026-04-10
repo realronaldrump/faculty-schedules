@@ -1,16 +1,32 @@
-import { collection, doc, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import {
-  loadTermConfig,
+  getTermConfig,
   normalizeTermDateValue,
   normalizeTermLabel,
   normalizeTermRecord,
+  setTermConfig,
   sortTermsByRecency,
   termCodeFromLabel,
   termLabelFromCode
 } from './termUtils';
 
 let cachedFallbackTerms = null;
+let termConfigLoaded = false;
+
+const ensureTermConfigLoaded = async ({ force = false } = {}) => {
+  if (termConfigLoaded && !force) return getTermConfig();
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'termConfig'));
+    if (snap.exists()) {
+      setTermConfig(snap.data());
+    }
+  } catch (error) {
+    console.warn('Term config load failed:', error);
+  }
+  termConfigLoaded = true;
+  return getTermConfig();
+};
 
 const buildTermDocId = (termLabel, termCode) => {
   const derivedCode = termCodeFromLabel(termCode || termLabel);
@@ -45,7 +61,7 @@ const buildTermDoc = ({ term, termCode, startDate, endDate, includeDefaults = fa
 };
 
 export const fetchTermOptions = async ({ includeArchived = false } = {}) => {
-  await loadTermConfig();
+  await ensureTermConfigLoaded();
   const termsSnapshot = await getDocs(collection(db, COLLECTIONS.TERMS));
   let normalized = termsSnapshot.docs.map((docSnap) => {
     const record = {
@@ -94,7 +110,7 @@ export const fetchTermOptions = async ({ includeArchived = false } = {}) => {
 };
 
 export const backfillTermMetadata = async () => {
-  await loadTermConfig();
+  await ensureTermConfigLoaded();
   const schedulesSnapshot = await getDocs(collection(db, COLLECTIONS.SCHEDULES));
   const schedules = schedulesSnapshot.docs;
   const termMap = new Map();

@@ -99,22 +99,6 @@ export const setTermConfig = (raw) => {
 
 export const getTermConfig = () => cachedConfig;
 
-export const loadTermConfig = async ({ force = false } = {}) => {
-  if (configLoaded && !force) return cachedConfig;
-  try {
-    const firestore = await import('firebase/firestore');
-    const { db } = await import('../firebase');
-    const snap = await firestore.getDoc(firestore.doc(db, 'settings', 'termConfig'));
-    if (snap.exists()) {
-      return setTermConfig(snap.data());
-    }
-  } catch (error) {
-    console.warn('Term config load failed:', error);
-  }
-  configLoaded = true;
-  return cachedConfig;
-};
-
 export const getSeasonNames = (termConfig = getTermConfig()) => {
   const names = new Set();
   normalizeSeasonList(termConfig.seasonOrder).forEach((season) => names.add(season));

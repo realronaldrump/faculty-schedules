@@ -8,9 +8,6 @@ import { useAppConfig } from '../contexts/AppConfigContext';
 import { formatTermFromCode, formatTermLabel, sortTerms } from '../utils/termUtils';
 import { resolveOfficeLocations } from '../utils/spaceUtils';
 import { parseTime } from '../utils/timeUtils';
-
-// Simple in-memory cache to avoid re-fetching schedules between openings
-const scheduleCache = new Map();
 const DAY_LABELS = Object.freeze({
     M: 'Monday',
     T: 'Tuesday',
@@ -220,15 +217,6 @@ const FacultyContactCard = ({
         const load = async () => {
             try {
                 setLoadingSchedules(true);
-                const cacheKey = contactPerson?.id ? `id:${contactPerson.id}` : null;
-                if (cacheKey && scheduleCache.has(cacheKey)) {
-                    const cached = scheduleCache.get(cacheKey);
-                    if (!cancelled) {
-                        setExternalSchedules(cached);
-                        setLoadingSchedules(false);
-                    }
-                    return;
-                }
                 const schedulesRef = collection(db, COLLECTIONS.SCHEDULES);
                 const results = [];
                 // Prefer id-based match when available
@@ -246,7 +234,6 @@ const FacultyContactCard = ({
                     });
                     merged.forEach((value) => results.push(value));
                 }
-                if (cacheKey) scheduleCache.set(cacheKey, results);
                 if (!cancelled) setExternalSchedules(results);
             } catch (err) {
                 console.warn('Failed to load schedules for contact card:', err);

@@ -17,11 +17,9 @@ import FacultyContactCard from "./FacultyContactCard";
 import ConfirmDialog from "./shared/ConfirmDialog";
 import PersonDirectory from "./people/PersonDirectory";
 import SortableHeader from "./shared/SortableHeader";
-import {
-  StudentAddWizard,
-  StudentEditModal,
-  StatusBadge,
-} from "./student";
+import StudentAddWizard from "./student/StudentAddWizard";
+import StudentEditModal from "./student/StudentEditModal";
+import StatusBadge from "./student/StatusBadge";
 import {
   Edit,
   Trash2,
@@ -210,7 +208,7 @@ const toComparableValue = (value) => {
  * Uses new UI components:
  * - StudentAddWizard for creating new students
  * - StudentEditModal for editing existing students
- * - ImprovedStudentTable for displaying students
+ * - UniversalDirectory for displaying students
  * - StatusBadge for visual status indicators
  */
 const StudentDirectory = () => {

@@ -8,7 +8,7 @@ import {
   AlertCircle,
   Download,
 } from "lucide-react";
-import { UniversalDirectory } from "../shared";
+import UniversalDirectory from "../shared/UniversalDirectory";
 import FacultyContactCard from "../FacultyContactCard";
 import { usePeople } from "../../contexts/PeopleContext";
 import { usePeopleOperations } from "../../hooks";

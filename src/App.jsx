@@ -16,7 +16,7 @@ import PageRouter from "./components/app/PageRouter.jsx";
 import Login from "./components/Login";
 import MaintenancePage from "./components/MaintenancePage";
 import Notification from "./components/Notification";
-import { TutorialOverlay } from "./components/help";
+import TutorialOverlay from "./components/help/TutorialOverlay";
 
 import { useAuth } from "./contexts/AuthContext.jsx";
 import { useUI } from "./contexts/UIContext.jsx";

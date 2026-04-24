@@ -54,48 +54,11 @@ export const AuthProvider = ({ children }) => {
   const [loadedProfile, setLoadedProfile] = useState(false);
   const [loadedAccess, setLoadedAccess] = useState(false);
   const activityTrackerRef = useRef(null);
+  const userProfileIsAdmin = isUserAdmin(userProfile);
 
   // Removed insecure .env based admin check. Admin access is now strictly role-based.
 
   const getAccessControlRef = () => doc(db, "settings", "accessControl");
-
-  const bootstrapAccessControl = async () => {
-    // Ensure settings/accessControl exists with safe defaults
-    try {
-      const ref = getAccessControlRef();
-      const snap = await getDoc(ref);
-      if (!snap.exists()) {
-    const defaults = {
-      rolePermissions: {
-        admin: { pages: { "*": true } },
-        staff: { pages: {} },
-        faculty: { pages: {} },
-          },
-          updatedAt: serverTimestamp(),
-        };
-        await setDoc(ref, defaults);
-        await logCreate(
-          "Access Control Defaults",
-          "settings",
-          "accessControl",
-          defaults,
-          "AuthContext.jsx - bootstrapAccessControl",
-        );
-        setRolePermissions(defaults.rolePermissions);
-      } else {
-        const data = snap.data() || {};
-        setRolePermissions(normalizeRolePermissions(data.rolePermissions));
-      }
-    } catch (e) {
-      // Fallback to in-memory defaults (normalized shape)
-      setRolePermissions({
-        admin: { pages: { "*": true } },
-        staff: { pages: {} },
-        faculty: { pages: {} },
-      });
-      console.warn("Failed to load access control. Using defaults.", e);
-    }
-  };
 
   const loadUserProfile = async (firebaseUser) => {
     if (!firebaseUser) {
@@ -257,11 +220,7 @@ export const AuthProvider = ({ children }) => {
 
       setUser(u);
       setLoadedProfile(false);
-      try {
-        await bootstrapAccessControl();
-      } finally {
-        // no-op
-      }
+      setLoadedAccess(false);
       // Ensure user profile document exists and update lastLoginAt
       try {
         if (u) {
@@ -287,7 +246,9 @@ export const AuthProvider = ({ children }) => {
         );
       } else {
         setUserProfile(null);
+        setRolePermissions(normalizeRolePermissions());
         setLoadedProfile(true);
+        setLoadedAccess(true);
         stopUserActivityTracking();
       }
     });
@@ -310,6 +271,18 @@ export const AuthProvider = ({ children }) => {
 
   // Subscribe to Access Control changes
   useEffect(() => {
+    if (!user?.uid) {
+      setRolePermissions(normalizeRolePermissions());
+      setLoadedAccess(true);
+      return undefined;
+    }
+
+    if (!loadedProfile) {
+      setLoadedAccess(false);
+      return undefined;
+    }
+
+    setLoadedAccess(false);
     const ref = getAccessControlRef();
     const stop = onSnapshot(
       ref,
@@ -318,7 +291,26 @@ export const AuthProvider = ({ children }) => {
           const data = snap.data() || {};
           setRolePermissions(normalizeRolePermissions(data.rolePermissions));
         } else {
-          setRolePermissions(normalizeRolePermissions());
+          const defaults = {
+            rolePermissions: normalizeRolePermissions(),
+            updatedAt: serverTimestamp(),
+          };
+          setRolePermissions(defaults.rolePermissions);
+          if (userProfileIsAdmin) {
+            setDoc(ref, defaults, { merge: true })
+              .then(() =>
+                logCreate(
+                  "Access Control Defaults",
+                  "settings",
+                  "accessControl",
+                  defaults,
+                  "AuthContext.jsx - accessControlListener",
+                ),
+              )
+              .catch((error) => {
+                console.warn("Failed to seed access control defaults.", error);
+              });
+          }
         }
         setLoadedAccess(true);
       },
@@ -332,7 +324,7 @@ export const AuthProvider = ({ children }) => {
       },
     );
     return () => stop();
-  }, []);
+  }, [user?.uid, loadedProfile, userProfileIsAdmin]);
 
   useEffect(() => {
     setLoading(!(loadedProfile && loadedAccess));

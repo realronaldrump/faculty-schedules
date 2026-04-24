@@ -447,5 +447,3 @@ export const migrationQueries = {
     FROM clss_import_staging
   `
 };
-
-export default normalizedSchema; 

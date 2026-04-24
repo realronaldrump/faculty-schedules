@@ -469,6 +469,11 @@ const AppSettings = () => {
       showNotification?.('warning', 'Missing Selection', 'Please select a target semester to merge into.');
       return;
     }
+
+    if (sourceTerm.termCode === mergeTargetTerm) {
+      showNotification?.('warning', 'Invalid Merge', 'Select a different target semester.');
+      return;
+    }
     
     const targetTermData = termOptions.find(t => t.termCode === mergeTargetTerm);
     if (!targetTermData) {
@@ -484,25 +489,44 @@ const AppSettings = () => {
         where('termCode', '==', sourceTerm.termCode)
       );
       const schedulesSnapshot = await getDocs(schedulesQuery);
-      
-      const batch = writeBatch(db);
+
+      const maxBatchOps = 450;
+      let batch = writeBatch(db);
+      let batchOps = 0;
       let updatedCount = 0;
-      
-      schedulesSnapshot.docs.forEach(docSnap => {
+      const now = new Date().toISOString();
+
+      const commitBatch = async () => {
+        if (batchOps === 0) return;
+        await batch.commit();
+        batch = writeBatch(db);
+        batchOps = 0;
+      };
+
+      for (const docSnap of schedulesSnapshot.docs) {
         batch.update(docSnap.ref, {
           term: targetTermData.term,
           termCode: targetTermData.termCode,
           mergedFrom: sourceTerm.termCode,
-          updatedAt: new Date().toISOString()
+          updatedAt: now
         });
+        batchOps++;
         updatedCount++;
-      });
+
+        if (batchOps >= maxBatchOps) {
+          await commitBatch();
+        }
+      }
       
       // Delete the source term document
       const sourceTermRef = doc(db, COLLECTIONS.TERMS, sourceTerm.termCode);
+      if (batchOps >= maxBatchOps) {
+        await commitBatch();
+      }
       batch.delete(sourceTermRef);
-      
-      await batch.commit();
+      batchOps++;
+
+      await commitBatch();
       
       await logBulkUpdate(
         `Merged ${updatedCount} courses from ${sourceTerm.term || sourceTerm.termCode} into ${targetTermData.term}`,

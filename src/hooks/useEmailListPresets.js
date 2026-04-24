@@ -17,7 +17,7 @@ import { useAuth } from '../contexts/AuthContext';
  * Hook to manage email list presets stored in Firestore.
  * Presets are universal (shared across all users).
  */
-export const useEmailListPresets = () => {
+const useEmailListPresets = () => {
     const [presets, setPresets] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);

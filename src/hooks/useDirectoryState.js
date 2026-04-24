@@ -10,7 +10,7 @@ import { useState, useCallback } from 'react';
  * @param {Function} options.createEmptyRecord Function returning an empty record for creation mode
  * @returns {Object} State values and setters
  */
-export function useDirectoryState({
+function useDirectoryState({
     defaultSort = { key: 'name', direction: 'ascending' },
     defaultFilters = {},
     createEmptyRecord = () => ({})

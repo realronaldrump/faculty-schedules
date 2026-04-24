@@ -11,7 +11,7 @@ const DUPLICATE_EVENT_WINDOW_MS = 15 * 1000;
 
 const defaultLastEvent = { pageId: "", timestampMs: 0 };
 
-export const useUserActivityTracker = ({
+const useUserActivityTracker = ({
   currentPage,
   isAuthenticated,
 } = {}) => {

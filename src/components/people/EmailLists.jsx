@@ -28,7 +28,7 @@ import ConfirmDialog from "../shared/ConfirmDialog";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { useAuth } from "../../contexts/AuthContext";
-import { useEmailListPresets } from "../../hooks/useEmailListPresets";
+import useEmailListPresets from "../../hooks/useEmailListPresets";
 import { useTutorial } from "../../contexts/TutorialContext";
 import { HelpTooltip, HintBanner } from "../help/Tooltip";
 import { resolveOfficeDetails } from "../../utils/directoryUtils";

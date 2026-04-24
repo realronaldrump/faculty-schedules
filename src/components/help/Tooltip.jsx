@@ -48,7 +48,7 @@ const styleVariants = {
  * Basic Tooltip component
  * Appears on hover/focus
  */
-export const Tooltip = ({
+const Tooltip = ({
   content,
   children,
   position = 'top',
@@ -264,74 +264,3 @@ export const HintBanner = ({
     </div>
   );
 };
-
-/**
- * FeatureHighlight - Highlights new or important features
- */
-export const FeatureHighlight = ({
-  featureId,
-  title,
-  description,
-  children,
-  position = 'bottom'
-}) => {
-  const { showTooltips, isHintDismissed, dismissHint } = useTutorial();
-  const [isVisible, setIsVisible] = useState(true);
-
-  if (!showTooltips || isHintDismissed(featureId) || !isVisible) {
-    return children;
-  }
-
-  return (
-    <div className="relative inline-block">
-      {children}
-      <div
-        className={`absolute z-50 w-64 p-4 bg-baylor-green text-white rounded-lg shadow-xl ${
-          position === 'bottom' ? 'top-full mt-2 left-1/2 -translate-x-1/2' :
-          position === 'top' ? 'bottom-full mb-2 left-1/2 -translate-x-1/2' :
-          position === 'left' ? 'right-full mr-2 top-1/2 -translate-y-1/2' :
-          'left-full ml-2 top-1/2 -translate-y-1/2'
-        }`}
-      >
-        <div className="flex items-start justify-between mb-2">
-          <h4 className="font-semibold flex items-center gap-2">
-            <Lightbulb className="w-4 h-4 text-baylor-gold" />
-            {title}
-          </h4>
-          <button
-            onClick={() => {
-              dismissHint(featureId);
-              setIsVisible(false);
-            }}
-            className="p-0.5 hover:bg-white/20 rounded"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <p className="text-sm text-white/90">{description}</p>
-        <div className="mt-3 flex justify-end">
-          <button
-            onClick={() => {
-              dismissHint(featureId);
-              setIsVisible(false);
-            }}
-            className="text-sm font-medium text-baylor-gold hover:text-white transition-colors"
-          >
-            Got it!
-          </button>
-        </div>
-        {/* Arrow */}
-        <div
-          className={`absolute w-3 h-3 bg-baylor-green transform rotate-45 ${
-            position === 'bottom' ? '-top-1.5 left-1/2 -translate-x-1/2' :
-            position === 'top' ? '-bottom-1.5 left-1/2 -translate-x-1/2' :
-            position === 'left' ? '-right-1.5 top-1/2 -translate-y-1/2' :
-            '-left-1.5 top-1/2 -translate-y-1/2'
-          }`}
-        />
-      </div>
-    </div>
-  );
-};
-
-export default Tooltip;

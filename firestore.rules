@@ -211,37 +211,47 @@ service cloud.firestore {
 
     function canManagePeople() {
       return userHasPage('people/directory') ||
+        userHasPage('admin-tools/import-wizard') ||
         userHasPage('data/import-wizard');
     }
 
     function canManagePrograms() {
       return userHasPage('people/programs') ||
+        userHasPage('admin-tools/import-wizard') ||
         userHasPage('data/import-wizard');
     }
 
     function canManageSchedules() {
-      return userHasPage('data/schedule-data') ||
+      return userHasPage('courses/manage') ||
+        userHasPage('admin-tools/import-wizard') ||
+        userHasPage('data/schedule-data') ||
         userHasPage('data/import-wizard');
     }
 
     function canManageCourses() {
-      return userHasPage('data/schedule-data') ||
+      return userHasPage('courses/manage') ||
+        userHasPage('admin-tools/import-wizard') ||
+        userHasPage('data/schedule-data') ||
         userHasPage('data/import-wizard');
     }
 
     function canManageDepartments() {
-      return userHasPage('data/schedule-data') ||
+      return userHasPage('courses/manage') ||
+        userHasPage('admin-tools/import-wizard') ||
+        userHasPage('data/schedule-data') ||
         userHasPage('data/import-wizard');
     }
 
     function canManageTerms() {
       return userHasPage('admin/settings') ||
+        userHasPage('admin-tools/import-wizard') ||
         userHasPage('data/import-wizard');
     }
 
     function canManageRooms() {
       return userHasPage('facilities/spaces') ||
         userHasPage('people/directory') ||
+        userHasPage('admin-tools/import-wizard') ||
         userHasPage('data/import-wizard');
     }
 
@@ -254,7 +264,8 @@ service cloud.firestore {
     }
 
     function canManageImports() {
-      return userHasPage('data/import-wizard');
+      return userHasPage('admin-tools/import-wizard') ||
+        userHasPage('data/import-wizard');
     }
 
     function canManageDataHygiene() {

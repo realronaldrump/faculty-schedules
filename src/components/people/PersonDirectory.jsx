@@ -4,7 +4,7 @@ import { Edit, Save, X, Trash2, Phone, PhoneOff, Building, BuildingIcon, Externa
 import { useDirectoryState, useDirectoryHandlers } from '../../hooks';
 import { useData } from '../../contexts/DataContext';
 import ConfirmDialog from '../shared/ConfirmDialog';
-import { UniversalDirectory } from '../shared';
+import UniversalDirectory from '../shared/UniversalDirectory';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import {
   buildDirectoryFilterOptions,

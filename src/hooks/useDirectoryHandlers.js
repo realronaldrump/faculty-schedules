@@ -19,7 +19,7 @@ const enforceAdjunctTenureRule = (record) => {
  * @param {Function} options.trackChange Optional function to track changes for undo
  * @returns {Object} Handler functions
  */
-export function useDirectoryHandlers({
+function useDirectoryHandlers({
     state,
     data = [],
     onUpdate,

@@ -517,7 +517,11 @@ const areEquivalentScheduleValues = (key, existingValue, incomingValue) => {
   if (key === 'instructorAssignments') {
     const normalizeAssignment = (assignment) => {
       if (!assignment || typeof assignment !== 'object') return '';
-      const personId = normalizeStringValue(assignment.personId || assignment.id);
+      const personId = normalizeStringValue(
+        assignment.personId ||
+          assignment.id ||
+          (assignment.matchIssueId ? `match:${assignment.matchIssueId}` : ''),
+      );
       const percentage = Number.isFinite(assignment.percentage) ? assignment.percentage : '';
       const primary = assignment.isPrimary ? 'primary' : '';
       return [personId, percentage, primary].filter(Boolean).join('|');
@@ -1218,10 +1222,7 @@ const previewScheduleChanges = async (
       ...scheduleWrite
     } = standardizedScheduleData;
     const scheduleWriteForUpdate = {
-      ...scheduleWrite,
-      instructorAssignments: Array.isArray(scheduleWrite.instructorAssignments)
-        ? scheduleWrite.instructorAssignments.filter((assignment) => assignment?.personId)
-        : []
+      ...scheduleWrite
     };
 
     if (existingSchedule) {
@@ -2048,10 +2049,98 @@ export const commitTransaction = async (
   const newPeopleIdsByName = new Map();
   const newPeopleIdsByBaylorId = new Map();
   const newPeopleIdsByIssueId = new Map();
+  const newPeopleByIssueId = new Map();
   const newRoomIdsByName = new Map();
   const termDocsToUpsert = new Map();
   let createdPeopleCount = 0;
   let createdRoomsCount = 0;
+
+  const resolveScheduleInstructorReferences = (scheduleData, { force = false } = {}) => {
+    if (!scheduleData || typeof scheduleData !== 'object') return scheduleData;
+
+    const next = { ...scheduleData };
+    const hasAssignments = Object.prototype.hasOwnProperty.call(next, 'instructorAssignments');
+
+    if (!force && !hasAssignments) {
+      delete next.instructorMatchIssueId;
+      delete next.instructorMatchIssueIds;
+      return next;
+    }
+
+    const incomingAssignments = Array.isArray(next.instructorAssignments)
+      ? next.instructorAssignments
+      : [];
+    const resolvedAssignments = [];
+
+    incomingAssignments.forEach((assignment) => {
+      if (!assignment) return;
+      const resolved = { ...assignment };
+
+      if (assignment.matchIssueId) {
+        const resolution = resolutionMap[assignment.matchIssueId];
+        if (resolution?.action === 'link' && resolution.personId) {
+          const canonicalId = resolvePersonId(resolution.personId);
+          resolved.personId = canonicalId;
+          const linkedPerson = peopleById.get(canonicalId) || linkedPeopleMap.get(canonicalId);
+          if (linkedPerson?.baylorId && (resolved.isPrimary || !next.instructorBaylorId)) {
+            next.instructorBaylorId = linkedPerson.baylorId;
+          }
+        } else if (resolution?.action === 'create') {
+          const createdId = newPeopleIdsByIssueId.get(assignment.matchIssueId);
+          if (createdId) {
+            resolved.personId = createdId;
+            const createdPerson = newPeopleByIssueId.get(assignment.matchIssueId);
+            if (createdPerson?.baylorId && (resolved.isPrimary || !next.instructorBaylorId)) {
+              next.instructorBaylorId = createdPerson.baylorId;
+            }
+          }
+        }
+      }
+
+      if (resolved.personId) {
+        const personId = resolvePersonId(resolved.personId) || resolved.personId;
+        resolvedAssignments.push({
+          personId,
+          isPrimary: !!resolved.isPrimary,
+          percentage: Number.isFinite(resolved.percentage) ? resolved.percentage : 100
+        });
+      }
+    });
+
+    const assignmentMap = new Map();
+    resolvedAssignments.forEach((assignment) => {
+      if (!assignment?.personId) return;
+      const existing = assignmentMap.get(assignment.personId);
+      if (!existing) {
+        assignmentMap.set(assignment.personId, assignment);
+        return;
+      }
+      assignmentMap.set(assignment.personId, {
+        personId: assignment.personId,
+        isPrimary: existing.isPrimary || assignment.isPrimary,
+        percentage: Math.max(existing.percentage || 0, assignment.percentage || 0)
+      });
+    });
+
+    const dedupedAssignments = Array.from(assignmentMap.values());
+    if (dedupedAssignments.length > 0 && !dedupedAssignments.some((a) => a.isPrimary)) {
+      dedupedAssignments[0].isPrimary = true;
+    }
+
+    const primaryAssignment =
+      dedupedAssignments.find((a) => a.isPrimary) || dedupedAssignments[0] || null;
+    next.instructorAssignments = dedupedAssignments;
+    next.instructorIds = Array.from(new Set(dedupedAssignments.map((a) => a.personId)));
+    if (primaryAssignment) {
+      next.instructorId = primaryAssignment.personId;
+    } else if (force && !next.instructorId) {
+      next.instructorId = null;
+    }
+
+    delete next.instructorMatchIssueId;
+    delete next.instructorMatchIssueIds;
+    return next;
+  };
 
   try {
     // First pass: Create people and rooms, collect their IDs
@@ -2086,6 +2175,7 @@ export const commitTransaction = async (
         }
         if (change.matchIssueId) {
           newPeopleIdsByIssueId.set(change.matchIssueId, docRef.id);
+          newPeopleByIssueId.set(change.matchIssueId, personPayload);
         }
 
       } else if (change.collection === 'rooms' && change.action === 'add') {
@@ -2115,51 +2205,10 @@ export const commitTransaction = async (
     // Second pass: Create schedules with proper relational IDs
     for (const change of changesToApply) {
       if (change.collection === 'schedules' && change.action === 'add') {
-        const scheduleData = { ...change.newData };
-
-        const incomingAssignments = Array.isArray(scheduleData.instructorAssignments)
-          ? scheduleData.instructorAssignments
-          : [];
-        const resolvedAssignments = [];
-
-        incomingAssignments.forEach((assignment) => {
-          if (!assignment) return;
-          const resolved = { ...assignment };
-          if (assignment.matchIssueId) {
-            const resolution = resolutionMap[assignment.matchIssueId];
-            if (resolution?.action === 'link' && resolution.personId) {
-              const canonicalId = resolvePersonId(resolution.personId);
-              resolved.personId = canonicalId;
-              const linkedPerson = peopleById.get(canonicalId) || linkedPeopleMap.get(canonicalId);
-              if (linkedPerson?.baylorId) {
-                scheduleData.instructorBaylorId = linkedPerson.baylorId;
-              }
-            } else if (resolution?.action === 'create') {
-              const createdId = newPeopleIdsByIssueId.get(assignment.matchIssueId);
-              if (createdId) {
-                resolved.personId = createdId;
-              }
-            }
-          }
-          if (resolved.personId) {
-            resolved.personId = resolvePersonId(resolved.personId) || resolved.personId;
-            resolvedAssignments.push({
-              personId: resolved.personId,
-              isPrimary: !!resolved.isPrimary,
-              percentage: Number.isFinite(resolved.percentage) ? resolved.percentage : 100
-            });
-          }
-        });
-
-        if (resolvedAssignments.length > 0 && !resolvedAssignments.some((a) => a.isPrimary)) {
-          resolvedAssignments[0].isPrimary = true;
-        }
-
-        const instructorIdSet = new Set(resolvedAssignments.map((a) => a.personId));
-        const primaryAssignment = resolvedAssignments.find((a) => a.isPrimary) || resolvedAssignments[0] || null;
-        scheduleData.instructorId = primaryAssignment?.personId || scheduleData.instructorId || null;
-        scheduleData.instructorIds = Array.from(instructorIdSet);
-        scheduleData.instructorAssignments = resolvedAssignments;
+        const scheduleData = resolveScheduleInstructorReferences(
+          { ...change.newData },
+          { force: true },
+        );
 
         // Update space IDs if this references a newly created room
         const locationNames = Array.isArray(scheduleData.spaceDisplayNames) ? scheduleData.spaceDisplayNames : [];
@@ -2234,7 +2283,11 @@ export const commitTransaction = async (
 
       } else if (change.action === 'modify') {
         // Apply only selected fields if provided
-        let updates = change.newData;
+        let updates =
+          change.collection === 'schedules'
+            ? resolveScheduleInstructorReferences(change.newData)
+            : change.newData;
+        change.newData = updates;
         const selectedKeys = selectedFieldMap && selectedFieldMap[change.id];
         if (selectedKeys && Array.isArray(selectedKeys) && selectedKeys.length > 0) {
           updates = {};

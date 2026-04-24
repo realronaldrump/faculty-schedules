@@ -32,7 +32,7 @@ const notify = (showNotification, type, title, message) => {
   showNotification?.(type, title, message);
 };
 
-export const useDataCleanupActions = ({ showNotification } = {}) => {
+const useDataCleanupActions = ({ showNotification } = {}) => {
   const [activeStep, setActiveStep] = useState(1);
   const [scanResult, setScanResult] = useState(null);
   const [safeFixResult, setSafeFixResult] = useState(null);

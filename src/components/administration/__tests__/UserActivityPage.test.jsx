@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const getDocsMock = vi.fn();
+const httpsCallableMock = vi.fn();
 
 vi.mock("../../../contexts/AuthContext.jsx", () => ({
   useAuth: () => ({ isActivityOwner: true }),
@@ -11,6 +12,11 @@ vi.mock("../../../contexts/AuthContext.jsx", () => ({
 
 vi.mock("../../../firebase", () => ({
   db: {},
+  functions: {},
+}));
+
+vi.mock("firebase/functions", () => ({
+  httpsCallable: (...args) => httpsCallableMock(...args),
 }));
 
 vi.mock("firebase/firestore", () => ({

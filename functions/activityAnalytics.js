@@ -148,6 +148,9 @@ const normalizeActionKey = (eventType, actionKey) => {
   return "";
 };
 
+const isSemanticActionEvent = (event) =>
+  event?.eventType !== "page_enter" && Boolean(event?.actionKey);
+
 const normalizeEvent = (event) => {
   const timestampDate = asDate(event?.timestamp);
   if (!event?.uid || !timestampDate) return null;
@@ -555,7 +558,7 @@ const rollupActivityForDateKeys = (rawEvents, dateKeys) => {
         sessionMap.set(sessionKey, sessionEvents);
       }
 
-      if (event.actionKey) {
+      if (isSemanticActionEvent(event)) {
         daily.semanticEventCount += 1;
         dayBucket.semanticEventCount += 1;
         userSummary.hourlyBuckets[event.hour].semanticEventCount += 1;

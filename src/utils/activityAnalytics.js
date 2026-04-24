@@ -1,4 +1,5 @@
 const ANALYTICS_TIME_ZONE = "America/Chicago";
+const NAVIGATION_ACTION_KEY = "navigate";
 export const ACTIVITY_RANGE_OPTIONS = [7, 30, 90];
 
 export const toDate = (value) => {
@@ -65,6 +66,31 @@ const sumBuckets = (rows = []) => {
   return buckets;
 };
 
+const getNavigationActionCount = (row) =>
+  (row?.topActions || []).reduce((total, item) => {
+    if (item?.actionKey !== NAVIGATION_ACTION_KEY) return total;
+    return total + (item.count || 0);
+  }, 0);
+
+const getSemanticEventCount = (row) => {
+  const count = row?.semanticEventCount || 0;
+  const navigationCount = getNavigationActionCount(row);
+  return navigationCount > 0 ? Math.max(0, count - navigationCount) : count;
+};
+
+const getHourlyBuckets = (row) => {
+  const buckets = row?.hourlyBuckets || [];
+  if (getNavigationActionCount(row) <= 0) return buckets;
+
+  return buckets.map((bucket) => ({
+    ...bucket,
+    semanticEventCount: Math.max(
+      0,
+      (bucket.semanticEventCount || 0) - (bucket.pageEnterCount || 0),
+    ),
+  }));
+};
+
 const mergeTopItems = (rows = [], field, keyField) => {
   const merged = new Map();
 
@@ -73,7 +99,14 @@ const mergeTopItems = (rows = [], field, keyField) => {
       const key = item[keyField] || item.pageId || item.sectionLabel || item.actionKey;
       if (!key) return;
 
-      const existing = merged.get(key) || { ...item };
+      const existing =
+        merged.get(key) ||
+        {
+          ...item,
+          count: 0,
+          totalMinutesApprox: 0,
+          uniqueUsers: 0,
+        };
       existing.count = (existing.count || 0) + (item.count || 0);
       existing.totalMinutesApprox =
         (existing.totalMinutesApprox || 0) + (item.totalMinutesApprox || 0);
@@ -89,6 +122,18 @@ const mergeTopItems = (rows = [], field, keyField) => {
     return String(left[keyField] || "").localeCompare(String(right[keyField] || ""));
   });
 };
+
+const mergeTopActions = (rows = []) =>
+  mergeTopItems(
+    rows.map((row) => ({
+      ...row,
+      topActions: (row.topActions || []).filter(
+        (item) => item?.actionKey !== NAVIGATION_ACTION_KEY,
+      ),
+    })),
+    "topActions",
+    "actionKey",
+  );
 
 const mergeTransitions = (rows = []) => {
   const merged = new Map();
@@ -176,6 +221,7 @@ export const buildActivityAnalyticsModel = ({
       activeDays: 0,
       sessionCount: 0,
       pageEnterCount: 0,
+      semanticEventCount: 0,
       totalMinutesApprox: 0,
       pagesVisitedCount: 0,
       firstSeenAt: null,
@@ -188,6 +234,7 @@ export const buildActivityAnalyticsModel = ({
     existing.activeDays += 1;
     existing.sessionCount += row.sessionCount || 0;
     existing.pageEnterCount += row.pageEnterCount || 0;
+    existing.semanticEventCount += getSemanticEventCount(row);
     existing.totalMinutesApprox += row.totalMinutesApprox || 0;
     existing.pagesVisitedCount += row.pagesVisitedCount || 0;
     existing.firstSeenAt = existing.firstSeenAt || row.firstSeenAt || null;
@@ -195,9 +242,13 @@ export const buildActivityAnalyticsModel = ({
     existing.topPagesDetailed = existing.topPagesDetailed.concat(
       row.topPagesDetailed || [],
     );
-    existing.topActions = existing.topActions.concat(row.topActions || []);
+    existing.topActions = existing.topActions.concat(
+      (row.topActions || []).filter(
+        (item) => item?.actionKey !== NAVIGATION_ACTION_KEY,
+      ),
+    );
     existing.hourlyBuckets = existing.hourlyBuckets.concat(
-      (row.hourlyBuckets || []).map((bucket) => ({
+      getHourlyBuckets(row).map((bucket) => ({
         ...bucket,
         uniqueUsers: 0,
       })),
@@ -221,11 +272,7 @@ export const buildActivityAnalyticsModel = ({
         "topPagesDetailed",
         "pageId",
       ).slice(0, 3),
-      topActions: mergeTopItems(
-        [{ topActions: user.topActions }],
-        "topActions",
-        "actionKey",
-      ).slice(0, 3),
+      topActions: mergeTopActions([{ topActions: user.topActions }]).slice(0, 3),
       hourlyBuckets: sumBuckets([{ hourlyBuckets: user.hourlyBuckets }]),
     }))
     .sort((left, right) => {
@@ -237,7 +284,15 @@ export const buildActivityAnalyticsModel = ({
 
   const repeatUsers = aggregatedUsers.filter((user) => user.sessionCount > 1).length;
   const oneTimeUsers = aggregatedUsers.length - repeatUsers;
-  const aggregatedHourly = sumBuckets(appRows);
+  const normalizedAppRows = appRows.map((row) => ({
+    ...row,
+    semanticEventCount: getSemanticEventCount(row),
+    hourlyBuckets: getHourlyBuckets(row),
+    topActions: (row.topActions || []).filter(
+      (item) => item?.actionKey !== NAVIGATION_ACTION_KEY,
+    ),
+  }));
+  const aggregatedHourly = sumBuckets(normalizedAppRows);
   const trendRows = buildTrendRows(appRows).map((row) => ({
     ...row,
     isPartial: row.dateKey === todayDateKey,
@@ -280,7 +335,7 @@ export const buildActivityAnalyticsModel = ({
     }, new Map())
     .values();
 
-  const topActions = mergeTopItems(appRows, "topActions", "actionKey");
+  const topActions = mergeTopActions(appRows);
   const topTransitions = mergeTransitions(appRows);
   const roleBreakdown = aggregateRoleBreakdown(appRows);
   const busiestHour =
@@ -310,7 +365,7 @@ export const buildActivityAnalyticsModel = ({
         0,
       ),
       semanticEventCount: appRows.reduce(
-        (total, row) => total + (row.semanticEventCount || 0),
+        (total, row) => total + getSemanticEventCount(row),
         0,
       ),
       avgSessionMinutes:
@@ -365,6 +420,14 @@ export const buildUserDrilldownModel = ({
 } = {}) => {
   const cutoffDateKey = getDateKeyDaysAgo(rangeDays - 1, now);
   const filteredRows = rows.filter((row) => (row.dateKey || "") >= cutoffDateKey);
+  const normalizedRows = filteredRows.map((row) => ({
+    ...row,
+    semanticEventCount: getSemanticEventCount(row),
+    hourlyBuckets: getHourlyBuckets(row),
+    topActions: (row.topActions || []).filter(
+      (item) => item?.actionKey !== NAVIGATION_ACTION_KEY,
+    ),
+  }));
   const trendRows = [...filteredRows]
     .sort((left, right) => left.dateKey.localeCompare(right.dateKey))
     .map((row) => ({
@@ -378,10 +441,10 @@ export const buildUserDrilldownModel = ({
 
   return {
     trendRows,
-    topPages: mergeTopItems(filteredRows, "topPagesDetailed", "pageId").slice(0, 8),
-    topSections: mergeTopItems(filteredRows, "topSections", "sectionLabel").slice(0, 6),
-    topActions: mergeTopItems(filteredRows, "topActions", "actionKey").slice(0, 6),
-    heatmapRows: sumBuckets(filteredRows),
+    topPages: mergeTopItems(normalizedRows, "topPagesDetailed", "pageId").slice(0, 8),
+    topSections: mergeTopItems(normalizedRows, "topSections", "sectionLabel").slice(0, 6),
+    topActions: mergeTopActions(normalizedRows).slice(0, 6),
+    heatmapRows: sumBuckets(normalizedRows),
     summary: {
       totalMinutesApprox: filteredRows.reduce(
         (total, row) => total + (row.totalMinutesApprox || 0),

@@ -8,6 +8,7 @@ import {
   startAfter,
   where,
 } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import {
   Activity,
   ArrowRightLeft,
@@ -20,7 +21,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { db } from "../../firebase";
+import { db, functions as firebaseFunctions } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import {
   ACTIVITY_RANGE_OPTIONS,
@@ -137,6 +138,20 @@ const formatActivityLoadError = (error) => {
     return "Activity rollups are blocked by Firestore rules. Deploy the latest Firestore rules and indexes, then refresh.";
   }
   return message || "Could not load activity analytics right now.";
+};
+
+const formatActivityRebuildError = (error) => {
+  const message = String(error?.message || "").trim();
+  if (error?.code === "functions/not-found" || error?.code === "not-found") {
+    return "The activity rebuild function is not deployed yet. Deploy the latest Firebase functions, then try again.";
+  }
+  if (
+    error?.code === "functions/permission-denied" ||
+    error?.code === "permission-denied"
+  ) {
+    return "Only the configured activity owner can rebuild activity analytics.";
+  }
+  return message || "Could not rebuild activity analytics right now.";
 };
 
 const getActivityStatus = (lastActiveAt) => {
@@ -613,7 +628,9 @@ const UserActivityPage = () => {
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [liveLoading, setLiveLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [rebuildMessage, setRebuildMessage] = useState("");
   const [analyticsRows, setAnalyticsRows] = useState([]);
   const [pageDailyRows, setPageDailyRows] = useState([]);
   const [userDailyRows, setUserDailyRows] = useState([]);
@@ -718,6 +735,40 @@ const UserActivityPage = () => {
     },
     [isActivityOwner, loadLiveData, loadSummaryData],
   );
+
+  const rebuildSelectedRange = useCallback(async () => {
+    if (!isActivityOwner || rebuilding) return;
+
+    const now = new Date();
+    const startDateKey = getDateKeyDaysAgo(rangeDays - 1, now);
+    const endDateKey = formatDateKeyInTimeZone(now);
+
+    setRebuilding(true);
+    setErrorMessage("");
+    setRebuildMessage("");
+
+    try {
+      const rebuildAnalytics = httpsCallable(
+        firebaseFunctions,
+        "rebuildUserActivityAnalytics",
+      );
+      const result = await rebuildAnalytics({ startDateKey, endDateKey });
+      const data = result?.data || {};
+      setRebuildMessage(
+        `Rebuilt ${data.analyticsDocCount || 0} daily summaries, ${
+          data.userDocCount || 0
+        } user summaries, and ${data.pageDocCount || 0} page summaries from ${
+          data.eventCount || 0
+        } raw events.`,
+      );
+      await refreshAll({ silent: true });
+    } catch (error) {
+      console.error("Failed to rebuild user activity analytics:", error);
+      setErrorMessage(formatActivityRebuildError(error));
+    } finally {
+      setRebuilding(false);
+    }
+  }, [isActivityOwner, rangeDays, refreshAll, rebuilding]);
 
   useEffect(() => {
     if (!isActivityOwner) return;
@@ -830,7 +881,7 @@ const UserActivityPage = () => {
       {
         label: "Curated Actions",
         value: analyticsModel.overview.semanticEventCount,
-        hint: "Semantic events such as navigate, import, save, or search",
+        hint: "Semantic events such as import, save, or search",
         icon: MousePointerClick,
         accentClass: "bg-amber-500",
       },
@@ -890,15 +941,26 @@ const UserActivityPage = () => {
 
             <div className="flex flex-col items-start gap-3 lg:items-end">
               <RangeSelector value={rangeDays} onChange={setRangeDays} />
-              <button
-                type="button"
-                onClick={() => void refreshAll({ silent: true })}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
-                disabled={refreshing}
-              >
-                <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-                <span>{refreshing ? "Refreshing..." : "Refresh analytics"}</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                <button
+                  type="button"
+                  onClick={() => void rebuildSelectedRange()}
+                  className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-emerald-700 bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-70"
+                  disabled={rebuilding}
+                >
+                  <RefreshCw className={`h-4 w-4 ${rebuilding ? "animate-spin" : ""}`} />
+                  <span>{rebuilding ? "Rebuilding..." : "Rebuild rollups"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void refreshAll({ silent: true })}
+                  className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+                  disabled={refreshing}
+                >
+                  <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                  <span>{refreshing ? "Refreshing..." : "Refresh analytics"}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -906,6 +968,12 @@ const UserActivityPage = () => {
         {errorMessage ? (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {errorMessage}
+          </div>
+        ) : null}
+
+        {rebuildMessage ? (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            {rebuildMessage}
           </div>
         ) : null}
 

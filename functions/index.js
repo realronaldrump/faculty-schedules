@@ -132,16 +132,78 @@ const commitWritesInChunks = async (writes) => {
   }
 };
 
+const fetchRollupDocsForDateRange = async (
+  collectionName,
+  startDateKey,
+  endDateKey,
+) => {
+  const docs = [];
+  let queryRef = db
+    .collection(collectionName)
+    .where("dateKey", ">=", startDateKey)
+    .where("dateKey", "<=", endDateKey)
+    .orderBy("dateKey", "asc")
+    .limit(QUERY_PAGE_SIZE);
+  let lastDoc = null;
+  let hasMore = true;
+
+  while (hasMore) {
+    const snapshot = await (lastDoc ? queryRef.startAfter(lastDoc).get() : queryRef.get());
+    if (snapshot.empty) break;
+
+    docs.push(...snapshot.docs);
+    if (snapshot.size < QUERY_PAGE_SIZE) {
+      hasMore = false;
+      continue;
+    }
+    lastDoc = snapshot.docs[snapshot.docs.length - 1];
+  }
+
+  return docs;
+};
+
+const deleteDocsInChunks = async (docs) => {
+  for (let index = 0; index < docs.length; index += WRITE_BATCH_SIZE) {
+    const chunk = docs.slice(index, index + WRITE_BATCH_SIZE);
+    const batch = db.batch();
+    chunk.forEach((docSnap) => {
+      batch.delete(docSnap.ref);
+    });
+    await batch.commit();
+  }
+};
+
+const clearExistingRollupsForDateRange = async (startDateKey, endDateKey) => {
+  const collections = [
+    "userActivityAnalyticsDaily",
+    "userActivityPageDaily",
+    "userActivityDaily",
+  ];
+  const snapshots = await Promise.all(
+    collections.map((collectionName) =>
+      fetchRollupDocsForDateRange(collectionName, startDateKey, endDateKey),
+    ),
+  );
+  const docs = snapshots.flat();
+  await deleteDocsInChunks(docs);
+  return docs.length;
+};
+
 const rebuildAnalyticsDateRange = async (startDateKey, endDateKey) => {
   const dateKeys = enumerateDateKeys(startDateKey, endDateKey);
   const events = await fetchActivityEventsForDateRange(startDateKey, endDateKey);
   const summaries = rollupActivityForDateKeys(events, dateKeys);
   const writes = buildRollupWrites(summaries);
+  const deletedRollupDocCount = await clearExistingRollupsForDateRange(
+    startDateKey,
+    endDateKey,
+  );
   await commitWritesInChunks(writes);
 
   return {
     dateKeys,
     eventCount: events.length,
+    deletedRollupDocCount,
     analyticsDocCount: summaries.length,
     pageDocCount: summaries.reduce(
       (count, summary) => count + summary.pageDocs.length,

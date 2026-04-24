@@ -101,7 +101,18 @@ describe("rollupActivityForDateKeys", () => {
     expect(result.analyticsDoc.sessionCount).toBe(2);
     expect(result.analyticsDoc.pageEnterCount).toBe(4);
     expect(result.analyticsDoc.totalMinutesApprox).toBe(40);
-    expect(result.analyticsDoc.topActions[0].actionKey).toBe("navigate");
+    expect(result.analyticsDoc.semanticEventCount).toBe(2);
+    expect(result.analyticsDoc.topActions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ actionKey: "search", count: 1 }),
+        expect.objectContaining({ actionKey: "save", count: 1 }),
+      ]),
+    );
+    expect(result.analyticsDoc.topActions).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ actionKey: "navigate" }),
+      ]),
+    );
     expect(result.analyticsDoc.topTransitions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

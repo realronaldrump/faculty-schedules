@@ -1,5 +1,5 @@
 const admin = require("firebase-admin");
-const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const {
   ACTIVITY_ROLLUP_TIME_ZONE,
@@ -25,85 +25,6 @@ const ALLOWED_CALLABLE_ORIGINS = [
   // Vercel preview deployments
   /^https:\/\/faculty-schedules(?:-[a-z0-9-]+)?\.vercel\.app$/,
 ];
-
-const isAllowedCallableOrigin = (origin) =>
-  ALLOWED_CALLABLE_ORIGINS.some((allowedOrigin) => {
-    if (typeof allowedOrigin === "string") return allowedOrigin === origin;
-    return allowedOrigin.test(origin);
-  });
-
-const applyCallableCorsHeaders = (req, res) => {
-  const origin = req.get("origin");
-  if (origin && isAllowedCallableOrigin(origin)) {
-    res.set("Access-Control-Allow-Origin", origin);
-    res.set("Vary", "Origin");
-  }
-  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set(
-    "Access-Control-Allow-Headers",
-    "Authorization, Content-Type, Firebase-Instance-ID-Token, X-Firebase-AppCheck",
-  );
-  res.set("Access-Control-Max-Age", "3600");
-};
-
-const callableErrorStatusByCode = {
-  cancelled: "CANCELLED",
-  unknown: "UNKNOWN",
-  "invalid-argument": "INVALID_ARGUMENT",
-  "deadline-exceeded": "DEADLINE_EXCEEDED",
-  "not-found": "NOT_FOUND",
-  "already-exists": "ALREADY_EXISTS",
-  "permission-denied": "PERMISSION_DENIED",
-  "resource-exhausted": "RESOURCE_EXHAUSTED",
-  "failed-precondition": "FAILED_PRECONDITION",
-  aborted: "ABORTED",
-  "out-of-range": "OUT_OF_RANGE",
-  unimplemented: "UNIMPLEMENTED",
-  internal: "INTERNAL",
-  unavailable: "UNAVAILABLE",
-  "data-loss": "DATA_LOSS",
-  unauthenticated: "UNAUTHENTICATED",
-};
-
-const httpStatusByCallableCode = {
-  "invalid-argument": 400,
-  "failed-precondition": 400,
-  unauthenticated: 401,
-  "permission-denied": 403,
-  "not-found": 404,
-  "already-exists": 409,
-  "resource-exhausted": 429,
-  "deadline-exceeded": 504,
-  unavailable: 503,
-};
-
-const sendCallableError = (res, error) => {
-  const code = error instanceof HttpsError ? error.code : "internal";
-  const message =
-    error instanceof HttpsError
-      ? error.message
-      : "An internal error occurred while rebuilding analytics.";
-  if (!(error instanceof HttpsError)) {
-    console.error("Unhandled callable error:", error);
-  }
-  res.status(httpStatusByCallableCode[code] || 500).json({
-    error: {
-      status: callableErrorStatusByCode[code] || "INTERNAL",
-      message,
-    },
-  });
-};
-
-const getCallableAuth = async (req) => {
-  const authorization = req.get("authorization") || "";
-  const match = authorization.match(/^Bearer (.+)$/i);
-  if (!match) return null;
-  try {
-    return await auth.verifyIdToken(match[1]);
-  } catch {
-    throw new HttpsError("unauthenticated", "Your sign-in session is invalid.");
-  }
-};
 
 const normalizeRoleList = (roles) => {
   if (Array.isArray(roles)) {
@@ -330,73 +251,53 @@ exports.rollupUserActivityHourly = onSchedule(
   },
 );
 
-exports.rebuildUserActivityAnalytics = onRequest(
+exports.rebuildUserActivityAnalytics = onCall(
   {
     region: "us-central1",
+    cors: ALLOWED_CALLABLE_ORIGINS,
     invoker: "public",
   },
-  async (req, res) => {
-    applyCallableCorsHeaders(req, res);
-    if (req.method === "OPTIONS") {
-      res.status(204).send("");
-      return;
+  async (request) => {
+    const callerUid = request.auth?.uid;
+    if (!callerUid) {
+      throw new HttpsError("unauthenticated", "You must be signed in.");
     }
-    if (req.method !== "POST") {
-      sendCallableError(
-        res,
-        new HttpsError("invalid-argument", "Only POST requests are supported."),
+
+    if (callerUid !== ACTIVITY_OWNER_UID) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only the activity owner can rebuild analytics.",
       );
-      return;
     }
 
-    try {
-      const decodedToken = await getCallableAuth(req);
-      const callerUid = decodedToken?.uid;
-      if (!callerUid) {
-        throw new HttpsError("unauthenticated", "You must be signed in.");
-      }
-
-      if (callerUid !== ACTIVITY_OWNER_UID) {
-        throw new HttpsError(
-          "permission-denied",
-          "Only the activity owner can rebuild analytics.",
-        );
-      }
-
-      const data = req.body?.data || {};
-      const startDateKey = String(data.startDateKey || "").trim();
-      const endDateKey = String(data.endDateKey || "").trim();
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(startDateKey) || !/^\d{4}-\d{2}-\d{2}$/.test(endDateKey)) {
-        throw new HttpsError(
-          "invalid-argument",
-          "startDateKey and endDateKey must be YYYY-MM-DD strings.",
-        );
-      }
-      if (startDateKey > endDateKey) {
-        throw new HttpsError(
-          "invalid-argument",
-          "startDateKey must be on or before endDateKey.",
-        );
-      }
-
-      const dateKeys = enumerateDateKeys(startDateKey, endDateKey);
-      if (dateKeys.length > MAX_BACKFILL_DAYS) {
-        throw new HttpsError(
-          "invalid-argument",
-          `Date range cannot exceed ${MAX_BACKFILL_DAYS} days.`,
-        );
-      }
-
-      const result = await rebuildAnalyticsDateRange(startDateKey, endDateKey);
-      res.json({
-        result: {
-          success: true,
-          ...result,
-        },
-      });
-    } catch (error) {
-      sendCallableError(res, error);
+    const startDateKey = String(request.data?.startDateKey || "").trim();
+    const endDateKey = String(request.data?.endDateKey || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDateKey) || !/^\d{4}-\d{2}-\d{2}$/.test(endDateKey)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "startDateKey and endDateKey must be YYYY-MM-DD strings.",
+      );
     }
+    if (startDateKey > endDateKey) {
+      throw new HttpsError(
+        "invalid-argument",
+        "startDateKey must be on or before endDateKey.",
+      );
+    }
+
+    const dateKeys = enumerateDateKeys(startDateKey, endDateKey);
+    if (dateKeys.length > MAX_BACKFILL_DAYS) {
+      throw new HttpsError(
+        "invalid-argument",
+        `Date range cannot exceed ${MAX_BACKFILL_DAYS} days.`,
+      );
+    }
+
+    const result = await rebuildAnalyticsDateRange(startDateKey, endDateKey);
+    return {
+      success: true,
+      ...result,
+    };
   },
 );
 

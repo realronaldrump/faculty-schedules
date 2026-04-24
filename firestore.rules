@@ -419,17 +419,17 @@ service cloud.firestore {
 
     match /userActivityDaily/{id} {
       allow read: if isActivityOwner();
-      allow write: if false;
+      allow write: if isActivityOwner();
     }
 
     match /userActivityAnalyticsDaily/{id} {
       allow read: if isActivityOwner();
-      allow write: if false;
+      allow write: if isActivityOwner();
     }
 
     match /userActivityPageDaily/{id} {
       allow read: if isActivityOwner();
-      allow write: if false;
+      allow write: if isActivityOwner();
     }
 
     // People collection (faculty, staff, adjunct, students): granular permissions

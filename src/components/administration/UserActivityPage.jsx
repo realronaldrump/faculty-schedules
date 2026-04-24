@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   collection,
+  doc,
   getDocs,
   limit,
   orderBy,
   query,
+  serverTimestamp,
   startAfter,
+  writeBatch,
   where,
 } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
 import {
   Activity,
   ArrowRightLeft,
@@ -21,7 +23,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { db, functions as firebaseFunctions } from "../../firebase";
+import { db } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import {
   ACTIVITY_RANGE_OPTIONS,
@@ -32,6 +34,7 @@ import {
   toDate,
 } from "../../utils/activityAnalytics";
 import { getNavigationMeta } from "../../utils/navigationMeta";
+import activityRollup from "../../utils/activityRollup.cjs";
 
 const LIVE_WINDOW_MINUTES = 2;
 const IDLE_WINDOW_MINUTES = 10;
@@ -40,6 +43,14 @@ const SUMMARY_LOOKBACK_DAYS = 90;
 const SUMMARY_QUERY_PAGE_SIZE = 500;
 const TIMELINE_LIMIT = 60;
 const PRESENCE_LIMIT = 120;
+const REBUILD_EVENT_PAGE_SIZE = 1000;
+const WRITE_BATCH_SIZE = 425;
+
+const {
+  addDaysToDateKey,
+  getDateKeyUtcRange,
+  rollupActivityForDateKeys,
+} = activityRollup;
 
 const mapQueryRows = (snapshot) =>
   snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
@@ -58,6 +69,129 @@ const buildRollupQuery = ({
     ...(lastDoc ? [startAfter(lastDoc)] : []),
     limit(SUMMARY_QUERY_PAGE_SIZE),
   );
+
+const buildPageRollupDocId = (pageDoc) =>
+  `${pageDoc.dateKey}_${encodeURIComponent(pageDoc.pageId || "unknown")}`;
+
+const fetchActivityEventsForRebuild = async (startDateKey, endDateKey) => {
+  const { start } = getDateKeyUtcRange(startDateKey);
+  const { start: endExclusive } = getDateKeyUtcRange(
+    addDaysToDateKey(endDateKey, 1),
+  );
+  const events = [];
+  let lastDoc = null;
+  let hasMore = true;
+
+  while (hasMore) {
+    const snapshot = await getDocs(
+      query(
+        collection(db, "userActivityEvents"),
+        where("timestamp", ">=", start),
+        where("timestamp", "<", endExclusive),
+        orderBy("timestamp", "asc"),
+        ...(lastDoc ? [startAfter(lastDoc)] : []),
+        limit(REBUILD_EVENT_PAGE_SIZE),
+      ),
+    );
+
+    if (snapshot.empty) {
+      hasMore = false;
+      continue;
+    }
+    events.push(...mapQueryRows(snapshot));
+    if (snapshot.size < REBUILD_EVENT_PAGE_SIZE) {
+      hasMore = false;
+      continue;
+    }
+    lastDoc = snapshot.docs[snapshot.docs.length - 1];
+  }
+
+  return events;
+};
+
+const deleteRollupDocsForRange = async (collectionName, startDateKey, endDateKey) => {
+  const docsToDelete = await fetchPagedRows((lastDoc) =>
+    buildRollupQuery({
+      collectionName,
+      startDateKey,
+      endDateKey,
+      lastDoc,
+    }),
+  );
+  for (let index = 0; index < docsToDelete.length; index += WRITE_BATCH_SIZE) {
+    const batch = writeBatch(db);
+    docsToDelete.slice(index, index + WRITE_BATCH_SIZE).forEach((row) => {
+      batch.delete(doc(db, collectionName, row.id));
+    });
+    await batch.commit();
+  }
+  return docsToDelete.length;
+};
+
+const commitRollupWrites = async (writes) => {
+  for (let index = 0; index < writes.length; index += WRITE_BATCH_SIZE) {
+    const batch = writeBatch(db);
+    writes.slice(index, index + WRITE_BATCH_SIZE).forEach(({ ref, data }) => {
+      batch.set(ref, data, { merge: false });
+    });
+    await batch.commit();
+  }
+};
+
+const rebuildActivityRollupsInBrowser = async (startDateKey, endDateKey) => {
+  const dateKeys = [];
+  let cursor = startDateKey;
+  while (cursor <= endDateKey) {
+    dateKeys.push(cursor);
+    cursor = addDaysToDateKey(cursor, 1);
+  }
+
+  const events = await fetchActivityEventsForRebuild(startDateKey, endDateKey);
+  const summaries = rollupActivityForDateKeys(events, dateKeys);
+  const deletedRollupDocCount = (
+    await Promise.all(
+      [
+        "userActivityAnalyticsDaily",
+        "userActivityPageDaily",
+        "userActivityDaily",
+      ].map((collectionName) =>
+        deleteRollupDocsForRange(collectionName, startDateKey, endDateKey),
+      ),
+    )
+  ).reduce((total, count) => total + count, 0);
+
+  const generatedAt = serverTimestamp();
+  const writes = summaries.flatMap((summary) => [
+    {
+      ref: doc(db, "userActivityAnalyticsDaily", summary.analyticsDoc.dateKey),
+      data: { ...summary.analyticsDoc, generatedAt },
+    },
+    ...summary.pageDocs.map((pageDoc) => ({
+      ref: doc(db, "userActivityPageDaily", buildPageRollupDocId(pageDoc)),
+      data: { ...pageDoc, generatedAt },
+    })),
+    ...summary.userDocs.map((userDoc) => ({
+      ref: doc(db, "userActivityDaily", `${userDoc.dateKey}_${userDoc.uid}`),
+      data: { ...userDoc, generatedAt },
+    })),
+  ]);
+
+  await commitRollupWrites(writes);
+
+  return {
+    eventCount: events.length,
+    deletedRollupDocCount,
+    analyticsDocCount: summaries.length,
+    pageDocCount: summaries.reduce(
+      (count, summary) => count + summary.pageDocs.length,
+      0,
+    ),
+    userDocCount: summaries.reduce(
+      (count, summary) => count + summary.userDocs.length,
+      0,
+    ),
+  };
+};
 
 const fetchPagedRows = async (buildQuery) => {
   const rows = [];
@@ -748,12 +882,7 @@ const UserActivityPage = () => {
     setRebuildMessage("");
 
     try {
-      const rebuildAnalytics = httpsCallable(
-        firebaseFunctions,
-        "rebuildUserActivityAnalytics",
-      );
-      const result = await rebuildAnalytics({ startDateKey, endDateKey });
-      const data = result?.data || {};
+      const data = await rebuildActivityRollupsInBrowser(startDateKey, endDateKey);
       setRebuildMessage(
         `Rebuilt ${data.analyticsDocCount || 0} daily summaries, ${
           data.userDocCount || 0

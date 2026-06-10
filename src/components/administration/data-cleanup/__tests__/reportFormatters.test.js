@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DATA_HEALTH_STATES,
   buildDataHealthViewModel,
+  buildRoutineCleanupPreview,
   summarizeBaselinePreview,
   summarizeBaselineReport,
   summarizeLocationApplyReport,
@@ -51,6 +52,83 @@ describe("report formatters", () => {
     expect(
       buildDataHealthViewModel({ lastRunError: "Permission denied" }).title,
     ).toBe("Could not finish");
+  });
+
+  it("builds a routine cleanup preview from the health scan", () => {
+    const preview = buildRoutineCleanupPreview({
+      autoFixable: {
+        highConfidencePeopleDuplicates: 1,
+        highConfidenceScheduleDuplicates: 0,
+        highConfidenceRoomDuplicates: 0,
+        orphanedSchedulesWithName: 1,
+        orphanedSpaceLinks: 1,
+        legacyModelIssues: 1,
+      },
+      issues: {
+        duplicates: {
+          people: [
+            {
+              records: [
+                { id: "p1", firstName: "Alex", lastName: "Taylor" },
+                { id: "p2", firstName: "Alec", lastName: "Taylor" },
+              ],
+            },
+          ],
+        },
+        orphaned: [
+          {
+            type: "orphaned_schedule",
+            record: {
+              id: "s1",
+              courseCode: "MUS 1010",
+              section: "01",
+              term: "Spring 2026",
+              instructorName: "Alex Taylor",
+            },
+          },
+          {
+            type: "orphaned_space",
+            record: {
+              id: "s2",
+              courseCode: "MUS 2020",
+              section: "02",
+              term: "Spring 2026",
+            },
+          },
+        ],
+        legacyModelIssues: [
+          {
+            recordType: "people",
+            record: { firstName: "Jordan", lastName: "Lee" },
+          },
+        ],
+      },
+    });
+
+    expect(preview).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "people-duplicates",
+          count: 1,
+          examples: ["Alex Taylor + Alec Taylor"],
+        }),
+        expect.objectContaining({
+          id: "instructor-links",
+          count: 1,
+          examples: ["MUS 1010 01 (Spring 2026)"],
+        }),
+        expect.objectContaining({
+          id: "room-links",
+          count: 1,
+          examples: ["MUS 2020 02 (Spring 2026)"],
+        }),
+        expect.objectContaining({
+          id: "older-format",
+          count: 1,
+          examples: ["Jordan Lee"],
+        }),
+      ]),
+    );
   });
 
   it("formats full data refresh summary", () => {

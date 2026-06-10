@@ -139,6 +139,122 @@ export const getSafeFixableCount = (scanResult) => {
   );
 };
 
+const getDuplicatePreviewLabel = (duplicate = {}, fallbackType = "entry") => {
+  const [primary, secondary] = toArray(duplicate.records);
+  const firstLabel =
+    fallbackType === "people"
+      ? getPersonLabel(primary)
+      : fallbackType === "rooms"
+        ? getRoomLabel(primary)
+        : getScheduleLabel(primary);
+  const secondLabel =
+    fallbackType === "people"
+      ? getPersonLabel(secondary)
+      : fallbackType === "rooms"
+        ? getRoomLabel(secondary)
+        : getScheduleLabel(secondary);
+
+  return [firstLabel, secondLabel].filter(Boolean).join(" + ");
+};
+
+const getRoutineCategory = ({
+  id,
+  label,
+  count,
+  description,
+  items = [],
+  getPreviewLabel,
+}) => {
+  const normalizedCount = Number(count || 0);
+  if (normalizedCount <= 0) return null;
+
+  return {
+    id,
+    label,
+    count: normalizedCount,
+    description,
+    examples: toArray(items)
+      .slice(0, 3)
+      .map(getPreviewLabel)
+      .filter(Boolean),
+  };
+};
+
+export const buildRoutineCleanupPreview = (scanResult) => {
+  if (!scanResult?.autoFixable) return [];
+
+  const auto = scanResult.autoFixable || {};
+  const duplicates = scanResult.issues?.duplicates || {};
+  const orphaned = toArray(scanResult.issues?.orphaned);
+
+  const safeInstructorLinks = orphaned.filter(
+    (issue) =>
+      issue?.type === "orphaned_schedule" &&
+      (issue?.record?.instructorName || issue?.record?.Instructor),
+  );
+  const safeSpaceLinks = orphaned.filter(
+    (issue) => issue?.type === "orphaned_space",
+  );
+
+  return [
+    getRoutineCategory({
+      id: "people-duplicates",
+      label: "People duplicates",
+      count: auto.highConfidencePeopleDuplicates,
+      description: "Very strong people matches will be merged into one entry.",
+      items: duplicates.people,
+      getPreviewLabel: (item) => getDuplicatePreviewLabel(item, "people"),
+    }),
+    getRoutineCategory({
+      id: "schedule-duplicates",
+      label: "Class duplicates",
+      count: auto.highConfidenceScheduleDuplicates,
+      description: "Very strong class matches will be merged into one schedule.",
+      items: duplicates.schedules,
+      getPreviewLabel: (item) => getDuplicatePreviewLabel(item, "schedules"),
+    }),
+    getRoutineCategory({
+      id: "room-duplicates",
+      label: "Room duplicates",
+      count: auto.highConfidenceRoomDuplicates,
+      description: "Very strong room matches will be merged into one room.",
+      items: duplicates.rooms,
+      getPreviewLabel: (item) => getDuplicatePreviewLabel(item, "rooms"),
+    }),
+    getRoutineCategory({
+      id: "instructor-links",
+      label: "Classes missing instructor links",
+      count: auto.orphanedSchedulesWithName,
+      description:
+        "Classes with a stored instructor name will get the matching instructor ID.",
+      items: safeInstructorLinks,
+      getPreviewLabel: (item) => getScheduleLabel(item?.record),
+    }),
+    getRoutineCategory({
+      id: "room-links",
+      label: "Classes missing room links",
+      count: auto.orphanedSpaceLinks,
+      description: "Classes with a recognizable room will get refreshed room links.",
+      items: safeSpaceLinks,
+      getPreviewLabel: (item) => getScheduleLabel(item?.record),
+    }),
+    getRoutineCategory({
+      id: "older-format",
+      label: "Older data format",
+      count: auto.legacyModelIssues,
+      description: "Older fields will be refreshed into the current format.",
+      items: scanResult.issues?.legacyModelIssues,
+      getPreviewLabel: (item) => {
+        const recordType = (item?.recordType || "entry").toString();
+        const record = item?.record || {};
+        if (recordType === "people") return getPersonLabel(record);
+        if (recordType === "schedules") return getScheduleLabel(record);
+        return item?.message || `${recordType} entry`;
+      },
+    }),
+  ].filter(Boolean);
+};
+
 const getDecisionCount = (totalBlockingIssues = 0, safeFixableCount = 0) =>
   Math.max(0, Number(totalBlockingIssues || 0) - Number(safeFixableCount || 0));
 

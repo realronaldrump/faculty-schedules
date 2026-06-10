@@ -249,6 +249,67 @@ describe("DataCleanupRepairsPage", () => {
     expect(mockActions.handleSafeFix).toHaveBeenCalledTimes(1);
   });
 
+  it("shows a routine cleanup preview from the cleanup metric", () => {
+    mockActions.scanResult = {
+      timestamp: new Date().toISOString(),
+      autoFixable: {
+        highConfidencePeopleDuplicates: 1,
+        highConfidenceScheduleDuplicates: 0,
+        highConfidenceRoomDuplicates: 0,
+        orphanedSchedulesWithName: 1,
+        orphanedSpaceLinks: 0,
+        legacyModelIssues: 0,
+      },
+      issues: {
+        duplicates: {
+          people: [
+            {
+              records: [
+                { id: "person-1", firstName: "Alex", lastName: "Taylor" },
+                { id: "person-2", firstName: "Alec", lastName: "Taylor" },
+              ],
+            },
+          ],
+        },
+        orphaned: [
+          {
+            type: "orphaned_schedule",
+            record: {
+              id: "schedule-1",
+              courseCode: "MUS 1010",
+              section: "01",
+              term: "Spring 2026",
+              instructorName: "Alex Taylor",
+            },
+          },
+        ],
+        legacyModelIssues: [],
+      },
+    };
+    mockActions.safeFixableCount = 2;
+    mockActions.totalBlockingIssues = 2;
+
+    render(<DataCleanupRepairsPage />);
+
+    expect(
+      screen.queryByText(/routine cleanup preview/i),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /routine cleanup\s+2\s+preview cleanup/i,
+      }),
+    );
+
+    expect(screen.getByText(/routine cleanup preview/i)).toBeInTheDocument();
+    expect(screen.getByText("People duplicates")).toBeInTheDocument();
+    expect(screen.getByText("Alex Taylor + Alec Taylor")).toBeInTheDocument();
+    expect(
+      screen.getByText("Classes missing instructor links"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("MUS 1010 01 (Spring 2026)")).toBeInTheDocument();
+  });
+
   it("renders manual decision items and triggers handlers", () => {
     const duplicateItem = {
       entityType: "people",

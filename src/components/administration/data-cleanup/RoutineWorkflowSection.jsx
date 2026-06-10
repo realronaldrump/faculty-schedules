@@ -1,6 +1,10 @@
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  ListChecks,
   Loader2,
   RefreshCw,
   Sparkles,
@@ -8,6 +12,7 @@ import {
 } from "lucide-react";
 import {
   DATA_HEALTH_STATES,
+  buildRoutineCleanupPreview,
   buildDataHealthViewModel,
 } from "./reportFormatters";
 
@@ -111,6 +116,7 @@ const RoutineWorkflowSection = ({
   onRunScan,
   onRunSafeFix,
 }) => {
+  const [isRoutinePreviewOpen, setIsRoutinePreviewOpen] = useState(false);
   const viewModel = buildDataHealthViewModel({
     scanResult,
     safeFixResult,
@@ -123,6 +129,18 @@ const RoutineWorkflowSection = ({
   const Icon = STATE_ICON[viewModel.state] || Sparkles;
   const tone = STATE_TONE[viewModel.state] || STATE_TONE[DATA_HEALTH_STATES.checking];
   const showCleanupNote = viewModel.hasCleanupResult && !isFixingSafe;
+  const routinePreview = useMemo(
+    () => buildRoutineCleanupPreview(scanResult),
+    [scanResult],
+  );
+  const canShowRoutinePreview =
+    Boolean(scanResult) && Number(safeFixableCount || 0) > 0 && !isFixingSafe;
+
+  useEffect(() => {
+    if (!canShowRoutinePreview) {
+      setIsRoutinePreviewOpen(false);
+    }
+  }, [canShowRoutinePreview]);
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
@@ -165,20 +183,127 @@ const RoutineWorkflowSection = ({
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {viewModel.metrics.map((metric) => (
-          <div
-            key={metric.label}
-            className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3"
-          >
-            <div className="text-xs font-medium text-gray-500">
-              {metric.label}
+        {viewModel.metrics.map((metric) => {
+          const isRoutineMetric = metric.label === "Routine cleanup";
+          const isInteractiveRoutineMetric =
+            isRoutineMetric && canShowRoutinePreview;
+          const metricContent = (
+            <>
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-xs font-medium text-gray-500">
+                  {metric.label}
+                </div>
+                {isInteractiveRoutineMetric &&
+                  (isRoutinePreviewOpen ? (
+                    <ChevronUp className="h-4 w-4 text-gray-500" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-500" />
+                  ))}
+              </div>
+              <div className="mt-1 text-base font-semibold text-gray-950">
+                {metric.value}
+              </div>
+              {isInteractiveRoutineMetric && (
+                <div className="mt-2 text-xs font-medium text-baylor-green">
+                  Preview cleanup
+                </div>
+              )}
+            </>
+          );
+
+          if (isInteractiveRoutineMetric) {
+            return (
+              <button
+                key={metric.label}
+                type="button"
+                aria-controls="routine-cleanup-preview"
+                aria-expanded={isRoutinePreviewOpen}
+                onClick={() => setIsRoutinePreviewOpen((prev) => !prev)}
+                className="rounded-lg border border-baylor-gold/40 bg-baylor-gold/10 px-4 py-3 text-left transition hover:border-baylor-gold/60 hover:bg-baylor-gold/20 focus:outline-none focus:ring-2 focus:ring-baylor-green/40"
+              >
+                {metricContent}
+              </button>
+            );
+          }
+
+          return (
+            <div
+              key={metric.label}
+              className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3"
+            >
+              {metricContent}
             </div>
-            <div className="mt-1 text-base font-semibold text-gray-950">
-              {metric.value}
+          );
+        })}
+      </div>
+
+      {isRoutinePreviewOpen && (
+        <div
+          id="routine-cleanup-preview"
+          className="mt-3 rounded-lg border border-baylor-gold/30 bg-baylor-gold/5 p-4"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-baylor-gold/40 bg-white text-baylor-green">
+              <ListChecks className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-gray-950">
+                Routine cleanup preview
+              </div>
+              <p className="mt-1 text-sm leading-6 text-gray-600">
+                This preview comes from the latest data health check. Click
+                Clean up routine items to apply these updates.
+              </p>
             </div>
           </div>
-        ))}
-      </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {routinePreview.map((category) => {
+              const hiddenExampleCount = Math.max(
+                0,
+                Number(category.count || 0) - category.examples.length,
+              );
+
+              return (
+                <div
+                  key={category.id}
+                  className="rounded-lg border border-gray-200 bg-white p-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="text-sm font-semibold text-gray-950">
+                      {category.label}
+                    </div>
+                    <div className="rounded-full bg-baylor-green/10 px-2 py-0.5 text-xs font-semibold text-baylor-green">
+                      {category.count}
+                    </div>
+                  </div>
+                  <p className="mt-1 text-sm leading-5 text-gray-600">
+                    {category.description}
+                  </p>
+                  {category.examples.length > 0 && (
+                    <ul className="mt-3 space-y-1 text-sm text-gray-700">
+                      {category.examples.map((example, index) => (
+                        <li
+                          key={`${category.id}:${example}:${index}`}
+                          className="flex gap-2"
+                        >
+                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-baylor-green/60" />
+                          <span>{example}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {hiddenExampleCount > 0 && (
+                    <div className="mt-2 text-xs font-medium text-gray-500">
+                      {hiddenExampleCount} more included
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {showCleanupNote && (
         <div className="mt-4 rounded-lg border border-baylor-green/20 bg-baylor-green/5 px-4 py-3 text-sm text-baylor-green">

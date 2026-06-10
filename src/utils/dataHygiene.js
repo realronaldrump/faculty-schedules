@@ -2995,6 +2995,25 @@ const buildStudentAggregate = (person = {}) => {
   };
 };
 
+const normalizeComparableValue = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeComparableValue(item));
+  }
+  if (value && typeof value === "object") {
+    return Object.keys(value)
+      .sort()
+      .reduce((normalized, key) => {
+        normalized[key] = normalizeComparableValue(value[key]);
+        return normalized;
+      }, {});
+  }
+  return value;
+};
+
+const areLegacyValuesEqual = (left, right) =>
+  JSON.stringify(normalizeComparableValue(left)) ===
+  JSON.stringify(normalizeComparableValue(right));
+
 const normalizeLegacyString = (value) => {
   if (value === undefined || value === null) return "";
   return String(value).trim();
@@ -3195,10 +3214,17 @@ const buildPersonLegacyFixUpdates = (person = {}) => {
     if (canonicalJobs.length > 0) {
       const aggregate = buildStudentAggregate({ ...person, jobs: canonicalJobs });
       if (aggregate.primaryBuildings.length > 0) {
-        updates.primaryBuildings = aggregate.primaryBuildings;
-        updates.primaryBuilding = aggregate.primaryBuilding;
+        if (!areLegacyValuesEqual(person.primaryBuildings, aggregate.primaryBuildings)) {
+          updates.primaryBuildings = aggregate.primaryBuildings;
+        }
+        if (!areLegacyValuesEqual(person.primaryBuilding, aggregate.primaryBuilding)) {
+          updates.primaryBuilding = aggregate.primaryBuilding;
+        }
       }
-      if (aggregate.weeklySchedule.length > 0) {
+      if (
+        aggregate.weeklySchedule.length > 0 &&
+        !areLegacyValuesEqual(person.weeklySchedule, aggregate.weeklySchedule)
+      ) {
         updates.weeklySchedule = aggregate.weeklySchedule;
       }
     }

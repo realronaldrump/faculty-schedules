@@ -744,8 +744,19 @@ const standardizeAllData = async (options = {}) => {
   if (includePeople) {
     const peopleSnapshot = await getDocs(collection(db, "people"));
     for (const docSnap of peopleSnapshot.docs) {
-      const standardized = standardizePerson(docSnap.data());
-      await batchWriter.add((batch) => batch.update(docSnap.ref, standardized));
+      const currentData = docSnap.data();
+      const standardized = standardizePerson(currentData, {
+        updateTimestamp: false,
+      });
+      if (areLegacyValuesEqual(currentData, standardized)) {
+        continue;
+      }
+      await batchWriter.add((batch) =>
+        batch.update(docSnap.ref, {
+          ...standardized,
+          updatedAt: new Date().toISOString(),
+        }),
+      );
       updateCount++;
     }
   }
@@ -758,11 +769,34 @@ const standardizeAllData = async (options = {}) => {
         )
       : await getDocs(collection(db, "schedules"));
     for (const docSnap of schedulesSnapshot.docs) {
-      const standardized = standardizeSchedule(docSnap.data());
+      const currentData = docSnap.data();
+      const standardized = standardizeSchedule(currentData);
+      const comparableCurrent = { ...currentData };
+      const comparableStandardized = {
+        ...standardized,
+        updatedAt: currentData.updatedAt,
+      };
+      const shouldDeleteInstructorName =
+        Boolean(standardized.instructorId) &&
+        Object.prototype.hasOwnProperty.call(currentData, "instructorName");
       if (standardized.instructorId) {
-        standardized.instructorName = deleteField();
+        delete comparableCurrent.instructorName;
+        delete comparableStandardized.instructorName;
       }
-      await batchWriter.add((batch) => batch.update(docSnap.ref, standardized));
+      if (
+        !shouldDeleteInstructorName &&
+        areLegacyValuesEqual(comparableCurrent, comparableStandardized)
+      ) {
+        continue;
+      }
+      const updatePayload = {
+        ...standardized,
+        updatedAt: new Date().toISOString(),
+      };
+      if (standardized.instructorId) {
+        updatePayload.instructorName = deleteField();
+      }
+      await batchWriter.add((batch) => batch.update(docSnap.ref, updatePayload));
       updateCount++;
     }
   }
@@ -771,8 +805,21 @@ const standardizeAllData = async (options = {}) => {
   if (includeRooms) {
     const roomsSnapshot = await getDocs(collection(db, "rooms"));
     for (const docSnap of roomsSnapshot.docs) {
-      const standardized = standardizeRoom(docSnap.data());
-      await batchWriter.add((batch) => batch.update(docSnap.ref, standardized));
+      const currentData = docSnap.data();
+      const standardized = standardizeRoom(currentData);
+      const comparableStandardized = {
+        ...standardized,
+        updatedAt: currentData.updatedAt,
+      };
+      if (areLegacyValuesEqual(currentData, comparableStandardized)) {
+        continue;
+      }
+      await batchWriter.add((batch) =>
+        batch.update(docSnap.ref, {
+          ...standardized,
+          updatedAt: new Date().toISOString(),
+        }),
+      );
       updateCount++;
     }
   }
@@ -780,11 +827,13 @@ const standardizeAllData = async (options = {}) => {
   await batchWriter.flush();
 
   // Log the standardization operation
-  await logStandardization(
-    "multiple",
-    updateCount,
-    "dataHygiene.js - standardizeAllData",
-  );
+  if (updateCount > 0) {
+    await logStandardization(
+      "multiple",
+      updateCount,
+      "dataHygiene.js - standardizeAllData",
+    );
+  }
 
   return { updatedRecords: updateCount };
 };

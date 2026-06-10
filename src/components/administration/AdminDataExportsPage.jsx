@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Download, FileSpreadsheet, Loader2 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { useSchedules } from "../../contexts/ScheduleContext.jsx";
@@ -15,10 +15,18 @@ import {
   getIndividualFileName,
   LARGE_EXPORT_ROW_THRESHOLD,
 } from "../../utils/export/adminExportData";
-import { downloadAdminWorkbook } from "../../utils/export/adminWorkbookBuilder";
 
 const TERM_SCOPE_ALL = "all";
 const TERM_SCOPE_SELECTED = "selected";
+
+const waitForPaint = () =>
+  new Promise((resolve) => {
+    if (typeof window !== "undefined" && window.requestAnimationFrame) {
+      window.requestAnimationFrame(resolve);
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
 
 const AdminDataExportsPage = () => {
   const { isAdmin } = useAuth();
@@ -30,6 +38,7 @@ const AdminDataExportsPage = () => {
   const [selectedTerm, setSelectedTerm] = useState(selectedSemester || "");
   const [isExporting, setIsExporting] = useState(false);
   const [activeExportId, setActiveExportId] = useState("");
+  const [exportStatus, setExportStatus] = useState("");
   const [pageError, setPageError] = useState("");
   const [warningState, setWarningState] = useState({
     isOpen: false,
@@ -86,11 +95,18 @@ const AdminDataExportsPage = () => {
     successTitle,
     successMessage,
   }) => {
+    setExportStatus("Loading workbook tools...");
+    await waitForPaint();
+    const { downloadAdminWorkbook } = await import(
+      "../../utils/export/adminWorkbookBuilder"
+    );
+
     await downloadAdminWorkbook({
       fileName,
       sheetIds: exportPackage.sheetIds,
       rowsBySheetId: exportPackage.rowsBySheetId,
       summaryRows: exportPackage.summaryRows,
+      onProgress: setExportStatus,
     });
 
     showNotification("success", successTitle, successMessage);
@@ -143,6 +159,7 @@ const AdminDataExportsPage = () => {
     } finally {
       setIsExporting(false);
       setActiveExportId("");
+      setExportStatus("");
     }
   };
 
@@ -173,6 +190,7 @@ const AdminDataExportsPage = () => {
     } finally {
       setIsExporting(false);
       setActiveExportId("");
+      setExportStatus("");
     }
   };
 
@@ -180,6 +198,7 @@ const AdminDataExportsPage = () => {
     setWarningState({ isOpen: false, pending: null });
     setIsExporting(false);
     setActiveExportId("");
+    setExportStatus("");
   };
 
   if (!isAdmin) {
@@ -281,6 +300,17 @@ const AdminDataExportsPage = () => {
         {pageError && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {pageError}
+          </div>
+        )}
+
+        {isExporting && exportStatus && (
+          <div
+            className="inline-flex items-center gap-2 rounded-lg border border-baylor-green/20 bg-baylor-green/5 px-3 py-2 text-sm text-baylor-green"
+            role="status"
+            aria-live="polite"
+          >
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {exportStatus}
           </div>
         )}
       </section>

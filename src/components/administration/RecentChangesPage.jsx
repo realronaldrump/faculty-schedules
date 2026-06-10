@@ -1,20 +1,7 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  ArrowLeft, 
-  Clock, 
-  Filter, 
-  Search, 
-  Calendar,
-  User,
-  Database,
-  Trash2,
-  Edit,
-  Plus,
-  RefreshCw,
-  BarChart3
-} from 'lucide-react';
-import { formatChangeForDisplay, groupChangesByDate, getChangeSummary } from '../../utils/recentChanges';
+import { ArrowLeft, Clock, Filter, Search, Calendar, Database, Trash2, Edit, Plus, RefreshCw, BarChart3 } from 'lucide-react';
+import { groupChangesByDate, getChangeSummary } from '../../utils/recentChanges';
 import { useData } from '../../contexts/DataContext';
 
 const RecentChangesPage = () => {

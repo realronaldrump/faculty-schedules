@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Building, Clock, MapPin } from 'lucide-react';
+import { Clock, MapPin } from 'lucide-react';
 import { formatHoursValue } from '../../utils/studentWorkers';
 
 const DAY_ORDER = ['M', 'T', 'W', 'R', 'F', 'S', 'U'];

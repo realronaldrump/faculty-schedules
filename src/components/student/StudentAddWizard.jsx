@@ -1,18 +1,5 @@
-import React, { useState, useMemo } from "react";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  X,
-  User,
-  Clock,
-  Building,
-  Check,
-  AlertCircle,
-  DollarSign,
-  Calendar,
-  GraduationCap,
-} from "lucide-react";
+import { useState, useMemo } from "react";
+import { ChevronLeft, ChevronRight, Plus, X, User, Building, Check, AlertCircle, DollarSign, Calendar, GraduationCap } from "lucide-react";
 import JobCard from "./JobCard";
 import TimelineVisualization from "./TimelineVisualization";
 import StatusBadge, { getStudentStatus } from "./StatusBadge";
@@ -636,7 +623,6 @@ const StudentAddWizard = ({
             const Icon = step.icon;
             const isActive = idx === currentStep;
             const isCompleted = idx < currentStep;
-            const isPending = idx > currentStep;
 
             return (
               <div key={step.id} className="flex items-center flex-1">

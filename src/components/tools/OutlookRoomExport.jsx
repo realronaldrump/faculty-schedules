@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Calendar,
   Download,
@@ -497,14 +497,6 @@ const OutlookRoomExport = () => {
     return true;
   };
 
-  const computeFirstOccurrence = (startDate, jsDay) => {
-    const first = new Date(startDate.getTime());
-    while (first.getDay() !== jsDay) {
-      first.setDate(first.getDate() + 1);
-    }
-    return first;
-  };
-
   const computeFirstOccurrenceForDays = (startDate, jsDays) => {
     const allowed = new Set(jsDays);
     const first = new Date(startDate.getTime());
@@ -755,13 +747,11 @@ const OutlookRoomExport = () => {
 
       if (mode === "zip") {
         const zip = new JSZip();
-        let totalEvents = 0;
         selectedRooms.forEach((room) => {
           const { ics, count } = generateCalendarForRoom(room);
           if (count > 0) {
             const roomTag = sanitizeForFile(room);
             zip.file(`${roomTag}.ics`, ics);
-            totalEvents += count;
           }
         });
         const blob = await zip.generateAsync({ type: "blob" });
@@ -779,11 +769,9 @@ const OutlookRoomExport = () => {
           "Multi-room Outlook calendar export created successfully.",
         );
       } else {
-        let totalEvents = 0;
         selectedRooms.forEach((room) => {
           const { ics, count } = generateCalendarForRoom(room);
           if (count === 0) return;
-          totalEvents += count;
           const roomTag = sanitizeForFile(room);
           const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
           const url = window.URL.createObjectURL(blob);

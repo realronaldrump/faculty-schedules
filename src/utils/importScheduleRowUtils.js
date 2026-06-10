@@ -2,7 +2,7 @@
  * Schedule row extraction and normalization helpers.
  *
  * These are shared across:
- * - import preview/commit pipeline (importTransactionUtils)
+ * - import preview/commit pipeline (import/core)
  * - within-batch preprocessing (importPreprocessor)
  *
  * Keeping them in a standalone module avoids circular dependencies.
@@ -13,7 +13,7 @@ import { parseMeetingPatterns } from "./meetingPatternUtils";
 import { normalizeBaylorId } from "./personMatchUtils";
 import { normalizeTermLabel, termCodeFromLabel } from "./termUtils";
 import { hashRecord } from "./hashUtils";
-import { standardizeCourseCode, isCancelledStatus } from "./hygieneCore";
+import { standardizeCourseCode } from "./hygieneCore";
 import { normalizeSectionNumber } from "./canonicalSchema";
 import {
   LOCATION_TYPE,
@@ -26,16 +26,16 @@ import {
   parseCrossListCrns,
 } from "./dataImportUtils";
 
-export const normalizeSectionIdentifier = (sectionField) =>
+const normalizeSectionIdentifier = (sectionField) =>
   normalizeSectionNumber(sectionField);
 
-export const extractCrnFromSectionField = (sectionField) => {
+const extractCrnFromSectionField = (sectionField) => {
   if (!sectionField) return "";
   const match = String(sectionField).match(/\((\d{5,6})\)/);
   return match ? match[1] : "";
 };
 
-export const extractAcademicYear = (term) => {
+const extractAcademicYear = (term) => {
   const match = String(term || "").match(/(\d{4})/);
   if (match) {
     const parsed = Number.parseInt(match[1], 10);
@@ -327,12 +327,4 @@ export const projectSchedulePreviewRow = (row, fallbackTerm = "") => {
     Enrollment: base.enrollment ?? "",
     "Max Enrollment": base.maxEnrollment ?? "",
   };
-};
-
-export default {
-  extractScheduleRowBaseData,
-  normalizeSectionIdentifier,
-  extractCrnFromSectionField,
-  extractAcademicYear,
-  projectSchedulePreviewRow,
 };

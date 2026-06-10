@@ -215,6 +215,81 @@ service cloud.firestore {
         userHasPage('data/import-wizard');
     }
 
+    function canManagePafWorkflow() {
+      return userHasPage('workflows/paf') ||
+        (
+          userIsActive() &&
+          !userHasDirectPageDeny('workflows/paf') &&
+          !userHasOverridePageDeny('workflows/paf') &&
+          userHasPage('people/directory')
+        );
+    }
+
+    function isValidPafIgniteUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'ignitePersonNumber',
+          'ignitePersonId',
+          'igniteId',
+          'personNumber',
+          'person_number',
+          'Person Number',
+          'externalIds',
+          'updatedAt'
+        ]) &&
+        request.resource.data.ignitePersonNumber is string &&
+        request.resource.data.ignitePersonNumber.matches('^[0-9]*$') &&
+        isValidPafIgniteAlias('ignitePersonId') &&
+        isValidPafIgniteAlias('igniteId') &&
+        isValidPafIgniteAlias('personNumber') &&
+        isValidPafIgniteAlias('person_number') &&
+        isValidPafIgniteAlias('Person Number') &&
+        isValidPafIgniteExternalIds() &&
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['updatedAt']) ||
+          isNonEmptyString(request.resource.data.updatedAt)
+        );
+    }
+
+    function isValidPafIgniteAlias(fieldName) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([fieldName]) ||
+        (
+          request.resource.data[fieldName] is string &&
+          request.resource.data[fieldName].matches('^[0-9]*$')
+        );
+    }
+
+    function isValidPafIgniteExternalIds() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['externalIds']) ||
+        (
+          request.resource.data.externalIds is map &&
+          (
+            resource.data.externalIds is map
+              ? request.resource.data.externalIds.diff(resource.data.externalIds).affectedKeys().hasOnly([
+                  'ignitePersonNumber',
+                  'ignitePersonId',
+                  'igniteId',
+                  'personNumber'
+                ])
+              : request.resource.data.externalIds.keys().hasOnly([
+                  'ignitePersonNumber',
+                  'personNumber'
+                ])
+          ) &&
+          isValidPafExternalIgniteAlias('ignitePersonNumber') &&
+          isValidPafExternalIgniteAlias('ignitePersonId') &&
+          isValidPafExternalIgniteAlias('igniteId') &&
+          isValidPafExternalIgniteAlias('personNumber')
+        );
+    }
+
+    function isValidPafExternalIgniteAlias(fieldName) {
+      return !(fieldName in request.resource.data.externalIds) ||
+        (
+          request.resource.data.externalIds[fieldName] is string &&
+          request.resource.data.externalIds[fieldName].matches('^[0-9]*$')
+        );
+    }
+
     function canManagePrograms() {
       return userHasPage('people/programs') ||
         userHasPage('admin-tools/import-wizard') ||
@@ -330,9 +405,19 @@ service cloud.firestore {
         (
           isNonEmptyString(data.baylorId) ||
           isNonEmptyString(data.email) ||
+          isNonEmptyString(data.ignitePersonNumber) ||
+          isNonEmptyString(data.ignitePersonId) ||
+          isNonEmptyString(data.igniteId) ||
+          isNonEmptyString(data.personNumber) ||
+          isNonEmptyString(data.person_number) ||
+          isNonEmptyString(data['Person Number']) ||
           (data.externalIds is map &&
             (isNonEmptyString(data.externalIds.baylorId) ||
-             isNonEmptyString(data.externalIds.clssInstructorId))) ||
+             isNonEmptyString(data.externalIds.clssInstructorId) ||
+             isNonEmptyString(data.externalIds.ignitePersonNumber) ||
+             isNonEmptyString(data.externalIds.ignitePersonId) ||
+             isNonEmptyString(data.externalIds.igniteId) ||
+             isNonEmptyString(data.externalIds.personNumber))) ||
           isNonEmptyString(data.clssInstructorId)
         );
     }
@@ -439,8 +524,9 @@ service cloud.firestore {
       // Create operations - allow users with people directory access (or import wizard)
       allow create: if canManagePeople() && isValidPersonCreate(request.resource.data);
 
-      // Update operations - allow users with people directory access (or import wizard)
-      allow update: if canManagePeople();
+      // Update operations - allow people managers, or restricted Ignite # edits from PAF workflow
+      allow update: if canManagePeople() ||
+        (canManagePafWorkflow() && isValidPafIgniteUpdate());
 
       // Delete operations - allow users with people directory access (or import wizard)
       allow delete: if canManagePeople();

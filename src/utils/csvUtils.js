@@ -62,7 +62,3 @@ export const parseCSVRecords = (text) => {
   return rows;
 };
 
-export default {
-  parseCSVRecords,
-};
-

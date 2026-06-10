@@ -20,7 +20,7 @@ import { auth, db } from '../firebase';
  * @param {string} [changeData.source] - Source of the change (component name, utility function, etc.)
  * @param {Object} [changeData.metadata] - Additional metadata (affected count, transaction ID, etc.)
  */
-export const logChange = async (changeData) => {
+const logChange = async (changeData) => {
   try {
     const currentUser = auth.currentUser;
     const actor = {
@@ -48,42 +48,6 @@ export const logChange = async (changeData) => {
   } catch (error) {
     console.error('❌ Error logging change:', error);
     // Don't throw error to prevent breaking the main operation
-  }
-};
-
-/**
- * Log a batch operation (multiple changes at once)
- * @param {Array} changes - Array of change objects
- * @param {string} batchDescription - Description of the batch operation
- * @param {string} source - Source of the batch operation
- */
-export const logBatchChanges = async (changes, batchDescription, source) => {
-  try {
-    const currentUser = auth.currentUser;
-    const actor = {
-      uid: currentUser?.uid || "system",
-      email: currentUser?.email || null,
-      displayName: currentUser?.displayName || null,
-    };
-
-    const batchLogEntry = {
-      timestamp: new Date().toISOString(),
-      action: 'BATCH_OPERATION',
-      entity: batchDescription,
-      collection: 'multiple',
-      source: source,
-      metadata: {
-        changesCount: changes.length,
-        changes: changes
-      },
-      userId: actor.uid,
-      actor,
-    };
-
-    await addDoc(collection(db, 'changeLog'), batchLogEntry);
-    console.log('📝 Batch operation logged:', batchLogEntry);
-  } catch (error) {
-    console.error('❌ Error logging batch changes:', error);
   }
 };
 

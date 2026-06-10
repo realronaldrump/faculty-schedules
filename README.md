@@ -41,7 +41,7 @@ npm test -- --run
 
 ### Import transaction pipeline
 
-- Public facade (imports remain stable): `src/utils/importTransactionUtils.js`
+- Import engine entry point: `src/utils/import/core.js`
 - Core implementation: `src/utils/import/core.js`
 
 ### CLSS contract layer
@@ -55,7 +55,7 @@ npm test -- --run
 ### Data hygiene pipeline
 
 - Public facade (imports remain stable): `src/utils/dataHygiene.js`
-- Core implementation: `src/utils/data-hygiene/core.js`
+- Core implementation: `src/utils/dataHygiene.js`
 
 ### Permission layer
 

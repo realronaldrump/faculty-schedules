@@ -31,17 +31,6 @@ export const SHEET_ORDER = Object.freeze([
   ...BULK_EXPORT_SHEET_IDS,
 ]);
 
-export const TECHNICAL_FIELD_EXCLUSIONS = Object.freeze([
-  "identityKey",
-  "identityKeys",
-  "identitySource",
-  "createdAt",
-  "updatedAt",
-  "mergedInto",
-  "rawHtml",
-  "html",
-]);
-
 export const SHEET_DEFINITIONS = Object.freeze({
   [SHEET_IDS.summary]: {
     id: SHEET_IDS.summary,
@@ -298,19 +287,3 @@ export const INDIVIDUAL_EXPORT_OPTIONS = Object.freeze([
 ]);
 
 export const getSheetDefinition = (sheetId) => SHEET_DEFINITIONS[sheetId] || null;
-
-export const getSheetHeaders = (sheetId) => {
-  const definition = getSheetDefinition(sheetId);
-  if (!definition) return [];
-  return definition.columns.map((columnDef) => columnDef.header);
-};
-
-export default {
-  SHEET_IDS,
-  BULK_EXPORT_SHEET_IDS,
-  SHEET_ORDER,
-  SHEET_DEFINITIONS,
-  INDIVIDUAL_EXPORT_OPTIONS,
-  getSheetDefinition,
-  getSheetHeaders,
-};

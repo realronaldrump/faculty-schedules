@@ -68,7 +68,7 @@ export const normalizeScheduleTime = (value) => {
   return formatMinutesTo24Hour(minutes);
 };
 
-export const normalizeWeeklySchedule = (entries) => {
+const normalizeWeeklySchedule = (entries) => {
   if (!Array.isArray(entries)) return [];
   const normalized = [];
   entries.forEach((entry) => {
@@ -92,7 +92,7 @@ export const normalizeWeeklySchedule = (entries) => {
   });
 };
 
-export const isWithinStudentScheduleWindow = (entry) => {
+const isWithinStudentScheduleWindow = (entry) => {
   if (!entry) return false;
   const day = normalizeScheduleDay(entry.day);
   if (!day || !STUDENT_SCHEDULE_RULES.allowedDays.includes(day)) return false;

@@ -8,9 +8,10 @@ This guide is the primary reference for import maintenance after handoff.
 - CLSS profile config (single-file maintenance target): `src/config/import/clss/default-profile.json`
 - CLSS contract parser: `src/utils/import/clss/parse-clss-file.js`
 - Schedule row extraction: `src/utils/importScheduleRowUtils.js`
-- Transaction API facade (stable): `src/utils/importTransactionUtils.js`
+- Import identity/canonicalization rules: `src/utils/importHygieneUtils.js`
+- Transaction engine (preview/commit/rollback): `src/utils/import/core.js`
 - Transaction core implementation: `src/utils/import/core.js`
-- Data hygiene pipeline (legacy cleanup): `src/utils/data-hygiene/core.js`
+- Data hygiene pipeline (legacy cleanup): `src/utils/dataHygiene.js`
 
 ## CLSS Change Procedure (Config-First)
 
@@ -35,27 +36,40 @@ Fail-fast behavior is intentional: if required CLSS columns are missing, preview
 
 ## Directory CSV Changes
 
-Directory parsing still lives in:
+Directory import field extraction lives in the Import Wizard and transaction core;
+identity/canonicalization lives in:
 
-- `src/utils/dataImportUtils.js`
+- `src/utils/importHygieneUtils.js`
+- `src/utils/importPreprocessor.js`
 
 If directory export headers change:
 
-1. Update directory field mapping logic there.
+1. Update directory field mapping logic in the import preview/core path.
 2. Re-run lint/build/tests.
 3. Smoke test Import Wizard with a directory CSV.
+
+Directory rows with the same strong person identity are merged within the import
+batch. Name-only duplicate rows are flagged and kept separate.
 
 ## Legacy Cleanup and Canonical Model
 
 - Scan/repair UI: `src/components/administration/data-cleanup/DataCleanupRepairsPage.jsx`
-- Engine: `src/utils/data-hygiene/core.js`
+- Engine: `src/utils/dataHygiene.js`
 
 Data Cleanup & Repairs reports `legacyModelIssues` and can auto-fix safe legacy mirrors.
+Committed imports also run a lightweight entity cleanup preview:
+
+- strong people duplicates are detected by Baylor ID, CLSS instructor ID, or email
+- room duplicates are detected by `spaceKey` or identical room name
+- duplicate merges are applied from Data Health Check, not from import commit, so
+  import rollback remains bounded to the transaction's tracked changes
+- schedule imports still run term-scoped schedule cleanup and cross-list linking
 
 ## Regression Test Targets
 
 - `src/utils/__tests__/clssProfileContract.test.js`
 - `src/utils/__tests__/dataImportUtils.test.js`
 - `src/utils/__tests__/importPreprocessor.test.js`
+- `src/utils/__tests__/importHygieneUtils.test.js`
 - `src/utils/__tests__/importValidationUtils.test.js`
 - `src/utils/__tests__/legacyModelCleanup.test.js`

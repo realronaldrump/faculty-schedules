@@ -1,4 +1,4 @@
-export const stableStringify = (value) => {
+const stableStringify = (value) => {
   if (value === null) return "null";
   if (value === undefined) return "undefined";
 

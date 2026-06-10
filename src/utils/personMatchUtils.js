@@ -58,6 +58,20 @@ const normalizeLastName = (value) =>
     .trim();
 
 export const normalizeBaylorId = (value) => (value || '').toString().replace(/\D/g, '');
+const normalizeIgnitePersonNumber = (value) => (value || '').toString().replace(/\D/g, '');
+
+const getIgnitePersonNumber = (person = {}) => normalizeIgnitePersonNumber(
+  person?.ignitePersonNumber ||
+    person?.ignitePersonId ||
+    person?.igniteId ||
+    person?.personNumber ||
+    person?.person_number ||
+    person?.['Person Number'] ||
+    person?.externalIds?.ignitePersonNumber ||
+    person?.externalIds?.ignitePersonId ||
+    person?.externalIds?.igniteId ||
+    person?.externalIds?.personNumber
+);
 
 export const makeNameKey = (firstName, lastName) => {
   const first = normalizeFirstName(firstName);
@@ -113,7 +127,7 @@ const partSimilarity = (a, b) => {
   return similarityScore(normalizedA, normalizedB);
 };
 
-export const calculateNameSimilarity = (firstA, lastA, firstB, lastB) => {
+const calculateNameSimilarity = (firstA, lastA, firstB, lastB) => {
   const normalizedLastA = normalizeLastName(lastA);
   const normalizedLastB = normalizeLastName(lastB);
   if (!normalizedLastA || !normalizedLastB) return 0;
@@ -131,6 +145,7 @@ const summarizePersonCandidate = (person, score, reason) => ({
   lastName: person.lastName || '',
   email: person.email || '',
   baylorId: person.baylorId || '',
+  ignitePersonNumber: getIgnitePersonNumber(person),
   jobTitle: person.jobTitle || '',
   department: person.department || '',
   score,
@@ -138,13 +153,17 @@ const summarizePersonCandidate = (person, score, reason) => ({
 });
 
 const findExactMatches = (personData, existingPeople) => {
-  const matches = [];
-  const baylorId = normalizeBaylorId(personData?.baylorId);
+  const baylorId = normalizeBaylorId(personData?.baylorId || personData?.externalIds?.baylorId);
   const email = (personData?.email || '').toLowerCase().trim();
-  const clssId = personData?.clssInstructorId ? String(personData.clssInstructorId).trim() : '';
+  const clssId = personData?.clssInstructorId || personData?.externalIds?.clssInstructorId
+    ? String(personData.clssInstructorId || personData.externalIds?.clssInstructorId).trim()
+    : '';
+  const ignitePersonNumber = getIgnitePersonNumber(personData);
 
   if (baylorId) {
-    const baylorMatches = existingPeople.filter(p => normalizeBaylorId(p?.baylorId) === baylorId);
+    const baylorMatches = existingPeople.filter(p =>
+      normalizeBaylorId(p?.baylorId || p?.externalIds?.baylorId) === baylorId
+    );
     if (baylorMatches.length > 0) {
       return { matches: baylorMatches, matchType: 'baylorId' };
     }
@@ -174,6 +193,15 @@ const findExactMatches = (personData, existingPeople) => {
     );
     if (clssMatches.length > 0) {
       return { matches: clssMatches, matchType: 'clssId' };
+    }
+  }
+
+  if (ignitePersonNumber) {
+    const igniteMatches = existingPeople.filter((p) => (
+      getIgnitePersonNumber(p) === ignitePersonNumber
+    ));
+    if (igniteMatches.length > 0) {
+      return { matches: igniteMatches, matchType: 'ignitePersonNumber' };
     }
   }
 
@@ -241,4 +269,3 @@ export const formatPersonDisplayName = (person) => {
   if (last) return last;
   return first;
 };
-

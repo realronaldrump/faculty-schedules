@@ -3,7 +3,7 @@ import { normalizeTermLabel } from "../../termUtils";
 const asString = (value) =>
   value === undefined || value === null ? "" : String(value).replace(/\r/g, "").trim();
 
-export const CLSS_CANONICAL_TO_LEGACY = {
+const CLSS_CANONICAL_TO_LEGACY = {
   clss_id: "CLSS ID",
   course_code: "Course",
   section: "Section #",
@@ -113,9 +113,4 @@ export const normalizeClssRow = (
   }
 
   return legacyRow;
-};
-
-export default {
-  CLSS_CANONICAL_TO_LEGACY,
-  normalizeClssRow,
 };

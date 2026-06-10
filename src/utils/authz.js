@@ -4,11 +4,14 @@ export const USER_STATUS = {
   DISABLED: "disabled",
 };
 
-export const DEFAULT_ROLES = ["admin", "staff", "faculty"];
+const DEFAULT_ROLES = ["admin", "staff", "faculty"];
 const ALLOWED_ROLES = new Set(DEFAULT_ROLES);
 
 const PAGE_ID_ALIASES = {
   "people/people-directory": "people/directory",
+  "people/paf": "workflows/paf",
+  "people/paf-workflow": "workflows/paf",
+  "paf-workflow": "workflows/paf",
   "scheduling/faculty-schedules": "scheduling/faculty",
   "scheduling/room-schedules": "scheduling/rooms",
   "scheduling/student-schedules": "scheduling/student-workers",
@@ -28,6 +31,10 @@ const PAGE_ID_ALIASES = {
   "data/schedule-data": "courses/manage",
   "data/import-wizard": "admin-tools/import-wizard",
   "data/crn-tools": "admin-tools/crn-tools",
+};
+
+const LEGACY_PAGE_ACCESS_FALLBACKS = {
+  "workflows/paf": ["people/directory"],
 };
 
 export const normalizePageId = (pageId) => {
@@ -135,8 +142,13 @@ export const canAccessPage = ({ userProfile, rolePermissions, pageId }) => {
     typeof pageId === "string"
       ? pageId.replace(/^\/+/, "").split(/[?#]/)[0]
       : pageId;
-  const pageIds =
-    rawId && rawId !== normalizedId ? [normalizedId, rawId] : [normalizedId];
+  const pageIds = Array.from(
+    new Set([
+      normalizedId,
+      ...(rawId && rawId !== normalizedId ? [rawId] : []),
+      ...(LEGACY_PAGE_ACCESS_FALLBACKS[normalizedId] || []),
+    ]),
+  );
   if (isUserAdmin(userProfile)) return true;
   if (!isUserActive(userProfile)) return false;
 

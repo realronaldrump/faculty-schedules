@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { X, FileText, AlertTriangle } from "lucide-react";
 
-const EXPORT_ROOT_ATTR = "data-export-root";
-
 const resolveExportTargets = (root) => {
   if (!root) return [];
   const targets = new Set();

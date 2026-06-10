@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   X,
   RotateCcw,
@@ -12,7 +12,13 @@ import {
   Database,
   AlertTriangle
 } from 'lucide-react';
-import { getImportTransactions, rollbackTransaction, deleteTransaction } from '../../utils/importTransactionUtils';
+import { getImportTransactions, rollbackTransaction, deleteTransaction } from '../../utils/import/core';
+import { buildGroupedChanges } from '../../utils/import/transaction-model';
+
+const getCollectionChangeCount = (groupedChanges, collection) => (
+  Object.values(groupedChanges[collection] || { added: [], modified: [], deleted: [] })
+    .reduce((sum, arr) => sum + arr.length, 0)
+);
 
 const ImportHistoryModal = ({
   onClose,
@@ -146,36 +152,26 @@ const ImportHistoryModal = ({
 
   const TransactionDetails = ({ transaction }) => {
     const allChanges = transaction.getAllChanges();
-    const groupedChanges = {
-      schedules: { added: [], modified: [], deleted: [] },
-      people: { added: [], modified: [], deleted: [] },
-      rooms: { added: [], modified: [], deleted: [] }
-    };
-
-    allChanges.forEach(change => {
-      const actionKey = change.action === 'add' ? 'added' :
-        change.action === 'modify' ? 'modified' : 'deleted';
-      groupedChanges[change.collection][actionKey].push(change);
-    });
+    const groupedChanges = buildGroupedChanges(allChanges);
 
     return (
       <div className="space-y-4">
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
             <div className="text-lg font-bold text-green-600">
-              {Object.values(groupedChanges.schedules).reduce((sum, arr) => sum + arr.length, 0)}
+              {getCollectionChangeCount(groupedChanges, 'schedules')}
             </div>
             <div className="text-sm text-gray-600">Schedule Changes</div>
           </div>
           <div>
             <div className="text-lg font-bold text-baylor-green">
-              {Object.values(groupedChanges.people).reduce((sum, arr) => sum + arr.length, 0)}
+              {getCollectionChangeCount(groupedChanges, 'people')}
             </div>
             <div className="text-sm text-gray-600">People Changes</div>
           </div>
           <div>
             <div className="text-lg font-bold text-baylor-gold">
-              {Object.values(groupedChanges.rooms).reduce((sum, arr) => sum + arr.length, 0)}
+              {getCollectionChangeCount(groupedChanges, 'rooms')}
             </div>
             <div className="text-sm text-gray-600">Room Changes</div>
           </div>

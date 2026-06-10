@@ -1,11 +1,6 @@
 import { parseFullName } from "./nameUtils";
 import { normalizeTermLabel, termCodeFromLabel } from "./termUtils";
-import {
-  generateSectionId,
-  normalizeSectionNumber,
-  areSameSectionIdentity,
-  areSamePersonIdentity,
-} from "./canonicalSchema";
+import { generateSectionId, normalizeSectionNumber } from "./canonicalSchema";
 import { resolveBuildingDisplayName } from "./locationService";
 
 // ---------------------------------------------------------------------------
@@ -79,7 +74,7 @@ export const isCancelledStatus = (status) => {
 
 const normalizeEmail = (email) => normalizeString(email).toLowerCase();
 
-export const standardizePhone = (phone) => {
+const standardizePhone = (phone) => {
   if (!phone) return "";
   return String(phone).replace(/\D/g, "");
 };
@@ -87,6 +82,11 @@ export const standardizePhone = (phone) => {
 const standardizeBaylorId = (baylorId) => {
   if (!baylorId) return "";
   return String(baylorId).replace(/\D/g, "");
+};
+
+const standardizeIgnitePersonNumber = (value) => {
+  if (!value) return "";
+  return String(value).replace(/\D/g, "");
 };
 
 export const standardizeCourseCode = (courseCode) => {
@@ -179,7 +179,7 @@ const normalizeSemesterSchedules = (semesterSchedules) => {
 
 const normalizeExternalIds = (
   externalIds,
-  { email, baylorId, clssInstructorId } = {},
+  { email, baylorId, clssInstructorId, ignitePersonNumber } = {},
 ) => {
   const base =
     externalIds && typeof externalIds === "object" ? { ...externalIds } : {};
@@ -200,6 +200,18 @@ const normalizeExternalIds = (
   }
   if (!normalized.clssInstructorId) normalized.clssInstructorId = null;
   if (baylorId && !normalized.baylorId) normalized.baylorId = baylorId;
+
+  const normalizedIgnite = standardizeIgnitePersonNumber(
+    ignitePersonNumber ||
+      normalized.ignitePersonNumber ||
+      normalized.ignitePersonId ||
+      normalized.igniteId ||
+      normalized.personNumber,
+  );
+  if (normalizedIgnite) {
+    normalized.ignitePersonNumber = normalizedIgnite;
+    normalized.personNumber = normalizedIgnite;
+  }
 
   return normalized;
 };
@@ -233,6 +245,18 @@ export const standardizePerson = (person = {}, options = {}) => {
   const baylorId = standardizeBaylorId(source.baylorId);
   const clssInstructorId = normalizeString(
     source.clssInstructorId || source.externalIds?.clssInstructorId,
+  );
+  const ignitePersonNumber = standardizeIgnitePersonNumber(
+    source.ignitePersonNumber ||
+      source.ignitePersonId ||
+      source.igniteId ||
+      source.personNumber ||
+      source.person_number ||
+      source["Person Number"] ||
+      source.externalIds?.ignitePersonNumber ||
+      source.externalIds?.ignitePersonId ||
+      source.externalIds?.igniteId ||
+      source.externalIds?.personNumber,
   );
 
   const primaryBuildings = normalizeBuildings(
@@ -270,10 +294,12 @@ export const standardizePerson = (person = {}, options = {}) => {
       ? source.weeklySchedule
       : [],
     baylorId,
+    ignitePersonNumber,
     externalIds: normalizeExternalIds(source.externalIds, {
       email,
       baylorId,
       clssInstructorId,
+      ignitePersonNumber,
     }),
     updatedAt: updateTimestamp ? new Date().toISOString() : source.updatedAt,
   };
@@ -461,6 +487,7 @@ const scorePersonCompleteness = (person = {}) => {
     "roles",
     "programId",
     "baylorId",
+    "ignitePersonNumber",
     "externalIds",
     "jobs",
     "primaryBuildings",
@@ -672,6 +699,7 @@ export const detectPeopleDuplicates = (people = [], options = {}) => {
   const duplicatesByPair = new Map();
   const baylorIdMap = new Map();
   const clssIdMap = new Map();
+  const ignitePersonNumberMap = new Map();
   const emailMap = new Map();
   const phoneMap = new Map();
   const nameMap = new Map();
@@ -741,6 +769,37 @@ export const detectPeopleDuplicates = (people = [], options = {}) => {
         } else {
           clssIdMap.set(clssKey, person);
         }
+      }
+    }
+
+    const ignitePersonNumber = standardizeIgnitePersonNumber(
+      person.ignitePersonNumber ||
+        person.ignitePersonId ||
+        person.igniteId ||
+        person.personNumber ||
+        person.person_number ||
+        person["Person Number"] ||
+        person.externalIds?.ignitePersonNumber ||
+        person.externalIds?.ignitePersonId ||
+        person.externalIds?.igniteId ||
+        person.externalIds?.personNumber,
+    );
+    if (ignitePersonNumber) {
+      if (ignitePersonNumberMap.has(ignitePersonNumber)) {
+        const existing = ignitePersonNumberMap.get(ignitePersonNumber);
+        addDuplicate(existing, person, {
+          type: "ignitePersonNumber",
+          confidence: 1.0,
+          reason: "Identical Ignite person number",
+        });
+        const { primary } = pickPrimaryByScore(
+          existing,
+          person,
+          scorePersonCompleteness,
+        );
+        ignitePersonNumberMap.set(ignitePersonNumber, primary);
+      } else {
+        ignitePersonNumberMap.set(ignitePersonNumber, person);
       }
     }
 
@@ -850,7 +909,6 @@ export const detectScheduleDuplicates = (schedules = [], options = {}) => {
   const seenByCrnTerm = new Map();
   const seenByComposite = new Map();
 
-  const normalize = (v) => normalizeString(v).toLowerCase();
   const parseCrnFromSection = (section) => {
     if (!section) return null;
     const m = String(section).match(/\b(\d{5,6})\b/);

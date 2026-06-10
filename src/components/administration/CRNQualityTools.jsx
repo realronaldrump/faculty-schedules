@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { usePermissions } from "../../utils/permissions";
-import { Database, AlertCircle, Save, Search, Pencil, X } from "lucide-react";
+import { Database, AlertCircle, Save, Search, X } from "lucide-react";
 import { analyzeCRNCoverage } from "../../utils/crnMigrationUtils";
 import { fetchSchedulesByTerms } from "../../utils/dataImportUtils";
 import { db } from "../../firebase";

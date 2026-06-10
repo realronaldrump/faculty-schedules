@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ShieldAlert } from "lucide-react";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useUI } from "../../../contexts/UIContext";
@@ -19,6 +19,7 @@ const DataCleanupRepairsPage = () => {
   const [isRareOpen, setIsRareOpen] = useState(false);
   const [isRareUnlocked, setIsRareUnlocked] = useState(false);
   const [confirmType, setConfirmType] = useState("");
+  const hasAutoScannedRef = useRef(false);
 
   useEffect(() => {
     if (!actions.termCode && selectedTermMeta?.termCode) {
@@ -35,14 +36,22 @@ const DataCleanupRepairsPage = () => {
     selectedTermMeta?.termCode,
   ]);
 
+  useEffect(() => {
+    if (!isAdmin || hasAutoScannedRef.current || actions.scanResult || actions.isScanning) {
+      return;
+    }
+    hasAutoScannedRef.current = true;
+    actions.handleScan();
+  }, [actions, isAdmin]);
+
   const confirmConfig = useMemo(() => {
     if (confirmType === "baseline") {
       return {
         variant: "danger",
-        title: "Run full baseline repair?",
+        title: "Run full data refresh?",
         message:
-          "This can update many records across all terms. Only run this for large-scale cleanup.",
-        confirmText: "Run Baseline",
+          "This can update many entries across all terms. Use it only for large cleanup with support guidance.",
+        confirmText: "Run Refresh",
         confirmDisabled: actions.isRunningBaseline,
         onConfirm: async () => {
           await actions.runBaseline();
@@ -53,10 +62,10 @@ const DataCleanupRepairsPage = () => {
     if (confirmType === "location") {
       return {
         variant: "warning",
-        title: "Apply location migration?",
+        title: "Update room links?",
         message:
-          "This applies the location preview changes and can update many schedules and rooms.",
-        confirmText: "Apply Migration",
+          "This applies the previewed room-link updates and can update many classes and rooms.",
+        confirmText: "Update Links",
         confirmDisabled:
           actions.isApplyingLocationMigration || !actions.locationPreview,
         onConfirm: async () => {
@@ -68,10 +77,10 @@ const DataCleanupRepairsPage = () => {
     if (confirmType === "orphans") {
       return {
         variant: "danger",
-        title: "Delete orphaned records?",
+        title: "Remove unused imported items?",
         message:
-          "This permanently deletes orphaned records found in the selected term scan.",
-        confirmText: "Delete Records",
+          "This permanently removes the unused imported items found in the selected term check.",
+        confirmText: "Remove Items",
         confirmDisabled:
           actions.isApplyingOrphanCleanup || actions.orphanTotal === 0,
         onConfirm: async () => {
@@ -99,7 +108,9 @@ const DataCleanupRepairsPage = () => {
     return (
       <div className="mx-auto max-w-4xl p-6">
         <div className="rounded-xl border border-red-200 bg-red-50 p-6">
-          <h1 className="text-xl font-semibold text-red-800">Data Cleanup & Repairs</h1>
+          <h1 className="text-xl font-semibold text-red-800">
+            Data Health Check
+          </h1>
           <p className="mt-2 text-sm text-red-700">
             Admin access is required to open these tools.
           </p>
@@ -108,36 +119,46 @@ const DataCleanupRepairsPage = () => {
     );
   }
 
+  const shouldShowDecisionQueue =
+    Boolean(actions.scanResult) &&
+    !actions.isScanning &&
+    !actions.isFixingSafe &&
+    actions.safeFixableCount === 0 &&
+    actions.totalBlockingIssues > 0;
+
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6 lg:p-8">
       <RoutineWorkflowSection
-        activeStep={actions.activeStep}
         scanResult={actions.scanResult}
         safeFixResult={actions.safeFixResult}
         isScanning={actions.isScanning}
         isFixingSafe={actions.isFixingSafe}
         safeFixableCount={actions.safeFixableCount}
         totalBlockingIssues={actions.totalBlockingIssues}
+        lastRunError={actions.lastRunError}
         onRunScan={actions.handleScan}
         onRunSafeFix={actions.handleSafeFix}
       />
 
-      <DecisionReviewSection
-        scanResult={actions.scanResult}
-        blockingCategories={actions.blockingCategories}
-        totalBlockingIssues={actions.totalBlockingIssues}
-        expandedCategories={actions.expandedCategories}
-        pendingActionKey={actions.pendingActionKey}
-        pendingMergeConfirmationKey={actions.pendingMergeConfirmationKey}
-        isFixingSafe={actions.isFixingSafe}
-        onToggleCategory={actions.toggleCategory}
-        onRunSafeFix={actions.handleSafeFix}
-        onMergeDuplicate={actions.handleMergeDuplicate}
-        onMarkDuplicateAsDistinct={actions.handleMarkDuplicateAsDistinct}
-        onRepairSpaceIssue={actions.handleRepairSpaceIssue}
-        onMarkConflictAsDistinct={actions.handleMarkConflictAsDistinct}
-        onCopyValue={actions.handleCopyValue}
-      />
+      {shouldShowDecisionQueue && (
+        <DecisionReviewSection
+          scanResult={actions.scanResult}
+          blockingCategories={actions.blockingCategories}
+          totalBlockingIssues={actions.totalBlockingIssues}
+          expandedCategories={actions.expandedCategories}
+          pendingActionKey={actions.pendingActionKey}
+          pendingMergeConfirmationKey={actions.pendingMergeConfirmationKey}
+          isFixingSafe={actions.isFixingSafe}
+          onToggleCategory={actions.toggleCategory}
+          onRunSafeFix={actions.handleSafeFix}
+          onMergeDuplicate={actions.handleMergeDuplicate}
+          onCancelMergeConfirmation={actions.cancelMergeConfirmation}
+          onMarkDuplicateAsDistinct={actions.handleMarkDuplicateAsDistinct}
+          onRepairSpaceIssue={actions.handleRepairSpaceIssue}
+          onMarkConflictAsDistinct={actions.handleMarkConflictAsDistinct}
+          onCopyValue={actions.handleCopyValue}
+        />
+      )}
 
       <RareRepairToolsSection
         isOpen={isRareOpen}
@@ -147,8 +168,8 @@ const DataCleanupRepairsPage = () => {
           setIsRareUnlocked(true);
           showNotification?.(
             "warning",
-            "Rare Tools Unlocked",
-            "Use these tools only for unusual repair situations.",
+            "Support Tools Shown",
+            "Use these tools only with support guidance.",
           );
         }}
         termOptions={termOptions}

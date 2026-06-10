@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Mail, Users, X } from "lucide-react";
 
 const getPersonDisplayName = (person) => {

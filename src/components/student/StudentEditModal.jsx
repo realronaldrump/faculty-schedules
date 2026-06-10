@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
   X,
   User,
@@ -14,8 +14,6 @@ import {
 import JobCard from "./JobCard";
 import TimelineVisualization from "./TimelineVisualization";
 import StatusBadge, { getStudentStatus } from "./StatusBadge";
-import BuildingSelector from "./BuildingSelector";
-import VisualScheduleBuilder from "./VisualScheduleBuilder";
 import { parseStudentWorkerDate } from "../../utils/studentWorkers";
 
 /**

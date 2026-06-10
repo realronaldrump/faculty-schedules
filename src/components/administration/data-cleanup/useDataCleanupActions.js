@@ -17,7 +17,7 @@ import {
 import {
   findOrphanedImportedData,
   cleanupOrphanedImportedData,
-} from "../../../utils/importTransactionUtils";
+} from "../../../utils/import/core";
 import {
   buildBlockingCategories,
   getDuplicatePairKey,
@@ -38,6 +38,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
   const [safeFixResult, setSafeFixResult] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isFixingSafe, setIsFixingSafe] = useState(false);
+  const [lastRunError, setLastRunError] = useState("");
 
   const [expandedCategories, setExpandedCategories] = useState({});
   const [pendingActionKey, setPendingActionKey] = useState("");
@@ -92,6 +93,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
 
   const handleScan = async () => {
     setIsScanning(true);
+    setLastRunError("");
     try {
       const result = await scanDataHealth();
       setScanResult(result);
@@ -103,15 +105,16 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "success",
-        "Data Check Complete",
-        `Found ${issues} item${issues === 1 ? "" : "s"} that may need attention.`,
+        "Data Health Check Complete",
+        `Found ${issues} item${issues === 1 ? "" : "s"} that may need your choice.`,
       );
     } catch (error) {
+      setLastRunError(error?.message || "Unable to check data health.");
       notify(
         showNotification,
         "error",
-        "Data Check Failed",
-        error?.message || "Unable to scan data health.",
+        "Data Health Check Could Not Finish",
+        error?.message || "Unable to check data health.",
       );
     } finally {
       setIsScanning(false);
@@ -120,6 +123,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
 
   const handleSafeFix = async () => {
     setIsFixingSafe(true);
+    setLastRunError("");
     try {
       let result = null;
       let refreshed = null;
@@ -162,34 +166,35 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
         notify(
           showNotification,
           "success",
-          "Safe Repairs Complete",
-          "Automatic cleanup and canonical repairs completed.",
+          "Routine Cleanup Complete",
+          "Routine cleanup finished.",
         );
       } else {
         const summaryParts = [
-          `${remainingLegacy} legacy item${remainingLegacy === 1 ? "" : "s"} still need review.`,
+          `${remainingLegacy} older-format item${remainingLegacy === 1 ? "" : "s"} still need review.`,
         ];
         if (errorCount > 0) {
           summaryParts.push(
-            `${errorCount} fix error${errorCount === 1 ? "" : "s"} occurred.`,
+            `${errorCount} cleanup note${errorCount === 1 ? "" : "s"} found.`,
           );
         }
         if (firstError) {
-          summaryParts.push(`First error: ${firstError}`);
+          summaryParts.push(`First note: ${firstError}`);
         }
         notify(
           showNotification,
           "warning",
-          "Safe Repairs Partially Complete",
+          "Routine Cleanup Needs Review",
           summaryParts.join(" "),
         );
       }
     } catch (error) {
+      setLastRunError(error?.message || "Could not run routine cleanup.");
       notify(
         showNotification,
         "error",
-        "Safe Repairs Failed",
-        error?.message || "Could not run automatic cleanup.",
+        "Routine Cleanup Could Not Finish",
+        error?.message || "Could not run routine cleanup.",
       );
     } finally {
       setIsFixingSafe(false);
@@ -222,7 +227,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
         showNotification,
         "error",
         "Merge Failed",
-        "This duplicate entry does not contain two valid records.",
+        "This duplicate entry does not include two valid items.",
       );
       return;
     }
@@ -233,8 +238,8 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "warning",
-        "Confirm Merge",
-        "Click Merge Records again to confirm this merge.",
+        "Review Merge",
+        "Confirm the merge inside the item card.",
       );
       return;
     }
@@ -259,14 +264,14 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
         showNotification,
         "success",
         "Duplicate Merged",
-        "The duplicate records were merged successfully.",
+        "The entries were merged successfully.",
       );
     } catch (error) {
       notify(
         showNotification,
         "error",
         "Merge Failed",
-        error?.message || "Could not merge duplicate records.",
+        error?.message || "Could not merge duplicate entries.",
       );
     } finally {
       setPendingActionKey("");
@@ -280,7 +285,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
         showNotification,
         "error",
         "Action Failed",
-        "This duplicate entry does not contain two valid records.",
+        "This duplicate entry does not include two valid items.",
       );
       return;
     }
@@ -293,7 +298,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
         entityType: duplicate.entityType,
         idA: primary.id,
         idB: secondary.id,
-        reason: "Marked from Data Cleanup & Repairs",
+        reason: "Marked from Data Health Check",
       });
       await refreshScanResult();
       notify(
@@ -321,7 +326,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "error",
-        "Repair Failed",
+        "Room Link Update Could Not Finish",
         "This issue does not include a schedule ID.",
       );
       return;
@@ -336,17 +341,17 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "success",
-        "Room Link Repaired",
-        `Updated ${result?.schedulesUpdated || 0} schedule record${
-          (result?.schedulesUpdated || 0) === 1 ? "" : "s"
+        "Room Link Updated",
+        `Updated ${result?.schedulesUpdated || 0} schedule entr${
+          (result?.schedulesUpdated || 0) === 1 ? "y" : "ies"
         }.`,
       );
     } catch (error) {
       notify(
         showNotification,
         "error",
-        "Repair Failed",
-        error?.message || "Could not repair schedule room links.",
+        "Room Link Update Could Not Finish",
+        error?.message || "Could not update schedule room links.",
       );
     } finally {
       setPendingActionKey("");
@@ -373,7 +378,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
         entityType: "schedules",
         idA: scheduleA.id,
         idB: scheduleB.id,
-        reason: "Marked from conflict review in Data Cleanup & Repairs",
+        reason: "Marked from conflict review in Data Health Check",
       });
       await refreshScanResult();
       notify(
@@ -405,6 +410,10 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
     });
   };
 
+  const cancelMergeConfirmation = () => {
+    setPendingMergeConfirmationKey("");
+  };
+
   const runBaseline = async () => {
     setIsRunningBaseline(true);
     try {
@@ -414,7 +423,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "success",
-        "Baseline Repair Complete",
+        "Full Data Refresh Complete",
         `Processed ${report?.summary?.totalSchedulesProcessed || 0} schedules across all terms.`,
       );
       return report;
@@ -422,8 +431,8 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "error",
-        "Baseline Repair Failed",
-        error?.message || "Failed to run baseline repair.",
+        "Full Data Refresh Could Not Finish",
+        error?.message || "Failed to run full data refresh.",
       );
       throw error;
     } finally {
@@ -439,7 +448,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "success",
-        "Baseline Preview Ready",
+        "Full Data Refresh Preview Ready",
         `Previewed ${preview?.summary?.totalSchedulesProcessed || 0} schedules across all terms.`,
       );
       return preview;
@@ -447,8 +456,8 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "error",
-        "Baseline Preview Failed",
-        error?.message || "Failed to generate baseline preview.",
+        "Full Data Refresh Preview Could Not Finish",
+        error?.message || "Failed to preview full data refresh.",
       );
       throw error;
     } finally {
@@ -469,7 +478,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
         showNotification,
         "warning",
         "Term Required",
-        "Choose a term before generating a term repair preview.",
+        "Choose a term before previewing a term refresh.",
       );
       return null;
     }
@@ -481,16 +490,16 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "success",
-        "Term Repair Preview Ready",
-        `Previewed repair actions for ${normalized}.`,
+        "Term Refresh Preview Ready",
+        `Previewed refresh actions for ${normalized}.`,
       );
       return preview;
     } catch (error) {
       notify(
         showNotification,
         "error",
-        "Term Preview Failed",
-        error?.message || "Failed to generate term repair preview.",
+        "Term Preview Could Not Finish",
+        error?.message || "Failed to preview the term refresh.",
       );
       throw error;
     } finally {
@@ -505,7 +514,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
         showNotification,
         "warning",
         "Term Required",
-        "Choose a term before running term repair.",
+        "Choose a term before refreshing a term.",
       );
       return null;
     }
@@ -518,7 +527,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "success",
-        "Term Repair Complete",
+        "Term Refresh Complete",
         `Updated ${report?.spaceLinkRepairs?.schedulesUpdated || 0} schedule links for ${normalized}.`,
       );
       return report;
@@ -526,8 +535,8 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "error",
-        "Term Repair Failed",
-        error?.message || "Failed to run term repair.",
+        "Term Refresh Could Not Finish",
+        error?.message || "Failed to refresh the term.",
       );
       throw error;
     } finally {
@@ -544,16 +553,16 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "success",
-        "Preview Ready",
-        "Location migration preview has been generated.",
+        "Room Link Preview Ready",
+        "Room link preview has been generated.",
       );
       return preview;
     } catch (error) {
       notify(
         showNotification,
         "error",
-        "Preview Failed",
-        error?.message || "Could not generate location preview.",
+        "Room Link Preview Could Not Finish",
+        error?.message || "Could not preview room link updates.",
       );
       throw error;
     } finally {
@@ -569,7 +578,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "success",
-        "Location Migration Complete",
+        "Room Link Update Complete",
         `Updated ${report?.roomsUpdated || 0} rooms and ${report?.schedulesUpdated || 0} schedules.`,
       );
       return report;
@@ -577,8 +586,8 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "error",
-        "Location Migration Failed",
-        error?.message || "Failed to apply location migration.",
+        "Room Link Update Could Not Finish",
+        error?.message || "Failed to update room links.",
       );
       throw error;
     } finally {
@@ -599,7 +608,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
         showNotification,
         "warning",
         "Term Required",
-        "Choose a term before scanning for orphaned records.",
+        "Choose a term before checking for unused imported items.",
       );
       return null;
     }
@@ -612,16 +621,16 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "success",
-        "Orphan Scan Complete",
-        `Found ${report?.total || 0} orphaned record${(report?.total || 0) === 1 ? "" : "s"}.`,
+        "Unused Imported Items Check Complete",
+        `Found ${report?.total || 0} unused imported item${(report?.total || 0) === 1 ? "" : "s"}.`,
       );
       return report;
     } catch (error) {
       notify(
         showNotification,
         "error",
-        "Orphan Scan Failed",
-        error?.message || "Could not scan for orphaned records.",
+        "Unused Imported Items Check Could Not Finish",
+        error?.message || "Could not check for unused imported items.",
       );
       throw error;
     } finally {
@@ -634,8 +643,8 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "info",
-        "No Orphans Found",
-        "There are no orphaned records to delete for this term.",
+        "No Unused Items Found",
+        "There are no unused imported items to remove for this term.",
       );
       return null;
     }
@@ -647,8 +656,8 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "success",
-        "Orphan Cleanup Complete",
-        `Deleted ${result?.deleted || 0} orphaned record${(result?.deleted || 0) === 1 ? "" : "s"}.`,
+        "Unused Imported Items Removed",
+        `Removed ${result?.deleted || 0} unused imported item${(result?.deleted || 0) === 1 ? "" : "s"}.`,
       );
       const refreshed = await findOrphanedImportedData(orphanTermFilter.trim());
       setOrphanScan(refreshed);
@@ -657,8 +666,8 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "error",
-        "Orphan Cleanup Failed",
-        error?.message || "Failed to clean orphaned records.",
+        "Unused Imported Items Could Not Be Removed",
+        error?.message || "Failed to remove unused imported items.",
       );
       throw error;
     } finally {
@@ -673,6 +682,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
     safeFixResult,
     isScanning,
     isFixingSafe,
+    lastRunError,
     blockingCategories,
     totalBlockingIssues,
     safeFixableCount,
@@ -708,6 +718,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
     handleRepairSpaceIssue,
     handleMarkConflictAsDistinct,
     toggleCategory,
+    cancelMergeConfirmation,
 
     loadBaselinePreview,
     runBaseline,

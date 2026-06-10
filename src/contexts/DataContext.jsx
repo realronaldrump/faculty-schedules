@@ -11,7 +11,7 @@
  * - Data transformation and adaptation
  */
 
-import React, {
+import {
   createContext,
   useContext,
   useState,
@@ -29,6 +29,8 @@ import {
   orderBy,
 } from "firebase/firestore";
 import {
+  adaptPeopleToFaculty,
+  adaptPeopleToStaff,
   fetchPrograms,
   getInstructorDisplayName,
   UNASSIGNED,
@@ -36,7 +38,6 @@ import {
 import { fetchRecentChanges } from "../utils/recentChanges";
 import { usePermissions } from "../utils/permissions";
 import { buildCourseSectionKey, parseCourseCode } from "../utils/courseUtils";
-import { adaptPeopleToFaculty, adaptPeopleToStaff } from "../utils/dataAdapter";
 import { applySemesterSchedule } from "../utils/studentWorkers";
 import { isStudentWorker } from "../utils/peopleUtils";
 import {
@@ -51,16 +52,31 @@ import { useSchedules } from "./ScheduleContext";
 
 const DataContext = createContext(null);
 
+const deriveCreditsFromSchedule = (courseCode, credits) => {
+  if (credits !== undefined && credits !== null && credits !== "") {
+    const numericCredits = Number(credits);
+    if (!Number.isNaN(numericCredits)) {
+      return numericCredits;
+    }
+  }
+  const parsed = parseCourseCode(courseCode || "");
+  if (
+    parsed &&
+    !parsed.error &&
+    parsed.credits !== undefined &&
+    parsed.credits !== null
+  ) {
+    return parsed.credits;
+  }
+  return null;
+};
+
 export const DataProvider = ({ children }) => {
   // Consumed Contexts
   const {
     people: rawPeople,
     allPeople,
     peopleIndex,
-    loadPeople,
-    addPerson,
-    updatePerson,
-    deletePerson,
     loading: peopleLoading,
   } = usePeople();
 
@@ -81,7 +97,6 @@ export const DataProvider = ({ children }) => {
   const [spacesList, setSpacesList] = useState([]);
   const [editHistory, setEditHistory] = useState([]);
   const [recentChanges, setRecentChanges] = useState([]);
-  const [localLoading, setLocalLoading] = useState(false);
   const [dataError, setDataError] = useState(null);
   const [programsLoaded, setProgramsLoaded] = useState(false);
   const [coursesLoaded, setCoursesLoaded] = useState(false);
@@ -97,27 +112,7 @@ export const DataProvider = ({ children }) => {
   const permissions = usePermissions();
 
   // Combined Loading State
-  const loading = localLoading || peopleLoading || schedulesLoading;
-
-  // Helper to derive credits
-  const deriveCreditsFromSchedule = (courseCode, credits) => {
-    if (credits !== undefined && credits !== null && credits !== "") {
-      const numericCredits = Number(credits);
-      if (!Number.isNaN(numericCredits)) {
-        return numericCredits;
-      }
-    }
-    const parsed = parseCourseCode(courseCode || "");
-    if (
-      parsed &&
-      !parsed.error &&
-      parsed.credits !== undefined &&
-      parsed.credits !== null
-    ) {
-      return parsed.credits;
-    }
-    return null;
-  };
+  const loading = peopleLoading || schedulesLoading;
 
   const peopleById = useMemo(() => {
     return new Map((rawPeople || []).map((person) => [person.id, person]));
@@ -491,24 +486,22 @@ export const DataProvider = ({ children }) => {
 
   const loadPrograms = useCallback(
     async ({ force = false } = {}) => {
-      if (programsLoaded && !force) return rawPrograms;
+      if (programsLoaded && !force) return;
       try {
         const programs = await fetchPrograms();
         setRawPrograms(programs);
         setProgramsLoaded(true);
-        return programs;
       } catch (e) {
         console.error("Programs load error:", e);
         setDataError(e.message);
-        return [];
       }
     },
-    [programsLoaded, rawPrograms],
+    [programsLoaded],
   );
 
   const loadCourses = useCallback(
     async ({ force = false } = {}) => {
-      if (coursesLoaded && !force) return rawCourses;
+      if (coursesLoaded && !force) return;
       setCoursesLoading(true);
       try {
         const snapshot = await getDocs(collection(db, "courses"));
@@ -518,16 +511,14 @@ export const DataProvider = ({ children }) => {
         }));
         setRawCourses(courses);
         setCoursesLoaded(true);
-        return courses;
       } catch (e) {
         console.error("Courses load error:", e);
         setDataError(e.message);
-        return [];
       } finally {
         setCoursesLoading(false);
       }
     },
-    [coursesLoaded, rawCourses],
+    [coursesLoaded],
   );
 
   // Load rooms from Firestore
@@ -606,9 +597,8 @@ export const DataProvider = ({ children }) => {
         }
         startRoomsSubscription();
       }
-      return roomsData;
     },
-    [roomsData, startRoomsSubscription],
+    [startRoomsSubscription],
   );
 
   // Refresh rooms (force reload)
@@ -619,7 +609,7 @@ export const DataProvider = ({ children }) => {
 
   const loadEditHistory = useCallback(
     async ({ force = false } = {}) => {
-      if (editHistoryLoaded && !force) return editHistory;
+      if (editHistoryLoaded && !force) return;
       try {
         const snap = await getDocs(
           query(collection(db, "editHistory"), orderBy("timestamp", "desc")),
@@ -627,68 +617,28 @@ export const DataProvider = ({ children }) => {
         const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         setEditHistory(items);
         setEditHistoryLoaded(true);
-        return items;
       } catch (e) {
         console.error("Edit history load error:", e);
         setDataError(e.message);
-        return [];
       }
     },
-    [editHistoryLoaded, editHistory],
+    [editHistoryLoaded],
   );
 
   const loadRecentChanges = useCallback(
     async ({ limit = 100, force = false } = {}) => {
-      if (recentChangesLoaded && !force) return recentChanges;
+      if (recentChangesLoaded && !force) return;
       try {
         const changes = await fetchRecentChanges(limit);
         setRecentChanges(changes);
         setRecentChangesLoaded(true);
-        return changes;
       } catch (e) {
         console.error("Recent changes load error:", e);
         setDataError(e.message);
-        return [];
       }
     },
-    [recentChangesLoaded, recentChanges],
+    [recentChangesLoaded],
   );
-
-  // Main Load Orchestrator
-  const loadData = useCallback(
-    async ({
-      silent = false,
-      includePeople = true,
-      includeCourses = true,
-      includePrograms = true,
-      includeEditHistory = true,
-      includeRecentChanges = true,
-      force = false,
-    } = {}) => {
-      if (!silent) setLocalLoading(true);
-      try {
-        console.log("📡 DataContext: Orchestrating data load...");
-
-        const tasks = [];
-        if (includePeople) tasks.push(loadPeople({ force }));
-        if (includeCourses) tasks.push(loadCourses({ force }));
-        if (includePrograms) tasks.push(loadPrograms({ force }));
-        if (includeEditHistory) tasks.push(loadEditHistory({ force }));
-        if (includeRecentChanges) tasks.push(loadRecentChanges({ force }));
-
-        await Promise.all(tasks);
-        // Note: Schedules load automatically via ScheduleContext when semester is set
-      } catch (e) {
-        console.error("Data load error:", e);
-        setDataError(e.message);
-      } finally {
-        if (!silent) setLocalLoading(false);
-      }
-    },
-    [loadPeople, loadCourses, loadPrograms, loadEditHistory, loadRecentChanges],
-  );
-
-  // Initial Load effect handled by components calling loadData or individual contexts
 
   const value = useMemo(
     () => ({
@@ -728,14 +678,12 @@ export const DataProvider = ({ children }) => {
       dataError,
 
       // Actions
-      loadData,
       loadCourses,
       loadPrograms,
       loadRooms,
       refreshRooms,
       loadEditHistory,
       loadRecentChanges,
-      refreshData: (options = {}) => loadData({ silent: true, ...options }),
 
       // Load State
       programsLoaded,
@@ -771,7 +719,6 @@ export const DataProvider = ({ children }) => {
       selectedTermMeta,
       loading,
       dataError,
-      loadData,
       loadCourses,
       loadPrograms,
       loadRooms,
@@ -799,5 +746,3 @@ export const useData = () => {
   }
   return context;
 };
-
-export default DataContext;

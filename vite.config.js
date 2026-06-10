@@ -22,7 +22,6 @@ export default defineConfig({
           ) {
             return 'react-vendor'
           }
-          if (id.includes('node_modules/exceljs')) return 'exceljs'
           if (id.includes('node_modules/lucide-react')) return 'icons'
           if (
             id.includes('node_modules/papaparse') ||

@@ -1,6 +1,6 @@
 export const toArray = (value) => (Array.isArray(value) ? value : []);
 
-export const formatTimestamp = (value) => {
+const formatTimestamp = (value) => {
   if (!value) return "Not run yet";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Not run yet";
@@ -80,44 +80,44 @@ export const buildBlockingCategories = (scanResult) => {
   return [
     {
       id: "orphaned-instructors",
-      label: "Missing instructor links",
+      label: "Classes missing instructor links",
       count: orphanedInstructorReferences.length,
-      description: "Class records that are missing a valid instructor link.",
+      description: "Classes that need the correct instructor selected.",
       items: orphanedInstructorReferences,
     },
     {
       id: "orphaned-spaces",
-      label: "Missing room links",
+      label: "Classes missing room links",
       count: orphanedSpaceReferences.length,
-      description: "Class records that point to room IDs that do not exist.",
+      description: "Classes that need their room connection refreshed.",
       items: orphanedSpaceReferences,
     },
     {
       id: "high-confidence-duplicates",
-      label: "Likely duplicate records",
+      label: "Possible duplicates",
       count: highConfidenceDuplicates.length,
-      description: "Records that strongly appear to be duplicates and can cause noise.",
+      description: "Entries that may be the same person, class, or room.",
       items: highConfidenceDuplicates,
     },
     {
       id: "unresolved-import-issues",
-      label: "Unfinished import decisions",
+      label: "Imported names to match",
       count: unresolvedImportIssues.length,
-      description: "Import transactions that still need link/create/exclude decisions.",
+      description: "Imported people that need to be matched or skipped.",
       items: unresolvedImportIssues,
     },
     {
       id: "teaching-conflicts",
-      label: "Possible teaching overlaps",
+      label: "Possible schedule overlaps",
       count: teachingConflicts.length,
-      description: "Potential same-time teaching conflicts for instructors.",
+      description: "Classes that may overlap for the same instructor.",
       items: teachingConflicts,
     },
     {
       id: "legacy-model-issues",
-      label: "Older field format records",
+      label: "Older data format",
       count: legacyModelIssues.length,
-      description: "Records still carrying legacy mirrored fields.",
+      description: "Entries saved in an older format that can usually be refreshed.",
       items: legacyModelIssues,
     },
   ];
@@ -139,89 +139,173 @@ export const getSafeFixableCount = (scanResult) => {
   );
 };
 
+const getDecisionCount = (totalBlockingIssues = 0, safeFixableCount = 0) =>
+  Math.max(0, Number(totalBlockingIssues || 0) - Number(safeFixableCount || 0));
+
+export const DATA_HEALTH_STATES = {
+  checking: "checking",
+  cleanupReady: "cleanupReady",
+  cleaning: "cleaning",
+  needsChoice: "needsChoice",
+  allClear: "allClear",
+  error: "error",
+};
+
+export const buildDataHealthViewModel = ({
+  scanResult,
+  safeFixResult,
+  isScanning = false,
+  isFixingSafe = false,
+  safeFixableCount = 0,
+  totalBlockingIssues = 0,
+  lastRunError = "",
+} = {}) => {
+  const routineCount = Number(safeFixableCount || 0);
+  const decisionCount = getDecisionCount(totalBlockingIssues, routineCount);
+  const checkedAt = formatTimestamp(scanResult?.timestamp);
+  const hasCleanupResult = Boolean(safeFixResult);
+  const errorMessage = (lastRunError || "").toString().trim();
+
+  const metrics = scanResult
+    ? [
+        {
+          label: "Routine cleanup",
+          value: routineCount > 0 ? routineCount : "None",
+        },
+        {
+          label: "Needs your choice",
+          value: decisionCount > 0 ? decisionCount : "None",
+        },
+        {
+          label: "Last checked",
+          value: checkedAt,
+        },
+      ]
+    : [
+        {
+          label: "Status",
+          value: "Starting automatically",
+        },
+      ];
+
+  if (errorMessage) {
+    return {
+      state: DATA_HEALTH_STATES.error,
+      title: "Could not finish",
+      eyebrow: "Data Health Check",
+      description:
+        "Nothing was changed. Try the check again, and use the troubleshooting details if this keeps happening.",
+      primaryAction: "scan",
+      primaryLabel: "Try again",
+      metrics,
+      decisionCount,
+      routineCount,
+      checkedAt,
+      errorMessage,
+      hasCleanupResult,
+    };
+  }
+
+  if (isFixingSafe) {
+    return {
+      state: DATA_HEALTH_STATES.cleaning,
+      title: "Cleaning up routine items",
+      eyebrow: "Data Health Check",
+      description:
+        "The app is handling routine cleanup now. It will check everything again when it finishes.",
+      primaryAction: null,
+      primaryLabel: "Cleaning...",
+      metrics,
+      decisionCount,
+      routineCount,
+      checkedAt,
+      hasCleanupResult,
+    };
+  }
+
+  if (isScanning || !scanResult) {
+    return {
+      state: DATA_HEALTH_STATES.checking,
+      title: "Checking your data",
+      eyebrow: "Data Health Check",
+      description:
+        "The app is looking for routine cleanup it can handle and anything that needs your choice.",
+      primaryAction: null,
+      primaryLabel: "Checking...",
+      metrics,
+      decisionCount,
+      routineCount,
+      checkedAt,
+      hasCleanupResult,
+    };
+  }
+
+  if (routineCount > 0) {
+    return {
+      state: DATA_HEALTH_STATES.cleanupReady,
+      title: "Routine cleanup available",
+      eyebrow: "Data Health Check",
+      description:
+        "The app found items it can clean up for you. Review is not needed for this step.",
+      primaryAction: "cleanup",
+      primaryLabel: "Clean up routine items",
+      metrics,
+      decisionCount,
+      routineCount,
+      checkedAt,
+      hasCleanupResult,
+    };
+  }
+
+  if (decisionCount > 0) {
+    return {
+      state: DATA_HEALTH_STATES.needsChoice,
+      title: "Needs your choice",
+      eyebrow: "Data Health Check",
+      description:
+        "Routine cleanup is done. A few items need a person to choose the right answer.",
+      primaryAction: "scan",
+      primaryLabel: "Check again",
+      metrics,
+      decisionCount,
+      routineCount,
+      checkedAt,
+      hasCleanupResult,
+    };
+  }
+
+  return {
+    state: DATA_HEALTH_STATES.allClear,
+    title: "All clear",
+    eyebrow: "Data Health Check",
+    description:
+      "Everything looks ready. You can check again any time after imports or schedule updates.",
+    primaryAction: "scan",
+    primaryLabel: "Check again",
+    metrics,
+    decisionCount,
+    routineCount,
+    checkedAt,
+    hasCleanupResult,
+  };
+};
+
+export const buildDecisionCategoryViewModels = (categories = []) =>
+  categories
+    .filter((category) => Number(category?.count || 0) > 0)
+    .map((category) => ({
+      id: category.id,
+      label: category.label,
+      count: Number(category.count || 0),
+      description: category.description,
+      items: toArray(category.items),
+    }));
+
 const buildSummary = (title, items = [], nextStep = "") => ({
   title,
   items,
   nextStep,
 });
-
-export const summarizeScanResult = (scanResult) => {
-  if (!scanResult) return null;
-  const issues = Number(scanResult?.summary?.blockingIssues || 0);
-  const items = [
-    { label: "Needs manual decisions", value: issues },
-    { label: "People records", value: Number(scanResult?.counts?.people || 0) },
-    { label: "Class records", value: Number(scanResult?.counts?.schedules || 0) },
-    { label: "Room records", value: Number(scanResult?.counts?.rooms || 0) },
-  ];
-  const nextStep =
-    issues === 0
-      ? "No blocking issues found. Routine cleanup is complete."
-      : "Run the safe fixes, then review any remaining decision items.";
-  return buildSummary("Data check complete", items, nextStep);
-};
-
-export const summarizeSafeFixPlan = (scanResult) => {
-  if (!scanResult?.autoFixable) return null;
-  const auto = scanResult.autoFixable;
-  const items = [
-    {
-      label: "People duplicates to merge",
-      value: Number(auto.highConfidencePeopleDuplicates || 0),
-    },
-    {
-      label: "Schedule duplicates to merge",
-      value: Number(auto.highConfidenceScheduleDuplicates || 0),
-    },
-    {
-      label: "Room duplicates to merge",
-      value: Number(auto.highConfidenceRoomDuplicates || 0),
-    },
-    {
-      label: "Instructor links to backfill",
-      value: Number(auto.orphanedSchedulesWithName || 0),
-    },
-    {
-      label: "Room links to repair",
-      value: Number(auto.orphanedSpaceLinks || 0),
-    },
-    {
-      label: "Legacy-format records to normalize",
-      value: Number(auto.legacyModelIssues || 0),
-    },
-  ];
-  const total = items.reduce((sum, item) => sum + Number(item.value || 0), 0);
-  return buildSummary(
-    "Safe fix preview",
-    [{ label: "Estimated records to touch", value: total }, ...items],
-    total > 0
-      ? "Run Safe Fixes to apply these repairs automatically."
-      : "No safe repairs are currently needed.",
-  );
-};
-
-export const summarizeSafeFixResult = (result) => {
-  if (!result) return null;
-  const items = [
-    { label: "People duplicates merged", value: Number(result?.duplicates?.peopleMerged || 0) },
-    {
-      label: "Schedule duplicates merged",
-      value: Number(result?.duplicates?.schedulesMerged || 0),
-    },
-    { label: "Room duplicates merged", value: Number(result?.duplicates?.roomsMerged || 0) },
-    {
-      label: "Instructor links repaired",
-      value: Number(result?.instructorLinks?.linked || 0),
-    },
-    { label: "Legacy records fixed", value: Number(result?.legacyModel?.fixed || 0) },
-    { label: "Total records updated", value: Number(result?.totalFixed || 0) },
-  ];
-  const nextStep =
-    Number(result?.errors?.length || 0) > 0
-      ? "Some items still need review. Check the optional detail panel for error notes."
-      : "Safe repairs completed. Review any remaining decision items below.";
-  return buildSummary("Safe repair run complete", items, nextStep);
-};
 
 export const summarizeBaselinePreview = (report) => {
   if (!report) return null;
@@ -243,7 +327,7 @@ export const summarizeBaselinePreview = (report) => {
       value: Number(report?.summary?.roomsCreated || 0),
     },
     {
-      label: "Schedule links to repair",
+      label: "Schedule links to update",
       value: Number(report?.summary?.schedulesSpaceRepaired || 0),
     },
     {
@@ -252,9 +336,9 @@ export const summarizeBaselinePreview = (report) => {
     },
   ];
   return buildSummary(
-    "Baseline preview ready",
+    "Full data refresh preview ready",
     items,
-    "If these counts look right, run the full system repair.",
+    "If these counts look right, run the full data refresh.",
   );
 };
 
@@ -270,20 +354,20 @@ export const summarizeBaselineReport = (report) => {
       value: Number(report?.summary?.totalSchedulesProcessed || 0),
     },
     {
-      label: "Identity repairs",
+      label: "Identity updates",
       value: Number(report?.summary?.identityBackfillUpdated || 0),
     },
     {
-      label: "Blockers",
+      label: "Items to review",
       value: Number(report?.summary?.blockerCount || 0),
     },
   ];
   const blockerCount = Number(report?.summary?.blockerCount || 0);
   const nextStep =
     blockerCount > 0
-      ? "Review blocker details before running more advanced repairs."
-      : "Baseline is clean. Continue only if new issues appear.";
-  return buildSummary("Baseline repair complete", items, nextStep);
+      ? "Review troubleshooting details before running more support tools."
+      : "Full data refresh finished. Continue only if new issues appear.";
+  return buildSummary("Full data refresh complete", items, nextStep);
 };
 
 export const summarizeTermRepairPreview = (report, termCode = "") => {
@@ -295,11 +379,11 @@ export const summarizeTermRepairPreview = (report, termCode = "") => {
       value: Number(report?.roomsCreated || 0),
     },
     {
-      label: "Schedule links to repair",
+      label: "Schedule links to update",
       value: Number(report?.spaceLinkRepairs?.schedulesUpdated || 0),
     },
     {
-      label: "Room records to normalize",
+      label: "Room entries to refresh",
       value: Number(report?.spaceLinkRepairs?.roomsUpdated || 0),
     },
     {
@@ -312,9 +396,9 @@ export const summarizeTermRepairPreview = (report, termCode = "") => {
     },
   ];
   return buildSummary(
-    "Term repair preview ready",
+    "Term refresh preview ready",
     items,
-    "If these counts look correct, run term repair to apply the planned changes.",
+    "If these counts look correct, refresh the selected term.",
   );
 };
 
@@ -338,9 +422,9 @@ export const summarizeTermRepairReport = (report, termCode = "") => {
   const blockerCount = toArray(report?.blockers).length;
   const nextStep =
     blockerCount > 0
-      ? "Check blocker details before running this repair again."
-      : "Term repair finished successfully.";
-  return buildSummary("Term repair complete", items, nextStep);
+      ? "Check troubleshooting details before refreshing this term again."
+      : "Term refresh finished.";
+  return buildSummary("Term refresh complete", items, nextStep);
 };
 
 export const summarizeLocationPreview = (preview) => {
@@ -364,9 +448,9 @@ export const summarizeLocationPreview = (preview) => {
     },
   ];
   return buildSummary(
-    "Location preview ready",
+    "Room link preview ready",
     items,
-    "Review the counts, then apply migration only if the preview looks correct.",
+    "Review the counts, then update room links only if the preview looks correct.",
   );
 };
 
@@ -381,37 +465,37 @@ export const summarizeLocationApplyReport = (report) => {
   const errorCount = toArray(report?.errors).length;
   const nextStep =
     errorCount > 0
-      ? "Some location updates failed. Check details before running again."
-      : "Location migration completed successfully.";
-  return buildSummary("Location migration complete", items, nextStep);
+      ? "Some room link updates could not finish. Check details before running again."
+      : "Room links updated successfully.";
+  return buildSummary("Room link update complete", items, nextStep);
 };
 
 export const summarizeOrphanScan = (scan, termLabel = "") => {
   if (!scan) return null;
   const items = [
     { label: "Term", value: termLabel || "Selected term" },
-    { label: "Orphaned schedules", value: Number(scan?.schedules?.length || 0) },
-    { label: "Orphaned people", value: Number(scan?.people?.length || 0) },
-    { label: "Orphaned rooms", value: Number(scan?.rooms?.length || 0) },
-    { label: "Total records", value: Number(scan?.total || 0) },
+    { label: "Unused classes", value: Number(scan?.schedules?.length || 0) },
+    { label: "Unused people", value: Number(scan?.people?.length || 0) },
+    { label: "Unused rooms", value: Number(scan?.rooms?.length || 0) },
+    { label: "Total items", value: Number(scan?.total || 0) },
   ];
   const nextStep =
     Number(scan?.total || 0) > 0
-      ? "If this looks correct, confirm cleanup to remove these records."
-      : "No orphaned records found for this term.";
-  return buildSummary("Orphan scan complete", items, nextStep);
+      ? "If this looks correct, confirm cleanup to remove these unused imported items."
+      : "No unused imported items found for this term.";
+  return buildSummary("Unused imported items check complete", items, nextStep);
 };
 
 export const summarizeOrphanCleanup = (result, termLabel = "") => {
   if (!result) return null;
   const items = [
     { label: "Term", value: termLabel || "Selected term" },
-    { label: "Deleted records", value: Number(result?.deleted || 0) },
+    { label: "Removed items", value: Number(result?.deleted || 0) },
     { label: "Errors", value: Number(result?.errors || 0) },
   ];
   const nextStep =
     Number(result?.errors || 0) > 0
-      ? "Some records could not be deleted. Check details for the failures."
+      ? "Some items could not be removed. Check details for the failures."
       : "Cleanup finished. Run one more scan to confirm everything is clear.";
-  return buildSummary("Orphan cleanup complete", items, nextStep);
+  return buildSummary("Unused imported items removed", items, nextStep);
 };

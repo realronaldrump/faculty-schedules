@@ -111,7 +111,7 @@ export const navigationItems = [
         label: "PAF Workflow",
         path: "workflows/paf",
         canonicalId: "workflows/paf",
-        accessId: "people/directory",
+        accessId: "workflows/paf",
         description: "Personnel action form workflow.",
         icon: ClipboardList,
       },
@@ -354,11 +354,11 @@ export const navigationItems = [
       },
       {
         id: "data-hygiene",
-        label: "Data Cleanup & Repairs",
+        label: "Data Health Check",
         path: "admin/data-hygiene",
         canonicalId: "admin/data-hygiene",
         adminOnly: true,
-        description: "Guided checks, safe repairs, and advanced cleanup tools.",
+        description: "Guided checks, routine cleanup, and support tools.",
         icon: FileText,
       },
       {

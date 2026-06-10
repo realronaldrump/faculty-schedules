@@ -1,5 +1,7 @@
-import React, { useState, useMemo } from "react";
-import { Search, Filter, ChevronsUpDown, Download } from "lucide-react";
+import { memo, useCallback, useMemo, useState } from "react";
+import { FixedSizeList as List } from "react-window";
+import { AutoSizer } from "react-virtualized-auto-sizer";
+import { Search, Filter, ChevronsUpDown, Download, Loader2 } from "lucide-react";
 import MultiSelectDropdown from "../MultiSelectDropdown";
 import FacultyContactCard from "../FacultyContactCard";
 import CourseDetailModal from "../scheduling/CourseDetailModal";
@@ -9,6 +11,70 @@ import { getBuildingDisplay, splitMultiRoom } from "../../utils/locationService"
 import { getMaxEnrollment } from "../../utils/enrollmentUtils";
 import { useData } from "../../contexts/DataContext";
 import { useAppConfig } from "../../contexts/AppConfigContext";
+
+const COURSE_ROW_HEIGHT = 58;
+const COURSE_TABLE_MAX_HEIGHT = 560;
+const COURSE_GRID_TEMPLATE =
+  "110px 80px minmax(220px,2fr) minmax(180px,1.4fr) 80px 150px minmax(200px,1.4fr) 130px";
+
+const formatInstructorDisplay = (item) =>
+  Array.isArray(item?.instructorNames)
+    ? item.instructorNames.join(", ")
+    : item?.Instructor || "—";
+
+const formatCourseTime = (item) => {
+  const startTime = item?.["Start Time"] || "";
+  const endTime = item?.["End Time"] || "";
+  if (startTime && endTime) return `${startTime} - ${endTime}`;
+  return startTime || endTime || "—";
+};
+
+const formatMaxEnrollmentDisplay = (item) => {
+  const value = getMaxEnrollment(item);
+  return value === null ? "—" : value;
+};
+
+const CourseTableRow = memo(({ index, style, data }) => {
+  const item = data.items[index];
+  if (!item) return null;
+
+  return (
+    <div
+      role="row"
+      aria-rowindex={index + 2}
+      style={{ ...style, gridTemplateColumns: COURSE_GRID_TEMPLATE }}
+      className="grid cursor-pointer items-center border-b border-gray-100 bg-white text-sm transition-colors hover:bg-gray-50"
+      onClick={() => data.onSelect(item)}
+    >
+      <div role="cell" className="px-4 py-3 font-medium text-baylor-green">
+        {item.Course || "—"}
+      </div>
+      <div role="cell" className="px-4 py-3 text-gray-700">
+        {item.Section || "—"}
+      </div>
+      <div role="cell" className="px-4 py-3 text-gray-700 truncate">
+        {item.Title || item["Course Title"] || "—"}
+      </div>
+      <div role="cell" className="px-4 py-3 text-gray-700 truncate">
+        {formatInstructorDisplay(item)}
+      </div>
+      <div role="cell" className="px-4 py-3 text-gray-700">
+        {item.Day || "—"}
+      </div>
+      <div role="cell" className="px-4 py-3 text-gray-700 whitespace-nowrap">
+        {formatCourseTime(item)}
+      </div>
+      <div role="cell" className="px-4 py-3 text-gray-700 truncate">
+        {item.Room || "—"}
+      </div>
+      <div role="cell" className="px-4 py-3 text-gray-700">
+        {formatMaxEnrollmentDisplay(item)}
+      </div>
+    </div>
+  );
+});
+
+CourseTableRow.displayName = "CourseTableRow";
 
 const CourseBrowser = ({ embedded = false }) => {
   const { scheduleData = [], facultyData = [] } = useData();
@@ -31,6 +97,7 @@ const CourseBrowser = ({ embedded = false }) => {
 
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
+  const [isCsvExporting, setIsCsvExporting] = useState(false);
 
   const computeCourseMetadata = (courseCode) => {
     if (!courseCode || typeof courseCode !== "string") {
@@ -48,7 +115,7 @@ const CourseBrowser = ({ embedded = false }) => {
     };
   };
 
-  const extractBuildingNameFromLocation = (locationLabel) => {
+  const extractBuildingNameFromLocation = useCallback((locationLabel) => {
     if (!locationLabel || typeof locationLabel !== "string") {
       return "Other";
     }
@@ -58,7 +125,7 @@ const CourseBrowser = ({ embedded = false }) => {
     }
     const building = getBuildingDisplay(locationLabel);
     return building || "Other";
-  };
+  }, [buildingConfigVersion]);
 
   // Get unique values for filters
   const uniqueInstructors = useMemo(() => {
@@ -120,11 +187,6 @@ const CourseBrowser = ({ embedded = false }) => {
     if (value === null || value === undefined || value === "") return null;
     const parsed = Number.parseInt(String(value), 10);
     return Number.isNaN(parsed) ? null : parsed;
-  };
-
-  const getMaxEnrollmentDisplay = (item) => {
-    const value = getMaxEnrollment(item);
-    return value === null ? "—" : value;
   };
 
   const groupedScheduleData = useMemo(() => {
@@ -313,7 +375,38 @@ const CourseBrowser = ({ embedded = false }) => {
     filters.maxEnrollmentMin ||
     filters.maxEnrollmentMax;
 
-  const handleDownloadCSV = () => {
+  const tableHeight = useMemo(() => {
+    if (sortedData.length === 0) return 0;
+    return Math.min(COURSE_TABLE_MAX_HEIGHT, sortedData.length * COURSE_ROW_HEIGHT);
+  }, [sortedData.length]);
+
+  const rowData = useMemo(
+    () => ({
+      items: sortedData,
+      onSelect: setSelectedCourse,
+    }),
+    [sortedData],
+  );
+
+  const getCourseRowKey = useCallback(
+    (index, data) =>
+      data.items[index]?.id ||
+      `${data.items[index]?.Course || "course"}-${data.items[index]?.Section || "section"}-${index}`,
+    [],
+  );
+
+  const handleDownloadCSV = async () => {
+    if (isCsvExporting || sortedData.length === 0) return;
+
+    setIsCsvExporting(true);
+    await new Promise((resolve) => {
+      if (typeof window !== "undefined" && window.requestAnimationFrame) {
+        window.requestAnimationFrame(resolve);
+      } else {
+        setTimeout(resolve, 0);
+      }
+    });
+
     const headers = [
       "Course",
       "Section",
@@ -324,39 +417,33 @@ const CourseBrowser = ({ embedded = false }) => {
       "Room",
       "Max Enrollment",
     ];
-    const rows = sortedData.map((item) => {
-      const instructorDisplay = Array.isArray(item.instructorNames)
-        ? item.instructorNames.join(", ")
-        : item.Instructor || "";
-      const startTime = item["Start Time"] || "";
-      const endTime = item["End Time"] || "";
-      const timeDisplay =
-        startTime && endTime
-          ? `${startTime} - ${endTime}`
-          : startTime || endTime || "";
-      return [
+
+    try {
+      const rows = sortedData.map((item) => [
         item.Course || "",
         item.Section || "",
         item.Title || item["Course Title"] || "",
-        instructorDisplay,
+        formatInstructorDisplay(item).replace(/^—$/, ""),
         item.Day || "",
-        timeDisplay,
+        formatCourseTime(item).replace(/^—$/, ""),
         item.Room || "",
         getMaxEnrollment(item) ?? "",
-      ];
-    });
-    const escapeCell = (value) =>
-      `"${String(value ?? "").replace(/"/g, '""')}"`;
-    const csvContent = [headers, ...rows]
-      .map((row) => row.map(escapeCell).join(","))
-      .join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `course-browse-${new Date().toISOString().split("T")[0]}.csv`;
-    link.click();
-    window.URL.revokeObjectURL(url);
+      ]);
+      const escapeCell = (value) =>
+        `"${String(value ?? "").replace(/"/g, '""')}"`;
+      const csvContent = [headers, ...rows]
+        .map((row) => row.map(escapeCell).join(","))
+        .join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `course-browse-${new Date().toISOString().split("T")[0]}.csv`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } finally {
+      setIsCsvExporting(false);
+    }
   };
 
   const handleShowContactCard = (facultyIdOrName, displayName) => {
@@ -371,18 +458,29 @@ const CourseBrowser = ({ embedded = false }) => {
   };
 
   const SortableHeader = ({ label, sortKey }) => (
-    <th
-      className="table-header-cell cursor-pointer select-none hover:text-baylor-green/80 transition-colors"
-      onClick={() => handleSort(sortKey)}
+    <div
+      role="columnheader"
+      aria-sort={
+        sortConfig.key === sortKey
+          ? sortConfig.direction === "ascending"
+            ? "ascending"
+            : "descending"
+          : "none"
+      }
+      className="table-header-cell select-none"
     >
-      <div className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => handleSort(sortKey)}
+        className="flex items-center gap-1 text-left hover:text-baylor-green/80 transition-colors"
+      >
         {label}
         <ChevronsUpDown
           size={14}
           className={`text-gray-400 ${sortConfig.key === sortKey ? "text-baylor-green" : ""}`}
         />
-      </div>
-    </th>
+      </button>
+    </div>
   );
 
   return (
@@ -504,10 +602,15 @@ const CourseBrowser = ({ embedded = false }) => {
           )}
           <button
             onClick={handleDownloadCSV}
-            className="ml-auto flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            disabled={isCsvExporting || sortedData.length === 0}
+            className="ml-auto flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <Download size={14} />
-            Export CSV
+            {isCsvExporting ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Download size={14} />
+            )}
+            {isCsvExporting ? "Preparing CSV..." : "Export CSV"}
           </button>
         </div>
       </div>
@@ -515,9 +618,18 @@ const CourseBrowser = ({ embedded = false }) => {
       {/* Course Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="university-table">
-            <thead>
-              <tr>
+          <div
+            role="table"
+            aria-label="Course schedule results"
+            aria-rowcount={sortedData.length + 1}
+            className="min-w-[980px]"
+          >
+            <div role="rowgroup">
+              <div
+                role="row"
+                style={{ gridTemplateColumns: COURSE_GRID_TEMPLATE }}
+                className="grid bg-gray-50 border-b border-gray-200"
+              >
                 <SortableHeader label="Course" sortKey="Course" />
                 <SortableHeader label="Section" sortKey="Section" />
                 <SortableHeader label="Title" sortKey="Title" />
@@ -526,69 +638,35 @@ const CourseBrowser = ({ embedded = false }) => {
                 <SortableHeader label="Time" sortKey="Time" />
                 <SortableHeader label="Room" sortKey="Room" />
                 <SortableHeader label="Max Enrollment" sortKey="Max Enrollment" />
-              </tr>
-            </thead>
-            <tbody>
-              {sortedData.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-8 text-center text-gray-500"
-                  >
-                    {hasActiveFilters
-                      ? "No courses match your filters."
-                      : "No courses found."}
-                  </td>
-                </tr>
-              ) : (
-                sortedData.map((item, index) => {
-                  const instructorDisplay = Array.isArray(item.instructorNames)
-                    ? item.instructorNames.join(", ")
-                    : item.Instructor || "—";
+              </div>
+            </div>
 
-                  const startTime = item["Start Time"] || "";
-                  const endTime = item["End Time"] || "";
-                  const timeDisplay =
-                    startTime && endTime
-                      ? `${startTime} - ${endTime}`
-                      : startTime || endTime || "—";
-
-                  return (
-                    <tr
-                      key={item.id || `${item.Course}-${item.Section}-${index}`}
-                      className="cursor-pointer transition-colors"
-                      onClick={() => setSelectedCourse(item)}
+            {sortedData.length === 0 ? (
+              <div className="px-4 py-8 text-center text-gray-500">
+                {hasActiveFilters
+                  ? "No courses match your filters."
+                  : "No courses found."}
+              </div>
+            ) : (
+              <div role="rowgroup" style={{ height: tableHeight }}>
+                <AutoSizer
+                  renderProp={({ height, width }) => (
+                    <List
+                      height={height || tableHeight}
+                      width={width || 980}
+                      itemCount={sortedData.length}
+                      itemSize={COURSE_ROW_HEIGHT}
+                      itemData={rowData}
+                      itemKey={getCourseRowKey}
+                      overscanCount={8}
                     >
-                      <td className="px-4 py-3 font-medium text-baylor-green">
-                        {item.Course || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {item.Section || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 max-w-xs truncate">
-                        {item.Title || item["Course Title"] || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {instructorDisplay}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {item.Day || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                        {timeDisplay}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {item.Room || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {getMaxEnrollmentDisplay(item)}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                      {CourseTableRow}
+                    </List>
+                  )}
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Results count footer */}

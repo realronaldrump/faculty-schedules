@@ -1,7 +1,9 @@
-import React, {
+import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -21,23 +23,13 @@ import {
   serverTimestamp,
   onSnapshot,
 } from "firebase/firestore";
-import { logCreate, logUpdate } from "../utils/changeLogger";
+import { logCreate } from "../utils/changeLogger";
 import {
   getAllRegisteredPageIds,
   getRegisteredPageMeta,
   getRegisteredNavigationEntries,
 } from "../utils/pageRegistry";
-import {
-  USER_STATUS,
-  normalizeRoleList,
-  normalizeRolePermissions,
-  resolveUserStatus,
-  isUserAdmin,
-  isUserActive,
-  isUserPending,
-  isUserDisabled,
-  canAccessPage,
-} from "../utils/authz";
+import { USER_STATUS, normalizeRolePermissions, resolveUserStatus, isUserAdmin, isUserActive, isUserPending, isUserDisabled, canAccessPage } from "../utils/authz";
 import { isActivityOwnerUid, isOwnerOnlyPageId } from "../utils/activityOwner";
 
 const AuthContext = createContext(null);
@@ -330,12 +322,12 @@ export const AuthProvider = ({ children }) => {
     setLoading(!(loadedProfile && loadedAccess));
   }, [loadedProfile, loadedAccess]);
 
-  const signIn = async (email, password) => {
+  const signIn = useCallback(async (email, password) => {
     const cred = await signInWithEmailAndPassword(auth, email, password);
     return cred.user;
-  };
+  }, []);
 
-  const signUp = async (email, password, displayName) => {
+  const signUp = useCallback(async (email, password, displayName) => {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     if (displayName) {
       try {
@@ -348,14 +340,16 @@ export const AuthProvider = ({ children }) => {
     // call loadUserProfile here to avoid a race where two concurrent
     // setDoc calls collide (second one hits the update rule and is denied).
     return cred.user;
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     await firebaseSignOut(auth);
-  };
+  }, []);
 
-  const getAllPageIds = () => {
-    const isOwner = isActivityOwnerUid(user?.uid);
+  const userUid = user?.uid;
+
+  const getAllPageIds = useCallback(() => {
+    const isOwner = isActivityOwnerUid(userUid);
     const fromMeta = getRegisteredPageMeta();
     if (Array.isArray(fromMeta) && fromMeta.length > 0) {
       return fromMeta
@@ -368,40 +362,57 @@ export const AuthProvider = ({ children }) => {
     return fromRegistry.filter((pageId) =>
       isOwner ? true : !isOwnerOnlyPageId(pageId),
     );
-  };
+  }, [userUid]);
 
-  const getAllNavigationEntries = () => {
+  const getAllNavigationEntries = useCallback(() => {
     const fromRegistry = getRegisteredNavigationEntries();
     if (!Array.isArray(fromRegistry)) return [];
-    const isOwner = isActivityOwnerUid(user?.uid);
+    const isOwner = isActivityOwnerUid(userUid);
     return fromRegistry.filter((entry) => !entry?.ownerOnly || isOwner);
-  };
+  }, [userUid]);
 
-  const canAccess = (pageId) => {
-    if (!isActivityOwnerUid(user?.uid) && isOwnerOnlyPageId(pageId)) {
-      return false;
-    }
-    return canAccessPage({ userProfile, rolePermissions, pageId });
-  };
+  const canAccess = useCallback(
+    (pageId) => {
+      if (!isActivityOwnerUid(userUid) && isOwnerOnlyPageId(pageId)) {
+        return false;
+      }
+      return canAccessPage({ userProfile, rolePermissions, pageId });
+    },
+    [userUid, userProfile, rolePermissions],
+  );
 
-  const value = {
-    user,
-    userProfile,
-    rolePermissions,
-    loading,
-    signIn,
-    signUp,
-    signOut,
-    canAccess,
-    getAllPageIds,
-    getAllNavigationEntries,
-    userStatus: resolveUserStatus(userProfile),
-    isPending: isUserPending(userProfile),
-    isActive: isUserActive(userProfile),
-    isDisabled: isUserDisabled(userProfile),
-    isAdmin: isUserAdmin(userProfile),
-    isActivityOwner: isActivityOwnerUid(user?.uid),
-  };
+  const value = useMemo(
+    () => ({
+      user,
+      userProfile,
+      rolePermissions,
+      loading,
+      signIn,
+      signUp,
+      signOut,
+      canAccess,
+      getAllPageIds,
+      getAllNavigationEntries,
+      userStatus: resolveUserStatus(userProfile),
+      isPending: isUserPending(userProfile),
+      isActive: isUserActive(userProfile),
+      isDisabled: isUserDisabled(userProfile),
+      isAdmin: isUserAdmin(userProfile),
+      isActivityOwner: isActivityOwnerUid(user?.uid),
+    }),
+    [
+      user,
+      userProfile,
+      rolePermissions,
+      loading,
+      signIn,
+      signUp,
+      signOut,
+      canAccess,
+      getAllPageIds,
+      getAllNavigationEntries,
+    ],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

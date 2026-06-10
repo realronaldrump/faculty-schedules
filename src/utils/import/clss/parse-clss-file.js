@@ -162,7 +162,3 @@ export const parseClssFile = (
     profile: compiledProfile,
   };
 };
-
-export default {
-  parseClssFile,
-};

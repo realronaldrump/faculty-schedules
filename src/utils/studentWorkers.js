@@ -75,13 +75,6 @@ export const getStudentAssignments = (student) => {
   });
 };
 
-export const getStudentTotalWeeklyHours = (student) => {
-  return getStudentAssignments(student).reduce(
-    (sum, assignment) => sum + assignment.weeklyHours,
-    0,
-  );
-};
-
 export const formatCurrency = (value) => {
   const numberValue = Number(value || 0);
   return `$${numberValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -147,13 +140,13 @@ const hasDateRangeOverlap = (range, window) => {
   return true;
 };
 
-export const getAssignmentDateRange = (assignment, student) => {
+const getAssignmentDateRange = (assignment, student) => {
   const startValue = assignment?.startDate || student?.startDate || "";
   const endValue = assignment?.endDate || student?.endDate || "";
   return buildDateRange(startValue, endValue);
 };
 
-export const buildSemesterWindow = (semesterMeta) => {
+const buildSemesterWindow = (semesterMeta) => {
   if (!semesterMeta) return null;
   const start = parseDateValue(semesterMeta.startDate, { endOfDay: false });
   const end = parseDateValue(semesterMeta.endDate, { endOfDay: true });
@@ -303,7 +296,7 @@ export const buildSemesterKey = (semesterLabel) => {
   };
 };
 
-export const getSemesterScheduleEntry = (student, semesterLabel) => {
+const getSemesterScheduleEntry = (student, semesterLabel) => {
   const semesterSchedules =
     student && typeof student.semesterSchedules === "object"
       ? student.semesterSchedules

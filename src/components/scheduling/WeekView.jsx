@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { MapPin, Download, Printer } from 'lucide-react';
 import CourseDetailModal from './CourseDetailModal';
 import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
@@ -9,7 +9,6 @@ const WeekView = ({
   scheduleData,
   filteredRooms,
   selectedRoom,
-  selectedBuilding,
   weekViewMode,
   density,
   onShowContactCard,
@@ -17,7 +16,6 @@ const WeekView = ({
   onPrint
 }) => {
   const { buildingConfigVersion } = useAppConfig();
-  const dayNames = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
   const dayOrder = ['M', 'T', 'W', 'R', 'F'];
 
   // Course detail card state

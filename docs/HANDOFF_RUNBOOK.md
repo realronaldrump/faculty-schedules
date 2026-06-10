@@ -54,7 +54,7 @@ If any command fails, fix before deploy.
 - Public facade:
   - `src/utils/dataHygiene.js`
 - Core implementation:
-  - `src/utils/data-hygiene/core.js`
+  - `src/utils/dataHygiene.js`
 - UI:
   - `src/components/administration/data-cleanup/DataCleanupRepairsPage.jsx`
   - One unified page now covers routine data checks, safe fixes, and rare repair tools.

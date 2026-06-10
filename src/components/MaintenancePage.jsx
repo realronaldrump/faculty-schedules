@@ -1,4 +1,3 @@
-import React from 'react';
 
 // A simple full-screen message shown when the application is in maintenance mode.
 export default function MaintenancePage({ message, until }) {

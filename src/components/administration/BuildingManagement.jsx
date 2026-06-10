@@ -7,20 +7,8 @@
  * - View spaces in each building
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
-import {
-  Building2,
-  Plus,
-  Edit2,
-  Trash2,
-  Save,
-  X,
-  ChevronDown,
-  ChevronUp,
-  AlertCircle,
-  Tag,
-  MapPin
-} from 'lucide-react';
+import { useState, useMemo, useCallback } from 'react';
+import { Building2, Plus, Edit2, Trash2, Save, X, ChevronDown, ChevronUp, Tag, MapPin } from 'lucide-react';
 import { collection, getDocs, query, where, writeBatch } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAppConfig } from '../../contexts/AppConfigContext';

@@ -1,4 +1,4 @@
-import React, { forwardRef, useMemo } from 'react';
+import { forwardRef, useMemo } from 'react';
 
 /**
  * ExportableRoomSchedule - A clean, export-optimized weekly room schedule
@@ -261,7 +261,7 @@ const ExportableRoomSchedule = forwardRef(({
                     paddingTop: '24px', // Align with day headers
                     position: 'relative',
                 }}>
-                    {hourLabels.map((minutes, idx) => {
+                    {hourLabels.map((minutes) => {
                         const top = ((minutes - timeRange.start) / totalMinutes) * 100;
                         return (
                             <div

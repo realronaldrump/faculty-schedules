@@ -1,4 +1,4 @@
-export const TEMPERATURE_DATA_REFRESH_EVENT = "temperature-data-refresh";
+const TEMPERATURE_DATA_REFRESH_EVENT = "temperature-data-refresh";
 
 export const emitTemperatureDataRefresh = (detail = {}) => {
   if (typeof window === "undefined") return;

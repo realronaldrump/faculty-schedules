@@ -7,6 +7,9 @@ This app now targets canonical storage shapes across imports and UI reads.
 1. Write canonical fields only.
 2. Treat legacy mirrored fields as migration targets, not source of truth.
 3. Use Data Cleanup & Repairs for legacy cleanup.
+4. Run every import through `src/utils/importHygieneUtils.js` before write
+   preview or commit. This is the import-time source of truth for
+   person/course/schedule/room canonicalization.
 
 ## Canonical Schedule Fields (Key Examples)
 
@@ -38,6 +41,7 @@ Legacy examples that should be removed by hygiene:
 - `lastName`
 - `roles` (array)
 - `externalIds` (object for IDs like `baylorId`, `clssInstructorId`)
+- `identityKey`, `identityKeys`, `identitySource` (import identity metadata)
 - `jobs` (for student worker role details)
 - `primaryBuildings`
 - `weeklySchedule`
@@ -63,6 +67,18 @@ Profile source:
 
 - `src/config/import/clss/default-profile.json`
 
+## Import Identity Contract
+
+- Schedules/sections are matched by `clss`, `crn`, `section`, then composite
+  meeting/room identity.
+- People are matched by Baylor ID, CLSS instructor ID, then email. Name-only
+  matches are review context, not automatic create/merge authority.
+- Courses are upserted by deterministic canonical `courseCode` document ID.
+- Rooms are upserted by canonical `spaceKey` document ID.
+- Re-importing the same semester should update canonical records or no-op; it
+  should not create new records for entities already represented by an identity
+  key.
+
 ## Migration/Cleanup Path
 
 Run Data Cleanup & Repairs:
@@ -78,4 +94,4 @@ Run Data Cleanup & Repairs:
 
 It reports `legacyModelIssues` and can auto-fix canonical migrations through:
 
-- `src/utils/data-hygiene/core.js`
+- `src/utils/dataHygiene.js`

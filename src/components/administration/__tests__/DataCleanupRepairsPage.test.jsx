@@ -21,6 +21,7 @@ const createMockActions = () => ({
   safeFixResult: null,
   isScanning: false,
   isFixingSafe: false,
+  lastRunError: "",
   blockingCategories: [],
   totalBlockingIssues: 0,
   safeFixableCount: 0,
@@ -58,6 +59,7 @@ const createMockActions = () => ({
   handleRepairSpaceIssue: vi.fn(),
   handleMarkConflictAsDistinct: vi.fn(),
   toggleCategory: vi.fn(),
+  cancelMergeConfirmation: vi.fn(),
 
   runBaseline: vi.fn(async () => {}),
   setTermCode: vi.fn(),
@@ -111,51 +113,50 @@ describe("DataCleanupRepairsPage", () => {
     cleanup();
   });
 
-  it("renders unified routine workflow by default", () => {
+  it("auto-runs the data check once and renders a calm starting state", () => {
+    render(<DataCleanupRepairsPage />);
+
+    expect(mockActions.handleScan).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Data Health Check")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Checking your data" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /checking/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /items that need your choice/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps support tools hidden until shown", () => {
     render(<DataCleanupRepairsPage />);
 
     expect(
-      screen.getByRole("heading", { name: "Data Cleanup & Repairs" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /run data check/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /run safe fixes/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: /3. review items needing decisions/i }),
-    ).toBeInTheDocument();
-  });
-
-  it("keeps rare tools hidden until unlocked", () => {
-    render(<DataCleanupRepairsPage />);
-
-    expect(
-      screen.queryByRole("button", { name: /run full baseline repair/i }),
+      screen.queryByRole("button", { name: /run full data refresh/i }),
     ).not.toBeInTheDocument();
 
     fireEvent.click(
-      screen.getAllByRole("button", { name: /rare repair tools/i })[0],
+      screen.getByRole("button", { name: /support tools/i }),
     );
 
     expect(
-      screen.getByRole("button", { name: /unlock rare repair tools/i }),
+      screen.getByRole("button", { name: /show support tools/i }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /run full baseline repair/i }),
+      screen.queryByRole("button", { name: /run full data refresh/i }),
     ).not.toBeInTheDocument();
 
     fireEvent.click(
-      screen.getByRole("button", { name: /unlock rare repair tools/i }),
+      screen.getByRole("button", { name: /show support tools/i }),
     );
 
     expect(
-      screen.getByRole("button", { name: /run full baseline repair/i }),
+      screen.getByRole("button", { name: /run full data refresh/i }),
     ).toBeInTheDocument();
   });
 
-  it("opens confirmation before destructive baseline action", async () => {
+  it("opens confirmation before full data refresh", async () => {
     mockActions.baselinePreviewReport = {
       summary: {
         totalTermsProcessed: 1,
@@ -166,22 +167,22 @@ describe("DataCleanupRepairsPage", () => {
     render(<DataCleanupRepairsPage />);
 
     fireEvent.click(
-      screen.getAllByRole("button", { name: /rare repair tools/i })[0],
+      screen.getByRole("button", { name: /support tools/i }),
     );
     fireEvent.click(
-      screen.getByRole("button", { name: /unlock rare repair tools/i }),
+      screen.getByRole("button", { name: /show support tools/i }),
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: /run full baseline repair/i }),
+      screen.getByRole("button", { name: /run full data refresh/i }),
     );
 
     expect(mockActions.runBaseline).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("heading", { name: /run full baseline repair\?/i }),
+      screen.getByRole("heading", { name: /run full data refresh\?/i }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /run baseline/i }));
+    fireEvent.click(screen.getByRole("button", { name: /run refresh/i }));
 
     await waitFor(() => {
       expect(mockActions.runBaseline).toHaveBeenCalledTimes(1);
@@ -202,12 +203,12 @@ describe("DataCleanupRepairsPage", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: /rare repair tools use these only for unusual issues/i,
+        name: /support tools most users never need/i,
       }),
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: /unlock rare repair tools/i }),
+      screen.getByRole("button", { name: /show support tools/i }),
     );
 
     const detailsPanels = screen.getAllByTestId("technical-details");
@@ -217,12 +218,35 @@ describe("DataCleanupRepairsPage", () => {
     });
   });
 
-  it("starts with rare tools collapsed by default", () => {
+  it("starts with support tools collapsed by default", () => {
     render(<DataCleanupRepairsPage />);
 
     expect(
-      screen.queryByRole("button", { name: /unlock rare repair tools/i }),
+      screen.queryByRole("button", { name: /show support tools/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("does not show scary maintenance words in the default visible UI", () => {
+    const { container } = render(<DataCleanupRepairsPage />);
+    const visibleText = container.textContent.toLowerCase();
+
+    ["orphan", "migration", "baseline", "legacy", "database"].forEach((word) => {
+      expect(visibleText).not.toContain(word);
+    });
+  });
+
+  it("runs routine cleanup from the main action", () => {
+    mockActions.scanResult = { timestamp: new Date().toISOString() };
+    mockActions.safeFixableCount = 3;
+    mockActions.totalBlockingIssues = 3;
+
+    render(<DataCleanupRepairsPage />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /clean up routine items/i }),
+    );
+
+    expect(mockActions.handleSafeFix).toHaveBeenCalledTimes(1);
   });
 
   it("renders manual decision items and triggers handlers", () => {
@@ -240,19 +264,52 @@ describe("DataCleanupRepairsPage", () => {
     mockActions.blockingCategories = [
       {
         id: "high-confidence-duplicates",
-        label: "Likely duplicate records",
+        label: "Possible duplicates",
         count: 1,
-        description: "Records that likely represent the same person.",
+        description: "Entries that may be the same person.",
         items: [duplicateItem],
       },
     ];
 
     render(<DataCleanupRepairsPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: /merge records/i }));
+    fireEvent.click(screen.getByRole("button", { name: /review merge/i }));
 
     expect(mockActions.handleMergeDuplicate).toHaveBeenCalledTimes(1);
     expect(mockActions.handleMergeDuplicate).toHaveBeenCalledWith(duplicateItem);
+  });
+
+  it("uses inline merge confirmation controls", () => {
+    const duplicateItem = {
+      entityType: "people",
+      confidence: 0.99,
+      records: [
+        { id: "person-1", firstName: "Alex", lastName: "Taylor" },
+        { id: "person-2", firstName: "Alec", lastName: "Taylor" },
+      ],
+    };
+
+    mockActions.scanResult = { timestamp: new Date().toISOString() };
+    mockActions.totalBlockingIssues = 1;
+    mockActions.pendingMergeConfirmationKey = "people:person-1:person-2";
+    mockActions.blockingCategories = [
+      {
+        id: "high-confidence-duplicates",
+        label: "Possible duplicates",
+        count: 1,
+        description: "Entries that may be the same person.",
+        items: [duplicateItem],
+      },
+    ];
+
+    render(<DataCleanupRepairsPage />);
+
+    expect(
+      screen.getByRole("button", { name: /yes, merge these/i }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /not now/i }));
+    expect(mockActions.cancelMergeConfirmation).toHaveBeenCalledTimes(1);
   });
 
   it("uses actionable unresolved import controls", () => {
@@ -261,9 +318,9 @@ describe("DataCleanupRepairsPage", () => {
     mockActions.blockingCategories = [
       {
         id: "unresolved-import-issues",
-        label: "Unfinished import decisions",
+        label: "Imported names to match",
         count: 2,
-        description: "Needs link/create/exclude decisions.",
+        description: "Imported people that need to be matched or skipped.",
         items: [
           {
             transactionId: "import_preview_1",
@@ -285,21 +342,23 @@ describe("DataCleanupRepairsPage", () => {
 
     render(<DataCleanupRepairsPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: /resume decision queue/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /continue import decisions/i }),
+    );
     expect(navigateMock).toHaveBeenCalledWith(
       "/admin-tools/import-wizard?transaction=import_preview_1&view=resolve",
     );
   });
 
-  it("re-runs safe fixes from legacy model issue cards", () => {
+  it("runs routine cleanup from older-format issue cards", () => {
     mockActions.scanResult = { timestamp: new Date().toISOString() };
     mockActions.totalBlockingIssues = 1;
     mockActions.blockingCategories = [
       {
         id: "legacy-model-issues",
-        label: "Older field format records",
+        label: "Older data format",
         count: 1,
-        description: "Legacy mirrored fields are present.",
+        description: "Entries saved in an older format.",
         items: [
           {
             recordType: "people",
@@ -313,7 +372,7 @@ describe("DataCleanupRepairsPage", () => {
     render(<DataCleanupRepairsPage />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /^run safe fixes$/i }),
+      screen.getByRole("button", { name: /clean up routine items/i }),
     );
     expect(mockActions.handleSafeFix).toHaveBeenCalledTimes(1);
   });

@@ -808,7 +808,7 @@ const loadSourceData = async ({ dependencies, termScopeInfo, buildingConfig }) =
   return payload;
 };
 
-export const estimateTotalRows = (rowsBySheetId = {}, sheetIds = []) =>
+const estimateTotalRows = (rowsBySheetId = {}, sheetIds = []) =>
   sheetIds.reduce((total, sheetId) => total + ((rowsBySheetId[sheetId] || []).length || 0), 0);
 
 export const buildAdminExportPackage = async ({
@@ -933,11 +933,3 @@ export const getBulkFileName = ({ termScopeInfo } = {}) =>
 
 export const getIndividualFileName = ({ label } = {}) =>
   buildIndividualFileName({ label });
-
-export default {
-  LARGE_EXPORT_ROW_THRESHOLD,
-  buildAdminExportPackage,
-  estimateTotalRows,
-  getBulkFileName,
-  getIndividualFileName,
-};

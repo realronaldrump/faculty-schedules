@@ -5,29 +5,9 @@
  * and provides access to help resources.
  */
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  BookOpen,
-  Play,
-  CheckCircle,
-  Clock,
-  ChevronRight,
-  Search,
-  Filter,
-  RotateCcw,
-  HelpCircle,
-  Lightbulb,
-  Settings,
-  Users,
-  Mail,
-  Calendar,
-  Building,
-  BarChart3,
-  Database,
-  Eye,
-  EyeOff,
-} from "lucide-react";
+import { BookOpen, Play, CheckCircle, Clock, Search, Filter, RotateCcw, HelpCircle, Lightbulb, Settings, Users, Mail, Calendar, Building, BarChart3, Database, Eye, EyeOff } from "lucide-react";
 import { useTutorial, TUTORIALS } from "../../contexts/TutorialContext";
 
 // Category icons mapping
@@ -135,7 +115,6 @@ const TutorialPage = () => {
     showTooltips,
     setShowTooltips,
     resetAllProgress,
-    resetHints,
   } = useTutorial();
 
   const [searchTerm, setSearchTerm] = useState("");

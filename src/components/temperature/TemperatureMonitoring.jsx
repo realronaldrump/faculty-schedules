@@ -1,26 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  AlertTriangle,
-  Calendar,
-  CheckCircle2,
-  Copy,
-  Download,
-  Eye,
-  EyeOff,
-  FileUp,
-  History,
-  Image as ImageIcon,
-  LayoutGrid,
-  LineChart,
-  Map as MapIcon,
-  Pencil,
-  Plus,
-  Save,
-  Thermometer,
-  Trash2,
-  X,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, Download, FileUp, Image as ImageIcon, Map as MapIcon, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import Papa from "papaparse";
 import JSZip from "jszip";
 import { v4 as uuidv4 } from "uuid";
@@ -40,8 +20,7 @@ import {
   orderBy,
   writeBatch,
 } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { db, storage } from "../../firebase";
+import { db } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { useData } from "../../contexts/DataContext.jsx";
 import { useUI } from "../../contexts/UIContext.jsx";
@@ -88,12 +67,7 @@ import {
 } from "../../utils/temperatureRangeUtils";
 import { emitTemperatureDataRefresh } from "../../utils/temperatureEvents";
 import ConfirmDialog from "../shared/ConfirmDialog";
-import {
-  ACTION_TABS,
-  AUTO_MATCH_THRESHOLD,
-  DATA_VIEW_TABS,
-  DEFAULT_TIMEZONE,
-} from "./monitoring/constants";
+import { ACTION_TABS, DATA_VIEW_TABS, DEFAULT_TIMEZONE } from "./monitoring/constants";
 import {
   buildDefaultSettings,
   coerceNumber,

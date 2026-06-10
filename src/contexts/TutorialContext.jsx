@@ -9,7 +9,7 @@
  * - Tutorial completion tracking
  */
 
-import React, {
+import {
   createContext,
   useContext,
   useState,
@@ -617,7 +617,7 @@ export const TUTORIALS = {
 };
 
 // Help hints that appear throughout the app
-export const HELP_HINTS = {
+const HELP_HINTS = {
   "email-lists-adjunct": {
     id: "email-lists-adjunct",
     title: "About Adjuncts",
@@ -934,5 +934,3 @@ export const useTutorial = () => {
   }
   return context;
 };
-
-export default TutorialContext;

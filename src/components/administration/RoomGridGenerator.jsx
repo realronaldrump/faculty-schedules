@@ -1,35 +1,11 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import DOMPurify from "dompurify";
 import Papa from "papaparse";
-import {
-  Upload,
-  X,
-  Trash2,
-  FileText,
-  Download,
-  Save as SaveIcon,
-  Database,
-  ArrowLeft,
-  ChevronDown,
-  ChevronUp,
-  HelpCircle,
-  RotateCcw,
-  Info,
-} from "lucide-react";
+import { Upload, X, FileText, Download, Save as SaveIcon, Database, ArrowLeft, ChevronDown, ChevronUp, RotateCcw, Info } from "lucide-react";
 import ExportModal from "./ExportModal";
 import ExportableRoomSchedule from "./ExportableRoomSchedule";
 import { db } from "../../firebase";
-import {
-  collection,
-  addDoc,
-  getDocs,
-  deleteDoc,
-  doc,
-  query,
-  where,
-  orderBy,
-  limit,
-} from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, limit } from "firebase/firestore";
 import { logCreate, logDelete } from "../../utils/changeLogger";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import { usePermissions } from "../../utils/permissions";
@@ -735,21 +711,6 @@ const RoomGridGenerator = () => {
     return chars;
   };
 
-  const formatTimeLabel = (mins) => {
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    const period = h >= 12 ? "PM" : "AM";
-    let hour = h % 12;
-    if (hour === 0) hour = 12;
-    return `${hour}:${m.toString().padStart(2, "0")} ${period}`.replace(
-      ":00",
-      "",
-    );
-  };
-
-  const roundDownTo = (mins, step) => Math.floor(mins / step) * step;
-  const roundUpTo = (mins, step) => Math.ceil(mins / step) * step;
-
   // New exportable weekly schedule using the clean React component
   const generateExportableWeeklySchedule = () => {
     const relevant = allClassData.filter(
@@ -772,117 +733,6 @@ const RoomGridGenerator = () => {
     setScheduleHtml(""); // Clear the old HTML-based schedule
     showMessage(
       "Weekly schedule generated. Click Export to save as PNG.",
-      "success",
-    );
-  };
-
-  // Legacy weekly schedule (kept for reference, but no longer used)
-  const generateWeeklySchedule = () => {
-    const relevant = allClassData.filter(
-      (c) => c.building === selectedBuilding && c.room === selectedRoom,
-    );
-    if (relevant.length === 0) {
-      setScheduleHtml(
-        `<div class="text-center p-8 text-gray-500">No classes found for ${selectedBuilding} ${selectedRoom}.</div>`,
-      );
-      return;
-    }
-
-    // Determine time range
-    let earliest = timeToMinutes("8:00 am");
-    let latest = timeToMinutes("5:00 pm");
-    try {
-      const starts = relevant.map((c) => parseTimeRange(c.time)[0]);
-      const ends = relevant.map((c) => parseTimeRange(c.time)[1]);
-      if (starts.length) earliest = Math.min(earliest, ...starts);
-      if (ends.length) latest = Math.max(latest, ...ends);
-    } catch (error) {
-      console.warn(error);
-    }
-    const step = 15; // minutes per grid row (visual height scales to fit the sheet)
-    const start = roundDownTo(earliest, 60); // snap to hour for cleaner labels
-    const end = roundUpTo(latest, 30);
-    const slots = Math.max(1, Math.round((end - start) / step));
-
-    // Build hour labels and horizontal gridlines
-    const hourMarks = [];
-    const headerOffset = 2; // reserve row 1 for day headers
-    for (let t = start; t <= end; t += 60) {
-      const row = Math.round((t - start) / step) + headerOffset;
-      const span = 60 / step;
-      hourMarks.push(`
-                <div class="hour-label" style="grid-column: 1; grid-row: ${row} / span ${span};">${formatTimeLabel(t)}</div>
-                <div class="hour-line" style="grid-column: 2 / -1; grid-row: ${row};"></div>
-            `);
-    }
-
-    // Build class blocks per day
-    const dayToColumn = { M: 2, T: 3, W: 4, R: 5, F: 6 };
-    const blocks = relevant
-      .flatMap((c) => {
-        const [classStart, classEnd] = parseTimeRange(c.time);
-        const startRow = Math.floor((classStart - start) / step) + headerOffset;
-        const endRow = Math.ceil((classEnd - start) / step) + headerOffset;
-        return parseDaysToChars(c.days)
-          .filter((d) => dayToColumn[d])
-          .map((d) => {
-            const col = dayToColumn[d];
-            return `
-                    <div class="class-block" style="grid-column: ${col}; grid-row: ${startRow} / ${endRow};">
-                        <button class="delete-entry-btn delete-block-btn export-ignore" data-action="delete-block" title="Remove">×</button>
-                        <div class="class-title" contenteditable="true">${c.class}.${c.section}</div>
-                        <div class="class-instructor" contenteditable="true">${c.professor}</div>
-                        <div class="class-time">${c.time}</div>
-                    </div>
-                `;
-          });
-      })
-      .join("");
-
-    const vLines = Object.values(dayToColumn)
-      .slice(0, -1)
-      .map(
-        (col) =>
-          `<div style="grid-column: ${col}; grid-row: 1 / -1; border-right: 1px solid var(--neutral-border);"></div>`,
-      )
-      .join("");
-
-    const grid = `
-            <div class="weekly-grid" style="--rows:${slots};" data-start="${start}" data-end="${end}" data-step="${step}" data-headeroffset="${headerOffset}">
-                ${hourMarks.join("")}
-                ${vLines}
-                ${blocks}
-                <div class="day-header" style="grid-column: 2;">Monday</div>
-                <div class="day-header" style="grid-column: 3;">Tuesday</div>
-                <div class="day-header" style="grid-column: 4;">Wednesday</div>
-                <div class="day-header" style="grid-column: 5;">Thursday</div>
-                <div class="day-header" style="grid-column: 6;">Friday</div>
-            </div>
-        `;
-
-    const header = `
-            <div class="weekly-header">
-                <div class="header-left">
-                    <div class="text-2xl font-bold" contenteditable="true">${selectedBuilding.replace(" Bldg", "").toUpperCase()} ${selectedRoom} Schedule</div>
-                    <div class="text-md" contenteditable="true">${semester}</div>
-                </div>
-                <div class="header-actions export-ignore">
-                    <button type="button" class="slot-add-btn export-ignore" data-action="add-week-block" title="Add class to week">＋ Add</button>
-                </div>
-            </div>
-        `;
-
-    const htmlUnsafe = `
-            <div class="schedule-sheet weekly-sheet">
-                ${header}
-                ${grid}
-            </div>
-        `;
-    setScheduleHtml(
-      DOMPurify.sanitize(htmlUnsafe, { USE_PROFILES: { html: true } }),
-    );
-    showMessage(
-      "Weekly grid generated. Click on fields to edit before printing.",
       "success",
     );
   };

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import { FixedSizeList as List } from 'react-window';
 import { AutoSizer } from 'react-virtualized-auto-sizer';
 import SortableHeader from './SortableHeader';

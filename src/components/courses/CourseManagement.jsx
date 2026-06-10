@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Edit,
   Save,
@@ -83,7 +83,6 @@ const CourseManagement = ({ embedded = false }) => {
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [selectedExportFields, setSelectedExportFields] = useState([]);
-  const [selectedRows, setSelectedRows] = useState(new Set());
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [linkSourceSchedule, setLinkSourceSchedule] = useState(null);
   const [linkTargetId, setLinkTargetId] = useState("");

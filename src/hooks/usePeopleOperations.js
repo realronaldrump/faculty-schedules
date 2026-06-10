@@ -7,17 +7,7 @@
 
 import { useCallback } from "react";
 import { db, COLLECTIONS } from "../firebase";
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  setDoc,
-  updateDoc,
-  where,
-  addDoc,
-} from "firebase/firestore";
+import { collection, doc, getDoc, setDoc, updateDoc, addDoc } from "firebase/firestore";
 import { logCreate, logUpdate, logDelete } from "../utils/changeLogger";
 import { useData } from "../contexts/DataContext";
 import { usePeople } from "../contexts/PeopleContext";
@@ -282,16 +272,13 @@ const usePeopleOperations = () => {
 
       try {
         let facultyRef;
-        let actionType;
 
         if (isNewFaculty) {
           console.log("🆕 Creating new faculty member");
           facultyRef = doc(collection(db, "people"));
-          actionType = "CREATE";
         } else {
           console.log("📝 Updating existing faculty member");
           facultyRef = doc(db, "people", facultyToUpdate.id);
-          actionType = "UPDATE";
         }
 
         // Clean data - remove undefined values and derived fields
@@ -681,16 +668,13 @@ const usePeopleOperations = () => {
 
       try {
         let studentRef;
-        let actionType;
 
         if (isNewStudent) {
           console.log("🆕 Creating new student worker");
           studentRef = doc(collection(db, "people"));
-          actionType = "CREATE";
         } else {
           console.log("📝 Updating existing student worker");
           studentRef = doc(db, "people", studentToUpdate.id);
-          actionType = "UPDATE";
         }
 
         const cleanStudentData = Object.fromEntries(

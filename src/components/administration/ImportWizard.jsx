@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { usePermissions } from "../../utils/permissions";
 import { useAuth } from "../../contexts/AuthContext";
@@ -6,7 +6,6 @@ import {
   Upload,
   CheckCircle,
   AlertCircle,
-  Eye,
   History,
   ChevronRight,
   Calendar,
@@ -15,9 +14,9 @@ import {
 import {
   previewImportChanges,
   commitTransaction,
-  projectSchedulePreviewRow,
   getImportTransactions,
-} from "../../utils/importTransactionUtils";
+} from "../../utils/import/core";
+import { projectSchedulePreviewRow } from "../../utils/importScheduleRowUtils";
 import { parseCSVRecords } from "../../utils/csvUtils";
 import { parseClssFile } from "../../utils/import/clss/parse-clss-file";
 import ImportPreviewModal from "./ImportPreviewModal";
@@ -27,6 +26,46 @@ import { usePeople } from "../../contexts/PeopleContext";
 import { useUI } from "../../contexts/UIContext";
 import { normalizeTermLabel, termCodeFromLabel } from "../../utils/termUtils";
 import { hashString, hashRecord } from "../../utils/hashUtils";
+
+const PREVIEW_ROW_LIMIT = 100;
+
+const DIRECTORY_FIRST_NAME_HEADERS = ["First Name", "FirstName", "firstName"];
+const DIRECTORY_LAST_NAME_HEADERS = ["Last Name", "LastName", "lastName"];
+const DIRECTORY_EMAIL_HEADERS = ["E-mail Address", "E-mail", "Email", "email"];
+const DIRECTORY_PHONE_HEADERS = ["Phone", "Business Phone", "Home Phone", "phone"];
+const DIRECTORY_BAYLOR_ID_HEADERS = ["Baylor ID", "BaylorID", "baylorId"];
+const DIRECTORY_CLSS_ID_HEADERS = [
+  "CLSS Instructor ID",
+  "clssInstructorId",
+  "Instructor ID",
+  "InstructorID",
+];
+const DIRECTORY_IGNITE_PERSON_NUMBER_HEADERS = [
+  "Person Number",
+  "PersonNumber",
+  "Person #",
+  "personNumber",
+  "person_number",
+  "ignitePersonNumber",
+  "Ignite Person Number",
+  "ignitePersonId",
+  "Ignite Person ID",
+  "igniteId",
+  "Ignite ID",
+];
+
+const hasAnyHeader = (headers, candidates) =>
+  candidates.some((candidate) => headers.includes(candidate));
+
+const readDirectoryPreviewValue = (row, candidates) => {
+  for (const candidate of candidates) {
+    const value = row?.[candidate];
+    if (value === undefined || value === null) continue;
+    const normalized = String(value).trim();
+    if (normalized) return normalized;
+  }
+  return "";
+};
 
 const ImportWizard = ({ embedded = false }) => {
   const location = useLocation();
@@ -42,7 +81,6 @@ const ImportWizard = ({ embedded = false }) => {
   const [fileName, setFileName] = useState("");
   const [fileHash, setFileHash] = useState("");
   const [fileSize, setFileSize] = useState(0);
-  const [rawText, setRawText] = useState("");
   const [csvData, setCsvData] = useState([]);
   const [importType, setImportType] = useState(null); // 'schedule' | 'directory'
   const [detectedTerm, setDetectedTerm] = useState("");
@@ -141,33 +179,42 @@ const ImportWizard = ({ embedded = false }) => {
     };
   }, [handledRouteIntent, location.search, showNotification]);
 
-  const parsedPreviewRows = useMemo(() => {
+  const previewRows = useMemo(() => {
     if (!csvData || csvData.length === 0) return [];
+    const rowsToPreview = csvData.slice(0, PREVIEW_ROW_LIMIT);
     if (importType === "schedule") {
       const fallbackTerm = detectedTerm || selectedSemester || "";
-      return csvData.map((row) => projectSchedulePreviewRow(row, fallbackTerm));
+      return rowsToPreview.map((row) => projectSchedulePreviewRow(row, fallbackTerm));
     }
     if (importType === "directory") {
-      return csvData.map((row) => ({
-        "First Name": row["First Name"] || "",
-        "Last Name": row["Last Name"] || "",
+      return rowsToPreview.map((row) => ({
+        "First Name": readDirectoryPreviewValue(row, DIRECTORY_FIRST_NAME_HEADERS),
+        "Last Name": readDirectoryPreviewValue(row, DIRECTORY_LAST_NAME_HEADERS),
         "Preferred Name":
           row["Preferred First Name"] || row["Preferred Name"] || "",
-        "E-mail Address": row["E-mail Address"] || "",
-        Phone: row["Phone"] || row["Business Phone"] || row["Home Phone"] || "",
+        "E-mail Address": readDirectoryPreviewValue(row, DIRECTORY_EMAIL_HEADERS),
+        "Baylor ID": readDirectoryPreviewValue(row, DIRECTORY_BAYLOR_ID_HEADERS),
+        "CLSS Instructor ID": readDirectoryPreviewValue(row, DIRECTORY_CLSS_ID_HEADERS),
+        "Ignite Person Number": readDirectoryPreviewValue(
+          row,
+          DIRECTORY_IGNITE_PERSON_NUMBER_HEADERS,
+        ),
+        Phone: readDirectoryPreviewValue(row, DIRECTORY_PHONE_HEADERS),
         Office: row["Office"] || row["Office Location"] || "",
       }));
     }
     return [];
   }, [csvData, importType, detectedTerm, selectedSemester]);
 
+  const hiddenPreviewRowCount = Math.max(0, csvData.length - previewRows.length);
+
   const previewHeaders = useMemo(() => {
     const headerSet = new Set();
-    parsedPreviewRows.forEach((row) => {
+    previewRows.forEach((row) => {
       Object.keys(row).forEach((key) => headerSet.add(key));
     });
     return Array.from(headerSet);
-  }, [parsedPreviewRows]);
+  }, [previewRows]);
 
   const handleFileChange = (event) => {
     const file = event.target.files?.[0];
@@ -185,7 +232,6 @@ const ImportWizard = ({ embedded = false }) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = String(e.target?.result || "");
-      setRawText(text);
       setFileHash(hashString(text));
       try {
         const clssResult = parseClssFile(text, { strict: false });
@@ -238,7 +284,6 @@ const ImportWizard = ({ embedded = false }) => {
           err.message || "Failed to parse CSV file",
         );
         setFileName("");
-        setRawText("");
         setCsvData([]);
         setImportType(null);
         setClssSchemaReport(null);
@@ -257,8 +302,15 @@ const ImportWizard = ({ embedded = false }) => {
     }
     if (importType === "directory") {
       const headers = Object.keys(csvData[0] || {});
-      const required = ["First Name", "Last Name", "E-mail Address"];
-      return required.every((h) => headers.includes(h));
+      const hasNameEmail =
+        hasAnyHeader(headers, DIRECTORY_FIRST_NAME_HEADERS) &&
+        hasAnyHeader(headers, DIRECTORY_LAST_NAME_HEADERS) &&
+        hasAnyHeader(headers, DIRECTORY_EMAIL_HEADERS);
+      const hasExternalIdentifier =
+        hasAnyHeader(headers, DIRECTORY_BAYLOR_ID_HEADERS) ||
+        hasAnyHeader(headers, DIRECTORY_CLSS_ID_HEADERS) ||
+        hasAnyHeader(headers, DIRECTORY_IGNITE_PERSON_NUMBER_HEADERS);
+      return hasNameEmail || hasExternalIdentifier;
     }
     return false;
   };
@@ -398,6 +450,8 @@ const ImportWizard = ({ embedded = false }) => {
         semester: result.getSummary().semester,
         exclusionSummary: result.exclusionSummary || null,
         integrityFinalizeReport: result.integrityFinalizeReport || null,
+        entityResolutionReport: result.entityResolutionReport || null,
+        entityCleanupReport: result.entityCleanupReport || null,
       });
       showNotification?.(
         "success",
@@ -410,11 +464,20 @@ const ImportWizard = ({ embedded = false }) => {
       if (importType === "schedule") {
         await refreshSchedules();
         await refreshTerms?.();
-        if (stats.peopleAdded > 0 || stats.peopleModified > 0) {
+        if (
+          stats.peopleAdded > 0 ||
+          stats.peopleModified > 0 ||
+          (result.entityCleanupReport?.peopleDuplicatesMerged || 0) > 0
+        ) {
           await loadPeople({ force: true });
         }
       } else {
-        await loadPeople({ force: true });
+        await Promise.all([
+          loadPeople({ force: true }),
+          (result.entityCleanupReport?.roomDuplicatesMerged || 0) > 0
+            ? refreshSchedules()
+            : Promise.resolve(),
+        ]);
       }
     } catch (e) {
       console.error("Commit error:", e);
@@ -431,7 +494,6 @@ const ImportWizard = ({ embedded = false }) => {
   const resetWizard = () => {
     setStep(1);
     setFileName("");
-    setRawText("");
     setCsvData([]);
     setImportType(null);
     setDetectedTerm("");
@@ -634,10 +696,16 @@ const ImportWizard = ({ embedded = false }) => {
             </div>
           </div>
 
-          {parsedPreviewRows.length > 0 && (
+          {previewRows.length > 0 && (
             <div className="bg-white border border-gray-200 rounded-xl p-6">
-              <div className="text-md font-semibold text-baylor-green mb-3">
-                Data Preview (all rows)
+              <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <div className="text-md font-semibold text-baylor-green">
+                  Data Preview
+                </div>
+                <div className="text-sm text-gray-500">
+                  Showing {previewRows.length.toLocaleString()} of{" "}
+                  {csvData.length.toLocaleString()} rows
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="university-table university-table--compact min-w-full">
@@ -654,7 +722,7 @@ const ImportWizard = ({ embedded = false }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {parsedPreviewRows.map((row, idx) => (
+                    {previewRows.map((row, idx) => (
                       <tr key={idx}>
                         {previewHeaders.map((header) => {
                           const value = row[header];
@@ -676,6 +744,12 @@ const ImportWizard = ({ embedded = false }) => {
                   </tbody>
                 </table>
               </div>
+              {hiddenPreviewRowCount > 0 && (
+                <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+                  {hiddenPreviewRowCount.toLocaleString()} additional rows will be
+                  included when you generate the import preview.
+                </div>
+              )}
               <div className="mt-4 flex items-center">
                 {validateDetected() ? (
                   <div className="flex items-center p-2 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
@@ -739,10 +813,37 @@ const ImportWizard = ({ embedded = false }) => {
               Import Another File
             </button>
           </div>
+          <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+            <div className="text-sm font-semibold text-blue-950">
+              Entity resolution and cleanup preview completed
+            </div>
+            <div className="mt-2 text-sm text-blue-950 space-y-1">
+              <div>
+                Person creates matched to existing records:{" "}
+                {resultsSummary?.entityResolutionReport?.personCreatesMatchedExisting || 0}
+              </div>
+              <div>
+                Deterministic person records created:{" "}
+                {resultsSummary?.entityResolutionReport?.deterministicPersonCreates || 0}
+              </div>
+              <div>
+                Course records upserted:{" "}
+                {resultsSummary?.entityResolutionReport?.courseUpserts || 0}
+              </div>
+              <div>
+                People duplicate candidates found:{" "}
+                {resultsSummary?.entityCleanupReport?.peopleDuplicatesWouldMerge || 0}
+              </div>
+              <div>
+                Room duplicate candidates found:{" "}
+                {resultsSummary?.entityCleanupReport?.roomDuplicatesWouldMerge || 0}
+              </div>
+            </div>
+          </div>
           {importType === "schedule" && (
             <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4">
               <div className="text-sm font-semibold text-green-900">
-                Automatic integrity checks completed
+                Post-import integrity finalization applied
               </div>
               <div className="mt-2 text-sm text-green-900 space-y-1">
                 <div>
@@ -771,6 +872,10 @@ const ImportWizard = ({ embedded = false }) => {
                       exclusionSummary: resultsSummary.exclusionSummary || null,
                       integrityFinalizeReport:
                         resultsSummary.integrityFinalizeReport || null,
+                      entityResolutionReport:
+                        resultsSummary.entityResolutionReport || null,
+                      entityCleanupReport:
+                        resultsSummary.entityCleanupReport || null,
                     },
                     null,
                     2,

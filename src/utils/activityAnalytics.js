@@ -33,7 +33,7 @@ export const getDateKeyDaysAgo = (days, fromDate = new Date()) => {
   return formatDateKeyInTimeZone(date);
 };
 
-export const formatDateKeyLabel = (dateKey) => {
+const formatDateKeyLabel = (dateKey) => {
   if (!dateKey) return "Unknown";
   const parsed = new Date(`${dateKey}T12:00:00`);
   if (Number.isNaN(parsed.getTime())) return dateKey;

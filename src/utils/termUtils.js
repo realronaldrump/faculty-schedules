@@ -16,7 +16,6 @@ let cachedConfig = {
   codeToSeason: { ...DEFAULT_TERM_CONFIG.codeToSeason },
   seasonOrder: [...DEFAULT_TERM_CONFIG.seasonOrder]
 };
-let configLoaded = false;
 
 const toTitleCase = (value) => {
   if (!value) return '';
@@ -93,13 +92,12 @@ export const normalizeTermConfig = (raw = {}) => {
 
 export const setTermConfig = (raw) => {
   cachedConfig = normalizeTermConfig(raw);
-  configLoaded = true;
   return cachedConfig;
 };
 
 export const getTermConfig = () => cachedConfig;
 
-export const getSeasonNames = (termConfig = getTermConfig()) => {
+const getSeasonNames = (termConfig = getTermConfig()) => {
   const names = new Set();
   normalizeSeasonList(termConfig.seasonOrder).forEach((season) => names.add(season));
   Object.values(termConfig.codeToSeason || {}).forEach((season) => {
@@ -108,7 +106,7 @@ export const getSeasonNames = (termConfig = getTermConfig()) => {
   return Array.from(names);
 };
 
-export const normalizeSeasonLabel = (season, termConfig = getTermConfig()) => {
+const normalizeSeasonLabel = (season, termConfig = getTermConfig()) => {
   if (!season) return '';
   const cleaned = season.trim();
   if (!cleaned) return '';
@@ -119,7 +117,7 @@ export const normalizeSeasonLabel = (season, termConfig = getTermConfig()) => {
   return canonical || toTitleCase(cleaned);
 };
 
-export const parseTermLabel = (term, termConfig = getTermConfig()) => {
+const parseTermLabel = (term, termConfig = getTermConfig()) => {
   if (!term) return null;
   const cleaned = term.trim();
   if (!cleaned) return null;
@@ -156,7 +154,7 @@ export const normalizeTermLabel = (term, termConfig = getTermConfig()) => {
   return fromCode || cleaned;
 };
 
-export const parseTermCode = (termCode, termConfig = getTermConfig()) => {
+const parseTermCode = (termCode, termConfig = getTermConfig()) => {
   if (!termCode || typeof termCode !== 'string') return null;
   const cleaned = termCode.trim();
   if (!/^\d{6}$/.test(cleaned)) return null;
@@ -202,7 +200,7 @@ export const termCodeFromLabel = (value, termConfig = getTermConfig()) => {
   return `${parsed.year}${match[0]}`;
 };
 
-export const getSeasonIndex = (season, termConfig = getTermConfig()) => {
+const getSeasonIndex = (season, termConfig = getTermConfig()) => {
   if (!season) return null;
   const order = normalizeSeasonList(termConfig.seasonOrder);
   if (order.length === 0) return null;
@@ -210,7 +208,7 @@ export const getSeasonIndex = (season, termConfig = getTermConfig()) => {
   return index === -1 ? null : index;
 };
 
-export const compareTermLabels = (a, b, termConfig = getTermConfig()) => {
+const compareTermLabels = (a, b, termConfig = getTermConfig()) => {
   const parsedA = parseTermLabel(a || '', termConfig);
   const parsedB = parseTermLabel(b || '', termConfig);
 
@@ -243,12 +241,6 @@ export const buildTermLabelRegex = (termConfig = getTermConfig()) => {
 
   const escaped = seasons.map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   return new RegExp(`^(${escaped.join('|')})\\s+\\d{4}$`, 'i');
-};
-
-export const isTermLabel = (term, termConfig = getTermConfig()) => {
-  if (!term) return false;
-  const pattern = buildTermLabelRegex(termConfig);
-  return pattern.test(term.trim());
 };
 
 export const deriveTermInfo = ({ term, termCode } = {}, termConfig = getTermConfig()) => {

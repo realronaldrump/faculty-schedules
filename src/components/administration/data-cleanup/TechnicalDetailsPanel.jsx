@@ -1,4 +1,3 @@
-import React from "react";
 
 const humanizeLabel = (value) =>
   String(value || "")
@@ -115,7 +114,11 @@ const renderValue = (value, depth = 0) => {
   );
 };
 
-const TechnicalDetailsPanel = ({ title = "Technical details", data, defaultOpen = false }) => {
+const TechnicalDetailsPanel = ({
+  title = "Troubleshooting details",
+  data,
+  defaultOpen = false,
+}) => {
   if (!data) return null;
 
   return (

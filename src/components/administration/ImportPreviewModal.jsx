@@ -11,6 +11,7 @@ import {
   Database
 } from 'lucide-react';
 import { usePeople } from '../../contexts/PeopleContext';
+import { buildGroupedChanges } from '../../utils/import/transaction-model';
 
 const INTERNAL_SCHEDULE_DIFF_KEYS = new Set([
   'identityKey',
@@ -194,19 +195,7 @@ const ImportPreviewModal = ({
   );
 
   const groupedChanges = useMemo(() => {
-    const groups = {
-      schedules: { added: [], modified: [], deleted: [] },
-      people: { added: [], modified: [], deleted: [] },
-      rooms: { added: [], modified: [], deleted: [] }
-    };
-
-    visibleChanges.forEach(change => {
-      const actionKey = change.action === 'add' ? 'added' :
-        change.action === 'modify' ? 'modified' : 'deleted';
-      groups[change.collection][actionKey].push(change);
-    });
-
-    return groups;
+    return buildGroupedChanges(visibleChanges);
   }, [visibleChanges]);
 
   const pendingPersonChangeIds = useMemo(() => {
@@ -270,14 +259,16 @@ const ImportPreviewModal = ({
     setMatchSearchTerms({});
   }, [transaction?.id]);
 
-  // Initialize with all changes selected, excluding pending people until resolved
+  // Initialize with all changes selected, excluding pending people until resolved.
+  // Depends only on transaction?.id — allChanges/pendingPersonChangeIds return new
+  // array references each render and would reset user selections on every keystroke.
   React.useEffect(() => {
-    if (allChanges.length > 0 && selectedChanges.size === 0) {
-      const initial = new Set(allChanges.map(c => c.id));
-      pendingPersonChangeIds.forEach((id) => initial.delete(id));
-      updateSelectedChanges(initial);
-    }
-  }, [allChanges, pendingPersonChangeIds, transaction?.id]);
+    const initial = new Set(allChanges.map(c => c.id));
+    pendingPersonChangeIds.forEach((id) => initial.delete(id));
+    setSelectedFieldsByChange({});
+    setShowDetails({});
+    updateSelectedChanges(initial);
+  }, [transaction?.id]);
 
   const toggleChange = (changeId) => {
     const newSelected = new Set(selectedChanges);
@@ -369,8 +360,8 @@ const ImportPreviewModal = ({
       const meta = changeMeta.metaById.get(change.id);
       const diff = meta?.displayDiff || change.diff || [];
       if (diff.length === 0) return;
-      const selectedSet = selectedFieldsByChange[change.id];
-      if (selectedSet && selectedSet.size > 0) {
+      if (selectedFieldsByChange[change.id]) {
+        const selectedSet = selectedFieldsByChange[change.id];
         fieldMap[change.id] = Array.from(selectedSet);
       }
     });
@@ -540,11 +531,12 @@ const ImportPreviewModal = ({
       return null;
     }
 
-    const selectedSet = selectedFieldsByChange[change.id] || new Set(diff.map(d => d.key));
+    const defaultSelectedKeys = diff.map(d => d.key);
+    const selectedSet = selectedFieldsByChange[change.id] || new Set(defaultSelectedKeys);
 
     const toggleField = (key) => {
       setSelectedFieldsByChange((prev) => {
-        const curr = new Set(prev[change.id] || []);
+        const curr = new Set(prev[change.id] || defaultSelectedKeys);
         if (curr.has(key)) curr.delete(key); else curr.add(key);
         return { ...prev, [change.id]: curr };
       });

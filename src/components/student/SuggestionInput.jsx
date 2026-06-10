@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useId } from "react";
+import { useEffect, useMemo, useRef, useState, useId } from "react";
 import { Check, ChevronDown, Plus } from "lucide-react";
 
 const normalizeOption = (value) => String(value || "").trim();

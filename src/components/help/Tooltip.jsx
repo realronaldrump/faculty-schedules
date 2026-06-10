@@ -8,7 +8,7 @@
  * - Respects user tooltip preferences
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { HelpCircle, X, BookOpen, Info, AlertCircle, Lightbulb } from 'lucide-react';
 import { useTutorial } from '../../contexts/TutorialContext';
 

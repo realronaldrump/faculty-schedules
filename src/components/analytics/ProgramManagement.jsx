@@ -1,24 +1,5 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
-import {
-  Users,
-  Edit,
-  Save,
-  X,
-  Plus,
-  Search,
-  GripVertical,
-  MoreVertical,
-  UserCog,
-  Building2,
-  ChevronDown,
-  ChevronUp,
-  ArrowRightLeft,
-  Trash2,
-  GraduationCap,
-  Star,
-  Move,
-  Eye,
-} from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Users, Edit, Save, X, Plus, Search, GripVertical, UserCog, Building2, ChevronDown, ChevronUp, ArrowRightLeft, Trash2, GraduationCap, Star, Move, Eye } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
 import { doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db, COLLECTIONS } from "../../firebase";
@@ -426,50 +407,6 @@ const ProgramManagement = ({ embedded = false }) => {
     setDraggedFaculty(null);
   };
 
-  // Handle program change via dropdown
-  const handleProgramChange = async (faculty, newProgramName) => {
-    if (!faculty || !newProgramName) return;
-
-    const currentProgram = Object.keys(programData).find((program) =>
-      programData[program].faculty.some((f) => f.id === faculty.id),
-    );
-
-    if (currentProgram === newProgramName) return;
-
-    try {
-      const targetProgram = programData[newProgramName];
-      if (!targetProgram || !targetProgram.programId) {
-        showNotification(
-          "error",
-          "Program Error",
-          "Cannot find target program information.",
-        );
-        return;
-      }
-
-      const updateData = {
-        ...faculty,
-        programId: targetProgram.programId,
-        updatedAt: new Date().toISOString(),
-      };
-
-      await handleFacultyUpdate(updateData);
-
-      showNotification(
-        "success",
-        "Faculty Moved",
-        `${faculty.name} moved to ${newProgramName} program`,
-      );
-    } catch (error) {
-      console.error("Error moving faculty:", error);
-      showNotification(
-        "error",
-        "Error",
-        "Failed to move faculty member. Please try again.",
-      );
-    }
-  };
-
   // Toggle program card expansion
   const toggleProgramExpansion = (programName) => {
     const newExpanded = new Set(expandedPrograms);
@@ -678,15 +615,6 @@ const ProgramManagement = ({ embedded = false }) => {
       setProgramToDelete(null);
     }
   };
-
-  // Get all program names for dropdown
-  const allProgramNames = useMemo(() => {
-    return Object.keys(programData)
-      .filter((p) => p !== "Unassigned")
-      .sort();
-  }, [programData]);
-
-  const programList = Object.keys(programData).sort();
 
   return (
     <div className="min-h-screen bg-gray-50/50">

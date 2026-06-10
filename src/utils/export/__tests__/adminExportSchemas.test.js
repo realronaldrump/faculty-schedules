@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   BULK_EXPORT_SHEET_IDS,
-  getSheetHeaders,
   SHEET_DEFINITIONS,
   SHEET_IDS,
   SHEET_ORDER,
-  TECHNICAL_FIELD_EXCLUSIONS,
 } from "../adminExportSchemas";
 
 describe("adminExportSchemas", () => {
@@ -24,7 +22,10 @@ describe("adminExportSchemas", () => {
   });
 
   it("keeps People headers deterministic", () => {
-    expect(getSheetHeaders(SHEET_IDS.people)).toEqual([
+    const headers = SHEET_DEFINITIONS[SHEET_IDS.people].columns.map(
+      (column) => column.header,
+    );
+    expect(headers).toEqual([
       "Name",
       "First Name",
       "Last Name",
@@ -51,10 +52,4 @@ describe("adminExportSchemas", () => {
     ]);
   });
 
-  it("tracks technical exclusions", () => {
-    expect(TECHNICAL_FIELD_EXCLUSIONS).toContain("identityKey");
-    expect(TECHNICAL_FIELD_EXCLUSIONS).toContain("identityKeys");
-    expect(TECHNICAL_FIELD_EXCLUSIONS).toContain("createdAt");
-    expect(TECHNICAL_FIELD_EXCLUSIONS).toContain("updatedAt");
-  });
 });

@@ -27,6 +27,8 @@ export const generateImportReport = (transaction) => {
     summary: buildSummary(transaction),
     normalization: buildNormalizationReport(transaction),
     duplicatePrevention: buildDuplicatePreventionReport(transaction),
+    entityResolution: buildEntityResolutionReport(transaction),
+    entityCleanup: buildEntityCleanupReport(transaction),
     validation: buildValidationReport(transaction),
     matchResolution: buildMatchResolutionReport(transaction),
     lineage: buildLineageReport(transaction)
@@ -103,12 +105,43 @@ const buildDuplicatePreventionReport = (transaction) => {
 
   // Count matched existing records
   const schedulesUpdated = transaction.changes?.schedules?.modified?.length || 0;
+  const peopleMatchedExisting = transaction.entityResolutionReport?.personCreatesMatchedExisting || 0;
 
   return {
     withinBatchDuplicates,
     withinBatchMerged: previewSummary.withinBatchMerged || 0,
-    matchedExisting: schedulesUpdated,
+    matchedExisting: schedulesUpdated + peopleMatchedExisting,
     identityKeysGenerated: countIdentityKeys(transaction)
+  };
+};
+
+const buildEntityResolutionReport = (transaction) => {
+  const report = transaction.entityResolutionReport || {};
+  return {
+    personCreatesMatchedExisting: report.personCreatesMatchedExisting || 0,
+    deterministicPersonCreates: report.deterministicPersonCreates || 0,
+    duplicateCreateChangesSuppressed: report.duplicateCreateChangesSuppressed || 0,
+    existingPersonIdentityCollisions: report.existingPersonIdentityCollisions || 0,
+    courseUpserts: report.courseUpserts || 0,
+    personMergeUpdates: Array.isArray(report.personMergeUpdates)
+      ? report.personMergeUpdates.slice(0, 20)
+      : []
+  };
+};
+
+const buildEntityCleanupReport = (transaction) => {
+  const report = transaction.entityCleanupReport || {};
+  return {
+    mode: report.mode || '',
+    peopleDuplicatesDetected: report.peopleDuplicatesDetected || 0,
+    peopleDuplicatesMerged: report.peopleDuplicatesMerged || 0,
+    peopleDuplicatesWouldMerge: report.peopleDuplicatesWouldMerge || 0,
+    peopleDuplicatesFlagged: report.peopleDuplicatesFlagged || 0,
+    roomDuplicatesDetected: report.roomDuplicatesDetected || 0,
+    roomDuplicatesMerged: report.roomDuplicatesMerged || 0,
+    roomDuplicatesWouldMerge: report.roomDuplicatesWouldMerge || 0,
+    roomDuplicatesFlagged: report.roomDuplicatesFlagged || 0,
+    error: report.error || ''
   };
 };
 
@@ -183,6 +216,9 @@ const countIdentityKeys = (transaction) => {
   (transaction.changes?.schedules?.added || []).forEach(change => {
     if (change.newData?.identityKey) count++;
   });
+  (transaction.changes?.people?.added || []).forEach(change => {
+    if (change.newData?.identityKey) count++;
+  });
 
   return count;
 };
@@ -195,7 +231,9 @@ const extractSkipReason = (message) => {
   if (message.includes('missing section')) return 'missing_section';
   if (message.includes('cancelled')) return 'cancelled_status';
   if (message.includes('invalid')) return 'invalid_data';
-  if (message.includes('no email or name')) return 'missing_identity';
+  if (message.includes('no email or name') || message.includes('no email, name, or external ID')) {
+    return 'missing_identity';
+  }
   return 'other';
 };
 
@@ -257,6 +295,41 @@ export const formatImportReportForLog = (report) => {
     lines.push('');
   }
 
+  if (report.entityResolution) {
+    lines.push('  ENTITY RESOLUTION');
+    lines.push('  -----------------');
+    lines.push(`  Person creates matched existing: ${report.entityResolution.personCreatesMatchedExisting}`);
+    lines.push(`  Deterministic person creates: ${report.entityResolution.deterministicPersonCreates}`);
+    lines.push(`  Course records upserted: ${report.entityResolution.courseUpserts}`);
+    lines.push('');
+  }
+
+  if (report.entityCleanup) {
+    const isPreview = report.entityCleanup.mode === 'preview';
+    lines.push(isPreview ? '  ENTITY CLEANUP PREVIEW' : '  ENTITY CLEANUP');
+    lines.push(isPreview ? '  ----------------------' : '  --------------');
+    if (report.entityCleanup.mode) {
+      lines.push(`  Mode: ${report.entityCleanup.mode}`);
+    }
+    lines.push(`  People duplicate candidates: ${report.entityCleanup.peopleDuplicatesWouldMerge}`);
+    if (!isPreview) {
+      lines.push(`  People duplicates merged: ${report.entityCleanup.peopleDuplicatesMerged}`);
+    }
+    lines.push(`  People duplicates flagged: ${report.entityCleanup.peopleDuplicatesFlagged}`);
+    lines.push(`  Room duplicate candidates: ${report.entityCleanup.roomDuplicatesWouldMerge}`);
+    if (!isPreview) {
+      lines.push(`  Room duplicates merged: ${report.entityCleanup.roomDuplicatesMerged}`);
+    }
+    lines.push(`  Room duplicates flagged: ${report.entityCleanup.roomDuplicatesFlagged}`);
+    if (isPreview) {
+      lines.push('  Apply duplicate decisions from Data Health Check.');
+    }
+    if (report.entityCleanup.error) {
+      lines.push(`  Cleanup error: ${report.entityCleanup.error}`);
+    }
+    lines.push('');
+  }
+
   // Validation section
   if (report.validation) {
     lines.push('  VALIDATION');
@@ -294,114 +367,4 @@ export const formatImportReportForLog = (report) => {
   lines.push('');
 
   return lines.join('\n');
-};
-
-/**
- * Generate a compact one-line summary
- *
- * @param {Object} report - Report from generateImportReport
- * @returns {string} Single-line summary
- */
-export const formatImportReportOneLine = (report) => {
-  if (!report || report.error) {
-    return `Import failed: ${report?.error || 'Unknown error'}`;
-  }
-
-  const parts = [];
-
-  if (report.summary.schedulesAdded > 0) {
-    parts.push(`+${report.summary.schedulesAdded} schedules`);
-  }
-  if (report.summary.schedulesModified > 0) {
-    parts.push(`~${report.summary.schedulesModified} updated`);
-  }
-  if (report.summary.peopleAdded > 0) {
-    parts.push(`+${report.summary.peopleAdded} people`);
-  }
-  if (report.summary.roomsAdded > 0) {
-    parts.push(`+${report.summary.roomsAdded} rooms`);
-  }
-  if (report.validation?.errorCount > 0) {
-    parts.push(`${report.validation.errorCount} errors`);
-  }
-  if (report.validation?.warningCount > 0) {
-    parts.push(`${report.validation.warningCount} warnings`);
-  }
-
-  if (parts.length === 0) {
-    return `Import ${report.status}: No changes`;
-  }
-
-  return `Import ${report.status}: ${parts.join(', ')}`;
-};
-
-/**
- * Generate a report suitable for UI display
- *
- * @param {Object} report - Report from generateImportReport
- * @returns {Object} UI-friendly report structure
- */
-export const formatImportReportForUI = (report) => {
-  if (!report || report.error) {
-    return {
-      status: 'error',
-      message: report?.error || 'Unknown error',
-      sections: []
-    };
-  }
-
-  const sections = [];
-
-  // Summary section
-  sections.push({
-    title: 'Summary',
-    type: 'stats',
-    items: [
-      { label: 'Schedules Added', value: report.summary.schedulesAdded, color: 'green' },
-      { label: 'Schedules Updated', value: report.summary.schedulesModified, color: 'blue' },
-      { label: 'Schedules Unchanged', value: report.summary.schedulesUnchanged, color: 'gray' },
-      { label: 'People Added', value: report.summary.peopleAdded, color: 'green' },
-      { label: 'People Updated', value: report.summary.peopleModified, color: 'blue' },
-      { label: 'Rooms Added', value: report.summary.roomsAdded, color: 'green' }
-    ]
-  });
-
-  // Validation section
-  if (report.validation?.errorCount > 0 || report.validation?.warningCount > 0) {
-    sections.push({
-      title: 'Validation',
-      type: 'alerts',
-      items: [
-        ...(report.validation.errors || []).map(e => ({
-          type: 'error',
-          message: e.message || e
-        })),
-        ...(report.validation.warnings || []).slice(0, 10).map(w => ({
-          type: 'warning',
-          message: w.message || w
-        }))
-      ]
-    });
-  }
-
-  // Match issues section
-  if (report.matchResolution?.total > 0) {
-    sections.push({
-      title: 'Match Resolution',
-      type: 'info',
-      items: [
-        { label: 'Total Issues', value: report.matchResolution.total },
-        { label: 'Resolved', value: report.matchResolution.resolved },
-        { label: 'Pending', value: report.matchResolution.pending }
-      ]
-    });
-  }
-
-  return {
-    status: report.status,
-    message: formatImportReportOneLine(report),
-    semester: report.semester,
-    timestamp: report.timestamp,
-    sections
-  };
 };

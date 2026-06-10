@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Star, ChevronRight, HelpCircle } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -384,7 +384,7 @@ const Dashboard = () => {
           <div className="h-px flex-1 bg-gray-200"></div>
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {navigationSections.map((section, index) => (
+          {navigationSections.map((section) => (
             <SectionCard
               key={section.id}
               section={section}

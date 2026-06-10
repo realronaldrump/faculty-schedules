@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import CourseBrowser from "./CourseBrowser";
@@ -18,8 +18,6 @@ const TAB_DEFINITIONS = [
     component: CourseManagement,
   },
 ];
-
-const CANONICAL_PATH = "/courses/browse";
 
 const CoursesHub = ({ initialTab }) => {
   const location = useLocation();

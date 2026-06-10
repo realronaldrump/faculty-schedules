@@ -1,4 +1,3 @@
-import React from 'react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 
 const ProtectedContent = ({ pageId, children }) => {

@@ -11,7 +11,7 @@
  * Components consume this via the useUI() hook instead of prop drilling.
  */
 
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 
 const UIContext = createContext(null);
 
@@ -186,5 +186,3 @@ export const useUI = () => {
   }
   return context;
 };
-
-export default UIContext;

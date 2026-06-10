@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { MapPin, Download, Printer, Clock, Calendar } from 'lucide-react';
 import CourseDetailModal from './CourseDetailModal';
 import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
@@ -8,7 +8,6 @@ import { buildCourseSectionKey } from '../../utils/courseUtils';
 const RoomCalendarView = ({
     scheduleData,
     selectedRoom,
-    selectedBuilding,
     density = 'comfortable',
     onShowContactCard,
     onExport,

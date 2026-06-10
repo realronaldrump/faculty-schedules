@@ -1,17 +1,6 @@
-import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  BarChart3,
-  Users,
-  Clock,
-  MapPin,
-  BookOpen,
-  ArrowUpDown,
-  X,
-  TrendingUp,
-  Calendar,
-  AlertTriangle,
-} from "lucide-react";
+import { BarChart3, Users, Clock, MapPin, BookOpen, ArrowUpDown, X, AlertTriangle } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
 import { parseTime, formatMinutesToTime } from "../../utils/timeUtils";
 import { useData } from "../../contexts/DataContext";
@@ -24,7 +13,6 @@ const DepartmentInsights = () => {
     scheduleData = [],
     facultyData = [],
     analytics,
-    selectedSemester,
   } = useData();
   const { loadPeople } = usePeople();
   const [showWarning, setShowWarning] = useState(
@@ -34,7 +22,7 @@ const DepartmentInsights = () => {
     key: "totalHours",
     direction: "desc",
   });
-  const [roomSort, setRoomSort] = useState({ key: "hours", direction: "desc" });
+  const roomSort = useMemo(() => ({ key: "hours", direction: "desc" }), []);
   const [hourlyUsageDayFilter, setHourlyUsageDayFilter] = useState("All");
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [selectedHourPopup, setSelectedHourPopup] = useState(null);

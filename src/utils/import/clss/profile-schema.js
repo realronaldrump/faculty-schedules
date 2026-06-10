@@ -1,6 +1,6 @@
 import defaultClssProfile from "../../../config/import/clss/default-profile.json";
 
-export const REQUIRED_CLSS_FIELDS = [
+const REQUIRED_CLSS_FIELDS = [
   "clss_id",
   "course_code",
   "section",
@@ -19,7 +19,7 @@ export const normalizeHeaderToken = (value) =>
 
 const ensureArray = (value) => (Array.isArray(value) ? value : []);
 
-export const validateClssProfile = (profile = {}) => {
+const validateClssProfile = (profile = {}) => {
   const errors = [];
   if (!profile || typeof profile !== "object") {
     return { isValid: false, errors: ["CLSS profile must be an object"] };
@@ -61,7 +61,7 @@ export const validateClssProfile = (profile = {}) => {
   return { isValid: errors.length === 0, errors };
 };
 
-export const compileClssProfile = (profile = defaultClssProfile) => {
+const compileClssProfile = (profile = defaultClssProfile) => {
   const validation = validateClssProfile(profile);
   if (!validation.isValid) {
     throw new Error(
@@ -96,11 +96,3 @@ export const compileClssProfile = (profile = defaultClssProfile) => {
 };
 
 export const getDefaultClssProfile = () => compileClssProfile(defaultClssProfile);
-
-export default {
-  REQUIRED_CLSS_FIELDS,
-  normalizeHeaderToken,
-  validateClssProfile,
-  compileClssProfile,
-  getDefaultClssProfile,
-};

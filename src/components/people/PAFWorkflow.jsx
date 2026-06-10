@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   Search,
   ChevronDown,
@@ -14,24 +14,30 @@ import {
   Users,
   AlertCircle,
 } from "lucide-react";
+import { doc, updateDoc } from "firebase/firestore";
 import { usePeople } from "../../contexts/PeopleContext";
 import { useData } from "../../contexts/DataContext";
-import { usePeopleOperations } from "../../hooks";
 import { useUI } from "../../contexts/UIContext";
 import { usePermissions } from "../../utils/permissions";
+import { db, COLLECTIONS } from "../../firebase";
+import { logUpdate } from "../../utils/changeLogger";
 import {
+  PAF_PAGE_ID,
   PAF_DEFAULTS,
+  buildIgnitePersonNumberUpdate,
+  buildPAFCoursesByInstructorId,
   formatCourseForPAF,
+  getIgnitePersonNumber,
+  normalizeIgnitePersonNumber,
   copyToClipboard,
 } from "../../utils/pafUtils";
 
 const PAFWorkflow = ({ embedded = false }) => {
   const { people: directoryData, loadPeople } = usePeople();
   const { scheduleData, selectedSemester, availableSemesters, setSelectedSemester } = useData();
-  const { handleFacultyUpdate } = usePeopleOperations();
   const { showNotification } = useUI();
   const { canEdit } = usePermissions();
-  const canEditPeople = canEdit("people/directory");
+  const canEditPAF = canEdit(PAF_PAGE_ID);
 
   const [searchText, setSearchText] = useState("");
   const [expandedIds, setExpandedIds] = useState(new Set());
@@ -59,33 +65,10 @@ const PAFWorkflow = ({ embedded = false }) => {
 
   // Build a map of instructorId -> courses for current semester
   const coursesByInstructorId = useMemo(() => {
-    const map = new Map();
-    if (!Array.isArray(scheduleData)) return map;
+    if (!Array.isArray(scheduleData)) return new Map();
 
-    // Get unique sections (de-duplicate by _originalId since scheduleData is flattened by meeting patterns)
-    const seenSections = new Set();
-    scheduleData.forEach((schedule) => {
-      const sectionId = schedule._originalId || schedule.id;
-      if (seenSections.has(sectionId)) return;
-      seenSections.add(sectionId);
-
-      const instructorIds = Array.isArray(schedule.instructorIds)
-        ? schedule.instructorIds
-        : schedule.instructorId
-          ? [schedule.instructorId]
-          : [];
-
-      instructorIds.forEach((instructorId) => {
-        if (!instructorId) return;
-        if (!map.has(instructorId)) {
-          map.set(instructorId, []);
-        }
-        map.get(instructorId).push(schedule);
-      });
-    });
-
-    return map;
-  }, [scheduleData]);
+    return buildPAFCoursesByInstructorId(scheduleData, adjuncts);
+  }, [scheduleData, adjuncts]);
 
   // Adjuncts with their courses for this semester
   const adjunctsWithCourses = useMemo(() => {
@@ -155,7 +138,7 @@ const PAFWorkflow = ({ embedded = false }) => {
 
   const startEditIgniteId = (adjunct) => {
     setEditingIgniteId(adjunct.id);
-    setIgniteIdDraft(adjunct.ignitePersonNumber || "");
+    setIgniteIdDraft(getIgnitePersonNumber(adjunct));
     setIgniteIdError("");
   };
 
@@ -166,8 +149,9 @@ const PAFWorkflow = ({ embedded = false }) => {
   };
 
   const validateIgniteId = (value) => {
-    if (!value) return ""; // Allow empty to clear
-    if (!/^\d+$/.test(value)) return "Ignite # must be numeric only";
+    const trimmed = value.trim();
+    if (!trimmed) return ""; // Allow empty to clear
+    if (!/^\d+$/.test(trimmed)) return "Ignite # must be numeric only";
     return "";
   };
 
@@ -177,26 +161,52 @@ const PAFWorkflow = ({ embedded = false }) => {
       setIgniteIdError(validation);
       return;
     }
-    if (!canEditPeople) {
+    if (!adjunct?.id) {
+      setIgniteIdError("Cannot save: missing person id");
+      return;
+    }
+    if (!canEditPAF) {
       showNotification?.(
         "warning",
         "Permission Denied",
-        "You do not have permission to modify person records."
+        "You do not have permission to update PAF data."
       );
       return;
     }
 
+    const nextIgnitePersonNumber = normalizeIgnitePersonNumber(igniteIdDraft);
+    const previousIgnitePersonNumber = getIgnitePersonNumber(adjunct);
+
     try {
-      await handleFacultyUpdate(
-        {
-          id: adjunct.id,
-          ignitePersonNumber: igniteIdDraft.trim(),
-        },
-        adjunct
+      const updateData = buildIgnitePersonNumberUpdate(
+        adjunct,
+        nextIgnitePersonNumber,
       );
+      await updateDoc(doc(db, COLLECTIONS.PEOPLE, adjunct.id), updateData);
+      await logUpdate(
+        `Person - ${adjunct.name || `${adjunct.firstName || ""} ${adjunct.lastName || ""}`.trim() || adjunct.id}`,
+        COLLECTIONS.PEOPLE,
+        adjunct.id,
+        updateData,
+        adjunct,
+        "PAFWorkflow.jsx - saveIgniteId",
+        { field: "ignitePersonNumber" }
+      );
+      await loadPeople({ force: true });
       setEditingIgniteId(null);
       setIgniteIdDraft("");
       setIgniteIdError("");
+      if (nextIgnitePersonNumber !== previousIgnitePersonNumber) {
+        setRevealedIgniteIds((prev) => {
+          const next = new Set(prev);
+          if (nextIgnitePersonNumber) {
+            next.add(adjunct.id);
+          } else {
+            next.delete(adjunct.id);
+          }
+          return next;
+        });
+      }
       showNotification?.(
         "success",
         "Updated",
@@ -204,6 +214,11 @@ const PAFWorkflow = ({ embedded = false }) => {
       );
     } catch (e) {
       setIgniteIdError(e?.message || "Failed to save");
+      showNotification?.(
+        "error",
+        "Update Failed",
+        "Ignite # was not saved. Please try again."
+      );
     }
   };
 
@@ -301,6 +316,7 @@ const PAFWorkflow = ({ embedded = false }) => {
                 const isIgniteRevealed = revealedIgniteIds.has(adjunct.id);
                 const isEditingIgnite = editingIgniteId === adjunct.id;
                 const fullName = `${adjunct.lastName || ""}, ${adjunct.firstName || ""}`.trim();
+                const ignitePersonNumber = getIgnitePersonNumber(adjunct);
 
                 return (
                   <div
@@ -429,14 +445,14 @@ const PAFWorkflow = ({ embedded = false }) => {
                               </div>
                             ) : (
                               <>
-                                {adjunct.ignitePersonNumber ? (
+                                {ignitePersonNumber ? (
                                   isIgniteRevealed ? (
                                     <>
                                       <span className="font-mono text-gray-800">
-                                        {adjunct.ignitePersonNumber}
+                                        {ignitePersonNumber}
                                       </span>
                                       <CopyButton
-                                        text={adjunct.ignitePersonNumber}
+                                        text={ignitePersonNumber}
                                         fieldKey={`ignite-${adjunct.id}`}
                                         label="Ignite #"
                                       />
@@ -462,7 +478,7 @@ const PAFWorkflow = ({ embedded = false }) => {
                                     Not set
                                   </span>
                                 )}
-                                {canEditPeople && (
+                                {canEditPAF && (
                                   <button
                                     onClick={() => startEditIgniteId(adjunct)}
                                     className="p-1 text-gray-400 hover:text-baylor-green rounded"

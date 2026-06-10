@@ -1,4 +1,3 @@
-import React from 'react';
 import PeopleDataTable from './PeopleDataTable';
 import DirectoryTable from './DirectoryTable';
 import { DirectorySearchBar, DirectoryFiltersPanel, NameSortToggle } from './DirectoryFilters';

@@ -1,27 +1,5 @@
-import React, { useState, useMemo, useEffect } from "react";
-import {
-  Search,
-  Download,
-  Mail,
-  Filter,
-  X,
-  Check,
-  ChevronDown,
-  Users,
-  Plus,
-  Minus,
-  Settings,
-  UserCog,
-  BookOpen,
-  Wifi,
-  Save,
-  Edit2,
-  Trash2,
-  FolderOpen,
-  GraduationCap,
-  HelpCircle,
-  Play,
-} from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Settings, Wifi, Save, Edit2, Trash2, FolderOpen, Play } from "lucide-react";
 import MultiSelectDropdown from "../MultiSelectDropdown";
 import FacultyContactCard from "../FacultyContactCard";
 import ConfirmDialog from "../shared/ConfirmDialog";
@@ -30,7 +8,7 @@ import { usePeople } from "../../contexts/PeopleContext";
 import { useAuth } from "../../contexts/AuthContext";
 import useEmailListPresets from "../../hooks/useEmailListPresets";
 import { useTutorial } from "../../contexts/TutorialContext";
-import { HelpTooltip, HintBanner } from "../help/Tooltip";
+import { HelpTooltip } from "../help/Tooltip";
 import { resolveOfficeDetails } from "../../utils/directoryUtils";
 import { buildCourseSectionKey } from "../../utils/courseUtils";
 import {
@@ -56,7 +34,7 @@ const EmailLists = ({ embedded = false }) => {
     loadPrograms,
   } = useData();
   const { loadPeople } = usePeople();
-  const { isAdmin, user } = useAuth();
+  const { isAdmin } = useAuth();
   const {
     presets,
     loading: presetsLoading,
@@ -64,7 +42,7 @@ const EmailLists = ({ embedded = false }) => {
     updatePreset,
     deletePreset,
   } = useEmailListPresets();
-  const { startTutorial, activeTutorial } = useTutorial();
+  const { startTutorial } = useTutorial();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPeople, setSelectedPeople] = useState([]);
@@ -867,17 +845,10 @@ const EmailLists = ({ embedded = false }) => {
       const validIds = preset.personIds.filter((id) =>
         combinedDirectoryData.some((person) => person.id === id),
       );
-      // 1. Identify valid people for this preset
-      const selectedPeopleData = combinedDirectoryData.filter((p) =>
-        validIds.includes(p.id),
-      );
-      const hasAdjuncts = selectedPeopleData.some((p) => p.isAdjunct);
-
-      // 2. Reset filters to ensure visibility, but handle adjuncts dynamically
+      // Reset filters to ensure visibility.
       setFilters(createDefaultDirectoryFilters());
       setSearchTerm("");
 
-      // 3. Set the selection
       setSelectedPeople(validIds);
 
       if (validIds.length !== preset.personIds.length) {

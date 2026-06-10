@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Shield, GraduationCap, Users, Calendar, BarChart3, MapPin, Database } from 'lucide-react';
+import { useState } from 'react';
+import { GraduationCap, Loader2, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 
 function Login() {
@@ -157,15 +157,8 @@ function Login() {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center px-4">
-      {/* Background Pattern */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-baylor-green/5 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-baylor-gold/5 rounded-full blur-3xl"></div>
-      </div>
-
-      <div className="relative w-full max-w-md">
-        {/* University Header Card */}
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
+      <div className="w-full max-w-md">
         <div className="university-card mb-6 animate-fade-in">
           <div className="university-header rounded-t-xl p-6">
             <div className="text-center">
@@ -180,10 +173,10 @@ function Login() {
           <div className="university-card-content">
             <div className="text-center">
               <h2 className="text-2xl font-bold text-baylor-green mb-2">
-                Faculty System Access
+                HSD Dashboard Access
               </h2>
-              <p className="text-gray-600 mb-6">
-                Secure login required for Davis&apos;s Big Beautiful Dashboard
+              <p className="text-gray-600 mb-6 max-w-sm mx-auto">
+                Sign in to manage schedules, people records, spaces, and department workflows.
               </p>
             </div>
 
@@ -251,19 +244,16 @@ function Login() {
               <button
                 type="submit"
                 disabled={isLoading || !email.trim() || !password.trim()}
-                className={`btn-primary w-full justify-center ${isLoading || !email.trim() || !password.trim() ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`btn-primary w-full gap-2 ${isLoading || !email.trim() || !password.trim() ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {isLoading ? (
-                  <span className="flex items-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     {mode === 'signin' ? 'Signing in...' : 'Creating account...'}
-                  </span>
+                  </>
                 ) : (
                   <>
-                    <Shield className="w-4 h-4 mr-2" />
+                    <Shield className="w-4 h-4" />
                     {mode === 'signin' ? 'Sign In' : 'Create Account'}
                   </>
                 )}
@@ -284,63 +274,10 @@ function Login() {
           </div>
         </div>
 
-        {/* System Information Card */}
-        <div className="university-card animate-fade-in" style={{ animationDelay: '0.2s' }}>
-          <div className="university-card-content">
-            <h3 className="text-lg font-semibold text-baylor-green mb-4 text-center">
-              System Features
-            </h3>
-            <div className="grid grid-cols-1 gap-4">
-              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                <Users className="w-5 h-5 text-baylor-green flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Advanced Faculty Management</p>
-                  <p className="text-xs text-gray-600">Comprehensive faculty directory with contact cards and program assignments</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                <Calendar className="w-5 h-5 text-baylor-green flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Intelligent Scheduling System</p>
-                  <p className="text-xs text-gray-600">Multi-semester course scheduling with room assignments and conflict detection</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                <MapPin className="w-5 h-5 text-baylor-green flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Room & Resource Management</p>
-                  <p className="text-xs text-gray-600">Building directory, room grids, and availability tracking with capacity data</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                <BarChart3 className="w-5 h-5 text-baylor-green flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Department Analytics</p>
-                  <p className="text-xs text-gray-600">Real-time insights on faculty workload, room utilization, and course distribution</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                <Database className="w-5 h-5 text-baylor-green flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Smart Data Import/Export</p>
-                  <p className="text-xs text-gray-600">CLSS integration, CRN migration, data deduplication, and transaction rollback</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                <Shield className="w-5 h-5 text-baylor-green flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Access Control & Audit</p>
-                  <p className="text-xs text-gray-600">Role-based permissions with comprehensive change logging</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Footer */}
         <div className="text-center mt-6 text-sm text-gray-500">
           <p>© 2025 Baylor University - Human Sciences & Design</p>
-          <p className="mt-1">Authorized users of Davis&apos;s Big Beautiful Dashboard only</p>
+          <p className="mt-1">Authorized users only</p>
         </div>
       </div>
     </div>

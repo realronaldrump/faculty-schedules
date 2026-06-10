@@ -80,17 +80,6 @@ export const validateDirectoryEntry = (data, options = {}) => {
 };
 
 /**
- * Get input field CSS class based on error state
- * @param {string} fieldName - Name of the field
- * @param {Object} errors - Errors object
- * @returns {string} CSS class string
- */
-export const getDirectoryInputClass = (fieldName, errors) => {
-    const baseClass = "w-full p-1 border rounded bg-baylor-gold/10";
-    return errors[fieldName] ? `${baseClass} border-red-500` : `${baseClass} border-baylor-gold`;
-};
-
-/**
  * Dedupe directory records based on name/email, keeping the record with more fields populated.
  * @param {Array} records
  * @returns {Array}

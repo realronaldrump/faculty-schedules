@@ -1,4 +1,3 @@
-import React from 'react';
 import { X } from 'lucide-react';
 
 const CourseDetailModal = ({ item, pattern, room, building, onClose, onShowContactCard }) => {

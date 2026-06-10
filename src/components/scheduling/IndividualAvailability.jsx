@@ -1,12 +1,5 @@
-import React, { useState, useMemo, useEffect } from "react";
-import {
-  User,
-  Calendar,
-  Clock,
-  Search,
-  ChevronDown,
-  ChevronsUpDown,
-} from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { User, Calendar, Clock, Search, ChevronsUpDown } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
 import { parseTime, formatMinutesToTime } from "../../utils/timeUtils";
 import { getLocationDisplay } from "../../utils/locationService";
@@ -245,7 +238,7 @@ const IndividualAvailability = ({ embedded = false }) => {
     </div>
   );
 
-  const DaySchedule = ({ dayName, dayCode, dayData }) => (
+  const DaySchedule = ({ dayName, dayData }) => (
     <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
       {/* Day Header */}
       <div className="bg-baylor-green/5 px-6 py-4 border-b border-gray-200">
@@ -411,7 +404,6 @@ const IndividualAvailability = ({ embedded = false }) => {
                 <DaySchedule
                   key={dayCode}
                   dayName={dayName}
-                  dayCode={dayCode}
                   dayData={dayData}
                 />
               );

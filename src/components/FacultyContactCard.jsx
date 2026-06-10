@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X, Mail, Phone, Building, BookOpen, Clock, GraduationCap, Wifi, ChevronDown } from 'lucide-react';
 import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
@@ -185,7 +185,6 @@ const FacultyContactCard = ({
     const { termConfig, termConfigVersion } = useAppConfig();
 
     const [externalSchedules, setExternalSchedules] = useState([]);
-    const [loadingSchedules, setLoadingSchedules] = useState(false);
     const [isEditingBaylorId, setIsEditingBaylorId] = useState(false);
     const [baylorIdValue, setBaylorIdValue] = useState(contactPerson?.baylorId || '');
     const [baylorIdError, setBaylorIdError] = useState('');
@@ -216,7 +215,6 @@ const FacultyContactCard = ({
         const shouldFetch = personType !== 'student' && contactPerson?.id;
         const load = async () => {
             try {
-                setLoadingSchedules(true);
                 const schedulesRef = collection(db, COLLECTIONS.SCHEDULES);
                 const results = [];
                 // Prefer id-based match when available
@@ -238,8 +236,6 @@ const FacultyContactCard = ({
             } catch (err) {
                 console.warn('Failed to load schedules for contact card:', err);
                 if (!cancelled) setExternalSchedules([]);
-            } finally {
-                if (!cancelled) setLoadingSchedules(false);
             }
         };
         if (shouldFetch) load();

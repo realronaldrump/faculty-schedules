@@ -12,8 +12,6 @@ export const normalizeRoleList = (roles) => {
   return [];
 };
 
-export const yesNo = (value) => (value ? "Yes" : "No");
-
 export const joinValues = (values = [], separator = "; ") => {
   if (!Array.isArray(values)) return "";
   const seen = new Set();
@@ -58,7 +56,7 @@ export const getPersonClssInstructorId = (person = {}) =>
     .toString()
     .trim();
 
-export const toDateObject = (value) => {
+const toDateObject = (value) => {
   if (!value) return null;
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value;
@@ -116,16 +114,6 @@ export const formatCurrency = (value) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return "";
   return `$${numeric.toFixed(2)}`;
-};
-
-export const formatNumber = (value, { decimals = 0 } = {}) => {
-  if (value === undefined || value === null || value === "") return "";
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return "";
-  return numeric.toLocaleString(undefined, {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
 };
 
 export const toNormalizedTermScope = ({
@@ -194,14 +182,14 @@ export const formatMeetingPatternSummary = (patterns = []) => {
   return joinValues(labels);
 };
 
-export const slugifyForFileName = (value = "") =>
+const slugifyForFileName = (value = "") =>
   String(value || "")
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "all";
 
-export const getTodayTag = () => formatDate(new Date());
+const getTodayTag = () => formatDate(new Date());
 
 export const buildBulkExportFileName = ({ termScopeInfo } = {}) => {
   const scopePart =

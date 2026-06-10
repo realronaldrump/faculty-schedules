@@ -24,7 +24,7 @@ const findBestAliasMatch = (
   return { matched: Boolean(matchedAlias), isExact: false };
 };
 
-export const buildHeaderMatchForRow = (row = [], profile) => {
+const buildHeaderMatchForRow = (row = [], profile) => {
   const normalizedHeaders = row.map((header) => normalizeHeaderToken(header));
   const usedIndexes = new Set();
   const fieldToIndex = {};
@@ -137,9 +137,4 @@ export const findBestHeaderRow = (rows = [], profile) => {
     headerMap,
     missingRequired,
   };
-};
-
-export default {
-  buildHeaderMatchForRow,
-  findBestHeaderRow,
 };

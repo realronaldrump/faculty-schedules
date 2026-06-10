@@ -1,192 +1,196 @@
-import React from "react";
 import {
-  Search,
-  Wrench,
-  ClipboardCheck,
-  Loader2,
+  AlertCircle,
   CheckCircle2,
+  Loader2,
+  RefreshCw,
+  Sparkles,
+  Wrench,
 } from "lucide-react";
 import {
-  formatTimestamp,
-  summarizeSafeFixPlan,
-  summarizeSafeFixResult,
-  summarizeScanResult,
+  DATA_HEALTH_STATES,
+  buildDataHealthViewModel,
 } from "./reportFormatters";
 
-const WORKFLOW_STEPS = {
-  1: {
-    title: "Check data",
-    description:
-      "Run a quick system check for missing links, likely duplicates, and unresolved imports.",
-    icon: Search,
+const STATE_ICON = {
+  [DATA_HEALTH_STATES.checking]: Loader2,
+  [DATA_HEALTH_STATES.cleanupReady]: Sparkles,
+  [DATA_HEALTH_STATES.cleaning]: Loader2,
+  [DATA_HEALTH_STATES.needsChoice]: AlertCircle,
+  [DATA_HEALTH_STATES.allClear]: CheckCircle2,
+  [DATA_HEALTH_STATES.error]: AlertCircle,
+};
+
+const STATE_TONE = {
+  [DATA_HEALTH_STATES.checking]: {
+    ring: "border-baylor-green/20 bg-baylor-green/5 text-baylor-green",
+    icon: "text-baylor-green",
   },
-  2: {
-    title: "Fix safe issues",
-    description:
-      "Apply automatic repairs that are safe to run without manual record decisions.",
-    icon: Wrench,
+  [DATA_HEALTH_STATES.cleanupReady]: {
+    ring: "border-baylor-gold/40 bg-baylor-gold/10 text-baylor-green",
+    icon: "text-baylor-green",
   },
-  3: {
-    title: "Review decisions",
-    description:
-      "Handle only the remaining items that need a human choice.",
-    icon: ClipboardCheck,
+  [DATA_HEALTH_STATES.cleaning]: {
+    ring: "border-baylor-green/20 bg-baylor-green/5 text-baylor-green",
+    icon: "text-baylor-green",
+  },
+  [DATA_HEALTH_STATES.needsChoice]: {
+    ring: "border-baylor-gold/40 bg-baylor-gold/10 text-baylor-green",
+    icon: "text-baylor-green",
+  },
+  [DATA_HEALTH_STATES.allClear]: {
+    ring: "border-baylor-green/20 bg-baylor-green/5 text-baylor-green",
+    icon: "text-baylor-green",
+  },
+  [DATA_HEALTH_STATES.error]: {
+    ring: "border-red-200 bg-red-50 text-red-800",
+    icon: "text-red-700",
   },
 };
 
-const SummaryCard = ({ summary }) => {
-  if (!summary) return null;
+const PrimaryActionButton = ({
+  viewModel,
+  isScanning,
+  isFixingSafe,
+  scanResult,
+  safeFixableCount,
+  onRunScan,
+  onRunSafeFix,
+}) => {
+  const isBusy =
+    viewModel.state === DATA_HEALTH_STATES.checking ||
+    viewModel.state === DATA_HEALTH_STATES.cleaning;
+
+  if (isBusy) {
+    return (
+      <button
+        type="button"
+        disabled
+        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-500"
+      >
+        <Loader2 className="h-4 w-4 animate-spin" />
+        {viewModel.primaryLabel}
+      </button>
+    );
+  }
+
+  if (viewModel.primaryAction === "cleanup") {
+    return (
+      <button
+        type="button"
+        onClick={onRunSafeFix}
+        disabled={!scanResult || safeFixableCount === 0 || isFixingSafe}
+        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-baylor-green px-4 py-2 text-sm font-semibold text-white hover:bg-baylor-green/90 disabled:opacity-50"
+      >
+        <Wrench className="h-4 w-4" />
+        {viewModel.primaryLabel}
+      </button>
+    );
+  }
 
   return (
-    <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4">
-      <div className="flex items-center gap-2 text-green-800">
-        <CheckCircle2 className="h-4 w-4" />
-        <span className="text-sm font-semibold">{summary.title}</span>
-      </div>
-      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-        {summary.items.map((item) => (
-          <div
-            key={`${summary.title}:${item.label}`}
-            className="rounded-md border border-green-200 bg-white p-2"
-          >
-            <div className="text-xs text-gray-500">{item.label}</div>
-            <div className="text-sm font-semibold text-gray-900">{item.value}</div>
-          </div>
-        ))}
-      </div>
-      {summary.nextStep && (
-        <p className="mt-3 text-sm text-green-900">Next step: {summary.nextStep}</p>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={onRunScan}
+      disabled={isScanning}
+      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-baylor-green px-4 py-2 text-sm font-semibold text-baylor-green hover:bg-baylor-green/5 disabled:opacity-50"
+    >
+      <RefreshCw className={`h-4 w-4 ${isScanning ? "animate-spin" : ""}`} />
+      {viewModel.primaryLabel}
+    </button>
   );
 };
 
 const RoutineWorkflowSection = ({
-  activeStep,
   scanResult,
   safeFixResult,
   isScanning,
   isFixingSafe,
   safeFixableCount,
   totalBlockingIssues,
+  lastRunError,
   onRunScan,
   onRunSafeFix,
 }) => {
-  const scanSummary = summarizeScanResult(scanResult);
-  const safeFixPlan = summarizeSafeFixPlan(scanResult);
-  const safeFixSummary = summarizeSafeFixResult(safeFixResult);
+  const viewModel = buildDataHealthViewModel({
+    scanResult,
+    safeFixResult,
+    isScanning,
+    isFixingSafe,
+    safeFixableCount,
+    totalBlockingIssues,
+    lastRunError,
+  });
+  const Icon = STATE_ICON[viewModel.state] || Sparkles;
+  const tone = STATE_TONE[viewModel.state] || STATE_TONE[DATA_HEALTH_STATES.checking];
+  const showCleanupNote = viewModel.hasCleanupResult && !isFixingSafe;
 
   return (
-    <section className="space-y-6">
-      <section className="rounded-xl border border-gray-200 bg-white p-5 sm:p-6">
-        <h2 className="text-xl font-bold text-gray-900">Data Cleanup & Repairs</h2>
-        <p className="mt-2 max-w-3xl text-sm sm:text-base text-gray-600">
-          Use this page to check data quality, apply safe fixes, and resolve any records
-          that still need manual decisions.
-        </p>
-        <div className="mt-3 text-xs sm:text-sm text-gray-500">
-          Last data check: {formatTimestamp(scanResult?.timestamp)}
-        </div>
-      </section>
-
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        {Object.entries(WORKFLOW_STEPS).map(([stepId, step]) => {
-          const numericStep = Number(stepId);
-          const StepIcon = step.icon;
-          const isActive = activeStep === numericStep;
-          return (
-            <article
-              key={stepId}
-              className={`rounded-xl border p-4 transition-colors ${
-                isActive
-                  ? "border-baylor-green bg-baylor-green/5"
-                  : "border-gray-200 bg-white"
+    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex gap-4">
+          <div
+            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full border ${tone.ring}`}
+          >
+            <Icon
+              className={`h-5 w-5 ${tone.icon} ${
+                viewModel.state === DATA_HEALTH_STATES.checking ||
+                viewModel.state === DATA_HEALTH_STATES.cleaning
+                  ? "animate-spin"
+                  : ""
               }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-sm font-semibold text-gray-700">
-                  {stepId}
-                </div>
-                <StepIcon className="h-4 w-4 text-baylor-green" />
-                <h3 className="text-sm font-semibold text-gray-900">{step.title}</h3>
-              </div>
-              <p className="mt-2 text-sm text-gray-600">{step.description}</p>
-            </article>
-          );
-        })}
-      </section>
-
-      <section className="rounded-xl border border-gray-200 bg-white p-5 sm:p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">1. Check data</h3>
-            <p className="mt-1 text-sm text-gray-600">
-              Find missing links, likely duplicates, unresolved import decisions, and
-              records in older field formats.
-            </p>
+            />
           </div>
-          <button
-            type="button"
-            onClick={onRunScan}
-            disabled={isScanning}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-baylor-green px-4 py-2 text-sm font-semibold text-white hover:bg-baylor-green/90 disabled:opacity-60"
-          >
-            {isScanning ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Checking...
-              </>
-            ) : (
-              <>
-                <Search className="h-4 w-4" />
-                Run Data Check
-              </>
-            )}
-          </button>
-        </div>
-
-        {scanResult && (
-          <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
-            <div className="flex items-center gap-3">
-              <div className="text-sm text-gray-600">Items needing decisions</div>
-              <div className="text-2xl font-bold text-gray-900">{totalBlockingIssues}</div>
+          <div>
+            <div className="text-sm font-semibold text-baylor-green">
+              {viewModel.eyebrow}
             </div>
-            <SummaryCard summary={scanSummary} />
-          </div>
-        )}
-      </section>
-
-      <section className="rounded-xl border border-gray-200 bg-white p-5 sm:p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">2. Fix safe issues</h3>
-            <p className="mt-1 text-sm text-gray-600">
-              Run automatic cleanup for issues that can be repaired safely.
+            <h1 className="mt-1 text-2xl font-bold text-gray-950">
+              {viewModel.title}
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600 sm:text-base">
+              {viewModel.description}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onRunSafeFix}
-            disabled={!scanResult || safeFixableCount === 0 || isFixingSafe}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-baylor-green px-4 py-2 text-sm font-semibold text-baylor-green hover:bg-baylor-green/5 disabled:opacity-50"
-          >
-            {isFixingSafe ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Applying...
-              </>
-            ) : (
-              <>
-                <Wrench className="h-4 w-4" />
-                Run Safe Fixes ({safeFixableCount})
-              </>
-            )}
-          </button>
         </div>
 
-        <SummaryCard summary={safeFixPlan} />
-        <SummaryCard summary={safeFixSummary} />
-      </section>
+        <PrimaryActionButton
+          viewModel={viewModel}
+          isScanning={isScanning}
+          isFixingSafe={isFixingSafe}
+          scanResult={scanResult}
+          safeFixableCount={safeFixableCount}
+          onRunScan={onRunScan}
+          onRunSafeFix={onRunSafeFix}
+        />
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {viewModel.metrics.map((metric) => (
+          <div
+            key={metric.label}
+            className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3"
+          >
+            <div className="text-xs font-medium text-gray-500">
+              {metric.label}
+            </div>
+            <div className="mt-1 text-base font-semibold text-gray-950">
+              {metric.value}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {showCleanupNote && (
+        <div className="mt-4 rounded-lg border border-baylor-green/20 bg-baylor-green/5 px-4 py-3 text-sm text-baylor-green">
+          Routine cleanup finished, and the app checked the data again afterward.
+        </div>
+      )}
+
+      {viewModel.errorMessage && (
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {viewModel.errorMessage}
+        </div>
+      )}
     </section>
   );
 };

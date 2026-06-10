@@ -266,14 +266,9 @@ export const normalizeBuildingConfig = (raw = {}) => {
 };
 
 /**
- * Get current building configuration
- */
-export const getBuildingConfig = () => buildingConfig;
-
-/**
  * Get list of active buildings for UI dropdowns
  */
-export const getActiveBuildings = () => {
+const getActiveBuildings = () => {
   return buildingConfig.buildings.filter((b) => b.isActive !== false);
 };
 
@@ -302,18 +297,6 @@ export const slugify = (value) => {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
-};
-
-export const normalizeBuildings = (buildings) => {
-  if (!Array.isArray(buildings)) return [];
-  const normalized = new Set();
-  buildings.forEach((b) => {
-    const n = normalizeBuildingName(b);
-    if (n && n !== 'Online' && n !== 'Off Campus') {
-      normalized.add(n);
-    }
-  });
-  return Array.from(normalized).sort();
 };
 
 export const buildingMatches = (buildingName, filterBuilding) => {
@@ -356,20 +339,6 @@ export const detectLocationType = (raw) => {
   }
 
   return LOCATION_TYPE.PHYSICAL;
-};
-
-/**
- * Check if a location string represents a virtual/online location
- */
-export const isVirtualLocation = (raw) => {
-  return detectLocationType(raw) === LOCATION_TYPE.VIRTUAL;
-};
-
-/**
- * Check if a location string represents "no room needed" / TBA
- */
-export const isNoRoomLocation = (raw) => {
-  return detectLocationType(raw) === LOCATION_TYPE.NONE;
 };
 
 /**
@@ -452,7 +421,7 @@ export const extractSpaceNumber = (label) => {
  * @param {string} label - Full room label (e.g., "Goebel Building 101")
  * @returns {Object|null} Building record, or null if not found
  */
-export const extractBuilding = (label) => {
+const extractBuilding = (label) => {
   if (!label || typeof label !== 'string') return null;
 
   const trimmed = label.trim();
@@ -910,118 +879,6 @@ export const getBuildingDisplay = (roomString) => {
 // VALIDATION UTILITIES
 // ============================================================================
 
-/**
- * Validate location data for a schedule
- * @param {Object} data - Schedule data with location fields
- * @returns {Object} { valid: boolean, errors: string[], warnings: string[] }
- */
-export const validateScheduleLocation = (data) => {
-  const errors = [];
-  const warnings = [];
-
-  const locationType = data.locationType || 'room';
-
-  if (locationType === 'room' || locationType === 'physical') {
-    // Should have space references
-    const hasSpaces = Array.isArray(data.spaceIds) && data.spaceIds.length > 0;
-    if (!hasSpaces) {
-      warnings.push('Physical location schedule has no space IDs assigned');
-    }
-  }
-
-  if (locationType === 'virtual' || data.isOnline) {
-    // Should not have physical space references
-    if (Array.isArray(data.spaceIds) && data.spaceIds.length > 0) {
-      warnings.push('Virtual/online schedule has space IDs assigned');
-    }
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-    warnings
-  };
-};
-
-/**
- * Validate office location for a person
- * @param {Object} data - Person data with office fields
- * @returns {Object} { valid: boolean, errors: string[], warnings: string[] }
- */
-export const validatePersonOffice = (data) => {
-  const errors = [];
-  const warnings = [];
-
-  const hasOffice = Boolean(data.office);
-  const hasOfficeSpaceId = Boolean(data.officeSpaceId);
-  const hasNoOffice = data.hasNoOffice === true || data.isRemote === true;
-
-  if (hasNoOffice && hasOffice) {
-    warnings.push('Person marked as no office but has office string');
-  }
-
-  if (hasOffice && !hasOfficeSpaceId && !hasNoOffice) {
-    warnings.push('Person has office string but no resolved officeSpaceId');
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-    warnings
-  };
-};
-
 // ============================================================================
 // EXPORT DEFAULT
 // ============================================================================
-
-export default {
-  // Constants
-  LOCATION_TYPE,
-  SPACE_TYPE,
-
-  // Configuration
-  DEFAULT_BUILDING_CONFIG,
-  normalizeBuildingConfig,
-  applyBuildingConfig,
-  getBuildingConfig,
-  getActiveBuildings,
-  getCanonicalBuildingList,
-
-  // Normalization
-  slugify,
-  normalizeSpaceNumber,
-  detectLocationType,
-  isVirtualLocation,
-  isNoRoomLocation,
-  isSkippableLocation,
-
-  // Parsing
-  splitMultiRoom,
-  extractSpaceNumber,
-  extractBuilding,
-  parseRoomLabel,
-  parseMultiRoom,
-  normalizeSingleSpaceKey,
-
-  // Space Keys
-  buildSpaceKey,
-  parseSpaceKey,
-  validateSpaceKey,
-
-  // Building Resolution
-  resolveBuilding,
-  normalizeBuildingName,
-  resolveBuildingDisplayName,
-  normalizeBuildings,
-  buildingMatches,
-
-  // Display
-  getLocationDisplay,
-  getBuildingDisplay,
-  formatSpaceDisplayName,
-
-  // Validation
-  validateScheduleLocation,
-  validatePersonOffice
-};

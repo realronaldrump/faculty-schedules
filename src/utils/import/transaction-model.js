@@ -1,4 +1,66 @@
 // Import transaction model for tracking changes
+const TRACKED_IMPORT_COLLECTIONS = ['schedules', 'people', 'rooms', 'courses', 'terms'];
+
+const CHANGE_BUCKETS = ['added', 'modified', 'deleted'];
+
+const createChangeBuckets = () => ({
+  added: [],
+  modified: [],
+  deleted: []
+});
+
+export const buildGroupedChanges = (changes = []) => {
+  const groups = TRACKED_IMPORT_COLLECTIONS.reduce((acc, collection) => {
+    acc[collection] = createChangeBuckets();
+    return acc;
+  }, {});
+  changes.forEach((change) => {
+    if (!change?.collection) return;
+    const actionKey = change.action === 'add' ? 'added' :
+      change.action === 'modify' ? 'modified' : 'deleted';
+    if (!CHANGE_BUCKETS.includes(actionKey)) return;
+    if (!groups[change.collection]) {
+      groups[change.collection] = createChangeBuckets();
+    }
+    groups[change.collection][actionKey].push(change);
+  });
+  return groups;
+};
+
+const createTrackedChanges = () => (
+  TRACKED_IMPORT_COLLECTIONS.reduce((changes, collection) => {
+    changes[collection] = createChangeBuckets();
+    return changes;
+  }, {})
+);
+
+const ensureChangeBuckets = (changes, collection) => {
+  if (!changes || typeof changes !== 'object') {
+    return createTrackedChanges();
+  }
+  TRACKED_IMPORT_COLLECTIONS.forEach((trackedCollection) => {
+    if (!changes[trackedCollection] || typeof changes[trackedCollection] !== 'object') {
+      changes[trackedCollection] = createChangeBuckets();
+    }
+    CHANGE_BUCKETS.forEach((bucket) => {
+      if (!Array.isArray(changes[trackedCollection][bucket])) {
+        changes[trackedCollection][bucket] = [];
+      }
+    });
+  });
+  if (collection && (!changes[collection] || typeof changes[collection] !== 'object')) {
+    changes[collection] = createChangeBuckets();
+  }
+  if (collection) {
+    CHANGE_BUCKETS.forEach((bucket) => {
+      if (!Array.isArray(changes[collection][bucket])) {
+        changes[collection][bucket] = [];
+      }
+    });
+  }
+  return changes;
+};
+
 export class ImportTransaction {
   constructor(type, description, semester) {
     this.id = `import_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -7,23 +69,7 @@ export class ImportTransaction {
     this.semester = semester;
     this.timestamp = new Date().toISOString();
     this.status = 'preview'; // 'preview' | 'committed' | 'rolled_back' | 'partial' | 'failed' | 'failed_integrity'
-    this.changes = {
-      schedules: {
-        added: [],
-        modified: [],
-        deleted: []
-      },
-      people: {
-        added: [],
-        modified: [],
-        deleted: []
-      },
-      rooms: {
-        added: [],
-        modified: [],
-        deleted: []
-      }
-    };
+    this.changes = createTrackedChanges();
     this.matchingIssues = [];
     this.validation = { errors: [], warnings: [] };
     // Structured import preprocessing report (within-batch dedupe, normalization, etc)
@@ -31,6 +77,8 @@ export class ImportTransaction {
     // Structured transaction validation report (schema + cross-ref checks)
     this.validationReport = null;
     this.previewSummary = null;
+    this.entityResolutionReport = null;
+    this.entityCleanupReport = null;
     this.originalData = {}; // Store original data for rollback
     this.importMetadata = {};
     this.rowLineage = [];
@@ -48,6 +96,7 @@ export class ImportTransaction {
 
   // Add a change to the transaction
   addChange(collection, action, newData, originalData = null, options = {}) {
+    this.changes = ensureChangeBuckets(this.changes, collection);
     const change = {
       id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       collection,
@@ -93,20 +142,21 @@ export class ImportTransaction {
   }
 
   updateStats() {
+    this.changes = ensureChangeBuckets(this.changes);
+    const totalChanges = TRACKED_IMPORT_COLLECTIONS.reduce((total, collection) => {
+      const buckets = this.changes[collection] || createChangeBuckets();
+      return total + buckets.added.length + buckets.modified.length + buckets.deleted.length;
+    }, 0);
+
     this.stats = {
-      totalChanges:
-        this.changes.schedules.added.length +
-        this.changes.schedules.modified.length +
-        this.changes.schedules.deleted.length +
-        this.changes.people.added.length +
-        this.changes.people.modified.length +
-        this.changes.people.deleted.length +
-        this.changes.rooms.added.length +
-        this.changes.rooms.modified.length +
-        this.changes.rooms.deleted.length,
+      totalChanges,
       schedulesAdded: this.changes.schedules.added.length,
       peopleAdded: this.changes.people.added.length,
       roomsAdded: this.changes.rooms.added.length,
+      coursesAdded: this.changes.courses.added.length,
+      coursesModified: this.changes.courses.modified.length,
+      termsAdded: this.changes.terms.added.length,
+      termsModified: this.changes.terms.modified.length,
       peopleModified: this.changes.people.modified.length
     };
     this.lastModified = new Date().toISOString();
@@ -129,6 +179,7 @@ export class ImportTransaction {
 
   // Get all changes in a flat list for UI display
   getAllChanges() {
+    this.changes = ensureChangeBuckets(this.changes);
     const allChanges = [];
 
     const actionMap = {
@@ -137,7 +188,7 @@ export class ImportTransaction {
       'deleted': 'delete'
     };
 
-    ['schedules', 'people', 'rooms'].forEach(collection => {
+    TRACKED_IMPORT_COLLECTIONS.forEach(collection => {
       ['added', 'modified', 'deleted'].forEach(actionKey => {
         this.changes[collection][actionKey].forEach(change => {
           // Keep references to the underlying change objects so commit/rollback can
@@ -168,6 +219,8 @@ export class ImportTransaction {
       preprocessReport: this.preprocessReport,
       validationReport: this.validationReport,
       previewSummary: this.previewSummary,
+      entityResolutionReport: this.entityResolutionReport,
+      entityCleanupReport: this.entityCleanupReport,
       originalData: this.originalData,
       importMetadata: this.importMetadata,
       rowLineage: this.rowLineage,
@@ -181,6 +234,7 @@ export class ImportTransaction {
   // Create from database format
   static fromFirestore(data) {
     const transaction = Object.assign(new ImportTransaction(), data);
+    transaction.changes = ensureChangeBuckets(transaction.changes);
     if (!Array.isArray(transaction.matchingIssues)) {
       transaction.matchingIssues = [];
     }
@@ -201,6 +255,12 @@ export class ImportTransaction {
     }
     if (!transaction.importMetadata || typeof transaction.importMetadata !== 'object') {
       transaction.importMetadata = {};
+    }
+    if (transaction.entityResolutionReport === undefined) {
+      transaction.entityResolutionReport = null;
+    }
+    if (transaction.entityCleanupReport === undefined) {
+      transaction.entityCleanupReport = null;
     }
     if (!Array.isArray(transaction.rowLineage)) {
       transaction.rowLineage = [];

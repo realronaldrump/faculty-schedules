@@ -11,7 +11,7 @@
  * - Office hours: 8 AM - 5 PM Central Time
  */
 
-import { parseTime, formatMinutesToTime } from "./timeUtils";
+import { parseTime } from "./timeUtils";
 import { getLocationDisplay } from "./locationService";
 
 // Day code mapping from JavaScript Date.getDay()
@@ -34,7 +34,7 @@ const OFFICE_HOURS_END = 17 * 60; // 5:00 PM = 1020 minutes
  * @param {Date} date
  * @returns {string|null} Day code (M, T, W, R, F) or null for weekend
  */
-export const getDayCodeFromDate = (date) => {
+const getDayCodeFromDate = (date) => {
   if (!date || !(date instanceof Date)) return null;
   return DAY_CODE_MAP[date.getDay()];
 };
@@ -44,7 +44,7 @@ export const getDayCodeFromDate = (date) => {
  * @param {number} minutes - Minutes from midnight
  * @returns {boolean}
  */
-export const isWithinOfficeHours = (minutes) => {
+const isWithinOfficeHours = (minutes) => {
   return minutes >= OFFICE_HOURS_START && minutes < OFFICE_HOURS_END;
 };
 
@@ -55,7 +55,7 @@ export const isWithinOfficeHours = (minutes) => {
  * @param {number} currentMinutes - Current time in minutes from midnight
  * @returns {Object|null} Matching pattern with times, or null
  */
-export const getActiveSchedulePattern = (schedule, dayCode, currentMinutes) => {
+const getActiveSchedulePattern = (schedule, dayCode, currentMinutes) => {
   if (!schedule || !dayCode) return null;
 
   // Check meetingPatterns array
@@ -92,7 +92,7 @@ export const getActiveSchedulePattern = (schedule, dayCode, currentMinutes) => {
  * @param {number} [params.horizonMinutes=1440] - How far ahead to look (default: 24 hours)
  * @returns {Object|null} Next assignment info or null
  */
-export const getNextAssignment = ({
+const getNextAssignment = ({
   facultyName,
   scheduleData,
   dayCode,
@@ -385,7 +385,6 @@ export const getAllFacultyLocations = ({
 export const getRoomOccupancy = ({
   scheduleData,
   asOfTime = new Date(),
-  options = {},
 }) => {
   const dayCode = getDayCodeFromDate(asOfTime);
   const currentMinutes = asOfTime.getHours() * 60 + asOfTime.getMinutes();

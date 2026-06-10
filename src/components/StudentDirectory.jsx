@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   GraduationCap,
@@ -16,7 +16,6 @@ import MultiSelectDropdown from "./MultiSelectDropdown";
 import FacultyContactCard from "./FacultyContactCard";
 import ConfirmDialog from "./shared/ConfirmDialog";
 import PersonDirectory from "./people/PersonDirectory";
-import SortableHeader from "./shared/SortableHeader";
 import StudentAddWizard from "./student/StudentAddWizard";
 import StudentEditModal from "./student/StudentEditModal";
 import StatusBadge from "./student/StatusBadge";

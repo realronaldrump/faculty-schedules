@@ -1,16 +1,5 @@
-import React, { useEffect, useState } from "react";
-import {
-  ChevronDown,
-  ChevronRight,
-  Menu,
-  X,
-  Home,
-  Calendar,
-  Users,
-  User,
-  Database,
-  Star,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronRight, Menu, X, User, Star } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext.jsx";
 
 const Sidebar = ({

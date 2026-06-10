@@ -9,8 +9,8 @@
  * This is the primary destination for all facility-related administration.
  */
 
-import React, { useMemo, useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Building2, DoorOpen, Thermometer } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import SpaceManagement from "../administration/SpaceManagement";
@@ -44,10 +44,7 @@ const TAB_DEFINITIONS = [
   },
 ];
 
-const CANONICAL_PATH = "/facilities";
-
 const FacilitiesHub = ({ initialTab }) => {
-  const location = useLocation();
   const navigate = useNavigate();
   const { canAccess } = useAuth();
 

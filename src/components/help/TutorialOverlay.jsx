@@ -9,20 +9,8 @@
  * - Responsive positioning
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  X,
-  ChevronLeft,
-  ChevronRight,
-  Play,
-  Pause,
-  SkipForward,
-  CheckCircle,
-  CheckCircle2,
-  Circle,
-  Target,
-  Hand
-} from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { X, ChevronLeft, ChevronRight, CheckCircle, CheckCircle2, Target, Hand } from 'lucide-react';
 import { useTutorial } from '../../contexts/TutorialContext';
 
 // Spotlight effect that highlights the target element

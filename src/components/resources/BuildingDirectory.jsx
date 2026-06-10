@@ -1,21 +1,5 @@
-import React, { useState, useMemo, useEffect } from "react";
-import {
-  Building2,
-  MapPin,
-  Search,
-  Filter,
-  Users,
-  Mail,
-  Phone,
-  PhoneOff,
-  Building,
-  BuildingIcon,
-  ChevronDown,
-  ChevronRight,
-  UserCog,
-  Eye,
-  Wifi,
-} from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Building2, MapPin, Search, Filter, Mail, Phone, PhoneOff, ChevronDown, ChevronRight, UserCog, Eye, Wifi } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";

@@ -7,7 +7,7 @@
  * - Managing available semesters
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { fetchSchedulesByTerm } from '../utils/dataImportUtils';
@@ -143,7 +143,10 @@ export const ScheduleProvider = ({ children }) => {
     }, [availableSemesters, activeTermByDate, adminDefaultTerm, selectedSemester]);
     // Load schedules when selectedSemester changes
     const loadSchedules = useCallback(async (termLabel) => {
-        if (!termLabel) return;
+        if (!termLabel) {
+            setRawScheduleData([]);
+            return;
+        }
         setLoading(true);
         setError(null);
         try {
@@ -157,6 +160,7 @@ export const ScheduleProvider = ({ children }) => {
             // console.log(`✅ Loaded ${schedules.length} schedules.`);
         } catch (err) {
             console.error('❌ Error loading schedules:', err);
+            setRawScheduleData([]);
             setError(err.message);
         } finally {
             setLoading(false);
@@ -214,5 +218,3 @@ export const useSchedules = () => {
     if (!context) throw new Error('useSchedules must be used within a ScheduleProvider');
     return context;
 };
-
-export default ScheduleContext;

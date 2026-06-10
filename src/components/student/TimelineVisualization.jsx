@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import { Calendar, Briefcase } from "lucide-react";
 import { parseStudentWorkerDate } from "../../utils/studentWorkers";
 

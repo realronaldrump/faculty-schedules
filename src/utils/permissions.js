@@ -49,6 +49,7 @@ export const PERMISSION_PAGE_MAP = {
   canDeduplicateData: "admin/data-hygiene",
   canMigrateData: "admin/data-hygiene",
   canBackupData: "admin/data-hygiene",
+  canEditPAF: "workflows/paf",
   canViewAnalytics: "analytics/department-insights",
   canEditAnalytics: "analytics/department-insights",
   canExportAnalytics: "analytics/department-insights",
@@ -72,21 +73,18 @@ export const PERMISSION_PAGE_MAP = {
 export function usePermissions() {
   const { canAccess } = useAuth();
 
-  const mappedPermissions = useMemo(() => {
-    const permissions = {};
+  return useMemo(() => {
+    const permissions = {
+      canView: (pageId) => canAccess(pageId),
+      canEdit: (pageId) => canAccess(pageId),
+      canExport: (pageId) => canAccess(pageId),
+      canImport: (pageId) => canAccess(pageId),
+      canAction: (pageId) => canAccess(pageId),
+      canDoAction: (pageId) => canAccess(pageId),
+    };
     Object.entries(PERMISSION_PAGE_MAP).forEach(([name, pageId]) => {
       permissions[name] = () => canAccess(pageId);
     });
     return permissions;
   }, [canAccess]);
-
-  return {
-    canView: (pageId) => canAccess(pageId),
-    canEdit: (pageId) => canAccess(pageId),
-    canExport: (pageId) => canAccess(pageId),
-    canImport: (pageId) => canAccess(pageId),
-    canAction: (pageId) => canAccess(pageId),
-    canDoAction: (pageId) => canAccess(pageId),
-    ...mappedPermissions,
-  };
 }

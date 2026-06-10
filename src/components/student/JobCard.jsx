@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Building,
   Clock,
@@ -51,7 +51,6 @@ const JobCard = ({
   onSave,
   onCancel,
   onRemove,
-  onChange,
   availableBuildings = [],
   supervisorOptions = [],
   existingJobTitles = [],

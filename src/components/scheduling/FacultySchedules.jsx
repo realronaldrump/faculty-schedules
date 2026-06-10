@@ -1,22 +1,5 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
-import {
-  User,
-  Calendar,
-  Clock,
-  Search,
-  ChevronDown,
-  ChevronsUpDown,
-  Grid,
-  List,
-  Plus,
-  X,
-  Eye,
-  Info,
-  Building,
-  BookOpen,
-  Users,
-  GraduationCap,
-} from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { Calendar, Clock, ChevronsUpDown, X, Eye, Info, Building, Users, GraduationCap } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
 import { parseTime, formatMinutesToTime } from "../../utils/timeUtils";
 import { getLocationDisplay } from "../../utils/locationService";
@@ -32,7 +15,6 @@ const FacultySchedules = ({ embedded = false }) => {
   } = useData();
   const { loadPeople } = usePeople();
   const [selectedFaculty, setSelectedFaculty] = useState([]);
-  const [viewMode, setViewMode] = useState("timeline");
   const [selectedDays, setSelectedDays] = useState(["M", "T", "W", "R", "F"]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);

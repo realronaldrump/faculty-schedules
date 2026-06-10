@@ -51,7 +51,7 @@ const normalizeCrn = (value) => {
 const normalizeTermKey = (value) =>
   normalizeString(value).replace(/[^A-Za-z0-9]+/g, "").toLowerCase();
 
-export const buildDeterministicLinkGroupId = ({
+const buildDeterministicLinkGroupId = ({
   termCode = "",
   term = "",
   crns = [],
@@ -407,12 +407,4 @@ export const unlinkSchedules = async ({
   }
 
   return { updated: totalUpdated };
-};
-
-export default {
-  buildDeterministicLinkGroupId,
-  computeCrossListAutoLinkGroups,
-  buildLinkedSchedulePairSet,
-  linkSchedules,
-  unlinkSchedules,
 };

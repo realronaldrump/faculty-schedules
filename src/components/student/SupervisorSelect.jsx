@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useId } from "react";
+import { useEffect, useMemo, useRef, useState, useId } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
 
 const normalizeLabel = (value) => String(value || "").trim();

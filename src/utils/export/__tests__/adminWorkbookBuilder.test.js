@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import JSZip from "jszip";
 import {
   buildAutoFilterRange,
   buildWorkbookDefinition,
+  createWorkbookBuffer,
   getWorkbookSheetOrder,
   toColumnLetter,
 } from "../adminWorkbookBuilder";
@@ -56,5 +58,48 @@ describe("adminWorkbookBuilder", () => {
     ]);
     expect(workbookDefinition[1].id).toBe(SHEET_IDS.programs);
     expect(workbookDefinition[1].rows).toHaveLength(1);
+  });
+
+  it("creates a valid workbook package without loading ExcelJS", async () => {
+    const buffer = await createWorkbookBuffer({
+      workbookSheets: [
+        {
+          name: "Test Sheet",
+          columns: [
+            { key: "label", header: "Label", width: 20 },
+            { key: "count", header: "Count", width: 12 },
+          ],
+          rows: [{ label: "A&B <test>", count: 42 }],
+        },
+      ],
+    });
+
+    const zip = await JSZip.loadAsync(buffer);
+    expect(zip.file("xl/workbook.xml")).toBeTruthy();
+    expect(zip.file("xl/styles.xml")).toBeTruthy();
+    expect(zip.file("xl/worksheets/sheet1.xml")).toBeTruthy();
+
+    const sheetXml = await zip.file("xl/worksheets/sheet1.xml").async("string");
+    expect(sheetXml).toContain("A&amp;B &lt;test&gt;");
+    expect(sheetXml).toContain("<v>42</v>");
+  });
+
+  it("preserves whitespace and strips invalid XML characters in string cells", async () => {
+    const buffer = await createWorkbookBuffer({
+      workbookSheets: [
+        {
+          name: "Text",
+          columns: [{ key: "label", header: "Label", width: 20 }],
+          rows: [{ label: "  keep spaces \u0000\uD800 " }],
+        },
+      ],
+    });
+
+    const zip = await JSZip.loadAsync(buffer);
+    const sheetXml = await zip.file("xl/worksheets/sheet1.xml").async("string");
+
+    expect(sheetXml).toContain('<t xml:space="preserve">  keep spaces  </t>');
+    expect(sheetXml).not.toContain("\u0000");
+    expect(sheetXml).not.toContain("\uD800");
   });
 });

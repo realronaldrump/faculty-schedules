@@ -212,11 +212,3 @@ export const resolveOfficeLocations = (person, spacesByKey) => {
 
   return results;
 };
-
-export default {
-  normalizeSpaceRecord,
-  resolveSpaceDisplayName,
-  resolveScheduleSpaces,
-  resolveOfficeLocation,
-  resolveOfficeLocations
-};

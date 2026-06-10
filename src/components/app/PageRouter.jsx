@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from "react";
+import { Suspense, lazy } from "react";
 import ProtectedContent from "../ProtectedContent.jsx";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 
@@ -108,7 +108,7 @@ const PageRouter = ({ currentPage, loading }) => {
     case "people/baylor-ids":
       return renderProtectedPage(currentPage, PeopleHub);
     case "workflows/paf":
-      return renderProtectedPage("people/directory", PAFWorkflow);
+      return renderProtectedPage("workflows/paf", PAFWorkflow);
     case "courses/browse":
     case "courses/manage":
       return renderProtectedPage(currentPage, CoursesHub);

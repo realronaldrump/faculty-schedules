@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Edit, Save, X, Trash2, Phone, PhoneOff, Building, BuildingIcon, ExternalLink } from 'lucide-react';
 import { useDirectoryState, useDirectoryHandlers } from '../../hooks';
@@ -584,7 +584,6 @@ const ConfiguredPersonDirectory = (props) => {
     handleCancel,
     handleSave,
     handleChange,
-    handleCreate,
     handleCancelCreate,
     handleCreateChange,
     handleCreateSave,

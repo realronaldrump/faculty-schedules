@@ -1,6 +1,6 @@
 const HEADER_NORMALIZE_REGEX = /\s+/g;
 
-export const normalizeCsvHeader = (value) => {
+const normalizeCsvHeader = (value) => {
   if (!value) return '';
   return value
     .replace(/\ufeff/g, '')

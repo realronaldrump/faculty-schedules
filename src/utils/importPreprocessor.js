@@ -14,17 +14,53 @@
 
 import { deriveScheduleIdentity } from './importIdentityUtils';
 import {
-  standardizeImportedPerson,
-  standardizeImportedSchedule,
-  standardizeImportedRoom
+  applyPersonIdentityMetadata,
+  buildPersonImportUpdates,
+  deriveImportedPersonIdentity,
+  standardizeImportedPerson
 } from './importHygieneUtils';
 import {
   extractScheduleRowBaseData,
 } from './importScheduleRowUtils';
-import { standardizeCourseCode, isCancelledStatus } from './hygieneCore';
 import { hashRecord } from './hashUtils';
-import { normalizeTermLabel, termCodeFromLabel } from './termUtils';
 import { parseCrossListCrns } from './dataImportUtils';
+
+const normalizeImportedDigits = (value) => (value || '').toString().replace(/\D/g, '');
+
+const DIRECTORY_FIRST_NAME_HEADERS = ['First Name', 'FirstName', 'firstName'];
+const DIRECTORY_LAST_NAME_HEADERS = ['Last Name', 'LastName', 'lastName'];
+const DIRECTORY_EMAIL_HEADERS = ['E-mail Address', 'E-mail', 'Email', 'email'];
+const DIRECTORY_PHONE_HEADERS = ['Phone', 'Business Phone', 'Home Phone', 'phone'];
+const DIRECTORY_BAYLOR_ID_HEADERS = ['Baylor ID', 'BaylorID', 'baylorId'];
+const DIRECTORY_CLSS_ID_HEADERS = [
+  'CLSS Instructor ID',
+  'clssInstructorId',
+  'Instructor ID',
+  'InstructorID'
+];
+const DIRECTORY_IGNITE_PERSON_NUMBER_HEADERS = [
+  'Person Number',
+  'PersonNumber',
+  'Person #',
+  'personNumber',
+  'person_number',
+  'ignitePersonNumber',
+  'Ignite Person Number',
+  'ignitePersonId',
+  'Ignite Person ID',
+  'igniteId',
+  'Ignite ID'
+];
+
+const readDirectoryField = (row = {}, headers = []) => {
+  for (const header of headers) {
+    const value = row?.[header];
+    if (value === undefined || value === null) continue;
+    const normalized = String(value).trim();
+    if (normalized) return normalized;
+  }
+  return '';
+};
 
 /**
  * Preprocess all import rows, normalizing and detecting within-batch duplicates
@@ -56,7 +92,7 @@ export const preprocessImportData = (rows, importType, options = {}) => {
   if (importType === 'schedule') {
     return preprocessScheduleRows(rows, fallbackTerm);
   } else if (importType === 'directory') {
-    return preprocessDirectoryRows(rows, options);
+    return preprocessDirectoryRows(rows);
   }
 
   // Unknown type - return as-is with minimal processing
@@ -423,35 +459,56 @@ const mergeArraysUnique = (arr1, arr2, keyFn) => {
 /**
  * Preprocess directory import rows (people data)
  */
-const preprocessDirectoryRows = (rows, options = {}) => {
+const preprocessDirectoryRows = (rows) => {
   const normalizedRows = [];
   const warnings = [];
   const errors = [];
   let skippedRows = 0;
 
-  // Track for duplicate detection by email/name
-  const emailMap = new Map();
+  const identityGroups = new Map();
   const nameMap = new Map();
+  const unkeyedRows = [];
 
   rows.forEach((row, index) => {
     const rowIndex = row.__rowIndex || index + 1;
 
     try {
-      const email = (row['E-mail Address'] || row['E-mail'] || row.Email || '').toString().trim().toLowerCase();
-      const firstName = (row['First Name'] || '').toString().trim();
-      const lastName = (row['Last Name'] || '').toString().trim();
+      const email = readDirectoryField(row, DIRECTORY_EMAIL_HEADERS).toLowerCase();
+      const firstName = readDirectoryField(row, DIRECTORY_FIRST_NAME_HEADERS);
+      const lastName = readDirectoryField(row, DIRECTORY_LAST_NAME_HEADERS);
+      const phone = readDirectoryField(row, DIRECTORY_PHONE_HEADERS);
+      const baylorId = readDirectoryField(row, DIRECTORY_BAYLOR_ID_HEADERS);
+      const ignitePersonNumber = normalizeImportedDigits(
+        readDirectoryField(row, DIRECTORY_IGNITE_PERSON_NUMBER_HEADERS)
+      );
+      const clssInstructorId = readDirectoryField(row, DIRECTORY_CLSS_ID_HEADERS);
 
       // Skip rows without meaningful identity
-      if (!email && !firstName && !lastName) {
+      if (!email && !firstName && !lastName && !baylorId && !clssInstructorId && !ignitePersonNumber) {
         skippedRows++;
         warnings.push({
           rowIndex,
-          message: `Skipped row ${rowIndex}: no email or name`
+          message: `Skipped row ${rowIndex}: no email, name, or external ID`
         });
         return;
       }
 
       const rowHash = row.__rowHash || hashRecord(row);
+      const baseData = applyPersonIdentityMetadata(standardizeImportedPerson({
+        firstName,
+        lastName,
+        email,
+        phone,
+        baylorId,
+        ignitePersonNumber,
+        externalIds: {
+          ...(clssInstructorId ? { clssInstructorId } : {}),
+          ...(ignitePersonNumber ? { ignitePersonNumber, personNumber: ignitePersonNumber } : {})
+        },
+        roles: ['faculty']
+      }, { updateTimestamp: false }));
+      const identity = deriveImportedPersonIdentity(baseData);
+      const primaryKey = identity.strongKeys[0] || '';
       const nameKey = `${firstName.toLowerCase()}|${lastName.toLowerCase()}`;
 
       const normalizedRow = {
@@ -459,17 +516,22 @@ const preprocessDirectoryRows = (rows, options = {}) => {
         __rowHash: rowHash,
         __email: email,
         __nameKey: nameKey,
+        __identityKey: primaryKey,
+        __identityKeys: identity.keys,
+        __identitySource: identity.source,
+        baseData,
         raw: row
       };
 
       normalizedRows.push(normalizedRow);
 
-      // Track for duplicate detection
-      if (email) {
-        if (!emailMap.has(email)) {
-          emailMap.set(email, []);
+      if (primaryKey) {
+        if (!identityGroups.has(primaryKey)) {
+          identityGroups.set(primaryKey, []);
         }
-        emailMap.get(email).push(normalizedRow);
+        identityGroups.get(primaryKey).push(normalizedRow);
+      } else {
+        unkeyedRows.push(normalizedRow);
       }
 
       if (nameKey) {
@@ -486,26 +548,29 @@ const preprocessDirectoryRows = (rows, options = {}) => {
     }
   });
 
-  // Detect duplicates (but don't auto-merge for people - too risky)
-  let duplicateCount = 0;
+  const { dedupedRows, mergeWarnings, duplicateCount } = mergeDirectoryIdentityGroups(identityGroups);
+  warnings.push(...mergeWarnings);
 
-  for (const [email, group] of emailMap) {
-    if (group.length > 1) {
-      duplicateCount += group.length - 1;
-      const rowIndexes = group.map(r => r.__rowIndex).join(', ');
-      warnings.push({
-        type: 'within_batch_duplicate',
-        field: 'email',
-        value: email,
-        rowIndexes: group.map(r => r.__rowIndex),
-        message: `Rows ${rowIndexes} have same email (${email}) - possible duplicates`
-      });
-    }
+  for (const [nameKey, group] of nameMap) {
+    if (!nameKey || group.length <= 1) continue;
+    const unkeyedGroup = group.filter((entry) => !entry.__identityKey);
+    if (unkeyedGroup.length <= 1) continue;
+    const rowIndexes = unkeyedGroup.map(r => r.__rowIndex).join(', ');
+    warnings.push({
+      type: 'possible_within_batch_duplicate',
+      field: 'name',
+      value: nameKey,
+      rowIndexes: unkeyedGroup.map(r => r.__rowIndex),
+      message: `Rows ${rowIndexes} have the same name but no strong identifier; keeping them separate for review`
+    });
   }
+
+  const combinedDeduped = [...dedupedRows, ...unkeyedRows].filter(Boolean);
+  combinedDeduped.sort((a, b) => (a?.__rowIndex || 0) - (b?.__rowIndex || 0));
 
   return {
     normalizedRows,
-    dedupedRows: normalizedRows, // Don't auto-merge people
+    dedupedRows: combinedDeduped,
     validationReport: {
       totalRows: rows.length,
       validRows: normalizedRows.length,
@@ -517,27 +582,95 @@ const preprocessDirectoryRows = (rows, options = {}) => {
   };
 };
 
-/**
- * Check if a preprocessed schedule row should be skipped
- * (e.g., cancelled status)
- */
-export const shouldSkipScheduleRow = (preprocessedRow) => {
-  const baseData = preprocessedRow?.baseData;
-  if (!baseData) return false;
+const mergeDirectoryIdentityGroups = (identityGroups) => {
+  const dedupedRows = [];
+  const mergeWarnings = [];
+  let duplicateCount = 0;
 
-  return isCancelledStatus(baseData.status);
+  for (const [key, group] of identityGroups) {
+    if (group.length === 1) {
+      dedupedRows.push(group[0]);
+      continue;
+    }
+
+    duplicateCount += group.length - 1;
+    const rowIndexes = group.map(r => r.__rowIndex).join(', ');
+    mergeWarnings.push({
+      type: 'within_batch_duplicate',
+      identityKey: key,
+      rowIndexes: group.map(r => r.__rowIndex),
+      message: `Rows ${rowIndexes} have the same person identity (${key}) - merging into one canonical person row`
+    });
+    dedupedRows.push(mergeDirectoryRowGroup(group));
+  }
+
+  return { dedupedRows, mergeWarnings, duplicateCount };
 };
 
-/**
- * Get identity key from a preprocessed row
- */
-export const getRowIdentityKey = (preprocessedRow) => {
-  return preprocessedRow?.__identityKey || '';
+const mergeDirectoryRowGroup = (group) => {
+  if (group.length === 0) return null;
+  if (group.length === 1) return group[0];
+
+  const scored = group.map((row) => ({
+    row,
+    score: scoreDirectoryCompleteness(row.baseData)
+  }));
+  scored.sort((a, b) => b.score - a.score || (a.row.__rowIndex || 0) - (b.row.__rowIndex || 0));
+
+  let mergedPerson = { ...(scored[0].row.baseData || {}) };
+  const mergedRaw = { ...(scored[0].row.raw || {}) };
+  const mergedIdentityKeys = new Set(scored[0].row.__identityKeys || []);
+
+  for (let i = 1; i < scored.length; i += 1) {
+    const entry = scored[i].row;
+    const { merged } = buildPersonImportUpdates(mergedPerson, entry.baseData, {
+      updateTimestamp: false
+    });
+    mergedPerson = applyPersonIdentityMetadata(merged);
+    (entry.__identityKeys || []).forEach((identityKey) => {
+      if (identityKey) mergedIdentityKeys.add(identityKey);
+    });
+
+    Object.entries(entry.raw || {}).forEach(([key, value]) => {
+      if (value === undefined || value === null || value === '') return;
+      if (
+        mergedRaw[key] === undefined ||
+        mergedRaw[key] === null ||
+        String(mergedRaw[key]).trim() === ''
+      ) {
+        mergedRaw[key] = value;
+      }
+    });
+  }
+
+  const merged = {
+    ...scored[0].row,
+    __merged: true,
+    __mergedFromRows: group.map(r => r.__rowIndex),
+    __identityKeys: Array.from(mergedIdentityKeys).filter(Boolean),
+    baseData: mergedPerson,
+    raw: mergedRaw
+  };
+  merged.__identityKey = deriveImportedPersonIdentity(mergedPerson).strongKeys[0] || merged.__identityKey;
+  return merged;
 };
 
-/**
- * Get all identity keys from a preprocessed row
- */
-export const getRowIdentityKeys = (preprocessedRow) => {
-  return preprocessedRow?.__identityKeys || [];
+const scoreDirectoryCompleteness = (person = {}) => {
+  if (!person) return 0;
+  let score = 0;
+  if (person.baylorId || person.externalIds?.baylorId) score += 10;
+  if (person.externalIds?.clssInstructorId) score += 9;
+  if (
+    person.ignitePersonNumber ||
+    person.personNumber ||
+    person.externalIds?.ignitePersonNumber ||
+    person.externalIds?.personNumber
+  ) score += 9;
+  if (person.email) score += 8;
+  if (person.firstName) score += 3;
+  if (person.lastName) score += 3;
+  if (person.phone) score += 2;
+  if (person.office || person.officeSpaceId) score += 2;
+  if (person.jobTitle || person.title) score += 1;
+  return score;
 };

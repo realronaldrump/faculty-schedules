@@ -5,9 +5,9 @@
  * and provides access to help resources.
  */
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, Play, CheckCircle, Clock, Search, Filter, RotateCcw, HelpCircle, Lightbulb, Settings, Users, Mail, Calendar, Building, BarChart3, Database, Eye, EyeOff } from "lucide-react";
+import { BookOpen, Play, CheckCircle, Clock, RotateCcw, Lightbulb, Settings, Users, Calendar, Building, BarChart3, Database, Eye, EyeOff } from "lucide-react";
 import { useTutorial, TUTORIALS } from "../../contexts/TutorialContext";
 
 // Category icons mapping
@@ -28,10 +28,11 @@ const TutorialCard = ({ tutorial, isCompleted, onStart }) => {
 
   return (
     <div
-      className={`bg-white rounded-xl border-2 transition-all duration-200 hover:shadow-lg ${isCompleted
+      className={`bg-white rounded-xl border-2 transition-all duration-200 hover:shadow-lg ${
+        isCompleted
           ? "border-green-200 bg-green-50/30"
           : "border-gray-200 hover:border-baylor-green/50"
-        }`}
+      }`}
     >
       <div className="p-6">
         {/* Header */}
@@ -60,7 +61,7 @@ const TutorialCard = ({ tutorial, isCompleted, onStart }) => {
         </p>
 
         {/* Meta */}
-        <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
+        <div className="flex items-center gap-4 text-sm text-gray-500 mb-6">
           <div className="flex items-center gap-1">
             <Clock className="w-4 h-4" />
             {tutorial.estimatedTime}
@@ -71,20 +72,14 @@ const TutorialCard = ({ tutorial, isCompleted, onStart }) => {
           </div>
         </div>
 
-        {/* Category badge */}
-        <div className="mb-4">
-          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-            {tutorial.category}
-          </span>
-        </div>
-
         {/* Action button */}
         <button
           onClick={() => onStart(tutorial.id)}
-          className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors ${isCompleted
+          className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors ${
+            isCompleted
               ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
               : "bg-baylor-green text-white hover:bg-baylor-green/90"
-            }`}
+          }`}
         >
           <Play className="w-4 h-4" />
           {isCompleted ? "Review Tutorial" : "Start Tutorial"}
@@ -93,19 +88,6 @@ const TutorialCard = ({ tutorial, isCompleted, onStart }) => {
     </div>
   );
 };
-
-// Quick tip card
-const QuickTipCard = ({ icon: Icon, title, description }) => (
-  <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-    <div className="p-2 bg-amber-100 rounded-lg flex-shrink-0">
-      <Icon className="w-5 h-5 text-amber-600" />
-    </div>
-    <div>
-      <h4 className="font-medium text-gray-900 mb-1">{title}</h4>
-      <p className="text-sm text-gray-600">{description}</p>
-    </div>
-  </div>
-);
 
 const TutorialPage = () => {
   const navigate = useNavigate();
@@ -118,39 +100,31 @@ const TutorialPage = () => {
     resetAllProgress,
   } = useTutorial();
 
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("all");
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const settingsRef = useRef(null);
 
   // Get all tutorials as array
   const tutorialList = Object.values(TUTORIALS);
 
-  // Get unique categories
-  const categories = ["all", ...new Set(tutorialList.map((t) => t.category))];
-
-  // Filter tutorials
-  const filteredTutorials = tutorialList.filter((tutorial) => {
-    const matchesSearch =
-      tutorial.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tutorial.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory =
-      selectedCategory === "all" || tutorial.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  // Progress stats
-  const completionRate =
-    tutorialList.length > 0
-      ? Math.round((completedTutorials.length / tutorialList.length) * 100)
-      : 0;
+  // Close settings dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target)) {
+        setShowSettings(false);
+      }
+    };
+    if (showSettings) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showSettings]);
 
   // Handle starting a tutorial
   const handleStartTutorial = (tutorialId) => {
     const tutorial = TUTORIALS[tutorialId];
     if (tutorial) {
-      // Navigate to the target page first
       navigate(`/${tutorial.targetPage}`);
-      // Start the tutorial after a brief delay to allow page to load
       setTimeout(() => {
         startTutorial(tutorialId);
       }, 500);
@@ -166,147 +140,86 @@ const TutorialPage = () => {
   return (
     <div className="space-y-8">
       {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
             <BookOpen className="w-8 h-8 text-baylor-green" />
             Help & Tutorials
           </h1>
           <p className="text-gray-600 mt-1">
-            Learn how to use Davis&apos;s Big Beautiful Dashboard with interactive step-by-step
-            tutorials
+            Learn how to use the dashboard with interactive step-by-step tutorials
           </p>
         </div>
 
-        {/* Progress indicator */}
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <div className="text-sm text-gray-500">Your Progress</div>
-            <div className="text-2xl font-bold text-baylor-green">
-              {completionRate}%
-            </div>
+        <div className="flex items-center gap-3">
+          {/* Progress badge */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-baylor-green/10 text-baylor-green rounded-full text-sm font-medium">
+            <CheckCircle className="w-4 h-4" />
+            {completedTutorials.length} / {tutorialList.length} completed
           </div>
-          <div className="w-16 h-16 relative">
-            <svg className="w-full h-full transform -rotate-90">
-              <circle
-                cx="32"
-                cy="32"
-                r="28"
-                stroke="#e5e7eb"
-                strokeWidth="8"
-                fill="none"
-              />
-              <circle
-                cx="32"
-                cy="32"
-                r="28"
-                stroke="#154734"
-                strokeWidth="8"
-                fill="none"
-                strokeDasharray={`${completionRate * 1.76} 176`}
-                strokeLinecap="round"
-              />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <CheckCircle
-                className={`w-6 h-6 ${completionRate === 100 ? "text-baylor-green" : "text-gray-300"}`}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Settings Panel */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            {/* Tooltip toggle */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  checked={showTooltips}
-                  onChange={(e) => setShowTooltips(e.target.checked)}
-                  className="sr-only"
-                />
-                <div
-                  className={`w-11 h-6 rounded-full transition-colors ${showTooltips ? "bg-baylor-green" : "bg-gray-300"}`}
-                >
-                  <div
-                    className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${showTooltips ? "translate-x-5" : ""}`}
-                  />
+          {/* Settings gear */}
+          <div className="relative" ref={settingsRef}>
+            <button
+              onClick={() => setShowSettings((s) => !s)}
+              className={`p-2 rounded-lg border transition-colors ${
+                showSettings
+                  ? "bg-gray-100 border-gray-300 text-gray-800"
+                  : "border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+              }`}
+              aria-label="Tutorial settings"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+
+            {showSettings && (
+              <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl border border-gray-200 shadow-lg z-10 overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <p className="text-sm font-semibold text-gray-700">Tutorial Settings</p>
+                </div>
+                <div className="p-4 space-y-3">
+                  {/* Tooltip toggle */}
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <span className="text-sm text-gray-700 flex items-center gap-1.5">
+                      {showTooltips ? (
+                        <Eye className="w-4 h-4" />
+                      ) : (
+                        <EyeOff className="w-4 h-4" />
+                      )}
+                      Show Tooltips & Hints
+                    </span>
+                    <div className="relative">
+                      <input
+                        type="checkbox"
+                        checked={showTooltips}
+                        onChange={(e) => setShowTooltips(e.target.checked)}
+                        className="sr-only"
+                      />
+                      <div
+                        className={`w-11 h-6 rounded-full transition-colors ${showTooltips ? "bg-baylor-green" : "bg-gray-300"}`}
+                      >
+                        <div
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${showTooltips ? "translate-x-5" : ""}`}
+                        />
+                      </div>
+                    </div>
+                  </label>
+
+                  <div className="border-t border-gray-100 pt-3">
+                    <button
+                      onClick={() => {
+                        setShowSettings(false);
+                        setShowResetConfirm(true);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      Reset Progress
+                    </button>
+                  </div>
                 </div>
               </div>
-              <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
-                {showTooltips ? (
-                  <Eye className="w-4 h-4" />
-                ) : (
-                  <EyeOff className="w-4 h-4" />
-                )}
-                Show Tooltips & Hints
-              </span>
-            </label>
-          </div>
-
-          {/* Reset button */}
-          <button
-            onClick={() => setShowResetConfirm(true)}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Reset Progress
-          </button>
-        </div>
-      </div>
-
-      {/* Quick Tips */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <QuickTipCard
-          icon={Lightbulb}
-          title="Interactive Learning"
-          description="Tutorials highlight elements on the actual page, showing you exactly where to click."
-        />
-        <QuickTipCard
-          icon={HelpCircle}
-          title="Contextual Help"
-          description="Look for the question mark icons throughout the app for helpful tooltips."
-        />
-        <QuickTipCard
-          icon={Mail}
-          title="Need More Help?"
-          description="Contact your dashboard administrator for additional assistance."
-        />
-      </div>
-
-      {/* Search and Filter */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
-          {/* Search */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search tutorials..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-            />
-          </div>
-
-          {/* Category filter */}
-          <div className="flex items-center gap-2">
-            <Filter className="w-5 h-5 text-gray-400" />
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-            >
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat === "all" ? "All Categories" : cat}
-                </option>
-              ))}
-            </select>
+            )}
           </div>
         </div>
       </div>
@@ -317,61 +230,20 @@ const TutorialPage = () => {
           <BookOpen className="w-5 h-5 text-baylor-green" />
           Available Tutorials
           <span className="text-sm font-normal text-gray-500">
-            ({filteredTutorials.length}{" "}
-            {filteredTutorials.length === 1 ? "tutorial" : "tutorials"})
+            ({tutorialList.length}{" "}
+            {tutorialList.length === 1 ? "tutorial" : "tutorials"})
           </span>
         </h2>
 
-        {filteredTutorials.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredTutorials.map((tutorial) => (
-              <TutorialCard
-                key={tutorial.id}
-                tutorial={tutorial}
-                isCompleted={isTutorialCompleted(tutorial.id)}
-                onStart={handleStartTutorial}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12 bg-gray-50 rounded-xl border border-gray-200">
-            <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500">No tutorials match your search.</p>
-            <button
-              onClick={() => {
-                setSearchTerm("");
-                setSelectedCategory("all");
-              }}
-              className="mt-2 text-baylor-green hover:underline"
-            >
-              Clear filters
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Coming Soon Section */}
-      <div className="bg-gradient-to-r from-baylor-green/5 to-baylor-gold/5 rounded-xl border border-baylor-green/20 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">
-          More Tutorials Coming Soon
-        </h2>
-        <p className="text-gray-600 mb-4">
-          I'm working on additional tutorials to help you get the most out of
-          Davis&apos;s Big Beautiful Dashboard. Check back for tutorials on
-          analytics, course management, and more.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {["Reports & Analytics", "Course Management", "Room Exports"].map(
-            (topic) => (
-              <span
-                key={topic}
-                className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-white border border-gray-200 text-gray-600"
-              >
-                <Clock className="w-3 h-3 mr-1.5 text-gray-400" />
-                {topic}
-              </span>
-            ),
-          )}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {tutorialList.map((tutorial) => (
+            <TutorialCard
+              key={tutorial.id}
+              tutorial={tutorial}
+              isCompleted={isTutorialCompleted(tutorial.id)}
+              onStart={handleStartTutorial}
+            />
+          ))}
         </div>
       </div>
 

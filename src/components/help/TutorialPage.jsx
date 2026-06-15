@@ -104,8 +104,26 @@ const TutorialPage = () => {
   const [showSettings, setShowSettings] = useState(false);
   const settingsRef = useRef(null);
 
-  // Get all tutorials as array
-  const tutorialList = Object.values(TUTORIALS);
+  // Category display order
+  const categoryOrder = [
+    "Getting Started",
+    "Scheduling",
+    "People Management",
+    "Facilities",
+    "Administration",
+    "Analytics",
+    "Resources",
+    "Data Management",
+  ];
+
+  // Get all tutorials as array, sorted by category priority then title
+  const tutorialList = Object.values(TUTORIALS).sort((a, b) => {
+    const ai = categoryOrder.indexOf(a.category);
+    const bi = categoryOrder.indexOf(b.category);
+    const categoryDiff = (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    if (categoryDiff !== 0) return categoryDiff;
+    return a.title.localeCompare(b.title);
+  });
 
   // Progress stats
   const completionRate =

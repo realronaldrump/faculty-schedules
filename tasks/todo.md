@@ -137,3 +137,46 @@ Reviewed all 9 tutorials for broken/outdated steps.
 ### Verification
 - [x] All 69 targets across 9 tutorials resolve to real anchors (incl. conditional-spread + dynamic templates)
 - [x] lint clean · build succeeds · 181 tests green
+
+---
+
+# Auth / Access Control Hardening & Cleanup — June 2026
+
+Goal: close the pending-user data-exposure hole and strip dormant auth machinery
+left over from the abandoned department-wide rollout. Scope chosen by owner:
+H1–H3 + low-priority cleanups. Role model stays as-is (Option B / conservative —
+staff/faculty retained for a possible future viewer).
+
+## High priority
+- [ ] **H1** firestore.rules: drop `userIsPending()` from `canReadAppData()` so
+      pending (self-registered) users can no longer read app data or write the
+      temperature collections via the SDK. Remove now-dead `userIsPending()` fn.
+- [ ] **H2** firestore.rules: delete the unused `actions` subsystem
+      (`userHasDirectAction`/`userHasOverrideAction`/`roleHasAction`/
+      `userHasRoleAction`/`userHasAction`) — never referenced by any `allow`.
+- [ ] **H3** firestore.rules: delete the dead `overrides.pages` schema
+      (`userHasOverridePage`/`userHasOverridePageDeny`); client only writes the
+      flat `permissions` map. Update `userHasPage` + `canManagePafWorkflow`.
+
+## Low priority cleanups
+- [ ] **L1** Remove dead custom-claim branches from `isAdmin()` in firestore.rules
+      and storage.rules (no code sets custom claims; admin is Firestore-role only).
+- [ ] **L3/L4** App.jsx: replace inline `normalizeRoles` with shared
+      `normalizeRoleList` from authz.js.
+- [ ] **L5** Cross-reference the hardcoded owner UID in activityOwner.js,
+      firestore.rules, and functions/index.js with comments (can't share a module).
+- [ ] **L2** (no-op) rules `get()` cost — negligible at this scale, intentionally
+      not restructured.
+- [ ] **L6** (re-evaluated, SKIP) `accessControl` false-padding is load-bearing for
+      the "new pages need decisions" UX and doc size is trivial — not bloat.
+- [ ] **L7** (no-op) free-tier/cost note only.
+
+## Verification
+- [ ] firestore.rules compiles (emulator)
+- [ ] authz + permissions unit tests green
+- [ ] lint clean · build succeeds · full test suite green
+- [ ] Manual reasoning: admins keep full access; owner keeps activity pages;
+      active staff/faculty unaffected; pending users lose data reads only.
+
+## Review
+_(to be filled in after implementation)_

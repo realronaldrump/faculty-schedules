@@ -50,63 +50,6 @@ service cloud.firestore {
         (userStatus() == 'active' || (userStatus() == null && userHasKnownRole()));
     }
 
-    function userIsPending() {
-      return hasUserProfile() &&
-        !userIsDisabled() &&
-        (userStatus() == 'pending' || (userStatus() == null && !userHasKnownRole()));
-    }
-
-    // Direct user action grants (supports wildcard)
-    function userHasDirectAction(actionKey) {
-      return hasUserProfile() &&
-        get(userDoc()).data.actions is map &&
-        (
-          get(userDoc()).data.actions[actionKey] == true ||
-          get(userDoc()).data.actions['*'] == true
-        );
-    }
-
-    // User overrides (new schema) for action grants
-    function userHasOverrideAction(actionKey) {
-      return hasUserProfile() &&
-        get(userDoc()).data.overrides is map &&
-        get(userDoc()).data.overrides.actions is map &&
-        (
-          get(userDoc()).data.overrides.actions[actionKey] == true ||
-          get(userDoc()).data.overrides.actions['*'] == true
-        );
-    }
-
-    // Role-based action grants from settings/accessControl (supports wildcard)
-    function roleHasAction(role, actionKey) {
-      return exists(accessControlDoc()) &&
-        get(accessControlDoc()).data.rolePermissions is map &&
-        get(accessControlDoc()).data.rolePermissions[role] is map &&
-        get(accessControlDoc()).data.rolePermissions[role].actions is map &&
-        (
-          get(accessControlDoc()).data.rolePermissions[role].actions[actionKey] == true ||
-          get(accessControlDoc()).data.rolePermissions[role].actions['*'] == true
-        );
-    }
-
-    function userHasRoleAction(actionKey) {
-      return hasUserProfile() && (
-        (userHasRole('admin') && roleHasAction('admin', actionKey)) ||
-        (userHasRole('staff') && roleHasAction('staff', actionKey)) ||
-        (userHasRole('faculty') && roleHasAction('faculty', actionKey))
-      );
-    }
-
-    // Check if user has a specific action permission (direct, override, or role-based)
-    function userHasAction(actionKey) {
-      return isAdmin() ||
-        (userIsActive() && (
-          userHasDirectAction(actionKey) ||
-          userHasOverrideAction(actionKey) ||
-          userHasRoleAction(actionKey)
-        ));
-    }
-
     // Direct user page grants (supports wildcard)
     function userHasDirectPage(pageId) {
       return hasUserProfile() &&

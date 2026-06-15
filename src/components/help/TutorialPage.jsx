@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, Play, CheckCircle, Clock, RotateCcw, Lightbulb, Settings, Users, Calendar, Building, BarChart3, Database, Eye, EyeOff } from "lucide-react";
+import { BookOpen, Play, CheckCircle, Clock, RotateCcw, Lightbulb, Settings, Users, Calendar, Building, BarChart3, Database, Eye, EyeOff, Trophy } from "lucide-react";
 import { useTutorial, TUTORIALS } from "../../contexts/TutorialContext";
 
 // Category icons mapping
@@ -107,6 +107,12 @@ const TutorialPage = () => {
   // Get all tutorials as array
   const tutorialList = Object.values(TUTORIALS);
 
+  // Progress stats
+  const completionRate =
+    tutorialList.length > 0
+      ? Math.round((completedTutorials.length / tutorialList.length) * 100)
+      : 0;
+
   // Close settings dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -152,10 +158,45 @@ const TutorialPage = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Progress badge */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-baylor-green/10 text-baylor-green rounded-full text-sm font-medium">
-            <CheckCircle className="w-4 h-4" />
-            {completedTutorials.length} / {tutorialList.length} completed
+          {/* Progress ring */}
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <div className="text-sm text-gray-500">Your Progress</div>
+              <div className="text-2xl font-bold text-baylor-green">
+                {completionRate}%
+              </div>
+            </div>
+            <div className="w-16 h-16 relative">
+              <svg className="w-full h-full transform -rotate-90">
+                <circle
+                  cx="32"
+                  cy="32"
+                  r="28"
+                  stroke="#e5e7eb"
+                  strokeWidth="8"
+                  fill="none"
+                />
+                <circle
+                  cx="32"
+                  cy="32"
+                  r="28"
+                  stroke="#154734"
+                  strokeWidth="8"
+                  fill="none"
+                  strokeDasharray={`${completionRate * 1.76} 176`}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                {completionRate === 100 ? (
+                  <Trophy className="w-5 h-5 text-baylor-green" />
+                ) : (
+                  <span className="text-xs font-semibold text-gray-500">
+                    {completedTutorials.length}/{tutorialList.length}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Settings gear */}

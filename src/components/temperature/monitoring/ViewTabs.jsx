@@ -35,6 +35,7 @@ const ViewTabs = ({
         return (
           <button
             key={tab.id}
+            data-tutorial={`view-tab-${tab.id}`}
             onClick={() => onViewModeChange(tab.id)}
             className={`px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${isActive
               ? "bg-white text-baylor-green shadow-sm"
@@ -55,6 +56,7 @@ const ViewTabs = ({
         return (
           <button
             key={tab.id}
+            data-tutorial={`action-tab-${tab.id}`}
             onClick={() => onViewModeChange(tab.id)}
             className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition border ${isActive
               ? "bg-baylor-green text-white border-baylor-green"

@@ -96,7 +96,6 @@ export const TUTORIALS = {
         target: '[data-tutorial="program-filters"]',
         position: "bottom",
         action: null,
-        requiresExpanded: "advanced-filters",
       },
       {
         id: "select-people",
@@ -382,59 +381,85 @@ export const TUTORIALS = {
         id: "data-views",
         title: "Data View Modes",
         content:
-          "Switch between different views: Floorplan shows temperatures on a building map, Daily shows a table of all rooms, Historical tracks data over time, and Trends displays charts and analytics.",
+          "These four tabs change how the data is shown: Floorplan maps temperatures onto the building, Daily lists every room in a table, Historical tracks readings over time, and Trends charts the analytics.",
         target: '[data-tutorial="data-view-tabs"]',
         position: "bottom",
-        action: "Try clicking a different view mode",
-        actionType: "click",
+        action: null,
       },
       {
-        id: "action-tabs",
-        title: "Admin Actions",
+        id: "open-daily",
+        title: "Open the Daily Table",
         content:
-          "These buttons access administrative functions: Import to upload sensor data, Export to download temperature records, and Settings to configure temperature ranges and snapshot times.",
-        target: '[data-tutorial="action-tabs"]',
+          "Let's look at the table view. Click the 'Daily' tab to see every room's readings side by side.",
+        target: '[data-tutorial="view-tab-daily"]',
         position: "bottom",
-        action: null,
+        action: "Click the Daily tab",
+        actionType: "click",
       },
       {
         id: "daily-table",
         title: "Daily Snapshot Table",
         content:
-          "This table shows temperature readings for each room at the configured snapshot times. Color coding indicates temperature status: green for ideal range, blue for too cold, and red for too hot.",
+          "This table shows each room's temperature at the configured snapshot times. Color coding flags the status at a glance: green for the ideal range, blue for too cold, and red for too hot.",
         target: '[data-tutorial="daily-table"]',
         position: "top",
         action: null,
-        requiresViewMode: "daily",
       },
       {
         id: "temperature-colors",
         title: "Temperature Color Coding",
         content:
-          "Temperature readings are color-coded for quick scanning: Green means within the ideal range (typically 68-72°F), Blue means below ideal (too cold), Red means above ideal (too hot), and Gray means no data available.",
+          "Readings are color-coded for quick scanning: Green means within the ideal range (typically 68–72°F), Blue means below it (too cold), Red means above it (too hot), and Gray means no data available.",
         target: null,
         position: "center",
         action: null,
       },
       {
+        id: "action-tabs",
+        title: "Admin Actions",
+        content:
+          "These buttons open the administrative panels: Import to upload sensor data, Export to download records, and Settings to configure ranges and snapshot times. Let's open a couple.",
+        target: '[data-tutorial="action-tabs"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "open-import",
+        title: "Open the Import Panel",
+        content:
+          "Click 'Import' to see how new sensor data gets into the system.",
+        target: '[data-tutorial="action-tab-import"]',
+        position: "bottom",
+        action: "Click the Import button",
+        actionType: "click",
+      },
+      {
         id: "import-section",
         title: "Importing Data",
         content:
-          "The Import section lets you upload Govee CSV exports. Simply drag files here or click to browse. The system auto-maps devices to rooms based on device labels, and you can correct any mappings before importing.",
+          "Upload Govee CSV exports here — drag files in or click to browse. The system auto-maps each device to a room from its label, and you can correct any mapping before the import is applied.",
         target: '[data-tutorial="import-section"]',
         position: "top",
         action: null,
-        requiresViewMode: "import",
+      },
+      {
+        id: "open-settings",
+        title: "Open Settings",
+        content:
+          "Finally, click 'Settings' to see the per-building configuration.",
+        target: '[data-tutorial="action-tab-settings"]',
+        position: "bottom",
+        action: "Click the Settings button",
+        actionType: "click",
       },
       {
         id: "settings-section",
         title: "Temperature Settings",
         content:
-          "In Settings, you can configure the building timezone, set ideal temperature ranges (with optional overrides per space type), manage snapshot times, and recompute historical data if needed.",
+          "Here you set the building timezone, ideal temperature ranges (with optional per-space overrides), snapshot times, and can recompute historical data if needed.",
         target: '[data-tutorial="settings-section"]',
         position: "top",
         action: null,
-        requiresViewMode: "settings",
       },
       {
         id: "complete",

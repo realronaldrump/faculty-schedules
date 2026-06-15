@@ -116,3 +116,24 @@ Goal: add the 4 essential tutorials (Getting Started, Today/Live View, Faculty S
 
 ### Known limitation (consistent with existing tutorials)
 - Tutorial cards aren't permission-gated. A non-admin who starts "Importing CLSS Data" lands on the route-protected Import Wizard (blocked message) with the overlay floating over it. Matches the pre-existing un-gated pattern; gating would be a new feature beyond scope.
+
+---
+
+# Tutorial Audit & Fixes — June 2026
+
+Reviewed all 9 tutorials for broken/outdated steps.
+
+### Bug fixed
+- **Temperature Monitoring**: `daily-table`, `import-section`, `settings-section` steps relied on the inert `requiresViewMode` key with no click to switch views (default view is `floorplan`), so they spotlighted nothing; the "data-views" step said "click *a* view" (could land anywhere). Fixed by adding dynamic per-tab anchors in `monitoring/ViewTabs.jsx` (`view-tab-${id}`, `action-tab-${id}`) and inserting required-click navigation steps (open Daily → table; open Import → panel; open Settings → panel). 11 → 15 steps, now fully walks the page.
+
+### Cleanup
+- Removed the inert `requiresViewMode` (×3) and `requiresExpanded` (×1, email-lists) keys — they never gated anything and were misleading.
+
+### Reviewed, left as-is (not defects)
+- People Directory: two steps both spotlight `directory-content` (progressive overview → row-click); acceptable.
+- JobCard `building-selector` anchor is unused by any tutorial (harmless).
+- `step.position` / `validationTarget` keys are inert but a harmless documented convention; left in place.
+
+### Verification
+- [x] All 69 targets across 9 tutorials resolve to real anchors (incl. conditional-spread + dynamic templates)
+- [x] lint clean · build succeeds · 181 tests green

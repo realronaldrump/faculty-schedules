@@ -619,6 +619,7 @@ const LiveView = () => {
           <div className="flex items-center gap-3">
             <div className="relative" ref={asOfRef}>
               <button
+                data-tutorial="asof-control"
                 onClick={() => setShowAsOfPopover((prev) => !prev)}
                 className="text-right"
                 title="Set as-of time"
@@ -723,6 +724,7 @@ const LiveView = () => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   ref={searchInputRef}
+                  data-tutorial="faculty-finder"
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -778,6 +780,7 @@ const LiveView = () => {
 
             <div className="flex items-center gap-2">
               <button
+                data-tutorial="explore-button"
                 onClick={() => handleOpenExplorer("faculty")}
                 className="w-full lg:w-auto px-4 py-3 rounded-xl text-sm font-medium bg-baylor-green text-white hover:bg-baylor-green/90 transition-all flex items-center justify-center gap-2"
               >
@@ -852,7 +855,10 @@ const LiveView = () => {
       </div>
 
       {/* Quick Stats Row - NOW shows real-time counts */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div
+        data-tutorial="today-schedule"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"
+      >
         <div className="university-card">
           <div className="university-card-content flex items-center gap-4">
             <div className="p-3 bg-baylor-green/10 rounded-xl relative">

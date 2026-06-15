@@ -12,6 +12,7 @@ import { useTutorial, TUTORIALS } from "../../contexts/TutorialContext";
 
 // Category icons mapping
 const categoryIcons = {
+  "Getting Started": Lightbulb,
   "People Management": Users,
   Scheduling: Calendar,
   Analytics: BarChart3,
@@ -356,11 +357,11 @@ const TutorialPage = () => {
         </h2>
         <p className="text-gray-600 mb-4">
           I'm working on additional tutorials to help you get the most out of
-          Davis&apos;s Big Beautiful Dashboard. Check back for tutorials on scheduling, analytics,
-          and more.
+          Davis&apos;s Big Beautiful Dashboard. Check back for tutorials on
+          analytics, course management, and more.
         </p>
         <div className="flex flex-wrap gap-2">
-          {["Faculty Schedules", "Data Import", "Reports & Analytics"].map(
+          {["Reports & Analytics", "Course Management", "Room Exports"].map(
             (topic) => (
               <span
                 key={topic}

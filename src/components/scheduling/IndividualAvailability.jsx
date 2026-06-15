@@ -176,6 +176,7 @@ const IndividualAvailability = ({ embedded = false }) => {
     <div className="relative">
       <button
         type="button"
+        data-tutorial="availability-search"
         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900 appearance-none cursor-pointer hover:border-baylor-green/50 transition-colors flex items-center justify-between"
       >

@@ -516,6 +516,7 @@ const FacultySchedules = ({ embedded = false }) => {
             </label>
             <div className="relative" ref={facultyDropdownRef}>
               <button
+                data-tutorial="faculty-search"
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900 flex items-center justify-between"
               >
@@ -651,7 +652,10 @@ const FacultySchedules = ({ embedded = false }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Select Days to View
             </label>
-            <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+            <div
+              data-tutorial="day-toggles"
+              className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg"
+            >
               {Object.entries(dayNames).map(([dayCode, dayName]) => (
                 <button
                   key={dayCode}
@@ -773,7 +777,7 @@ const FacultySchedules = ({ embedded = false }) => {
         )}
       </div>
 
-      <div>
+      <div data-tutorial="compare-grid">
         {selectedFaculty.length > 0 ? (
           <div className="space-y-8">
             {selectedDays.length > 0 ? (

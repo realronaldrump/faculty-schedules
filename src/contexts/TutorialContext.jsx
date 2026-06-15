@@ -614,6 +614,376 @@ export const TUTORIALS = {
       },
     ],
   },
+  "getting-started": {
+    id: "getting-started",
+    title: "Getting Started: Your Dashboard Tour",
+    description:
+      "New here? Take a quick tour of the dashboard — search, shortcuts, and the fastest ways to get anywhere.",
+    estimatedTime: "2 min",
+    category: "Getting Started",
+    targetPage: "dashboard",
+    steps: [
+      {
+        id: "welcome",
+        title: "Welcome to Your Dashboard",
+        content:
+          "This dashboard is your launchpad. In a couple of minutes you'll learn the three fastest ways to get anywhere in the app: search, pinned shortcuts, and the section browser.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+      {
+        id: "help-button",
+        title: "Help Is Always Here",
+        content:
+          "This Tutorials button sits in the top-right of the dashboard. It brings you back to the help center anytime you want to learn a new area.",
+        target: '[data-tutorial="help-button"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "global-search",
+        title: "Search to Jump Anywhere",
+        content:
+          "This is the fastest way to navigate. Search every page, tool, and report by name, description, or section — no need to remember where things live.",
+        target: '[data-tutorial="global-search"]',
+        position: "bottom",
+        action: "Type part of a page name, like 'rooms' or 'email'",
+        actionType: "input",
+      },
+      {
+        id: "search-results",
+        title: "Pick a Result",
+        content:
+          "Matches appear instantly as you type. Press Enter to jump straight to the top result, or click any match. Press Escape to clear the search.",
+        target: '[data-tutorial="search-results"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "explore-sections",
+        title: "Browse by Section",
+        content:
+          "Prefer to browse? These cards mirror the sidebar — every section of the app, grouped together. They start collapsed to keep the page tidy.",
+        target: '[data-tutorial="explore-sections"]',
+        position: "top",
+        action: null,
+      },
+      {
+        id: "expand-section",
+        title: "Open a Section",
+        content:
+          "Click a section header to expand it and reveal the pages inside.",
+        target: '[data-tutorial="section-card"]',
+        position: "bottom",
+        action: "Click the section to expand it",
+        actionType: "click",
+      },
+      {
+        id: "pin-shortcut",
+        title: "Pin Your Favorites",
+        content:
+          "See the star beside each page? Click it to pin that page as a shortcut for one-click access later.",
+        target: '[data-tutorial="pin-button"]',
+        position: "left",
+        action: "Click the star to pin this page",
+        actionType: "click",
+      },
+      {
+        id: "shortcuts",
+        title: "Your Shortcuts",
+        content:
+          "Pinned pages collect here under 'Your shortcuts' for instant access from now on. Click a star again anytime to unpin.",
+        target: '[data-tutorial="shortcuts"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "complete",
+        title: "You're Ready to Explore",
+        content:
+          "That's the tour! Search to jump anywhere, pin the pages you use most, and remember the full sidebar on the left is always available. Try the other tutorials whenever you're ready.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+    ],
+  },
+  "today-live-view": {
+    id: "today-live-view",
+    title: "Today: The Live View",
+    description:
+      "Read the department's live snapshot — who's teaching, which rooms are busy, and where any faculty member is right now.",
+    estimatedTime: "3 min",
+    category: "Getting Started",
+    targetPage: "live-view",
+    steps: [
+      {
+        id: "welcome",
+        title: "Welcome to Today",
+        content:
+          "'Today' is your live, at-a-glance view of the department right now — who's teaching, which rooms are in use, and where any faculty member is at this moment.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+      {
+        id: "asof-control",
+        title: "Rewind or Jump Ahead",
+        content:
+          "This shows the current time, with a gold pulse when it's live. Open the picker to set any date and time — or press 'Now' to snap back to live. Perfect for previewing tomorrow at 9 AM.",
+        target: '[data-tutorial="asof-control"]',
+        position: "bottom",
+        action: "Click the time to open the date & time picker",
+        actionType: "click",
+      },
+      {
+        id: "faculty-finder",
+        title: "Find Anyone Instantly",
+        content:
+          "Looking for someone? Type any faculty name to see where they are right now — in class, in their office, or done for the day.",
+        target: '[data-tutorial="faculty-finder"]',
+        position: "bottom",
+        action: "Type a faculty member's name",
+        actionType: "input",
+      },
+      {
+        id: "spotlight",
+        title: "The Spotlight Card",
+        content:
+          "When you pick a name, a spotlight card appears with their current location, what they're teaching, and what's next. Close it with the X when you're done.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+      {
+        id: "today-schedule",
+        title: "Live Counters",
+        content:
+          "These counters refresh every minute: classes in session, faculty teaching, and rooms in use right now. Use the building filter above them to narrow to your area.",
+        target: '[data-tutorial="today-schedule"]',
+        position: "top",
+        action: null,
+      },
+      {
+        id: "explore-button",
+        title: "See the Full Picture",
+        content:
+          "Want everything at once? Open the explorer to browse every faculty member and room with live status filters.",
+        target: '[data-tutorial="explore-button"]',
+        position: "top",
+        action: "Open the explorer",
+        actionType: "click",
+      },
+      {
+        id: "complete",
+        title: "You're All Set",
+        content:
+          "That's 'Today.' Keep it open as your daily heads-up display, and use the as-of control whenever you need to look ahead or back.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+    ],
+  },
+  "faculty-schedules": {
+    id: "faculty-schedules",
+    title: "Faculty Schedules",
+    description:
+      "Compare schedules side by side, find one person's open time, and pick a meeting slot that works for a whole group.",
+    estimatedTime: "5 min",
+    category: "Scheduling",
+    targetPage: "scheduling/faculty?tab=compare",
+    steps: [
+      {
+        id: "welcome",
+        title: "Three Tools, One Place",
+        content:
+          "The Faculty area has three tools for working with instructor schedules: Compare, Availability, and Group Meetings. We'll touch all three. You're starting on Compare.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+      {
+        id: "faculty-search",
+        title: "Add Faculty to Compare",
+        content:
+          "On the Compare tab you build a side-by-side view. Open this picker to add faculty by name — or use the program picker beside it to add an entire program at once.",
+        target: '[data-tutorial="faculty-search"]',
+        position: "bottom",
+        action: "Open the picker to add a faculty member",
+        actionType: "click",
+      },
+      {
+        id: "day-toggles",
+        title: "Choose Your Days",
+        content:
+          "Pick which weekdays to display. Toggle off the days you don't care about to focus the comparison.",
+        target: '[data-tutorial="day-toggles"]',
+        position: "bottom",
+        action: "Toggle the days you want to see",
+        actionType: "click",
+      },
+      {
+        id: "compare-grid",
+        title: "Read the Comparison",
+        content:
+          "Each selected instructor's schedule lines up here, day by day, so you can spot conflicts and overlaps at a glance. Click any class for details, or a name to open their contact card.",
+        target: '[data-tutorial="compare-grid"]',
+        position: "top",
+        action: null,
+      },
+      {
+        id: "to-availability",
+        title: "Now Look at One Person",
+        content:
+          "Let's switch tools. Click the 'Availability' tab to dive into a single faculty member's week.",
+        target: '[data-tutorial="faculty-tab-availability"]',
+        position: "bottom",
+        action: "Click the Availability tab",
+        actionType: "click",
+      },
+      {
+        id: "availability-search",
+        title: "See One Week in Detail",
+        content:
+          "Pick a single faculty member here to see their full week split into busy periods and open slots — ideal for finding exactly when someone is free.",
+        target: '[data-tutorial="availability-search"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "to-meetings",
+        title: "Find a Time for a Group",
+        content:
+          "Last tool. Click the 'Group Meetings' tab to find a slot that fits several people at once.",
+        target: '[data-tutorial="faculty-tab-meetings"]',
+        position: "bottom",
+        action: "Click the Group Meetings tab",
+        actionType: "click",
+      },
+      {
+        id: "meeting-professors",
+        title: "Add the Attendees",
+        content:
+          "Add everyone who needs to attend by searching their names here. Each person you add narrows the available times.",
+        target: '[data-tutorial="meeting-professors"]',
+        position: "bottom",
+        action: "Search for an attendee",
+        actionType: "input",
+      },
+      {
+        id: "meeting-duration",
+        title: "Set the Length",
+        content:
+          "Choose how long the meeting needs to be. The tool only suggests slots that are at least this long.",
+        target: '[data-tutorial="meeting-duration"]',
+        position: "top",
+        action: null,
+      },
+      {
+        id: "meeting-results",
+        title: "Find Common Time",
+        content:
+          "Once your attendees are added, this button computes everyone's common free time — the slots when the whole group is available at once.",
+        target: '[data-tutorial="meeting-results"]',
+        position: "top",
+        action: null,
+      },
+      {
+        id: "complete",
+        title: "That's the Faculty Toolkit",
+        content:
+          "Compare for side-by-side schedules, Availability for one person's open time, and Group Meetings to find a slot that fits everyone.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+    ],
+  },
+  "import-clss-data": {
+    id: "import-clss-data",
+    title: "Importing CLSS Data",
+    description:
+      "Tour the four-stage Import Wizard that safely turns a CLSS export into live schedule data. (Read-only tour — nothing is changed.)",
+    estimatedTime: "4 min",
+    category: "Administration",
+    targetPage: "admin-tools/import-wizard",
+    steps: [
+      {
+        id: "welcome",
+        title: "How Data Gets In",
+        content:
+          "The Import Wizard turns CLSS schedule exports into live data. This is a guided tour only — we won't upload or change anything. A real import writes to the live database, so the wizard makes you validate and preview before any changes are saved.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+      {
+        id: "import-stepper",
+        title: "Four Safe Stages",
+        content:
+          "Every import follows four stages: Upload → Validate → Preview → Results. This bar tracks where you are, and nothing is saved until you commit at the very end.",
+        target: '[data-tutorial="import-stepper"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "upload-dropzone",
+        title: "Stage 1 — Upload",
+        content:
+          "Drop a CLSS export here (the .csv you download from CLSS). The wizard reads the file right in your browser — nothing is sent or saved yet.",
+        target: '[data-tutorial="upload-dropzone"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "validate",
+        title: "Stage 2 — Validate",
+        content:
+          "After upload, the wizard auto-detects what kind of export it is and checks the rows for problems — so you catch issues before they ever reach the database.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+      {
+        id: "preview",
+        title: "Stage 3 — Preview",
+        content:
+          "Next you'll see exactly what will change — new sections, edits, and removals — before anything is written. This is your last chance to review and back out.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+      {
+        id: "results",
+        title: "Stage 4 — Results",
+        content:
+          "Only after you commit does the wizard write the data, then show a summary of everything that changed, grouped by type.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+      {
+        id: "import-history",
+        title: "History & Rollback",
+        content:
+          "Every commit is logged. The Import History button opens a record of past imports — where you can review them and roll one back if something looks wrong.",
+        target: '[data-tutorial="import-history"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "complete",
+        title: "Safe by Design",
+        content:
+          "That's the import flow: Upload, Validate, Preview, then commit — with full history and rollback if you ever need it. When you have a real CLSS export, start at Stage 1.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+    ],
+  },
 };
 
 // Help hints that appear throughout the app

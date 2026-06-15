@@ -68,3 +68,51 @@ Goal: remove dead code/bloat, fix bugs, improve data architecture and maintainab
 - `src/utils/activityRollup.cjs` is a byte-identical copy of `functions/activityAnalytics.js` (deployment isolation for Cloud Functions); keep in sync when editing either
 - `usePeopleOperations` (1200 lines) is the single person/program CRUD path — further decomposition possible but working and tested
 - `eslint no-unused-vars` is off; enabling it would guard against future dead code accumulation
+
+---
+
+# Tier-1 Tutorials — June 2026
+
+Goal: add the 4 essential tutorials (Getting Started, Today/Live View, Faculty Schedules, Import Wizard) using the existing tutorial engine. Interactive hands-on where safe; Import is walkthrough-only (data-mutating). Plan: `~/.claude/plans/glimmering-chasing-garden.md`.
+
+## A — data-tutorial anchors
+- [x] Dashboard.jsx (help-button, global-search, search-results, explore-sections, shortcuts, first SectionCard: section-card + pin-button via isFirst prop)
+- [x] LiveView.jsx (asof-control, faculty-finder, explore-button, today-schedule) — dropped asof-popover anchor (popover closes on Next; explanation folded into asof-control step)
+- [x] FacultyHub.jsx (faculty-tab-{compare,availability,meetings} via dynamic template)
+- [x] FacultySchedules.jsx (faculty-search, day-toggles, compare-grid)
+- [x] IndividualAvailability.jsx (availability-search) — dropped availability-results anchor (conditional render risk)
+- [x] GroupMeetings.jsx (meeting-professors, meeting-duration, meeting-results)
+- [x] ImportWizard.jsx (import-stepper, upload-dropzone, import-history)
+
+## B — tutorial configs (TutorialContext.jsx)
+- [x] getting-started (9 steps, Getting Started)
+- [x] today-live-view (7 steps, Getting Started)
+- [x] faculty-schedules (11 steps across 3 tabs, Scheduling)
+- [x] import-clss-data (8 steps, Administration, walkthrough only — zero required actions)
+
+## C — TutorialPage.jsx
+- [x] Add "Getting Started" → Lightbulb in categoryIcons
+- [x] Update Coming Soon chips (drop fulfilled Faculty Schedules + Data Import)
+
+## Verification
+- [x] npm run lint clean
+- [x] npm run build succeeds
+- [x] npm test green (30 files, 181 tests)
+- [x] Static reconciliation: every referenced target has a matching anchor
+- [ ] Manual click-through (needs authenticated session + Firestore data — left for user)
+
+## Review
+
+### What shipped
+- 4 new tutorials (5 → 9 total). Getting Started + Today are new "Getting Started" category; Faculty Schedules + Import fulfil 2 of 3 "Coming Soon" promises.
+- ~20 `data-tutorial` anchors added across 7 components; no changes to the overlay engine, routing, or nav.
+- Format per user: tutorials 1–3 use required `click`/`input` steps on real controls (safe hands-on); Import is a pure read-only walkthrough (data-mutating).
+
+### Engine quirks discovered (drove the design)
+- `requiresViewMode`/`requiresExpanded` config keys are **inert** — nothing reads them. `step.position` is also inert (overlay auto-positions). Multi-view flows work only because (a) a required `click` targets the tab/control and (b) the next step's target exists only after the view renders; 500ms polling re-acquires it.
+- `ClickBlockerFrame` leaves **only the spotlighted element** clickable, so "switch tab" steps must target the tab button.
+- LiveView as-of popover and the faculty/availability pickers close on outside `mousedown` → a follow-up step can't target their contents (closes when the user clicks "Next"). Folded those explanations into the trigger step instead.
+- `<details>` keeps collapsed children in the DOM with a 0-size rect → Getting Started expands the first section (required click) before targeting the pin star inside it.
+
+### Known limitation (consistent with existing tutorials)
+- Tutorial cards aren't permission-gated. A non-admin who starts "Importing CLSS Data" lands on the route-protected Import Wizard (blocked message) with the overlay floating over it. Matches the pre-existing un-gated pattern; gating would be a new feature beyond scope.

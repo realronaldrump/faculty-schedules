@@ -164,7 +164,7 @@ const Dashboard = () => {
     [togglePinPage],
   );
 
-  const SectionCard = ({ section, defaultOpen }) => {
+  const SectionCard = ({ section, defaultOpen, isFirst }) => {
     const SectionIcon = section.icon;
 
     return (
@@ -172,7 +172,10 @@ const Dashboard = () => {
         className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden group/card transition-all duration-200 hover:shadow-md hover:border-baylor-green/20"
         open={defaultOpen}
       >
-        <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        <summary
+          data-tutorial={isFirst ? "section-card" : undefined}
+          className="cursor-pointer list-none [&::-webkit-details-marker]:hidden"
+        >
           <div className="flex items-start justify-between gap-4 p-5">
             <div className="flex items-start gap-3">
               <div className="mt-0.5 rounded-lg bg-baylor-green/10 p-2.5 group-hover/card:bg-baylor-gold/15 transition-all">
@@ -191,7 +194,7 @@ const Dashboard = () => {
           </div>
         </summary>
         <div className="border-t border-gray-50 divide-y divide-gray-50">
-          {section.items.map((item) => {
+          {section.items.map((item, itemIndex) => {
             const ItemIcon = item.icon || section.icon;
             const pinned = isPinned(item.id);
 
@@ -217,6 +220,7 @@ const Dashboard = () => {
                   <ChevronRight className="mt-1 h-4 w-4 text-gray-200 group-hover/item:text-baylor-gold/60 transition-colors" />
                 </button>
                 <button
+                  data-tutorial={isFirst && itemIndex === 0 ? "pin-button" : undefined}
                   onClick={(event) => handlePinToggle(event, item.id)}
                   className="flex items-center px-4 text-gray-300 hover:text-baylor-gold transition-colors"
                   aria-pressed={pinned}
@@ -251,6 +255,7 @@ const Dashboard = () => {
             </p>
           </div>
           <button
+            data-tutorial="help-button"
             onClick={() => handleNavigate("/help/tutorials")}
             className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white/90 bg-white/10 hover:bg-white/20 rounded-md transition-all"
             title="View tutorials and help"
@@ -269,6 +274,7 @@ const Dashboard = () => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
           <input
             id="dashboard-search"
+            data-tutorial="global-search"
             type="text"
             placeholder="Search for people, rooms, courses, or tools..."
             value={searchQuery}
@@ -279,7 +285,10 @@ const Dashboard = () => {
         </div>
 
         {searchQuery.trim().length > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div
+            data-tutorial="search-results"
+            className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
+          >
             <div className="px-5 py-3 text-xs font-medium text-gray-400 border-b border-gray-50 bg-gray-50/30">
               Search results
             </div>
@@ -336,7 +345,11 @@ const Dashboard = () => {
       </section>
 
       {pinnedItems.length > 0 && (
-        <section aria-label="Pinned destinations" className="space-y-2">
+        <section
+          data-tutorial="shortcuts"
+          aria-label="Pinned destinations"
+          className="space-y-2"
+        >
           <div className="flex items-center gap-2">
             <Star className="h-3.5 w-3.5 text-baylor-gold fill-current" />
             <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -383,12 +396,16 @@ const Dashboard = () => {
           </h2>
           <div className="h-px flex-1 bg-gray-200"></div>
         </div>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {navigationSections.map((section) => (
+        <div
+          data-tutorial="explore-sections"
+          className="grid grid-cols-1 gap-4 lg:grid-cols-2"
+        >
+          {navigationSections.map((section, sectionIndex) => (
             <SectionCard
               key={section.id}
               section={section}
               defaultOpen={false}
+              isFirst={sectionIndex === 0}
             />
           ))}
         </div>

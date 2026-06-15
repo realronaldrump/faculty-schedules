@@ -532,6 +532,7 @@ const ImportWizard = ({ embedded = false }) => {
           </p>
         </div>
         <button
+          data-tutorial="import-history"
           onClick={() => {
             setHistoryTransactionId("");
             setShowHistory(true);
@@ -543,7 +544,7 @@ const ImportWizard = ({ embedded = false }) => {
         </button>
       </div>
 
-      <div className="flex items-center mb-6 text-sm">
+      <div data-tutorial="import-stepper" className="flex items-center mb-6 text-sm">
         <div
           className={`flex items-center ${step >= 1 ? "text-baylor-green" : "text-gray-400"}`}
         >
@@ -570,7 +571,10 @@ const ImportWizard = ({ embedded = false }) => {
       </div>
 
       {step === 1 && (
-        <div className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center bg-gray-50/50">
+        <div
+          data-tutorial="upload-dropzone"
+          className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center bg-gray-50/50"
+        >
           <div className="bg-white rounded-lg p-4 inline-block mb-4 shadow-sm">
             <Upload className="w-8 h-8 text-baylor-green mx-auto" />
           </div>

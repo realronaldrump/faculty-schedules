@@ -418,7 +418,10 @@ const GroupMeetings = ({ embedded = false }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   Meeting Duration
                 </label>
-                <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+                <div
+                  data-tutorial="meeting-duration"
+                  className="grid grid-cols-3 md:grid-cols-6 gap-3"
+                >
                   {[30, 60, 90, 120, 150, 180].map((duration) => (
                     <button
                       key={duration}
@@ -573,6 +576,7 @@ const GroupMeetings = ({ embedded = false }) => {
                 />
                 <input
                   type="text"
+                  data-tutorial="meeting-professors"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900"
@@ -697,6 +701,7 @@ const GroupMeetings = ({ embedded = false }) => {
             {/* Find Meeting Times Button */}
             <div className="text-center mt-6">
               <button
+                data-tutorial="meeting-results"
                 onClick={() => setShowResults(true)}
                 disabled={selectedProfessors.length === 0}
                 className="px-8 py-3 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-bold text-lg shadow-md"

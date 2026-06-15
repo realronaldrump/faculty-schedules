@@ -93,6 +93,7 @@ const FacultyHub = ({ initialTab }) => {
         {availableTabs.map((tab) => (
           <button
             key={tab.id}
+            data-tutorial={`faculty-tab-${tab.id}`}
             onClick={() => handleTabChange(tab.id)}
             className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${activeTab === tab.id
               ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"

@@ -9,6 +9,34 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "dateLocal",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "temperatureDeviceReadings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "buildingName",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dateLocal",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "temperatureDeviceReadings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "buildingCode",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "deviceId",
           "order": "ASCENDING"
         },
@@ -28,6 +56,34 @@
         },
         {
           "fieldPath": "spaceKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dateLocal",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "temperatureRoomSnapshots",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "buildingCode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dateLocal",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "temperatureRoomSnapshots",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "buildingName",
           "order": "ASCENDING"
         },
         {

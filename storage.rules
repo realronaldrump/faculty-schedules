@@ -16,11 +16,9 @@ service firebase.storage {
         );
     }
 
+    // Admin = admin role in the Firestore user profile (no custom claims are set).
     function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.admin == true ||
-        userHasAdminRole()
-      );
+      return isSignedIn() && userHasAdminRole();
     }
 
     match /temperature-floorplans/{buildingKey}/{fileName} {

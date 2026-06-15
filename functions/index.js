@@ -39,6 +39,8 @@ const normalizeRoleList = (roles) => {
   return [];
 };
 
+// Duplicated from src/utils/activityOwner.js (client source of truth) and
+// firestore.rules (isActivityOwner) — keep all three in sync if it ever changes.
 const ACTIVITY_OWNER_UID = "fjQuh4iAMFYi8URf35Yv5RRijKw2";
 const MAX_BACKFILL_DAYS = 120;
 const QUERY_PAGE_SIZE = 1000;

@@ -24,6 +24,7 @@ import { useSchedules } from "./contexts/ScheduleContext.jsx";
 import useUserActivityTracker from "./hooks/useUserActivityTracker";
 import { registerNavigationPages } from "./utils/pageRegistry";
 import { navigationItems } from "./utils/navigationConfig";
+import { normalizeRoleList } from "./utils/authz";
 
 import {
   Calendar,
@@ -90,17 +91,8 @@ function App() {
     return path === "" ? "dashboard" : path;
   }, [location.pathname]);
 
-  const normalizeRoles = (roles) => {
-    if (Array.isArray(roles)) return roles.filter(Boolean);
-    if (roles && typeof roles === "object") {
-      return Object.keys(roles).filter((key) => roles[key]);
-    }
-    if (typeof roles === "string" && roles.trim()) return [roles.trim()];
-    return [];
-  };
-
   const userRoles = useMemo(
-    () => normalizeRoles(userProfile?.roles),
+    () => normalizeRoleList(userProfile?.roles),
     [userProfile?.roles],
   );
 

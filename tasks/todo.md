@@ -148,35 +148,62 @@ H1–H3 + low-priority cleanups. Role model stays as-is (Option B / conservative
 staff/faculty retained for a possible future viewer).
 
 ## High priority
-- [ ] **H1** firestore.rules: drop `userIsPending()` from `canReadAppData()` so
+- [x] **H1** firestore.rules: dropped `userIsPending()` from `canReadAppData()` so
       pending (self-registered) users can no longer read app data or write the
-      temperature collections via the SDK. Remove now-dead `userIsPending()` fn.
-- [ ] **H2** firestore.rules: delete the unused `actions` subsystem
+      temperature collections via the SDK. Removed now-dead `userIsPending()` fn.
+- [x] **H2** firestore.rules: deleted the unused `actions` subsystem
       (`userHasDirectAction`/`userHasOverrideAction`/`roleHasAction`/
       `userHasRoleAction`/`userHasAction`) — never referenced by any `allow`.
-- [ ] **H3** firestore.rules: delete the dead `overrides.pages` schema
-      (`userHasOverridePage`/`userHasOverridePageDeny`); client only writes the
-      flat `permissions` map. Update `userHasPage` + `canManagePafWorkflow`.
+- [x] **H3** firestore.rules: deleted the dead `overrides.pages` schema
+      (`userHasOverridePage`/`userHasOverridePageDeny`); updated `userHasPage` +
+      `canManagePafWorkflow`. Client only ever wrote the flat `permissions` map.
 
 ## Low priority cleanups
-- [ ] **L1** Remove dead custom-claim branches from `isAdmin()` in firestore.rules
+- [x] **L1** Removed dead custom-claim branches from `isAdmin()` in firestore.rules
       and storage.rules (no code sets custom claims; admin is Firestore-role only).
-- [ ] **L3/L4** App.jsx: replace inline `normalizeRoles` with shared
+- [x] **L3/L4** App.jsx: replaced inline `normalizeRoles` with shared
       `normalizeRoleList` from authz.js.
-- [ ] **L5** Cross-reference the hardcoded owner UID in activityOwner.js,
-      firestore.rules, and functions/index.js with comments (can't share a module).
-- [ ] **L2** (no-op) rules `get()` cost — negligible at this scale, intentionally
+- [x] **L5** Cross-referenced the hardcoded owner UID in activityOwner.js,
+      firestore.rules, and functions/index.js with comments.
+- [x] **L2** (no-op) rules `get()` cost — negligible at this scale, intentionally
       not restructured.
-- [ ] **L6** (re-evaluated, SKIP) `accessControl` false-padding is load-bearing for
+- [x] **L6** (re-evaluated, SKIP) `accessControl` false-padding is load-bearing for
       the "new pages need decisions" UX and doc size is trivial — not bloat.
-- [ ] **L7** (no-op) free-tier/cost note only.
+- [x] **L7** (no-op) free-tier/cost note only.
 
 ## Verification
-- [ ] firestore.rules compiles (emulator)
-- [ ] authz + permissions unit tests green
-- [ ] lint clean · build succeeds · full test suite green
-- [ ] Manual reasoning: admins keep full access; owner keeps activity pages;
+- [x] firestore.rules compiles (emulator started + ran script → rules compiled)
+- [x] authz + permissions unit tests green
+- [x] lint clean · build succeeds · full test suite green (30 files, 181 tests)
+- [x] Manual reasoning: admins keep full access; owner keeps activity pages;
       active staff/faculty unaffected; pending users lose data reads only.
 
 ## Review
-_(to be filled in after implementation)_
+
+### What changed
+- **H1 (security):** `canReadAppData()` is now `isAdmin() || userIsActive()`. Pending,
+  self-registered accounts can no longer read any app collection or write the
+  `temperature*` collections via the SDK — they retain access only to their own
+  `users/{uid}` doc. Dead `userIsPending()` helper removed.
+- **H2/H3 (dead code):** removed the entire `actions` authorization subsystem (~50
+  lines) and the `overrides.pages` schema — neither was reachable (no `allow` rule
+  referenced actions; the client only writes the flat `permissions` map).
+- **L1:** `isAdmin()` in both rules files is now just `isSignedIn() && userHasAdminRole()`;
+  the `request.auth.token.admin` custom-claim branches were dead (no code ever calls
+  `setCustomUserClaims`).
+- **L3/L4/L5:** App.jsx uses the shared `normalizeRoleList`; owner UID is now
+  comment-cross-referenced in its three locations.
+
+net: firestore.rules ~95 lines smaller, no behavior change for admins/active users.
+
+### Risk / behavior
+- Admins: unchanged (full access). Owner: unchanged (activity pages). Active
+  staff/faculty: unchanged. Disabled: unchanged (no access). Pending: lose data
+  reads (intended). AuthContext's `settings/accessControl` listener handles the
+  resulting permission-denied gracefully (error callback sets defaults).
+
+### NOT YET LIVE — deploy required
+Rules changes only take effect after deploy. The H1 fix is a real hole until then:
+- `npm run deploy:firestore`  (firestore rules + indexes)
+- `firebase deploy --only storage`  (storage rules)
+Owner to run/authorize. No Cloud Functions changes needed (only a comment edit).

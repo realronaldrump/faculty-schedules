@@ -71,29 +71,6 @@ service cloud.firestore {
         );
     }
 
-    // User overrides (new schema) for page grants
-    function userHasOverridePage(pageId) {
-      return hasUserProfile() &&
-        get(userDoc()).data.overrides is map &&
-        get(userDoc()).data.overrides.pages is map &&
-        (
-          get(userDoc()).data.overrides.pages[pageId] == true ||
-          get(userDoc()).data.overrides.pages['*'] == true
-        );
-    }
-
-    function userHasOverridePageDeny(pageId) {
-      return hasUserProfile() &&
-        get(userDoc()).data.overrides is map &&
-        get(userDoc()).data.overrides.pages is map &&
-        (
-          (pageId in get(userDoc()).data.overrides.pages &&
-            get(userDoc()).data.overrides.pages[pageId] == false) ||
-          ('*' in get(userDoc()).data.overrides.pages &&
-            get(userDoc()).data.overrides.pages['*'] == false)
-        );
-    }
-
     // Role-based page grants from settings/accessControl (supports wildcard)
     function roleHasPage(role, pageId) {
       return exists(accessControlDoc()) &&
@@ -114,30 +91,24 @@ service cloud.firestore {
       );
     }
 
-    // Check if user has a specific page permission (direct, override, or role-based)
+    // Check if user has a specific page permission (direct or role-based)
     function userHasPage(pageId) {
       return isAdmin() ||
         (userIsActive() && (
           !userHasDirectPageDeny(pageId) &&
-          !userHasOverridePageDeny(pageId) &&
           (userHasDirectPage(pageId) ||
-            userHasOverridePage(pageId) ||
             userHasRolePage(pageId))
         ));
     }
 
-    // Treat someone as admin if they have a custom claim or admin role
+    // Admin = admin role in the Firestore user profile (no custom claims are set).
     function isAdmin() {
-      return isSignedIn() && (
-        // Custom claim on the Auth token
-        request.auth.token.admin == true ||
-        request.auth.token.admin == "true" ||
-        request.auth.token.admin == 1 ||
-        // Check Firestore user profile roles (supports array or map formats)
-        userHasAdminRole()
-      );
+      return isSignedIn() && userHasAdminRole();
     }
 
+    // Owner-only gate for activity telemetry. This UID is duplicated in
+    // src/utils/activityOwner.js (client source of truth) and functions/index.js;
+    // update all three together if it ever changes.
     function isActivityOwner() {
       return isSignedIn() &&
         request.auth.uid == 'fjQuh4iAMFYi8URf35Yv5RRijKw2';
@@ -148,8 +119,10 @@ service cloud.firestore {
       return isAdmin();
     }
 
+    // Pending (self-registered, unapproved) users intentionally get NO app-data
+    // read access — only their own users/{uid} doc, handled by the /users rule.
     function canReadAppData() {
-      return isAdmin() || userIsActive() || userIsPending();
+      return isAdmin() || userIsActive();
     }
 
     function canManagePeople() {
@@ -163,7 +136,6 @@ service cloud.firestore {
         (
           userIsActive() &&
           !userHasDirectPageDeny('workflows/paf') &&
-          !userHasOverridePageDeny('workflows/paf') &&
           userHasPage('people/directory')
         );
     }

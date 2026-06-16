@@ -28,6 +28,7 @@ import {
 import { getActiveFacultyList } from "../../utils/facultyFinderUtils";
 import FacultyStatusBadge from "./FacultyStatusBadge";
 
+import SelectDropdown from "../SelectDropdown";
 const QuickStats = ({ stats, isWeekend }) => {
   if (isWeekend) {
     return (
@@ -517,7 +518,7 @@ const FacultyExplorer = ({
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2">
             <Building2 className="w-4 h-4 text-gray-500" />
-            <select
+            <SelectDropdown
               value={programFilter}
               onChange={(e) => handleSetProgramFilter(e.target.value)}
               className="bg-transparent text-sm font-medium text-gray-700 focus:outline-none cursor-pointer min-w-[120px] max-w-[200px]"
@@ -529,7 +530,7 @@ const FacultyExplorer = ({
                   {program.name}
                 </option>
               ))}
-            </select>
+            </SelectDropdown>
           </div>
           {programFilter !== "all" && (
             <button

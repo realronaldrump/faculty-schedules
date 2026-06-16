@@ -17,6 +17,7 @@ import {
 } from "../../utils/locationService";
 import { useSchedules } from "../../contexts/ScheduleContext";
 
+import SelectDropdown from "../SelectDropdown";
 const RoomGridGenerator = () => {
   const { canEdit } = usePermissions();
   const canEditHere = canEdit("scheduling/rooms");
@@ -1308,7 +1309,7 @@ const RoomGridGenerator = () => {
                       <span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
                     </label>
                     {dataMode === "auto" && availableSemesters.length > 0 ? (
-                      <select
+                      <SelectDropdown
                         id="semesterSelect"
                         value={semester}
                         onChange={(e) => setSemester(e.target.value)}
@@ -1322,7 +1323,7 @@ const RoomGridGenerator = () => {
                             {s}
                           </option>
                         ))}
-                      </select>
+                      </SelectDropdown>
                     ) : (
                       <input
                         type="text"
@@ -1351,7 +1352,7 @@ const RoomGridGenerator = () => {
                       Building
                       <span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
                     </label>
-                    <select
+                    <SelectDropdown
                       id="buildingSelect"
                       value={multiRoomMode ? "" : selectedBuilding}
                       onChange={(e) => {
@@ -1369,7 +1370,7 @@ const RoomGridGenerator = () => {
                     >
                       {!multiRoomMode && <option value="">Choose building...</option>}
                       {buildingOptions}
-                    </select>
+                    </SelectDropdown>
                     <p id="building-help" className="text-xs text-gray-500 mt-1">
                       {Object.keys(buildings).length === 0
                         ? "No buildings loaded yet"
@@ -1399,7 +1400,7 @@ const RoomGridGenerator = () => {
                         </span>
                       </div>
                     ) : (
-                      <select
+                      <SelectDropdown
                         id="roomSelect"
                         value={selectedRoom}
                         onChange={(e) => setSelectedRoom(e.target.value)}
@@ -1412,7 +1413,7 @@ const RoomGridGenerator = () => {
                           {!selectedBuilding ? "Select building first" : "Choose room..."}
                         </option>
                         {roomOptions}
-                      </select>
+                      </SelectDropdown>
                     )}
                     {!multiRoomMode && (
                       <p id="room-help" className="text-xs text-gray-500 mt-1">
@@ -1436,7 +1437,7 @@ const RoomGridGenerator = () => {
                       >
                         Day Pattern
                       </label>
-                      <select
+                      <SelectDropdown
                         id="dayTypeSelect"
                         value={selectedDayType}
                         onChange={(e) => setSelectedDayType(e.target.value)}
@@ -1447,7 +1448,7 @@ const RoomGridGenerator = () => {
                         <option value="WEEK">Full Week (Mon–Fri)</option>
                         <option value="MWF">Mon / Wed / Fri only</option>
                         <option value="TR">Tue / Thu only</option>
-                      </select>
+                      </SelectDropdown>
                     </div>
                     <p id="daytype-help" className="text-sm text-gray-500 self-end pb-2">
                       Choose which days to include in the schedule grid

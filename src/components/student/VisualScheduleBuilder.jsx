@@ -10,6 +10,7 @@ import {
   toScheduleMinutes,
 } from "../../utils/studentScheduleUtils";
 
+import SelectDropdown from "../SelectDropdown";
 /**
  * VisualScheduleBuilder - Grid-based visual schedule selector
  *
@@ -425,7 +426,7 @@ const VisualScheduleBuilder = ({
           <span className="text-xs text-gray-500">5-minute increments</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-          <select
+          <SelectDropdown
             value={manualEntry.day}
             onChange={(e) => handleManualFieldChange("day", e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -435,7 +436,7 @@ const VisualScheduleBuilder = ({
                 {day.full}
               </option>
             ))}
-          </select>
+          </SelectDropdown>
           <input
             type="time"
             step={300}

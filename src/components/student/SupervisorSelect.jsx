@@ -110,7 +110,7 @@ const SupervisorSelect = ({
           onChange={handleInputChange}
           onFocus={() => setIsOpen(true)}
           placeholder={placeholder}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-baylor-green focus:border-baylor-green pr-9"
+          className="w-full min-h-10 rounded-lg border border-gray-300 bg-white px-3 py-2 pr-9 text-sm font-medium text-gray-900 shadow-sm transition-colors focus:border-baylor-green focus:outline-none focus:ring-2 focus:ring-baylor-green/20"
           autoComplete="off"
         />
         <ChevronDown
@@ -118,15 +118,15 @@ const SupervisorSelect = ({
           className={`absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
         />
         {isOpen && (
-          <div className="absolute z-20 mt-2 w-full rounded-md border border-gray-200 bg-white shadow-lg overflow-hidden">
-            <div className="px-3 py-2 text-xs font-semibold text-gray-500 bg-gray-50 border-b border-gray-100">
+          <div className="app-dropdown-menu absolute mt-1 w-full">
+            <div className="app-dropdown-section text-xs font-semibold text-gray-500">
               Select a supervisor
             </div>
             <div className="max-h-52 overflow-y-auto">
               {allowClear && value && (
                 <button
                   type="button"
-                  className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 text-gray-600 hover:bg-gray-100 border-b border-gray-100"
+                  className="app-dropdown-option flex items-center gap-2 border-b border-gray-100 text-gray-600"
                   onMouseDown={(event) => {
                     event.preventDefault();
                     handleClear();
@@ -137,7 +137,7 @@ const SupervisorSelect = ({
                 </button>
               )}
               {filteredOptions.length === 0 && (
-                <div className="px-3 py-2 text-sm text-gray-500">
+                <div className="app-dropdown-empty">
                   No supervisors found.
                 </div>
               )}
@@ -147,7 +147,9 @@ const SupervisorSelect = ({
                   <button
                     key={option.id}
                     type="button"
-                    className={`w-full px-3 py-2 text-sm text-left flex items-center justify-between hover:bg-baylor-green/10 ${isSelected ? "bg-baylor-green/5 text-baylor-green" : "text-gray-700"}`}
+                    className={`app-dropdown-option flex items-center justify-between ${
+                      isSelected ? "app-dropdown-option-selected" : ""
+                    }`}
                     onMouseDown={(event) => {
                       event.preventDefault();
                       handleSelect(option);

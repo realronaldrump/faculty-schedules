@@ -487,25 +487,25 @@ const GroupMeetings = ({ embedded = false }) => {
                 <div className="relative" ref={programDropdownRef}>
                   <button
                     onClick={() => setIsProgramDropdownOpen((prev) => !prev)}
-                    className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900 flex items-center justify-between"
+                    className="app-dropdown-trigger"
                   >
                     <span>Select program...</span>
                     <GraduationCap className="w-5 h-5 text-baylor-green" />
                   </button>
                   {isProgramDropdownOpen && (
-                    <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-hidden">
+                    <div className="app-dropdown-menu absolute mt-1 w-full max-h-60">
                       <div className="p-2 border-b border-gray-200">
                         <input
                           type="text"
                           placeholder="Search programs..."
                           value={programSearchTerm}
                           onChange={(e) => setProgramSearchTerm(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-baylor-green focus:border-baylor-green text-sm"
+                          className="app-dropdown-search"
                         />
                       </div>
                       <div className="max-h-48 overflow-auto">
                         {filteredPrograms.length === 0 ? (
-                          <div className="px-3 py-2 text-sm text-gray-500">
+                          <div className="app-dropdown-empty">
                             {programSearchTerm
                               ? "No programs found matching your search."
                               : !programsLoaded
@@ -526,7 +526,7 @@ const GroupMeetings = ({ embedded = false }) => {
                                 key={program}
                                 onClick={() => handleAddProgramFaculty(program)}
                                 disabled={count === 0}
-                                className={`w-full text-left px-3 py-2 hover:bg-baylor-green/10 transition-colors text-sm ${count === 0 ? "text-gray-400 cursor-not-allowed" : ""}`}
+                                className={`app-dropdown-option ${count === 0 ? "app-dropdown-option-disabled" : ""}`}
                               >
                                 <div className="flex items-center justify-between">
                                   <span>{program}</span>

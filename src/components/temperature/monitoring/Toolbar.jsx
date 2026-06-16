@@ -1,6 +1,7 @@
 import { Calendar, Eye, EyeOff, Map as MapIcon, Thermometer } from "lucide-react";
 import { formatMinutesToLabel } from "../../../utils/timeUtils";
 
+import SelectDropdown from "../../SelectDropdown";
 const Toolbar = ({
   selectedBuilding,
   buildingOptions,
@@ -24,7 +25,7 @@ const Toolbar = ({
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <MapIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10 pointer-events-none" />
-            <select
+            <SelectDropdown
               className="form-select pl-9 w-full font-medium"
               value={selectedBuilding}
               onChange={(e) => onBuildingChange(e.target.value)}
@@ -36,7 +37,7 @@ const Toolbar = ({
                   {hiddenBuildingCodes.has(building.code) ? " (hidden)" : ""}
                 </option>
               ))}
-            </select>
+            </SelectDropdown>
           </div>
           {hiddenBuildingCodes.size > 0 && (
             <button
@@ -79,7 +80,7 @@ const Toolbar = ({
             </label>
             <div className="flex items-center gap-2">
               <Thermometer className="w-4 h-4 text-gray-400" />
-              <select
+              <SelectDropdown
                 className="form-select"
                 value={selectedSnapshotId}
                 onChange={(e) => onSnapshotChange(e.target.value)}
@@ -89,7 +90,7 @@ const Toolbar = ({
                     {slot.label || formatMinutesToLabel(slot.minutes)}
                   </option>
                 ))}
-              </select>
+              </SelectDropdown>
             </div>
           </div>
         </>

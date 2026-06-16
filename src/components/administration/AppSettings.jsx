@@ -15,6 +15,7 @@ import ConfirmDialog from '../shared/ConfirmDialog';
 import BuildingManagement from './BuildingManagement';
 import SpaceManagement from './SpaceManagement';
 
+import SelectDropdown from "../SelectDropdown";
 const AppSettings = () => {
   const navigate = useNavigate();
   const { availableSemesters = [], termOptions = [], refreshTerms } = useSchedules();
@@ -672,7 +673,7 @@ const AppSettings = () => {
                       </span>
                     )}
                   </label>
-                  <select
+                  <SelectDropdown
                     value={selectedTerm}
                     onChange={(e) => setSelectedTerm(e.target.value)}
                     className="w-full md:w-96 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -682,7 +683,7 @@ const AppSettings = () => {
                     {availableSemesters && availableSemesters.map((semester) => (
                       <option key={semester} value={semester}>{semester}</option>
                     ))}
-                  </select>
+                  </SelectDropdown>
                 </div>
 
                 <div className="flex items-center space-x-3 pt-2">
@@ -757,7 +758,7 @@ const AppSettings = () => {
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Semester Name</label>
-                        <select
+                        <SelectDropdown
                           value={mapping.season}
                           onChange={(e) => handleUpdateSeasonMapping(mapping.code, e.target.value)}
                           className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -766,7 +767,7 @@ const AppSettings = () => {
                           <option value="Spring">Spring</option>
                           <option value="Summer">Summer</option>
                           <option value="Fall">Fall</option>
-                        </select>
+                        </SelectDropdown>
                       </div>
                     </div>
                     <button
@@ -795,7 +796,7 @@ const AppSettings = () => {
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Semester Name</label>
-                        <select
+                        <SelectDropdown
                           value={newMappingSeason}
                           onChange={(e) => setNewMappingSeason(e.target.value)}
                           className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -805,7 +806,7 @@ const AppSettings = () => {
                           <option value="Spring">Spring</option>
                           <option value="Summer">Summer</option>
                           <option value="Fall">Fall</option>
-                        </select>
+                        </SelectDropdown>
                       </div>
                     </div>
                     <button
@@ -1270,7 +1271,7 @@ const AppSettings = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Select target semester:
                     </label>
-                    <select
+                    <SelectDropdown
                       value={mergeTargetTerm}
                       onChange={(e) => setMergeTargetTerm(e.target.value)}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -1284,7 +1285,7 @@ const AppSettings = () => {
                           </option>
                         ))
                       }
-                    </select>
+                    </SelectDropdown>
                   </div>
                   
                   <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm">

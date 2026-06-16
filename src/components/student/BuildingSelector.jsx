@@ -104,7 +104,7 @@ const BuildingSelector = ({
               }}
               onFocus={() => setIsDropdownOpen(true)}
               placeholder={placeholder}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green text-sm"
+              className="w-full min-h-10 rounded-lg border border-gray-300 bg-white py-2 pl-10 pr-4 text-sm font-medium text-gray-900 shadow-sm transition-colors focus:border-baylor-green focus:outline-none focus:ring-2 focus:ring-baylor-green/20"
               disabled={selectedBuildings.length >= maxBuildings}
             />
           </div>
@@ -122,7 +122,7 @@ const BuildingSelector = ({
               className="fixed inset-0 z-10"
               onClick={() => setIsDropdownOpen(false)}
             />
-            <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+            <div className="app-dropdown-menu absolute mt-1 w-full max-h-60 overflow-y-auto">
               {filteredBuildings.map((building, idx) => (
                 <button
                   key={idx}
@@ -130,7 +130,7 @@ const BuildingSelector = ({
                     toggleBuilding(building);
                     setIsDropdownOpen(false);
                   }}
-                  className="w-full flex items-center gap-2 px-4 py-2 hover:bg-baylor-green/10 text-left text-sm transition-colors"
+                  className="app-dropdown-option flex items-center gap-2"
                 >
                   <Building size={14} className="text-gray-400" />
                   {building}
@@ -140,7 +140,7 @@ const BuildingSelector = ({
               {canAddCustom && (
                 <button
                   onClick={addCustomBuilding}
-                  className="w-full flex items-center gap-2 px-4 py-2 hover:bg-baylor-green/10 text-left text-sm text-baylor-green border-t border-gray-100 transition-colors"
+                  className="app-dropdown-option flex items-center gap-2 border-t border-gray-100 text-baylor-green"
                 >
                   <Plus size={14} />
                   Add "{searchTerm}"

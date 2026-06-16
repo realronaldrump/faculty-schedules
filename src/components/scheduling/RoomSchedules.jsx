@@ -31,6 +31,7 @@ import { useAppConfig } from "../../contexts/AppConfigContext";
 import { useSchedules } from "../../contexts/ScheduleContext";
 import { parseTermDate } from "../../utils/termUtils";
 
+import SelectDropdown from "../SelectDropdown";
 const RoomSchedules = ({ embedded = false }) => {
   const { scheduleData = [], facultyData = [] } = useData();
   const { loadPeople } = usePeople();
@@ -791,7 +792,7 @@ const RoomSchedules = ({ embedded = false }) => {
                   className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
                   size={16}
                 />
-                <select
+                <SelectDropdown
                   value={selectedBuilding}
                   onChange={(e) => setSelectedBuilding(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white"
@@ -802,7 +803,7 @@ const RoomSchedules = ({ embedded = false }) => {
                       {b}
                     </option>
                   ))}
-                </select>
+                </SelectDropdown>
               </div>
             </div>
 
@@ -816,7 +817,7 @@ const RoomSchedules = ({ embedded = false }) => {
                   className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
                   size={16}
                 />
-                <select
+                <SelectDropdown
                   value={selectedRoom}
                   onChange={(e) => setSelectedRoom(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white"
@@ -827,7 +828,7 @@ const RoomSchedules = ({ embedded = false }) => {
                       {r}
                     </option>
                   ))}
-                </select>
+                </SelectDropdown>
               </div>
             </div>
 
@@ -943,7 +944,7 @@ const RoomSchedules = ({ embedded = false }) => {
                   className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
                   size={16}
                 />
-                <select
+                <SelectDropdown
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white"
@@ -951,7 +952,7 @@ const RoomSchedules = ({ embedded = false }) => {
                   <option value="room">Room (A–Z)</option>
                   <option value="sessions">Sessions (High → Low)</option>
                   <option value="utilization">Utilization (High → Low)</option>
-                </select>
+                </SelectDropdown>
               </div>
             </div>
 
@@ -966,7 +967,7 @@ const RoomSchedules = ({ embedded = false }) => {
                     className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
                     size={16}
                   />
-                  <select
+                  <SelectDropdown
                     value={weekViewMode}
                     onChange={(e) => setWeekViewMode(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white"
@@ -976,7 +977,7 @@ const RoomSchedules = ({ embedded = false }) => {
                     <option value="tr">TR</option>
                     <option value="mw">MW</option>
                     <option value="trf">TRF</option>
-                  </select>
+                  </SelectDropdown>
                 </div>
               </div>
             )}

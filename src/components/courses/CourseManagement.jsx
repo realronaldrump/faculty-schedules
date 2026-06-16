@@ -50,6 +50,7 @@ import {
   resolveScheduleTermKey,
 } from "./course-management/helpers";
 
+import SelectDropdown from "../SelectDropdown";
 const CourseManagement = ({ embedded = false }) => {
   const {
     scheduleData = [],
@@ -1400,7 +1401,7 @@ const CourseManagement = ({ embedded = false }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Instructor *
                 </label>
-                <select
+                <SelectDropdown
                   name="instructorId"
                   value={newCourseData.instructorId || ""}
                   onChange={handleNewCourseChange}
@@ -1412,13 +1413,13 @@ const CourseManagement = ({ embedded = false }) => {
                       {faculty.displayName}
                     </option>
                   ))}
-                </select>
+                </SelectDropdown>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Semester *
                 </label>
-                <select
+                <SelectDropdown
                   name="Term"
                   value={newCourseData.Term || ""}
                   onChange={handleNewCourseChange}
@@ -1430,7 +1431,7 @@ const CourseManagement = ({ embedded = false }) => {
                       {term}
                     </option>
                   ))}
-                </select>
+                </SelectDropdown>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1521,7 +1522,7 @@ const CourseManagement = ({ embedded = false }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Online Mode
                 </label>
-                <select
+                <SelectDropdown
                   name="onlineMode"
                   value={newCourseData.onlineMode || ""}
                   onChange={handleNewCourseChange}
@@ -1531,7 +1532,7 @@ const CourseManagement = ({ embedded = false }) => {
                   <option value="">Not set</option>
                   <option value="synchronous">Synchronous</option>
                   <option value="asynchronous">Asynchronous</option>
-                </select>
+                </SelectDropdown>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1564,7 +1565,7 @@ const CourseManagement = ({ embedded = false }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Schedule Type
                 </label>
-                <select
+                <SelectDropdown
                   name="Schedule Type"
                   value={newCourseData["Schedule Type"] || "Class Instruction"}
                   onChange={handleNewCourseChange}
@@ -1575,7 +1576,7 @@ const CourseManagement = ({ embedded = false }) => {
                   <option value="Studio">Studio</option>
                   <option value="Seminar">Seminar</option>
                   <option value="Independent Study">Independent Study</option>
-                </select>
+                </SelectDropdown>
               </div>
             </div>
             <div className="flex gap-2">
@@ -1614,7 +1615,7 @@ const CourseManagement = ({ embedded = false }) => {
             </h3>
             <div className="flex items-center space-x-2">
               {/* Filter Presets */}
-              <select
+              <SelectDropdown
                 value={activeFilterPreset}
                 onChange={(e) => applyFilterPreset(e.target.value)}
                 className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -1625,7 +1626,7 @@ const CourseManagement = ({ embedded = false }) => {
                     {preset.name}
                   </option>
                 ))}
-              </select>
+              </SelectDropdown>
 
               {/* Advanced Filters Toggle */}
               <button
@@ -1797,7 +1798,7 @@ const CourseManagement = ({ embedded = false }) => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Adjunct Status
                   </label>
-                  <select
+                  <SelectDropdown
                     value={filters.adjunct}
                     onChange={(e) =>
                       setFilters((prev) => ({
@@ -1810,14 +1811,14 @@ const CourseManagement = ({ embedded = false }) => {
                     <option value="all">All Faculty</option>
                     <option value="include">Adjunct Only</option>
                     <option value="exclude">Exclude Adjunct</option>
-                  </select>
+                  </SelectDropdown>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Tenure Status
                   </label>
-                  <select
+                  <SelectDropdown
                     value={filters.tenured}
                     onChange={(e) =>
                       setFilters((prev) => ({
@@ -1830,14 +1831,14 @@ const CourseManagement = ({ embedded = false }) => {
                     <option value="all">All Faculty</option>
                     <option value="include">Tenured Only</option>
                     <option value="exclude">Exclude Tenured</option>
-                  </select>
+                  </SelectDropdown>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Credit Hours
                   </label>
-                  <select
+                  <SelectDropdown
                     value={filters.credits}
                     onChange={(e) =>
                       setFilters((prev) => ({
@@ -1852,14 +1853,14 @@ const CourseManagement = ({ embedded = false }) => {
                     <option value="2">2 Credits</option>
                     <option value="3">3 Credits</option>
                     <option value="4+">4+ Credits</option>
-                  </select>
+                  </SelectDropdown>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Time of Day
                   </label>
-                  <select
+                  <SelectDropdown
                     value={filters.timeOfDay}
                     onChange={(e) =>
                       setFilters((prev) => ({
@@ -1873,7 +1874,7 @@ const CourseManagement = ({ embedded = false }) => {
                     <option value="morning">Morning (Before 12pm)</option>
                     <option value="afternoon">Afternoon (12pm-5pm)</option>
                     <option value="evening">Evening (After 5pm)</option>
-                  </select>
+                  </SelectDropdown>
                 </div>
               </div>
 
@@ -1883,7 +1884,7 @@ const CourseManagement = ({ embedded = false }) => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Status
                   </label>
-                  <select
+                  <SelectDropdown
                     value={filters.status}
                     onChange={(e) =>
                       setFilters((prev) => ({
@@ -1899,7 +1900,7 @@ const CourseManagement = ({ embedded = false }) => {
                         {status}
                       </option>
                     ))}
-                  </select>
+                  </SelectDropdown>
                 </div>
               </div>
 
@@ -2088,7 +2089,7 @@ const CourseManagement = ({ embedded = false }) => {
                     {editingRowId === row.id ? (
                       <>
                         <td className="p-1">
-                          <select
+                          <SelectDropdown
                             name="instructorId"
                             value={editFormData.instructorId || ""}
                             onChange={handleEditFormChange}
@@ -2100,7 +2101,7 @@ const CourseManagement = ({ embedded = false }) => {
                                 {faculty.displayName}
                               </option>
                             ))}
-                          </select>
+                          </SelectDropdown>
                         </td>
                         <td className="p-1">
                           <input
@@ -2130,7 +2131,7 @@ const CourseManagement = ({ embedded = false }) => {
                           />
                         </td>
                         <td className="p-1">
-                          <select
+                          <SelectDropdown
                             name="Term"
                             value={editFormData.Term || ""}
                             onChange={handleEditFormChange}
@@ -2142,7 +2143,7 @@ const CourseManagement = ({ embedded = false }) => {
                                 {term}
                               </option>
                             ))}
-                          </select>
+                          </SelectDropdown>
                         </td>
                         <td className="p-1">
                           <input
@@ -2229,7 +2230,7 @@ const CourseManagement = ({ embedded = false }) => {
                           />
                         </td>
                         <td className="p-1">
-                          <select
+                          <SelectDropdown
                             name="Status"
                             value={editFormData.Status || ""}
                             onChange={handleEditFormChange}
@@ -2241,7 +2242,7 @@ const CourseManagement = ({ embedded = false }) => {
                                 {status}
                               </option>
                             ))}
-                          </select>
+                          </SelectDropdown>
                         </td>
                         <td className="p-1">
                           <label className="inline-flex items-center gap-2 text-sm">
@@ -2261,7 +2262,7 @@ const CourseManagement = ({ embedded = false }) => {
                           </label>
                         </td>
                         <td className="p-1">
-                          <select
+                          <SelectDropdown
                             name="onlineMode"
                             value={editFormData.onlineMode || ""}
                             onChange={handleEditFormChange}
@@ -2271,7 +2272,7 @@ const CourseManagement = ({ embedded = false }) => {
                             <option value="">Not set</option>
                             <option value="synchronous">Synchronous</option>
                             <option value="asynchronous">Asynchronous</option>
-                          </select>
+                          </SelectDropdown>
                         </td>
                         <td className="p-1 text-center">
                           <div className="flex gap-1 justify-center">

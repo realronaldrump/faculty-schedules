@@ -61,6 +61,7 @@ import {
 import { db } from "../../firebase";
 import SpaceUsageDetailModal from "./SpaceUsageDetailModal";
 
+import SelectDropdown from "../SelectDropdown";
 const getCanonicalSpaceKeyFromSpace = (space) => {
   if (!space) return "";
   const raw = (space.spaceKey || space.id || "").toString().trim();
@@ -1191,7 +1192,7 @@ const SpaceManagement = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Building <span className="text-red-500">*</span>
               </label>
-              <select
+              <SelectDropdown
                 value={bulkData.buildingCode}
                 onChange={(e) =>
                   setBulkData((prev) => ({
@@ -1207,7 +1208,7 @@ const SpaceManagement = () => {
                     {b.displayName} ({b.code})
                   </option>
                 ))}
-              </select>
+              </SelectDropdown>
             </div>
 
             {/* Start Number */}
@@ -1285,7 +1286,7 @@ const SpaceManagement = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Space Type
               </label>
-              <select
+              <SelectDropdown
                 value={bulkData.type}
                 onChange={(e) =>
                   setBulkData((prev) => ({ ...prev, type: e.target.value }))
@@ -1297,7 +1298,7 @@ const SpaceManagement = () => {
                     {type}
                   </option>
                 ))}
-              </select>
+              </SelectDropdown>
             </div>
           </div>
 
@@ -1366,7 +1367,7 @@ const SpaceManagement = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Building <span className="text-red-500">*</span>
               </label>
-              <select
+              <SelectDropdown
                 value={formData.buildingCode}
                 onChange={(e) =>
                   setFormData((prev) => ({
@@ -1382,7 +1383,7 @@ const SpaceManagement = () => {
                     {b.displayName} ({b.code})
                   </option>
                 ))}
-              </select>
+              </SelectDropdown>
             </div>
 
             {/* Space Number */}
@@ -1410,7 +1411,7 @@ const SpaceManagement = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Space Type
               </label>
-              <select
+              <SelectDropdown
                 value={formData.type}
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, type: e.target.value }))
@@ -1422,7 +1423,7 @@ const SpaceManagement = () => {
                     {type}
                   </option>
                 ))}
-              </select>
+              </SelectDropdown>
             </div>
 
             {/* Capacity */}
@@ -1542,7 +1543,7 @@ const SpaceManagement = () => {
         </div>
 
         {/* Building Filter */}
-        <select
+        <SelectDropdown
           value={buildingFilter}
           onChange={(e) => setBuildingFilter(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
@@ -1555,10 +1556,10 @@ const SpaceManagement = () => {
               </option>
             );
           })}
-        </select>
+        </SelectDropdown>
 
         {/* Type Filter */}
-        <select
+        <SelectDropdown
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
@@ -1569,10 +1570,10 @@ const SpaceManagement = () => {
               {type}
             </option>
           ))}
-        </select>
+        </SelectDropdown>
 
         {/* Usage Filter */}
-        <select
+        <SelectDropdown
           value={usageFilter}
           onChange={(e) => setUsageFilter(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
@@ -1581,7 +1582,7 @@ const SpaceManagement = () => {
           <option value="scheduled">With Classes</option>
           <option value="office">As Offices</option>
           <option value="unused">Unused</option>
-        </select>
+        </SelectDropdown>
       </div>
 
       {/* Spaces List */}

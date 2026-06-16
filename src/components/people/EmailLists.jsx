@@ -23,6 +23,7 @@ import {
   buildStudentWorkersCsv,
 } from "./email-lists/export-utils";
 
+import SelectDropdown from "../SelectDropdown";
 const EmailLists = ({ embedded = false }) => {
   const {
     facultyData = [],
@@ -1026,7 +1027,7 @@ const EmailLists = ({ embedded = false }) => {
                 data-tutorial="preset-dropdown"
               >
                 <FolderOpen className="w-4 h-4 text-gray-500" />
-                <select
+                <SelectDropdown
                   value={selectedPresetId}
                   onChange={(e) => {
                     setSelectedPresetId(e.target.value);
@@ -1046,7 +1047,7 @@ const EmailLists = ({ embedded = false }) => {
                       </option>
                     ))
                   )}
-                </select>
+                </SelectDropdown>
 
                 {/* Save as Preset Button */}
                 <button
@@ -1189,7 +1190,7 @@ const EmailLists = ({ embedded = false }) => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Role Type
                     </label>
-                    <select
+                    <SelectDropdown
                       value={filters.roleFilter}
                       onChange={(e) =>
                         setFilters((prev) => ({
@@ -1203,14 +1204,14 @@ const EmailLists = ({ embedded = false }) => {
                       <option value="faculty">Faculty Only</option>
                       <option value="staff">Staff Only</option>
                       <option value="both">Faculty & Staff</option>
-                    </select>
+                    </SelectDropdown>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Adjunct Status
                     </label>
-                    <select
+                    <SelectDropdown
                       value={filters.adjunct}
                       onChange={(e) =>
                         setFilters((prev) => ({
@@ -1223,14 +1224,14 @@ const EmailLists = ({ embedded = false }) => {
                       <option value="all">All</option>
                       <option value="include">Adjunct Only</option>
                       <option value="exclude">Exclude Adjunct</option>
-                    </select>
+                    </SelectDropdown>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Tenure Status
                     </label>
-                    <select
+                    <SelectDropdown
                       value={filters.tenured}
                       onChange={(e) =>
                         setFilters((prev) => ({
@@ -1243,14 +1244,14 @@ const EmailLists = ({ embedded = false }) => {
                       <option value="all">All</option>
                       <option value="include">Tenured Only</option>
                       <option value="exclude">Exclude Tenured</option>
-                    </select>
+                    </SelectDropdown>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       UPD Status
                     </label>
-                    <select
+                    <SelectDropdown
                       value={filters.upd}
                       onChange={(e) =>
                         setFilters((prev) => ({ ...prev, upd: e.target.value }))
@@ -1260,14 +1261,14 @@ const EmailLists = ({ embedded = false }) => {
                       <option value="all">All</option>
                       <option value="include">UPD Only</option>
                       <option value="exclude">Exclude UPD</option>
-                    </select>
+                    </SelectDropdown>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Remote Status
                     </label>
-                    <select
+                    <SelectDropdown
                       value={filters.isRemote}
                       onChange={(e) =>
                         setFilters((prev) => ({
@@ -1280,7 +1281,7 @@ const EmailLists = ({ embedded = false }) => {
                       <option value="all">All</option>
                       <option value="include">Remote Only</option>
                       <option value="exclude">Exclude Remote</option>
-                    </select>
+                    </SelectDropdown>
                   </div>
                 </div>
               </div>
@@ -1315,14 +1316,14 @@ const EmailLists = ({ embedded = false }) => {
                   <span className="text-sm text-gray-600 whitespace-nowrap">
                     Outlook version:
                   </span>
-                  <select
+                  <SelectDropdown
                     value={outlookVersion}
                     onChange={(e) => setOutlookVersion(e.target.value)}
                     className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
                   >
                     <option value="new">New (comma)</option>
                     <option value="old">Old (semicolon)</option>
-                  </select>
+                  </SelectDropdown>
                   <HelpTooltip
                     content="New Outlook uses commas between emails. Older versions use semicolons. Choose based on your email client."
                     position="left"
@@ -1803,14 +1804,14 @@ const EmailLists = ({ embedded = false }) => {
                 <span className="text-sm text-gray-600 whitespace-nowrap">
                   Outlook version:
                 </span>
-                <select
+                <SelectDropdown
                   value={outlookVersion}
                   onChange={(e) => setOutlookVersion(e.target.value)}
                   className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
                 >
                   <option value="new">New (comma)</option>
                   <option value="old">Old (semicolon)</option>
-                </select>
+                </SelectDropdown>
                 <HelpTooltip
                   content="New Outlook uses commas between emails. Older versions use semicolons. Choose based on your email client."
                   position="left"

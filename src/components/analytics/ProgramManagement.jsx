@@ -15,6 +15,7 @@ import { usePeople } from "../../contexts/PeopleContext";
 import { usePeopleOperations } from "../../hooks";
 import { useUI } from "../../contexts/UIContext";
 
+import SelectDropdown from "../SelectDropdown";
 const ProgramManagement = ({ embedded = false }) => {
   const { facultyData = [], programs = [], loadPrograms } = useData();
   const { loadPeople } = usePeople();
@@ -743,7 +744,7 @@ const ProgramManagement = ({ embedded = false }) => {
 
             {/* Filters */}
             <div className="flex flex-wrap items-center gap-3">
-              <select
+              <SelectDropdown
                 value={selectedProgramFilter}
                 onChange={(e) => setSelectedProgramFilter(e.target.value)}
                 className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#154734] focus:border-transparent bg-white text-sm"
@@ -757,7 +758,7 @@ const ProgramManagement = ({ embedded = false }) => {
                 {unassignedProgram && unassignedProgram.faculty.length > 0 && (
                   <option value="Unassigned">Unassigned</option>
                 )}
-              </select>
+              </SelectDropdown>
 
               <label className="flex items-center gap-2 px-3 py-2.5 border border-gray-300 rounded-lg bg-white cursor-pointer hover:bg-gray-50 transition-colors">
                 <input

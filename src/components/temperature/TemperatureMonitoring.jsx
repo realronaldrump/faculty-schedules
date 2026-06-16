@@ -84,6 +84,7 @@ import SnapshotPanel from "./monitoring/SnapshotPanel";
 import ImportPanel from "./monitoring/ImportPanel";
 import SettingsPanel from "./monitoring/SettingsPanel";
 
+import SelectDropdown from "../SelectDropdown";
 const MAX_FIRESTORE_BATCH_WRITES = 400;
 
 const toLocalDateToken = (value) => {
@@ -3652,7 +3653,7 @@ const TemperatureMonitoring = () => {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
           <div>
             <label className="form-label">Room</label>
-            <select
+            <SelectDropdown
               className="form-input"
               value={historicalSpaceKey}
               onChange={(e) => setHistoricalSpaceKey(e.target.value)}
@@ -3667,7 +3668,7 @@ const TemperatureMonitoring = () => {
                   </option>
                 );
               })}
-            </select>
+            </SelectDropdown>
             {historicalSpaceKey && (
               <div className="mt-4 overflow-x-auto">
                 <table className="university-table min-w-full">
@@ -4102,7 +4103,7 @@ const TemperatureMonitoring = () => {
                       %
                     </div>
                   </div>
-                  <select
+                  <SelectDropdown
                     className="form-input md:max-w-xs"
                     value={
                       mappingOverrides[item.deviceId] ||
@@ -4126,7 +4127,7 @@ const TemperatureMonitoring = () => {
                         </option>
                       );
                     })}
-                  </select>
+                  </SelectDropdown>
                 </div>
               ))}
             </div>
@@ -4161,7 +4162,7 @@ const TemperatureMonitoring = () => {
           </p>
         </div>
         <div className="flex flex-col md:flex-row md:items-center gap-3">
-          <select
+          <SelectDropdown
             className="form-input md:max-w-sm"
             value={deleteRoomSpaceKey}
             onChange={(e) => setDeleteRoomSpaceKey(e.target.value)}
@@ -4177,7 +4178,7 @@ const TemperatureMonitoring = () => {
                 </option>
               );
             })}
-          </select>
+          </SelectDropdown>
           <button
             className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => setShowDeleteRoomDataConfirm(true)}
@@ -4378,7 +4379,7 @@ const TemperatureMonitoring = () => {
             />
           </div>
           <label className="form-label">Rooms (optional)</label>
-          <select
+          <SelectDropdown
             className="form-input"
             multiple
             value={exportSpaceKeys}
@@ -4397,9 +4398,9 @@ const TemperatureMonitoring = () => {
                 </option>
               );
             })}
-          </select>
+          </SelectDropdown>
           <label className="form-label">Snapshot times (optional)</label>
-          <select
+          <SelectDropdown
             className="form-input"
             multiple
             value={exportSnapshotIds}
@@ -4414,7 +4415,7 @@ const TemperatureMonitoring = () => {
                 {slot.label || formatMinutesToLabel(slot.minutes)}
               </option>
             ))}
-          </select>
+          </SelectDropdown>
         </div>
         <div className="space-y-3">
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">

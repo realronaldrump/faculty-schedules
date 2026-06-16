@@ -178,7 +178,7 @@ const IndividualAvailability = ({ embedded = false }) => {
         type="button"
         data-tutorial="availability-search"
         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900 appearance-none cursor-pointer hover:border-baylor-green/50 transition-colors flex items-center justify-between"
+        className="app-dropdown-trigger"
       >
         <span className="block truncate text-left">
           {selectedIndividual || "Choose a faculty member..."}
@@ -189,7 +189,7 @@ const IndividualAvailability = ({ embedded = false }) => {
       </button>
 
       {isDropdownOpen && (
-        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-hidden">
+        <div className="app-dropdown-menu absolute mt-1 w-full max-h-60">
           {/* Search input */}
           <div className="p-2 border-b border-gray-200">
             <div className="relative">
@@ -202,7 +202,7 @@ const IndividualAvailability = ({ embedded = false }) => {
                 placeholder="Search faculty..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-baylor-green focus:border-baylor-green text-sm"
+                className="app-dropdown-search pl-9"
                 onClick={(e) => e.stopPropagation()}
               />
             </div>
@@ -219,17 +219,17 @@ const IndividualAvailability = ({ embedded = false }) => {
                     setIsDropdownOpen(false);
                     setSearchTerm("");
                   }}
-                  className={`w-full px-4 py-3 text-left hover:bg-baylor-green/10 transition-colors ${
+                  className={`app-dropdown-option ${
                     instructor === selectedIndividual
-                      ? "bg-baylor-green text-white"
-                      : "text-gray-900"
+                      ? "app-dropdown-option-selected"
+                      : ""
                   }`}
                 >
                   {instructor}
                 </button>
               ))
             ) : (
-              <div className="px-4 py-3 text-gray-500 text-sm">
+              <div className="app-dropdown-empty">
                 No faculty found
               </div>
             )}

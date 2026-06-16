@@ -18,6 +18,7 @@ import { formatPhoneNumber, validateDirectoryEntry } from '../../utils/directory
 import { buildCourseSectionKey } from '../../utils/courseUtils';
 import { normalizeTermLabel, termCodeFromLabel } from '../../utils/termUtils';
 
+import SelectDropdown from "../SelectDropdown";
 const canUseWindow = typeof window !== 'undefined';
 
 const escapeCSVCell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
@@ -877,7 +878,7 @@ const facultyDirectoryConfig = {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-9 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Adjunct Status</label>
-          <select
+          <SelectDropdown
             value={state.filters.adjunct}
             onChange={(event) => state.setFilters((prev) => ({ ...prev, adjunct: event.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -885,11 +886,11 @@ const facultyDirectoryConfig = {
             <option value="all">All</option>
             <option value="include">Adjunct Only</option>
             <option value="exclude">Exclude Adjunct</option>
-          </select>
+          </SelectDropdown>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Tenure Status</label>
-          <select
+          <SelectDropdown
             value={state.filters.tenured}
             onChange={(event) => state.setFilters((prev) => ({ ...prev, tenured: event.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -897,11 +898,11 @@ const facultyDirectoryConfig = {
             <option value="all">All</option>
             <option value="include">Tenured Only</option>
             <option value="exclude">Exclude Tenured</option>
-          </select>
+          </SelectDropdown>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">UPD Status</label>
-          <select
+          <SelectDropdown
             value={state.filters.upd}
             onChange={(event) => state.setFilters((prev) => ({ ...prev, upd: event.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -909,11 +910,11 @@ const facultyDirectoryConfig = {
             <option value="all">All</option>
             <option value="include">UPD Only</option>
             <option value="exclude">Exclude UPD</option>
-          </select>
+          </SelectDropdown>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Staff Status</label>
-          <select
+          <SelectDropdown
             value={state.filters.isAlsoStaff}
             onChange={(event) => state.setFilters((prev) => ({ ...prev, isAlsoStaff: event.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -921,11 +922,11 @@ const facultyDirectoryConfig = {
             <option value="all">All</option>
             <option value="include">Also Staff</option>
             <option value="exclude">Faculty Only</option>
-          </select>
+          </SelectDropdown>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Course Status</label>
-          <select
+          <SelectDropdown
             value={state.filters.courseCount}
             onChange={(event) => state.setFilters((prev) => ({ ...prev, courseCount: event.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -933,11 +934,11 @@ const facultyDirectoryConfig = {
             <option value="all">All</option>
             <option value="with-courses">Teaching Courses</option>
             <option value="without-courses">Not Teaching</option>
-          </select>
+          </SelectDropdown>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">PhD Status</label>
-          <select
+          <SelectDropdown
             value={state.filters.hasPhD}
             onChange={(event) => state.setFilters((prev) => ({ ...prev, hasPhD: event.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -945,11 +946,11 @@ const facultyDirectoryConfig = {
             <option value="all">All</option>
             <option value="include">PhD Only</option>
             <option value="exclude">Exclude PhD</option>
-          </select>
+          </SelectDropdown>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Baylor ID Status</label>
-          <select
+          <SelectDropdown
             value={state.filters.hasBaylorId}
             onChange={(event) => state.setFilters((prev) => ({ ...prev, hasBaylorId: event.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -957,11 +958,11 @@ const facultyDirectoryConfig = {
             <option value="all">All</option>
             <option value="with-id">Has Baylor ID</option>
             <option value="without-id">Missing Baylor ID</option>
-          </select>
+          </SelectDropdown>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Remote Status</label>
-          <select
+          <SelectDropdown
             value={state.filters.isRemote}
             onChange={(event) => state.setFilters((prev) => ({ ...prev, isRemote: event.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -969,11 +970,11 @@ const facultyDirectoryConfig = {
             <option value="all">All</option>
             <option value="include">Remote Only</option>
             <option value="exclude">Exclude Remote</option>
-          </select>
+          </SelectDropdown>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Active Status</label>
-          <select
+          <SelectDropdown
             value={state.filters.activeStatus}
             onChange={(event) => state.setFilters((prev) => ({ ...prev, activeStatus: event.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -981,7 +982,7 @@ const facultyDirectoryConfig = {
             <option value="active">Active Only</option>
             <option value="inactive">Inactive Only</option>
             <option value="all">All</option>
-          </select>
+          </SelectDropdown>
         </div>
       </div>
     </>
@@ -1229,7 +1230,7 @@ const staffDirectoryConfig = {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Employment Status</label>
-          <select
+          <SelectDropdown
             value={state.filters.isFullTime}
             onChange={(event) => state.setFilters((prev) => ({ ...prev, isFullTime: event.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -1237,11 +1238,11 @@ const staffDirectoryConfig = {
             <option value="all">All</option>
             <option value="full-time">Full-time Only</option>
             <option value="part-time">Part-time Only</option>
-          </select>
+          </SelectDropdown>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Faculty Status</label>
-          <select
+          <SelectDropdown
             value={state.filters.isAlsoFaculty}
             onChange={(event) => state.setFilters((prev) => ({ ...prev, isAlsoFaculty: event.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -1249,11 +1250,11 @@ const staffDirectoryConfig = {
             <option value="all">All</option>
             <option value="include">Also Faculty</option>
             <option value="exclude">Staff Only</option>
-          </select>
+          </SelectDropdown>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Remote Status</label>
-          <select
+          <SelectDropdown
             value={state.filters.isRemote}
             onChange={(event) => state.setFilters((prev) => ({ ...prev, isRemote: event.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -1261,11 +1262,11 @@ const staffDirectoryConfig = {
             <option value="all">All</option>
             <option value="include">Remote Only</option>
             <option value="exclude">Exclude Remote</option>
-          </select>
+          </SelectDropdown>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Active Status</label>
-          <select
+          <SelectDropdown
             value={state.filters.activeStatus}
             onChange={(event) => state.setFilters((prev) => ({ ...prev, activeStatus: event.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -1273,7 +1274,7 @@ const staffDirectoryConfig = {
             <option value="active">Active Only</option>
             <option value="inactive">Inactive Only</option>
             <option value="all">All</option>
-          </select>
+          </SelectDropdown>
         </div>
       </div>
     </>
@@ -1604,7 +1605,7 @@ const adjunctDirectoryConfig = {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Course Status</label>
-          <select
+          <SelectDropdown
             value={state.filters.courseCount}
             onChange={(event) => state.setFilters((prev) => ({ ...prev, courseCount: event.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -1612,11 +1613,11 @@ const adjunctDirectoryConfig = {
             <option value="all">All</option>
             <option value="with-courses">Teaching Courses</option>
             <option value="without-courses">Not Teaching</option>
-          </select>
+          </SelectDropdown>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Remote Status</label>
-          <select
+          <SelectDropdown
             value={state.filters.isRemote}
             onChange={(event) => state.setFilters((prev) => ({ ...prev, isRemote: event.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -1624,11 +1625,11 @@ const adjunctDirectoryConfig = {
             <option value="all">All</option>
             <option value="include">Remote Only</option>
             <option value="exclude">Exclude Remote</option>
-          </select>
+          </SelectDropdown>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Active Status</label>
-          <select
+          <SelectDropdown
             value={state.filters.activeStatus}
             onChange={(event) => state.setFilters((prev) => ({ ...prev, activeStatus: event.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -1636,7 +1637,7 @@ const adjunctDirectoryConfig = {
             <option value="active">Active Only</option>
             <option value="inactive">Inactive Only</option>
             <option value="all">All</option>
-          </select>
+          </SelectDropdown>
         </div>
       </div>
     </>

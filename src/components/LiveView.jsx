@@ -39,6 +39,7 @@ import FacultyContactCard from "./FacultyContactCard";
 import FacultyExplorer from "./today/FacultyExplorer";
 import FacultySpotlightCard from "./today/FacultySpotlightCard";
 
+import SelectDropdown from "./SelectDropdown";
 const LiveView = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -650,7 +651,7 @@ const LiveView = () => {
                 </div>
               </button>
               {showAsOfPopover && (
-                <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-lg border border-gray-200 z-50">
+                <div className="app-dropdown-menu absolute right-0 mt-2 w-72">
                   <div className="p-4 space-y-3">
                     <div className="text-xs text-gray-500 uppercase tracking-wide">
                       As of
@@ -745,15 +746,15 @@ const LiveView = () => {
               </div>
 
               {searchFocused && searchSuggestions.length > 0 && (
-                <div className="absolute z-50 left-0 right-0 mt-2 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                <div className="app-dropdown-menu absolute left-0 right-0 z-50 mt-2">
                   {searchSuggestions.map((faculty, idx) => (
                     <button
                       key={faculty.id || idx}
                       onClick={() => handleSelectSuggestion(faculty)}
-                      className={`w-full px-4 py-3 text-left flex items-center gap-3 transition-colors ${
+                      className={`app-dropdown-option flex items-center gap-3 ${
                         idx === highlightedIndex
-                          ? "bg-baylor-green/10 text-baylor-green"
-                          : "hover:bg-gray-50"
+                          ? "app-dropdown-option-selected"
+                          : ""
                       }`}
                     >
                       <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
@@ -831,7 +832,7 @@ const LiveView = () => {
           <Filter className="w-4 h-4" />
           <span>Filter by building:</span>
         </div>
-        <select
+        <SelectDropdown
           value={selectedBuilding}
           onChange={(e) => setSelectedBuilding(e.target.value)}
           className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
@@ -842,7 +843,7 @@ const LiveView = () => {
               {building}
             </option>
           ))}
-        </select>
+        </SelectDropdown>
         {selectedBuilding && (
           <button
             onClick={() => setSelectedBuilding("")}

@@ -272,7 +272,7 @@ const TutorialPage = () => {
             </button>
 
             {showSettings && (
-              <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl border border-gray-200 shadow-lg z-10 overflow-hidden">
+              <div className="app-dropdown-menu absolute right-0 z-10 mt-2 w-64">
                 <div className="px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-semibold text-gray-700">Tutorial Settings</p>
                 </div>
@@ -310,7 +310,7 @@ const TutorialPage = () => {
                         setShowSettings(false);
                         setShowResetConfirm(true);
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      className="app-dropdown-option flex items-center gap-2 text-red-600 hover:bg-red-50"
                     >
                       <RotateCcw className="w-4 h-4" />
                       Reset Progress

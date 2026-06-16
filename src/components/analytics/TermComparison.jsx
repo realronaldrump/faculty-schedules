@@ -8,6 +8,7 @@ import {
   diffSectionMaps,
 } from "../../utils/scheduleDiffUtils";
 
+import SelectDropdown from "../SelectDropdown";
 const MetricCard = ({ icon: Icon, label, value, tone }) => (
   <div className="rounded-lg border border-gray-200 bg-white p-4">
     <div className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
@@ -105,7 +106,7 @@ const TermComparison = () => {
       >
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">From</label>
-          <select
+          <SelectDropdown
             value={effectiveA}
             onChange={(e) => setTermA(e.target.value)}
             className="rounded-lg border border-gray-300 px-3 py-2 focus:border-baylor-green focus:outline-none focus:ring-1 focus:ring-baylor-green"
@@ -115,12 +116,12 @@ const TermComparison = () => {
                 {t}
               </option>
             ))}
-          </select>
+          </SelectDropdown>
         </div>
         <ArrowRight className="w-5 h-5 text-gray-400 mb-2.5" />
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">To</label>
-          <select
+          <SelectDropdown
             value={effectiveB}
             onChange={(e) => setTermB(e.target.value)}
             className="rounded-lg border border-gray-300 px-3 py-2 focus:border-baylor-green focus:outline-none focus:ring-1 focus:ring-baylor-green"
@@ -130,7 +131,7 @@ const TermComparison = () => {
                 {t}
               </option>
             ))}
-          </select>
+          </SelectDropdown>
         </div>
         <div className="flex-1 min-w-[180px]">
           <label className="block text-xs font-medium text-gray-600 mb-1">

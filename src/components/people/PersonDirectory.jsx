@@ -14,6 +14,7 @@ import {
 } from '../../utils/directoryUtils';
 import { resolveOfficeLocations } from '../../utils/spaceUtils';
 
+import SelectDropdown from "../SelectDropdown";
 const getNameSortValue = (person, nameSort) => {
   if (nameSort === 'firstName') {
     return (person.firstName || person.name?.split(' ')[0] || '').toLowerCase();
@@ -110,7 +111,7 @@ const buildBaseColumns = ({
     headerClassName: 'w-[15%]',
     render: (person) => person.program?.name || '-',
     renderEdit: () => (
-      <select
+      <SelectDropdown
         name="programId"
         value={editFormData.programId || ''}
         onChange={handleChange}
@@ -120,10 +121,10 @@ const buildBaseColumns = ({
         {programs.map((program) => (
           <option key={program.id} value={program.id}>{program.name}</option>
         ))}
-      </select>
+      </SelectDropdown>
     ),
     renderCreate: () => (
-      <select
+      <SelectDropdown
         name="programId"
         value={newRecord.programId || ''}
         onChange={handleCreateChange}
@@ -133,7 +134,7 @@ const buildBaseColumns = ({
         {programs.map((program) => (
           <option key={program.id} value={program.id}>{program.name}</option>
         ))}
-      </select>
+      </SelectDropdown>
     )
   };
 

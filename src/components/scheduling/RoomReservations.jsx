@@ -25,6 +25,7 @@ import {
   findClassConflicts,
 } from "../../utils/reservationUtils";
 
+import SelectDropdown from "../SelectDropdown";
 const TIMELINE_START = 7 * 60; // 7:00 AM
 const TIMELINE_END = 21 * 60; // 9:00 PM
 const TIMELINE_SPAN = TIMELINE_END - TIMELINE_START;
@@ -307,7 +308,7 @@ const RoomReservations = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
-              <select
+              <SelectDropdown
                 data-tutorial="reservation-room"
                 value={form.spaceKey}
                 onChange={(e) => setField("spaceKey", e.target.value)}
@@ -320,7 +321,7 @@ const RoomReservations = () => {
                     {space.capacity ? ` (cap ${space.capacity})` : ""}
                   </option>
                 ))}
-              </select>
+              </SelectDropdown>
               {restricted && (
                 <p className="mt-1 text-xs text-amber-700 flex items-center gap-1">
                   <AlertTriangle className="w-3.5 h-3.5" />

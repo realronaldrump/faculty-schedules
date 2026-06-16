@@ -4,6 +4,7 @@ import { ArrowLeft, Clock, Filter, Search, Calendar, Database, Trash2, Edit, Plu
 import { groupChangesByDate, getChangeSummary } from '../../utils/recentChanges';
 import { useData } from '../../contexts/DataContext';
 
+import SelectDropdown from "../SelectDropdown";
 const RecentChangesPage = () => {
   const navigate = useNavigate();
   const { recentChanges = [], loadRecentChanges } = useData();
@@ -183,7 +184,7 @@ const RecentChangesPage = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gray-200">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Action</label>
-                  <select
+                  <SelectDropdown
                     value={selectedAction}
                     onChange={(e) => setSelectedAction(e.target.value)}
                     className="input-field"
@@ -192,12 +193,12 @@ const RecentChangesPage = () => {
                     {uniqueActions.map(action => (
                       <option key={action} value={action}>{action}</option>
                     ))}
-                  </select>
+                  </SelectDropdown>
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Collection</label>
-                  <select
+                  <SelectDropdown
                     value={selectedCollection}
                     onChange={(e) => setSelectedCollection(e.target.value)}
                     className="input-field"
@@ -206,12 +207,12 @@ const RecentChangesPage = () => {
                     {uniqueCollections.map(collection => (
                       <option key={collection} value={collection}>{collection}</option>
                     ))}
-                  </select>
+                  </SelectDropdown>
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Source</label>
-                  <select
+                  <SelectDropdown
                     value={selectedSource}
                     onChange={(e) => setSelectedSource(e.target.value)}
                     className="input-field"
@@ -220,7 +221,7 @@ const RecentChangesPage = () => {
                     {uniqueSources.map(source => (
                       <option key={source} value={source}>{source}</option>
                     ))}
-                  </select>
+                  </SelectDropdown>
                 </div>
               </div>
             )}

@@ -5,6 +5,7 @@ import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { resolveOfficeDetails } from "../../utils/directoryUtils";
 
+import SelectDropdown from "../SelectDropdown";
 const BuildingDirectory = ({ embedded = false }) => {
   const { facultyData = [], staffData = [], spacesByKey } = useData();
   const { loadPeople } = usePeople();
@@ -231,7 +232,7 @@ const BuildingDirectory = ({ embedded = false }) => {
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2">
               <Filter size={16} className="text-gray-400" />
-              <select
+              <SelectDropdown
                 value={selectedBuilding}
                 onChange={(e) => setSelectedBuilding(e.target.value)}
                 className="p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-baylor-green"
@@ -242,7 +243,7 @@ const BuildingDirectory = ({ embedded = false }) => {
                     {building}
                   </option>
                 ))}
-              </select>
+              </SelectDropdown>
             </div>
 
             {/* Role Toggles */}

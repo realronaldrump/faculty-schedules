@@ -294,6 +294,45 @@
     @apply form-input bg-white;
   }
 
+  /* Shared Dropdown System */
+  .app-dropdown-trigger {
+    @apply flex min-h-10 w-full items-center justify-between gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-left text-sm font-medium text-gray-900 shadow-sm transition-colors hover:bg-gray-50 focus:border-baylor-green focus:outline-none focus:ring-2 focus:ring-baylor-green/20 disabled:cursor-not-allowed disabled:opacity-60;
+    font-family: "calluna", Georgia, serif;
+  }
+
+  .app-dropdown-trigger-disabled {
+    @apply cursor-not-allowed opacity-60 hover:bg-white;
+  }
+
+  .app-dropdown-menu {
+    @apply z-50 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg;
+    font-family: "calluna", Georgia, serif;
+  }
+
+  .app-dropdown-option {
+    @apply w-full px-4 py-2 text-left text-sm text-gray-900 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-400 disabled:hover:bg-white;
+  }
+
+  .app-dropdown-option-selected {
+    @apply bg-baylor-green/5 font-medium text-baylor-green;
+  }
+
+  .app-dropdown-option-disabled {
+    @apply cursor-not-allowed text-gray-400 hover:bg-white;
+  }
+
+  .app-dropdown-empty {
+    @apply px-4 py-3 text-sm text-gray-500;
+  }
+
+  .app-dropdown-section {
+    @apply border-b border-gray-100 px-4 py-2;
+  }
+
+  .app-dropdown-search {
+    @apply w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-baylor-green focus:outline-none focus:ring-2 focus:ring-baylor-green/20;
+  }
+
   .form-error {
     @apply text-red-600 text-sm mt-1;
   }

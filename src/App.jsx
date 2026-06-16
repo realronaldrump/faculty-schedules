@@ -16,6 +16,7 @@ import PageRouter from "./components/app/PageRouter.jsx";
 import Login from "./components/Login";
 import MaintenancePage from "./components/MaintenancePage";
 import Notification from "./components/Notification";
+import SelectDropdown from "./components/SelectDropdown";
 import TutorialOverlay from "./components/help/TutorialOverlay";
 
 import { useAuth } from "./contexts/AuthContext.jsx";
@@ -26,13 +27,7 @@ import { registerNavigationPages } from "./utils/pageRegistry";
 import { navigationItems } from "./utils/navigationConfig";
 import { normalizeRoleList } from "./utils/authz";
 
-import {
-  Calendar,
-  GraduationCap,
-  Menu,
-  LogOut,
-  ChevronDown,
-} from "lucide-react";
+import { Calendar, GraduationCap, Menu, LogOut } from "lucide-react";
 
 // ==================== MAINTENANCE MODE CONFIG ====================
 
@@ -82,8 +77,6 @@ function App() {
   // Router hooks
   const location = useLocation();
   const navigate = useNavigate();
-
-  const [showSemesterDropdown, setShowSemesterDropdown] = React.useState(false);
 
   // Current page from URL
   const currentPage = useMemo(() => {
@@ -148,7 +141,8 @@ function App() {
   // Navigation handler
   const handleNavigate = (path) => {
     const normalized = path.startsWith("/") ? path : `/${path}`;
-    if (normalized !== location.pathname) {
+    const currentTarget = `${location.pathname}${location.search || ""}`;
+    if (normalized !== currentTarget) {
       navigate(normalized);
     }
   };
@@ -162,17 +156,6 @@ function App() {
     currentPage,
     isAuthenticated: Boolean(user),
   });
-
-  // Click outside handler for semester dropdown
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (!event.target.closest(".semester-dropdown")) {
-        setShowSemesterDropdown(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   // Logout handlers
   const handleLogout = () => setShowLogoutConfirm(true);
@@ -330,83 +313,63 @@ function App() {
             {/* Right: Actions */}
             <div className="flex items-center space-x-2 md:space-x-4">
               {/* Semester Selector */}
-              <div className="relative semester-dropdown">
-                <button
-                  onClick={() => setShowSemesterDropdown(!showSemesterDropdown)}
-                  className="flex items-center space-x-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <Calendar className="w-4 h-4 text-gray-500" />
-                  <span className="font-medium text-gray-900">
-                    {selectedSemester || "Select Semester"}
-                  </span>
-                  {selectedTermMeta && isSelectedTermLocked && (
-                    <span className="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-800">
+              <SelectDropdown
+                value={selectedSemester}
+                onChange={(event) => setSelectedSemester(event.target.value)}
+                placeholder="Select Semester"
+                leadingIcon={<Calendar className="h-4 w-4 text-gray-500" />}
+                selectedAdornment={
+                  selectedTermMeta && isSelectedTermLocked ? (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
                       {selectedTermMeta.status === "archived"
                         ? "Archived"
                         : "Locked"}
                     </span>
-                  )}
-                  <ChevronDown className="w-4 h-4 text-gray-500" />
-                </button>
-                {showSemesterDropdown && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                    {isAdmin &&
-                      termOptions?.some(
-                        (term) => term.status === "archived",
-                      ) && (
-                        <div className="px-4 py-2 border-b border-gray-100">
-                          <label className="flex items-center text-xs text-gray-600 space-x-2">
-                            <input
-                              type="checkbox"
-                              className="rounded border-gray-300"
-                              checked={includeArchived}
-                              onChange={(e) =>
-                                setIncludeArchived(e.target.checked)
-                              }
-                            />
-                            <span>Show archived semesters</span>
-                          </label>
-                        </div>
-                      )}
-                    <div className="py-2">
-                      {availableSemesters.length === 0 && (
-                        <div className="px-4 py-2 text-sm text-gray-500">
-                          No semesters available
-                        </div>
-                      )}
-                      {availableSemesters.map((semester) => {
-                        const termMeta = termMetaByLabel.get(semester);
-                        const isArchived = termMeta?.status === "archived";
-                        const isLocked =
-                          termMeta?.locked === true || isArchived;
-                        return (
-                          <button
-                            key={semester}
-                            onClick={() => {
-                              setSelectedSemester(semester);
-                              setShowSemesterDropdown(false);
-                            }}
-                            className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${
-                              semester === selectedSemester
-                                ? "bg-baylor-green/5 text-baylor-green font-medium"
-                                : "text-gray-900"
-                            }`}
-                          >
-                            <span className="flex items-center justify-between">
-                              <span>{semester}</span>
-                              {(isArchived || isLocked) && (
-                                <span className="ml-2 text-xs text-amber-700">
-                                  {isArchived ? "Archived" : "Locked"}
-                                </span>
-                              )}
-                            </span>
-                          </button>
-                        );
-                      })}
+                  ) : null
+                }
+                beforeOptions={
+                  isAdmin &&
+                  termOptions?.some((term) => term.status === "archived") ? (
+                    <div className="app-dropdown-section">
+                      <label className="flex items-center space-x-2 text-xs text-gray-600">
+                        <input
+                          type="checkbox"
+                          className="rounded border-gray-300"
+                          checked={includeArchived}
+                          onChange={(event) =>
+                            setIncludeArchived(event.target.checked)
+                          }
+                        />
+                        <span>Show archived semesters</span>
+                      </label>
                     </div>
-                  </div>
-                )}
-              </div>
+                  ) : null
+                }
+                emptyMessage="No semesters available"
+                menuMinWidth={192}
+                renderOption={(option) => {
+                  const termMeta = termMetaByLabel.get(option.value);
+                  const isArchived = termMeta?.status === "archived";
+                  const isLocked = termMeta?.locked === true || isArchived;
+
+                  return (
+                    <span className="flex items-center justify-between gap-3">
+                      <span>{option.label}</span>
+                      {(isArchived || isLocked) && (
+                        <span className="text-xs text-amber-700">
+                          {isArchived ? "Archived" : "Locked"}
+                        </span>
+                      )}
+                    </span>
+                  );
+                }}
+              >
+                {availableSemesters.map((semester) => (
+                  <option key={semester} value={semester}>
+                    {semester}
+                  </option>
+                ))}
+              </SelectDropdown>
 
               {/* Logout Button */}
               <button

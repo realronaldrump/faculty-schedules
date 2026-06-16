@@ -56,6 +56,7 @@ import { useUI } from "../contexts/UIContext";
 import { useAppConfig } from "../contexts/AppConfigContext";
 import { useTutorial } from "../contexts/TutorialContext";
 
+import SelectDropdown from "./SelectDropdown";
 const trimValue = (value) => (typeof value === "string" ? value.trim() : value);
 
 const normalizeBuildingLabel = (value) => {
@@ -1078,7 +1079,7 @@ const StudentDirectory = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Supervisor
               </label>
-              <select
+              <SelectDropdown
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
                 value={filters.supervisors.include?.[0] || ""}
                 onChange={(e) => {
@@ -1098,7 +1099,7 @@ const StudentDirectory = () => {
                     {supervisor}
                   </option>
                 ))}
-              </select>
+              </SelectDropdown>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

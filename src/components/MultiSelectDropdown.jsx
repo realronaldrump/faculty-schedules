@@ -117,21 +117,18 @@ const MultiSelectDropdown = ({
     return `${visible} +${labels.length - maxDisplayCount} more`;
   }, [selected, showSelectedLabels, displayMap, placeholder, maxDisplayCount]);
 
-  const menuInlineStyle = menuPortal
-    ? {
-        ...menuStyle,
-        ...(menuMinWidth ? { minWidth: menuMinWidth } : {}),
-      }
-    : menuMinWidth
-      ? { minWidth: menuMinWidth }
-      : undefined;
+  const menuInlineStyle = {
+    maxHeight: menuMaxHeight,
+    ...(menuPortal ? menuStyle : {}),
+    ...(menuMinWidth ? { minWidth: menuMinWidth } : {}),
+  };
 
   const menuContent = (
     <div
       ref={menuRef}
       style={menuInlineStyle}
-      className={`absolute z-30 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto ${
-        menuPortal ? '' : ''
+      className={`app-dropdown-menu w-full max-h-60 overflow-y-auto ${
+        menuPortal ? '' : 'absolute mt-1'
       }`}
     >
       {enableSearch && (
@@ -141,20 +138,22 @@ const MultiSelectDropdown = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={searchPlaceholder}
-            className="w-full px-2 py-1 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-baylor-green/30"
+            className="app-dropdown-search"
           />
         </div>
       )}
 
       {filteredOptions.length === 0 ? (
-        <div className="px-4 py-3 text-sm text-gray-500">
+        <div className="app-dropdown-empty">
           No matches found.
         </div>
       ) : (
         filteredOptions.map((option) => (
           <div
             key={option}
-            className="flex items-center px-4 py-2 hover:bg-baylor-green/10"
+            className={`app-dropdown-option flex items-center ${
+              selected.includes(option) ? "app-dropdown-option-selected" : ""
+            }`}
           >
             <input
               type="checkbox"
@@ -183,7 +182,7 @@ const MultiSelectDropdown = ({
           setIsOpen(!isOpen);
         }}
         disabled={disabled}
-        className={`w-full p-2 border border-gray-300 rounded-lg bg-white text-left flex items-center justify-between ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+        className={`app-dropdown-trigger ${disabled ? 'app-dropdown-trigger-disabled' : ''}`}
       >
         <span className={selected?.length ? "text-gray-700" : "text-gray-500"}>
           {selectedLabel}

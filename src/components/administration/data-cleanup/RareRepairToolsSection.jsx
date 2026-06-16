@@ -20,6 +20,7 @@ import {
   summarizeTermRepairReport,
 } from "./reportFormatters";
 
+import SelectDropdown from "../../SelectDropdown";
 const SummaryCard = ({ summary, tone = "amber" }) => {
   if (!summary) return null;
 
@@ -239,7 +240,7 @@ const RareRepairToolsSection = ({
               </p>
             </div>
 
-            <select
+            <SelectDropdown
               value={termCode}
               onChange={(event) => setTermCode(event.target.value)}
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
@@ -251,7 +252,7 @@ const RareRepairToolsSection = ({
                   {term.termCode ? ` (${term.termCode})` : ""}
                 </option>
               ))}
-            </select>
+            </SelectDropdown>
 
             <div className="flex flex-wrap gap-2">
               <button
@@ -380,7 +381,7 @@ const RareRepairToolsSection = ({
               </p>
             </div>
 
-            <select
+            <SelectDropdown
               value={orphanTermFilter}
               onChange={(event) => setOrphanTermFilter(event.target.value)}
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
@@ -391,7 +392,7 @@ const RareRepairToolsSection = ({
                   {term.term || term.termCode || "Unknown"}
                 </option>
               ))}
-            </select>
+            </SelectDropdown>
 
             <div className="flex flex-wrap gap-2">
               <button

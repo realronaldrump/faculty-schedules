@@ -16,6 +16,7 @@ import {
   LARGE_EXPORT_ROW_THRESHOLD,
 } from "../../utils/export/adminExportData";
 
+import SelectDropdown from "../SelectDropdown";
 const TERM_SCOPE_ALL = "all";
 const TERM_SCOPE_SELECTED = "selected";
 
@@ -256,7 +257,7 @@ const AdminDataExportsPage = () => {
                 >
                   Select semester
                 </label>
-                <select
+                <SelectDropdown
                   id="selected-term"
                   value={selectedTerm}
                   onChange={(event) => setSelectedTerm(event.target.value)}
@@ -268,7 +269,7 @@ const AdminDataExportsPage = () => {
                       {term.term}
                     </option>
                   ))}
-                </select>
+                </SelectDropdown>
               </div>
             )}
           </div>

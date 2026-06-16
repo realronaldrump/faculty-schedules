@@ -1,6 +1,37 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { ChevronRight, Menu, X, User, Star } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext.jsx";
+
+const normalizeNavigationPath = (path = "") =>
+  String(path || "").replace(/^\//, "");
+
+const getPathnamePart = (path = "") =>
+  normalizeNavigationPath(path).split("?")[0];
+
+const getNavigationAccessId = (item) =>
+  item?.accessId || getPathnamePart(item?.path) || item?.id;
+
+const getSidebarChildren = (item) =>
+  Array.isArray(item?.sidebarChildren) ? item.sidebarChildren : [];
+
+const pathMatchesCurrent = (path, currentPage, currentTarget) => {
+  const normalized = normalizeNavigationPath(path);
+  if (!normalized) return false;
+  if (normalized.includes("?")) {
+    return normalized === currentTarget;
+  }
+  return getPathnamePart(normalized) === currentPage;
+};
+
+const pathIsActive = (path, currentPage) => {
+  const basePath = getPathnamePart(path);
+  if (!basePath) return false;
+  if (basePath === "dashboard") {
+    return currentPage === "dashboard";
+  }
+  return currentPage === basePath || currentPage.startsWith(basePath);
+};
 
 const Sidebar = ({
   navigationItems,
@@ -14,6 +45,8 @@ const Sidebar = ({
 }) => {
   const [expandedSections, setExpandedSections] = useState([]); // Default expanded sections
   const { canAccess, userProfile, isAdmin, isActivityOwner } = useAuth();
+  const location = useLocation();
+  const currentTarget = `${currentPage}${location.search || ""}`;
 
   const toggleSection = (sectionId) => {
     setExpandedSections((prev) =>
@@ -26,17 +59,36 @@ const Sidebar = ({
   useEffect(() => {
     if (!currentPage || collapsed) return;
     const activeSection = navigationItems.find((item) => {
-      if (item.path && item.path === currentPage) return true;
+      if (item.path && pathIsActive(item.path, currentPage)) return true;
       if (item.children) {
-        return item.children.some((child) => child.path === currentPage);
+        return item.children.some(
+          (child) =>
+            (child.path && pathIsActive(child.path, currentPage)) ||
+            getSidebarChildren(child).some((sidebarChild) =>
+              pathMatchesCurrent(
+                sidebarChild.path,
+                currentPage,
+                currentTarget,
+              ),
+            ),
+        );
       }
       return false;
     });
     if (!activeSection) return;
+    const activeChildIds = (activeSection.children || [])
+      .filter(
+        (child) =>
+          (child.path && pathIsActive(child.path, currentPage)) ||
+          getSidebarChildren(child).some((sidebarChild) =>
+            pathMatchesCurrent(sidebarChild.path, currentPage, currentTarget),
+          ),
+      )
+      .map((child) => child.id);
     setExpandedSections((prev) =>
-      prev.includes(activeSection.id) ? prev : [...prev, activeSection.id],
+      Array.from(new Set([...prev, activeSection.id, ...activeChildIds])),
     );
-  }, [collapsed, currentPage, navigationItems]);
+  }, [collapsed, currentPage, currentTarget, navigationItems]);
 
   const findNavItem = (id) => {
     for (const section of navigationItems) {
@@ -70,14 +122,17 @@ const Sidebar = ({
     return userRoles.some((role) => hiddenRoles.includes(role));
   };
 
-  const isActive = (path) => {
-    if (path === "dashboard") {
-      return currentPage === "dashboard";
-    }
-    return currentPage.startsWith(path) || currentPage === path;
-  };
+  const isActive = (path) => pathIsActive(path, currentPage);
 
-  const isCurrentPage = (path) => currentPage === path;
+  const isCurrentPage = (path) =>
+    pathMatchesCurrent(path, currentPage, currentTarget);
+
+  const isDefaultCurrentPage = (path) =>
+    getPathnamePart(path) === currentPage && !location.search;
+
+  const isSidebarChildCurrent = (child, parentPath) =>
+    isCurrentPage(child.path) ||
+    (child.defaultForParent && isDefaultCurrentPage(parentPath));
 
   return (
     <div
@@ -134,7 +189,7 @@ const Sidebar = ({
               {pinnedPages.map((pageId) => {
                 const item = findNavItem(pageId);
                 if (!item) return null;
-                const pinAccessId = item.accessId || item.path;
+                const pinAccessId = getNavigationAccessId(item);
                 if (!canAccess(pinAccessId) || shouldHideForRole(item))
                   return null;
                 const Icon = item.icon || User;
@@ -164,15 +219,15 @@ const Sidebar = ({
             const itemIsActive = isActive(item.path || item.id);
             const visibleChildren = hasChildren
               ? (item.children || []).filter(
-                (child) =>
-                  canAccess(child.accessId || child.path) &&
-                  !shouldHideForRole(child),
-              )
+                  (child) =>
+                    canAccess(getNavigationAccessId(child)) &&
+                    !shouldHideForRole(child),
+                )
               : [];
             const sectionAllowed = hasChildren
               ? visibleChildren.length > 0
-              : canAccess(item.accessId || item.path || item.id) &&
-              !shouldHideForRole(item);
+              : canAccess(getNavigationAccessId(item)) &&
+                !shouldHideForRole(item);
 
             if (!sectionAllowed) {
               return null;
@@ -228,34 +283,103 @@ const Sidebar = ({
                   <div className="space-y-1 pl-2">
                     {visibleChildren.map((child) => {
                       const isPinned = pinnedPages.includes(child.id);
+                      const visibleSidebarChildren = getSidebarChildren(
+                        child,
+                      ).filter(
+                        (sidebarChild) =>
+                          canAccess(getNavigationAccessId(sidebarChild)) &&
+                          !shouldHideForRole(sidebarChild),
+                      );
+                      const hasSidebarChildren =
+                        visibleSidebarChildren.length > 0;
+                      const sidebarChildExpanded = expandedSections.includes(
+                        child.id,
+                      );
+                      const childIsActive =
+                        isCurrentPage(child.path) ||
+                        visibleSidebarChildren.some((sidebarChild) =>
+                          isSidebarChildCurrent(sidebarChild, child.path),
+                        );
+                      const childClassName =
+                        hasSidebarChildren && childIsActive
+                          ? "bg-baylor-green/5 text-baylor-green font-medium"
+                          : isCurrentPage(child.path)
+                            ? "nav-sub-item-active"
+                            : "nav-sub-item-inactive";
+
                       return (
-                        <div key={child.id} className="group flex items-center">
-                          <button
-                            onClick={() => {
-                              onNavigate(child.path);
-                            }}
-                            className={`nav-sub-item w-full text-left ${isCurrentPage(child.path)
-                              ? "nav-sub-item-active"
-                              : "nav-sub-item-inactive"
-                              }`}
-                          >
-                            <span className="text-sm font-['DM_Sans']">
-                              {child.label}
-                            </span>
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              togglePinPage(child.id);
-                            }}
-                            className="p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-baylor-green/20"
-                            title={isPinned ? "Unpin page" : "Pin page"}
-                          >
-                            <Star
-                              size={14}
-                              className={`${isPinned ? "text-baylor-gold fill-current" : "text-gray-400"}`}
-                            />
-                          </button>
+                        <div key={child.id} className="space-y-1">
+                          <div className="group flex items-center">
+                            <button
+                              onClick={() => {
+                                onNavigate(child.path);
+                              }}
+                              className={`nav-sub-item flex-1 min-w-0 text-left ${childClassName}`}
+                            >
+                              <span className="text-sm font-['DM_Sans'] truncate">
+                                {child.label}
+                              </span>
+                            </button>
+                            {hasSidebarChildren && (
+                              <button
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  toggleSection(child.id);
+                                }}
+                                className="p-1 rounded-md text-gray-400 hover:bg-baylor-green/10 hover:text-baylor-green"
+                                title={
+                                  sidebarChildExpanded
+                                    ? `Collapse ${child.label}`
+                                    : `Expand ${child.label}`
+                                }
+                              >
+                                <ChevronRight
+                                  size={14}
+                                  className={`transition-transform duration-200 ${sidebarChildExpanded ? "rotate-90" : ""}`}
+                                />
+                              </button>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                togglePinPage(child.id);
+                              }}
+                              className="p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-baylor-green/20"
+                              title={isPinned ? "Unpin page" : "Pin page"}
+                            >
+                              <Star
+                                size={14}
+                                className={`${isPinned ? "text-baylor-gold fill-current" : "text-gray-400"}`}
+                              />
+                            </button>
+                          </div>
+                          {hasSidebarChildren && sidebarChildExpanded && (
+                            <div className="space-y-1 pl-4">
+                              {visibleSidebarChildren.map((sidebarChild) => {
+                                const sidebarChildClassName =
+                                  isSidebarChildCurrent(
+                                    sidebarChild,
+                                    child.path,
+                                  )
+                                    ? "nav-sub-item-active"
+                                    : "nav-sub-item-inactive";
+
+                                return (
+                                  <button
+                                    key={sidebarChild.id}
+                                    onClick={() => {
+                                      onNavigate(sidebarChild.path);
+                                    }}
+                                    className={`nav-sub-item w-full text-left ${sidebarChildClassName}`}
+                                  >
+                                    <span className="text-[13px] font-['DM_Sans']">
+                                      {sidebarChild.label}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       );
                     })}

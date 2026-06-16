@@ -32,6 +32,7 @@ import {
   copyToClipboard,
 } from "../../utils/pafUtils";
 
+import SelectDropdown from "../SelectDropdown";
 const PAFWorkflow = ({ embedded = false }) => {
   const { people: directoryData, loadPeople } = usePeople();
   const { scheduleData, selectedSemester, availableSemesters, setSelectedSemester } = useData();
@@ -263,7 +264,7 @@ const PAFWorkflow = ({ embedded = false }) => {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <select
+            <SelectDropdown
               value={selectedSemester}
               onChange={(e) => setSelectedSemester(e.target.value)}
               className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-baylor-green focus:border-baylor-green"
@@ -273,7 +274,7 @@ const PAFWorkflow = ({ embedded = false }) => {
                   {sem}
                 </option>
               ))}
-            </select>
+            </SelectDropdown>
             <div className="p-3 bg-baylor-green/10 rounded-lg">
               <FileText className="h-6 w-6 text-baylor-green" />
             </div>

@@ -18,6 +18,7 @@ import {
 } from "../../utils/capacityUtils";
 import CourseDetailModal from "../scheduling/CourseDetailModal";
 
+import SelectDropdown from "../SelectDropdown";
 const pct = (value) => (value == null ? "—" : `${Math.round(value * 100)}%`);
 
 const FillBar = ({ value }) => {
@@ -215,7 +216,7 @@ const EnrollmentCapacity = () => {
             a bigger room, or a second look.
           </p>
         </div>
-        <select
+        <SelectDropdown
           data-tutorial="capacity-term"
           value={effectiveTerm}
           onChange={(e) => setTerm(e.target.value)}
@@ -227,7 +228,7 @@ const EnrollmentCapacity = () => {
               {t}
             </option>
           ))}
-        </select>
+        </SelectDropdown>
       </div>
 
       <div

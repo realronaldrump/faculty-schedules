@@ -536,6 +536,8 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
                   setFilters((prev) => ({ ...prev, jobTitles: selected }))
                 }
                 placeholder="Filter by job title"
+                menuPortal
+                menuMaxHeight={320}
               />
 
               <MultiSelectDropdown
@@ -545,6 +547,8 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
                   setFilters((prev) => ({ ...prev, buildings: selected }))
                 }
                 placeholder="Filter by building"
+                menuPortal
+                menuMaxHeight={320}
               />
 
               <MultiSelectDropdown
@@ -554,6 +558,8 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
                   setFilters((prev) => ({ ...prev, supervisors: selected }))
                 }
                 placeholder="Filter by supervisor"
+                menuPortal
+                menuMaxHeight={320}
               />
             </div>
 

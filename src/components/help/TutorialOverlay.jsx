@@ -10,8 +10,15 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, ChevronLeft, ChevronRight, CheckCircle, CheckCircle2, Target, Hand } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { X, ChevronLeft, ChevronRight, CheckCircle, CheckCircle2, Target, Hand, AlertTriangle, Loader2 } from 'lucide-react';
 import { useTutorial } from '../../contexts/TutorialContext';
+
+// How long a defined target may be missing from the DOM before we treat the
+// user as having navigated away and recover (navigate back + show a notice).
+// Must comfortably exceed the 500ms poll interval so brief transitions (e.g.
+// switching tabs within the tutorial page) don't trigger a false recovery.
+const TARGET_MISSING_GRACE_MS = 1200;
 
 // Spotlight effect that highlights the target element
 const Spotlight = ({ targetRect, padding = 8 }) => {
@@ -311,6 +318,46 @@ const InstructionCard = ({
   );
 };
 
+// Non-blocking notice shown when a step's target element can't be found on the
+// current page (e.g. the user navigated away mid-tutorial). Unlike the spotlight
+// overlay, this does NOT dim or block the page — it leaves the app fully usable
+// while we navigate back to the tutorial's page, and always offers an exit.
+const TargetMissingNotice = ({ onTutorialPage, onReturn, onExit }) => (
+  <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[9999] w-96 max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-2xl overflow-hidden border border-gray-200">
+    <div className="bg-baylor-green px-4 py-3 flex items-center gap-2 text-white">
+      {onTutorialPage ? (
+        <AlertTriangle className="w-5 h-5 text-baylor-gold" />
+      ) : (
+        <Loader2 className="w-5 h-5 text-baylor-gold animate-spin" />
+      )}
+      <span className="font-semibold">Tutorial paused</span>
+    </div>
+    <div className="p-5">
+      <p className="text-gray-600 mb-4">
+        {onTutorialPage
+          ? "We can't find this step on the page yet — it may still be loading. You can keep waiting or exit the tutorial."
+          : "You've left the tutorial page. Taking you back to where you left off…"}
+      </p>
+      <div className="flex items-center justify-end gap-2">
+        {!onTutorialPage && (
+          <button
+            onClick={onReturn}
+            className="flex items-center gap-1 px-4 py-1.5 text-sm rounded-lg bg-baylor-green text-white hover:bg-baylor-green/90 transition-colors"
+          >
+            Return now
+          </button>
+        )}
+        <button
+          onClick={onExit}
+          className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+        >
+          Exit tutorial
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
 // Main TutorialOverlay component
 const TutorialOverlay = () => {
   const {
@@ -325,8 +372,17 @@ const TutorialOverlay = () => {
     markActionCompleted
   } = useTutorial();
 
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [targetRect, setTargetRect] = useState(null);
   const [targetElement, setTargetElement] = useState(null);
+  // True only when the current step DEFINES a target but it isn't in the DOM
+  // right now. Distinct from intro/outro steps where `target` is null by design.
+  const [targetMissing, setTargetMissing] = useState(false);
+  // Becomes true once a missing target has survived the grace period, at which
+  // point we surface the recovery notice and navigate back to the tutorial page.
+  const [recoveryActive, setRecoveryActive] = useState(false);
   const [cardPosition, setCardPosition] = useState({ top: 0, left: 0, position: 'center' });
   const cardSize = { width: 384, height: 300 }; // Approximate card dimensions
 
@@ -336,8 +392,10 @@ const TutorialOverlay = () => {
   // Find and track the target element
   const updateTargetPosition = useCallback(() => {
     if (!currentStep || !currentStep.target) {
+      // Intro/outro step: no target by design → intentional full-screen dim.
       setTargetRect(null);
       setTargetElement(null);
+      setTargetMissing(false);
       return;
     }
 
@@ -353,6 +411,7 @@ const TutorialOverlay = () => {
         right: rect.right
       });
       setTargetElement(element);
+      setTargetMissing(false);
 
       // Scroll element into view if needed
       const isInViewport =
@@ -369,8 +428,12 @@ const TutorialOverlay = () => {
         });
       }
     } else {
+      // Step expects a target that isn't on the page right now (user likely
+      // navigated away). Flag it as missing so we recover instead of trapping
+      // the user behind a full-screen dim/click-blocker.
       setTargetRect(null);
       setTargetElement(null);
+      setTargetMissing(true);
     }
   }, [currentStep]);
 
@@ -404,6 +467,32 @@ const TutorialOverlay = () => {
       clearInterval(pollInterval);
     };
   }, [activeTutorial, currentStep, isPaused, updateTargetPosition]);
+
+  // Recover when a defined target stays missing past the grace period. We treat
+  // this as "the user navigated away mid-tutorial": surface the non-blocking
+  // notice and navigate back to the tutorial's page so the poller can re-acquire
+  // the target. We only auto-navigate when off the tutorial page (avoids a
+  // redirect loop if the element is genuinely absent on the correct page).
+  useEffect(() => {
+    if (!activeTutorial || !targetMissing) {
+      setRecoveryActive(false);
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      setRecoveryActive(true);
+
+      const { targetPage } = activeTutorial;
+      if (targetPage) {
+        const targetPathname = `/${targetPage.split('?')[0]}`;
+        if (location.pathname !== targetPathname) {
+          navigate(`/${targetPage}`);
+        }
+      }
+    }, TARGET_MISSING_GRACE_MS);
+
+    return () => clearTimeout(timer);
+  }, [activeTutorial, targetMissing, currentStepIndex, location.pathname, navigate]);
 
   // Listen for action completion on target element
   useEffect(() => {
@@ -467,9 +556,30 @@ const TutorialOverlay = () => {
     return null;
   }
 
+  // Target defined but missing from the DOM: never full-screen dim/block. Show
+  // the non-blocking recovery notice once the grace period has elapsed (it stays
+  // hidden during brief transitions so it doesn't flash mid-tutorial).
+  if (targetMissing) {
+    if (!recoveryActive) return null;
+
+    const targetPage = activeTutorial.targetPage;
+    const targetPathname = targetPage ? `/${targetPage.split('?')[0]}` : null;
+    const onTutorialPage = targetPathname
+      ? location.pathname === targetPathname
+      : false;
+
+    return (
+      <TargetMissingNotice
+        onTutorialPage={onTutorialPage}
+        onReturn={() => targetPage && navigate(`/${targetPage}`)}
+        onExit={() => endTutorial(false)}
+      />
+    );
+  }
+
   return (
     <>
-      {/* Spotlight overlay */}
+      {/* Spotlight overlay (full-screen dim for intro/outro is intentional) */}
       <Spotlight targetRect={targetRect} />
 
       {/* Click blocker frame - blocks clicks outside target, leaves target fully interactive */}

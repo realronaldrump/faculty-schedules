@@ -9,6 +9,7 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
+  CheckCircle2,
 } from "lucide-react";
 import { useData } from "../../contexts/DataContext";
 import {
@@ -31,7 +32,7 @@ const FillBar = ({ value }) => {
       : "bg-baylor-green";
   return (
     <div className="flex items-center gap-2">
-      <div className="h-2 w-20 rounded-full bg-gray-100 overflow-hidden">
+      <div className="h-2 w-24 rounded-full bg-gray-100 overflow-hidden">
         <div
           className={`h-full ${color}`}
           style={{ width: `${Math.min(clamped, 1) * 100}%` }}
@@ -70,7 +71,7 @@ const SortIcon = ({ col, sortState }) => {
     : <ChevronDown className="w-3 h-3 ml-1 inline text-baylor-green" />;
 };
 
-const SectionTable = ({ title, description, rows, onSelect, dataTutorial }) => {
+const SectionTable = ({ title, description, rows, onSelect, dataTutorial, accentBorder, TitleIcon }) => {
   const [sortState, setSortState] = useState({ col: null, dir: "asc" });
 
   const sortedRows = useMemo(() => {
@@ -96,13 +97,22 @@ const SectionTable = ({ title, description, rows, onSelect, dataTutorial }) => {
 
   return (
   <div
-    className="bg-white border border-gray-200 rounded-xl p-5"
+    className={`bg-white border border-gray-200 rounded-xl p-5 border-l-4 ${accentBorder ?? "border-l-gray-200"}`}
     data-tutorial={dataTutorial}
   >
-    <h3 className="text-base font-semibold text-gray-900">{title}</h3>
-    <p className="text-sm text-gray-600 mb-3">{description}</p>
+    <div className="flex items-start gap-2 mb-0.5">
+      {TitleIcon && <TitleIcon className="w-4 h-4 mt-0.5 flex-shrink-0 text-gray-400" />}
+      <h3 className="text-base font-semibold text-gray-900">
+        {title}
+        <span className="ml-2 text-sm font-normal text-gray-400">({rows.length})</span>
+      </h3>
+    </div>
+    <p className="text-sm text-gray-600 mb-3 ml-6">{description}</p>
     {rows.length === 0 ? (
-      <p className="text-sm text-gray-500">Nothing flagged. 🎉</p>
+      <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-500">
+        <CheckCircle2 className="w-4 h-4 text-baylor-green flex-shrink-0" />
+        Nothing flagged for this term.
+      </div>
     ) : (
       <div className="overflow-x-auto rounded-lg border border-gray-200">
         <table className="university-table min-w-full">
@@ -147,9 +157,11 @@ const SectionTable = ({ title, description, rows, onSelect, dataTutorial }) => {
                 </td>
                 <td className="table-cell text-gray-700">
                   {s.waitlist > 0 ? (
-                    <span className="text-amber-700 font-medium">{s.waitlist}</span>
+                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                      {s.waitlist}
+                    </span>
                   ) : (
-                    "0"
+                    <span className="text-gray-300">—</span>
                   )}
                 </td>
                 <td className="table-cell text-xs text-gray-600 max-w-xs">
@@ -316,6 +328,8 @@ const EnrollmentCapacity = () => {
         rows={analysis.overCapacity}
         onSelect={setDetail}
         dataTutorial="capacity-over"
+        accentBorder="border-l-red-400"
+        TitleIcon={TrendingUp}
       />
       <SectionTable
         title="Under-enrolled"
@@ -323,6 +337,8 @@ const EnrollmentCapacity = () => {
         rows={analysis.underEnrolled}
         onSelect={setDetail}
         dataTutorial="capacity-under"
+        accentBorder="border-l-amber-400"
+        TitleIcon={TrendingDown}
       />
       <SectionTable
         title="Room capacity mismatch"
@@ -330,6 +346,8 @@ const EnrollmentCapacity = () => {
         rows={analysis.roomMismatch}
         onSelect={setDetail}
         dataTutorial="capacity-mismatch"
+        accentBorder="border-l-blue-400"
+        TitleIcon={Maximize2}
       />
 
       {detail && (

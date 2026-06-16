@@ -92,6 +92,28 @@ const getFieldChanges = (originalData, updatedData) => {
   return changes;
 };
 
+// System-managed fields that should never trigger a "changed" detection,
+// even when they appear inside nested objects (e.g. semesterSchedules entries).
+const SYSTEM_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'timestamp']);
+
+/**
+ * Recursively strip system-managed fields so that auto-updated timestamps
+ * inside nested objects (e.g. semesterSchedules[key].updatedAt) do not
+ * produce false-positive change detections.
+ */
+const stripSystemFields = (value) => {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map(stripSystemFields);
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([k]) => !SYSTEM_FIELDS.has(k))
+        .map(([k, v]) => [k, stripSystemFields(v)])
+    );
+  }
+  return value;
+};
+
 /**
  * Produce a canonical JSON string with sorted keys, so key-order differences
  * (e.g. from normalization) do not produce false-positive change detections.
@@ -116,10 +138,12 @@ const areValuesEqual = (val1, val2) => {
   if (isEmpty(val1) && isEmpty(val2)) return true;
   if (isEmpty(val1) || isEmpty(val2)) return false;
 
-  // Handle objects/arrays using canonical (key-sorted) comparison so that
-  // key-order differences from normalization don't produce false positives.
+  // For objects/arrays: strip system-managed timestamp fields recursively
+  // before canonical comparison so that auto-updated timestamps inside nested
+  // structures (e.g. semesterSchedules[key].updatedAt) don't produce false
+  // positives, then compare with key-sorted canonical stringification.
   if (typeof val1 === 'object' && typeof val2 === 'object') {
-    return canonicalStringify(val1) === canonicalStringify(val2);
+    return canonicalStringify(stripSystemFields(val1)) === canonicalStringify(stripSystemFields(val2));
   }
 
   return false;

@@ -343,12 +343,10 @@ export const AuthProvider = ({ children }) => {
         }
         setLoadedAccess(true);
       },
-      () => {
-        setRolePermissions({
-          admin: { pages: { "*": true } },
-          staff: { pages: {} },
-          faculty: { pages: {} },
-        });
+      (error) => {
+        console.warn("Access control snapshot failed, using profile-based fallback.", error);
+        // Only grant wildcard access to the actual admin role — not to everyone.
+        setRolePermissions(normalizeRolePermissions());
         setLoadedAccess(true);
       },
     );

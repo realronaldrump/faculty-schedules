@@ -51,6 +51,7 @@ const JobCard = ({
   onSave,
   onCancel,
   onRemove,
+  onDraftChange,
   availableBuildings = [],
   supervisorOptions = [],
   existingJobTitles = [],
@@ -69,6 +70,15 @@ const JobCard = ({
     }
     return job?.supervisor || "";
   }, [job, supervisorOptions]);
+
+  // Notify parent of draft changes so the main Save can auto-commit
+  // an in-progress job edit without requiring an explicit "Save Job" click.
+  useEffect(() => {
+    if (isEditing) {
+      onDraftChange?.(draft);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, isEditing]);
 
   useEffect(() => {
     if (isEditing) {

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import {
   X,
   User,
@@ -48,6 +48,9 @@ const StudentEditModal = ({
   const [errors, setErrors] = useState({});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editingJobIndex, setEditingJobIndex] = useState(null);
+  // Holds the live draft of any job currently being edited so the main
+  // Save button can auto-commit it without requiring an explicit "Save Job" click.
+  const activeDraftRef = useRef(null);
   const [addingJob, setAddingJob] = useState(false);
   const canDeleteStudent =
     typeof window === "undefined" ||
@@ -88,8 +91,16 @@ const StudentEditModal = ({
   };
 
   const handleSave = () => {
+    // Auto-commit any in-progress job edit so users don't lose changes
+    // made in JobCard without explicitly clicking "Save Job".
+    let dataToSave = formData;
+    if (editingJobIndex !== null && activeDraftRef.current) {
+      const newJobs = [...(formData.jobs || [])];
+      newJobs[editingJobIndex] = { ...newJobs[editingJobIndex], ...activeDraftRef.current };
+      dataToSave = { ...formData, jobs: newJobs };
+    }
     if (validate()) {
-      onSave(formData);
+      onSave(dataToSave);
     }
   };
 
@@ -255,9 +266,14 @@ const StudentEditModal = ({
             onEdit={() => setEditingJobIndex(idx)}
             onSave={(updatedJob) => {
               updateJob(idx, updatedJob);
+              activeDraftRef.current = null;
               setEditingJobIndex(null);
             }}
-            onCancel={() => setEditingJobIndex(null)}
+            onCancel={() => {
+              activeDraftRef.current = null;
+              setEditingJobIndex(null);
+            }}
+            onDraftChange={(draft) => { activeDraftRef.current = draft; }}
             onRemove={() => removeJob(idx)}
             availableBuildings={availableBuildings}
             supervisorOptions={supervisorOptions}

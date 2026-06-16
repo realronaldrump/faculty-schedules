@@ -7,7 +7,7 @@
 
 import { useCallback } from "react";
 import { db, COLLECTIONS } from "../firebase";
-import { collection, doc, getDoc, setDoc, updateDoc, addDoc } from "firebase/firestore";
+import { collection, doc, getDoc, setDoc, updateDoc, addDoc, deleteField } from "firebase/firestore";
 import { logCreate, logUpdate, logDelete } from "../utils/changeLogger";
 import { useData } from "../contexts/DataContext";
 import { usePeople } from "../contexts/PeopleContext";
@@ -775,7 +775,16 @@ const usePeopleOperations = () => {
             return;
           }
 
-          await updateDoc(studentRef, updateData);
+          // Explicitly delete legacy top-level mirror fields that stripLegacyStudentMirrors
+          // removed from the JS object — updateDoc only updates present fields, it does
+          // NOT delete absent ones, so these would otherwise persist in Firestore.
+          await updateDoc(studentRef, {
+            ...updateData,
+            hourlyRate: deleteField(),
+            jobTitle: deleteField(),
+            supervisor: deleteField(),
+            supervisorId: deleteField(),
+          });
           await logUpdate(
             `Student - ${studentToUpdate.name}`,
             "people",

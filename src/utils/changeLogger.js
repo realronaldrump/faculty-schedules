@@ -93,20 +93,35 @@ const getFieldChanges = (originalData, updatedData) => {
 };
 
 /**
+ * Produce a canonical JSON string with sorted keys, so key-order differences
+ * (e.g. from normalization) do not produce false-positive change detections.
+ */
+const canonicalStringify = (value) => {
+  if (value === null || value === undefined) return String(value);
+  if (typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return '[' + value.map(canonicalStringify).join(',') + ']';
+  }
+  return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + canonicalStringify(value[k])).join(',') + '}';
+};
+
+/**
  * Compare two values for equality (handles objects, arrays, etc.)
  */
 const areValuesEqual = (val1, val2) => {
   if (val1 === val2) return true;
-  
-  // Handle null/undefined cases
-  if (val1 == null && val2 == null) return true;
-  if (val1 == null || val2 == null) return false;
-  
-  // Handle objects/arrays
+
+  // Treat null, undefined, and empty string as equivalent "empty" values
+  const isEmpty = (v) => v == null || v === '';
+  if (isEmpty(val1) && isEmpty(val2)) return true;
+  if (isEmpty(val1) || isEmpty(val2)) return false;
+
+  // Handle objects/arrays using canonical (key-sorted) comparison so that
+  // key-order differences from normalization don't produce false positives.
   if (typeof val1 === 'object' && typeof val2 === 'object') {
-    return JSON.stringify(val1) === JSON.stringify(val2);
+    return canonicalStringify(val1) === canonicalStringify(val2);
   }
-  
+
   return false;
 };
 
@@ -122,7 +137,8 @@ const formatValue = (value) => {
   }
   if (typeof value === 'object') {
     if (Array.isArray(value)) {
-      return value.length > 0 ? value.join(', ') : '(empty)';
+      if (value.length === 0) return '(empty)';
+      return value.map(item => typeof item === 'object' ? JSON.stringify(item) : String(item)).join(', ');
     }
     return JSON.stringify(value);
   }

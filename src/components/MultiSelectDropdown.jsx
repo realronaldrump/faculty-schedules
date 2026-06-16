@@ -52,7 +52,7 @@ const MultiSelectDropdown = ({
         position: 'fixed',
         top,
         left: rect.left,
-        width: rect.width,
+        minWidth: rect.width,
         zIndex: 60,
       });
     };

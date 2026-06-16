@@ -417,6 +417,15 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Per-user tutorial progress: each user owns their own document; the
+    // activity owner can read every document for the admin completion view.
+    match /tutorialProgress/{userId} {
+      allow read: if isSelf(userId) || isActivityOwner();
+      allow create, update: if isSelf(userId) &&
+        request.resource.data.uid == request.auth.uid;
+      allow delete: if false;
+    }
+
     match /userActivityDaily/{id} {
       allow read: if isActivityOwner();
       allow write: if isActivityOwner();

@@ -85,12 +85,15 @@ describe("UserActivityPage", () => {
       .mockResolvedValueOnce(makeSnapshot([]))
       .mockResolvedValueOnce(makeSnapshot([]))
       .mockResolvedValueOnce(makeSnapshot([]))
+      .mockResolvedValueOnce(makeSnapshot([]))
       .mockResolvedValueOnce(makeSnapshot([]));
 
     render(<UserActivityPage />);
 
+    // Analytics (1) + paged page rollups (2) + user (1) + presence (1) +
+    // events (1) + tutorial progress (1) = 7 reads.
     await waitFor(() => {
-      expect(getDocsMock).toHaveBeenCalledTimes(6);
+      expect(getDocsMock).toHaveBeenCalledTimes(7);
     });
   });
 });

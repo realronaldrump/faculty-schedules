@@ -207,3 +207,32 @@ Rules changes only take effect after deploy. The H1 fix is a real hole until the
 - `npm run deploy:firestore`  (firestore rules + indexes)
 - `firebase deploy --only storage`  (storage rules)
 Owner to run/authorize. No Cloud Functions changes needed (only a comment edit).
+
+---
+
+# Tutorial Progress Persistence + Admin Visibility — June 2026
+
+Goal: make tutorial progress reliable/persistent/account-scoped, give the activity owner visibility into completion, stay on Firebase free tier.
+
+## Problem (verified)
+- Completion was stored ONLY in localStorage (`completedTutorials`), browser-scoped not user-scoped → leaked across users on a shared browser, no cross-device sync, lost on a different device.
+- In-progress step was in-memory React state only → a hard refresh dropped it; no "started/partial" record ever existed.
+- Admin visibility was impossible (no server-side record at all).
+
+## Plan
+- [x] Add `tutorialProgress/{uid}` Firestore data layer (`src/utils/tutorialProgress.js`): subscribe + start/step/complete/reset + admin fetch.
+- [x] Migrate `TutorialContext` to Firestore as source of truth: subscribe on login, derive `completedTutorials`, persist start/step(debounced)/complete, emit `tutorial_completed` activity event, reset clears server doc. Drop localStorage completion store (kept showTooltips/dismissedHints as device prefs).
+- [x] `TutorialPage`: resume support — "In progress" badge, step progress bar, "Resume · Step X of N" button; start at saved step.
+- [x] `UserActivityPage`: owner-only "Tutorial completion" section — user × tutorial matrix (✓ / step x/N / –) + summary metrics, fed by a single `tutorialProgress` collection read.
+- [x] Firestore rules: `tutorialProgress/{userId}` readable by self or activity owner, writable by self only.
+- [x] Update `UserActivityPage.test.jsx` read-count expectation (6 → 7).
+
+## Review / Results
+- All 181 tests pass; lint clean on changed files; `vite build` succeeds.
+- Fixes every loss scenario except offline-then-hard-refresh (Firestore SDK queues writes in-memory; IndexedDB persistence intentionally left off to keep the change scoped — noted as optional follow-up).
+- Cost: tiny per-user keyed writes (start/complete + debounced step) and one small collection read for the admin grid → comfortably within Spark free tier.
+- ACTION REQUIRED by owner: deploy rules before the feature goes live — `npm run deploy:firestore` (or `firebase deploy --only firestore:rules`). Until deployed, progress writes are denied and the admin section stays empty.
+
+## Known/au follow-ups (not in scope)
+- Overlay traps the screen if the user navigates off the target page mid-tutorial (pre-existing). Consider a grace-period guard before full-screen blocking.
+- Optional: enable Firestore IndexedDB persistence to survive offline + refresh.

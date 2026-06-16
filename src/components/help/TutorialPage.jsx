@@ -23,15 +23,27 @@ const categoryIcons = {
 };
 
 // Tutorial card component
-const TutorialCard = ({ tutorial, isCompleted, onStart }) => {
+const TutorialCard = ({ tutorial, isCompleted, progress, onStart }) => {
   const CategoryIcon = categoryIcons[tutorial.category] || BookOpen;
+
+  const totalSteps = tutorial.steps.length;
+  const isInProgress = !isCompleted && progress?.status === "started";
+  const resumeStep = isInProgress
+    ? Math.min(Math.max(0, progress.currentStepIndex || 0), totalSteps - 1)
+    : 0;
+  const completedSteps = isInProgress ? resumeStep : 0;
+  const percent = isInProgress
+    ? Math.round((completedSteps / totalSteps) * 100)
+    : 0;
 
   return (
     <div
       className={`bg-white rounded-xl border-2 transition-all duration-200 hover:shadow-lg ${
         isCompleted
           ? "border-green-200 bg-green-50/30"
-          : "border-gray-200 hover:border-baylor-green/50"
+          : isInProgress
+            ? "border-baylor-gold/50 bg-baylor-gold/5"
+            : "border-gray-200 hover:border-baylor-green/50"
       }`}
     >
       <div className="p-6">
@@ -44,12 +56,17 @@ const TutorialCard = ({ tutorial, isCompleted, onStart }) => {
               className={`w-6 h-6 ${isCompleted ? "text-green-600" : "text-baylor-green"}`}
             />
           </div>
-          {isCompleted && (
+          {isCompleted ? (
             <div className="flex items-center gap-1 text-green-600 text-sm font-medium">
               <CheckCircle className="w-4 h-4" />
               Completed
             </div>
-          )}
+          ) : isInProgress ? (
+            <div className="flex items-center gap-1 text-amber-600 text-sm font-medium">
+              <Clock className="w-4 h-4" />
+              In progress
+            </div>
+          ) : null}
         </div>
 
         {/* Content */}
@@ -68,13 +85,31 @@ const TutorialCard = ({ tutorial, isCompleted, onStart }) => {
           </div>
           <div className="flex items-center gap-1">
             <BookOpen className="w-4 h-4" />
-            {tutorial.steps.length} steps
+            {totalSteps} steps
           </div>
         </div>
 
+        {/* In-progress bar */}
+        {isInProgress && (
+          <div className="mb-4">
+            <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+              <span>
+                Step {resumeStep + 1} of {totalSteps}
+              </span>
+              <span>{percent}%</span>
+            </div>
+            <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-baylor-gold transition-all duration-300"
+                style={{ width: `${percent}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Action button */}
         <button
-          onClick={() => onStart(tutorial.id)}
+          onClick={() => onStart(tutorial.id, isInProgress ? resumeStep : 0)}
           className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors ${
             isCompleted
               ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -82,7 +117,11 @@ const TutorialCard = ({ tutorial, isCompleted, onStart }) => {
           }`}
         >
           <Play className="w-4 h-4" />
-          {isCompleted ? "Review Tutorial" : "Start Tutorial"}
+          {isCompleted
+            ? "Review Tutorial"
+            : isInProgress
+              ? `Resume · Step ${resumeStep + 1} of ${totalSteps}`
+              : "Start Tutorial"}
         </button>
       </div>
     </div>
@@ -95,6 +134,7 @@ const TutorialPage = () => {
     startTutorial,
     isTutorialCompleted,
     completedTutorials,
+    tutorialProgressById,
     showTooltips,
     setShowTooltips,
     resetAllProgress,
@@ -144,13 +184,13 @@ const TutorialPage = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showSettings]);
 
-  // Handle starting a tutorial
-  const handleStartTutorial = (tutorialId) => {
+  // Handle starting (or resuming) a tutorial
+  const handleStartTutorial = (tutorialId, startStepIndex = 0) => {
     const tutorial = TUTORIALS[tutorialId];
     if (tutorial) {
       navigate(`/${tutorial.targetPage}`);
       setTimeout(() => {
-        startTutorial(tutorialId);
+        startTutorial(tutorialId, startStepIndex);
       }, 500);
     }
   };
@@ -300,6 +340,7 @@ const TutorialPage = () => {
               key={tutorial.id}
               tutorial={tutorial}
               isCompleted={isTutorialCompleted(tutorial.id)}
+              progress={tutorialProgressById[tutorial.id]}
               onStart={handleStartTutorial}
             />
           ))}

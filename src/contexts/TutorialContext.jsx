@@ -18,6 +18,18 @@ import {
   useMemo,
   useRef,
 } from "react";
+import { useAuth } from "./AuthContext.jsx";
+import {
+  buildActivityActor,
+  logUserActivityEvent,
+} from "../utils/activityTracking";
+import {
+  markTutorialCompleted,
+  markTutorialStarted,
+  resetTutorialProgress,
+  subscribeTutorialProgress,
+  updateTutorialStep,
+} from "../utils/tutorialProgress";
 
 const TutorialContext = createContext(null);
 
@@ -1037,6 +1049,21 @@ const HELP_HINTS = {
 };
 
 export const TutorialProvider = ({ children }) => {
+  const { user, userProfile } = useAuth();
+
+  // Activity actor used for progress persistence and completion telemetry.
+  const actor = useMemo(
+    () => buildActivityActor({ user, userProfile }),
+    [
+      user?.uid,
+      user?.email,
+      user?.displayName,
+      userProfile?.email,
+      userProfile?.displayName,
+      userProfile?.roles,
+    ],
+  );
+
   // Active tutorial state
   const [activeTutorial, setActiveTutorial] = useState(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -1046,6 +1073,7 @@ export const TutorialProvider = ({ children }) => {
   // Tutorial-created data tracking (for cleanup)
   const [tutorialStudentId, setTutorialStudentId] = useState(null);
   const cleanupCallbackRef = useRef(null);
+  const stepWriteTimerRef = useRef(null);
 
   // User preferences
   const [showTooltips, setShowTooltips] = useState(() => {
@@ -1057,15 +1085,18 @@ export const TutorialProvider = ({ children }) => {
     }
   });
 
-  // Track completed tutorials
-  const [completedTutorials, setCompletedTutorials] = useState(() => {
-    try {
-      const saved = localStorage.getItem("completedTutorials");
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  // Tutorial progress (Firestore source of truth, keyed by tutorial id).
+  // Hydrated from the signed-in user's own `tutorialProgress/{uid}` document so
+  // completion is account-scoped and synced across devices and refreshes.
+  const [tutorialProgressById, setTutorialProgressById] = useState({});
+
+  const completedTutorials = useMemo(
+    () =>
+      Object.entries(tutorialProgressById)
+        .filter(([, entry]) => entry?.status === "completed")
+        .map(([tutorialId]) => tutorialId),
+    [tutorialProgressById],
+  );
 
   // Track dismissed hints
   const [dismissedHints, setDismissedHints] = useState(() => {
@@ -1077,36 +1108,117 @@ export const TutorialProvider = ({ children }) => {
     }
   });
 
-  // Persist preferences
+  // Persist device-level UI preferences (not account data).
   useEffect(() => {
     localStorage.setItem("tutorialShowTooltips", JSON.stringify(showTooltips));
   }, [showTooltips]);
 
   useEffect(() => {
-    localStorage.setItem(
-      "completedTutorials",
-      JSON.stringify(completedTutorials),
-    );
-  }, [completedTutorials]);
-
-  useEffect(() => {
     localStorage.setItem("dismissedHints", JSON.stringify(dismissedHints));
   }, [dismissedHints]);
 
-  // Start a tutorial
-  const startTutorial = useCallback((tutorialId) => {
-    const tutorial = TUTORIALS[tutorialId];
-    if (tutorial) {
+  // Subscribe to the signed-in user's progress document. Clears on sign-out so
+  // progress never leaks between accounts sharing a browser.
+  useEffect(() => {
+    if (!user?.uid) {
+      setTutorialProgressById({});
+      return undefined;
+    }
+    const unsubscribe = subscribeTutorialProgress(
+      user.uid,
+      (tutorials) => setTutorialProgressById(tutorials || {}),
+      (error) =>
+        console.warn("Tutorial progress subscription failed:", error),
+    );
+    return unsubscribe;
+  }, [user?.uid]);
+
+  // Start (or resume) a tutorial at a given step.
+  const startTutorial = useCallback(
+    (tutorialId, startStepIndex = 0) => {
+      const tutorial = TUTORIALS[tutorialId];
+      if (!tutorial) return;
+
+      const lastIndex = tutorial.steps.length - 1;
+      const startIndex = Math.min(Math.max(0, startStepIndex), lastIndex);
+
       setActiveTutorial(tutorial);
-      setCurrentStepIndex(0);
+      setCurrentStepIndex(startIndex);
       setIsPaused(false);
       setActionCompleted(false);
+
+      if (!actor?.uid) return;
+
+      const existing = tutorialProgressById[tutorialId];
+      if (!existing) {
+        // First-ever open: record the start with its timestamp.
+        void markTutorialStarted(
+          actor,
+          tutorialId,
+          tutorial.steps.length,
+          startIndex,
+        ).catch((error) =>
+          console.warn("Failed to record tutorial start:", error),
+        );
+      } else if (existing.status !== "completed") {
+        // Resuming an in-progress tutorial: advance the pointer, keep startedAt.
+        void updateTutorialStep(
+          actor,
+          tutorialId,
+          startIndex,
+          tutorial.steps.length,
+        ).catch((error) =>
+          console.warn("Failed to record tutorial resume:", error),
+        );
+      }
+      // A completed tutorial being reviewed is intentionally left untouched.
+    },
+    [actor, tutorialProgressById],
+  );
+
+  // Persist the furthest step reached (debounced) while a tutorial is running.
+  // Skips writes when the stored step already matches to avoid a write loop on
+  // snapshot echo, and never churns an already-completed tutorial.
+  useEffect(() => {
+    if (!activeTutorial || !actor?.uid) return undefined;
+
+    const tutorialId = activeTutorial.id;
+    const totalSteps = activeTutorial.steps.length;
+    const persisted = tutorialProgressById[tutorialId];
+
+    if (persisted?.status === "completed") return undefined;
+    if (persisted && persisted.currentStepIndex === currentStepIndex) {
+      return undefined;
     }
-  }, []);
+
+    if (stepWriteTimerRef.current) clearTimeout(stepWriteTimerRef.current);
+    stepWriteTimerRef.current = setTimeout(() => {
+      void updateTutorialStep(
+        actor,
+        tutorialId,
+        currentStepIndex,
+        totalSteps,
+      ).catch((error) =>
+        console.warn("Failed to record tutorial step:", error),
+      );
+    }, 600);
+
+    return () => {
+      if (stepWriteTimerRef.current) clearTimeout(stepWriteTimerRef.current);
+    };
+  }, [activeTutorial, currentStepIndex, actor, tutorialProgressById]);
 
   // End/exit tutorial
   const endTutorial = useCallback(
     async (markComplete = false) => {
+      // Flush any pending debounced step write.
+      if (stepWriteTimerRef.current) {
+        clearTimeout(stepWriteTimerRef.current);
+        stepWriteTimerRef.current = null;
+      }
+
+      const finishedTutorial = activeTutorial;
+
       // Run cleanup callback if registered (e.g., delete tutorial student)
       if (cleanupCallbackRef.current) {
         try {
@@ -1116,13 +1228,38 @@ export const TutorialProvider = ({ children }) => {
         }
       }
 
-      if (markComplete && activeTutorial) {
-        setCompletedTutorials((prev) =>
-          prev.includes(activeTutorial.id)
-            ? prev
-            : [...prev, activeTutorial.id],
-        );
+      if (markComplete && finishedTutorial && actor?.uid) {
+        // Persist completion (source of truth for the progress ring + admin view).
+        try {
+          await markTutorialCompleted(
+            actor,
+            finishedTutorial.id,
+            finishedTutorial.steps.length,
+          );
+        } catch (error) {
+          console.warn("Failed to record tutorial completion:", error);
+        }
+
+        // Emit a semantic activity event so completions surface in the owner's
+        // User Activity console (Top Actions + timeline) for free.
+        try {
+          await logUserActivityEvent({
+            actor,
+            currentPage: (finishedTutorial.targetPage || "help/tutorials").split(
+              "?",
+            )[0],
+            eventType: "action",
+            actionKey: "tutorial_completed",
+            metadata: {
+              tutorialId: finishedTutorial.id,
+              tutorialTitle: finishedTutorial.title,
+            },
+          });
+        } catch (error) {
+          console.warn("Failed to log tutorial completion event:", error);
+        }
       }
+
       setActiveTutorial(null);
       setCurrentStepIndex(0);
       setIsPaused(false);
@@ -1130,7 +1267,7 @@ export const TutorialProvider = ({ children }) => {
       setTutorialStudentId(null);
       cleanupCallbackRef.current = null;
     },
-    [activeTutorial, tutorialStudentId],
+    [activeTutorial, tutorialStudentId, actor],
   );
 
   // Navigate tutorial steps
@@ -1210,9 +1347,15 @@ export const TutorialProvider = ({ children }) => {
   // Reset all progress
   const resetAllProgress = useCallback(async () => {
     await endTutorial(false);
-    setCompletedTutorials([]);
+    if (actor?.uid) {
+      try {
+        await resetTutorialProgress(actor);
+      } catch (error) {
+        console.warn("Failed to reset tutorial progress:", error);
+      }
+    }
     setDismissedHints([]);
-  }, [endTutorial]);
+  }, [endTutorial, actor]);
 
   // Register cleanup callback for tutorial-created data
   const registerCleanupCallback = useCallback((callback) => {
@@ -1260,6 +1403,7 @@ export const TutorialProvider = ({ children }) => {
 
       // Completion tracking
       completedTutorials,
+      tutorialProgressById,
       isTutorialCompleted,
 
       // Tooltip preferences
@@ -1301,6 +1445,7 @@ export const TutorialProvider = ({ children }) => {
       resumeTutorial,
       markActionCompleted,
       completedTutorials,
+      tutorialProgressById,
       isTutorialCompleted,
       showTooltips,
       dismissedHints,

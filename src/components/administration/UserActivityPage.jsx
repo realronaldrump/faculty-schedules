@@ -15,8 +15,10 @@ import {
   Activity,
   ArrowRightLeft,
   BarChart3,
+  CheckCircle2,
   Clock3,
   Flame,
+  GraduationCap,
   MousePointerClick,
   RefreshCw,
   Shield,
@@ -25,6 +27,7 @@ import {
 } from "lucide-react";
 import { db } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import { TUTORIALS } from "../../contexts/TutorialContext";
 import {
   ACTIVITY_RANGE_OPTIONS,
   buildActivityAnalyticsModel,
@@ -756,6 +759,209 @@ const UserDrilldownDrawer = ({
   );
 };
 
+const TUTORIAL_LIST = Object.values(TUTORIALS).map((tutorial) => ({
+  id: tutorial.id,
+  title: tutorial.title,
+  category: tutorial.category,
+  totalSteps: tutorial.steps.length,
+}));
+
+const buildTutorialCompletionModel = (rows) => {
+  const users = rows
+    .map((row) => {
+      const tutorials = row.tutorials || {};
+      const byId = {};
+      let completedCount = 0;
+      let inProgressCount = 0;
+
+      TUTORIAL_LIST.forEach((tutorial) => {
+        const entry = tutorials[tutorial.id];
+        let status = "not_started";
+        if (entry?.status === "completed") {
+          status = "completed";
+          completedCount += 1;
+        } else if (entry?.status === "started") {
+          status = "started";
+          inProgressCount += 1;
+        }
+        byId[tutorial.id] = {
+          status,
+          currentStepIndex: entry?.currentStepIndex ?? 0,
+          totalSteps: entry?.totalSteps || tutorial.totalSteps,
+        };
+      });
+
+      return {
+        uid: row.uid || row.id,
+        displayName: row.displayName || row.email || row.uid || row.id,
+        email: row.email || "",
+        role: row.role || "unknown",
+        completedCount,
+        inProgressCount,
+        byId,
+      };
+    })
+    .sort(
+      (left, right) =>
+        right.completedCount - left.completedCount ||
+        left.displayName.localeCompare(right.displayName),
+    );
+
+  const perTutorial = TUTORIAL_LIST.map((tutorial) => {
+    let completed = 0;
+    let started = 0;
+    users.forEach((user) => {
+      const status = user.byId[tutorial.id]?.status;
+      if (status === "completed") completed += 1;
+      else if (status === "started") started += 1;
+    });
+    return { ...tutorial, completed, started };
+  });
+
+  return {
+    users,
+    perTutorial,
+    totalCompletions: users.reduce((sum, user) => sum + user.completedCount, 0),
+    usersWithActivity: users.length,
+    usersFullyComplete: users.filter(
+      (user) => user.completedCount === TUTORIAL_LIST.length,
+    ).length,
+  };
+};
+
+const TutorialStatusCell = ({ cell }) => {
+  if (cell?.status === "completed") {
+    return (
+      <span className="inline-flex items-center justify-center text-emerald-600">
+        <CheckCircle2 className="h-4 w-4" />
+      </span>
+    );
+  }
+  if (cell?.status === "started") {
+    const total = cell.totalSteps || 0;
+    const current = Math.min((cell.currentStepIndex || 0) + 1, total || 1);
+    return (
+      <span className="inline-flex items-center justify-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+        {current}/{total}
+      </span>
+    );
+  }
+  return <span className="text-slate-300">–</span>;
+};
+
+const TutorialCompletionSection = ({ loading, model }) => {
+  const metrics = [
+    {
+      label: "Tutorials",
+      value: TUTORIAL_LIST.length,
+      hint: "Available step-by-step tutorials",
+      accentClass: "bg-sky-600",
+      icon: GraduationCap,
+    },
+    {
+      label: "Total Completions",
+      value: model.totalCompletions,
+      hint: `${model.usersFullyComplete} user${
+        model.usersFullyComplete === 1 ? "" : "s"
+      } finished every tutorial`,
+      accentClass: "bg-emerald-600",
+      icon: CheckCircle2,
+    },
+    {
+      label: "Users With Progress",
+      value: model.usersWithActivity,
+      hint: "Started or completed at least one tutorial",
+      accentClass: "bg-violet-600",
+      icon: Users,
+    },
+  ];
+
+  return (
+    <SectionShell
+      eyebrow="Onboarding"
+      title="Tutorial completion"
+      description="Who has completed, started, or not yet opened each tutorial. A check means completed; an amber count shows the furthest step reached on an in-progress tutorial."
+    >
+      {loading ? (
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+          Loading tutorial progress...
+        </div>
+      ) : (
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {metrics.map((metric) => (
+              <MetricCard key={metric.label} {...metric} />
+            ))}
+          </div>
+
+          {model.users.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+              No tutorial activity recorded yet.
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-3xl border border-slate-200">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr className="border-b border-slate-200 text-left">
+                      <th className="sticky left-0 z-10 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        User
+                      </th>
+                      {model.perTutorial.map((tutorial) => (
+                        <th
+                          key={tutorial.id}
+                          className="px-3 py-3 text-center align-bottom"
+                          title={`${tutorial.title} — ${tutorial.completed} completed, ${tutorial.started} in progress`}
+                        >
+                          <div className="mx-auto max-w-[7rem] text-xs font-semibold text-slate-700">
+                            {tutorial.title}
+                          </div>
+                          <div className="mt-1 text-[11px] font-medium text-slate-400">
+                            {tutorial.completed}✓
+                            {tutorial.started ? ` · ${tutorial.started}…` : ""}
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {model.users.map((user) => (
+                      <tr
+                        key={user.uid}
+                        className="border-b border-slate-100 transition hover:bg-slate-50"
+                      >
+                        <td className="sticky left-0 z-10 bg-white px-4 py-3 align-top">
+                          <p className="font-semibold text-slate-900">
+                            {user.displayName}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {user.completedCount}/{TUTORIAL_LIST.length} done
+                            {user.inProgressCount
+                              ? ` · ${user.inProgressCount} in progress`
+                              : ""}
+                          </p>
+                        </td>
+                        {model.perTutorial.map((tutorial) => (
+                          <td
+                            key={tutorial.id}
+                            className="px-3 py-3 text-center align-middle"
+                          >
+                            <TutorialStatusCell cell={user.byId[tutorial.id]} />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </SectionShell>
+  );
+};
+
 const UserActivityPage = () => {
   const { isActivityOwner } = useAuth();
   const [rangeDays, setRangeDays] = useState(30);
@@ -770,6 +976,7 @@ const UserActivityPage = () => {
   const [userDailyRows, setUserDailyRows] = useState([]);
   const [presenceRows, setPresenceRows] = useState([]);
   const [eventRows, setEventRows] = useState([]);
+  const [tutorialProgressRows, setTutorialProgressRows] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [userDetailLoading, setUserDetailLoading] = useState(false);
   const [userDetailRows, setUserDetailRows] = useState([]);
@@ -844,6 +1051,13 @@ const UserActivityPage = () => {
     );
   }, [isActivityOwner]);
 
+  const loadTutorialProgress = useCallback(async () => {
+    if (!isActivityOwner) return;
+
+    const snapshot = await getDocs(collection(db, "tutorialProgress"));
+    setTutorialProgressRows(mapQueryRows(snapshot));
+  }, [isActivityOwner]);
+
   const refreshAll = useCallback(
     async ({ silent = false } = {}) => {
       if (!isActivityOwner) return;
@@ -857,7 +1071,11 @@ const UserActivityPage = () => {
 
       try {
         setErrorMessage("");
-        await Promise.all([loadSummaryData(), loadLiveData()]);
+        await Promise.all([
+          loadSummaryData(),
+          loadLiveData(),
+          loadTutorialProgress(),
+        ]);
       } catch (error) {
         console.error("Failed to load user activity analytics:", error);
         setErrorMessage(formatActivityLoadError(error));
@@ -867,7 +1085,7 @@ const UserActivityPage = () => {
         setRefreshing(false);
       }
     },
-    [isActivityOwner, loadLiveData, loadSummaryData],
+    [isActivityOwner, loadLiveData, loadSummaryData, loadTutorialProgress],
   );
 
   const rebuildSelectedRange = useCallback(async () => {
@@ -942,6 +1160,11 @@ const UserActivityPage = () => {
   const userDetailModel = useMemo(
     () => buildUserDrilldownModel({ rows: userDetailRows, rangeDays }),
     [rangeDays, userDetailRows],
+  );
+
+  const tutorialCompletionModel = useMemo(
+    () => buildTutorialCompletionModel(tutorialProgressRows),
+    [tutorialProgressRows],
   );
 
   const liveUsers = useMemo(() => {
@@ -1346,6 +1569,11 @@ const UserActivityPage = () => {
             </div>
           )}
         </SectionShell>
+
+        <TutorialCompletionSection
+          loading={summaryLoading}
+          model={tutorialCompletionModel}
+        />
 
         <SectionShell
           eyebrow="Live / Timeline"

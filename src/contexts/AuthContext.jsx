@@ -38,6 +38,43 @@ const USER_ACTIVITY_HEARTBEAT_INTERVAL_MS = 60 * 1000; // 60 seconds
 const USER_ACTIVITY_MIN_UPDATE_INTERVAL_MS = 30 * 1000; // 30 seconds
 const USER_ACTIVITY_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
+// Firestore errors that, immediately after a fresh sign-in, indicate the auth
+// token has not yet propagated to the Firestore SDK rather than a real denial.
+const TRANSIENT_AUTH_ERROR_CODES = new Set([
+  "permission-denied",
+  "unauthenticated",
+]);
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Read the signed-in user's own profile doc, retrying through the brief window
+ * after a fresh sign-in where the auth token has not yet reached the Firestore
+ * SDK (the read is denied until it does). Self-reads are gated only on
+ * `request.auth.uid == userId`, so a `permission-denied` here can only mean the
+ * token isn't attached yet — making this read a reliable "auth is ready" probe.
+ *
+ * Awaiting this before attaching the profile/access listeners and downstream
+ * data loads closes the race that otherwise left freshly-signed-in users with
+ * no data until a full page refresh.
+ */
+const readOwnProfileWhenAuthReady = async (
+  userRef,
+  { attempts = 6, baseDelayMs = 250 } = {},
+) => {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await getDoc(userRef);
+    } catch (error) {
+      const isTransient = TRANSIENT_AUTH_ERROR_CODES.has(error?.code);
+      if (!isTransient || attempt >= attempts - 1) {
+        throw error;
+      }
+      await wait(baseDelayMs * (attempt + 1));
+    }
+  }
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
@@ -58,7 +95,7 @@ export const AuthProvider = ({ children }) => {
       return;
     }
     const userRef = doc(db, "users", firebaseUser.uid);
-    const snap = await getDoc(userRef);
+    const snap = await readOwnProfileWhenAuthReady(userRef);
     if (!snap.exists()) {
       const newProfile = {
         uid: firebaseUser.uid,

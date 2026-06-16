@@ -179,7 +179,7 @@ const SelectDropdown = ({
           ? Math.max(8, rect.top - measuredHeight - 4)
           : rect.bottom + 4,
         left: rect.left,
-        width: rect.width,
+        minWidth: rect.width,
         zIndex: 60,
       });
     };
@@ -321,7 +321,7 @@ const SelectDropdown = ({
                   renderOption(option, { selected: isSelected })
                 ) : (
                   <span className="flex min-w-0 items-center justify-between gap-3">
-                    <span className="truncate">{option.children}</span>
+                    <span className="whitespace-nowrap">{option.children}</span>
                     {isSelected && (
                       <Check className="h-4 w-4 shrink-0 text-baylor-green" />
                     )}

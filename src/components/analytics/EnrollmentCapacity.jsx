@@ -6,6 +6,9 @@ import {
   Maximize2,
   SlidersHorizontal,
   AlertCircle,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
 } from "lucide-react";
 import { useData } from "../../contexts/DataContext";
 import {
@@ -49,7 +52,49 @@ const MetricCard = ({ icon: Icon, label, value, tone }) => (
   </div>
 );
 
-const SectionTable = ({ title, description, rows, onSelect, dataTutorial }) => (
+const SORT_COLS = [
+  { key: "course",      label: "Course",      get: (s) => s.course ?? "" },
+  { key: "instructor",  label: "Instructor",   get: (s) => s.instructor ?? "" },
+  { key: "room",        label: "Room",         get: (s) => s.room ?? "" },
+  { key: "enrollment",  label: "Enroll / Cap", get: (s) => s.enrollment ?? 0 },
+  { key: "fillPct",     label: "Fill",         get: (s) => s.fillPct ?? -1 },
+  { key: "waitlist",    label: "Wait",         get: (s) => s.waitlist ?? 0 },
+  { key: null,          label: "What to do",   get: null },
+];
+
+const SortIcon = ({ col, sortState }) => {
+  if (col.key === null) return null;
+  if (sortState.col !== col.key) return <ChevronsUpDown className="w-3 h-3 ml-1 inline text-gray-400" />;
+  return sortState.dir === "asc"
+    ? <ChevronUp className="w-3 h-3 ml-1 inline text-baylor-green" />
+    : <ChevronDown className="w-3 h-3 ml-1 inline text-baylor-green" />;
+};
+
+const SectionTable = ({ title, description, rows, onSelect, dataTutorial }) => {
+  const [sortState, setSortState] = useState({ col: null, dir: "asc" });
+
+  const sortedRows = useMemo(() => {
+    if (!sortState.col) return rows;
+    const col = SORT_COLS.find((c) => c.key === sortState.col);
+    if (!col) return rows;
+    return [...rows].sort((a, b) => {
+      const av = col.get(a);
+      const bv = col.get(b);
+      const cmp = typeof av === "string" ? av.localeCompare(bv) : av - bv;
+      return sortState.dir === "asc" ? cmp : -cmp;
+    });
+  }, [rows, sortState]);
+
+  const handleSort = (col) => {
+    if (col.key === null) return;
+    setSortState((prev) =>
+      prev.col === col.key
+        ? { col: col.key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { col: col.key, dir: "asc" }
+    );
+  };
+
+  return (
   <div
     className="bg-white border border-gray-200 rounded-xl p-5"
     data-tutorial={dataTutorial}
@@ -63,17 +108,20 @@ const SectionTable = ({ title, description, rows, onSelect, dataTutorial }) => (
         <table className="university-table min-w-full">
           <thead>
             <tr>
-              <th className="table-header-cell">Course</th>
-              <th className="table-header-cell">Instructor</th>
-              <th className="table-header-cell">Room</th>
-              <th className="table-header-cell">Enroll / Cap</th>
-              <th className="table-header-cell">Fill</th>
-              <th className="table-header-cell">Wait</th>
-              <th className="table-header-cell">What to do</th>
+              {SORT_COLS.map((col) => (
+                <th
+                  key={col.label}
+                  className={`table-header-cell${col.key ? " cursor-pointer select-none hover:bg-gray-100" : ""}`}
+                  onClick={() => handleSort(col)}
+                >
+                  {col.label}
+                  <SortIcon col={col} sortState={sortState} />
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((s) => (
+            {sortedRows.map((s) => (
               <tr
                 key={s.key}
                 className="cursor-pointer hover:bg-baylor-green/5"
@@ -114,7 +162,8 @@ const SectionTable = ({ title, description, rows, onSelect, dataTutorial }) => (
       </div>
     )}
   </div>
-);
+  );
+};
 
 const EnrollmentCapacity = () => {
   const {

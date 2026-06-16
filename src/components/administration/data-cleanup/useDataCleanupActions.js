@@ -477,8 +477,8 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "warning",
-        "Term Required",
-        "Choose a term before previewing a term refresh.",
+        "Semester Required",
+        "Choose a semester before previewing a semester refresh.",
       );
       return null;
     }
@@ -490,7 +490,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "success",
-        "Term Refresh Preview Ready",
+        "Semester Refresh Preview Ready",
         `Previewed refresh actions for ${normalized}.`,
       );
       return preview;
@@ -498,8 +498,8 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "error",
-        "Term Preview Could Not Finish",
-        error?.message || "Failed to preview the term refresh.",
+        "Semester Preview Could Not Finish",
+        error?.message || "Failed to preview the semester refresh.",
       );
       throw error;
     } finally {
@@ -513,8 +513,8 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "warning",
-        "Term Required",
-        "Choose a term before refreshing a term.",
+        "Semester Required",
+        "Choose a semester before refreshing a semester.",
       );
       return null;
     }
@@ -527,7 +527,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "success",
-        "Term Refresh Complete",
+        "Semester Refresh Complete",
         `Updated ${report?.spaceLinkRepairs?.schedulesUpdated || 0} schedule links for ${normalized}.`,
       );
       return report;
@@ -535,8 +535,8 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "error",
-        "Term Refresh Could Not Finish",
-        error?.message || "Failed to refresh the term.",
+        "Semester Refresh Could Not Finish",
+        error?.message || "Failed to refresh the semester.",
       );
       throw error;
     } finally {
@@ -607,8 +607,8 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       notify(
         showNotification,
         "warning",
-        "Term Required",
-        "Choose a term before checking for unused imported items.",
+        "Semester Required",
+        "Choose a semester before checking for unused imported items.",
       );
       return null;
     }
@@ -644,7 +644,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
         showNotification,
         "info",
         "No Unused Items Found",
-        "There are no unused imported items to remove for this term.",
+        "There are no unused imported items to remove for this semester.",
       );
       return null;
     }

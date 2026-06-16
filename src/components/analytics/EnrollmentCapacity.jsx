@@ -263,21 +263,21 @@ const EnrollmentCapacity = () => {
 
       <SectionTable
         title="Over / near capacity"
-        description="At or above the fill threshold, or with a waitlist — candidates for a larger room or another section."
+        description="At or above the fill threshold, or with a waitlist: candidates for a larger room or another section."
         rows={analysis.overCapacity}
         onSelect={setDetail}
         dataTutorial="capacity-over"
       />
       <SectionTable
         title="Under-enrolled"
-        description="Low or zero enrollment — review for cancellation or consolidation."
+        description="Low or zero enrollment. Review for cancellation or consolidation."
         rows={analysis.underEnrolled}
         onSelect={setDetail}
         dataTutorial="capacity-under"
       />
       <SectionTable
         title="Room capacity mismatch"
-        description="Enrollment or cap doesn't fit the assigned room — too small, or much too large."
+        description="Enrollment or cap doesn't fit the assigned room: too small, or much too large."
         rows={analysis.roomMismatch}
         onSelect={setDetail}
         dataTutorial="capacity-mismatch"

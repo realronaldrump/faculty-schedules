@@ -144,7 +144,7 @@ describe("report formatters", () => {
     expect(summary.title).toBe("Full data refresh complete");
     expect(summary.items).toEqual(
       expect.arrayContaining([
-        { label: "Terms processed", value: 4 },
+        { label: "Semesters processed", value: 4 },
         { label: "Schedules processed", value: 340 },
         { label: "Identity updates", value: 29 },
         { label: "Items to review", value: 0 },
@@ -168,7 +168,7 @@ describe("report formatters", () => {
     expect(summary.title).toBe("Full data refresh preview ready");
     expect(summary.items).toEqual(
       expect.arrayContaining([
-        { label: "Terms in scope", value: 4 },
+        { label: "Semesters in scope", value: 4 },
         { label: "Schedules in scope", value: 340 },
         { label: "Identity updates planned", value: 29 },
         { label: "Rooms to create", value: 3 },
@@ -188,10 +188,10 @@ describe("report formatters", () => {
       "202610",
     );
 
-    expect(summary.title).toBe("Term refresh complete");
+    expect(summary.title).toBe("Semester refresh complete");
     expect(summary.items).toEqual(
       expect.arrayContaining([
-        { label: "Term", value: "202610" },
+        { label: "Semester", value: "202610" },
         { label: "Schedules updated", value: 17 },
         { label: "Rooms updated", value: 8 },
         { label: "Duplicates merged", value: 3 },
@@ -211,10 +211,10 @@ describe("report formatters", () => {
       "202610",
     );
 
-    expect(summary.title).toBe("Term refresh preview ready");
+    expect(summary.title).toBe("Semester refresh preview ready");
     expect(summary.items).toEqual(
       expect.arrayContaining([
-        { label: "Term", value: "202610" },
+        { label: "Semester", value: "202610" },
         { label: "Rooms to create", value: 2 },
         { label: "Schedule links to update", value: 17 },
         { label: "Room entries to refresh", value: 8 },
@@ -277,7 +277,7 @@ describe("report formatters", () => {
     expect(scanSummary.title).toBe("Unused imported items check complete");
     expect(scanSummary.items).toEqual(
       expect.arrayContaining([
-        { label: "Term", value: "Spring 2026" },
+        { label: "Semester", value: "Spring 2026" },
         { label: "Unused classes", value: 1 },
         { label: "Unused people", value: 2 },
         { label: "Unused rooms", value: 0 },
@@ -293,7 +293,7 @@ describe("report formatters", () => {
     expect(cleanupSummary.title).toBe("Unused imported items removed");
     expect(cleanupSummary.items).toEqual(
       expect.arrayContaining([
-        { label: "Term", value: "Spring 2026" },
+        { label: "Semester", value: "Spring 2026" },
         { label: "Removed items", value: 3 },
         { label: "Errors", value: 0 },
       ]),

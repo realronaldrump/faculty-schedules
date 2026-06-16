@@ -680,11 +680,11 @@ const buildSummaryRows = ({
   const rows = [
     { metric: "Generated At", value: formatDateTime(new Date()) },
     {
-      metric: "Term Scope",
+      metric: "Semester Scope",
       value:
         termScopeInfo.scope === "selected"
           ? `Selected: ${termScopeInfo.termLabel || termScopeInfo.termCode || "Unknown"}`
-          : "All terms",
+          : "All semesters",
     },
     {
       metric: "Included Sheets",

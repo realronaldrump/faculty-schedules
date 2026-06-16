@@ -427,7 +427,7 @@ export const summarizeBaselinePreview = (report) => {
   if (!report) return null;
   const items = [
     {
-      label: "Terms in scope",
+      label: "Semesters in scope",
       value: Number(report?.summary?.totalTermsProcessed || 0),
     },
     {
@@ -462,7 +462,7 @@ export const summarizeBaselineReport = (report) => {
   if (!report) return null;
   const items = [
     {
-      label: "Terms processed",
+      label: "Semesters processed",
       value: Number(report?.summary?.totalTermsProcessed || 0),
     },
     {
@@ -489,7 +489,7 @@ export const summarizeBaselineReport = (report) => {
 export const summarizeTermRepairPreview = (report, termCode = "") => {
   if (!report) return null;
   const items = [
-    { label: "Term", value: termCode || report?.termCodes?.[0] || "Unknown" },
+    { label: "Semester", value: termCode || report?.termCodes?.[0] || "Unknown" },
     {
       label: "Rooms to create",
       value: Number(report?.roomsCreated || 0),
@@ -512,16 +512,16 @@ export const summarizeTermRepairPreview = (report, termCode = "") => {
     },
   ];
   return buildSummary(
-    "Term refresh preview ready",
+    "Semester refresh preview ready",
     items,
-    "If these counts look correct, refresh the selected term.",
+    "If these counts look correct, refresh the selected semester.",
   );
 };
 
 export const summarizeTermRepairReport = (report, termCode = "") => {
   if (!report) return null;
   const items = [
-    { label: "Term", value: termCode || report?.termCodes?.[0] || "Unknown" },
+    { label: "Semester", value: termCode || report?.termCodes?.[0] || "Unknown" },
     {
       label: "Schedules updated",
       value: Number(report?.spaceLinkRepairs?.schedulesUpdated || 0),
@@ -538,9 +538,9 @@ export const summarizeTermRepairReport = (report, termCode = "") => {
   const blockerCount = toArray(report?.blockers).length;
   const nextStep =
     blockerCount > 0
-      ? "Check troubleshooting details before refreshing this term again."
-      : "Term refresh finished.";
-  return buildSummary("Term refresh complete", items, nextStep);
+      ? "Check troubleshooting details before refreshing this semester again."
+      : "Semester refresh finished.";
+  return buildSummary("Semester refresh complete", items, nextStep);
 };
 
 export const summarizeLocationPreview = (preview) => {
@@ -589,7 +589,7 @@ export const summarizeLocationApplyReport = (report) => {
 export const summarizeOrphanScan = (scan, termLabel = "") => {
   if (!scan) return null;
   const items = [
-    { label: "Term", value: termLabel || "Selected term" },
+    { label: "Semester", value: termLabel || "Selected semester" },
     { label: "Unused classes", value: Number(scan?.schedules?.length || 0) },
     { label: "Unused people", value: Number(scan?.people?.length || 0) },
     { label: "Unused rooms", value: Number(scan?.rooms?.length || 0) },
@@ -598,14 +598,14 @@ export const summarizeOrphanScan = (scan, termLabel = "") => {
   const nextStep =
     Number(scan?.total || 0) > 0
       ? "If this looks correct, confirm cleanup to remove these unused imported items."
-      : "No unused imported items found for this term.";
+      : "No unused imported items found for this semester.";
   return buildSummary("Unused imported items check complete", items, nextStep);
 };
 
 export const summarizeOrphanCleanup = (result, termLabel = "") => {
   if (!result) return null;
   const items = [
-    { label: "Term", value: termLabel || "Selected term" },
+    { label: "Semester", value: termLabel || "Selected semester" },
     { label: "Removed items", value: Number(result?.deleted || 0) },
     { label: "Errors", value: Number(result?.errors || 0) },
   ];

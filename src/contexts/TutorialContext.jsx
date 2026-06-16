@@ -449,7 +449,7 @@ export const TUTORIALS = {
         id: "import-section",
         title: "Importing Data",
         content:
-          "Upload Govee CSV exports here — drag files in or click to browse. The system auto-maps each device to a room from its label, and you can correct any mapping before the import is applied.",
+          "Upload Govee CSV exports here: drag files in or click to browse. The system auto-maps each device to a room from its label, and you can correct any mapping before the import is applied.",
         target: '[data-tutorial="import-section"]',
         position: "top",
         action: null,
@@ -655,7 +655,7 @@ export const TUTORIALS = {
     id: "getting-started",
     title: "Getting Started: Your Dashboard Tour",
     description:
-      "New here? Take a quick tour of the dashboard — search, shortcuts, and the fastest ways to get anywhere.",
+      "New here? Take a quick tour of the dashboard: search, shortcuts, and the fastest ways to get anywhere.",
     estimatedTime: "2 min",
     category: "Getting Started",
     targetPage: "dashboard",
@@ -682,7 +682,7 @@ export const TUTORIALS = {
         id: "global-search",
         title: "Search to Jump Anywhere",
         content:
-          "This is the fastest way to navigate. Search every page, tool, and report by name, description, or section — no need to remember where things live.",
+          "This is the fastest way to navigate. Search every page, tool, and report by name, description, or section. No need to remember where things live.",
         target: '[data-tutorial="global-search"]',
         position: "bottom",
         action: "Type part of a page name, like 'rooms' or 'email'",
@@ -701,7 +701,7 @@ export const TUTORIALS = {
         id: "explore-sections",
         title: "Browse by Section",
         content:
-          "Prefer to browse? These cards mirror the sidebar — every section of the app, grouped together. They start collapsed to keep the page tidy.",
+          "Prefer to browse? These cards mirror the sidebar: every section of the app, grouped together. They start collapsed to keep the page tidy.",
         target: '[data-tutorial="explore-sections"]',
         position: "top",
         action: null,
@@ -750,7 +750,7 @@ export const TUTORIALS = {
     id: "today-live-view",
     title: "Today: The Live View",
     description:
-      "Read the department's live snapshot — who's teaching, which rooms are busy, and where any faculty member is right now.",
+      "Read the department's live snapshot: who's teaching, which rooms are busy, and where any faculty member is right now.",
     estimatedTime: "3 min",
     category: "Getting Started",
     targetPage: "live-view",
@@ -759,7 +759,7 @@ export const TUTORIALS = {
         id: "welcome",
         title: "Welcome to Today",
         content:
-          "'Today' is your live, at-a-glance view of the department right now — who's teaching, which rooms are in use, and where any faculty member is at this moment.",
+          "'Today' is your live, at-a-glance view of the department right now: who's teaching, which rooms are in use, and where any faculty member is at this moment.",
         target: null,
         position: "center",
         action: null,
@@ -768,7 +768,7 @@ export const TUTORIALS = {
         id: "asof-control",
         title: "Rewind or Jump Ahead",
         content:
-          "This shows the current time, with a gold pulse when it's live. Open the picker to set any date and time — or press 'Now' to snap back to live. Perfect for previewing tomorrow at 9 AM.",
+          "This shows the current time, with a gold pulse when it's live. Open the picker to set any date and time, or press 'Now' to snap back to live. Perfect for previewing tomorrow at 9 AM.",
         target: '[data-tutorial="asof-control"]',
         position: "bottom",
         action: "Click the time to open the date & time picker",
@@ -778,7 +778,7 @@ export const TUTORIALS = {
         id: "faculty-finder",
         title: "Find Anyone Instantly",
         content:
-          "Looking for someone? Type any faculty name to see where they are right now — in class, in their office, or done for the day.",
+          "Looking for someone? Type any faculty name to see where they are right now: in class, in their office, or done for the day.",
         target: '[data-tutorial="faculty-finder"]',
         position: "bottom",
         action: "Type a faculty member's name",
@@ -845,7 +845,7 @@ export const TUTORIALS = {
         id: "faculty-search",
         title: "Add Faculty to Compare",
         content:
-          "On the Compare tab you build a side-by-side view. Open this picker to add faculty by name — or use the program picker beside it to add an entire program at once.",
+          "On the Compare tab you build a side-by-side view. Open this picker to add faculty by name, or use the program picker beside it to add an entire program at once.",
         target: '[data-tutorial="faculty-search"]',
         position: "bottom",
         action: "Open the picker to add a faculty member",
@@ -884,7 +884,7 @@ export const TUTORIALS = {
         id: "availability-search",
         title: "See One Week in Detail",
         content:
-          "Pick a single faculty member here to see their full week split into busy periods and open slots — ideal for finding exactly when someone is free.",
+          "Pick a single faculty member here to see their full week split into busy periods and open slots, ideal for finding exactly when someone is free.",
         target: '[data-tutorial="availability-search"]',
         position: "bottom",
         action: null,
@@ -922,7 +922,7 @@ export const TUTORIALS = {
         id: "meeting-results",
         title: "Find Common Time",
         content:
-          "Once your attendees are added, this button computes everyone's common free time — the slots when the whole group is available at once.",
+          "Once your attendees are added, this button computes everyone's common free time: the slots when the whole group is available at once.",
         target: '[data-tutorial="meeting-results"]',
         position: "top",
         action: null,
@@ -942,7 +942,7 @@ export const TUTORIALS = {
     id: "import-clss-data",
     title: "Importing CLSS Data",
     description:
-      "Tour the four-stage Import Wizard that safely turns a CLSS export into live schedule data. (Read-only tour — nothing is changed.)",
+      "Tour the four-stage Import Wizard that safely turns a CLSS export into live schedule data. (Read-only tour: nothing is changed.)",
     estimatedTime: "4 min",
     category: "Administration",
     targetPage: "admin-tools/import-wizard",
@@ -951,7 +951,7 @@ export const TUTORIALS = {
         id: "welcome",
         title: "How Data Gets In",
         content:
-          "The Import Wizard turns CLSS schedule exports into live data. This is a guided tour only — we won't upload or change anything. A real import writes to the live database, so the wizard makes you validate and preview before any changes are saved.",
+          "The Import Wizard turns CLSS schedule exports into live data. This is a guided tour only (we won't upload or change anything). A real import writes to the live database, so the wizard makes you validate and preview before any changes are saved.",
         target: null,
         position: "center",
         action: null,
@@ -967,34 +967,34 @@ export const TUTORIALS = {
       },
       {
         id: "upload-dropzone",
-        title: "Stage 1 — Upload",
+        title: "Stage 1: Upload",
         content:
-          "Drop a CLSS export here (the .csv you download from CLSS). The wizard reads the file right in your browser — nothing is sent or saved yet.",
+          "Drop a CLSS export here (the .csv you download from CLSS). The wizard reads the file right in your browser. Nothing is sent or saved yet.",
         target: '[data-tutorial="upload-dropzone"]',
         position: "bottom",
         action: null,
       },
       {
         id: "validate",
-        title: "Stage 2 — Validate",
+        title: "Stage 2: Validate",
         content:
-          "After upload, the wizard auto-detects what kind of export it is and checks the rows for problems — so you catch issues before they ever reach the database.",
+          "After upload, the wizard auto-detects what kind of export it is and checks the rows for problems, so you catch issues before they ever reach the database.",
         target: null,
         position: "center",
         action: null,
       },
       {
         id: "preview",
-        title: "Stage 3 — Preview",
+        title: "Stage 3: Preview",
         content:
-          "Next you'll see exactly what will change — new sections, edits, and removals — before anything is written. This is your last chance to review and back out.",
+          "Next you'll see exactly what will change (new sections, edits, and removals) before anything is written. This is your last chance to review and back out.",
         target: null,
         position: "center",
         action: null,
       },
       {
         id: "results",
-        title: "Stage 4 — Results",
+        title: "Stage 4: Results",
         content:
           "Only after you commit does the wizard write the data, then show a summary of everything that changed, grouped by type.",
         target: null,
@@ -1005,7 +1005,7 @@ export const TUTORIALS = {
         id: "import-history",
         title: "History & Rollback",
         content:
-          "Every commit is logged. The Import History button opens a record of past imports — where you can review them and roll one back if something looks wrong.",
+          "Every commit is logged. The Import History button opens a record of past imports, where you can review them and roll one back if something looks wrong.",
         target: '[data-tutorial="import-history"]',
         position: "bottom",
         action: null,
@@ -1014,7 +1014,7 @@ export const TUTORIALS = {
         id: "complete",
         title: "Safe by Design",
         content:
-          "That's the import flow: Upload, Validate, Preview, then commit — with full history and rollback if you ever need it. When you have a real CLSS export, start at Stage 1.",
+          "That's the import flow: Upload, Validate, Preview, then commit, with full history and rollback if you ever need it. When you have a real CLSS export, start at Stage 1.",
         target: null,
         position: "center",
         action: null,
@@ -1085,9 +1085,9 @@ export const TUTORIALS = {
       },
       {
         id: "book",
-        title: "Book it — conflict-checked",
+        title: "Book it (conflict-checked)",
         content:
-          "When your time is free, this button turns green and you can book instantly. If it overlaps a class or another reservation, the dashboard blocks it and tells you exactly what conflicts — no more hunting for double-bookings.",
+          "When your time is free, this button turns green and you can book instantly. If it overlaps a class or another reservation, the dashboard blocks it and tells you exactly what conflicts. No more hunting for double-bookings.",
         target: '[data-tutorial="reservation-book"]',
         position: "top",
         action: null,
@@ -1105,7 +1105,7 @@ export const TUTORIALS = {
         id: "complete",
         title: "You're ready!",
         content:
-          "That's room reservations. Use it for meetings, events, and visits — and trust the conflict check to keep the schedule clean.",
+          "That's room reservations. Use it for meetings, events, and visits. Trust the conflict check to keep the schedule clean.",
         target: null,
         position: "center",
         action: null,
@@ -1132,9 +1132,9 @@ export const TUTORIALS = {
       },
       {
         id: "term",
-        title: "Pick a term",
+        title: "Pick a semester",
         content:
-          "Choose which term to analyze. Everything below updates for that term.",
+          "Choose which semester to analyze. Everything below updates for that semester.",
         target: '[data-tutorial="capacity-term"]',
         position: "bottom",
         action: null,
@@ -1161,7 +1161,7 @@ export const TUTORIALS = {
         id: "over",
         title: "Over / near capacity",
         content:
-          "Sections at or above the fill threshold, or with a waitlist — the candidates for a larger room or an extra section. Click any row to open full course details.",
+          "Sections at or above the fill threshold, or with a waitlist: candidates for a larger room or an extra section. Click any row to open full course details.",
         target: '[data-tutorial="capacity-over"]',
         position: "top",
         action: null,
@@ -1170,7 +1170,7 @@ export const TUTORIALS = {
         id: "under",
         title: "Under-enrolled",
         content:
-          "Low or zero-enrollment sections — candidates for cancellation or consolidation.",
+          "Low or zero-enrollment sections: candidates for cancellation or consolidation.",
         target: '[data-tutorial="capacity-under"]',
         position: "top",
         action: null,
@@ -1188,7 +1188,7 @@ export const TUTORIALS = {
         id: "complete",
         title: "You're ready!",
         content:
-          "Use this each term to drive overrides, new sections, room moves, and cancellations — all from the numbers the registrar already gave you.",
+          "Use this each semester to drive overrides, new sections, room moves, and cancellations, all from the numbers the registrar already gave you.",
         target: null,
         position: "center",
         action: null,
@@ -1197,26 +1197,26 @@ export const TUTORIALS = {
   },
   "term-comparison": {
     id: "term-comparison",
-    title: "Term Comparison Tutorial",
-    description: "See exactly what changed between two terms of the schedule.",
+    title: "Semester Comparison Tutorial",
+    description: "See exactly what changed between two semesters of the schedule.",
     estimatedTime: "2 min",
     category: "Analytics",
     targetPage: "analytics/term-comparison",
     steps: [
       {
         id: "welcome",
-        title: "Compare two terms",
+        title: "Compare two semesters",
         content:
-          "After each CLSS import, this shows what changed versus a previous term — the fastest way to sanity-check a new schedule.",
+          "After each CLSS import, this shows what changed versus a previous semester. It's the fastest way to sanity-check a new schedule.",
         target: null,
         position: "center",
         action: null,
       },
       {
         id: "selectors",
-        title: "Choose the terms",
+        title: "Choose the semesters",
         content:
-          'Pick the "from" and "to" terms. It defaults to the two most recent.',
+          'Pick the "from" and "to" semesters. It defaults to the two most recent.',
         target: '[data-tutorial="termcompare-selectors"]',
         position: "bottom",
         action: null,
@@ -1243,7 +1243,7 @@ export const TUTORIALS = {
         id: "changed",
         title: "What changed",
         content:
-          "Sections that kept the same course and section number but changed instructor, room, time, or cap — shown as before → after. This is where most surprises hide after an import.",
+          "Sections that kept the same course and section number but changed instructor, room, time, or cap, shown as before → after. This is where most surprises hide after an import.",
         target: '[data-tutorial="termcompare-changed"]',
         position: "top",
         action: null,
@@ -1261,7 +1261,7 @@ export const TUTORIALS = {
         id: "complete",
         title: "You're ready!",
         content:
-          "Run this right after importing a term to catch instructor, room, and time changes before they become surprises.",
+          "Run this right after importing a semester to catch instructor, room, and time changes before they become surprises.",
         target: null,
         position: "center",
         action: null,

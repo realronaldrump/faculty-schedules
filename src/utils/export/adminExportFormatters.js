@@ -131,8 +131,8 @@ export const toNormalizedTermScope = ({
     termCode: normalizedCode || "",
     scopeLabel:
       termScope === "selected"
-        ? normalizedLabel || selectedTermMeta?.term || "Selected term"
-        : "All terms",
+        ? normalizedLabel || selectedTermMeta?.term || "Selected semester"
+        : "All semesters",
   };
 };
 

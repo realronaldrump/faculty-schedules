@@ -335,7 +335,7 @@ const TargetMissingNotice = ({ onTutorialPage, onReturn, onExit }) => (
     <div className="p-5">
       <p className="text-gray-600 mb-4">
         {onTutorialPage
-          ? "We can't find this step on the page yet — it may still be loading. You can keep waiting or exit the tutorial."
+          ? "We can't find this step on the page yet. It may still be loading. You can keep waiting or exit the tutorial."
           : "You've left the tutorial page. Taking you back to where you left off…"}
       </p>
       <div className="flex items-center justify-end gap-2">

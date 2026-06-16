@@ -89,12 +89,12 @@ export const analyzeCapacity = ({
     if (waitlist > 0) {
       flags.push("waitlist");
       hints.push(
-        `Waitlist of ${waitlist} — consider a larger room or an additional section.`,
+        `Waitlist of ${waitlist}. Consider a larger room or an additional section.`,
       );
     }
     if (fillPct != null && fillPct >= t.nearCapPct) {
       flags.push("near-cap");
-      if (waitlist === 0) hints.push("Near full — monitor or move to a larger room.");
+      if (waitlist === 0) hints.push("Near full. Monitor or move to a larger room.");
     }
 
     // Under-enrolled
@@ -103,10 +103,10 @@ export const analyzeCapacity = ({
       (fillPct != null && fillPct <= t.underPct) || enrollment < t.minEnroll;
     if (isZero) {
       flags.push("zero-enroll");
-      hints.push("No enrollment — cancellation candidate.");
+      hints.push("No enrollment. Cancellation candidate.");
     } else if (isLow) {
       flags.push("under-enroll");
-      hints.push("Low enrollment — review for cancellation or consolidation.");
+      hints.push("Low enrollment. Review for cancellation or consolidation.");
     }
 
     // Room mismatch
@@ -114,7 +114,7 @@ export const analyzeCapacity = ({
       if (enrollment > roomCapacity) {
         flags.push("over-room");
         hints.push(
-          `Enrollment (${enrollment}) exceeds room capacity (${roomCapacity}) — move to a larger room.`,
+          `Enrollment (${enrollment}) exceeds room capacity (${roomCapacity}). Move to a larger room.`,
         );
       } else if (max != null && max > roomCapacity) {
         flags.push("overbooked-room");
@@ -128,7 +128,7 @@ export const analyzeCapacity = ({
       ) {
         flags.push("oversized-room");
         hints.push(
-          `Room (${roomCapacity}) is much larger than the cap (${max}) — could be freed for events.`,
+          `Room (${roomCapacity}) is much larger than the cap (${max}). Could be freed for events.`,
         );
       }
     }

@@ -917,7 +917,7 @@ const TutorialCompletionSection = ({ loading, model }) => {
                         <th
                           key={tutorial.id}
                           className="px-3 py-3 text-center align-bottom"
-                          title={`${tutorial.title} — ${tutorial.completed} completed, ${tutorial.started} in progress`}
+                          title={`${tutorial.title}: ${tutorial.completed} completed, ${tutorial.started} in progress`}
                         >
                           <div className="mx-auto max-w-[7rem] text-xs font-semibold text-slate-700">
                             {tutorial.title}
@@ -1400,7 +1400,7 @@ const UserActivityPage = () => {
               <p className="text-xs text-slate-500">
                 {lastRebuiltAt
                   ? `Rollups updated ${formatTimeAgo(lastRebuiltAt)}`
-                  : "Rollups not built yet — click Rebuild rollups"}
+                  : "Rollups not built yet. Click Rebuild rollups."}
               </p>
             </div>
           </div>

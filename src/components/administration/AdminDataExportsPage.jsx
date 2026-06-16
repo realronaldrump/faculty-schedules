@@ -118,8 +118,8 @@ const AdminDataExportsPage = () => {
     if (!canRunSelectedTermExport) {
       showNotification(
         "warning",
-        "Select a Term",
-        "Choose a term before running a selected-term export.",
+        "Select a Semester",
+        "Choose a semester before running a selected-semester export.",
       );
       return;
     }
@@ -222,7 +222,7 @@ const AdminDataExportsPage = () => {
       <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-gray-900">Term Scope</p>
+            <p className="text-sm font-semibold text-gray-900">Semester Scope</p>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <label className="inline-flex items-center gap-2 text-sm text-gray-700">
                 <input
@@ -233,7 +233,7 @@ const AdminDataExportsPage = () => {
                   onChange={() => setTermScope(TERM_SCOPE_ALL)}
                   className="h-4 w-4 text-baylor-green border-gray-300"
                 />
-                All terms
+                All semesters
               </label>
               <label className="inline-flex items-center gap-2 text-sm text-gray-700">
                 <input
@@ -244,7 +244,7 @@ const AdminDataExportsPage = () => {
                   onChange={() => setTermScope(TERM_SCOPE_SELECTED)}
                   className="h-4 w-4 text-baylor-green border-gray-300"
                 />
-                Selected term
+                Selected semester
               </label>
             </div>
 
@@ -254,7 +254,7 @@ const AdminDataExportsPage = () => {
                   htmlFor="selected-term"
                   className="block text-xs font-medium text-gray-600 mb-1"
                 >
-                  Select term
+                  Select semester
                 </label>
                 <select
                   id="selected-term"
@@ -262,7 +262,7 @@ const AdminDataExportsPage = () => {
                   onChange={(event) => setSelectedTerm(event.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
                 >
-                  <option value="">Choose a term...</option>
+                  <option value="">Choose a semester...</option>
                   {normalizedTermOptions.map((term) => (
                     <option key={term.termCode || term.term} value={term.term}>
                       {term.term}

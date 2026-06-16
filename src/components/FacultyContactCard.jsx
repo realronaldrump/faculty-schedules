@@ -768,7 +768,7 @@ const FacultyContactCard = ({
 
                                                                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                                                         <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
-                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Term</p>
+                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Semester</p>
                                                                             <p className="text-sm font-medium text-gray-700">{course.term || 'Other'}</p>
                                                                         </div>
                                                                         <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">

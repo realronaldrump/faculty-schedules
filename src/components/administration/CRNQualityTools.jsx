@@ -318,7 +318,7 @@ const CRNQualityTools = () => {
               >
                 <div className="px-3 py-2 bg-red-50 flex items-center justify-between">
                   <div className="text-sm text-red-800 font-medium">
-                    Semester {group.term || "Unknown"} — CRN {group.crn} —{" "}
+                    Semester {group.term || "Unknown"}, CRN {group.crn}:{" "}
                     {group.count} records
                   </div>
                 </div>

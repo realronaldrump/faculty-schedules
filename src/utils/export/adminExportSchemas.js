@@ -96,8 +96,8 @@ export const SHEET_DEFINITIONS = Object.freeze({
     name: "Course Sections",
     description: "Section-level operational schedule records.",
     columns: [
-      column("term", "Term", 16),
-      column("termCode", "Term Code", 12),
+      column("term", "Semester", 16),
+      column("termCode", "Semester Code", 12),
       column("courseCode", "Course Code", 14),
       column("courseTitle", "Course Title", 32),
       column("section", "Section", 10),
@@ -116,7 +116,7 @@ export const SHEET_DEFINITIONS = Object.freeze({
       column("maxEnrollment", "Max Enrollment", 14),
       column("waitCap", "Waitlist Cap", 12),
       column("waitCurrent", "Waitlist Current", 14),
-      column("partOfTerm", "Part of Term", 14),
+      column("partOfTerm", "Part of Semester", 14),
       column("customStartDate", "Custom Start Date", 18),
       column("customEndDate", "Custom End Date", 18),
     ],
@@ -126,8 +126,8 @@ export const SHEET_DEFINITIONS = Object.freeze({
     name: "Section Meetings",
     description: "Meeting-pattern rows per section.",
     columns: [
-      column("term", "Term", 16),
-      column("termCode", "Term Code", 12),
+      column("term", "Semester", 16),
+      column("termCode", "Semester Code", 12),
       column("courseCode", "Course Code", 14),
       column("section", "Section", 10),
       column("crn", "CRN", 10),
@@ -201,11 +201,11 @@ export const SHEET_DEFINITIONS = Object.freeze({
   },
   [SHEET_IDS.terms]: {
     id: SHEET_IDS.terms,
-    name: "Terms",
-    description: "Term lifecycle and scoped section counts.",
+    name: "Semesters",
+    description: "Semester lifecycle and scoped section counts.",
     columns: [
-      column("term", "Term", 18),
-      column("termCode", "Term Code", 12),
+      column("term", "Semester", 18),
+      column("termCode", "Semester Code", 12),
       column("status", "Status", 12),
       column("locked", "Locked", 10),
       column("startDate", "Start Date", 14),
@@ -274,8 +274,8 @@ export const INDIVIDUAL_EXPORT_OPTIONS = Object.freeze([
   },
   {
     id: SHEET_IDS.terms,
-    label: "Terms",
-    description: "Term metadata and section counts.",
+    label: "Semesters",
+    description: "Semester metadata and section counts.",
     sheetIds: [SHEET_IDS.terms],
   },
   {

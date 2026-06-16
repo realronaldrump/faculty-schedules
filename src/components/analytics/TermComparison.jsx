@@ -80,10 +80,10 @@ const TermComparison = () => {
   if (termOptions.length < 2) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-gray-900">Term Comparison</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Semester Comparison</h1>
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex gap-2">
           <Info className="w-5 h-5 flex-shrink-0" />
-          Comparison needs at least two imported terms. Import another term's CLSS
+          Comparison needs at least two imported semesters. Import another semester's CLSS
           file to see what changed.
         </div>
       </div>
@@ -93,9 +93,9 @@ const TermComparison = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Term Comparison</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">Semester Comparison</h1>
         <p className="text-gray-600">
-          What changed between two terms of the official schedule.
+          What changed between two semesters of the official schedule.
         </p>
       </div>
 

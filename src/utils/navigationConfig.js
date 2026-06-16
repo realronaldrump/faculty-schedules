@@ -236,13 +236,13 @@ export const navigationItems = [
       },
       {
         id: "term-comparison",
-        label: "Term Comparison",
+        label: "Semester Comparison",
         path: "analytics/term-comparison",
         canonicalId: "analytics/term-comparison",
         permissions: {
           hideFromRoles: ["faculty"],
         },
-        description: "What changed between two terms of the schedule.",
+        description: "What changed between two semesters of the schedule.",
         icon: ArrowLeftRight,
       },
     ],

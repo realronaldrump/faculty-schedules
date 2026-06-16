@@ -236,3 +236,69 @@ Goal: make tutorial progress reliable/persistent/account-scoped, give the activi
 ## Known/au follow-ups (not in scope)
 - Overlay traps the screen if the user navigates off the target page mid-tutorial (pre-existing). Consider a grace-period guard before full-screen blocking.
 - Optional: enable Firestore IndexedDB persistence to survive offline + refresh.
+
+---
+
+# User Activity — comprehensive review & improvements — June 2026
+
+Scope: owner User Activity console + the tracking core. Free-tier (Spark)
+Firestore is the binding constraint, so every change minimizes reads/writes.
+Deliberately NOT doing broad cross-app semantic-action instrumentation
+(minimal-impact; would touch many feature files for marginal gain).
+
+## Bugs / dead code
+- [x] Rewrite `formatActivityRebuildError` — drop the `functions/not-found` and
+      `functions/permission-denied` branches (rebuild is browser-side now; those
+      can never fire). Map real failures: `permission-denied`, quota
+      (`resource-exhausted`).
+- [x] Fix inaccurate hero copy ("computed directly from raw activity events").
+- [x] Remove dead `firebase/functions` / `httpsCallable` mocks from the page test.
+
+## Reliability (free-tier safe)
+- [x] Pause the 60s live auto-refresh while the tab is hidden; refresh on return.
+- [x] Add a visibility-gated presence heartbeat (presence-only write, ~90s) so
+      "Active now" reflects users who linger on a page, not just navigators.
+
+## Power / UX
+- [x] Data-freshness chip: "Rollups updated <relative>" from latest `generatedAt`.
+- [x] CSV export of the per-user table (client-side, no Firestore cost).
+- [x] Empty-state nudge pointing the owner at "Rebuild rollups".
+
+## Verify
+- [x] `vitest run` full suite green (34 files, 206 tests — +1 new page test).
+- [x] lint clean on changed files (`--max-warnings 0`).
+- [x] `npm run build` clean.
+
+## Review
+
+### What changed
+- **activityTracking.js** — extracted `buildPresenceBase` and added `touchPresence`
+  (presence-only upsert, no event row). `logUserActivityEvent` now reuses the base.
+- **useUserActivityTracker.js** — added a visibility-gated presence heartbeat
+  (~90s) so "Active now" reflects users who linger, not just navigators. Pauses
+  when the tab is hidden; fires once on return. Same `canAccess` gate as events.
+- **UserActivityPage.jsx**
+  - `formatActivityRebuildError`: dropped the dead `functions/*` branches (rebuild
+    is 100% browser-side on the free tier) → maps `permission-denied` + quota
+    (`resource-exhausted`) to actionable copy.
+  - Live auto-refresh is now visibility-gated (no idle read burn).
+  - Accurate hero copy (on-demand rollups, not "computed directly from events").
+  - "Rollups updated <relative>" freshness line from the newest `generatedAt`.
+  - Client-side CSV export of the per-user table (zero Firestore cost).
+  - Empty-state nudges the owner to "Rebuild rollups".
+- **UserActivityPage.test.jsx** — removed dead `firebase/functions`/`httpsCallable`
+  mocks; added a test for the freshness + disabled-export empty state.
+
+### Free-tier cost impact
+- Reads: net **down** — the live console no longer polls while hidden.
+- Writes: heartbeat adds ≤1 presence upsert / 90s / *visible* authenticated tab
+  (no event rows, no storage growth in `userActivityEvents`). Negligible vs. the
+  20k/day Spark write quota for this user base.
+
+### Deliberately not done (minimal-impact)
+- Broad semantic-action instrumentation across feature files (import/save/search/
+  export). The "Top Actions" panels stay sparse (only `tutorial_completed` is
+  emitted today). Wiring more would touch many unrelated components for marginal
+  gain — left as a scoped follow-up if desired.
+- Switching rebuild back to the Cloud Function: intentionally browser-side to
+  avoid relying on scheduled/callable functions on the free tier.

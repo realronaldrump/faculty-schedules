@@ -2,6 +2,7 @@ import { useMemo, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import RoomSchedules from "./RoomSchedules";
+import RoomReservations from "./RoomReservations";
 
 const TAB_DEFINITIONS = [
   {
@@ -9,6 +10,12 @@ const TAB_DEFINITIONS = [
     label: "Browse",
     accessId: "scheduling/rooms",
     component: RoomSchedules,
+  },
+  {
+    id: "reservations",
+    label: "Reservations",
+    accessId: "scheduling/rooms",
+    component: RoomReservations,
   },
 ];
 

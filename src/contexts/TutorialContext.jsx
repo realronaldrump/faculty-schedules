@@ -1021,6 +1021,253 @@ export const TUTORIALS = {
       },
     ],
   },
+  "room-reservations": {
+    id: "room-reservations",
+    title: "Room Reservations Tutorial",
+    description:
+      "Book department rooms in the gaps around the class schedule, with automatic conflict checking.",
+    estimatedTime: "3 min",
+    category: "Scheduling",
+    targetPage: "scheduling/rooms?tab=reservations",
+    steps: [
+      {
+        id: "welcome",
+        title: "Reserve a room",
+        content:
+          "This tool books Goebel and Mary Gibbs Jones rooms for meetings and events. It checks the official class schedule and existing reservations for you, so you never double-book.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+      {
+        id: "room",
+        title: "Pick a room",
+        content:
+          "Choose a room to reserve. Only the department's bookable spaces are listed, and labs or studios show a reminder to confirm swipe access.",
+        target: '[data-tutorial="reservation-room"]',
+        position: "bottom",
+        action: "Select a room to continue",
+        actionType: "input",
+      },
+      {
+        id: "date",
+        title: "Choose a date",
+        content: "Pick the day for your event.",
+        target: '[data-tutorial="reservation-date"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "times",
+        title: "Set the time",
+        content: "Enter a start and end time for the reservation.",
+        target: '[data-tutorial="reservation-times"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "title",
+        title: "Name the event",
+        content:
+          'Give the reservation a title (for example "CFS Retreat" or "faculty search lunch"), and optionally who it is for and a headcount.',
+        target: '[data-tutorial="reservation-title"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "timeline",
+        title: "Read the day at a glance",
+        content:
+          "This timeline shows the room's day: green blocks are classes from the official schedule, blue blocks are existing reservations. Your proposed slot appears as a dashed outline so you can spot open gaps.",
+        target: '[data-tutorial="reservation-timeline"]',
+        position: "left",
+        action: null,
+      },
+      {
+        id: "book",
+        title: "Book it — conflict-checked",
+        content:
+          "When your time is free, this button turns green and you can book instantly. If it overlaps a class or another reservation, the dashboard blocks it and tells you exactly what conflicts — no more hunting for double-bookings.",
+        target: '[data-tutorial="reservation-book"]',
+        position: "top",
+        action: null,
+      },
+      {
+        id: "list",
+        title: "Manage reservations",
+        content:
+          'Every booking lands here. Use "Outlook" to download a calendar invite (.ics) for any reservation, or "Cancel" to remove it.',
+        target: '[data-tutorial="reservation-list"]',
+        position: "top",
+        action: null,
+      },
+      {
+        id: "complete",
+        title: "You're ready!",
+        content:
+          "That's room reservations. Use it for meetings, events, and visits — and trust the conflict check to keep the schedule clean.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+    ],
+  },
+  "enrollment-capacity": {
+    id: "enrollment-capacity",
+    title: "Enrollment & Capacity Tutorial",
+    description:
+      "Spot sections that need a bigger room, another section, or a second look.",
+    estimatedTime: "3 min",
+    category: "Analytics",
+    targetPage: "analytics/enrollment-capacity",
+    steps: [
+      {
+        id: "welcome",
+        title: "Enrollment & Capacity",
+        content:
+          "This view turns the official schedule into action items: which sections are full, which are under-enrolled, and which are in the wrong-sized room.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+      {
+        id: "term",
+        title: "Pick a term",
+        content:
+          "Choose which term to analyze. Everything below updates for that term.",
+        target: '[data-tutorial="capacity-term"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "metrics",
+        title: "The headline numbers",
+        content:
+          "At a glance: total sections, plus how many are over/near capacity, under-enrolled, or in a mis-sized room.",
+        target: '[data-tutorial="capacity-metrics"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "thresholds",
+        title: "Tune the thresholds",
+        content:
+          'Open this to change what counts as "near full" or "under-enrolled," and the minimum healthy headcount. The defaults are sensible, but you can match your department\'s rules.',
+        target: '[data-tutorial="capacity-thresholds"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "over",
+        title: "Over / near capacity",
+        content:
+          "Sections at or above the fill threshold, or with a waitlist — the candidates for a larger room or an extra section. Click any row to open full course details.",
+        target: '[data-tutorial="capacity-over"]',
+        position: "top",
+        action: null,
+      },
+      {
+        id: "under",
+        title: "Under-enrolled",
+        content:
+          "Low or zero-enrollment sections — candidates for cancellation or consolidation.",
+        target: '[data-tutorial="capacity-under"]',
+        position: "top",
+        action: null,
+      },
+      {
+        id: "mismatch",
+        title: "Room mismatch",
+        content:
+          "Sections where the assigned room is too small for the enrollment, or far larger than needed (a room you could free up for events).",
+        target: '[data-tutorial="capacity-mismatch"]',
+        position: "top",
+        action: null,
+      },
+      {
+        id: "complete",
+        title: "You're ready!",
+        content:
+          "Use this each term to drive overrides, new sections, room moves, and cancellations — all from the numbers the registrar already gave you.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+    ],
+  },
+  "term-comparison": {
+    id: "term-comparison",
+    title: "Term Comparison Tutorial",
+    description: "See exactly what changed between two terms of the schedule.",
+    estimatedTime: "2 min",
+    category: "Analytics",
+    targetPage: "analytics/term-comparison",
+    steps: [
+      {
+        id: "welcome",
+        title: "Compare two terms",
+        content:
+          "After each CLSS import, this shows what changed versus a previous term — the fastest way to sanity-check a new schedule.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+      {
+        id: "selectors",
+        title: "Choose the terms",
+        content:
+          'Pick the "from" and "to" terms. It defaults to the two most recent.',
+        target: '[data-tutorial="termcompare-selectors"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "metrics",
+        title: "Added, dropped, changed",
+        content:
+          "A quick count of new sections, removed sections, and sections that changed.",
+        target: '[data-tutorial="termcompare-metrics"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "added",
+        title: "What's new (and what's gone)",
+        content:
+          "New sections appear here as green chips; dropped sections show just below in red.",
+        target: '[data-tutorial="termcompare-added"]',
+        position: "top",
+        action: null,
+      },
+      {
+        id: "changed",
+        title: "What changed",
+        content:
+          "Sections that kept the same course and section number but changed instructor, room, time, or cap — shown as before → after. This is where most surprises hide after an import.",
+        target: '[data-tutorial="termcompare-changed"]',
+        position: "top",
+        action: null,
+      },
+      {
+        id: "search",
+        title: "Filter to a course",
+        content:
+          'Type a subject or course (like "NUTR" or "ID 4433") to narrow every list at once.',
+        target: '[data-tutorial="termcompare-search"]',
+        position: "bottom",
+        action: null,
+      },
+      {
+        id: "complete",
+        title: "You're ready!",
+        content:
+          "Run this right after importing a term to catch instructor, room, and time changes before they become surprises.",
+        target: null,
+        position: "center",
+        action: null,
+      },
+    ],
+  },
 };
 
 // Help hints that appear throughout the app

@@ -120,6 +120,35 @@ const sanitizeMetadata = (metadata) => {
   }, {});
 };
 
+const buildPresenceBase = (actor, pageMeta, sessionId) => ({
+  uid: actor.uid,
+  email: actor.email,
+  displayName: actor.displayName,
+  role: actor.role,
+  sessionId,
+  currentPageId: pageMeta.pageId,
+  currentPageLabel: pageMeta.pageLabel,
+  currentSectionLabel: pageMeta.sectionLabel,
+  updatedAt: serverTimestamp(),
+});
+
+// Heartbeat: refresh only the presence doc (no event row) so a user who lingers
+// on one page still reads as "Active now" without inflating userActivityEvents.
+// Cheap on the free tier — one keyed upsert per call, gated to a visible tab by
+// the caller.
+export const touchPresence = async ({ actor, currentPage }) => {
+  if (!actor?.uid || !currentPage) return;
+
+  const pageMeta = getNavigationMeta(currentPage);
+  const sessionId = getActivitySessionId(actor.uid);
+
+  await setDoc(
+    doc(db, "userPresence", actor.uid),
+    buildPresenceBase(actor, pageMeta, sessionId),
+    { merge: true },
+  );
+};
+
 export const logUserActivityEvent = async ({
   actor,
   currentPage,
@@ -163,16 +192,8 @@ export const logUserActivityEvent = async ({
       setDoc(
         doc(db, "userPresence", actor.uid),
         {
-          uid: actor.uid,
-          email: actor.email,
-          displayName: actor.displayName,
-          role: actor.role,
-          sessionId,
-          currentPageId: pageMeta.pageId,
-          currentPageLabel: pageMeta.pageLabel,
-          currentSectionLabel: pageMeta.sectionLabel,
+          ...buildPresenceBase(actor, pageMeta, sessionId),
           enteredAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
         },
         { merge: true },
       ),

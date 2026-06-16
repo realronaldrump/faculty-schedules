@@ -70,6 +70,7 @@ export const COLLECTIONS = {
   DEPARTMENTS: "departments",
   EMAIL_LIST_PRESETS: "emailListPresets",
   OUTLOOK_EXCEPTIONS: "outlookExceptions",
+  RESERVATIONS: "reservations",
 };
 
 // Export the initialized app for any additional services

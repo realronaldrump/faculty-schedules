@@ -4,7 +4,6 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const getDocsMock = vi.fn();
-const httpsCallableMock = vi.fn();
 
 vi.mock("../../../contexts/AuthContext.jsx", () => ({
   useAuth: () => ({ isActivityOwner: true }),
@@ -12,11 +11,6 @@ vi.mock("../../../contexts/AuthContext.jsx", () => ({
 
 vi.mock("../../../firebase", () => ({
   db: {},
-  functions: {},
-}));
-
-vi.mock("firebase/functions", () => ({
-  httpsCallable: (...args) => httpsCallableMock(...args),
 }));
 
 vi.mock("firebase/firestore", () => ({
@@ -62,6 +56,21 @@ describe("UserActivityPage", () => {
     expect(
       screen.getByText(/No timeline entries yet\./i),
     ).toBeInTheDocument();
+  });
+
+  it("flags missing rollups and disables export until summaries load", async () => {
+    render(<UserActivityPage />);
+
+    await waitFor(() => {
+      expect(getDocsMock).toHaveBeenCalled();
+    });
+
+    expect(screen.getByText(/Rollups not built yet/i)).toBeInTheDocument();
+
+    const exportButton = await screen.findByRole("button", {
+      name: /export csv/i,
+    });
+    expect(exportButton).toBeDisabled();
   });
 
   it("continues fetching paged summary rollups until the last page", async () => {

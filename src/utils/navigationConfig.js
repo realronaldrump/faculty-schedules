@@ -21,6 +21,8 @@ import {
   Target,
   Clock,
   Activity,
+  Gauge,
+  ArrowLeftRight,
 } from "lucide-react";
 
 export const navigationItems = [
@@ -220,6 +222,28 @@ export const navigationItems = [
         },
         description: "Student worker analytics.",
         icon: BarChart3,
+      },
+      {
+        id: "enrollment-capacity",
+        label: "Enrollment & Capacity",
+        path: "analytics/enrollment-capacity",
+        canonicalId: "analytics/enrollment-capacity",
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
+        description: "Capacity flags and actionable enrollment insights.",
+        icon: Gauge,
+      },
+      {
+        id: "term-comparison",
+        label: "Term Comparison",
+        path: "analytics/term-comparison",
+        canonicalId: "analytics/term-comparison",
+        permissions: {
+          hideFromRoles: ["faculty"],
+        },
+        description: "What changed between two terms of the schedule.",
+        icon: ArrowLeftRight,
       },
     ],
   },

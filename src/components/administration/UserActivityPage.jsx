@@ -17,6 +17,7 @@ import {
   BarChart3,
   CheckCircle2,
   Clock3,
+  Download,
   Flame,
   GraduationCap,
   MousePointerClick,
@@ -279,14 +280,19 @@ const formatActivityLoadError = (error) => {
 
 const formatActivityRebuildError = (error) => {
   const message = String(error?.message || "").trim();
-  if (error?.code === "functions/not-found" || error?.code === "not-found") {
-    return "The activity rebuild function is not deployed yet. Deploy the latest Firebase functions, then try again.";
+  // Rebuilds run entirely in the browser (no Cloud Function on the free tier),
+  // so the only real failures are Firestore rule denials or a quota wall.
+  if (
+    error?.code === "permission-denied" ||
+    /missing or insufficient permissions/i.test(message)
+  ) {
+    return "Rebuilding is blocked by Firestore rules. Confirm you are signed in as the activity owner and that the latest rules are deployed.";
   }
   if (
-    error?.code === "functions/permission-denied" ||
-    error?.code === "permission-denied"
+    error?.code === "resource-exhausted" ||
+    /quota|resource-exhausted/i.test(message)
   ) {
-    return "Only the configured activity owner can rebuild activity analytics.";
+    return "Firestore's free-tier quota was exhausted mid-rebuild. Wait for the daily reset, then rebuild a shorter range.";
   }
   return message || "Could not rebuild activity analytics right now.";
 };
@@ -1124,12 +1130,24 @@ const UserActivityPage = () => {
 
   useEffect(() => {
     if (!isActivityOwner) return;
-    const intervalId = setInterval(() => {
+    if (typeof document === "undefined") return;
+
+    // Only poll while the tab is visible — an idle console left open would
+    // otherwise burn ~10k reads/hour against the free-tier daily quota.
+    const refreshLive = () => {
+      if (document.visibilityState !== "visible") return;
       void loadLiveData().catch((error) => {
         console.error("Failed to refresh live activity:", error);
       });
-    }, LIVE_REFRESH_INTERVAL_MS);
-    return () => clearInterval(intervalId);
+    };
+
+    const intervalId = setInterval(refreshLive, LIVE_REFRESH_INTERVAL_MS);
+    document.addEventListener("visibilitychange", refreshLive);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", refreshLive);
+    };
   }, [isActivityOwner, loadLiveData]);
 
   useEffect(() => {
@@ -1264,6 +1282,71 @@ const UserActivityPage = () => {
     }));
   };
 
+  // Freshness: the newest generatedAt across loaded daily rollups tells the owner
+  // how stale the summaries are (rollups are rebuilt on demand on the free tier).
+  const lastRebuiltAt = useMemo(() => {
+    let latest = null;
+    analyticsRows.forEach((row) => {
+      const generatedDate = toDate(row.generatedAt);
+      if (generatedDate && (!latest || generatedDate > latest)) {
+        latest = generatedDate;
+      }
+    });
+    return latest;
+  }, [analyticsRows]);
+
+  const exportUsersCsv = useCallback(() => {
+    if (!sortedUsers.length) return;
+
+    const header = [
+      "Name",
+      "Email",
+      "Role",
+      "Total Minutes",
+      "Sessions",
+      "Avg Min/Session",
+      "Pages Visited",
+      "Active Days",
+      "Avg Pages/Day",
+    ];
+    const escapeCell = (value) => {
+      const text = String(value ?? "");
+      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const lines = [header.join(",")];
+    sortedUsers.forEach((user) => {
+      lines.push(
+        [
+          user.displayName,
+          user.email,
+          user.role || "unknown",
+          user.totalMinutesApprox || 0,
+          user.sessionCount || 0,
+          user.avgMinutesPerSession || 0,
+          user.pagesVisitedCount || 0,
+          user.activeDays || 0,
+          user.avgPagesPerDay || 0,
+        ]
+          .map(escapeCell)
+          .join(","),
+      );
+    });
+
+    const blob = new Blob([lines.join("\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `user-activity-${rangeDays}d-${formatDateKeyInTimeZone(
+      new Date(),
+    )}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [rangeDays, sortedUsers]);
+
   if (!isActivityOwner) {
     return (
       <div className="rounded-lg border border-gray-200 bg-white p-6 text-gray-700">
@@ -1285,9 +1368,10 @@ const UserActivityPage = () => {
                 User Activity Intelligence
               </h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                Analytics are computed directly from raw activity events. Live
-                presence refreshes every minute. Use the range selector and
-                refresh button to explore usage patterns and navigation habits.
+                Daily rollups are rebuilt on demand from raw events to stay within
+                the free Firestore tier — click <strong>Rebuild rollups</strong> to
+                refresh the summaries for the selected range. Live presence and the
+                timeline refresh automatically every minute while this tab is open.
               </p>
             </div>
 
@@ -1313,6 +1397,11 @@ const UserActivityPage = () => {
                   <span>{refreshing ? "Refreshing..." : "Refresh analytics"}</span>
                 </button>
               </div>
+              <p className="text-xs text-slate-500">
+                {lastRebuiltAt
+                  ? `Rollups updated ${formatTimeAgo(lastRebuiltAt)}`
+                  : "Rollups not built yet — click Rebuild rollups"}
+              </p>
             </div>
           </div>
         </div>
@@ -1462,6 +1551,17 @@ const UserActivityPage = () => {
           eyebrow="Users"
           title="Who uses the app and how"
           description="This table aggregates daily per-user summaries for the selected range. Open a user to inspect their day-by-day pattern, top pages, and activity heatmap."
+          action={
+            <button
+              type="button"
+              onClick={exportUsersCsv}
+              disabled={summaryLoading || sortedUsers.length === 0}
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" />
+              <span>Export CSV</span>
+            </button>
+          }
         >
           {summaryLoading ? (
             <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
@@ -1469,7 +1569,9 @@ const UserActivityPage = () => {
             </div>
           ) : sortedUsers.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
-              No rolled-up user summaries exist yet for the selected range.
+              No rolled-up user summaries exist yet for the selected range. Click{" "}
+              <strong>Rebuild rollups</strong> above to generate them from raw
+              events.
             </div>
           ) : (
             <div className="overflow-hidden rounded-3xl border border-slate-200">

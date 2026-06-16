@@ -4,10 +4,14 @@ import {
   buildActivityActor,
   getActivitySessionId,
   logUserActivityEvent,
+  touchPresence,
 } from "../utils/activityTracking";
 import { getNavigationMeta } from "../utils/navigationMeta";
 
 const DUPLICATE_EVENT_WINDOW_MS = 15 * 1000;
+// Keep "Active now" honest for users who read one page for a while. Presence-only
+// write, gated to a visible tab, so it stays cheap on the free tier.
+const PRESENCE_HEARTBEAT_MS = 90 * 1000;
 
 const defaultLastEvent = { pageId: "", timestampMs: 0 };
 
@@ -79,6 +83,34 @@ const useUserActivityTracker = ({
     };
 
     void writeActivity();
+  }, [actor, canAccess, currentPage, isAuthenticated, loading]);
+
+  // Presence heartbeat: while the current page is open AND the tab is visible,
+  // refresh the presence doc so the owner's "Active now" reflects real presence,
+  // not just the last navigation. Pauses entirely when the tab is hidden.
+  useEffect(() => {
+    if (!isAuthenticated || loading || !actor || !currentPage) return;
+    if (typeof document === "undefined") return;
+
+    const pageMeta = getNavigationMeta(currentPage);
+    const accessId = pageMeta?.accessId || pageMeta?.pageId || currentPage;
+    if (typeof canAccess === "function" && !canAccess(accessId)) return;
+
+    const beat = () => {
+      if (document.visibilityState !== "visible") return;
+      void touchPresence({ actor, currentPage }).catch((error) => {
+        console.warn("Presence heartbeat failed:", error);
+      });
+    };
+
+    const intervalId = setInterval(beat, PRESENCE_HEARTBEAT_MS);
+    // Refresh immediately when the user returns to the tab.
+    document.addEventListener("visibilitychange", beat);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", beat);
+    };
   }, [actor, canAccess, currentPage, isAuthenticated, loading]);
 };
 

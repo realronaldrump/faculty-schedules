@@ -595,6 +595,15 @@ service cloud.firestore {
       allow delete: if canManageRoomGrids();
     }
 
+    // Room reservations: self-serve bookings layered on the class schedule.
+    // Active users can read; users with room-scheduling access can manage.
+    match /reservations/{id} {
+      allow read: if canReadAppData();
+      allow create: if canManageRoomGrids();
+      allow update: if canManageRoomGrids();
+      allow delete: if canManageRoomGrids();
+    }
+
     // Email List Presets: shared presets that any signed-in user can create/edit
     // Only admins can delete presets
     match /emailListPresets/{id} {

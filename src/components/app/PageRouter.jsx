@@ -16,6 +16,10 @@ const DepartmentInsights = lazy(
 const StudentWorkerAnalytics = lazy(
   () => import("../analytics/StudentWorkerAnalytics.jsx"),
 );
+const EnrollmentCapacity = lazy(
+  () => import("../analytics/EnrollmentCapacity.jsx"),
+);
+const TermComparison = lazy(() => import("../analytics/TermComparison.jsx"));
 const CoursesHub = lazy(() =>
   import("../courses").then((module) => ({ default: module.CoursesHub })),
 );
@@ -122,6 +126,13 @@ const PageRouter = ({ currentPage, loading }) => {
         "analytics/student-worker-analytics",
         StudentWorkerAnalytics,
       );
+    case "analytics/enrollment-capacity":
+      return renderProtectedPage(
+        "analytics/enrollment-capacity",
+        EnrollmentCapacity,
+      );
+    case "analytics/term-comparison":
+      return renderProtectedPage("analytics/term-comparison", TermComparison);
     case "admin-tools/import-wizard":
       return renderProtectedPage("admin-tools/import-wizard", ImportWizard);
     case "admin-tools/crn-tools":

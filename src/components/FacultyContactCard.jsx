@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Mail, Phone, Building, BookOpen, Clock, GraduationCap, Wifi, ChevronDown } from 'lucide-react';
+import { X, Mail, Phone, Building, BookOpen, Clock, GraduationCap, Wifi, ChevronDown, User } from 'lucide-react';
 import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { logUpdate } from '../utils/changeLogger';
@@ -455,6 +455,16 @@ const FacultyContactCard = ({
         [studentAssignments]
     );
 
+    const supervisorNames = useMemo(() => {
+        if (personType !== 'student') return [];
+        const names = new Set();
+        resolvedStudentAssignments.forEach((a) => {
+            const name = (a.supervisor || '').trim();
+            if (name) names.add(name);
+        });
+        return Array.from(names);
+    }, [personType, resolvedStudentAssignments]);
+
     const shouldShowStudentSchedule = personType === 'student' && showStudentSchedule;
 
     const cardWidthClass = shouldShowStudentSchedule ? 'max-w-5xl' : 'max-w-2xl';
@@ -666,6 +676,26 @@ const FacultyContactCard = ({
                                 <div className="mt-1 text-xs text-red-600">{baylorIdError}</div>
                             )}
                         </div>
+                        {personType === 'student' && supervisorNames.length > 0 && (
+                            <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 sm:col-span-2">
+                                <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                    <User size={14} className="text-baylor-green" />
+                                    {supervisorNames.length === 1 ? 'Supervisor' : 'Supervisors'}
+                                </div>
+                                {supervisorNames.length === 1 ? (
+                                    <span className="text-sm font-medium text-gray-800">{supervisorNames[0]}</span>
+                                ) : (
+                                    <ul className="space-y-1">
+                                        {supervisorNames.map((name) => (
+                                            <li key={name} className="flex items-start gap-2 text-sm font-medium text-gray-800">
+                                                <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-gray-500" />
+                                                <span>{name}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        )}
                     </div>
                     {personType !== 'student' && hasCourses && (
                         <div className="mt-4 flex items-center justify-center gap-2 rounded-lg bg-baylor-green/5 px-3 py-2 text-sm text-baylor-green">

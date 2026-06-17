@@ -166,6 +166,9 @@ const Dashboard = () => {
 
   const SectionCard = ({ section, defaultOpen, isFirst }) => {
     const SectionIcon = section.icon;
+    const tutorialPinIndex = section.items.findIndex((item) => !isPinned(item.id));
+    const tutorialPinTargetIndex =
+      tutorialPinIndex >= 0 ? tutorialPinIndex : 0;
 
     return (
       <details
@@ -220,7 +223,11 @@ const Dashboard = () => {
                   <ChevronRight className="mt-1 h-4 w-4 text-gray-200 group-hover/item:text-baylor-gold/60 transition-colors" />
                 </button>
                 <button
-                  data-tutorial={isFirst && itemIndex === 0 ? "pin-button" : undefined}
+                  data-tutorial={
+                    isFirst && itemIndex === tutorialPinTargetIndex
+                      ? "pin-button"
+                      : undefined
+                  }
                   onClick={(event) => handlePinToggle(event, item.id)}
                   className="flex items-center px-4 text-gray-300 hover:text-baylor-gold transition-colors"
                   aria-pressed={pinned}

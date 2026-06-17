@@ -685,6 +685,7 @@ const StudentAddWizard = ({
           <button
             onClick={handleNext}
             className="btn-primary"
+            data-tutorial="wizard-next-btn"
           >
             Next
             <ChevronRight size={16} />

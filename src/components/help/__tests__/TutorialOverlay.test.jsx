@@ -138,4 +138,37 @@ describe("TutorialOverlay missing-target recovery", () => {
 
     document.body.removeChild(el);
   });
+
+  it("keeps the instruction card visible when a completed action removes its target", () => {
+    const actionStep = {
+      ...TUTORIAL.steps[1],
+      action: "Click Save Job",
+      actionType: "click",
+    };
+
+    tutorialState.current = {
+      activeTutorial: {
+        ...TUTORIAL,
+        steps: [TUTORIAL.steps[0], actionStep],
+      },
+      currentStep: actionStep,
+      currentStepIndex: 1,
+      isPaused: false,
+      actionCompleted: true,
+      nextStep: vi.fn(),
+      prevStep: vi.fn(),
+      endTutorial: vi.fn(),
+      markActionCompleted: vi.fn(),
+    };
+
+    render(<TutorialOverlay />);
+
+    expect(screen.getByText(/Step 2 of 2/i)).toBeInTheDocument();
+    expect(screen.getByText(/Done!/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Tutorial paused/i)).not.toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(1300));
+    expect(screen.queryByText(/Tutorial paused/i)).not.toBeInTheDocument();
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
 });

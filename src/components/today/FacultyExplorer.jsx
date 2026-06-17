@@ -81,6 +81,8 @@ const QuickStats = ({ stats, isWeekend }) => {
 };
 
 const FacultyRow = ({ faculty, locationStatus, onSelect, isSelected }) => {
+  if (!faculty || !locationStatus) return null;
+
   const {
     currentLocation,
     nextLocation,
@@ -636,8 +638,8 @@ const FacultyExplorer = ({
                 <tbody className="divide-y divide-gray-100">
                   {sortedLocations.map(({ faculty, locationStatus }) => (
                     <FacultyRow
-                      key={faculty.id}
-                      person={faculty}
+                      key={faculty.id || faculty.name}
+                      faculty={faculty}
                       locationStatus={locationStatus}
                       onSelect={handleSelectFaculty}
                       isSelected={effectiveSelectedFaculty?.id === faculty.id}

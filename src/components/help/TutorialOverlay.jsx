@@ -388,6 +388,8 @@ const TutorialOverlay = () => {
 
   // Calculate if user can advance to next step
   const canAdvance = !currentStep?.action || actionCompleted;
+  const completedActionLostTarget =
+    targetMissing && currentStep?.action && actionCompleted;
 
   // Find and track the target element
   const updateTargetPosition = useCallback(() => {
@@ -474,7 +476,7 @@ const TutorialOverlay = () => {
   // the target. We only auto-navigate when off the tutorial page (avoids a
   // redirect loop if the element is genuinely absent on the correct page).
   useEffect(() => {
-    if (!activeTutorial || !targetMissing) {
+    if (!activeTutorial || !targetMissing || completedActionLostTarget) {
       setRecoveryActive(false);
       return undefined;
     }
@@ -492,7 +494,14 @@ const TutorialOverlay = () => {
     }, TARGET_MISSING_GRACE_MS);
 
     return () => clearTimeout(timer);
-  }, [activeTutorial, targetMissing, currentStepIndex, location.pathname, navigate]);
+  }, [
+    activeTutorial,
+    targetMissing,
+    completedActionLostTarget,
+    currentStepIndex,
+    location.pathname,
+    navigate,
+  ]);
 
   // Listen for action completion on target element
   useEffect(() => {
@@ -560,6 +569,25 @@ const TutorialOverlay = () => {
   // the non-blocking recovery notice once the grace period has elapsed (it stays
   // hidden during brief transitions so it doesn't flash mid-tutorial).
   if (targetMissing) {
+    if (completedActionLostTarget) {
+      return (
+        <InstructionCard
+          step={currentStep}
+          stepNumber={currentStepIndex + 1}
+          totalSteps={activeTutorial.steps.length}
+          position={cardPosition}
+          onNext={nextStep}
+          onPrev={prevStep}
+          onSkip={() => endTutorial(false)}
+          onClose={() => endTutorial(false)}
+          isFirst={currentStepIndex === 0}
+          isLast={currentStepIndex === activeTutorial.steps.length - 1}
+          canAdvance={canAdvance}
+          actionCompleted={actionCompleted}
+        />
+      );
+    }
+
     if (!recoveryActive) return null;
 
     const targetPage = activeTutorial.targetPage;

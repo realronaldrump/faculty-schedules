@@ -548,7 +548,7 @@ export const TUTORIALS = {
         title: "Continue to Employment",
         content:
           "Great! Now click the 'Next' button at the bottom to proceed to the Employment step.",
-        target: '[data-tutorial="wizard-navigation"]',
+        target: '[data-tutorial="wizard-next-btn"]',
         position: "top",
         action: "Click Next to continue",
         actionType: "click",
@@ -567,7 +567,7 @@ export const TUTORIALS = {
         title: "Continue to Jobs",
         content:
           "Click 'Next' to proceed to the Job Assignments step. This is where you'll define what work the student does.",
-        target: '[data-tutorial="wizard-navigation"]',
+        target: '[data-tutorial="wizard-next-btn"]',
         position: "top",
         action: "Click Next to continue",
         actionType: "click",
@@ -615,10 +615,20 @@ export const TUTORIALS = {
         id: "save-job",
         title: "Save the Job Assignment",
         content:
-          "Click 'Save Job' to save this job assignment, then click 'Next' to proceed to the review step.",
-        target: '[data-tutorial="job-form"]',
+          "Click 'Save Job' to save this job assignment.",
+        target: '[data-tutorial="save-job-btn"]',
         position: "top",
-        action: "Save the job and click Next",
+        action: "Click Save Job",
+        actionType: "click",
+      },
+      {
+        id: "jobs-next",
+        title: "Continue to Review",
+        content:
+          "Your job assignment is saved. Click 'Next' to review the test student before saving.",
+        target: '[data-tutorial="wizard-next-btn"]',
+        position: "top",
+        action: "Click Next to continue",
         actionType: "click",
       },
       {

@@ -334,6 +334,7 @@ const LiveView = () => {
   );
 
   const handleSelectSuggestion = useCallback((faculty) => {
+    if (!faculty) return;
     setSelectedFaculty(faculty);
     setSearchQuery("");
     setSearchFocused(false);
@@ -800,7 +801,7 @@ const LiveView = () => {
       {selectedFaculty && selectedFacultyLocation && (
         <div className="mb-6">
           <FacultySpotlightCard
-            person={selectedFaculty}
+            faculty={selectedFaculty}
             locationStatus={selectedFacultyLocation}
             onClose={handleClearSelection}
           />

@@ -281,6 +281,7 @@ const JobCard = ({
             <button
               onClick={() => onSave(draft)}
               className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+              data-tutorial="save-job-btn"
             >
               Save Job
             </button>

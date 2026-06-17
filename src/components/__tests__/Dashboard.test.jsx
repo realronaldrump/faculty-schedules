@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import Dashboard from "../Dashboard";
 
 const navigateMock = vi.fn();
+let mockPinnedPages = [];
 
 vi.mock("react-router-dom", () => ({
   useNavigate: () => navigateMock,
@@ -21,15 +22,16 @@ vi.mock("../../contexts/AuthContext", () => ({
 
 vi.mock("../../contexts/UIContext", () => ({
   useUI: () => ({
-    pinnedPages: [],
+    pinnedPages: mockPinnedPages,
     togglePinPage: vi.fn(),
-    isPinned: () => false,
+    isPinned: (pageId) => mockPinnedPages.includes(pageId),
   }),
 }));
 
 describe("Dashboard", () => {
   beforeEach(() => {
     navigateMock.mockClear();
+    mockPinnedPages = [];
   });
 
   it("renders the launchpad header and search input", () => {
@@ -71,5 +73,15 @@ describe("Dashboard", () => {
     fireEvent.click(resultButton);
 
     expect(navigateMock).toHaveBeenCalledWith("/live-view");
+  });
+
+  it("places the getting started pin target on an unpinned page", () => {
+    mockPinnedPages = ["dashboard"];
+
+    render(<Dashboard />);
+
+    const tutorialPinButton = document.querySelector('[data-tutorial="pin-button"]');
+    expect(tutorialPinButton).toBeInTheDocument();
+    expect(tutorialPinButton).toHaveAttribute("title", "Pin for quick access");
   });
 });

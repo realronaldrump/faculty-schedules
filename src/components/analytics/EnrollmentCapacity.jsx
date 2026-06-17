@@ -17,6 +17,7 @@ import {
   DEFAULT_THRESHOLDS,
 } from "../../utils/capacityUtils";
 import CourseDetailModal from "../scheduling/CourseDetailModal";
+import PageHeader from "../shared/PageHeader";
 
 import SelectDropdown from "../SelectDropdown";
 const pct = (value) => (value == null ? "—" : `${Math.round(value * 100)}%`);
@@ -206,30 +207,26 @@ const EnrollmentCapacity = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">
-            Enrollment &amp; Capacity
-          </h1>
-          <p className="text-gray-600">
-            Actionable flags from the official schedule — what needs a section,
-            a bigger room, or a second look.
-          </p>
-        </div>
-        <SelectDropdown
-          data-tutorial="capacity-term"
-          value={effectiveTerm}
-          onChange={(e) => setTerm(e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-2 focus:border-baylor-green focus:outline-none focus:ring-1 focus:ring-baylor-green"
-        >
-          {termOptions.length === 0 && <option value="">No terms</option>}
-          {termOptions.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </SelectDropdown>
-      </div>
+      <PageHeader
+        title="Enrollment & Capacity"
+        subtitle="Actionable flags from the official schedule — what needs a section, a bigger room, or a second look."
+        className="mb-0"
+        actions={
+          <SelectDropdown
+            data-tutorial="capacity-term"
+            value={effectiveTerm}
+            onChange={(e) => setTerm(e.target.value)}
+            className="rounded-lg border border-gray-300 px-3 py-2 focus:border-baylor-green focus:outline-none focus:ring-1 focus:ring-baylor-green"
+          >
+            {termOptions.length === 0 && <option value="">No terms</option>}
+            {termOptions.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </SelectDropdown>
+        }
+      />
 
       <div
         className="grid grid-cols-2 md:grid-cols-4 gap-4"

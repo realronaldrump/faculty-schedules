@@ -77,7 +77,7 @@ const CourseTableRow = memo(({ index, style, data }) => {
 CourseTableRow.displayName = "CourseTableRow";
 
 const CourseBrowser = ({ embedded = false }) => {
-  const { scheduleData = [], facultyData = [] } = useData();
+  const { scheduleData = [], facultyData = [], allFacultyData = [] } = useData();
   const { buildingConfigVersion } = useAppConfig();
 
   const [filters, setFilters] = useState({
@@ -98,6 +98,7 @@ const CourseBrowser = ({ embedded = false }) => {
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [isCsvExporting, setIsCsvExporting] = useState(false);
+  const facultyLookupData = allFacultyData.length > 0 ? allFacultyData : facultyData;
 
   const computeCourseMetadata = (courseCode) => {
     if (!courseCode || typeof courseCode !== "string") {
@@ -447,7 +448,7 @@ const CourseBrowser = ({ embedded = false }) => {
   };
 
   const handleShowContactCard = (facultyIdOrName, displayName) => {
-    const faculty = facultyData.find(
+    const faculty = facultyLookupData.find(
       (f) => f.id === facultyIdOrName || f.name === facultyIdOrName,
     );
     if (faculty) {

@@ -351,7 +351,7 @@ const TemperatureLineChart = ({
                     y={yScale(tick)}
                     textAnchor="end"
                     dominantBaseline="middle"
-                    className="fill-gray-500 text-[10px]"
+                    className="fill-gray-500 text-2xs"
                   >
                     {tick.toFixed(0)}{unitLabel}
                   </text>
@@ -373,7 +373,7 @@ const TemperatureLineChart = ({
                       x={xScale(tick)}
                       y={height - plotPadding.bottom + 18}
                       textAnchor="middle"
-                      className="fill-gray-500 text-[10px]"
+                      className="fill-gray-500 text-2xs"
                     >
                       {formatTick(
                         tickDate,

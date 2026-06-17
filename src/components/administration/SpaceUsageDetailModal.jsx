@@ -1,5 +1,6 @@
-import { useEffect, useMemo } from "react";
-import { Mail, Users, X } from "lucide-react";
+import { useMemo } from "react";
+import { Mail, Users } from "lucide-react";
+import Modal from "../shared/Modal";
 
 const getPersonDisplayName = (person) => {
   if (!person) return "Unknown";
@@ -57,15 +58,6 @@ const SpaceUsageDetailModal = ({
 }) => {
   const view = mode === "office" ? "office" : "scheduled";
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") onClose?.();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isOpen, onClose]);
-
   const schedules = useMemo(() => {
     const raw = Array.isArray(usage?.schedules) ? usage.schedules : [];
     // Dedupe defensively by id (scheduleData should already be unique).
@@ -111,38 +103,26 @@ const SpaceUsageDetailModal = ({
       ? `Office Occupant${officeCount === 1 ? "" : "s"}`
       : `Class${scheduledCount === 1 ? "" : "es"}`;
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="text-xs text-gray-500">
-              Usage Details: {heading}
-            </div>
-            <h3 className="modal-title truncate">{spaceKey || "Space"}</h3>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              {displayName ? (
-                <span className="text-sm text-gray-700">{displayName}</span>
-              ) : null}
-              {type ? (
-                <span className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700">
-                  {type}
-                </span>
-              ) : null}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
-            aria-label="Close usage details"
-          >
-            <X size={18} />
-          </button>
-        </div>
+  const header = (
+    <div className="min-w-0">
+      <div className="text-xs text-gray-500">Usage Details: {heading}</div>
+      <h3 className="modal-title truncate">{spaceKey || "Space"}</h3>
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        {displayName ? (
+          <span className="text-sm text-gray-700">{displayName}</span>
+        ) : null}
+        {type ? (
+          <span className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700">
+            {type}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
 
-        <div className="modal-body space-y-4">
-          {view === "scheduled" ? (
+  return (
+    <Modal isOpen onClose={onClose} size="md" title={header} bodyClassName="modal-body space-y-4">
+      {view === "scheduled" ? (
             scheduledCount === 0 ? (
               <div className="text-sm text-gray-600">
                 No scheduled classes reference this space.
@@ -248,9 +228,7 @@ const SpaceUsageDetailModal = ({
               })}
             </div>
           )}
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

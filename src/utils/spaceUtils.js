@@ -79,8 +79,11 @@ export const normalizeSpaceRecord = (space = {}, docId = '') => {
     buildingDisplayName: resolvedBuildingName || '',
     spaceNumber: normalizedNumber || '',
     displayName,
+    isReservable: base.isReservable === true,
   };
 };
+
+export const isSpaceReservable = (space = {}) => space?.isReservable === true;
 
 export const resolveSpaceDisplayName = (spaceKey, spacesByKey) => {
   if (!spaceKey) return '';

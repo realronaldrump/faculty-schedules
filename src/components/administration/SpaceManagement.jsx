@@ -45,7 +45,7 @@ import {
   resolveBuilding,
   resolveBuildingDisplayName,
 } from "../../utils/locationService";
-import { normalizeSpaceRecord } from "../../utils/spaceUtils";
+import { isSpaceReservable, normalizeSpaceRecord } from "../../utils/spaceUtils";
 import { validateSpace } from "../../utils/canonicalSchema";
 import { standardizeRoom } from "../../utils/hygieneCore";
 import {
@@ -89,6 +89,7 @@ const SpaceManagement = () => {
   const [buildingFilter, setBuildingFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [usageFilter, setUsageFilter] = useState("all"); // all, scheduled, office, unused
+  const [reservationFilter, setReservationFilter] = useState("all");
   const [editingSpace, setEditingSpace] = useState(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [isBulkAdding, setIsBulkAdding] = useState(false);
@@ -145,6 +146,7 @@ const SpaceManagement = () => {
     capacity: "",
     equipment: [],
     notes: "",
+    isReservable: false,
   });
   const [equipmentInput, setEquipmentInput] = useState("");
 
@@ -156,6 +158,7 @@ const SpaceManagement = () => {
     prefix: "",
     suffix: "",
     type: SPACE_TYPE.CLASSROOM,
+    isReservable: false,
   });
 
   // Get buildings for dropdown
@@ -323,6 +326,13 @@ const SpaceManagement = () => {
       });
     }
 
+    if (reservationFilter !== "all") {
+      spaces = spaces.filter((s) => {
+        const reservable = isSpaceReservable(s);
+        return reservationFilter === "reservable" ? reservable : !reservable;
+      });
+    }
+
     // Apply search
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -355,6 +365,7 @@ const SpaceManagement = () => {
     buildingFilter,
     typeFilter,
     usageFilter,
+    reservationFilter,
     searchQuery,
     spaceUsage,
   ]);
@@ -374,6 +385,7 @@ const SpaceManagement = () => {
     let withSchedules = 0;
     let withOffices = 0;
     let unused = 0;
+    let reservable = 0;
 
     activeSpaces.forEach((s) => {
       const key = getCanonicalSpaceKeyFromSpace(s);
@@ -383,6 +395,7 @@ const SpaceManagement = () => {
       if (usage.scheduled > 0) withSchedules++;
       if (usage.offices > 0) withOffices++;
       if (usage.scheduled === 0 && usage.offices === 0) unused++;
+      if (isSpaceReservable(s)) reservable++;
     });
 
     return {
@@ -391,6 +404,7 @@ const SpaceManagement = () => {
       withSchedules,
       withOffices,
       unused,
+      reservable,
     };
   }, [spacesList, roomsData, spaceUsage]);
 
@@ -439,6 +453,7 @@ const SpaceManagement = () => {
       capacity: "",
       equipment: [],
       notes: "",
+      isReservable: false,
     });
     setEquipmentInput("");
     setEditingSpace(null);
@@ -455,6 +470,7 @@ const SpaceManagement = () => {
       capacity: normalized.capacity || "",
       equipment: [...(normalized.equipment || [])],
       notes: normalized.notes || "",
+      isReservable: isSpaceReservable(normalized),
     });
     setEditingSpace(space);
     setIsAddingNew(false);
@@ -475,6 +491,7 @@ const SpaceManagement = () => {
       prefix: "",
       suffix: "",
       type: SPACE_TYPE.CLASSROOM,
+      isReservable: false,
     });
     setIsBulkAdding(true);
     setIsAddingNew(false);
@@ -620,6 +637,7 @@ const SpaceManagement = () => {
         capacity: formData.capacity ? parseInt(formData.capacity, 10) : null,
         equipment: formData.equipment,
         notes: formData.notes.trim(),
+        isReservable: formData.isReservable === true,
         isActive: true,
         displayName,
 
@@ -913,6 +931,7 @@ const SpaceManagement = () => {
             capacity: null,
             equipment: [],
             notes: "",
+            isReservable: bulkData.isReservable === true,
             isActive: true,
             displayName,
             createdAt: new Date().toISOString(),
@@ -1002,6 +1021,50 @@ const SpaceManagement = () => {
       }
     },
     [showNotification, refreshRooms],
+  );
+
+  const handleToggleReservable = useCallback(
+    async (space) => {
+      if (!space) return;
+      const spaceKey = getCanonicalSpaceKeyFromSpace(space);
+      const docId = space.id || spaceKey;
+      if (!docId) {
+        showNotification(
+          "warning",
+          "Missing Space",
+          "Could not identify the space to update.",
+        );
+        return;
+      }
+
+      const nextReservable = !isSpaceReservable(space);
+      setSaving(true);
+      try {
+        await setDoc(
+          doc(db, "rooms", docId),
+          {
+            isReservable: nextReservable,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true },
+        );
+        showNotification(
+          "success",
+          nextReservable ? "Reservations Enabled" : "Reservations Disabled",
+          `${space.displayName || space.spaceKey || docId} is ${nextReservable ? "available" : "not available"} for room reservations.`,
+        );
+      } catch (error) {
+        console.error("Error updating reservation status:", error);
+        showNotification(
+          "error",
+          "Update Failed",
+          "Failed to update reservation status. Please try again.",
+        );
+      } finally {
+        setSaving(false);
+      }
+    },
+    [showNotification],
   );
 
   const handleRefresh = useCallback(async () => {
@@ -1108,7 +1171,7 @@ const SpaceManagement = () => {
               </button>
               <button
                 onClick={handleAddNew}
-                className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+                className="btn-primary"
               >
                 <Plus size={18} />
                 Add Space
@@ -1131,7 +1194,7 @@ const SpaceManagement = () => {
         </button>
 
         {showStats && (
-          <div className="p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          <div className="p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
             <div className="text-center">
               <div className="text-2xl font-bold text-baylor-green">
                 {stats.total}
@@ -1159,6 +1222,14 @@ const SpaceManagement = () => {
                 {stats.unused}
               </div>
               <div className="text-xs text-gray-500">Unused</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-emerald-600">
+                {stats.reservable}
+              </div>
+              <div className="text-xs text-gray-500 flex items-center justify-center gap-1">
+                <Calendar size={10} /> Reservable
+              </div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-blue-500">
@@ -1300,6 +1371,21 @@ const SpaceManagement = () => {
                 ))}
               </SelectDropdown>
             </div>
+
+            <label className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={bulkData.isReservable}
+                onChange={(e) =>
+                  setBulkData((prev) => ({
+                    ...prev,
+                    isReservable: e.target.checked,
+                  }))
+                }
+                className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+              />
+              <span>Reservable</span>
+            </label>
           </div>
 
           {/* Preview */}
@@ -1343,7 +1429,7 @@ const SpaceManagement = () => {
             <button
               onClick={handleBulkSave}
               disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors disabled:opacity-50"
+              className="btn-primary disabled:opacity-50"
             >
               <Layers size={18} />
               {saving ? "Creating..." : "Create Spaces"}
@@ -1443,8 +1529,23 @@ const SpaceManagement = () => {
               />
             </div>
 
+            <label className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={formData.isReservable}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    isReservable: e.target.checked,
+                  }))
+                }
+                className="rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
+              />
+              <span>Reservable</span>
+            </label>
+
             {/* Notes */}
-            <div className="md:col-span-2">
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Notes
               </label>
@@ -1519,7 +1620,7 @@ const SpaceManagement = () => {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors disabled:opacity-50"
+              className="btn-primary disabled:opacity-50"
             >
               <Save size={18} />
               {saving ? "Saving..." : "Save Space"}
@@ -1583,6 +1684,16 @@ const SpaceManagement = () => {
           <option value="office">As Offices</option>
           <option value="unused">Unused</option>
         </SelectDropdown>
+
+        <SelectDropdown
+          value={reservationFilter}
+          onChange={(e) => setReservationFilter(e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
+        >
+          <option value="all">All Reservation Status</option>
+          <option value="reservable">Reservable</option>
+          <option value="notReservable">Not Reservable</option>
+        </SelectDropdown>
       </div>
 
       {/* Spaces List */}
@@ -1594,6 +1705,7 @@ const SpaceManagement = () => {
             {buildingFilter !== "all" ||
             typeFilter !== "all" ||
             usageFilter !== "all" ||
+            reservationFilter !== "all" ||
             searchQuery
               ? " (filtered)"
               : ""}
@@ -1607,7 +1719,8 @@ const SpaceManagement = () => {
               {searchQuery ||
               buildingFilter !== "all" ||
               typeFilter !== "all" ||
-              usageFilter !== "all"
+              usageFilter !== "all" ||
+              reservationFilter !== "all"
                 ? "No spaces match your filters."
                 : 'No spaces found. Click "Add Space" or "Bulk Add" to create some.'}
             </p>
@@ -1622,6 +1735,7 @@ const SpaceManagement = () => {
                   <th className="table-header-cell">Number</th>
                   <th className="table-header-cell">Type</th>
                   <th className="table-header-cell text-center">Capacity</th>
+                  <th className="table-header-cell text-center">Reservable</th>
                   <th className="table-header-cell text-center">
                     <span
                       className="inline-flex items-center justify-center gap-1 w-full"
@@ -1706,6 +1820,26 @@ const SpaceManagement = () => {
                           </span>
                         );
                       })()}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleReservable(space)}
+                        disabled={saving}
+                        className={`inline-flex items-center justify-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+                          isSpaceReservable(space)
+                            ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        }`}
+                        title={
+                          isSpaceReservable(space)
+                            ? "Disable room reservations for this space"
+                            : "Enable room reservations for this space"
+                        }
+                      >
+                        <Calendar size={12} />
+                        {isSpaceReservable(space) ? "Yes" : "No"}
+                      </button>
                     </td>
                     <td className="px-4 py-3 text-center">
                       {renderUsageIndicators(space)}

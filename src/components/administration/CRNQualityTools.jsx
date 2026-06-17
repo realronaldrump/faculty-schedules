@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { usePermissions } from "../../utils/permissions";
 import { Database, AlertCircle, Save, Search, X } from "lucide-react";
 import { analyzeCRNCoverage } from "../../utils/crnMigrationUtils";
+import PageHeader from "../shared/PageHeader";
 import { fetchSchedulesByTerms } from "../../utils/dataImportUtils";
 import { db } from "../../firebase";
 import { doc, updateDoc } from "firebase/firestore";
@@ -222,14 +223,10 @@ const CRNQualityTools = () => {
 
   return (
       <div className="p-6 max-w-5xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">
-          CRN Quality Tools
-        </h1>
-        <p className="text-gray-600">
-          Analyze coverage, find duplicates, and edit missing CRNs.
-        </p>
-      </div>
+      <PageHeader
+        title="CRN Quality Tools"
+        subtitle="Analyze coverage, find duplicates, and edit missing CRNs."
+      />
 
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
         <div className="text-sm text-amber-800">

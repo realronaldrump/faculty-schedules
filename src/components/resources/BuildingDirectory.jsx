@@ -3,7 +3,7 @@ import { Building2, MapPin, Search, Filter, Mail, Phone, PhoneOff, ChevronDown, 
 import FacultyContactCard from "../FacultyContactCard";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
-import { resolveOfficeDetails } from "../../utils/directoryUtils";
+import { buildOfficeBuildingData } from "../../utils/buildingDirectoryUtils";
 
 import SelectDropdown from "../SelectDropdown";
 const BuildingDirectory = ({ embedded = false }) => {
@@ -23,98 +23,14 @@ const BuildingDirectory = ({ embedded = false }) => {
 
   // Combine and organize all people by building
   const buildingData = useMemo(() => {
-    const buildings = {};
-
-    // Process faculty data
-    if (showFaculty && facultyData && Array.isArray(facultyData)) {
-      const facultyToProcess = showAdjuncts
-        ? facultyData
-        : facultyData.filter((f) => !f.isAdjunct);
-
-      facultyToProcess.forEach((person) => {
-        // Route remote people to "Remote" section, otherwise use building
-        let buildingName;
-        let roomNumber = "";
-        if (person.isRemote) {
-          buildingName = "Remote";
-        } else {
-          const resolved = resolveOfficeDetails(person, spacesByKey);
-          buildingName = resolved.buildingName || "No Building";
-          roomNumber = resolved.roomNumber || "";
-        }
-
-        if (!buildings[buildingName]) {
-          buildings[buildingName] = {
-            name: buildingName,
-            people: [],
-            facultyCount: 0,
-            staffCount: 0,
-          };
-        }
-
-        buildings[buildingName].people.push({
-          ...person,
-          roleType: "faculty",
-          displayRole: person.isAdjunct ? "Adjunct Faculty" : "Faculty",
-          buildingName,
-          roomNumber,
-          sortKey: roomNumber || person.name || "",
-        });
-        buildings[buildingName].facultyCount++;
-      });
-    }
-
-    // Process staff data
-    if (showStaff && staffData && Array.isArray(staffData)) {
-      staffData.forEach((person) => {
-        // Route remote people to "Remote" section, otherwise use building
-        let buildingName;
-        let roomNumber = "";
-        if (person.isRemote) {
-          buildingName = "Remote";
-        } else {
-          const resolved = resolveOfficeDetails(person, spacesByKey);
-          buildingName = resolved.buildingName || "No Building";
-          roomNumber = resolved.roomNumber || "";
-        }
-
-        if (!buildings[buildingName]) {
-          buildings[buildingName] = {
-            name: buildingName,
-            people: [],
-            facultyCount: 0,
-            staffCount: 0,
-          };
-        }
-
-        buildings[buildingName].people.push({
-          ...person,
-          roleType: "staff",
-          displayRole: person.isAlsoFaculty ? "Faculty & Staff" : "Staff",
-          buildingName,
-          roomNumber,
-          sortKey: roomNumber || person.name || "",
-        });
-        buildings[buildingName].staffCount++;
-      });
-    }
-
-    // Sort people within each building by room number, then by name
-    Object.values(buildings).forEach((building) => {
-      building.people.sort((a, b) => {
-        // First sort by room number (numeric)
-        const roomA = parseInt(a.roomNumber) || 9999;
-        const roomB = parseInt(b.roomNumber) || 9999;
-        if (roomA !== roomB) {
-          return roomA - roomB;
-        }
-
-        // Then sort by name
-        return (a.name || "").localeCompare(b.name || "");
-      });
+    return buildOfficeBuildingData({
+      facultyData,
+      staffData,
+      spacesByKey,
+      showFaculty,
+      showStaff,
+      showAdjuncts,
     });
-
-    return buildings;
   }, [
     facultyData,
     staffData,
@@ -383,11 +299,9 @@ const BuildingDirectory = ({ embedded = false }) => {
                           </thead>
                           <tbody>
                             {building.people.map((person) => {
-                              // Ensure a unique key by combining id and roleType (faculty/staff)
-                              const rowKey = `${person.id}-${person.roleType}`;
                               return (
                                 <tr
-                                  key={rowKey}
+                                  key={person.rowKey}
                                   className="cursor-pointer"
                                   onClick={() =>
                                     setSelectedPersonForCard(person)

@@ -1,71 +1,26 @@
 import { parseStudentWorkerDate } from "../../utils/studentWorkers";
+import Badge from "../shared/Badge";
 
 /**
- * StatusBadge - Visual status indicator with color coding
+ * StatusBadge - employment status indicator for student workers.
  *
- * Displays student/assignment status with appropriate colors and icons
+ * Thin wrapper that maps a status string to the shared Badge primitive so all
+ * badges across the app share one consistent, on-brand appearance.
  */
+const STATUS_CONFIG = {
+  active: { tone: "success", label: "Active" },
+  inactive: { tone: "neutral", label: "Inactive" },
+  upcoming: { tone: "info", label: "Upcoming" },
+  ended: { tone: "warning", label: "Ended" },
+  partial: { tone: "warning", label: "Partial" },
+};
 
 const StatusBadge = ({ status, size = "md", showDot = true }) => {
-  const config = {
-    active: {
-      bg: "bg-green-100",
-      text: "text-green-800",
-      dot: "bg-green-500",
-      border: "border-green-200",
-      label: "Active",
-    },
-    inactive: {
-      bg: "bg-gray-100",
-      text: "text-gray-800",
-      dot: "bg-gray-500",
-      border: "border-gray-200",
-      label: "Inactive",
-    },
-    upcoming: {
-      bg: "bg-blue-100",
-      text: "text-blue-800",
-      dot: "bg-blue-500",
-      border: "border-blue-200",
-      label: "Upcoming",
-    },
-    ended: {
-      bg: "bg-amber-100",
-      text: "text-amber-800",
-      dot: "bg-amber-500",
-      border: "border-amber-200",
-      label: "Ended",
-    },
-    partial: {
-      bg: "bg-purple-100",
-      text: "text-purple-800",
-      dot: "bg-purple-500",
-      border: "border-purple-200",
-      label: "Partial",
-    },
-  };
-
-  const { bg, text, dot, border, label } = config[status] || config.inactive;
-
-  const sizeClasses = {
-    sm: "px-2 py-0.5 text-xs",
-    md: "px-2.5 py-1 text-sm",
-    lg: "px-3 py-1.5 text-base",
-  };
-
-  const dotSizes = {
-    sm: "w-1.5 h-1.5",
-    md: "w-2 h-2",
-    lg: "w-2.5 h-2.5",
-  };
-
+  const { tone, label } = STATUS_CONFIG[status] || STATUS_CONFIG.inactive;
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full font-medium border ${bg} ${text} ${border} ${sizeClasses[size]}`}
-    >
-      {showDot && <span className={`rounded-full ${dot} ${dotSizes[size]}`} />}
+    <Badge tone={tone} size={size} showDot={showDot} bordered>
       {label}
-    </span>
+    </Badge>
   );
 };
 

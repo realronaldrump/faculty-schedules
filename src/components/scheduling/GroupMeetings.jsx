@@ -10,6 +10,7 @@ import {
   GraduationCap,
 } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
+import Modal from "../shared/Modal";
 import { parseTime, formatMinutesToTime } from "../../utils/timeUtils";
 import { splitMultiRoom } from "../../utils/locationService";
 import { useData } from "../../contexts/DataContext";
@@ -19,6 +20,7 @@ const GroupMeetings = ({ embedded = false }) => {
   const {
     scheduleData = [],
     facultyData = [],
+    allFacultyData = [],
     loadPrograms,
     programsLoaded,
   } = useData();
@@ -32,11 +34,11 @@ const GroupMeetings = ({ embedded = false }) => {
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [selectedSlotForRoomSearch, setSelectedSlotForRoomSearch] =
     useState(null);
-  const roomModalRef = useRef(null);
   const [showAdjuncts, setShowAdjuncts] = useState(true);
   const [isProgramDropdownOpen, setIsProgramDropdownOpen] = useState(false);
   const [programSearchTerm, setProgramSearchTerm] = useState("");
   const programDropdownRef = useRef(null);
+  const facultyLookupData = allFacultyData.length > 0 ? allFacultyData : facultyData;
 
   useEffect(() => {
     loadPeople();
@@ -47,21 +49,6 @@ const GroupMeetings = ({ embedded = false }) => {
       loadPrograms();
     }
   }, [programsLoaded, loadPrograms]);
-
-  // Close room modal when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (
-        isRoomModalOpen &&
-        roomModalRef.current &&
-        !roomModalRef.current.contains(event.target)
-      ) {
-        setIsRoomModalOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isRoomModalOpen]);
 
   // Close program dropdown when clicking outside
   useEffect(() => {
@@ -82,7 +69,7 @@ const GroupMeetings = ({ embedded = false }) => {
   useEffect(() => {
     if (!showAdjuncts && selectedProfessors.length > 0) {
       const toRemove = selectedProfessors.filter((name) => {
-        const f = facultyData.find((x) => x.name === name);
+        const f = facultyLookupData.find((x) => x.name === name);
         return f && f.isAdjunct;
       });
       if (toRemove.length > 0) {
@@ -91,7 +78,7 @@ const GroupMeetings = ({ embedded = false }) => {
         );
       }
     }
-  }, [showAdjuncts, selectedProfessors, facultyData]);
+  }, [showAdjuncts, selectedProfessors, facultyLookupData]);
 
   const dayNames = {
     M: "Monday",
@@ -138,13 +125,13 @@ const GroupMeetings = ({ embedded = false }) => {
     if (!showAdjuncts) {
       return names
         .filter((name) => {
-          const faculty = facultyData.find((f) => f.name === name);
+          const faculty = facultyLookupData.find((f) => f.name === name);
           return faculty && !faculty.isAdjunct;
         })
         .sort();
     }
     return names.sort();
-  }, [scheduleData, facultyData, showAdjuncts]);
+  }, [scheduleData, facultyLookupData, showAdjuncts]);
 
   const uniqueRooms = useMemo(() => {
     const allRooms = scheduleData.flatMap((item) =>
@@ -172,12 +159,12 @@ const GroupMeetings = ({ embedded = false }) => {
   // Unique programs from faculty data (respect adjunct filter)
   const uniquePrograms = useMemo(() => {
     const programs = new Set();
-    (facultyData || []).forEach((f) => {
+    (facultyLookupData || []).forEach((f) => {
       if (!showAdjuncts && f.isAdjunct) return;
       if (f.program && f.program.name) programs.add(f.program.name);
     });
     return Array.from(programs).sort();
-  }, [facultyData, showAdjuncts]);
+  }, [facultyLookupData, showAdjuncts]);
 
   const filteredPrograms = useMemo(
     () =>
@@ -189,7 +176,7 @@ const GroupMeetings = ({ embedded = false }) => {
 
   // Faculty by program (names that also have schedules)
   const getFacultyByProgram = (programName) => {
-    const names = (facultyData || [])
+    const names = (facultyLookupData || [])
       .filter((f) => {
         if (!showAdjuncts && f.isAdjunct) return false;
         return f.program && f.program.name === programName;
@@ -286,7 +273,7 @@ const GroupMeetings = ({ embedded = false }) => {
   };
 
   const handleShowContactCard = (facultyName) => {
-    const faculty = facultyData.find((f) => f.name === facultyName);
+    const faculty = facultyLookupData.find((f) => f.name === facultyName);
     if (faculty) {
       setSelectedFacultyForCard(faculty);
     }
@@ -320,68 +307,59 @@ const GroupMeetings = ({ embedded = false }) => {
       });
     });
 
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-        <div
-          ref={roomModalRef}
-          className="bg-white rounded-xl shadow-2xl p-6 max-w-2xl w-full mx-4"
-        >
-          <div className="flex justify-between items-center mb-4 border-b border-baylor-gold pb-3">
-            <div>
-              <h3 className="text-xl font-serif font-bold text-baylor-green">
-                Available Rooms
-              </h3>
-              <p className="text-md text-gray-700">
-                For <span className="font-semibold">{dayName}</span>, from{" "}
-                <span className="font-semibold">
-                  {formatMinutesToTime(meetingStart)}
-                </span>{" "}
-                to{" "}
-                <span className="font-semibold">
-                  {formatMinutesToTime(meetingEnd)}
-                </span>
-              </p>
-            </div>
-            <button
-              onClick={() => setIsRoomModalOpen(false)}
-              className="p-2 rounded-full hover:bg-gray-200"
-            >
-              <X size={20} className="text-gray-600" />
-            </button>
-          </div>
-
-          {availableRooms.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto pr-2">
-              {availableRooms.map((room) => (
-                <div
-                  key={room}
-                  className="flex items-center p-3 bg-baylor-green/5 border border-baylor-green/20 rounded-lg"
-                >
-                  <CheckCircle className="w-5 h-5 text-baylor-green mr-3" />
-                  <span className="font-medium text-baylor-green">{room}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12 text-gray-500">
-              <div className="text-2xl mb-2">😔</div>
-              <p className="text-lg">No available rooms for this time slot.</p>
-              <p className="text-sm">
-                Try a different time or a shorter meeting duration.
-              </p>
-            </div>
-          )}
-
-          <div className="mt-6 text-right">
-            <button
-              onClick={() => setIsRoomModalOpen(false)}
-              className="px-4 py-2 bg-baylor-gold text-baylor-green font-bold rounded-lg hover:bg-baylor-gold/90 transition-colors"
-            >
-              Close
-            </button>
-          </div>
-        </div>
+    const header = (
+      <div>
+        <h3 className="modal-title">Available Rooms</h3>
+        <p className="text-md text-gray-700">
+          For <span className="font-semibold">{dayName}</span>, from{" "}
+          <span className="font-semibold">
+            {formatMinutesToTime(meetingStart)}
+          </span>{" "}
+          to{" "}
+          <span className="font-semibold">
+            {formatMinutesToTime(meetingEnd)}
+          </span>
+        </p>
       </div>
+    );
+
+    return (
+      <Modal
+        isOpen={isRoomModalOpen}
+        onClose={() => setIsRoomModalOpen(false)}
+        size="md"
+        title={header}
+        footer={
+          <button
+            onClick={() => setIsRoomModalOpen(false)}
+            className="btn-accent"
+          >
+            Close
+          </button>
+        }
+      >
+        {availableRooms.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pr-2">
+            {availableRooms.map((room) => (
+              <div
+                key={room}
+                className="flex items-center p-3 bg-baylor-green/5 border border-baylor-green/20 rounded-lg"
+              >
+                <CheckCircle className="w-5 h-5 text-baylor-green mr-3" />
+                <span className="font-medium text-baylor-green">{room}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 text-gray-500">
+            <div className="text-2xl mb-2">😔</div>
+            <p className="text-lg">No available rooms for this time slot.</p>
+            <p className="text-sm">
+              Try a different time or a shorter meeting duration.
+            </p>
+          </div>
+        )}
+      </Modal>
     );
   };
 
@@ -590,7 +568,7 @@ const GroupMeetings = ({ embedded = false }) => {
               <div className="mb-4 p-4 bg-baylor-green/10 rounded-lg border border-baylor-green/20">
                 <div className="flex flex-wrap gap-2">
                   {selectedProfessors.map((professor) => {
-                    const faculty = facultyData.find(
+                    const faculty = facultyLookupData.find(
                       (f) => f.name === professor,
                     );
                     const programName = faculty?.program?.name;
@@ -614,7 +592,7 @@ const GroupMeetings = ({ embedded = false }) => {
                           </span>
                         )}
                         {isAdjunct && (
-                          <span className="ml-1 text-[10px] bg-orange-200 text-orange-900 px-1 rounded">
+                          <span className="ml-1 text-2xs bg-orange-200 text-orange-900 px-1 rounded">
                             Adjunct
                           </span>
                         )}
@@ -643,7 +621,7 @@ const GroupMeetings = ({ embedded = false }) => {
                 </div>
               ) : (
                 filteredInstructors.map((professor) => {
-                  const faculty = facultyData.find((f) => f.name === professor);
+                  const faculty = facultyLookupData.find((f) => f.name === professor);
                   const isAdjunct = faculty?.isAdjunct;
 
                   return (

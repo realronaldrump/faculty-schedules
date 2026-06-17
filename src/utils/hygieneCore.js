@@ -457,6 +457,7 @@ export const standardizeRoom = (room = {}) => ({
   spaceNumber: normalizeString(room.spaceNumber),
   spaceKey: normalizeString(room.spaceKey),
   type: normalizeString(room.type || "Classroom"),
+  isReservable: room.isReservable === true,
   updatedAt: new Date().toISOString(),
 });
 

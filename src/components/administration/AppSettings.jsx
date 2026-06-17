@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSchedules } from '../../contexts/ScheduleContext';
 import { useUI } from '../../contexts/UIContext';
 import { useAppConfig } from '../../contexts/AppConfigContext';
+import PageHeader from '../shared/PageHeader';
 import { backfillTermMetadata } from '../../utils/termDataUtils';
 import { normalizeTermDateValue, parseTermDate } from '../../utils/termUtils';
 import { deleteSemesterImport } from '../../utils/importLifecycleUtils';
@@ -593,11 +594,11 @@ const AppSettings = () => {
         Back to Dashboard
       </button>
 
-      {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">App Settings</h1>
-        <p className="text-gray-600">Configure application-wide settings, semesters, and locations</p>
-      </div>
+      <PageHeader
+        title="App Settings"
+        subtitle="Configure application-wide settings, semesters, and locations"
+        className="mb-0"
+      />
 
       {/* Section Navigation */}
       <div className="flex border-b border-gray-200">

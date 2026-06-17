@@ -34,6 +34,12 @@ import {
   buildLinkedSchedulePairSet,
   computeCrossListAutoLinkGroups,
 } from "./scheduleLinkUtils";
+import { scheduleReferencesPerson } from "./scheduleReferenceUtils";
+
+export {
+  getScheduleInstructorReferenceIds,
+  scheduleReferencesPerson,
+} from "./scheduleReferenceUtils";
 
 const MAX_BATCH_OPERATIONS = 450;
 
@@ -596,15 +602,12 @@ export const deletePersonSafely = async (personId) => {
     throw new Error("Person not found");
   }
 
-  const schedulesSnapshot = await getDocs(
-    query(
-      collection(db, "schedules"),
-      where("instructorId", "==", personId),
-      limit(1),
-    ),
+  const schedulesSnapshot = await getDocs(collection(db, "schedules"));
+  const hasScheduleReference = schedulesSnapshot.docs.some((docSnap) =>
+    scheduleReferencesPerson(docSnap.data(), personId),
   );
 
-  if (!schedulesSnapshot.empty) {
+  if (hasScheduleReference) {
     throw new Error(
       "Cannot delete a person while they are assigned to schedules. Reassign or merge first.",
     );

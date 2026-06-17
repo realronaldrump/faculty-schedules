@@ -1,6 +1,6 @@
-import { useMemo, useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../../contexts/AuthContext.jsx";
+import { useHubTabs } from "../../hooks/useHubTabs";
+import HubTabs from "../shared/HubTabs";
+import PageHeader from "../shared/PageHeader";
 import FacultySchedules from "./FacultySchedules";
 import IndividualAvailability from "./IndividualAvailability";
 import GroupMeetings from "./GroupMeetings";
@@ -29,81 +29,30 @@ const TAB_DEFINITIONS = [
 const CANONICAL_PATH = "/scheduling/faculty";
 
 const FacultyHub = ({ initialTab }) => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const { canAccess } = useAuth();
-
-  const availableTabs = useMemo(
-    () => TAB_DEFINITIONS.filter((tab) => canAccess(tab.accessId)),
-    [canAccess],
-  );
-
-  // Read tab from URL query parameter
-  const tabFromUrl = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    return params.get("tab");
-  }, [location.search]);
-
-  const fallbackTab = availableTabs[0]?.id || TAB_DEFINITIONS[0].id;
-  // Priority: URL query param > initialTab prop > fallback
-  const initialSelection = tabFromUrl || initialTab || fallbackTab;
-
-  const [activeTab, setActiveTab] = useState(initialSelection);
-
-  useEffect(() => {
-    // URL query param takes priority
-    const nextTab = tabFromUrl || initialTab || fallbackTab;
-    if (!availableTabs.some((tab) => tab.id === nextTab)) {
-      setActiveTab(fallbackTab);
-      return;
-    }
-    if (nextTab !== activeTab) {
-      setActiveTab(nextTab);
-    }
-  }, [activeTab, availableTabs, fallbackTab, initialTab, tabFromUrl]);
-
-  useEffect(() => {
-    if (location.pathname !== CANONICAL_PATH && initialTab) {
-      const params = new URLSearchParams();
-      params.set("tab", initialTab || fallbackTab);
-      navigate(`${CANONICAL_PATH}?${params.toString()}`, { replace: true });
-    }
-  }, [fallbackTab, initialTab, location.pathname, navigate]);
-
-  const handleTabChange = (tabId) => {
-    setActiveTab(tabId);
-    const params = new URLSearchParams();
-    params.set("tab", tabId);
-    navigate(`${CANONICAL_PATH}?${params.toString()}`, { replace: true });
-  };
+  const { availableTabs, activeTab, handleTabChange } = useHubTabs({
+    tabs: TAB_DEFINITIONS,
+    initialTab,
+    strategy: "query",
+    canonicalPath: CANONICAL_PATH,
+  });
 
   const activeTabConfig = availableTabs.find((tab) => tab.id === activeTab);
   const ActiveComponent = activeTabConfig?.component;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Faculty</h1>
-        <p className="text-gray-600">
-          Compare schedules, find availability, and plan meetings.
-        </p>
-      </div>
+      <PageHeader
+        title="Faculty"
+        subtitle="Compare schedules, find availability, and plan meetings."
+        className="mb-0"
+      />
 
-      <div className="flex flex-wrap gap-2">
-        {availableTabs.map((tab) => (
-          <button
-            key={tab.id}
-            data-tutorial={`faculty-tab-${tab.id}`}
-            onClick={() => handleTabChange(tab.id)}
-            className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${activeTab === tab.id
-              ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
-              : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-              }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <HubTabs
+        tabs={availableTabs}
+        activeTab={activeTab}
+        onChange={handleTabChange}
+        dataTutorialPrefix="faculty-tab-"
+      />
 
       {ActiveComponent ? (
         <ActiveComponent embedded />

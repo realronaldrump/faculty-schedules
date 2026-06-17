@@ -235,7 +235,7 @@ const BuildingManagement = () => {
         {!isAddingNew && !editingBuilding && (
           <button
             onClick={handleAddNew}
-            className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+            className="btn-primary"
           >
             <Plus size={18} />
             Add Building
@@ -378,7 +378,7 @@ const BuildingManagement = () => {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors disabled:opacity-50"
+              className="btn-primary disabled:opacity-50"
             >
               <Save size={18} />
               {saving ? 'Saving...' : 'Save Building'}

@@ -353,7 +353,7 @@ const buildBaseColumns = ({
                 searchPlaceholder="Search spaces..."
                 disabled={editFormData.hasNoOffice}
               />
-              <div className="text-[11px] text-gray-500 mt-1">
+              <div className="text-2xs text-gray-500 mt-1">
                 Select up to 3 spaces. Office labels are derived from the selected space keys.
               </div>
             </div>
@@ -416,7 +416,7 @@ const buildBaseColumns = ({
                 searchPlaceholder="Search spaces..."
                 disabled={newRecord.hasNoOffice}
               />
-              <div className="text-[11px] text-gray-500 mt-1">
+              <div className="text-2xs text-gray-500 mt-1">
                 Select up to 3 spaces.
               </div>
             </div>

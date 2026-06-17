@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import MultiSelectDropdown from "../MultiSelectDropdown";
 import FacultyContactCard from "../FacultyContactCard";
+import Modal from "../shared/Modal";
+import ConfirmDialog from "../shared/ConfirmDialog";
 import { formatChangeForDisplay } from "../../utils/recentChanges";
 import { buildCourseSectionKey } from "../../utils/courseUtils";
 import { parseTime } from "../../utils/timeUtils";
@@ -56,6 +58,7 @@ const CourseManagement = ({ embedded = false }) => {
     scheduleData = [],
     rawScheduleData = [],
     facultyData = [],
+    allFacultyData = [],
     editHistory = [],
     recentChanges = [],
     spacesList = [],
@@ -89,6 +92,7 @@ const CourseManagement = ({ embedded = false }) => {
   const [linkTargetId, setLinkTargetId] = useState("");
   const [linkSearch, setLinkSearch] = useState("");
   const [isLinking, setIsLinking] = useState(false);
+  const facultyLookupData = allFacultyData.length > 0 ? allFacultyData : facultyData;
 
   useEffect(() => {
     loadPeople();
@@ -280,8 +284,8 @@ const CourseManagement = ({ embedded = false }) => {
   }, [facultyData]);
 
   const facultyById = useMemo(() => {
-    return new Map((facultyData || []).map((faculty) => [faculty.id, faculty]));
-  }, [facultyData]);
+    return new Map((facultyLookupData || []).map((faculty) => [faculty.id, faculty]));
+  }, [facultyLookupData]);
 
   // Process recent changes to show schedule-related changes in display format
   const processedChanges = useMemo(() => {
@@ -629,7 +633,7 @@ const CourseManagement = ({ embedded = false }) => {
     // Apply adjunct filter
     if (filters.adjunct && filters.adjunct !== "all") {
       data = data.filter((item) => {
-        if (!item || !facultyData) return true;
+        if (!item || !facultyLookupData) return true;
         const instructorIds =
           Array.isArray(item.instructorIds) && item.instructorIds.length > 0
             ? item.instructorIds
@@ -647,7 +651,7 @@ const CourseManagement = ({ embedded = false }) => {
           .filter(Boolean);
         if (instructors.length === 0) {
           instructorNames.forEach((name) => {
-            const match = facultyData.find((f) => f.name === name);
+            const match = facultyLookupData.find((f) => f.name === name);
             if (match) instructors.push(match);
           });
         }
@@ -665,7 +669,7 @@ const CourseManagement = ({ embedded = false }) => {
     // Apply tenured filter
     if (filters.tenured && filters.tenured !== "all") {
       data = data.filter((item) => {
-        if (!item || !facultyData) return true;
+        if (!item || !facultyLookupData) return true;
         const instructorIds =
           Array.isArray(item.instructorIds) && item.instructorIds.length > 0
             ? item.instructorIds
@@ -683,7 +687,7 @@ const CourseManagement = ({ embedded = false }) => {
           .filter(Boolean);
         if (instructors.length === 0) {
           instructorNames.forEach((name) => {
-            const match = facultyData.find((f) => f.name === name);
+            const match = facultyLookupData.find((f) => f.name === name);
             if (match) instructors.push(match);
           });
         }
@@ -825,7 +829,7 @@ const CourseManagement = ({ embedded = false }) => {
     }
 
     return data;
-  }, [scheduleData, filters, sortConfig, facultyData, buildingConfigVersion]);
+  }, [scheduleData, filters, sortConfig, facultyById, facultyLookupData, buildingConfigVersion]);
 
   const validateScheduleData = (data) => {
     const errors = [];
@@ -952,7 +956,7 @@ const CourseManagement = ({ embedded = false }) => {
   const handleShowContactCard = (facultyId, fallbackName = "") => {
     const faculty =
       facultyById.get(facultyId) ||
-      facultyData.find((f) => f.name === fallbackName);
+      facultyLookupData.find((f) => f.name === fallbackName);
     if (faculty) {
       setSelectedFacultyForCard(faculty);
     }
@@ -1181,7 +1185,7 @@ const CourseManagement = ({ embedded = false }) => {
         }),
       ).size,
       adjunctTaughtSessions: scheduleData.filter((s) => {
-        if (!s || !facultyData) return false;
+        if (!s || !facultyLookupData) return false;
         const instructorIds =
           Array.isArray(s.instructorIds) && s.instructorIds.length > 0
             ? s.instructorIds
@@ -1199,7 +1203,7 @@ const CourseManagement = ({ embedded = false }) => {
           .filter(Boolean);
         if (instructors.length === 0) {
           instructorNames.forEach((name) => {
-            const match = facultyData.find((f) => f.name === name);
+            const match = facultyLookupData.find((f) => f.name === name);
             if (match) instructors.push(match);
           });
         }
@@ -1222,7 +1226,7 @@ const CourseManagement = ({ embedded = false }) => {
 
     stats.busiestDay = busiestDay;
     return stats;
-  }, [scheduleData, facultyData]);
+  }, [scheduleData, facultyById, facultyLookupData]);
 
   return (
     <div className="space-y-6">
@@ -1245,30 +1249,15 @@ const CourseManagement = ({ embedded = false }) => {
           </button>
         </div>
       )}
-      {inlineConfirm.isOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              {inlineConfirm.title}
-            </h3>
-            <p className="text-gray-700 mb-4">{inlineConfirm.message}</p>
-            <div className="flex justify-end gap-2">
-              <button
-                className="px-4 py-2 rounded bg-gray-100 text-gray-700"
-                onClick={inlineConfirm.onCancel}
-              >
-                Cancel
-              </button>
-              <button
-                className="px-4 py-2 rounded bg-red-600 text-white"
-                onClick={inlineConfirm.onConfirm}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        isOpen={inlineConfirm.isOpen}
+        title={inlineConfirm.title}
+        message={inlineConfirm.message}
+        confirmText="Delete"
+        variant="danger"
+        onConfirm={inlineConfirm.onConfirm}
+        onCancel={inlineConfirm.onCancel}
+      />
       {/* Page Header */}
       {!embedded && (
         <div>
@@ -2440,83 +2429,89 @@ const CourseManagement = ({ embedded = false }) => {
 
       {/* Faculty Contact Card Modal */}
       {/* Export Modal */}
-      {exportModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg">
-            <h3 className="text-lg font-serif font-semibold text-baylor-green mb-4">
-              Export Courses
-            </h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Select the fields to include in your export.
-            </p>
-            <div className="max-h-60 overflow-y-auto grid grid-cols-2 gap-2">
-              {availableExportFields.map((field) => (
-                <label key={field} className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedExportFields.includes(field)}
-                    onChange={() => toggleExportField(field)}
-                    className="h-4 w-4 text-baylor-green focus:ring-baylor-green border-gray-300 rounded"
-                  />
-                  <span className="text-sm">{getExportFieldLabel(field)}</span>
-                </label>
-              ))}
-            </div>
-            <div className="mt-6 flex justify-between items-center">
-              <div className="space-x-2">
-                <button
-                  onClick={() => setSelectedExportFields(availableExportFields)}
-                  className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
-                >
-                  Select All
-                </button>
-                <button
-                  onClick={() => setSelectedExportFields([])}
-                  className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
-                >
-                  Clear All
-                </button>
-              </div>
-              <div className="space-x-2">
-                <button
-                  onClick={handleDownloadCSV}
-                  className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 text-sm flex items-center"
-                >
-                  <Download size={16} className="mr-2" />
-                  Download CSV
-                </button>
-                <button
-                  onClick={() => setExportModalOpen(false)}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {linkModalOpen && linkSourceSchedule && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between p-5 border-b border-gray-200">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Link Sections
-                </h3>
-                <p className="text-sm text-gray-600">
-                  Select another section in the same term to link.
-                </p>
-              </div>
+      <Modal
+        isOpen={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        size="md"
+        title="Export Courses"
+        footer={
+          <div className="w-full flex justify-between items-center">
+            <div className="space-x-2">
               <button
-                onClick={closeLinkModal}
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                onClick={() => setSelectedExportFields(availableExportFields)}
+                className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
               >
-                <X className="w-5 h-5" />
+                Select All
+              </button>
+              <button
+                onClick={() => setSelectedExportFields([])}
+                className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
+              >
+                Clear All
               </button>
             </div>
-            <div className="p-5 space-y-4 overflow-y-auto">
+            <div className="space-x-2">
+              <button
+                onClick={() => setExportModalOpen(false)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDownloadCSV}
+                className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 text-sm inline-flex items-center"
+              >
+                <Download size={16} className="mr-2" />
+                Download CSV
+              </button>
+            </div>
+          </div>
+        }
+      >
+        <p className="text-sm text-gray-600 mb-4">
+          Select the fields to include in your export.
+        </p>
+        <div className="max-h-60 overflow-y-auto grid grid-cols-2 gap-2">
+          {availableExportFields.map((field) => (
+            <label key={field} className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={selectedExportFields.includes(field)}
+                onChange={() => toggleExportField(field)}
+                className="h-4 w-4 text-baylor-green focus:ring-baylor-green border-gray-300 rounded"
+              />
+              <span className="text-sm">{getExportFieldLabel(field)}</span>
+            </label>
+          ))}
+        </div>
+      </Modal>
+
+      {linkModalOpen && linkSourceSchedule && (
+        <Modal
+          isOpen
+          onClose={closeLinkModal}
+          size="lg"
+          title="Link Sections"
+          subtitle="Select another section in the same term to link."
+          bodyClassName="modal-body space-y-4"
+          footer={
+            <>
+              <button
+                onClick={closeLinkModal}
+                className="px-4 py-2 text-sm bg-gray-200 rounded hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmLink}
+                disabled={!linkTargetId || isLinking}
+                className="px-4 py-2 text-sm bg-baylor-green text-white rounded hover:bg-baylor-green/90 disabled:opacity-50"
+              >
+                {isLinking ? "Linking..." : "Link Sections"}
+              </button>
+            </>
+          }
+        >
               <div className="p-3 bg-gray-50 border rounded-lg">
                 <div className="text-xs text-gray-500">Source Section</div>
                 <div className="text-sm text-gray-900 font-medium">
@@ -2588,24 +2583,7 @@ const CourseManagement = ({ embedded = false }) => {
                   )}
                 </div>
               </div>
-            </div>
-            <div className="p-4 border-t flex items-center justify-end gap-2">
-              <button
-                onClick={closeLinkModal}
-                className="px-4 py-2 text-sm bg-gray-200 rounded hover:bg-gray-300"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmLink}
-                disabled={!linkTargetId || isLinking}
-                className="px-4 py-2 text-sm bg-baylor-green text-white rounded hover:bg-baylor-green/90 disabled:opacity-50"
-              >
-                {isLinking ? "Linking..." : "Link Sections"}
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {selectedFacultyForCard && (

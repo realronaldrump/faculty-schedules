@@ -8,7 +8,7 @@ import { useSchedules } from "../../contexts/ScheduleContext";
 import { usePeople } from "../../contexts/PeopleContext";
 
 const IndividualAvailability = ({ embedded = false }) => {
-  const { scheduleData = [], facultyData = [] } = useData();
+  const { scheduleData = [], facultyData = [], allFacultyData = [] } = useData();
   const { selectedSemester } = useSchedules();
   const { loadPeople } = usePeople();
   const [selectedIndividual, setSelectedIndividual] = useState("");
@@ -23,6 +23,7 @@ const IndividualAvailability = ({ embedded = false }) => {
     R: "Thursday",
     F: "Friday",
   };
+  const facultyLookupData = allFacultyData.length > 0 ? allFacultyData : facultyData;
 
   useEffect(() => {
     loadPeople();
@@ -166,7 +167,7 @@ const IndividualAvailability = ({ embedded = false }) => {
   };
 
   const handleShowContactCard = (facultyName) => {
-    const faculty = facultyData.find((f) => f.name === facultyName);
+    const faculty = facultyLookupData.find((f) => f.name === facultyName);
     if (faculty) {
       setSelectedFacultyForCard(faculty);
     }

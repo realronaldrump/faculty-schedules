@@ -1149,7 +1149,7 @@ const RoomGridGenerator = () => {
     : !showExportableWeek;
 
   return (
-    <div className="page-content">
+    <div className="space-y-6">
       <div className="university-header rounded-xl p-8 mb-8">
         <h1 className="university-title">Room Grid Generator</h1>
         <p className="university-subtitle">

@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Plus, X, User, Building, Check, AlertCircle,
 import JobCard from "./JobCard";
 import TimelineVisualization from "./TimelineVisualization";
 import StatusBadge, { getStudentStatus } from "./StatusBadge";
+import Modal from "../shared/Modal";
 import { parseStudentWorkerDate } from "../../utils/studentWorkers";
 
 /**
@@ -584,7 +585,13 @@ const StudentAddWizard = ({
   );
 
   return (
-    <div className="bg-white rounded-lg shadow-lg w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col mx-auto">
+    <Modal
+      isOpen
+      onClose={onCancel}
+      size="lg"
+      showClose={false}
+      bodyClassName="flex flex-col"
+    >
       {/* Header with Stepper */}
       <div className="border-b border-gray-200 p-6 flex-shrink-0">
         <div className="flex items-center justify-between mb-6">
@@ -677,7 +684,7 @@ const StudentAddWizard = ({
         {currentStep < STEPS.length - 1 ? (
           <button
             onClick={handleNext}
-            className="flex items-center gap-2 px-6 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+            className="btn-primary"
           >
             Next
             <ChevronRight size={16} />
@@ -685,7 +692,7 @@ const StudentAddWizard = ({
         ) : (
           <button
             onClick={() => onSave(student)}
-            className="flex items-center gap-2 px-6 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+            className="btn-primary"
             data-tutorial="save-student-btn"
           >
             <Check size={16} />
@@ -693,7 +700,7 @@ const StudentAddWizard = ({
           </button>
         )}
       </div>
-    </div>
+    </Modal>
   );
 };
 

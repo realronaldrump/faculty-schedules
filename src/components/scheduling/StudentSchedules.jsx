@@ -587,7 +587,7 @@ const StudentSchedules = ({ embedded = false }) => {
                           (_, i) => (
                             <div
                               key={i}
-                              className="border-b border-gray-100 text-[11px] text-gray-500 text-right pr-1 flex items-start justify-end"
+                              className="border-b border-gray-100 text-2xs text-gray-500 text-right pr-1 flex items-start justify-end"
                               style={{ height: `${HOUR_HEIGHT}px` }}
                             >
                               <span className="mt-[-0.5em]">
@@ -673,13 +673,13 @@ const StudentSchedules = ({ embedded = false }) => {
                                     >
                                       {event.student.name}
                                     </div>
-                                    <div className="text-[10px] text-gray-600 leading-tight">
+                                    <div className="text-2xs text-gray-600 leading-tight">
                                       {formatTimeCompact(event.startMinutes)}-
                                       {formatTimeCompact(event.endMinutes)}
                                     </div>
                                     {height > 44 &&
                                       event.assignment.jobTitle && (
-                                        <div className="text-[10px] text-gray-500 leading-tight truncate">
+                                        <div className="text-2xs text-gray-500 leading-tight truncate">
                                           {event.assignment.jobTitle}
                                         </div>
                                       )}

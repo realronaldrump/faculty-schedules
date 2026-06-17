@@ -12,6 +12,7 @@
   - Document ID for new writes: `spaceKey` in format `BUILDING_CODE:SPACE_NUMBER`.
   - Required fields: `spaceKey`, `buildingCode`, `buildingDisplayName`, `spaceNumber`.
   - Optional display fields: `name`, `displayName`.
+  - Reservation control: `isReservable=true` means the room can be selected in Room Reservations. Missing/false means not reservable.
   - Soft delete via `isActive=false`.
 
 - Schedule (schedules collection)

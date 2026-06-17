@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { db } from "../../firebase";
+import PageHeader from "../shared/PageHeader";
 import {
   collection,
   getDocs,
@@ -308,7 +309,7 @@ const BaylorAcronyms = () => {
 
     return (
       <div className="p-4 md:p-6">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Baylor Acronyms</h1>
+      <PageHeader title="Baylor Acronyms" />
 
       <div className="mb-8 p-6 bg-white border border-gray-200 rounded-lg shadow-sm">
         <h2 className="text-xl font-semibold text-gray-700 mb-4 flex items-center">

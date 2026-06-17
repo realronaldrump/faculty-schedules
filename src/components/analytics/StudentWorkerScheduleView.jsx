@@ -331,7 +331,7 @@ const StudentWorkerScheduleView = ({ student, assignments = [] }) => {
             <div key={`mobile-${day}`} className="rounded-lg border border-gray-200 bg-white overflow-hidden">
               <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-3 py-1.5">
                 <span className="text-xs font-semibold text-baylor-green tracking-wide">{DAY_LABELS[day]}</span>
-                <span className="text-[11px] font-medium text-gray-400">
+                <span className="text-2xs font-medium text-gray-400">
                   {formatHoursValue(dailyTotals[day] || 0)} hrs
                 </span>
               </div>
@@ -376,7 +376,7 @@ const StudentWorkerScheduleView = ({ student, assignments = [] }) => {
                 <span className="lg:hidden">{DAY_ABBR[day]}</span>
                 <span className="hidden lg:inline">{DAY_SHORT_LABELS[day]}</span>
               </div>
-              <div className="text-[10px] text-gray-400 leading-tight mt-0.5">
+              <div className="text-2xs text-gray-400 leading-tight mt-0.5">
                 {formatHoursValue(dailyTotals[day] || 0)}h
               </div>
             </div>
@@ -392,7 +392,7 @@ const StudentWorkerScheduleView = ({ student, assignments = [] }) => {
               return (
                 <React.Fragment key={`tick-${tick}`}>
                   <span
-                    className="absolute right-2 text-[10px] font-medium text-gray-400 leading-none select-none"
+                    className="absolute right-2 text-2xs font-medium text-gray-400 leading-none select-none"
                     style={{ top: `${topPx}px`, transform: 'translateY(-50%)' }}
                   >
                     {formatMinutesToLabel(tick)}
@@ -444,7 +444,7 @@ const StudentWorkerScheduleView = ({ student, assignments = [] }) => {
                   >
                     {isCompact ? (
                       <div className="flex items-center gap-1 px-1.5 h-full">
-                        <span className="text-[10px] font-semibold truncate" style={{ color: event.accent.text }}>
+                        <span className="text-2xs font-semibold truncate" style={{ color: event.accent.text }}>
                           {event.assignment?.jobTitle || 'Assignment'}
                         </span>
                         <span className="text-[9px] text-gray-500 shrink-0">
@@ -453,10 +453,10 @@ const StudentWorkerScheduleView = ({ student, assignments = [] }) => {
                       </div>
                     ) : (
                       <div className="px-2 py-1">
-                        <div className="text-[11px] font-semibold leading-tight truncate" style={{ color: event.accent.text }}>
+                        <div className="text-2xs font-semibold leading-tight truncate" style={{ color: event.accent.text }}>
                           {event.assignment?.jobTitle || 'Assignment'}
                         </div>
-                        <div className="text-[10px] text-gray-500 leading-tight mt-0.5 truncate">
+                        <div className="text-2xs text-gray-500 leading-tight mt-0.5 truncate">
                           {formatEventRangeShort(event)}
                         </div>
                         {!isCompact && height > 56 && event.assignment?.buildings?.length > 0 && (

@@ -77,7 +77,6 @@ const JobCard = ({
     if (isEditing) {
       onDraftChange?.(draft);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, isEditing]);
 
   useEffect(() => {

@@ -121,7 +121,7 @@ const FacultyRow = ({ faculty, locationStatus, onSelect, isSelected }) => {
         </div>
       </td>
       <td className="px-4 py-3">
-        <FacultyStatusBadge status={status} label={statusLabel} small />
+        <FacultyStatusBadge status={status} label={statusLabel} size="sm" />
         {hasConflict && (
           <AlertTriangle
             className="w-3 h-3 text-amber-500 inline ml-1"

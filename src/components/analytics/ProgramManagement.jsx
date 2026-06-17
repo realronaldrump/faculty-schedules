@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from "react";
 import { Users, Edit, Save, X, Plus, Search, GripVertical, UserCog, Building2, ChevronDown, ChevronUp, ArrowRightLeft, Trash2, GraduationCap, Star, Move, Eye } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
+import Modal from "../shared/Modal";
+import ConfirmDialog from "../shared/ConfirmDialog";
 import { doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db, COLLECTIONS } from "../../firebase";
 import { logUpdate, logDelete } from "../../utils/changeLogger";
@@ -1315,137 +1317,96 @@ const ProgramManagement = ({ embedded = false }) => {
       )}
 
       {/* Create Program Modal */}
-      {showCreateProgram && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Create New Program
-              </h3>
-              <button
-                onClick={() => setShowCreateProgram(false)}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
+      <Modal
+        isOpen={showCreateProgram}
+        onClose={() => setShowCreateProgram(false)}
+        size="sm"
+        title="Create New Program"
+        footer={
+          <>
+            <button
+              onClick={() => setShowCreateProgram(false)}
+              className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={createNewProgram}
+              disabled={!newProgramName.trim() || isCreatingProgram}
+              className="px-4 py-2 bg-baylor-green text-white rounded-lg font-medium hover:bg-baylor-green/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isCreatingProgram ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus size={18} />
+                  Create Program
+                </>
+              )}
+            </button>
+          </>
+        }
+      >
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Program Name
+        </label>
+        <input
+          type="text"
+          value={newProgramName}
+          onChange={(e) => setNewProgramName(e.target.value)}
+          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-baylor-green focus:border-transparent"
+          placeholder="Enter program name..."
+          autoFocus
+          onKeyDown={(e) => {
+            if (e.key === "Enter") createNewProgram();
+          }}
+        />
+        <p className="mt-2 text-xs text-gray-500">
+          Program names must be unique and cannot be "Unassigned".
+        </p>
 
-            <div className="p-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Program Name
-              </label>
-              <input
-                type="text"
-                value={newProgramName}
-                onChange={(e) => setNewProgramName(e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#154734] focus:border-transparent"
-                placeholder="Enter program name..."
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") createNewProgram();
-                }}
-              />
-              <p className="mt-2 text-xs text-gray-500">
-                Program names must be unique and cannot be "Unassigned".
-              </p>
-
-              <label className="block text-sm font-medium text-gray-700 mt-4 mb-2">
-                Program Code (optional)
-              </label>
-              <input
-                type="text"
-                value={newProgramCode}
-                onChange={(e) => setNewProgramCode(e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#154734] focus:border-transparent font-mono uppercase"
-                placeholder="Example: ADM"
-                maxLength={12}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") createNewProgram();
-                }}
-              />
-              <p className="mt-2 text-xs text-gray-500">
-                Rarely used, but available for exports and filters.
-              </p>
-            </div>
-
-            <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3">
-              <button
-                onClick={() => setShowCreateProgram(false)}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg font-medium transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={createNewProgram}
-                disabled={!newProgramName.trim() || isCreatingProgram}
-                className="px-4 py-2 bg-[#154734] text-white rounded-lg font-medium hover:bg-[#0f3526] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {isCreatingProgram ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <Plus size={18} />
-                    Create Program
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        <label className="block text-sm font-medium text-gray-700 mt-4 mb-2">
+          Program Code (optional)
+        </label>
+        <input
+          type="text"
+          value={newProgramCode}
+          onChange={(e) => setNewProgramCode(e.target.value)}
+          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-baylor-green focus:border-transparent font-mono uppercase"
+          placeholder="Example: ADM"
+          maxLength={12}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") createNewProgram();
+          }}
+        />
+        <p className="mt-2 text-xs text-gray-500">
+          Rarely used, but available for exports and filters.
+        </p>
+      </Modal>
 
       {/* Delete Confirmation Modal */}
-      {programToDelete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Delete Program
-              </h3>
-            </div>
-
-            <div className="p-6">
-              <p className="text-gray-700">
-                Are you sure you want to delete{" "}
-                <strong>{programToDelete}</strong>?
-              </p>
-              <p className="mt-2 text-sm text-gray-500">
-                This action cannot be undone. Programs with faculty members
-                cannot be deleted.
-              </p>
-            </div>
-
-            <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3">
-              <button
-                onClick={() => setProgramToDelete(null)}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg font-medium transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={deleteProgram}
-                disabled={isDeletingProgram}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                {isDeletingProgram ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Deleting...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 size={18} />
-                    Delete Program
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        isOpen={!!programToDelete}
+        title="Delete Program"
+        message={
+          <>
+            Are you sure you want to delete <strong>{programToDelete}</strong>?
+            <span className="mt-2 block text-sm text-gray-500">
+              This action cannot be undone. Programs with faculty members cannot
+              be deleted.
+            </span>
+          </>
+        }
+        confirmText={isDeletingProgram ? "Deleting..." : "Delete Program"}
+        confirmDisabled={isDeletingProgram}
+        variant="danger"
+        icon={Trash2}
+        onConfirm={deleteProgram}
+        onCancel={() => setProgramToDelete(null)}
+      />
 
       {/* Faculty Contact Card Modal */}
       {selectedFacultyForCard && (

@@ -33,7 +33,7 @@ import { parseTermDate } from "../../utils/termUtils";
 
 import SelectDropdown from "../SelectDropdown";
 const RoomSchedules = ({ embedded = false }) => {
-  const { scheduleData = [], facultyData = [] } = useData();
+  const { scheduleData = [], facultyData = [], allFacultyData = [] } = useData();
   const { loadPeople } = usePeople();
   const { startTutorial } = useTutorial();
   const { buildingConfigVersion } = useAppConfig();
@@ -78,6 +78,7 @@ const RoomSchedules = ({ embedded = false }) => {
     return now.getHours() * 60 + now.getMinutes();
   });
   const [selectedCourseForModal, setSelectedCourseForModal] = useState(null);
+  const facultyLookupData = allFacultyData.length > 0 ? allFacultyData : facultyData;
 
   const dayNames = {
     M: "Monday",
@@ -352,13 +353,13 @@ const RoomSchedules = ({ embedded = false }) => {
   }, [visibleRooms, roomStats]);
 
   const facultyById = useMemo(() => {
-    return new Map((facultyData || []).map((faculty) => [faculty.id, faculty]));
-  }, [facultyData]);
+    return new Map((facultyLookupData || []).map((faculty) => [faculty.id, faculty]));
+  }, [facultyLookupData]);
 
   const handleShowContactCard = (facultyIdOrName, fallbackName = "") => {
     const faculty =
       facultyById.get(facultyIdOrName) ||
-      facultyData.find((f) => f.name === (fallbackName || facultyIdOrName));
+      facultyLookupData.find((f) => f.name === (fallbackName || facultyIdOrName));
     if (faculty) {
       setSelectedFacultyForCard(faculty);
     }

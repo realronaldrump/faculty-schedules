@@ -3343,7 +3343,7 @@ const TemperatureMonitoring = () => {
                       onPointerDown={(event) =>
                         handleMarkerPointerDown(spaceKey, event)
                       }
-                      className={`absolute -translate-x-1/2 -translate-y-1/2 rounded px-2 py-1 text-[10px] font-medium shadow-sm whitespace-nowrap flex flex-col items-center leading-tight ${getTempToneClasses({
+                      className={`absolute -translate-x-1/2 -translate-y-1/2 rounded px-2 py-1 text-2xs font-medium shadow-sm whitespace-nowrap flex flex-col items-center leading-tight ${getTempToneClasses({
                         valueF: tempValueF,
                         missing: isMissing,
                         range: roomRange,

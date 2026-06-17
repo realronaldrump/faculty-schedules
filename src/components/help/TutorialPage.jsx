@@ -9,6 +9,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { BookOpen, Play, CheckCircle, Clock, RotateCcw, Lightbulb, Settings, Users, Calendar, Building, BarChart3, Database, Eye, EyeOff, Trophy } from "lucide-react";
 import { useTutorial, TUTORIALS } from "../../contexts/TutorialContext";
+import ConfirmDialog from "../shared/ConfirmDialog";
 
 // Category icons mapping
 const categoryIcons = {
@@ -348,42 +349,25 @@ const TutorialPage = () => {
       </div>
 
       {/* Reset Confirmation Modal */}
-      {showResetConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Reset Tutorial Progress
-              </h3>
-            </div>
-            <div className="p-6">
-              <p className="text-gray-600 mb-4">
-                This will reset all your tutorial completion progress and
-                dismissed hints. You'll be able to go through the tutorials
-                again from the beginning.
-              </p>
-              <p className="text-sm text-gray-500">
-                This action cannot be undone.
-              </p>
-            </div>
-            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
-              <button
-                onClick={() => setShowResetConfirm(false)}
-                className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleReset}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
-              >
-                <RotateCcw className="w-4 h-4" />
-                Reset Progress
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        isOpen={showResetConfirm}
+        title="Reset Tutorial Progress"
+        message={
+          <>
+            This will reset all your tutorial completion progress and dismissed
+            hints. You'll be able to go through the tutorials again from the
+            beginning.
+            <span className="mt-2 block text-sm text-gray-500">
+              This action cannot be undone.
+            </span>
+          </>
+        }
+        confirmText="Reset Progress"
+        variant="danger"
+        icon={RotateCcw}
+        onConfirm={handleReset}
+        onCancel={() => setShowResetConfirm(false)}
+      />
     </div>
   );
 };

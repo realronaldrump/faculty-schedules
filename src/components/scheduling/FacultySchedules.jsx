@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Calendar, Clock, ChevronsUpDown, X, Eye, Info, Building, Users, GraduationCap } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
+import Modal from "../shared/Modal";
 import { parseTime, formatMinutesToTime } from "../../utils/timeUtils";
 import { getLocationDisplay } from "../../utils/locationService";
 import { useData } from "../../contexts/DataContext";
@@ -10,6 +11,7 @@ const FacultySchedules = ({ embedded = false }) => {
   const {
     scheduleData = [],
     facultyData = [],
+    allFacultyData = [],
     loadPrograms,
     programsLoaded,
   } = useData();
@@ -34,6 +36,7 @@ const FacultySchedules = ({ embedded = false }) => {
     R: "Thursday",
     F: "Friday",
   };
+  const facultyLookupData = allFacultyData.length > 0 ? allFacultyData : facultyData;
 
   useEffect(() => {
     loadPeople();
@@ -74,14 +77,14 @@ const FacultySchedules = ({ embedded = false }) => {
     if (!showAdjuncts) {
       return instructorNames
         .filter((instructorName) => {
-          const faculty = facultyData.find((f) => f.name === instructorName);
+          const faculty = facultyLookupData.find((f) => f.name === instructorName);
           return faculty && !faculty.isAdjunct;
         })
         .sort();
     }
 
     return instructorNames.sort();
-  }, [scheduleData, facultyData, showAdjuncts]);
+  }, [scheduleData, facultyLookupData, showAdjuncts]);
 
   const filteredInstructors = useMemo(
     () =>
@@ -94,7 +97,7 @@ const FacultySchedules = ({ embedded = false }) => {
   // Get unique programs from faculty data (filtered by adjunct preference)
   const uniquePrograms = useMemo(() => {
     const programs = new Set();
-    facultyData.forEach((faculty) => {
+    facultyLookupData.forEach((faculty) => {
       // Skip adjuncts if showAdjuncts is false
       if (!showAdjuncts && faculty.isAdjunct) {
         return;
@@ -104,7 +107,7 @@ const FacultySchedules = ({ embedded = false }) => {
       }
     });
     return Array.from(programs).sort();
-  }, [facultyData, showAdjuncts]);
+  }, [facultyLookupData, showAdjuncts]);
 
   const filteredPrograms = useMemo(
     () =>
@@ -116,7 +119,7 @@ const FacultySchedules = ({ embedded = false }) => {
 
   // Get faculty names by program (filtered by adjunct preference)
   const getFacultyByProgram = (programName) => {
-    return facultyData
+    return facultyLookupData
       .filter((faculty) => {
         // Skip adjuncts if showAdjuncts is false
         if (!showAdjuncts && faculty.isAdjunct) {
@@ -189,7 +192,7 @@ const FacultySchedules = ({ embedded = false }) => {
   useEffect(() => {
     if (!showAdjuncts) {
       const adjunctFaculty = selectedFaculty.filter((facultyName) => {
-        const faculty = facultyData.find((f) => f.name === facultyName);
+        const faculty = facultyLookupData.find((f) => f.name === facultyName);
         return faculty && faculty.isAdjunct;
       });
 
@@ -199,7 +202,7 @@ const FacultySchedules = ({ embedded = false }) => {
         );
       }
     }
-  }, [showAdjuncts, facultyData, selectedFaculty]);
+  }, [showAdjuncts, facultyLookupData, selectedFaculty]);
 
   // Get schedule data for selected faculty
   const getFacultyScheduleData = (facultyName, day) => {
@@ -310,7 +313,7 @@ const FacultySchedules = ({ embedded = false }) => {
                   <div className="w-48 flex-shrink-0 p-4 border-r border-gray-200 bg-gray-50/30">
                     <button
                       onClick={() => {
-                        const faculty = facultyData.find(
+                        const faculty = facultyLookupData.find(
                           (f) => f.name === facultyName,
                         );
                         if (faculty) {
@@ -398,32 +401,26 @@ const FacultySchedules = ({ embedded = false }) => {
     const { rawData, facultyName } = course;
     const faculty = facultyData.find((f) => f.name === facultyName);
 
+    const header = (
+      <div>
+        <p className="text-sm font-semibold text-baylor-green tracking-wider uppercase">
+          {course.course}
+        </p>
+        <h2 className="text-2xl font-bold font-serif text-gray-900 mt-1">
+          {course.title}
+        </h2>
+      </div>
+    );
+
     return (
-      <div
-        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 transition-opacity"
-        onClick={onClose}
+      <Modal
+        isOpen={!!course}
+        onClose={onClose}
+        size="md"
+        title={header}
+        bodyClassName="modal-body"
       >
-        <div
-          className="bg-white rounded-xl shadow-2xl p-8 m-4 max-w-lg w-full relative transform transition-all"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-          >
-            <X size={24} />
-          </button>
-
-          <div className="mb-6">
-            <p className="text-sm font-semibold text-baylor-green tracking-wider uppercase">
-              {course.course}
-            </p>
-            <h2 className="text-3xl font-bold font-serif text-gray-900 mt-1">
-              {course.title}
-            </h2>
-          </div>
-
-          <div className="space-y-4 text-gray-700">
+        <div className="space-y-4 text-gray-700">
             <div className="flex items-center">
               <Users size={20} className="text-gray-400 mr-4" />
               <div>
@@ -486,8 +483,7 @@ const FacultySchedules = ({ embedded = false }) => {
               )}
             </div>
           )}
-        </div>
-      </div>
+      </Modal>
     );
   };
 
@@ -722,7 +718,7 @@ const FacultySchedules = ({ embedded = false }) => {
               {showAdjuncts &&
                 (() => {
                   const adjunctCount = selectedFaculty.filter((name) => {
-                    const faculty = facultyData.find((f) => f.name === name);
+                    const faculty = facultyLookupData.find((f) => f.name === name);
                     return faculty && faculty.isAdjunct;
                   }).length;
                   return adjunctCount > 0 ? (
@@ -735,7 +731,7 @@ const FacultySchedules = ({ embedded = false }) => {
             </div>
             <div className="flex items-center space-x-2 flex-wrap">
               {selectedFaculty.map((facultyName) => {
-                const faculty = facultyData.find((f) => f.name === facultyName);
+                const faculty = facultyLookupData.find((f) => f.name === facultyName);
                 const programName = faculty?.program?.name;
                 const isAdjunct = faculty?.isAdjunct;
 
@@ -819,7 +815,7 @@ const FacultySchedules = ({ embedded = false }) => {
       {selectedCourse && (
         <CourseDetailModal
           course={selectedCourse}
-          facultyData={facultyData}
+          facultyData={facultyLookupData}
           onClose={() => setSelectedCourse(null)}
         />
       )}

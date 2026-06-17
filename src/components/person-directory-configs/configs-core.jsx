@@ -8,10 +8,10 @@ import {
   RotateCcw,
   UserCog,
   Users,
-  Wifi,
-  X
+  Wifi
 } from 'lucide-react';
 import FacultyContactCard from '../FacultyContactCard';
+import Modal from '../shared/Modal';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import { adaptPeopleToFaculty, adaptPeopleToStaff } from '../../utils/dataAdapter';
 import { formatPhoneNumber, validateDirectoryEntry } from '../../utils/directoryUtils';
@@ -278,87 +278,77 @@ const ExportColumnsModal = ({
   };
 
   return (
-    <div className="modal-overlay" onClick={handleClose}>
-      <div className="modal-content max-w-3xl" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header flex items-center justify-between">
-          <h3 className="modal-title">{title}</h3>
-          <button
-            type="button"
-            onClick={handleClose}
-            className="text-gray-500 hover:text-gray-700"
-            aria-label="Close"
-          >
-            <X size={20} />
-          </button>
-        </div>
-        <div className="modal-body">
-          {description && (
-            <p className="text-sm text-gray-600 mb-4">{description}</p>
-          )}
-          <div className="max-h-64 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {columnOrder.map((key) => (
-              <label key={key} className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={orderedSelection.includes(key)}
-                  onChange={() => handleToggle(key)}
-                  className="h-4 w-4 text-baylor-green focus:ring-baylor-green border-gray-300 rounded"
-                />
-                <span>{columnLabels[key] || key}</span>
-              </label>
-            ))}
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      size="lg"
+      title={title}
+      footer={
+        <div className="w-full flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleSelectAll}
+              className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
+            >
+              Select All
+            </button>
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
+            >
+              Clear All
+            </button>
+            <button
+              type="button"
+              onClick={handleResetDefaults}
+              className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
+            >
+              Reset Defaults
+            </button>
           </div>
-          {!canExport && (
-            <p className="text-sm text-red-600 mt-3">Select at least one column to export.</p>
-          )}
-        </div>
-        <div className="modal-footer">
-          <div className="w-full flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={handleSelectAll}
-                className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
-              >
-                Select All
-              </button>
-              <button
-                type="button"
-                onClick={handleClearAll}
-                className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
-              >
-                Clear All
-              </button>
-              <button
-                type="button"
-                onClick={handleResetDefaults}
-                className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
-              >
-                Reset Defaults
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleClose}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleExport}
-                disabled={!canExport}
-                className={`px-4 py-2 rounded-lg text-sm flex items-center gap-2 ${canExport ? 'bg-baylor-green text-white hover:bg-baylor-green/90' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
-              >
-                <Download size={16} />
-                Export CSV
-              </button>
-            </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={!canExport}
+              className={`px-4 py-2 rounded-lg text-sm flex items-center gap-2 ${canExport ? 'bg-baylor-green text-white hover:bg-baylor-green/90' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+            >
+              <Download size={16} />
+              Export CSV
+            </button>
           </div>
         </div>
+      }
+    >
+      {description && (
+        <p className="text-sm text-gray-600 mb-4">{description}</p>
+      )}
+      <div className="max-h-64 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {columnOrder.map((key) => (
+          <label key={key} className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={orderedSelection.includes(key)}
+              onChange={() => handleToggle(key)}
+              className="h-4 w-4 text-baylor-green focus:ring-baylor-green border-gray-300 rounded"
+            />
+            <span>{columnLabels[key] || key}</span>
+          </label>
+        ))}
       </div>
-    </div>
+      {!canExport && (
+        <p className="text-sm text-red-600 mt-3">Select at least one column to export.</p>
+      )}
+    </Modal>
   );
 };
 
@@ -820,13 +810,13 @@ const facultyDirectoryConfig = {
       <>
         <button
           onClick={openExportModal}
-          className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+          className="btn-primary"
         >
           <Download size={18} /> Export CSV
         </button>
         <button
           onClick={handlers.handleCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+          className="btn-primary"
           disabled={canUseWindow && window?.appPermissions?.canAddFaculty === false}
         >
           <Plus size={18} /> Add Faculty
@@ -1184,7 +1174,7 @@ const staffDirectoryConfig = {
     <>
       <button
         onClick={() => exportStaffCSV(data)}
-        className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+        className="btn-primary"
       >
         <Download size={18} /> Export CSV
       </button>
@@ -1199,7 +1189,7 @@ const staffDirectoryConfig = {
       )}
       <button
         onClick={handlers.handleCreate}
-        className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+        className="btn-primary"
         disabled={canUseWindow && window?.appPermissions?.canCreateStaff === false}
       >
         <Plus size={18} />
@@ -1537,7 +1527,7 @@ const adjunctDirectoryConfig = {
       <>
         <button
           onClick={openExportModal}
-          className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+          className="btn-primary"
         >
           <Download size={18} /> Export CSV
         </button>
@@ -1552,7 +1542,7 @@ const adjunctDirectoryConfig = {
         )}
         <button
           onClick={handlers.handleCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+          className="btn-primary"
           disabled={canUseWindow && window?.appPermissions?.canCreateAdjunct === false}
         >
           <Plus size={18} />

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import {
-  X,
   RotateCcw,
   Clock,
   CheckCircle,
@@ -14,6 +13,7 @@ import {
 } from 'lucide-react';
 import { getImportTransactions, rollbackTransaction, deleteTransaction } from '../../utils/import/core';
 import { buildGroupedChanges } from '../../utils/import/transaction-model';
+import Modal from '../shared/Modal';
 
 const getCollectionChangeCount = (groupedChanges, collection) => (
   Object.values(groupedChanges[collection] || { added: [], modified: [], deleted: [] })
@@ -213,83 +213,67 @@ const ImportHistoryModal = ({
   };
 
   const ConfirmRollbackModal = ({ transaction, onConfirm, onCancel, isLoading }) => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-60">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
-        <div className="p-6">
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="p-2 bg-red-100 rounded-lg">
-              <AlertTriangle className="w-6 h-6 text-red-600" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Confirm Rollback</h3>
-              <p className="text-sm text-gray-600">This action will reverse all changes</p>
-            </div>
-          </div>
-
-          <div className="mb-6">
-            <p className="text-gray-700 mb-3">
-              Are you sure you want to roll back the import for <strong>{transaction.semester}</strong>?
-            </p>
-            <p className="text-sm text-gray-600 bg-red-50 p-3 rounded-lg">
-              ⚠️ This will permanently delete all {transaction.stats.totalChanges} imported records
-              and restore the database to its previous state. This action cannot be undone.
-            </p>
-          </div>
-
-          <div className="flex items-center justify-end space-x-3">
-            <button
-              onClick={onCancel}
-              disabled={isLoading}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onConfirm}
-              disabled={isLoading}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center space-x-2"
-            >
-              {isLoading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Rolling Back...</span>
-                </>
-              ) : (
-                <>
-                  <RotateCcw className="w-4 h-4" />
-                  <span>Roll Back Import</span>
-                </>
-              )}
-            </button>
-          </div>
+    <Modal isOpen onClose={onCancel} size="sm" showClose={false} bodyClassName="p-6">
+      <div className="flex items-center space-x-3 mb-4">
+        <div className="p-2 bg-red-100 rounded-lg">
+          <AlertTriangle className="w-6 h-6 text-red-600" />
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Confirm Rollback</h3>
+          <p className="text-sm text-gray-600">This action will reverse all changes</p>
         </div>
       </div>
-    </div>
+
+      <div className="mb-6">
+        <p className="text-gray-700 mb-3">
+          Are you sure you want to roll back the import for <strong>{transaction.semester}</strong>?
+        </p>
+        <p className="text-sm text-gray-600 bg-red-50 p-3 rounded-lg">
+          ⚠️ This will permanently delete all {transaction.stats.totalChanges} imported records
+          and restore the database to its previous state. This action cannot be undone.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-end space-x-3">
+        <button
+          onClick={onCancel}
+          disabled={isLoading}
+          className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onConfirm}
+          disabled={isLoading}
+          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center space-x-2"
+        >
+          {isLoading ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <span>Rolling Back...</span>
+            </>
+          ) : (
+            <>
+              <RotateCcw className="w-4 h-4" />
+              <span>Roll Back Import</span>
+            </>
+          )}
+        </button>
+      </div>
+    </Modal>
   );
 
   return (
     <>
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-200">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Import History</h2>
-              <p className="text-gray-600 mt-1">
-                Manage and review all data imports
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 overflow-hidden">
-            {transactions.length === 0 ? (
+      <Modal
+        isOpen
+        onClose={onClose}
+        size="lg"
+        title="Import History"
+        subtitle="Manage and review all data imports"
+        bodyClassName="flex-1 overflow-hidden"
+      >
+        {transactions.length === 0 ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
                   <Database className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -439,9 +423,7 @@ const ImportHistoryModal = ({
                 </div>
               </div>
             )}
-          </div>
-        </div>
-      </div>
+      </Modal>
 
       {/* Confirm Rollback Modal */}
       {showConfirmRollback && (

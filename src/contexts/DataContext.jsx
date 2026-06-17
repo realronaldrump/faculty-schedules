@@ -461,17 +461,25 @@ export const DataProvider = ({ children }) => {
   }, [scheduleData]);
 
   // Adapters with Cross-Linking (preserves rich objects for UI views)
-  const facultyData = useMemo(() => {
+  const allFacultyData = useMemo(() => {
     return adaptPeopleToFaculty(rawPeople, rawScheduleData, rawPrograms, {
-      includeInactive: false,
+      includeInactive: true,
+    });
+  }, [rawPeople, rawScheduleData, rawPrograms]);
+
+  const facultyData = useMemo(() => {
+    return allFacultyData.filter((person) => person.isActive !== false);
+  }, [allFacultyData]);
+
+  const allStaffData = useMemo(() => {
+    return adaptPeopleToStaff(rawPeople, rawScheduleData, rawPrograms, {
+      includeInactive: true,
     });
   }, [rawPeople, rawScheduleData, rawPrograms]);
 
   const staffData = useMemo(() => {
-    return adaptPeopleToStaff(rawPeople, rawScheduleData, rawPrograms, {
-      includeInactive: false,
-    });
-  }, [rawPeople, rawScheduleData, rawPrograms]);
+    return allStaffData.filter((person) => person.isActive !== false);
+  }, [allStaffData]);
 
   const studentData = useMemo(() => {
     return rawPeople
@@ -652,7 +660,9 @@ export const DataProvider = ({ children }) => {
 
       // Transformed/Legacy Data
       scheduleData,
+      allFacultyData,
       facultyData,
+      allStaffData,
       staffData,
       studentData,
       programs: rawPrograms,
@@ -705,7 +715,9 @@ export const DataProvider = ({ children }) => {
       rawPrograms,
       rawCourses,
       scheduleData,
+      allFacultyData,
       facultyData,
+      allStaffData,
       staffData,
       studentData,
       analytics,

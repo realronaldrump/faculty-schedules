@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
 import { logBulkUpdate, logDelete } from './changeLogger';
+import { getScheduleInstructorReferenceIds } from './scheduleReferenceUtils';
 
 const QUERY_CHUNK_SIZE = 10;
 
@@ -105,10 +106,7 @@ export const deleteSemesterImport = async (termCode, options = {}) => {
 
     schedules.forEach(schedule => {
       (schedule.spaceIds || []).forEach(id => usedSpaceIds.add(id));
-      (schedule.instructorIds || []).forEach(id => usedPersonIds.add(id));
-      if (schedule.instructorId) {
-        usedPersonIds.add(schedule.instructorId);
-      }
+      getScheduleInstructorReferenceIds(schedule).forEach(id => usedPersonIds.add(id));
     });
 
     // 3. Find orphaned rooms (rooms only used by this semester)
@@ -293,34 +291,16 @@ const findOrphanedPeople = async (usedPersonIds, excludeTermCode) => {
   const orphanedPeople = [];
   const referencedByOtherTerms = new Set();
 
-  for (const chunk of chunkValues(personIdArray)) {
-    const scheduleRows = mergeSnapshotRows(await Promise.all([
-      getDocs(
-        query(
-          collection(db, COLLECTIONS.SCHEDULES),
-          where('instructorId', 'in', chunk),
-        ),
-      ),
-      getDocs(
-        query(
-          collection(db, COLLECTIONS.SCHEDULES),
-          where('instructorIds', 'array-contains-any', chunk),
-        ),
-      ),
-    ]));
-
-    scheduleRows.forEach((schedule) => {
-      if (schedule.termCode === excludeTermCode) return;
-      if (candidateIds.has(schedule.instructorId)) {
-        referencedByOtherTerms.add(schedule.instructorId);
+  const scheduleSnapshot = await getDocs(collection(db, COLLECTIONS.SCHEDULES));
+  scheduleSnapshot.docs.forEach((docSnap) => {
+    const schedule = { id: docSnap.id, ...docSnap.data() };
+    if (schedule.termCode === excludeTermCode) return;
+    getScheduleInstructorReferenceIds(schedule).forEach((personId) => {
+      if (candidateIds.has(personId)) {
+        referencedByOtherTerms.add(personId);
       }
-      (schedule.instructorIds || []).forEach((personId) => {
-        if (candidateIds.has(personId)) {
-          referencedByOtherTerms.add(personId);
-        }
-      });
     });
-  }
+  });
 
   const orphanedPersonIds = personIdArray.filter(
     (personId) => !referencedByOtherTerms.has(personId),

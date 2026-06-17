@@ -144,15 +144,15 @@ const Sidebar = ({
           {!collapsed && (
             <div className="sidebar-brand">
               <div className="sidebar-logo">
-                <span className="text-white font-bold text-sm font-['DM_Sans']">
+                <span className="text-white font-bold text-sm">
                   HSD
                 </span>
               </div>
               <div>
-                <div className="sidebar-title text-lg font-bold text-white font-['DM_Sans']">
+                <div className="sidebar-title text-lg font-bold text-white">
                   HSD Dashboard
                 </div>
-                <div className="sidebar-subtitle text-sm text-baylor-gold/80 mt-1 font-['DM_Sans']">
+                <div className="sidebar-subtitle text-sm text-baylor-gold/80 mt-1">
                   {selectedSemester || "Select Semester"}
                 </div>
               </div>
@@ -160,7 +160,7 @@ const Sidebar = ({
           )}
           {collapsed && (
             <div className="sidebar-logo mx-auto">
-              <span className="text-white font-bold text-sm font-['DM_Sans']">
+              <span className="text-white font-bold text-sm">
                 HSD
               </span>
             </div>
@@ -202,7 +202,7 @@ const Sidebar = ({
                     className={`nav-sub-item w-full ${isCurrentPage(item.path) ? "nav-sub-item-active" : "nav-sub-item-inactive"}`}
                   >
                     <Icon size={16} className="mr-2" />
-                    <span className="text-sm font-['DM_Sans']">
+                    <span className="text-sm">
                       {item.label}
                     </span>
                   </button>
@@ -259,7 +259,7 @@ const Sidebar = ({
                         }`}
                     />
                     {!collapsed && (
-                      <span className="font-medium text-sm font-['DM_Sans']">
+                      <span className="font-medium text-sm">
                         {item.label}
                       </span>
                     )}
@@ -316,7 +316,7 @@ const Sidebar = ({
                               }}
                               className={`nav-sub-item flex-1 min-w-0 text-left ${childClassName}`}
                             >
-                              <span className="text-sm font-['DM_Sans'] truncate">
+                              <span className="text-sm truncate">
                                 {child.label}
                               </span>
                             </button>
@@ -372,7 +372,7 @@ const Sidebar = ({
                                     }}
                                     className={`nav-sub-item w-full text-left ${sidebarChildClassName}`}
                                   >
-                                    <span className="text-[13px] font-['DM_Sans']">
+                                    <span className="text-sm">
                                       {sidebarChild.label}
                                     </span>
                                   </button>
@@ -395,20 +395,20 @@ const Sidebar = ({
       <div className="border-t border-gray-200 p-4 mt-auto">
         {!collapsed ? (
           <div className="text-center space-y-1">
-            <div className="text-xs font-medium text-baylor-green font-['DM_Sans']">
+            <div className="text-xs font-medium text-baylor-green">
               Baylor University
             </div>
-            <div className="text-xs text-gray-500 font-['DM_Sans']">
+            <div className="text-xs text-gray-500">
               Human Sciences & Design
             </div>
-            <div className="text-xs text-gray-400 mt-2 font-['DM_Sans']">
+            <div className="text-xs text-gray-400 mt-2">
               Davis&apos;s Big Beautiful Dashboard
             </div>
           </div>
         ) : (
           <div className="flex justify-center">
             <div className="w-8 h-8 bg-baylor-green/10 rounded-lg flex items-center justify-center">
-              <span className="text-xs font-bold text-baylor-green font-['DM_Sans']">
+              <span className="text-xs font-bold text-baylor-green">
                 BU
               </span>
             </div>

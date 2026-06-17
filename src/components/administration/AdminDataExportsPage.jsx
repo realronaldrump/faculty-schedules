@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Download, FileSpreadsheet, Loader2 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import PageHeader from "../shared/PageHeader";
 import { useSchedules } from "../../contexts/ScheduleContext.jsx";
 import { useUI } from "../../contexts/UIContext.jsx";
 import { useAppConfig } from "../../contexts/AppConfigContext.jsx";
@@ -212,13 +213,11 @@ const AdminDataExportsPage = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Data Exports</h1>
-        <p className="text-gray-600">
-          Export operational data to clean Excel workbooks for departmental
-          administration.
-        </p>
-      </div>
+      <PageHeader
+        title="Data Exports"
+        subtitle="Export operational data to clean Excel workbooks for departmental administration."
+        className="mb-0"
+      />
 
       <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">

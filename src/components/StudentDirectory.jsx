@@ -1061,7 +1061,7 @@ const StudentDirectory = () => {
             </button>
             <button
               onClick={() => setIsWizardOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors"
+              className="btn-primary"
               data-tutorial="add-student-btn"
               disabled={
                 typeof window !== "undefined" &&
@@ -1265,17 +1265,15 @@ const StudentDirectory = () => {
 
       {/* Student Add Wizard Modal */}
       {isWizardOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center z-50 p-4 overflow-y-auto">
-          <StudentAddWizard
-            onSave={handleCreateStudent}
-            onCancel={() => setIsWizardOpen(false)}
-            availableBuildings={availableBuildings}
-            supervisorOptions={supervisorOptions}
-            existingJobTitles={availableJobTitles}
-            semesterLabel={semesterLabel}
-            isTutorialMode={isTutorialMode}
-          />
-        </div>
+        <StudentAddWizard
+          onSave={handleCreateStudent}
+          onCancel={() => setIsWizardOpen(false)}
+          availableBuildings={availableBuildings}
+          supervisorOptions={supervisorOptions}
+          existingJobTitles={availableJobTitles}
+          semesterLabel={semesterLabel}
+          isTutorialMode={isTutorialMode}
+        />
       )}
 
       {/* Student Edit Modal */}

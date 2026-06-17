@@ -34,6 +34,7 @@ import { preprocessImportData } from '../importPreprocessor';
 import { validateImportTransaction } from '../importValidationUtils';
 import { buildPeopleIndex } from '../peopleUtils';
 import { extractScheduleRowBaseData } from '../importScheduleRowUtils';
+import { getScheduleInstructorReferenceIds } from '../scheduleReferenceUtils';
 import {
   runImportEntityResolutionCleanup,
   runPostImportCleanup
@@ -1920,11 +1921,7 @@ export const commitTransaction = async (
 
     const collectFromSchedule = (schedule) => {
       if (!schedule || typeof schedule !== 'object') return;
-      addPersonId(schedule.instructorId);
-      (Array.isArray(schedule.instructorIds) ? schedule.instructorIds : []).forEach(addPersonId);
-      (Array.isArray(schedule.instructorAssignments) ? schedule.instructorAssignments : []).forEach((assignment) => {
-        addPersonId(assignment?.personId);
-      });
+      getScheduleInstructorReferenceIds(schedule).forEach(addPersonId);
       (Array.isArray(schedule.spaceIds) ? schedule.spaceIds : []).forEach(addRoomId);
     };
 
@@ -3215,12 +3212,16 @@ export const findOrphanedImportedData = async (semesterFilter = null) => {
       const isInSelectedTerm = termFilterNorm && termNorm === termFilterNorm;
 
       if (!isInSelectedTerm) {
-        if (data.instructorId) usedPeopleOutsideTerm.add(data.instructorId);
+        getScheduleInstructorReferenceIds(data).forEach((personId) => {
+          usedPeopleOutsideTerm.add(personId);
+        });
         if (Array.isArray(data.spaceIds)) {
           data.spaceIds.forEach((sid) => sid && usedRoomsOutsideTerm.add(sid));
         }
       } else {
-        if (data.instructorId) usedPeopleInSelectedTerm.add(data.instructorId);
+        getScheduleInstructorReferenceIds(data).forEach((personId) => {
+          usedPeopleInSelectedTerm.add(personId);
+        });
         if (Array.isArray(data.spaceIds)) {
           data.spaceIds.forEach((sid) => sid && usedRoomsInSelectedTerm.add(sid));
         }

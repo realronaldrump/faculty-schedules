@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import PageHeader from '../shared/PageHeader';
 import {
   ArrowLeft,
   ExternalLink,
@@ -131,11 +132,11 @@ const BaylorSystems = () => {
         Back to Dashboard
       </button>
 
-      {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Baylor Systems</h1>
-        <p className="text-gray-600">Quick links to official Baylor University systems and resources</p>
-      </div>
+      <PageHeader
+        title="Baylor Systems"
+        subtitle="Quick links to official Baylor University systems and resources"
+        className="mb-0"
+      />
 
       {/* Quick Access Banner */}
       <div className="university-header rounded-xl p-8">

@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import Modal from "../shared/Modal";
 import { logUpdate } from "../../utils/changeLogger";
 import {
   Shield,
@@ -762,7 +763,7 @@ const AccessControl = () => {
                                     <span className="text-gray-700 leading-tight">
                                       {page.label}
                                       {isAlias && permissionDescriptor !== page.label && (
-                                        <span className="block text-[10px] text-gray-500">
+                                        <span className="block text-2xs text-gray-500">
                                           Uses {permissionDescriptor} access
                                         </span>
                                       )}
@@ -1287,47 +1288,43 @@ const AccessControl = () => {
       </div >
 
       {/* Delete Confirmation Modal */}
-      {
-        deleteTarget && (
-          <div className="modal-overlay">
-            <div className="modal-content max-w-md">
-              <div className="modal-header">
-                <div className="flex items-center gap-2">
-                  <Trash2 className="w-5 h-5 text-red-600" />
-                  <h3 className="modal-title">Delete User Account</h3>
-                </div>
-              </div>
-              <div className="modal-body">
-                <p className="text-gray-700 mb-2">
-                  This will remove the user's profile and authentication account:
-                </p>
-                <p className="text-gray-900 font-medium bg-gray-100 rounded px-3 py-2">
-                  {deleteTarget.email || deleteTarget.id}
-                </p>
-                <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  <p className="text-sm text-amber-900">
-                    <strong>Note:</strong> This deletes the Firebase
-                    Authentication account and the Firestore profile. The user
-                    will need to sign up again if access is required later.
-                  </p>
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button
-                  className="btn-ghost"
-                  onClick={() => setDeleteTarget(null)}
-                >
-                  Cancel
-                </button>
-                <button className="btn-danger" onClick={confirmDeleteUser}>
-                  Delete User
-                </button>
-              </div>
-            </div>
+      <Modal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        size="sm"
+        closeOnOverlayClick={false}
+        title={
+          <div className="flex items-center gap-2">
+            <Trash2 className="w-5 h-5 text-red-600" />
+            <h3 className="modal-title">Delete User Account</h3>
           </div>
-        )
-      }
-    </div >
+        }
+        footer={
+          <>
+            <button className="btn-ghost" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </button>
+            <button className="btn-danger" onClick={confirmDeleteUser}>
+              Delete User
+            </button>
+          </>
+        }
+      >
+        <p className="text-gray-700 mb-2">
+          This will remove the user's profile and authentication account:
+        </p>
+        <p className="text-gray-900 font-medium bg-gray-100 rounded px-3 py-2">
+          {deleteTarget?.email || deleteTarget?.id}
+        </p>
+        <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+          <p className="text-sm text-amber-900">
+            <strong>Note:</strong> This deletes the Firebase Authentication
+            account and the Firestore profile. The user will need to sign up
+            again if access is required later.
+          </p>
+        </div>
+      </Modal>
+    </div>
   );
 };
 

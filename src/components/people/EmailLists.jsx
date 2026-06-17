@@ -3,6 +3,7 @@ import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Settings,
 import MultiSelectDropdown from "../MultiSelectDropdown";
 import FacultyContactCard from "../FacultyContactCard";
 import ConfirmDialog from "../shared/ConfirmDialog";
+import Modal from "../shared/Modal";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -1630,92 +1631,91 @@ const EmailLists = ({ embedded = false }) => {
           )}
 
           {/* Preset Modal */}
-          {showPresetModal && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-200 bg-baylor-green">
-                  <h3 className="text-lg font-semibold text-white">
-                    {editingPreset ? "Edit Preset" : "Create New Preset"}
-                  </h3>
-                </div>
-                <div className="p-6 space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Preset Name
-                    </label>
-                    <input
-                      type="text"
-                      value={presetName}
-                      onChange={(e) => setPresetName(e.target.value)}
-                      placeholder="e.g., Faculty Meeting Professors, Remote Adjuncts, etc."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                      autoFocus
-                    />
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <p className="text-sm text-gray-600">
-                      <span className="font-medium">
-                        {selectedPeople.length}
-                      </span>{" "}
-                      people will be saved in this preset
-                    </p>
-                    {selectedPeople.length > 0 && (
-                      <div className="mt-2 max-h-32 overflow-y-auto">
-                        <ul className="text-xs text-gray-500 space-y-0.5">
-                          {combinedDirectoryData
-                            .filter((p) => selectedPeople.includes(p.id))
-                            .slice(0, 10)
-                            .map((p) => (
-                              <li key={p.id} className="truncate">
-                                • {p.name}
-                              </li>
-                            ))}
-                          {selectedPeople.length > 10 && (
-                            <li className="text-gray-400 italic">
-                              ...and {selectedPeople.length - 10} more
-                            </li>
-                          )}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
-                  <button
-                    onClick={() => {
-                      setShowPresetModal(false);
-                      setPresetName("");
-                      setEditingPreset(null);
-                    }}
-                    className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSavePreset}
-                    disabled={
-                      !presetName.trim() ||
-                      selectedPeople.length === 0 ||
-                      presetSaving
-                    }
-                    className="px-4 py-2 text-sm bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                  >
-                    {presetSaving ? (
-                      <>
-                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        {editingPreset ? "Update Preset" : "Save Preset"}
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
+          <Modal
+            isOpen={showPresetModal}
+            onClose={() => {
+              setShowPresetModal(false);
+              setPresetName("");
+              setEditingPreset(null);
+            }}
+            size="sm"
+            title={editingPreset ? "Edit Preset" : "Create New Preset"}
+            bodyClassName="modal-body space-y-4"
+            footer={
+              <>
+                <button
+                  onClick={() => {
+                    setShowPresetModal(false);
+                    setPresetName("");
+                    setEditingPreset(null);
+                  }}
+                  className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSavePreset}
+                  disabled={
+                    !presetName.trim() ||
+                    selectedPeople.length === 0 ||
+                    presetSaving
+                  }
+                  className="px-4 py-2 text-sm bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                >
+                  {presetSaving ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      {editingPreset ? "Update Preset" : "Save Preset"}
+                    </>
+                  )}
+                </button>
+              </>
+            }
+          >
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Preset Name
+              </label>
+              <input
+                type="text"
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                placeholder="e.g., Faculty Meeting Professors, Remote Adjuncts, etc."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                autoFocus
+              />
             </div>
-          )}
+            <div className="bg-gray-50 rounded-lg p-3">
+              <p className="text-sm text-gray-600">
+                <span className="font-medium">{selectedPeople.length}</span>{" "}
+                people will be saved in this preset
+              </p>
+              {selectedPeople.length > 0 && (
+                <div className="mt-2 max-h-32 overflow-y-auto">
+                  <ul className="text-xs text-gray-500 space-y-0.5">
+                    {combinedDirectoryData
+                      .filter((p) => selectedPeople.includes(p.id))
+                      .slice(0, 10)
+                      .map((p) => (
+                        <li key={p.id} className="truncate">
+                          • {p.name}
+                        </li>
+                      ))}
+                    {selectedPeople.length > 10 && (
+                      <li className="text-gray-400 italic">
+                        ...and {selectedPeople.length - 10} more
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </Modal>
         </>
       )}
 
@@ -1931,90 +1931,91 @@ const EmailLists = ({ embedded = false }) => {
       )}
 
       {/* Preset Modal */}
-      {showPresetModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 bg-baylor-green">
-              <h3 className="text-lg font-semibold text-white">
-                {editingPreset ? "Edit Preset" : "Create New Preset"}
-              </h3>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Preset Name
-                </label>
-                <input
-                  type="text"
-                  value={presetName}
-                  onChange={(e) => setPresetName(e.target.value)}
-                  placeholder="e.g., Faculty Meeting Professors, Remote Adjuncts, etc."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                  autoFocus
-                />
-              </div>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-sm text-gray-600">
-                  <span className="font-medium">{selectedPeople.length}</span>{" "}
-                  people will be saved in this preset
-                </p>
-                {selectedPeople.length > 0 && (
-                  <div className="mt-2 max-h-32 overflow-y-auto">
-                    <ul className="text-xs text-gray-500 space-y-0.5">
-                      {combinedDirectoryData
-                        .filter((p) => selectedPeople.includes(p.id))
-                        .slice(0, 10)
-                        .map((p) => (
-                          <li key={p.id} className="truncate">
-                            • {p.name}
-                          </li>
-                        ))}
-                      {selectedPeople.length > 10 && (
-                        <li className="text-gray-400 italic">
-                          ...and {selectedPeople.length - 10} more
-                        </li>
-                      )}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowPresetModal(false);
-                  setPresetName("");
-                  setEditingPreset(null);
-                }}
-                className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSavePreset}
-                disabled={
-                  !presetName.trim() ||
-                  selectedPeople.length === 0 ||
-                  presetSaving
-                }
-                className="px-4 py-2 text-sm bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-              >
-                {presetSaving ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    {editingPreset ? "Update Preset" : "Save Preset"}
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
+      <Modal
+        isOpen={showPresetModal}
+        onClose={() => {
+          setShowPresetModal(false);
+          setPresetName("");
+          setEditingPreset(null);
+        }}
+        size="sm"
+        title={editingPreset ? "Edit Preset" : "Create New Preset"}
+        bodyClassName="modal-body space-y-4"
+        footer={
+          <>
+            <button
+              onClick={() => {
+                setShowPresetModal(false);
+                setPresetName("");
+                setEditingPreset(null);
+              }}
+              className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSavePreset}
+              disabled={
+                !presetName.trim() ||
+                selectedPeople.length === 0 ||
+                presetSaving
+              }
+              className="px-4 py-2 text-sm bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            >
+              {presetSaving ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  {editingPreset ? "Update Preset" : "Save Preset"}
+                </>
+              )}
+            </button>
+          </>
+        }
+      >
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Preset Name
+          </label>
+          <input
+            type="text"
+            value={presetName}
+            onChange={(e) => setPresetName(e.target.value)}
+            placeholder="e.g., Faculty Meeting Professors, Remote Adjuncts, etc."
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+            autoFocus
+          />
         </div>
-      )}
+        <div className="bg-gray-50 rounded-lg p-3">
+          <p className="text-sm text-gray-600">
+            <span className="font-medium">{selectedPeople.length}</span> people
+            will be saved in this preset
+          </p>
+          {selectedPeople.length > 0 && (
+            <div className="mt-2 max-h-32 overflow-y-auto">
+              <ul className="text-xs text-gray-500 space-y-0.5">
+                {combinedDirectoryData
+                  .filter((p) => selectedPeople.includes(p.id))
+                  .slice(0, 10)
+                  .map((p) => (
+                    <li key={p.id} className="truncate">
+                      • {p.name}
+                    </li>
+                  ))}
+                {selectedPeople.length > 10 && (
+                  <li className="text-gray-400 italic">
+                    ...and {selectedPeople.length - 10} more
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       {/* Notification */}
       {notification.show && (

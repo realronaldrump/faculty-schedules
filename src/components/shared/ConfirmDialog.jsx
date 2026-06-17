@@ -1,4 +1,5 @@
 import { AlertTriangle, Info, X } from 'lucide-react';
+import Modal from './Modal';
 
 /**
  * General-purpose confirmation dialog modal.
@@ -41,9 +42,9 @@ const ConfirmDialog = ({
       confirmText: 'text-white',
     },
     info: {
-      iconBg: 'bg-blue-100',
-      iconColor: 'text-blue-600',
-      confirmBg: 'bg-blue-600 hover:bg-blue-700',
+      iconBg: 'bg-baylor-blue/10',
+      iconColor: 'text-baylor-blue',
+      confirmBg: 'bg-baylor-blue hover:bg-baylor-blue/90',
       confirmText: 'text-white',
     },
     danger: {
@@ -70,41 +71,42 @@ const ConfirmDialog = ({
   const IconComponent = CustomIcon || defaultIconByVariant[variant] || AlertTriangle;
 
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div
-        className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl animate-scale-in"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-3 mb-4">
-          <div className={`p-2 rounded-full ${styles.iconBg}`}>
-            <IconComponent className={`h-6 w-6 ${styles.iconColor}`} />
-          </div>
-          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+    <Modal
+      isOpen={isOpen}
+      onClose={onCancel}
+      size="sm"
+      showClose={false}
+      bodyClassName="p-6"
+    >
+      <div className="flex items-center gap-3 mb-4">
+        <div className={`p-2 rounded-full ${styles.iconBg}`}>
+          <IconComponent className={`h-6 w-6 ${styles.iconColor}`} />
         </div>
-
-        <div className="text-gray-600 mb-6 space-y-4">
-          <div>{message}</div>
-          {children}
-        </div>
-
-        <div className="flex justify-end gap-3">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
-          >
-            <X size={16} />
-            {cancelText}
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={confirmDisabled}
-            className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${styles.confirmBg} ${styles.confirmText}`}
-          >
-            {confirmText}
-          </button>
-        </div>
+        <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
       </div>
-    </div>
+
+      <div className="text-gray-600 mb-6 space-y-4">
+        <div>{message}</div>
+        {children}
+      </div>
+
+      <div className="flex justify-end gap-3">
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
+        >
+          <X size={16} />
+          {cancelText}
+        </button>
+        <button
+          onClick={onConfirm}
+          disabled={confirmDisabled}
+          className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${styles.confirmBg} ${styles.confirmText}`}
+        >
+          {confirmText}
+        </button>
+      </div>
+    </Modal>
   );
 };
 

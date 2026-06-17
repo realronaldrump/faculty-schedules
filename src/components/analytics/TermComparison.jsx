@@ -3,6 +3,7 @@ import { ArrowRight, PlusCircle, MinusCircle, Pencil, Search, Info, Loader2 } fr
 import { useSchedules } from "../../contexts/ScheduleContext";
 import { sortTerms } from "../../utils/termUtils";
 import { fetchSchedulesByTerms } from "../../utils/dataImportUtils";
+import PageHeader from "../shared/PageHeader";
 import {
   buildSectionMapFromEnriched,
   diffSectionMaps,
@@ -81,7 +82,7 @@ const TermComparison = () => {
   if (termOptions.length < 2) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-gray-900">Semester Comparison</h1>
+        <PageHeader title="Semester Comparison" className="mb-0" />
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex gap-2">
           <Info className="w-5 h-5 flex-shrink-0" />
           Comparison needs at least two imported semesters. Import another semester's CLSS
@@ -93,12 +94,11 @@ const TermComparison = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Semester Comparison</h1>
-        <p className="text-gray-600">
-          What changed between two semesters of the official schedule.
-        </p>
-      </div>
+      <PageHeader
+        title="Semester Comparison"
+        subtitle="What changed between two semesters of the official schedule."
+        className="mb-0"
+      />
 
       <div
         className="flex flex-wrap items-end gap-3 bg-white border border-gray-200 rounded-xl p-4"

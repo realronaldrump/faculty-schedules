@@ -668,7 +668,7 @@ const SortHeader = ({ label, active, direction, onClick }) => (
     }`}
   >
     <span>{label}</span>
-    <span className="text-[10px]">{active ? (direction === "asc" ? "▲" : "▼") : ""}</span>
+    <span className="text-2xs">{active ? (direction === "asc" ? "▲" : "▼") : ""}</span>
   </button>
 );
 
@@ -922,7 +922,7 @@ const TutorialCompletionSection = ({ loading, model }) => {
                           <div className="mx-auto max-w-[7rem] text-xs font-semibold text-slate-700">
                             {tutorial.title}
                           </div>
-                          <div className="mt-1 text-[11px] font-medium text-slate-400">
+                          <div className="mt-1 text-2xs font-medium text-slate-400">
                             {tutorial.completed}✓
                             {tutorial.started ? ` · ${tutorial.started}…` : ""}
                           </div>

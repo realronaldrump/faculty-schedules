@@ -4,6 +4,7 @@ import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/fire
 import { db, COLLECTIONS } from '../firebase';
 import { logUpdate } from '../utils/changeLogger';
 import StudentWorkerScheduleView from './analytics/StudentWorkerScheduleView';
+import Modal from './shared/Modal';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { formatTermFromCode, formatTermLabel, sortTerms } from '../utils/termUtils';
 import { resolveOfficeLocations } from '../utils/spaceUtils';
@@ -466,8 +467,6 @@ const FacultyContactCard = ({
     }, [personType, resolvedStudentAssignments]);
 
     const shouldShowStudentSchedule = personType === 'student' && showStudentSchedule;
-
-    const cardWidthClass = shouldShowStudentSchedule ? 'max-w-5xl' : 'max-w-2xl';
     const nameInitials = useMemo(() => (
         (contactPerson?.name || '')
             .split(' ')
@@ -510,11 +509,13 @@ const FacultyContactCard = ({
         : (officeLocations[0] || 'Not specified');
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 backdrop-blur-[2px] p-3 sm:p-6" onClick={onClose}>
-            <div
-                className={`relative mx-auto w-full ${cardWidthClass} rounded-2xl border border-gray-200 bg-white shadow-2xl max-h-[92vh] overflow-y-auto`}
-                onClick={e => e.stopPropagation()}
-            >
+        <Modal
+            isOpen
+            onClose={onClose}
+            size={shouldShowStudentSchedule ? 'xl' : 'md'}
+            showClose={false}
+            bodyClassName="relative overflow-y-auto"
+        >
                 <button
                     onClick={onClose}
                     aria-label="Close contact card"
@@ -743,12 +744,12 @@ const FacultyContactCard = ({
                                                                             {course.courseCode || 'Course'}
                                                                         </span>
                                                                         {course.section && (
-                                                                            <span className="rounded bg-white px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                                                                            <span className="rounded bg-white px-2 py-0.5 text-2xs font-medium text-gray-600">
                                                                                 Sec {course.section}
                                                                             </span>
                                                                         )}
                                                                         {formattedCredits && (
-                                                                            <span className="rounded bg-white px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                                                                            <span className="rounded bg-white px-2 py-0.5 text-2xs font-medium text-gray-500">
                                                                                 {formattedCredits}
                                                                             </span>
                                                                         )}
@@ -798,32 +799,32 @@ const FacultyContactCard = ({
 
                                                                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                                                         <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
-                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Semester</p>
+                                                                            <p className="text-2xs font-semibold uppercase tracking-wide text-gray-500">Semester</p>
                                                                             <p className="text-sm font-medium text-gray-700">{course.term || 'Other'}</p>
                                                                         </div>
                                                                         <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
-                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Section</p>
+                                                                            <p className="text-2xs font-semibold uppercase tracking-wide text-gray-500">Section</p>
                                                                             <p className="text-sm font-medium text-gray-700">{course.section || '—'}</p>
                                                                         </div>
                                                                         <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
-                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">CRN</p>
+                                                                            <p className="text-2xs font-semibold uppercase tracking-wide text-gray-500">CRN</p>
                                                                             <p className="text-sm font-medium text-gray-700">{course.crn || '—'}</p>
                                                                         </div>
                                                                         <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
-                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Credits</p>
+                                                                            <p className="text-2xs font-semibold uppercase tracking-wide text-gray-500">Credits</p>
                                                                             <p className="text-sm font-medium text-gray-700">{formattedCredits || '—'}</p>
                                                                         </div>
                                                                         <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
-                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Instruction</p>
+                                                                            <p className="text-2xs font-semibold uppercase tracking-wide text-gray-500">Instruction</p>
                                                                             <p className="text-sm font-medium text-gray-700">{instructionLabel}</p>
                                                                         </div>
                                                                         <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2">
-                                                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Status</p>
+                                                                            <p className="text-2xs font-semibold uppercase tracking-wide text-gray-500">Status</p>
                                                                             <p className="text-sm font-medium text-gray-700">{course.status || 'Not specified'}</p>
                                                                         </div>
                                                                         {course.scheduleType && (
                                                                             <div className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2 sm:col-span-2">
-                                                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Schedule Type</p>
+                                                                                <p className="text-2xs font-semibold uppercase tracking-wide text-gray-500">Schedule Type</p>
                                                                                 <p className="text-sm font-medium text-gray-700">{course.scheduleType}</p>
                                                                             </div>
                                                                         )}
@@ -856,8 +857,7 @@ const FacultyContactCard = ({
                         <StudentWorkerScheduleView student={contactPerson} assignments={resolvedStudentAssignments} />
                     </div>
                 )}
-            </div>
-        </div>
+        </Modal>
     );
 };
 

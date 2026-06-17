@@ -32,10 +32,8 @@
 @layer base {
   :root {
     --baylorGreen: #154734;
-    --universityGold: #FFB81C;
     --white: #ffffff;
     --charcoal: #383838;
-    --lightGray: #eeeeee;
     --linkGreen: #006A52;
     --linkGreenHover: #154734;
   }
@@ -215,29 +213,36 @@
     @apply p-3 bg-baylor-green/10 rounded-lg group-hover:bg-baylor-green/20 transition-colors;
   }
 
-  /* Professional Buttons */
+  /* Professional Buttons
+     One consistent medium size (px-4 py-2) across every variant so buttons
+     read as one family. Use the -sm variants for compact/inline contexts. */
   .btn-primary {
-    @apply inline-flex items-center justify-center px-6 py-3 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-all duration-200 font-semibold text-sm shadow-sm hover:shadow-md active:scale-95;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 hover:shadow-md shadow-sm transition-all duration-200 font-semibold text-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
     font-family: "calluna", Georgia, serif;
   }
 
   .btn-secondary {
-    @apply px-6 py-3 bg-white text-baylor-green border border-baylor-green rounded-lg hover:bg-baylor-green/5 transition-all duration-200 font-semibold text-sm shadow-sm;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-white text-baylor-green border border-baylor-green rounded-lg hover:bg-baylor-green/5 shadow-sm transition-all duration-200 font-semibold text-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
     font-family: "calluna", Georgia, serif;
   }
 
   .btn-accent {
-    @apply px-6 py-3 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 transition-all duration-200 font-semibold text-sm shadow-sm hover:shadow-md active:scale-95;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 hover:shadow-md shadow-sm transition-all duration-200 font-semibold text-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
     font-family: "calluna", Georgia, serif;
   }
 
   .btn-ghost {
-    @apply px-4 py-2 text-gray-600 hover:text-baylor-green hover:bg-gray-50 rounded-lg transition-colors font-medium text-sm;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-gray-600 hover:text-baylor-green hover:bg-gray-50 rounded-lg transition-colors font-medium text-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
     font-family: "calluna", Georgia, serif;
   }
 
   .btn-danger {
-    @apply px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm shadow-sm;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-sm transition-all duration-200 font-semibold text-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    font-family: "calluna", Georgia, serif;
+  }
+
+  .btn-primary-sm {
+    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors font-semibold text-xs shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
     font-family: "calluna", Georgia, serif;
   }
 
@@ -519,24 +524,6 @@
 
   .notification-info {
     @apply border-l-4 border-baylor-blue;
-  }
-
-  /* Page Layout */
-  .page-header {
-    @apply mb-8;
-  }
-
-  .page-title {
-    @apply text-3xl font-bold text-baylor-green mb-2;
-    font-family: "calluna", Georgia, serif;
-  }
-
-  .page-subtitle {
-    @apply text-gray-600 text-lg;
-  }
-
-  .page-content {
-    @apply space-y-6;
   }
 
   /* Utility Classes */
@@ -879,10 +866,6 @@
   .table-header-cell,
   .table-cell {
     @apply text-xs;
-  }
-  
-  .page-title {
-    @apply text-2xl;
   }
 }
 

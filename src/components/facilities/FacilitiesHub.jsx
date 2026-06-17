@@ -9,10 +9,10 @@
  * This is the primary destination for all facility-related administration.
  */
 
-import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
 import { Building2, DoorOpen, Thermometer } from "lucide-react";
-import { useAuth } from "../../contexts/AuthContext.jsx";
+import { useHubTabs } from "../../hooks/useHubTabs";
+import HubTabs from "../shared/HubTabs";
+import PageHeader from "../shared/PageHeader";
 import SpaceManagement from "../administration/SpaceManagement";
 import BuildingManagement from "../administration/BuildingManagement";
 import TemperatureMonitoring from "../temperature/TemperatureMonitoring";
@@ -22,6 +22,7 @@ const TAB_DEFINITIONS = [
     id: "spaces",
     label: "Spaces",
     icon: DoorOpen,
+    path: "facilities/spaces",
     description: "Manage rooms, offices, labs, and other spaces",
     accessId: "facilities/spaces",
     component: SpaceManagement,
@@ -30,6 +31,7 @@ const TAB_DEFINITIONS = [
     id: "buildings",
     label: "Buildings",
     icon: Building2,
+    path: "facilities/buildings",
     description: "Configure buildings and aliases",
     accessId: "facilities/buildings",
     component: BuildingManagement,
@@ -38,6 +40,7 @@ const TAB_DEFINITIONS = [
     id: "temperature",
     label: "Temperature",
     icon: Thermometer,
+    path: "facilities/temperature",
     description: "Monitor room temperatures and manage sensors",
     accessId: "facilities/temperature",
     component: TemperatureMonitoring,
@@ -45,67 +48,35 @@ const TAB_DEFINITIONS = [
 ];
 
 const FacilitiesHub = ({ initialTab }) => {
-  const navigate = useNavigate();
-  const { canAccess } = useAuth();
-
-  const availableTabs = useMemo(
-    () => TAB_DEFINITIONS.filter((tab) => canAccess(tab.accessId)),
-    [canAccess]
-  );
-
-  // Use initialTab from props as the source of truth
-  const activeTab = initialTab || availableTabs[0]?.id || TAB_DEFINITIONS[0].id;
-
-  const handleTabChange = (tabId) => {
-    // Navigate to the correct path based on the tab's accessId
-    // accessId is like "facilities/spaces", so we just prepend "/"
-    const tab = availableTabs.find(t => t.id === tabId);
-    if (tab) {
-      navigate(`/${tab.accessId}`);
-    }
-  };
+  const { availableTabs, activeTab, handleTabChange } = useHubTabs({
+    tabs: TAB_DEFINITIONS,
+    initialTab,
+    strategy: "path",
+  });
 
   const activeTabConfig = availableTabs.find((tab) => tab.id === activeTab);
   const ActiveComponent = activeTabConfig?.component;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Facilities</h1>
-        <p className="text-gray-600">
-          Manage buildings, rooms, offices, and facility monitoring.
-        </p>
-      </div>
+      <PageHeader
+        title="Facilities"
+        subtitle="Manage buildings, rooms, offices, and facility monitoring."
+        className="mb-0"
+      />
 
-      {/* Tab Navigation */}
-      <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-4">
-        {availableTabs.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => handleTabChange(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === tab.id
-                  ? "bg-baylor-green text-white shadow-sm"
-                  : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 hover:border-gray-300"
-                }`}
-            >
-              <Icon size={18} />
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      <HubTabs
+        tabs={availableTabs}
+        activeTab={activeTab}
+        onChange={handleTabChange}
+      />
 
-      {/* Active Tab Description */}
-      {activeTabConfig && (
+      {activeTabConfig?.description && (
         <div className="text-sm text-gray-500">
           {activeTabConfig.description}
         </div>
       )}
 
-      {/* Tab Content */}
       <div className="min-h-[400px]">
         {ActiveComponent ? (
           <ActiveComponent />

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { X, FileText, AlertTriangle } from "lucide-react";
+import { FileText, AlertTriangle } from "lucide-react";
+import Modal from "../shared/Modal";
 
 const resolveExportTargets = (root) => {
   if (!root) return [];
@@ -149,46 +150,32 @@ const ExportModal = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4">
-        <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-semibold text-gray-900">Export to PDF</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-            title="Close"
-          >
-            <X className="w-6 h-6" />
-          </button>
+    <Modal isOpen={isOpen} onClose={onClose} size="sm" title="Export to PDF">
+      <p className="text-sm text-gray-600 mb-6">
+        Export the current schedule(s) as a print-ready PDF. The PDF will open in
+        your browser&apos;s print dialog where you can save it or send it to a
+        printer.
+      </p>
+      {exportError && (
+        <div
+          className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex items-start gap-2"
+          role="alert"
+        >
+          <AlertTriangle className="w-4 h-4 mt-0.5 text-red-600" />
+          <span className="text-sm text-red-800">{exportError}</span>
         </div>
-        <div className="p-6">
-          <p className="text-sm text-gray-600 mb-6">
-            Export the current schedule(s) as a print-ready PDF. The PDF will
-            open in your browser&apos;s print dialog where you can save it or
-            send it to a printer.
-          </p>
-          {exportError && (
-            <div
-              className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex items-start gap-2"
-              role="alert"
-            >
-              <AlertTriangle className="w-4 h-4 mt-0.5 text-red-600" />
-              <span className="text-sm text-red-800">{exportError}</span>
-            </div>
-          )}
-          <button
-            onClick={handleExportPDF}
-            className="w-full flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-baylor-green hover:bg-baylor-green/5 transition-colors"
-          >
-            <FileText className="w-12 h-12 mb-3 text-baylor-green" />
-            <span className="font-semibold text-gray-900">Export as PDF</span>
-            <span className="text-xs text-gray-500 mt-1">
-              Opens print dialog to save as PDF
-            </span>
-          </button>
-        </div>
-      </div>
-    </div>
+      )}
+      <button
+        onClick={handleExportPDF}
+        className="w-full flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-baylor-green hover:bg-baylor-green/5 transition-colors"
+      >
+        <FileText className="w-12 h-12 mb-3 text-baylor-green" />
+        <span className="font-semibold text-gray-900">Export as PDF</span>
+        <span className="text-xs text-gray-500 mt-1">
+          Opens print dialog to save as PDF
+        </span>
+      </button>
+    </Modal>
   );
 };
 

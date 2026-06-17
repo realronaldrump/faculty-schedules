@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { BarChart3, Users, Clock, MapPin, BookOpen, ArrowUpDown, X, AlertTriangle } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
+import PageHeader from "../shared/PageHeader";
 import { parseTime, formatMinutesToTime } from "../../utils/timeUtils";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
@@ -12,6 +13,7 @@ const DepartmentInsights = () => {
   const {
     scheduleData = [],
     facultyData = [],
+    allFacultyData = [],
     analytics,
   } = useData();
   const { loadPeople } = usePeople();
@@ -29,6 +31,7 @@ const DepartmentInsights = () => {
   const [popupAnchor, setPopupAnchor] = useState(null);
   const [popupPosition, setPopupPosition] = useState(null);
   const popupPanelRef = useRef(null);
+  const facultyLookupData = allFacultyData.length > 0 ? allFacultyData : facultyData;
 
   const dayNames = {
     M: "Monday",
@@ -232,7 +235,7 @@ const DepartmentInsights = () => {
   };
 
   const handleShowContactCard = (facultyName) => {
-    const faculty = facultyData.find((f) => f.name === facultyName);
+    const faculty = facultyLookupData.find((f) => f.name === facultyName);
     if (faculty) {
       setSelectedFacultyForCard(faculty);
     }
@@ -364,14 +367,11 @@ const DepartmentInsights = () => {
   if (!analytics) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Department Insights
-          </h1>
-          <p className="text-gray-600">
-            Analytics and metrics for faculty scheduling
-          </p>
-        </div>
+        <PageHeader
+          title="Department Insights"
+          subtitle="Analytics and metrics for faculty scheduling"
+          className="mb-0"
+        />
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
           <BarChart3 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -383,7 +383,7 @@ const DepartmentInsights = () => {
           </p>
           <button
             onClick={() => handleNavigate("admin-tools/import-wizard")}
-            className="px-6 py-3 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors font-medium"
+            className="btn-primary"
           >
             Import Schedule Data
           </button>
@@ -394,15 +394,11 @@ const DepartmentInsights = () => {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">
-          Department Insights
-        </h1>
-        <p className="text-gray-600">
-          Analytics and metrics for faculty scheduling
-        </p>
-      </div>
+      <PageHeader
+        title="Department Insights"
+        subtitle="Analytics and metrics for faculty scheduling"
+        className="mb-0"
+      />
 
       {/* Warning Banner */}
       {showWarning && (

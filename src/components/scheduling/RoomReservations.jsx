@@ -17,6 +17,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { parseTermDate } from "../../utils/termUtils";
 import { formatMinutesToTime, formatMinutesToLabel } from "../../utils/timeUtils";
 import { buildSingleEventICS, downloadICS, sanitizeForFile } from "../../utils/icsUtils";
+import { isSpaceReservable } from "../../utils/spaceUtils";
 import {
   checkConflicts,
   createReservation,
@@ -77,10 +78,11 @@ const RoomReservations = () => {
     return () => unsubscribe?.();
   }, []);
 
-  // Department-bookable rooms = the department's own physical spaces.
+  // Department-bookable rooms = active physical spaces explicitly enabled by Facilities.
   const bookableRooms = useMemo(() => {
     return spacesList
       .filter((space) => {
+        if (space.isActive === false || !isSpaceReservable(space)) return false;
         const type = (space.spaceType || space.type || "").toString().toLowerCase();
         if (VIRTUAL_TYPES.has(type)) return false;
         return Boolean(space.spaceKey && space.displayName);
@@ -322,6 +324,11 @@ const RoomReservations = () => {
                   </option>
                 ))}
               </SelectDropdown>
+              {bookableRooms.length === 0 && (
+                <p className="mt-1 text-xs text-gray-500">
+                  No rooms are enabled for reservations.
+                </p>
+              )}
               {restricted && (
                 <p className="mt-1 text-xs text-amber-700 flex items-center gap-1">
                   <AlertTriangle className="w-3.5 h-3.5" />

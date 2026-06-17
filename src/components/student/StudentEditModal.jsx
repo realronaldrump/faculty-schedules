@@ -14,6 +14,8 @@ import {
 import JobCard from "./JobCard";
 import TimelineVisualization from "./TimelineVisualization";
 import StatusBadge, { getStudentStatus } from "./StatusBadge";
+import Modal from "../shared/Modal";
+import ConfirmDialog from "../shared/ConfirmDialog";
 import { parseStudentWorkerDate } from "../../utils/studentWorkers";
 
 /**
@@ -502,10 +504,15 @@ const StudentEditModal = ({
   );
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="bg-baylor-green text-white px-6 py-4">
+    <Modal
+      isOpen
+      onClose={onClose}
+      size="xl"
+      showClose={false}
+      bodyClassName="flex flex-col"
+    >
+      {/* Header */}
+      <div className="bg-baylor-green text-white px-6 py-4">
           <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
             <div className="flex items-center gap-3">
               <div className="bg-white/20 p-2 rounded-full">
@@ -641,55 +648,34 @@ const StudentEditModal = ({
             Cancel
           </button>
           <div className="flex gap-3">
-            <button
-              onClick={handleSave}
-              className="flex items-center gap-2 px-6 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors font-medium"
-            >
+            <button onClick={handleSave} className="btn-primary">
               <Check size={18} />
               Save Changes
             </button>
           </div>
         </div>
 
-        {/* Delete Confirmation */}
-        {showDeleteConfirm && (
-          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md mx-4">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-red-100 rounded-full">
-                  <Trash2 size={24} className="text-red-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Delete Student?
-                </h3>
-              </div>
-              <p className="text-gray-600 mb-6">
-                Are you sure you want to delete <strong>{formData.name}</strong>
-                ? This action cannot be undone.
-              </p>
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    if (!canDeleteStudent) return;
-                    onDelete(student.id);
-                    onClose();
-                  }}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-                >
-                  Delete Student
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Delete Student?"
+        message={
+          <>
+            Are you sure you want to delete <strong>{formData.name}</strong>?
+            This action cannot be undone.
+          </>
+        }
+        confirmText="Delete Student"
+        variant="danger"
+        icon={Trash2}
+        onConfirm={() => {
+          if (!canDeleteStudent) return;
+          onDelete(student.id);
+          onClose();
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
+    </Modal>
   );
 };
 

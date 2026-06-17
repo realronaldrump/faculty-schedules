@@ -97,7 +97,7 @@ const RecentChangesPage = () => {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Recent Changes</h1>
+            <h1 className="text-2xl font-bold text-baylor-green">Recent Changes</h1>
             <p className="text-gray-600 mt-1">
               Complete audit trail of all data modifications
             </p>

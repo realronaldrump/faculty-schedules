@@ -602,7 +602,7 @@ const LiveView = () => {
     ).padStart(2, "0")}`;
 
   return (
-    <div className="page-content">
+    <div className="space-y-6">
       {/* Header */}
       <div className="university-header rounded-xl p-6 mb-6">
         <div className="flex items-center justify-between flex-wrap gap-4">

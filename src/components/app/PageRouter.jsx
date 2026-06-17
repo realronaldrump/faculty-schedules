@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Component, Suspense, lazy } from "react";
 import ProtectedContent from "../ProtectedContent.jsx";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 
@@ -62,12 +62,70 @@ const RouteLoadingState = () => (
   </div>
 );
 
-const renderProtectedPage = (pageId, Component, componentProps = {}) => (
-  <ProtectedContent pageId={pageId}>
-    <Suspense fallback={<RouteLoadingState />}>
-      <Component {...componentProps} />
-    </Suspense>
-  </ProtectedContent>
+const RouteLoadErrorState = () => (
+  <div className="flex items-center justify-center h-64">
+    <div className="max-w-md text-center">
+      <h2 className="text-lg font-semibold text-gray-900">
+        Page update needed
+      </h2>
+      <p className="mt-2 text-sm text-gray-600">
+        This page could not load the latest app files. Reload to continue.
+      </p>
+      <button
+        type="button"
+        className="btn-primary mt-4"
+        onClick={() => window.location.reload()}
+      >
+        Reload page
+      </button>
+    </div>
+  </div>
+);
+
+class RouteErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidUpdate(prevProps) {
+    if (prevProps.resetKey !== this.props.resetKey && this.state.error) {
+      this.setState({ error: null });
+    }
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("Route failed to render:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.error) {
+      return <RouteLoadErrorState />;
+    }
+
+    return this.props.children;
+  }
+}
+
+const getRouteBoundaryKey = (pageId, componentProps) => {
+  const initialTab = componentProps.initialTab
+    ? `:${componentProps.initialTab}`
+    : "";
+  return `${pageId}${initialTab}`;
+};
+
+const renderProtectedPage = (pageId, PageComponent, componentProps = {}) => (
+  <RouteErrorBoundary resetKey={getRouteBoundaryKey(pageId, componentProps)}>
+    <ProtectedContent pageId={pageId}>
+      <Suspense fallback={<RouteLoadingState />}>
+        <PageComponent {...componentProps} />
+      </Suspense>
+    </ProtectedContent>
+  </RouteErrorBoundary>
 );
 
 const PageRouter = ({ currentPage, loading }) => {

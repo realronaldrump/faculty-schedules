@@ -169,6 +169,30 @@ const ExportableRoomSchedule = forwardRef(({
         };
     };
 
+    const getClassBlockFit = (cls) => {
+        const duration = cls.endMinutes - cls.startMinutes;
+        const heightRatio = totalMinutes > 0 ? duration / totalMinutes : 0;
+        const isVeryTight = duration < 35 || heightRatio < 0.065;
+        const isTight = isVeryTight || duration < 55 || heightRatio < 0.095;
+        const isCondensed = isCompact || isTight || heightRatio < 0.12;
+
+        return {
+            isVeryTight,
+            isTight,
+            titleFontSize: isVeryTight ? '9px' : isTight ? '10px' : isCompact ? '10px' : '12px',
+            timeFontSize: isTight ? '7px' : '8px',
+            padding: isVeryTight ? '0 2px' : isTight ? '1px 2px' : isCompact ? '1px 3px' : '2px 4px',
+            showTime: !isVeryTight && duration >= 30,
+            showInstructor: !isCondensed && duration >= 60 && heightRatio >= 0.105 && Boolean(cls.professor),
+        };
+    };
+
+    const getClassBlockLabel = (cls) => [
+        cls.class && `${cls.class}${cls.section ? `.${cls.section}` : ''}`,
+        `${formatTime(cls.startMinutes)}-${formatTime(cls.endMinutes)}`,
+        cls.professor,
+    ].filter(Boolean).join(' • ');
+
     // Determine if we need compact text (many classes or short time slots)
     const avgDuration = useMemo(() => {
         let total = 0, count = 0;
@@ -343,66 +367,72 @@ const ExportableRoomSchedule = forwardRef(({
                                 })}
 
                                 {/* Class blocks */}
-                                {classesByDay[day].map((cls, idx) => (
-                                    <div
-                                        key={`${day}-${idx}`}
-                                        style={{
-                                            ...getBlockStyle(cls.startMinutes, cls.endMinutes),
-                                            backgroundColor: colors.classBlock,
-                                            border: `1px solid ${colors.classBlockBorder}`,
-                                            borderLeft: `3px solid ${colors.classBlockBorder}`,
-                                            borderRadius: '2px',
-                                            padding: isCompact ? '1px 3px' : '2px 4px',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            justifyContent: 'center',
-                                            overflow: 'hidden',
-                                            boxSizing: 'border-box',
-                                        }}
-                                    >
-                                        {/* Course code */}
-                                        <div style={{
-                                            fontSize: isCompact ? '10px' : '12px', // Increased from 9/10
-                                            fontWeight: '800',
-                                            color: colors.baylorGreen,
-                                            lineHeight: '1.1',
-                                            whiteSpace: 'nowrap',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            textAlign: 'center',
-                                        }}>
-                                            {cls.class}{cls.section ? `.${cls.section}` : ''}
-                                        </div>
-                                        {/* Time range - lower threshold for visibility */}
-                                        {(cls.endMinutes - cls.startMinutes) >= 30 && (
+                                {classesByDay[day].map((cls, idx) => {
+                                    const fit = getClassBlockFit(cls);
+                                    return (
+                                        <div
+                                            key={`${day}-${idx}`}
+                                            title={getClassBlockLabel(cls)}
+                                            aria-label={getClassBlockLabel(cls)}
+                                            style={{
+                                                ...getBlockStyle(cls.startMinutes, cls.endMinutes),
+                                                backgroundColor: colors.classBlock,
+                                                border: `1px solid ${colors.classBlockBorder}`,
+                                                borderLeft: `3px solid ${colors.classBlockBorder}`,
+                                                borderRadius: '2px',
+                                                padding: fit.padding,
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                justifyContent: 'center',
+                                                overflow: 'hidden',
+                                                boxSizing: 'border-box',
+                                            }}
+                                        >
+                                            {/* Course code */}
                                             <div style={{
-                                                fontSize: '8px', // Increased from 7
-                                                color: colors.textMuted,
-                                                textAlign: 'center',
-                                                lineHeight: '1.1',
-                                                marginTop: '1px',
-                                                fontWeight: '500',
-                                            }}>
-                                                {formatTime(cls.startMinutes)}-{formatTime(cls.endMinutes)}
-                                            </div>
-                                        )}
-                                        {/* Instructor - lower threshold for visibility */}
-                                        {!isCompact && (cls.endMinutes - cls.startMinutes) >= 50 && cls.professor && (
-                                            <div style={{
-                                                fontSize: '8px', // Increased from 7
-                                                color: colors.textLight,
-                                                textAlign: 'center',
-                                                lineHeight: '1.1',
+                                                fontSize: fit.titleFontSize,
+                                                fontWeight: '800',
+                                                color: colors.baylorGreen,
+                                                lineHeight: fit.isVeryTight ? '1' : '1.05',
                                                 whiteSpace: 'nowrap',
                                                 overflow: 'hidden',
                                                 textOverflow: 'ellipsis',
-                                                marginTop: '1px',
+                                                textAlign: 'center',
                                             }}>
-                                                {cls.professor}
+                                                {cls.class}{cls.section ? `.${cls.section}` : ''}
                                             </div>
-                                        )}
-                                    </div>
-                                ))}
+                                            {fit.showTime && (
+                                                <div style={{
+                                                    fontSize: fit.timeFontSize,
+                                                    color: colors.textMuted,
+                                                    textAlign: 'center',
+                                                    lineHeight: '1.05',
+                                                    marginTop: fit.isTight ? '0' : '1px',
+                                                    fontWeight: '500',
+                                                    whiteSpace: 'nowrap',
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                }}>
+                                                    {formatTime(cls.startMinutes)}-{formatTime(cls.endMinutes)}
+                                                </div>
+                                            )}
+                                            {fit.showInstructor && (
+                                                <div style={{
+                                                    fontSize: '8px',
+                                                    color: colors.textLight,
+                                                    textAlign: 'center',
+                                                    lineHeight: '1.05',
+                                                    whiteSpace: 'nowrap',
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    marginTop: '1px',
+                                                }}>
+                                                    {cls.professor}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
 
                                 {/* Empty state */}
                                 {classesByDay[day].length === 0 && (

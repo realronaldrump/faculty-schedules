@@ -114,6 +114,14 @@ service cloud.firestore {
         request.auth.uid == 'fjQuh4iAMFYi8URf35Yv5RRijKw2';
     }
 
+    function isOwnActivityDailySummary(summaryId) {
+      return isSignedIn() &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.dateKey is string &&
+        request.resource.data.dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+        summaryId == request.resource.data.dateKey + '_' + request.auth.uid;
+    }
+
     // Admin-only access for sensitive operations
     function canWrite() {
       return isAdmin();
@@ -430,7 +438,8 @@ service cloud.firestore {
 
     match /userActivityDaily/{id} {
       allow read: if isActivityOwner();
-      allow write: if isActivityOwner();
+      allow create, update: if isActivityOwner() || isOwnActivityDailySummary(id);
+      allow delete: if isActivityOwner();
     }
 
     match /userActivityAnalyticsDaily/{id} {

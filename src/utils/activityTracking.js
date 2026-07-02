@@ -1,14 +1,20 @@
 import {
   addDoc,
+  arrayUnion,
   collection,
   doc,
+  increment,
   serverTimestamp,
   setDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { formatDateKeyInTimeZone } from "./activityAnalytics";
 import { getNavigationMeta } from "./navigationMeta";
 
 const ACTIVITY_SESSION_STORAGE_KEY = "activitySession";
+const ACTIVITY_TIME_ZONE = "America/Chicago";
+const NAVIGATION_ACTION_KEY = "navigate";
+const warnedWriteFailures = new Set();
 
 const normalizeRoleList = (roles) => {
   if (Array.isArray(roles)) return roles.filter(Boolean);
@@ -120,6 +126,116 @@ const sanitizeMetadata = (metadata) => {
   }, {});
 };
 
+const safeMapKey = (value) =>
+  encodeURIComponent(String(value || "unknown")).replace(/\./g, "%2E");
+
+const getActivityHour = (date) => {
+  const formatted = new Intl.DateTimeFormat("en-US", {
+    timeZone: ACTIVITY_TIME_ZONE,
+    hour: "2-digit",
+    hour12: false,
+  }).format(date);
+  const hour = Number.parseInt(formatted, 10);
+  return Number.isFinite(hour) ? hour % 24 : 0;
+};
+
+const buildDailySummaryUpdate = ({
+  actor,
+  pageMeta,
+  sessionId,
+  eventPayload,
+  now,
+}) => {
+  const isPageEnter = eventPayload.eventType === "page_enter";
+  const isSemanticAction = !isPageEnter;
+  const pageEnterDelta = isPageEnter ? 1 : 0;
+  const semanticDelta = isSemanticAction ? 1 : 0;
+  const minutesDelta = isPageEnter ? 1 : 0;
+  const dateKey = formatDateKeyInTimeZone(now, ACTIVITY_TIME_ZONE);
+  const hour = getActivityHour(now);
+  const pageKey = safeMapKey(pageMeta.pageId);
+  const actionKey = eventPayload.actionKey || eventPayload.eventType || "action";
+  const actionMapKey = safeMapKey(actionKey);
+
+  const pageSummary = {
+    pageId: pageMeta.pageId,
+    pageLabel: pageMeta.pageLabel,
+    sectionLabel: pageMeta.sectionLabel,
+    uniqueUsers: 1,
+    pageEnterCount: increment(pageEnterDelta),
+    semanticEventCount: increment(semanticDelta),
+    count: increment(pageEnterDelta),
+    totalMinutesApprox: increment(minutesDelta),
+    hourlyBuckets: {
+      [`h${String(hour).padStart(2, "0")}`]: {
+        hour,
+        pageEnterCount: increment(pageEnterDelta),
+        semanticEventCount: increment(semanticDelta),
+        totalMinutesApprox: increment(minutesDelta),
+        uniqueUsers: 1,
+      },
+    },
+  };
+
+  if (isSemanticAction) {
+    pageSummary.actionCounts = {
+      [actionMapKey]: {
+        actionKey,
+        count: increment(1),
+      },
+    };
+  }
+
+  return {
+    ref: doc(db, "userActivityDaily", `${dateKey}_${actor.uid}`),
+    data: {
+      schemaVersion: 2,
+      dateKey,
+      uid: actor.uid,
+      email: actor.email,
+      displayName: actor.displayName,
+      role: actor.role,
+      sessionIds: arrayUnion(sessionId),
+      pageEnterCount: increment(pageEnterDelta),
+      semanticEventCount: increment(semanticDelta),
+      pagesVisitedCount: increment(pageEnterDelta),
+      totalMinutesApprox: increment(minutesDelta),
+      pageCounts: {
+        [pageKey]: pageSummary,
+      },
+      hourlyBuckets: {
+        [`h${String(hour).padStart(2, "0")}`]: {
+          hour,
+          pageEnterCount: increment(pageEnterDelta),
+          semanticEventCount: increment(semanticDelta),
+          totalMinutesApprox: increment(minutesDelta),
+          uniqueUsers: 1,
+        },
+      },
+      ...(isSemanticAction
+        ? {
+            actionCounts: {
+              [actionMapKey]: {
+                actionKey,
+                count: increment(1),
+              },
+            },
+          }
+        : {}),
+      firstSeenAt: serverTimestamp(),
+      lastSeenAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    },
+  };
+};
+
+const warnWriteFailureOnce = (label, error) => {
+  const key = `${label}:${error?.code || error?.message || "unknown"}`;
+  if (warnedWriteFailures.has(key)) return;
+  warnedWriteFailures.add(key);
+  console.warn(`Activity ${label} write failed:`, error);
+};
+
 const buildPresenceBase = (actor, pageMeta, sessionId) => ({
   uid: actor.uid,
   email: actor.email,
@@ -223,21 +339,56 @@ export const logUserActivityEvent = async ({
     timestamp: serverTimestamp(),
   };
 
-  const writes = [addDoc(collection(db, "userActivityEvents"), eventPayload)];
+  const now = new Date();
+  const summaryUpdate = buildDailySummaryUpdate({
+    actor,
+    pageMeta,
+    sessionId,
+    eventPayload,
+    now,
+  });
+
+  const writes = [
+    {
+      label: "daily summary",
+      promise: setDoc(summaryUpdate.ref, summaryUpdate.data, { merge: true }),
+    },
+  ];
+
+  // Navigation volume belongs in per-user daily summaries and presence. Keep raw
+  // event rows for semantic actions only so the live timeline remains useful
+  // without letting route changes grow an unbounded collection.
+  if (
+    normalizedEventType !== "page_enter" &&
+    normalizedActionKey !== NAVIGATION_ACTION_KEY
+  ) {
+    writes.push({
+      label: "event timeline",
+      promise: addDoc(collection(db, "userActivityEvents"), eventPayload),
+    });
+  }
 
   if (includePresence) {
     writes.push(
-      setDoc(
-        doc(db, "userPresence", actor.uid),
-        {
-          ...buildPresenceBase(actor, pageMeta, sessionId),
-          enteredAt: serverTimestamp(),
-        },
-        { merge: true },
-      ),
+      {
+        label: "presence",
+        promise: setDoc(
+          doc(db, "userPresence", actor.uid),
+          {
+            ...buildPresenceBase(actor, pageMeta, sessionId),
+            enteredAt: serverTimestamp(),
+          },
+          { merge: true },
+        ),
+      },
     );
   }
 
-  await Promise.all(writes);
+  const results = await Promise.allSettled(writes.map((write) => write.promise));
+  results.forEach((result, index) => {
+    if (result.status === "rejected") {
+      warnWriteFailureOnce(writes[index].label, result.reason);
+    }
+  });
   return sessionId;
 };

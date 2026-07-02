@@ -112,7 +112,7 @@ describe("UserActivityPage", () => {
     cleanup();
   });
 
-  it("syncs rollups automatically on open and reports up-to-date status", async () => {
+  it("loads bounded summaries automatically on open and reports up-to-date status", async () => {
     render(<UserActivityPage />);
 
     await waitFor(() => {
@@ -130,7 +130,7 @@ describe("UserActivityPage", () => {
     expect(screen.queryByText(/rebuild/i)).not.toBeInTheDocument();
   });
 
-  it("still loads stored summaries when the automatic sync fails", async () => {
+  it("still loads stored summaries when the status check fails", async () => {
     syncActivityRollupsMock.mockRejectedValue(
       Object.assign(new Error("Missing or insufficient permissions."), {
         code: "permission-denied",
@@ -141,9 +141,9 @@ describe("UserActivityPage", () => {
     render(<UserActivityPage />);
 
     expect(
-      await screen.findByText(/Summaries could not update/i),
+      await screen.findByText(/Summary status could not be checked/i),
     ).toBeInTheDocument();
-    // Overview still renders from the stored rollups.
+    // Overview still renders from the stored summaries.
     expect(await screen.findByText(/Usage trend/i)).toBeInTheDocument();
   });
 

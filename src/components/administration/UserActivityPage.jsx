@@ -61,17 +61,17 @@ const formatLoadError = (error) => {
 
 const formatSyncError = (error) => {
   if (isPermissionError(error)) {
-    return "Summaries could not update: Firestore rules block rollup writes. Deploy the latest rules (including userActivityMeta).";
+    return "Summary status could not be checked: Firestore rules block activity summary reads.";
   }
   if (
     error?.code === "resource-exhausted" ||
     /quota|resource-exhausted/i.test(String(error?.message || ""))
   ) {
-    return "Summaries could not update: the free-tier Firestore quota is exhausted. They will catch up automatically after the daily reset.";
+    return "Summary status could not be checked: the free-tier Firestore quota is exhausted. Stored activity will resume automatically after the daily reset.";
   }
   return (
     String(error?.message || "").trim() ||
-    "Summaries could not update right now — showing the latest stored data."
+    "Summary status could not be checked right now — showing the latest stored data."
   );
 };
 
@@ -132,7 +132,9 @@ const SyncStatus = ({ syncState }) => {
   }
   const { info } = syncState;
   const detail =
-    info?.mode && info.mode !== "none"
+    info?.mode === "event-summaries"
+      ? "Daily summaries update automatically as users use the app"
+      : info?.mode && info.mode !== "none"
       ? `Rolled up ${info.rolledDayCount} day${info.rolledDayCount === 1 ? "" : "s"} just now`
       : info?.lastSyncAt
         ? `Last rollup ${formatTimeAgo(info.lastSyncAt)}`
@@ -201,8 +203,8 @@ const UserActivityPage = () => {
     );
   }, [isActivityOwner]);
 
-  // The whole pipeline is automatic: opening the page rolls up any uncovered
-  // past days, then loads stored summaries plus a live in-memory view of today.
+  // The whole pipeline is automatic: activity writes maintain daily summaries,
+  // while this page only reloads those bounded summaries and live presence.
   const initialize = useCallback(
     async ({ silent = false } = {}) => {
       if (!isActivityOwner) return;
@@ -248,8 +250,7 @@ const UserActivityPage = () => {
   }, [initialize, isActivityOwner]);
 
   // Live data refreshes each minute while the tab is visible. If the local day
-  // rolls over while the page stays open, re-run the full sync so yesterday
-  // gets rolled up without any manual step.
+  // rolls over while the page stays open, reload bounded summaries automatically.
   useEffect(() => {
     if (!isActivityOwner || typeof document === "undefined") return undefined;
 

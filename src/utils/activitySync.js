@@ -1,59 +1,61 @@
 import {
   collection,
-  doc,
-  getDoc,
   getDocs,
   limit,
   orderBy,
   query,
-  serverTimestamp,
-  setDoc,
   startAfter,
   where,
-  writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import {
-  addDaysToDateKey,
-  enumerateDateKeys,
-  getDateKeyUtcRange,
-  rollupActivityForDateKeys,
-} from "./activityRollup";
+import { addDaysToDateKey, enumerateDateKeys } from "./activityRollup";
 import {
   formatDateKeyInTimeZone,
   getDateKeyDaysAgo,
 } from "./activityAnalytics";
 
-// Bump this whenever the rollup output shape changes. The next console visit
-// detects the mismatch and rebuilds the whole lookback window automatically —
-// no manual "rebuild" step, ever.
-export const ROLLUP_SCHEMA_VERSION = 1;
+// Version 2 summaries are maintained as users move through the app. The admin
+// page never rebuilds from raw events, so opening it cannot burn the read quota.
+export const ROLLUP_SCHEMA_VERSION = 2;
 export const SUMMARY_LOOKBACK_DAYS = 90;
-// Raw events older than this are pruned once they are safely covered by daily
-// rollups. Keeps userActivityEvents bounded on the Spark plan while leaving a
-// deep window for automatic full rebuilds.
-const EVENT_RETENTION_DAYS = 180;
 
-const EVENT_PAGE_SIZE = 1000;
 const ROLLUP_QUERY_PAGE_SIZE = 500;
-const WRITE_BATCH_SIZE = 425;
-const PRUNE_BATCH_LIMIT = 400;
 
-const ROLLUP_COLLECTIONS = [
-  "userActivityAnalyticsDaily",
-  "userActivityPageDaily",
-  "userActivityDaily",
-];
+const numberOrZero = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
 
-const metaDocRef = () => doc(db, "userActivityMeta", "rollupState");
-
-const mapQueryRows = (snapshot) =>
-  snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+const fetchRollupRange = async (
+  collectionName,
+  startDateKey,
+  endDateKey,
+) => {
+  const rows = [];
+  let lastDoc = null;
+  let hasMore = true;
+  while (hasMore) {
+    const snapshot = await getDocs(
+      query(
+        collection(db, collectionName),
+        where("dateKey", ">=", startDateKey),
+        where("dateKey", "<=", endDateKey),
+        orderBy("dateKey", "asc"),
+        ...(lastDoc ? [startAfter(lastDoc)] : []),
+        limit(ROLLUP_QUERY_PAGE_SIZE),
+      ),
+    );
+    const docs = snapshot?.docs || [];
+    rows.push(...docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+    hasMore = docs.length >= ROLLUP_QUERY_PAGE_SIZE;
+    if (hasMore) lastDoc = docs[docs.length - 1];
+  }
+  return rows;
+};
 
 /**
- * Pure planner: given the stored watermark state, decide which past days need
- * rolling up. Today is never rolled up here — it is computed in memory from raw
- * events so the console is always current without repeated writes.
+ * Legacy planner retained for focused unit coverage and for old callers. The
+ * runtime sync no longer uses it because rollups are maintained at write time.
  */
 export const planRollupSync = ({
   metaState,
@@ -92,225 +94,281 @@ export const planRollupSync = ({
   };
 };
 
-const fetchEventsBetween = async (startDateKey, endDateKeyInclusive) => {
-  const { start } = getDateKeyUtcRange(startDateKey);
-  const { start: endExclusive } = getDateKeyUtcRange(
-    addDaysToDateKey(endDateKeyInclusive, 1),
-  );
+const emptyHourlyBuckets = () =>
+  Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    pageEnterCount: 0,
+    semanticEventCount: 0,
+    totalMinutesApprox: 0,
+    uniqueUsers: 0,
+  }));
 
-  const events = [];
-  let lastDoc = null;
-  let hasMore = true;
-  while (hasMore) {
-    const snapshot = await getDocs(
-      query(
-        collection(db, "userActivityEvents"),
-        where("timestamp", ">=", start),
-        where("timestamp", "<", endExclusive),
-        orderBy("timestamp", "asc"),
-        ...(lastDoc ? [startAfter(lastDoc)] : []),
-        limit(EVENT_PAGE_SIZE),
-      ),
-    );
-    if (snapshot.empty) break;
-    events.push(...mapQueryRows(snapshot));
-    hasMore = snapshot.size >= EVENT_PAGE_SIZE;
-    lastDoc = snapshot.docs[snapshot.docs.length - 1];
-  }
-  return events;
+const normalizeHourlyBuckets = (value) => {
+  const buckets = emptyHourlyBuckets();
+  const source = Array.isArray(value)
+    ? value
+    : Object.values(value && typeof value === "object" ? value : {});
+
+  source.forEach((bucket) => {
+    const hour = numberOrZero(bucket?.hour);
+    const target = buckets[hour];
+    if (!target) return;
+    target.pageEnterCount += numberOrZero(bucket.pageEnterCount);
+    target.semanticEventCount += numberOrZero(bucket.semanticEventCount);
+    target.totalMinutesApprox += numberOrZero(bucket.totalMinutesApprox);
+    target.uniqueUsers += numberOrZero(bucket.uniqueUsers);
+  });
+
+  return buckets;
 };
 
-const fetchRollupRange = async (
-  collectionName,
-  startDateKey,
-  endDateKey,
-) => {
-  const rows = [];
-  let lastDoc = null;
-  let hasMore = true;
-  while (hasMore) {
-    const snapshot = await getDocs(
-      query(
-        collection(db, collectionName),
-        where("dateKey", ">=", startDateKey),
-        where("dateKey", "<=", endDateKey),
-        orderBy("dateKey", "asc"),
-        ...(lastDoc ? [startAfter(lastDoc)] : []),
-        limit(ROLLUP_QUERY_PAGE_SIZE),
-      ),
-    );
-    const docs = snapshot?.docs || [];
-    rows.push(...docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
-    hasMore = docs.length >= ROLLUP_QUERY_PAGE_SIZE;
-    if (hasMore) lastDoc = docs[docs.length - 1];
-  }
-  return rows;
+const mergeHourlyBucketsInto = (target, source) => {
+  normalizeHourlyBuckets(source).forEach((bucket) => {
+    const destination = target[bucket.hour];
+    if (!destination) return;
+    destination.pageEnterCount += bucket.pageEnterCount;
+    destination.semanticEventCount += bucket.semanticEventCount;
+    destination.totalMinutesApprox += bucket.totalMinutesApprox;
+    destination.uniqueUsers += bucket.uniqueUsers;
+  });
 };
 
-const deleteRollupRange = async (collectionName, startDateKey, endDateKey) => {
-  const rows = await fetchRollupRange(collectionName, startDateKey, endDateKey);
-  for (let index = 0; index < rows.length; index += WRITE_BATCH_SIZE) {
-    const batch = writeBatch(db);
-    rows.slice(index, index + WRITE_BATCH_SIZE).forEach((row) => {
-      batch.delete(doc(db, collectionName, row.id));
+const normalizeActionCounts = (value) => {
+  const source = Array.isArray(value)
+    ? value
+    : Object.values(value && typeof value === "object" ? value : {});
+
+  return source
+    .map((item) => ({
+      actionKey: item?.actionKey || "",
+      count: numberOrZero(item?.count),
+    }))
+    .filter((item) => item.actionKey && item.count > 0)
+    .sort((left, right) => {
+      if (right.count !== left.count) return right.count - left.count;
+      return left.actionKey.localeCompare(right.actionKey);
     });
-    await batch.commit();
+};
+
+const mergeTopActions = (actions = []) => {
+  const merged = new Map();
+  actions.forEach((item) => {
+    if (!item?.actionKey) return;
+    const existing = merged.get(item.actionKey) || {
+      ...item,
+      count: 0,
+    };
+    existing.count += numberOrZero(item.count);
+    merged.set(item.actionKey, existing);
+  });
+  return Array.from(merged.values()).sort((left, right) => {
+    if (right.count !== left.count) return right.count - left.count;
+    return left.actionKey.localeCompare(right.actionKey);
+  });
+};
+
+const normalizePageCounts = (row) => {
+  if (Array.isArray(row?.topPagesDetailed)) {
+    return row.topPagesDetailed.map((page) => ({
+      ...page,
+      pageId: page.pageId || "unknown",
+      pageLabel: page.pageLabel || page.pageId || "Unknown page",
+      sectionLabel: page.sectionLabel || "Other",
+      pageEnterCount: numberOrZero(page.pageEnterCount ?? page.count),
+      semanticEventCount: numberOrZero(page.semanticEventCount),
+      count: numberOrZero(page.count ?? page.pageEnterCount),
+      totalMinutesApprox: numberOrZero(page.totalMinutesApprox),
+      uniqueUsers: numberOrZero(page.uniqueUsers || 1),
+      topActions: normalizeActionCounts(page.topActions || page.actionCounts),
+      hourlyBuckets: normalizeHourlyBuckets(page.hourlyBuckets),
+    }));
   }
-  return rows.length;
+
+  return Object.values(row?.pageCounts || {})
+    .map((page) => ({
+      ...page,
+      pageId: page?.pageId || "unknown",
+      pageLabel: page?.pageLabel || page?.pageId || "Unknown page",
+      sectionLabel: page?.sectionLabel || "Other",
+      pageEnterCount: numberOrZero(page?.pageEnterCount ?? page?.count),
+      semanticEventCount: numberOrZero(page?.semanticEventCount),
+      count: numberOrZero(page?.count ?? page?.pageEnterCount),
+      totalMinutesApprox: numberOrZero(page?.totalMinutesApprox),
+      uniqueUsers: numberOrZero(page?.uniqueUsers || 1),
+      topActions: normalizeActionCounts(page?.topActions || page?.actionCounts),
+      hourlyBuckets: normalizeHourlyBuckets(page?.hourlyBuckets),
+    }))
+    .filter(
+      (page) =>
+        page.pageEnterCount > 0 ||
+        page.semanticEventCount > 0 ||
+        page.totalMinutesApprox > 0,
+    );
 };
 
-const buildPageRollupDocId = (pageDoc) =>
-  `${pageDoc.dateKey}_${encodeURIComponent(pageDoc.pageId || "unknown")}`;
+const normalizeUserDailyRow = (row) => {
+  const topPagesDetailed = normalizePageCounts(row);
+  const sessionCount = numberOrZero(row.sessionCount) ||
+    (Array.isArray(row.sessionIds) ? row.sessionIds.length : 0) ||
+    (numberOrZero(row.pageEnterCount) > 0 ? 1 : 0);
 
-const writeRollupSummaries = async (summaries) => {
-  const generatedAt = serverTimestamp();
-  const writes = summaries.flatMap((summary) => [
-    {
-      ref: doc(db, "userActivityAnalyticsDaily", summary.analyticsDoc.dateKey),
-      data: { ...summary.analyticsDoc, generatedAt },
-    },
-    ...summary.pageDocs.map((pageDoc) => ({
-      ref: doc(db, "userActivityPageDaily", buildPageRollupDocId(pageDoc)),
-      data: { ...pageDoc, generatedAt },
-    })),
-    ...summary.userDocs.map((userDoc) => ({
-      ref: doc(db, "userActivityDaily", `${userDoc.dateKey}_${userDoc.uid}`),
-      data: { ...userDoc, generatedAt },
-    })),
-  ]);
-
-  for (let index = 0; index < writes.length; index += WRITE_BATCH_SIZE) {
-    const batch = writeBatch(db);
-    writes.slice(index, index + WRITE_BATCH_SIZE).forEach(({ ref, data }) => {
-      batch.set(ref, data, { merge: false });
-    });
-    await batch.commit();
-  }
-  return writes.length;
+  return {
+    ...row,
+    role: row.role || "unknown",
+    sessionCount,
+    pageEnterCount: numberOrZero(row.pageEnterCount),
+    semanticEventCount: numberOrZero(row.semanticEventCount),
+    totalMinutesApprox: numberOrZero(row.totalMinutesApprox),
+    pagesVisitedCount:
+      numberOrZero(row.pagesVisitedCount) ||
+      topPagesDetailed.reduce(
+        (total, page) => total + numberOrZero(page.pageEnterCount || page.count),
+        0,
+      ),
+    topActions: normalizeActionCounts(row.topActions || row.actionCounts),
+    topPagesDetailed,
+    hourlyBuckets: normalizeHourlyBuckets(row.hourlyBuckets),
+  };
 };
 
-// One capped delete pass per sync. Old events reappear in the next sync's pass
-// if more than PRUNE_BATCH_LIMIT remain, so backlog drains gradually without
-// ever spending a quota-threatening burst.
-const pruneExpiredEvents = async (todayDateKey) => {
-  const cutoffDateKey = addDaysToDateKey(todayDateKey, -EVENT_RETENTION_DAYS);
-  const { start: cutoff } = getDateKeyUtcRange(cutoffDateKey);
-  const snapshot = await getDocs(
-    query(
-      collection(db, "userActivityEvents"),
-      where("timestamp", "<", cutoff),
-      orderBy("timestamp", "asc"),
-      limit(PRUNE_BATCH_LIMIT),
-    ),
-  );
-  if (snapshot.empty) return 0;
-  const batch = writeBatch(db);
-  snapshot.docs.forEach((docSnap) => batch.delete(docSnap.ref));
-  await batch.commit();
-  return snapshot.size;
+const addRoleBreakdown = (target, row, uniqueUsers = 1) => {
+  const role = row.role || "unknown";
+  const existing = target[role] || {
+    role,
+    uniqueUsers: 0,
+    sessionCount: 0,
+    pageEnterCount: 0,
+    semanticEventCount: 0,
+    totalMinutesApprox: 0,
+  };
+  existing.uniqueUsers += uniqueUsers;
+  existing.sessionCount += numberOrZero(row.sessionCount);
+  existing.pageEnterCount += numberOrZero(row.pageEnterCount);
+  existing.semanticEventCount += numberOrZero(row.semanticEventCount);
+  existing.totalMinutesApprox += numberOrZero(row.totalMinutesApprox);
+  target[role] = existing;
 };
 
-/**
- * Bring daily rollups up to date. Runs automatically when the console opens:
- * - normally a single meta read confirms everything is covered (no writes);
- * - after a day boundary it rolls up just the uncovered day(s);
- * - after a schema version bump (or force) it rebuilds the whole window.
- */
-export const syncActivityRollups = async ({ force = false, now = new Date() } = {}) => {
-  const todayDateKey = formatDateKeyInTimeZone(now);
-  const metaSnap = await getDoc(metaDocRef());
-  const metaState = metaSnap.exists() ? metaSnap.data() : null;
+const deriveSummariesFromUserDailyRows = (rawUserRows) => {
+  const userDailyRows = rawUserRows.map(normalizeUserDailyRow);
+  const appByDate = new Map();
+  const pageByDateAndId = new Map();
 
-  const plan = force
-    ? planRollupSync({ metaState: null, todayDateKey })
-    : planRollupSync({ metaState, todayDateKey });
+  userDailyRows.forEach((row) => {
+    if (!row.dateKey) return;
 
-  let eventCount = 0;
-  let rolledDayCount = 0;
-  if (plan.mode !== "none") {
-    const events = await fetchEventsBetween(plan.startDateKey, plan.endDateKey);
-    eventCount = events.length;
-    const summaries = rollupActivityForDateKeys(events, plan.dateKeys);
-    rolledDayCount = summaries.length;
+    const appRow = appByDate.get(row.dateKey) || {
+      dateKey: row.dateKey,
+      uniqueUsers: 0,
+      sessionCount: 0,
+      pageEnterCount: 0,
+      semanticEventCount: 0,
+      totalMinutesApprox: 0,
+      topActions: [],
+      topTransitions: [],
+      roleBreakdown: {},
+      hourlyBuckets: emptyHourlyBuckets(),
+    };
+    appRow.uniqueUsers += row.uid ? 1 : 0;
+    appRow.sessionCount += row.sessionCount;
+    appRow.pageEnterCount += row.pageEnterCount;
+    appRow.semanticEventCount += row.semanticEventCount;
+    appRow.totalMinutesApprox += row.totalMinutesApprox;
+    appRow.topActions.push(...row.topActions);
+    mergeHourlyBucketsInto(appRow.hourlyBuckets, row.hourlyBuckets);
+    addRoleBreakdown(appRow.roleBreakdown, row, row.uid ? 1 : 0);
+    appByDate.set(row.dateKey, appRow);
 
-    if (plan.mode === "full") {
-      // A rebuild may legitimately produce fewer docs than exist (removed
-      // pages, corrected events), so clear the window before rewriting.
-      await Promise.all(
-        ROLLUP_COLLECTIONS.map((name) =>
-          deleteRollupRange(name, plan.startDateKey, plan.endDateKey),
-        ),
+    row.topPagesDetailed.forEach((page) => {
+      const key = `${row.dateKey}_${page.pageId}`;
+      const pageRow = pageByDateAndId.get(key) || {
+        dateKey: row.dateKey,
+        pageId: page.pageId,
+        pageLabel: page.pageLabel,
+        sectionLabel: page.sectionLabel || "Other",
+        uniqueUsers: 0,
+        pageEnterCount: 0,
+        semanticEventCount: 0,
+        totalMinutesApprox: 0,
+        topActions: [],
+        roleBreakdown: {},
+        hourlyBuckets: emptyHourlyBuckets(),
+      };
+      pageRow.uniqueUsers += 1;
+      pageRow.pageEnterCount += numberOrZero(page.pageEnterCount || page.count);
+      pageRow.semanticEventCount += numberOrZero(page.semanticEventCount);
+      pageRow.totalMinutesApprox += numberOrZero(page.totalMinutesApprox);
+      pageRow.topActions.push(...(page.topActions || []));
+      mergeHourlyBucketsInto(pageRow.hourlyBuckets, page.hourlyBuckets);
+      addRoleBreakdown(
+        pageRow.roleBreakdown,
+        {
+          ...row,
+          pageEnterCount: page.pageEnterCount || page.count,
+          semanticEventCount: page.semanticEventCount,
+          totalMinutesApprox: page.totalMinutesApprox,
+        },
+        1,
       );
-    }
-    await writeRollupSummaries(summaries);
-  }
-
-  const prunedCount = await pruneExpiredEvents(todayDateKey);
-
-  if (plan.mode !== "none" || !metaState) {
-    await setDoc(metaDocRef(), {
-      coveredThroughDateKey:
-        plan.mode === "none"
-          ? metaState?.coveredThroughDateKey || ""
-          : plan.endDateKey,
-      schemaVersion: ROLLUP_SCHEMA_VERSION,
-      lastSyncAt: serverTimestamp(),
-      lastSyncMode: plan.mode,
-      lastSyncEventCount: eventCount,
+      pageByDateAndId.set(key, pageRow);
     });
-  }
+  });
 
-  return {
-    mode: plan.mode,
-    rolledDayCount,
-    eventCount,
-    prunedCount,
-    coveredThroughDateKey:
-      plan.mode === "none"
-        ? metaState?.coveredThroughDateKey || ""
-        : plan.endDateKey,
-    lastSyncAt: metaState?.lastSyncAt || null,
-  };
-};
+  const analyticsRows = Array.from(appByDate.values())
+    .map((row) => ({
+      ...row,
+      topActions: mergeTopActions(row.topActions),
+    }))
+    .sort((left, right) => left.dateKey.localeCompare(right.dateKey));
 
-// Today's numbers never touch Firestore rollups: they are derived in memory
-// from today's raw events on each load, so the console is always current.
-const fetchTodayPartialSummary = async (now = new Date()) => {
-  const todayDateKey = formatDateKeyInTimeZone(now);
-  const events = await fetchEventsBetween(todayDateKey, todayDateKey);
-  const summary = rollupActivityForDateKeys(events, [todayDateKey])[0] || null;
-  return {
-    todayDateKey,
-    analyticsRows: summary ? [{ ...summary.analyticsDoc, isPartial: true }] : [],
-    pageRows: summary ? summary.pageDocs : [],
-    userRows: summary ? summary.userDocs : [],
-  };
+  const pageDailyRows = Array.from(pageByDateAndId.values())
+    .map((row) => ({
+      ...row,
+      topActions: mergeTopActions(row.topActions),
+    }))
+    .sort((left, right) => {
+      const dateCompare = left.dateKey.localeCompare(right.dateKey);
+      if (dateCompare !== 0) return dateCompare;
+      return left.pageLabel.localeCompare(right.pageLabel);
+    });
+
+  return { analyticsRows, pageDailyRows, userDailyRows };
 };
 
 /**
- * Load everything the analytics model needs: stored rollups for the lookback
- * window plus an in-memory rollup of today's raw events (which replaces any
- * stored rows for today, e.g. from an older full rebuild).
+ * Kept as a cheap compatibility hook for the admin page. Summaries now update in
+ * the background as activity is recorded, so this function performs zero reads,
+ * zero writes, and zero deletes.
  */
+export const syncActivityRollups = async ({ now = new Date() } = {}) => {
+  const todayDateKey = formatDateKeyInTimeZone(now);
+  return {
+    mode: "event-summaries",
+    rolledDayCount: 0,
+    eventCount: 0,
+    prunedCount: 0,
+    coveredThroughDateKey: todayDateKey,
+    lastSyncAt: null,
+  };
+};
+
 export const loadActivitySummaries = async ({
   lookbackDays = SUMMARY_LOOKBACK_DAYS,
   now = new Date(),
 } = {}) => {
   const todayDateKey = formatDateKeyInTimeZone(now);
   const startDateKey = getDateKeyDaysAgo(lookbackDays - 1, now);
+  const rawUserRows = await fetchRollupRange(
+    "userActivityDaily",
+    startDateKey,
+    todayDateKey,
+  );
+  const derived = deriveSummariesFromUserDailyRows(rawUserRows);
 
-  const [analyticsRows, pageDailyRows, userDailyRows, today] = await Promise.all([
-    fetchRollupRange("userActivityAnalyticsDaily", startDateKey, todayDateKey),
-    fetchRollupRange("userActivityPageDaily", startDateKey, todayDateKey),
-    fetchRollupRange("userActivityDaily", startDateKey, todayDateKey),
-    fetchTodayPartialSummary(now),
-  ]);
-
-  const notToday = (row) => row.dateKey !== todayDateKey;
   return {
     todayDateKey,
-    analyticsRows: [...analyticsRows.filter(notToday), ...today.analyticsRows],
-    pageDailyRows: [...pageDailyRows.filter(notToday), ...today.pageRows],
-    userDailyRows: [...userDailyRows.filter(notToday), ...today.userRows],
+    analyticsRows: derived.analyticsRows,
+    pageDailyRows: derived.pageDailyRows,
+    userDailyRows: derived.userDailyRows,
   };
 };

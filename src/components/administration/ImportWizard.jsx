@@ -26,6 +26,7 @@ import { usePeople } from "../../contexts/PeopleContext";
 import { useUI } from "../../contexts/UIContext";
 import { normalizeTermLabel, termCodeFromLabel } from "../../utils/termUtils";
 import { hashString, hashRecord } from "../../utils/hashUtils";
+import { trackAction } from "../../utils/activityTracking";
 
 const PREVIEW_ROW_LIMIT = 100;
 
@@ -458,6 +459,10 @@ const ImportWizard = ({ embedded = false }) => {
         "Import Applied",
         `Applied ${stats.totalChanges} changes`,
       );
+      trackAction("import_applied", {
+        importType,
+        changes: stats.totalChanges,
+      });
       setShowPreviewModal(false);
       setPreviewTransaction(null);
       setStep(4);

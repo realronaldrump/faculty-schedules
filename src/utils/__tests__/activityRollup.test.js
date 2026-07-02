@@ -1,9 +1,6 @@
 // @vitest-environment node
-import { createRequire } from "module";
 import { describe, expect, it } from "vitest";
-
-const require = createRequire(import.meta.url);
-const { rollupActivityForDateKeys } = require("../activityAnalytics");
+import { rollupActivityForDateKeys } from "../activityRollup";
 
 describe("rollupActivityForDateKeys", () => {
   const events = [

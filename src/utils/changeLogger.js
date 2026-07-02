@@ -7,6 +7,7 @@
 
 import { collection, addDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
+import { trackActionThrottled } from './activityTracking';
 
 /**
  * Log a data change to the database
@@ -44,6 +45,12 @@ const logChange = async (changeData) => {
     };
 
     await addDoc(collection(db, 'changeLog'), logEntry);
+    // Surface the mutation as a semantic activity action (throttled so bulk
+    // operations produce one event, not one per record).
+    trackActionThrottled(
+      `${String(changeData.action || 'change').toLowerCase()}_${changeData.collection || 'data'}`,
+      { entity: String(changeData.entity || '').slice(0, 120) },
+    );
     console.log('📝 Change logged:', logEntry);
   } catch (error) {
     console.error('❌ Error logging change:', error);

@@ -720,7 +720,7 @@ const rollupActivityForDateKeys = (rawEvents, dateKeys) => {
     });
 };
 
-module.exports = {
+export {
   ACTIVITY_ROLLUP_TIME_ZONE,
   addDaysToDateKey,
   enumerateDateKeys,

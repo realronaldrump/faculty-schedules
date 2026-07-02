@@ -6,7 +6,6 @@
     "src/**/__tests__/**/*.{js,jsx}",
     "src/**/*.test.{js,jsx}"
   ],
-  "project": ["src/**/*.{js,jsx,cjs}", "functions/**/*.js"],
-  "ignore": ["src/utils/activityRollup.cjs"],
+  "project": ["src/**/*.{js,jsx}", "functions/**/*.js"],
   "ignoreDependencies": ["firebase-functions", "firebase-admin"]
 }

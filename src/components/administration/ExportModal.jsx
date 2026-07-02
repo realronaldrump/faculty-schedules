@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FileText, AlertTriangle } from "lucide-react";
 import Modal from "../shared/Modal";
+import { trackAction } from "../../utils/activityTracking";
 
 const resolveExportTargets = (root) => {
   if (!root) return [];
@@ -142,6 +143,7 @@ const ExportModal = ({
       printWindow.onafterprint = cleanup;
       setTimeout(cleanup, 1000);
 
+      trackAction("schedule_pdf_exported", { title: cleanTitle });
       onClose();
     } catch (err) {
       console.error("PDF export failed:", err);

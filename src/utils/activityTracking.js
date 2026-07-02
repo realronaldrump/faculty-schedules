@@ -149,6 +149,44 @@ export const touchPresence = async ({ actor, currentPage }) => {
   );
 };
 
+// Module-level activity context lets feature code report semantic actions with a
+// one-line trackAction() call — no actor/page prop drilling. useUserActivityTracker
+// (wired in App.jsx) keeps this current for the signed-in user.
+let activityContext = { actor: null, currentPage: "" };
+
+export const setActivityContext = ({ actor = null, currentPage = "" } = {}) => {
+  activityContext = { actor, currentPage };
+};
+
+export const trackAction = (actionKey, metadata = {}) => {
+  const { actor, currentPage } = activityContext;
+  if (!actor?.uid || !currentPage || !actionKey) return;
+  void logUserActivityEvent({
+    actor,
+    currentPage,
+    eventType: "action",
+    actionKey,
+    metadata,
+  }).catch((error) => {
+    console.warn("Activity action tracking failed:", error);
+  });
+};
+
+// Throttled variant for high-frequency sources (e.g. bulk imports logging one
+// audit row per record): at most one activity event per actionKey per window.
+const lastTrackedAtMs = new Map();
+const ACTION_THROTTLE_WINDOW_MS = 30 * 1000;
+
+export const trackActionThrottled = (actionKey, metadata = {}) => {
+  if (!actionKey) return;
+  const now = Date.now();
+  if (now - (lastTrackedAtMs.get(actionKey) || 0) < ACTION_THROTTLE_WINDOW_MS) {
+    return;
+  }
+  lastTrackedAtMs.set(actionKey, now);
+  trackAction(actionKey, metadata);
+};
+
 export const logUserActivityEvent = async ({
   actor,
   currentPage,

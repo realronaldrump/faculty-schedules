@@ -414,7 +414,9 @@ service cloud.firestore {
       allow create: if isSignedIn() &&
         request.resource.data.uid == request.auth.uid &&
         request.resource.data.pageId is string;
-      allow update, delete: if false;
+      allow update: if false;
+      // The owner console prunes events older than the retention window.
+      allow delete: if isActivityOwner();
     }
 
     // Per-user tutorial progress: each user owns their own document; the
@@ -437,6 +439,12 @@ service cloud.firestore {
     }
 
     match /userActivityPageDaily/{id} {
+      allow read: if isActivityOwner();
+      allow write: if isActivityOwner();
+    }
+
+    // Rollup watermark/state for the automatic activity sync.
+    match /userActivityMeta/{id} {
       allow read: if isActivityOwner();
       allow write: if isActivityOwner();
     }

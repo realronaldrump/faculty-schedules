@@ -17,6 +17,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { parseTermDate } from "../../utils/termUtils";
 import { formatMinutesToTime, formatMinutesToLabel } from "../../utils/timeUtils";
 import { buildSingleEventICS, downloadICS, sanitizeForFile } from "../../utils/icsUtils";
+import { trackAction } from "../../utils/activityTracking";
 import { isSpaceReservable } from "../../utils/spaceUtils";
 import {
   checkConflicts,
@@ -229,6 +230,10 @@ const RoomReservations = () => {
         "Room booked",
         `${selectedSpace.displayName} reserved for ${form.date}.`,
       );
+      trackAction("room_reserved", {
+        room: selectedSpace.displayName,
+        date: form.date,
+      });
       setForm((prev) => ({ ...prev, title: "", purpose: "", headcount: "" }));
     } catch (error) {
       console.error("Failed to create reservation", error);

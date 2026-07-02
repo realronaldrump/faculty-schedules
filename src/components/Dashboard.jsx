@@ -4,6 +4,7 @@ import { Search, Star, ChevronRight, HelpCircle } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useUI } from "../contexts/UIContext";
 import { navigationItems } from "../utils/navigationConfig";
+import { trackAction } from "../utils/activityTracking";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -149,6 +150,7 @@ const Dashboard = () => {
         setSearchQuery("");
       }
       if (event.key === "Enter" && searchResults.length > 0) {
+        trackAction("search_used", { target: searchResults[0].path });
         handleNavigate(searchResults[0].path);
         setSearchQuery("");
       }
@@ -311,7 +313,10 @@ const Dashboard = () => {
                   return (
                     <div key={item.id} className="flex items-stretch group">
                       <button
-                        onClick={() => handleNavigate(item.path)}
+                        onClick={() => {
+                          trackAction("search_used", { target: item.path });
+                          handleNavigate(item.path);
+                        }}
                         className="flex flex-1 items-start gap-3 px-5 py-4 text-left hover:bg-gray-50/80 transition-colors"
                       >
                         <div className="mt-0.5 rounded-lg bg-baylor-green/5 p-2 group-hover:bg-baylor-gold/10 transition-colors">

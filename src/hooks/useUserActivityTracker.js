@@ -4,6 +4,7 @@ import {
   buildActivityActor,
   getActivitySessionId,
   logUserActivityEvent,
+  setActivityContext,
   touchPresence,
 } from "../utils/activityTracking";
 import { getNavigationMeta } from "../utils/navigationMeta";
@@ -45,6 +46,18 @@ const useUserActivityTracker = ({
       sessionIdRef.current = getActivitySessionId(user.uid);
     }
   }, [isAuthenticated, loading, user?.uid]);
+
+  // Keep the module-level context current so feature code can call
+  // trackAction(actionKey) from anywhere without actor/page plumbing.
+  useEffect(() => {
+    setActivityContext(
+      isAuthenticated && !loading && actor
+        ? { actor, currentPage }
+        : { actor: null, currentPage: "" },
+    );
+  }, [actor, currentPage, isAuthenticated, loading]);
+
+  useEffect(() => () => setActivityContext(), []);
 
   useEffect(() => {
     if (!isAuthenticated || loading || !actor || !currentPage) return;

@@ -1,6 +1,12 @@
 const ANALYTICS_TIME_ZONE = "America/Chicago";
 const NAVIGATION_ACTION_KEY = "navigate";
 export const ACTIVITY_RANGE_OPTIONS = [7, 30, 90];
+export const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const getWeekdayIndex = (dateKey) => {
+  const parsed = new Date(`${dateKey}T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getDay();
+};
 
 export const toDate = (value) => {
   if (!value) return null;
@@ -195,11 +201,19 @@ const buildTrendRows = (appRows = []) =>
           : 0,
     }));
 
+// Percentage change vs the prior equal-length window; null when there is no
+// prior baseline to compare against.
+const computeDelta = (current, previous) => {
+  if (!Number.isFinite(previous) || previous <= 0) return null;
+  return Number((((current - previous) / previous) * 100).toFixed(0));
+};
+
 export const buildActivityAnalyticsModel = ({
   appDailyRows = [],
   pageDailyRows = [],
   userDailyRows = [],
   rangeDays = 30,
+  lookbackDays = 90,
   now = new Date(),
 } = {}) => {
   const cutoffDateKey = getDateKeyDaysAgo(rangeDays - 1, now);
@@ -208,6 +222,17 @@ export const buildActivityAnalyticsModel = ({
   const appRows = appDailyRows.filter((row) => (row.dateKey || "") >= cutoffDateKey);
   const pageRows = pageDailyRows.filter((row) => (row.dateKey || "") >= cutoffDateKey);
   const userRows = userDailyRows.filter((row) => (row.dateKey || "") >= cutoffDateKey);
+
+  // First appearance across the whole loaded lookback (not just the selected
+  // range) so "new" means "not seen before this range within the lookback".
+  const firstSeenDateKeyByUid = new Map();
+  userDailyRows.forEach((row) => {
+    if (!row.uid || !row.dateKey) return;
+    const existing = firstSeenDateKeyByUid.get(row.uid);
+    if (!existing || row.dateKey < existing) {
+      firstSeenDateKeyByUid.set(row.uid, row.dateKey);
+    }
+  });
 
   const usersByUid = new Map();
   userRows.forEach((row) => {
@@ -226,6 +251,7 @@ export const buildActivityAnalyticsModel = ({
       pagesVisitedCount: 0,
       firstSeenAt: null,
       lastSeenAt: null,
+      lastSeenDateKey: "",
       topPagesDetailed: [],
       topActions: [],
       hourlyBuckets: [],
@@ -239,6 +265,9 @@ export const buildActivityAnalyticsModel = ({
     existing.pagesVisitedCount += row.pagesVisitedCount || 0;
     existing.firstSeenAt = existing.firstSeenAt || row.firstSeenAt || null;
     existing.lastSeenAt = row.lastSeenAt || existing.lastSeenAt || null;
+    if ((row.dateKey || "") > existing.lastSeenDateKey) {
+      existing.lastSeenDateKey = row.dateKey || "";
+    }
     existing.topPagesDetailed = existing.topPagesDetailed.concat(
       row.topPagesDetailed || [],
     );
@@ -256,9 +285,16 @@ export const buildActivityAnalyticsModel = ({
     usersByUid.set(key, existing);
   });
 
+  // "New" is only meaningful when the lookback extends before the range —
+  // otherwise every user would look new.
+  const canFlagNewUsers = lookbackDays > rangeDays;
+
   const aggregatedUsers = Array.from(usersByUid.values())
     .map((user) => ({
       ...user,
+      isNewInRange:
+        canFlagNewUsers &&
+        (firstSeenDateKeyByUid.get(user.uid) || "") >= cutoffDateKey,
       avgMinutesPerSession:
         user.sessionCount > 0
           ? Number((user.totalMinutesApprox / user.sessionCount).toFixed(1))
@@ -347,6 +383,119 @@ export const buildActivityAnalyticsModel = ({
     right.dateKey.localeCompare(left.dateKey),
   )[0];
 
+  // Period-over-period comparison against the prior equal-length window, only
+  // when the loaded lookback fully covers that prior window.
+  const previousCutoffDateKey = getDateKeyDaysAgo(rangeDays * 2 - 1, now);
+  const hasPreviousWindow = rangeDays * 2 <= lookbackDays;
+  const previousAppRows = hasPreviousWindow
+    ? appDailyRows.filter((row) => {
+        const dateKey = row.dateKey || "";
+        return dateKey >= previousCutoffDateKey && dateKey < cutoffDateKey;
+      })
+    : [];
+  const previousUserRows = hasPreviousWindow
+    ? userDailyRows.filter((row) => {
+        const dateKey = row.dateKey || "";
+        return dateKey >= previousCutoffDateKey && dateKey < cutoffDateKey;
+      })
+    : [];
+  const sumField = (rows, field) =>
+    rows.reduce((total, row) => total + (row[field] || 0), 0);
+  const currentTotals = {
+    totalMinutesApprox: sumField(appRows, "totalMinutesApprox"),
+    sessionCount: sumField(appRows, "sessionCount"),
+    pageEnterCount: sumField(appRows, "pageEnterCount"),
+    uniqueUsers: aggregatedUsers.length,
+  };
+  const previousTotals = {
+    totalMinutesApprox: sumField(previousAppRows, "totalMinutesApprox"),
+    sessionCount: sumField(previousAppRows, "sessionCount"),
+    pageEnterCount: sumField(previousAppRows, "pageEnterCount"),
+    uniqueUsers: new Set(previousUserRows.map((row) => row.uid).filter(Boolean))
+      .size,
+  };
+  const deltas = hasPreviousWindow
+    ? {
+        totalMinutesApprox: computeDelta(
+          currentTotals.totalMinutesApprox,
+          previousTotals.totalMinutesApprox,
+        ),
+        sessionCount: computeDelta(
+          currentTotals.sessionCount,
+          previousTotals.sessionCount,
+        ),
+        pageEnterCount: computeDelta(
+          currentTotals.pageEnterCount,
+          previousTotals.pageEnterCount,
+        ),
+        uniqueUsers: computeDelta(
+          currentTotals.uniqueUsers,
+          previousTotals.uniqueUsers,
+        ),
+      }
+    : null;
+
+  // Weekday x hour minutes grid (rows Sun..Sat, cols 0..23) for the heatmap.
+  const weekHourGrid = Array.from({ length: 7 }, () =>
+    Array.from({ length: 24 }, () => 0),
+  );
+  const weekdayTotals = Array.from({ length: 7 }, (_, weekday) => ({
+    weekday,
+    label: WEEKDAY_LABELS[weekday],
+    totalMinutesApprox: 0,
+    activeDayCount: 0,
+  }));
+  appRows.forEach((row) => {
+    const weekday = getWeekdayIndex(row.dateKey);
+    (row.hourlyBuckets || []).forEach((bucket) => {
+      if (bucket.hour >= 0 && bucket.hour <= 23) {
+        weekHourGrid[weekday][bucket.hour] += bucket.totalMinutesApprox || 0;
+      }
+    });
+    weekdayTotals[weekday].totalMinutesApprox += row.totalMinutesApprox || 0;
+    if ((row.totalMinutesApprox || 0) > 0) {
+      weekdayTotals[weekday].activeDayCount += 1;
+    }
+  });
+
+  const busiestDay =
+    [...trendRows].sort(
+      (left, right) => right.totalMinutesApprox - left.totalMinutesApprox,
+    )[0] || null;
+
+  // Per-page aggregation for the sortable Pages table. Daily unique-user counts
+  // cannot be summed across days, so expose the peak day instead.
+  const pagesTable = Array.from(
+    pageRows
+      .reduce((accumulator, row) => {
+        const existing = accumulator.get(row.pageId) || {
+          pageId: row.pageId,
+          pageLabel: row.pageLabel || row.pageId,
+          sectionLabel: row.sectionLabel || "Other",
+          pageEnterCount: 0,
+          totalMinutesApprox: 0,
+          semanticEventCount: 0,
+          peakDayUsers: 0,
+          daysUsed: 0,
+          lastUsedDateKey: "",
+        };
+        existing.pageEnterCount += row.pageEnterCount || 0;
+        existing.totalMinutesApprox += row.totalMinutesApprox || 0;
+        existing.semanticEventCount += getSemanticEventCount(row);
+        existing.peakDayUsers = Math.max(
+          existing.peakDayUsers,
+          row.uniqueUsers || 0,
+        );
+        existing.daysUsed += 1;
+        if ((row.dateKey || "") > existing.lastUsedDateKey) {
+          existing.lastUsedDateKey = row.dateKey || "";
+        }
+        accumulator.set(row.pageId, existing);
+        return accumulator;
+      }, new Map())
+      .values(),
+  ).sort((left, right) => right.totalMinutesApprox - left.totalMinutesApprox);
+
   return {
     cutoffDateKey,
     todayDateKey,
@@ -401,8 +550,13 @@ export const buildActivityAnalyticsModel = ({
       topActions: topActions.slice(0, 6),
       topTransitions: topTransitions.slice(0, 6),
     },
+    deltas,
     trendRows,
     heatmapRows: aggregatedHourly,
+    weekHourGrid,
+    weekdayTotals,
+    busiestDay,
+    pagesTable,
     topPages: Array.from(topPages)
       .sort((left, right) => right.totalMinutesApprox - left.totalMinutesApprox)
       .slice(0, 8),
@@ -410,6 +564,52 @@ export const buildActivityAnalyticsModel = ({
       .sort((left, right) => right.totalMinutesApprox - left.totalMinutesApprox)
       .slice(0, 8),
     aggregatedUsers,
+  };
+};
+
+export const buildPageDrilldownModel = ({
+  rows = [],
+  rangeDays = 30,
+  now = new Date(),
+} = {}) => {
+  const cutoffDateKey = getDateKeyDaysAgo(rangeDays - 1, now);
+  const filteredRows = rows.filter((row) => (row.dateKey || "") >= cutoffDateKey);
+  const normalizedRows = filteredRows.map((row) => ({
+    ...row,
+    semanticEventCount: getSemanticEventCount(row),
+    hourlyBuckets: getHourlyBuckets(row),
+  }));
+
+  const trendRows = [...filteredRows]
+    .sort((left, right) => left.dateKey.localeCompare(right.dateKey))
+    .map((row) => ({
+      dateKey: row.dateKey,
+      label: formatDateKeyLabel(row.dateKey),
+      totalMinutesApprox: row.totalMinutesApprox || 0,
+      pageEnterCount: row.pageEnterCount || 0,
+      uniqueUsers: row.uniqueUsers || 0,
+    }));
+
+  return {
+    trendRows,
+    heatmapRows: sumBuckets(normalizedRows),
+    topActions: mergeTopActions(normalizedRows).slice(0, 6),
+    roleBreakdown: aggregateRoleBreakdown(normalizedRows),
+    summary: {
+      totalMinutesApprox: filteredRows.reduce(
+        (total, row) => total + (row.totalMinutesApprox || 0),
+        0,
+      ),
+      pageEnterCount: filteredRows.reduce(
+        (total, row) => total + (row.pageEnterCount || 0),
+        0,
+      ),
+      peakDayUsers: filteredRows.reduce(
+        (max, row) => Math.max(max, row.uniqueUsers || 0),
+        0,
+      ),
+      daysUsed: filteredRows.length,
+    },
   };
 };
 

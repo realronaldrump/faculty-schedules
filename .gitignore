@@ -9,6 +9,7 @@ yarn-error.log*
 # Build output
 dist/
 dist-ssr/
+coverage/
 
 # Environment variables
 .env

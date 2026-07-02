@@ -14,7 +14,20 @@ export default defineConfig({
           const packageName = packageSegments[0].startsWith('@')
             ? `${packageSegments[0]}/${packageSegments[1]}`
             : packageSegments[0]
-          if (id.includes('node_modules/firebase')) return 'firebase'
+          if (packageName === 'firebase') {
+            const firebaseService = packageSegments[1] || 'app'
+            if (
+              ['app', 'auth', 'firestore', 'functions', 'storage'].includes(
+                firebaseService,
+              )
+            ) {
+              return `firebase-${firebaseService}`
+            }
+            return 'firebase'
+          }
+          if (packageName.startsWith('@firebase/')) {
+            return `vendor-${packageName.replace('@', '').replace('/', '-')}`
+          }
           if (
             id.includes('node_modules/react/') ||
             id.includes('node_modules/react-dom/') ||

@@ -32,7 +32,7 @@ export const SUMMARY_LOOKBACK_DAYS = 90;
 // Raw events older than this are pruned once they are safely covered by daily
 // rollups. Keeps userActivityEvents bounded on the Spark plan while leaving a
 // deep window for automatic full rebuilds.
-export const EVENT_RETENTION_DAYS = 180;
+const EVENT_RETENTION_DAYS = 180;
 
 const EVENT_PAGE_SIZE = 1000;
 const ROLLUP_QUERY_PAGE_SIZE = 500;
@@ -120,7 +120,7 @@ const fetchEventsBetween = async (startDateKey, endDateKeyInclusive) => {
   return events;
 };
 
-export const fetchRollupRange = async (
+const fetchRollupRange = async (
   collectionName,
   startDateKey,
   endDateKey,

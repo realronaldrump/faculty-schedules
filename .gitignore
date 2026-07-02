@@ -34,5 +34,7 @@ temperature_examples/
 
 # Project-specific local files
 docs/student-worker-audit.md
-src/utils/__tests__/
+src/utils/__tests__/*
+!src/utils/__tests__/activityAnalytics.test.js
+!src/utils/__tests__/activitySync.test.js
 functions/package-lock.json

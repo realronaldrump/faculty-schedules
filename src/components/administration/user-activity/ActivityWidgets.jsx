@@ -19,7 +19,7 @@ export const SectionCard = ({ title, subtitle, actions, children, className = ""
   </div>
 );
 
-export const DeltaChip = ({ value, compareLabel }) => {
+const DeltaChip = ({ value, compareLabel }) => {
   if (value === null || value === undefined) return null;
   if (value === 0) {
     return (

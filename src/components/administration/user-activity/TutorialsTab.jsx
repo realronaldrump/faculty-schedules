@@ -11,7 +11,7 @@ const TUTORIAL_LIST = Object.values(TUTORIALS).map((tutorial) => ({
   totalSteps: tutorial.steps.length,
 }));
 
-export const buildTutorialCompletionModel = (rows) => {
+const buildTutorialCompletionModel = (rows) => {
   const users = rows
     .map((row) => {
       const tutorials = row.tutorials || {};

@@ -107,8 +107,8 @@ service cloud.firestore {
     }
 
     // Owner-only gate for activity telemetry. This UID is duplicated in
-    // src/utils/activityOwner.js (client source of truth) and functions/index.js;
-    // update all three together if it ever changes.
+    // src/utils/activityOwner.js (client source of truth); update both places if
+    // it ever changes.
     function isActivityOwner() {
       return isSignedIn() &&
         request.auth.uid == 'fjQuh4iAMFYi8URf35Yv5RRijKw2';

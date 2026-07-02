@@ -1,7 +1,7 @@
 import { toDate } from "../../../utils/activityAnalytics";
 
-export const LIVE_WINDOW_MINUTES = 2;
-export const IDLE_WINDOW_MINUTES = 10;
+const LIVE_WINDOW_MINUTES = 2;
+const IDLE_WINDOW_MINUTES = 10;
 
 export const formatMinutes = (value) => {
   const minutes = Math.round(value || 0);

@@ -1,6 +1,5 @@
 // Client source of truth for the owner UID. The same value is duplicated in
-// firestore.rules (isActivityOwner) and functions/index.js (ACTIVITY_OWNER_UID)
-// because rules/functions cannot import this module — update all three together.
+// firestore.rules (isActivityOwner) because rules cannot import this module.
 const ACTIVITY_OWNER_UID = "fjQuh4iAMFYi8URf35Yv5RRijKw2";
 const ACTIVITY_OWNER_PAGE_ID = "admin/user-activity";
 

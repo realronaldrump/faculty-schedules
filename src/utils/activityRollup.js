@@ -721,10 +721,8 @@ const rollupActivityForDateKeys = (rawEvents, dateKeys) => {
 };
 
 export {
-  ACTIVITY_ROLLUP_TIME_ZONE,
   addDaysToDateKey,
   enumerateDateKeys,
-  formatDateKeyInTimeZone,
   getDateKeyUtcRange,
   rollupActivityForDateKeys,
 };

@@ -1,53 +1,109 @@
-# User Activity Overhaul — July 2026
+# Program Director Canonicalization + GPD Support — July 2026
 
-(Previous plan archived at tasks/archive-2026-06-codebase-cleanup.md)
+(Previous plan archived at tasks/archive-2026-07-user-activity-overhaul.md)
 
-## Initial Diagnosis
-- Rollups only update via a manual "Rebuild rollups" button; opening the console shows stale data.
-- `UserActivityPage.jsx` (1,793 lines) mixes Firestore rollup plumbing with UI, and uses an
-  off-brand design language (slate/stone/emerald, `rounded-[2rem]`, `font-black`, tracking-heavy
-  eyebrows) instead of the app design system (baylor-green, university-card/table, Badge, .btn-*).
-- Only `tutorial_completed` is instrumented, so "Top Actions" panels are empty.
-- Dead Cloud Functions rollup code existed in `functions/index.js` (Spark plan can't run scheduled
-  functions; the browser rollup is the intentional path).
+## Root cause (audit findings)
+UPD assignments live in THREE disconnected places, written non-atomically:
+1. `people/{id}.isUPD` boolean (directory badges/filters read ONLY this)
+2. `programs/{id}.updIds` array (+ legacy singular `updId`)
+3. Implicit `person.programId === program.id` coupling — the Programs page only
+   shows a UPD when ALL THREE agree.
 
-## Plan
+Divergence sources: two-doc non-atomic writes in `ProgramManagement.jsx`
+(`handleSetUPD`/`handleRemoveUPD`); `deletePersonSafely` never cleans `updIds`;
+`mergePeople` never remaps `updIds`; drag-moving faculty to another program
+silently breaks the program-page display condition while the directory badge
+stays; admin export "unions" both sources as a workaround; `isUPD` used as a
+faculty-proxy in `dataAdapter` + `supervisorUtils`; hard 2-UPD cap in UI.
 
-### A. Automatic pipeline (no manual intervention, Spark-safe)
-- [x] `src/utils/activitySync.js`: auto-sync engine
-  - watermark meta doc `userActivityMeta/rollupState` (`coveredThroughDateKey`, `schemaVersion`)
-  - on console open: roll up only uncovered past days (usually 0-1 days) automatically
-  - schema version bump => automatic full rebuild of the 90-day window (delete + rewrite)
-  - today's numbers computed in-memory from today's raw events (always fresh, zero writes)
-  - retention: prune raw events older than 180 days in capped batches
-- [x] `activityTracking.js`: `setActivityContext` + fire-and-forget `trackAction(actionKey, meta)`
-- [x] Instrument semantic actions: import applied, reservation created, PDF export, person
-  saved/deleted, dashboard search used (tutorial_completed already exists)
-- [x] Firestore rules: `userActivityMeta` owner-only block present; deploy rules before production use
-- [x] Remove dead rollup Cloud Functions + `functions/activityAnalytics.js` (keep `deleteUser`)
+## Canonical model
+`programs/{id}.directors = [{ personId, role }]`, role ∈ `'upd' | 'gpd'`
+(typed constants in `utils/directorAssignments.js`). Single source of truth;
+every consumer derives via `buildDirectorIndex(programs)`. All mutations are
+single-program-doc updates → inherently atomic. Duplicate (personId, role)
+prevented by the single write path + normalization on read. No person-side
+flags. No count caps (multi-UPD/GPD supported); adjunct-ineligibility kept;
+same person may hold UPD+GPD for one program; cross-program directing allowed.
 
-### B. Better data / insight
-- [x] Period-over-period deltas (current range vs prior equal window)
-- [x] Weekday x hour heatmap grid + busiest day/hour
-- [x] Pages table model (opens, minutes, peak daily users, last used) + per-page drilldown
-- [x] New-in-window flag for users; last-seen column
+## Migration reconciliation (deterministic)
+For each program P, UPD candidates = P.updIds ∪ [P.updId] ∪
+{people with isUPD===true and programId===P.id}.
+- id in updIds & person exists (follow `mergedInto`) → migrate (report source)
+- isUPD-only + valid programId → migrate ("directory flag + membership")
+- isUPD-only, no resolvable program → manual-review list (reported, not silently
+  dropped)
+- updIds id with no person doc → orphaned (reported, dropped)
+Cleanup in same apply: delete `updIds`/`updId` from all programs, `isUPD` from
+all people, chunked batched writes. Preview (dry-run) before apply, in Data
+Cleanup → Rare Repair Tools.
 
-### C. Professional UI matching the app
-- [x] Rebuild page with `university-header` hero, HubTabs (Overview / Users / Pages / Live /
-  Tutorials), university-card sections, Badge statuses, .btn-* buttons, SortableHeader tables
-- [x] Split into `src/components/administration/user-activity/` subcomponents
-- [x] Filters: user search + role filter; page search + section filter; timeline event-type filter
-- [x] Drilldowns via shared Modal; CSV export for users and pages
-
-### D. Verification
-- [x] Unit tests: sync planning, analytics model additions, page render/tab tests
-- [x] `npm test` green; production build passes
+## Tasks
+- [x] Audit all read/write/display sites (complete — list above)
+- [ ] `utils/directorAssignments.js` — model: roles, normalize, add/remove,
+      index, filter/label helpers
+- [ ] `utils/directorMigration.js` — pure plan builder + preview/apply
+- [ ] `hygieneCore.js` — drop isUPD from DEFAULT_PERSON_SCHEMA; standardizePerson
+      strips legacy `isUPD`
+- [ ] `dataAdapter.js` — inject `directorAssignments` (faculty+staff), drop isUPD
+- [ ] `DataContext.jsx` — expose `directorIndex`
+- [ ] `usePeopleOperations.js` — `handleDirectorToggle` (assign/remove w/
+      validation); program create seeds `directors: []`
+- [ ] `ProgramManagement.jsx` — "Programs & Directors": grouped UPD/GPD display,
+      one manage UI with role toggles, cross-program assign, empty states
+- [ ] `configs-core.jsx` — director filter (all/upd/gpd/any/none), badges,
+      "Directors first" pin, faculty CSV directors column
+- [ ] `EmailLists.jsx` + `email-lists/export-utils.js` — filter/badges/sort/CSV
+- [ ] `FacultyContactCard.jsx`, `BuildingDirectory.jsx` — canonical badges
+- [ ] `supervisorUtils.js` + callers — director-aware candidate check
+- [ ] `adminExportData.js`/`adminExportSchemas.js` — directors columns (people +
+      programs sheets)
+- [ ] `dataHygiene.js` — deletePersonSafely/mergePeople director cleanup;
+      legacy isUPD/updIds detection in scan
+- [ ] `useDataCleanupActions.js` + `RareRepairToolsSection.jsx` — migration
+      preview/apply UI
+- [ ] `permissions.js`, `navigationConfig.js`, `PeopleHub.jsx` — naming
+- [ ] `firestore.rules` — directors list validation + reject legacy fields
+      (deploy AFTER running migration)
+- [ ] Tests: model, migration, cross-view consistency regression, legacy guard,
+      export schema updates
+- [ ] Run vitest, eslint, build; fix all failures
+- [ ] Post-implementation grep for legacy remnants (isUPD/updIds/UPD-singular)
 
 ## Review
-- Activity rollup utilities moved from the Cloud Functions package into `src/utils`, with the browser
-  owner console now responsible for Spark-safe incremental rollups and retention pruning.
-- The User Activity page is split into focused Overview, Users, Pages, Live, and Tutorials tabs with
-  app-native styling, drilldowns, filters, and CSV export.
-- Semantic action tracking is wired through the activity context and data-change logging so Top
-  Actions is no longer dependent only on tutorial completions.
-- Verified on July 2, 2026 with `npm test -- --run`, `npm run lint`, and `npm run build`.
+(to fill in when done)
+
+---
+
+# What's New changelog (in-app release notes) — July 2026
+
+Non-obtrusive "What's New" feature: a small dismissible card appears bottom-right
+on the first visit after a release; a header Sparkles button (with unseen dot)
+reopens the full release-notes modal anytime. Content ships with the app as a
+static versioned data module (no Firestore reads/rules — release notes describe
+deploys, so they belong in the deploy). Seen-state = localStorage
+`whatsNewLastSeenVersion` (same pattern as pinned pages).
+
+## Tasks
+- [x] `src/utils/whatsNew.js` — versioned releases data (v1 = director overhaul
+      + Baylor ID cleanup, timestamped), seen-state helpers, local-time formatter
+- [x] `src/hooks/useWhatsNew.js` (+ barrel export) — unseen detection, delayed
+      toast visibility, open/dismiss/mark-seen state machine
+- [x] `src/components/WhatsNew.jsx` — `WhatsNewToast` (bottom-right card,
+      brand accent, slide-up) + `WhatsNewModal` (shared Modal, release timeline)
+- [x] `src/App.jsx` — wire hook; header Sparkles button with unseen dot; mount
+      toast + modal; `trackAction("whats_new_opened")`
+- [x] `src/utils/__tests__/whatsNew.test.js` — data invariants + seen-state logic
+- [x] Run vitest (7/7 pass), eslint (clean), build (passes)
+- [ ] Verify in browser — BLOCKED on Firebase auth limits (couldn't sign in).
+      Manual walkthrough: sign in → toast slides in bottom-right after 1.5s →
+      "See what's new" opens modal → header Sparkles dot clears → reload shows
+      no toast; clear `whatsNewLastSeenVersion` in localStorage to replay.
+
+## Review
+Static versioned data module (release notes describe deploys, so they ship in
+code — no Firestore reads/rules). Seen-state in localStorage. To publish v2:
+prepend an object in `src/utils/whatsNew.js` RELEASES. Toast delayed 1.5s,
+bottom-right (Notification owns top-right), dismiss/open both acknowledge.
+Modal reachable forever via header Sparkles button; opening logs a
+`whats_new_opened` activity event. Added `dev-alt` (port 5273, strictPort)
+launch config for parallel-session previews.

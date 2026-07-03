@@ -144,7 +144,7 @@ const summarizePersonCandidate = (person, score, reason) => ({
   firstName: person.firstName || '',
   lastName: person.lastName || '',
   email: person.email || '',
-  baylorId: person.baylorId || '',
+  baylorId: person.baylorId || person.externalIds?.baylorId || '',
   ignitePersonNumber: getIgnitePersonNumber(person),
   jobTitle: person.jobTitle || '',
   department: person.department || '',

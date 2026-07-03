@@ -85,7 +85,7 @@ export const navigationItems = [
         label: "Programs",
         path: "people/programs",
         canonicalId: "people/programs",
-        description: "Programs, UPDs, and affiliations.",
+        description: "Programs, directors (UPD/GPD), and affiliations.",
         icon: GraduationCap,
       },
       {

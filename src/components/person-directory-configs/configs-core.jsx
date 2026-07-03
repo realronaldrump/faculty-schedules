@@ -3,9 +3,7 @@ import {
   BookOpen,
   BookUser,
   Download,
-  History,
   Plus,
-  RotateCcw,
   UserCog,
   Users,
   Wifi
@@ -13,7 +11,13 @@ import {
 import FacultyContactCard from '../FacultyContactCard';
 import Modal from '../shared/Modal';
 import MultiSelectDropdown from '../MultiSelectDropdown';
+import DirectorRoleBadge from '../shared/DirectorRoleBadge';
 import { adaptPeopleToFaculty, adaptPeopleToStaff } from '../../utils/dataAdapter';
+import {
+  DIRECTOR_FILTER_OPTIONS,
+  formatDirectorAssignmentList,
+  matchesDirectorFilter
+} from '../../utils/directorAssignments';
 import { formatPhoneNumber, validateDirectoryEntry } from '../../utils/directoryUtils';
 import { buildCourseSectionKey } from '../../utils/courseUtils';
 import { normalizeTermLabel, termCodeFromLabel } from '../../utils/termUtils';
@@ -148,19 +152,27 @@ const SHARED_EXPORT_COLUMN_DEFS = {
     label: 'Office',
     getValue: (person) => (person.hasNoOffice ? 'No office' : (person.office || ''))
   },
-  baylorId: { label: 'Baylor ID', getValue: (person) => person.baylorId || 'Not assigned' },
+  baylorId: {
+    label: 'Baylor ID',
+    getValue: (person) => person.baylorId || person.externalIds?.baylorId || 'Not assigned',
+  },
   courseCount: { label: 'Courses', getValue: (person) => person.courseCount || 0 },
   courseList: { label: 'Courses Taught', getValue: (person) => formatCourseList(person.courses) },
   remote: { label: 'Remote', getValue: (person) => (person.isRemote ? 'Yes' : 'No') }
 };
 
 const FACULTY_EXPORT_COLUMN_DEFS = {
-  ...SHARED_EXPORT_COLUMN_DEFS
+  ...SHARED_EXPORT_COLUMN_DEFS,
+  directors: {
+    label: 'Director Roles',
+    getValue: (person) => formatDirectorAssignmentList(person.directorAssignments)
+  }
 };
 
 const FACULTY_EXPORT_COLUMN_ORDER = [
   'name',
   'program',
+  'directors',
   'jobTitle',
   'email',
   'phone',
@@ -423,14 +435,14 @@ const buildCourseCounts = (records = [], scheduleData = [], filterFn = () => tru
 
 const useFacultyExtras = () => {
   const [showOnlyWithCourses, setShowOnlyWithCourses] = useState(false);
-  const [pinUPDsFirst, setPinUPDsFirst] = useState(false);
+  const [pinDirectorsFirst, setPinDirectorsFirst] = useState(false);
   const [exportColumns, setExportColumns] = useState(() => [...DEFAULT_FACULTY_EXPORT_COLUMNS]);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   return {
     showOnlyWithCourses,
     setShowOnlyWithCourses,
-    pinUPDsFirst,
-    setPinUPDsFirst,
+    pinDirectorsFirst,
+    setPinDirectorsFirst,
     exportColumns,
     setExportColumns,
     exportModalOpen,
@@ -514,43 +526,6 @@ const exportAdjunctCSV = (records = [], selectedColumns = DEFAULT_ADJUNCT_EXPORT
   );
 };
 
-const renderHistoryPanel = ({
-  changeHistory,
-  showHistory,
-  title,
-  labelKey,
-  onUndo
-}) => {
-  if (!showHistory || changeHistory.length === 0) return null;
-
-  return (
-    <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-      <h3 className="font-medium text-gray-900 mb-3">{title}</h3>
-      <div className="space-y-2 max-h-48 overflow-y-auto">
-        {changeHistory.map((change) => (
-          <div key={change.id} className="flex items-center justify-between p-3 bg-white rounded border">
-            <div className="flex-1">
-              <div className="font-medium text-sm">
-                {change.action === 'create' ? 'Created' : 'Updated'} {change[labelKey]}
-              </div>
-              <div className="text-xs text-gray-500">{new Date(change.timestamp).toLocaleString()}</div>
-            </div>
-            {change.action === 'update' && (
-              <button
-                onClick={() => onUndo(change)}
-                className="flex items-center gap-1 px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
-              >
-                <RotateCcw size={12} />
-                Undo
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
 const facultyDirectoryConfig = {
   title: 'Faculty Directory',
   icon: BookUser,
@@ -562,7 +537,7 @@ const facultyDirectoryConfig = {
     buildings: [],
     adjunct: 'exclude',
     tenured: 'all',
-    upd: 'all',
+    director: 'all',
     courseCount: 'all',
     isAlsoStaff: 'all',
     hasPhD: 'all',
@@ -580,7 +555,7 @@ const facultyDirectoryConfig = {
     offices: [],
     officeSpaceId: '',
     officeSpaceIds: [],
-    baylorId: '',
+    baylorId: null,
     isAdjunct: false,
     isTenured: false,
     isAlsoStaff: false,
@@ -634,8 +609,8 @@ const facultyDirectoryConfig = {
     if (filters.tenured !== 'all') {
       filtered = filtered.filter((person) => filters.tenured === 'include' ? person.isTenured : !person.isTenured);
     }
-    if (filters.upd !== 'all') {
-      filtered = filtered.filter((person) => filters.upd === 'include' ? person.isUPD : !person.isUPD);
+    if (filters.director !== 'all') {
+      filtered = filtered.filter((person) => matchesDirectorFilter(person.directorAssignments, filters.director));
     }
     if (filters.isAlsoStaff !== 'all') {
       filtered = filtered.filter((person) => filters.isAlsoStaff === 'include' ? person.isAlsoStaff : !person.isAlsoStaff);
@@ -654,14 +629,21 @@ const facultyDirectoryConfig = {
     }
 
     if (filters.hasBaylorId === 'with-id') {
-      filtered = filtered.filter((person) => person.baylorId && person.baylorId.trim() !== '');
+      filtered = filtered.filter((person) => {
+        const baylorId = person.baylorId || person.externalIds?.baylorId || '';
+        return String(baylorId).trim() !== '';
+      });
     } else if (filters.hasBaylorId === 'without-id') {
-      filtered = filtered.filter((person) => !person.baylorId || person.baylorId.trim() === '');
+      filtered = filtered.filter((person) => {
+        const baylorId = person.baylorId || person.externalIds?.baylorId || '';
+        return String(baylorId).trim() === '';
+      });
     }
 
     return filtered;
   },
-  getSortPriority: (person, extraState) => (extraState.pinUPDsFirst ? (person.isUPD ? 1 : 0) : 0),
+  getSortPriority: (person, extraState) =>
+    (extraState.pinDirectorsFirst ? ((person.directorAssignments || []).length > 0 ? 1 : 0) : 0),
   permissions: {
     canEdit: () => !canUseWindow || window?.appPermissions?.canEditFaculty !== false,
     canDelete: () => !canUseWindow || window?.appPermissions?.canDeleteFaculty !== false,
@@ -696,9 +678,15 @@ const facultyDirectoryConfig = {
               <div className="text-xs text-red-600 font-medium">Inactive</div>
             )}
             {faculty.program && <div className="text-xs text-baylor-green font-medium">{faculty.program.name}</div>}
-            {faculty.isUPD && (
-              <div className="text-xs text-amber-600 font-medium flex items-center gap-1">
-                <UserCog size={12} /> UPD
+            {(faculty.directorAssignments || []).length > 0 && (
+              <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                {faculty.directorAssignments.map((assignment) => (
+                  <DirectorRoleBadge
+                    key={`${assignment.programId}-${assignment.role}`}
+                    role={assignment.role}
+                    programName={assignment.programName}
+                  />
+                ))}
               </div>
             )}
             {faculty.isAlsoStaff && <div className="text-xs text-baylor-gold font-medium">Also Staff</div>}
@@ -775,12 +763,12 @@ const facultyDirectoryConfig = {
   leadingActions: ({ extraState }) => (
     <>
       <button
-        onClick={() => extraState.setPinUPDsFirst((prev) => !prev)}
-        className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${extraState.pinUPDsFirst ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'}`}
-        title="Bring Undergraduate Program Directors to the top"
+        onClick={() => extraState.setPinDirectorsFirst((prev) => !prev)}
+        className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${extraState.pinDirectorsFirst ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'}`}
+        title="Bring program directors (UPD/GPD) to the top"
       >
         <UserCog size={16} />
-        <span className="text-xs font-medium">UPD first</span>
+        <span className="text-xs font-medium">Directors first</span>
       </button>
       <label className="flex items-center gap-2 text-sm">
         <input
@@ -891,15 +879,15 @@ const facultyDirectoryConfig = {
           </SelectDropdown>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">UPD Status</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Director Role</label>
           <SelectDropdown
-            value={state.filters.upd}
-            onChange={(event) => state.setFilters((prev) => ({ ...prev, upd: event.target.value }))}
+            value={state.filters.director}
+            onChange={(event) => state.setFilters((prev) => ({ ...prev, director: event.target.value }))}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
           >
-            <option value="all">All</option>
-            <option value="include">UPD Only</option>
-            <option value="exclude">Exclude UPD</option>
+            {DIRECTOR_FILTER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </SelectDropdown>
         </div>
         <div>
@@ -947,7 +935,7 @@ const facultyDirectoryConfig = {
           >
             <option value="all">All</option>
             <option value="with-id">Has Baylor ID</option>
-            <option value="without-id">Missing Baylor ID</option>
+            <option value="without-id">Unassigned Baylor ID</option>
           </SelectDropdown>
         </div>
         <div>
@@ -1041,7 +1029,6 @@ const staffDirectoryConfig = {
   deriveData: ({ data, programs }) => (
     Array.isArray(data) ? adaptPeopleToStaff(data, [], programs, { includeInactive: true }) : []
   ),
-  changeTracking: { idKey: 'staffId', nameKey: 'staffName' },
   applyFilters: (records, { filters }) => {
     let filtered = [...records];
 
@@ -1170,7 +1157,7 @@ const staffDirectoryConfig = {
       baseColumns.office
     ];
   },
-  trailingActions: ({ handlers, state, data }) => (
+  trailingActions: ({ handlers, data }) => (
     <>
       <button
         onClick={() => exportStaffCSV(data)}
@@ -1178,15 +1165,6 @@ const staffDirectoryConfig = {
       >
         <Download size={18} /> Export CSV
       </button>
-      {state.changeHistory.length > 0 && (
-        <button
-          onClick={() => state.setShowHistory(!state.showHistory)}
-          className="flex items-center gap-2 px-3 py-2 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 transition-colors"
-        >
-          <History size={16} />
-          Changes ({state.changeHistory.length})
-        </button>
-      )}
       <button
         onClick={handlers.handleCreate}
         className="btn-primary"
@@ -1269,31 +1247,6 @@ const staffDirectoryConfig = {
       </div>
     </>
   ),
-  bodyTop: ({ state, onUpdate, onRelatedUpdate }) => {
-    const undoChange = async (change) => {
-      if (change.action !== 'update') return;
-
-      try {
-        const dataToRestore = { ...change.originalData };
-        if (dataToRestore.isAlsoFaculty && onRelatedUpdate) {
-          await onRelatedUpdate(dataToRestore);
-        } else if (onUpdate) {
-          await onUpdate(dataToRestore);
-        }
-        state.setChangeHistory((prev) => prev.filter((item) => item.id !== change.id));
-      } catch (error) {
-        console.error('Error undoing change:', error);
-      }
-    };
-
-    return renderHistoryPanel({
-      changeHistory: state.changeHistory,
-      showHistory: state.showHistory,
-      title: 'Recent Changes',
-      labelKey: 'staffName',
-      onUndo: undoChange
-    });
-  },
   renderContactCard: ({ record, onClose }) => (
     <FacultyContactCard person={record} onClose={onClose} />
   )
@@ -1322,7 +1275,7 @@ const adjunctDirectoryConfig = {
     offices: [],
     officeSpaceId: '',
     officeSpaceIds: [],
-    baylorId: '',
+    baylorId: null,
     isAdjunct: true,
     isTenured: false,
     isAlsoStaff: false,
@@ -1362,7 +1315,6 @@ const adjunctDirectoryConfig = {
     const base = adaptPeopleToFaculty(data, scheduleData, programs, { includeInactive: true });
     return buildCourseCounts(base, scheduleData, (faculty) => faculty.isAdjunct, selectedSemester);
   },
-  changeTracking: { idKey: 'facultyId', nameKey: 'facultyName' },
   applyFilters: (records, { filters, extraState }) => {
     let filtered = [...records];
 
@@ -1510,7 +1462,7 @@ const adjunctDirectoryConfig = {
       Only show adjunct with at least 1 course
     </label>
   ),
-  trailingActions: ({ handlers, state, data, extraState }) => {
+  trailingActions: ({ handlers, data, extraState }) => {
     const openExportModal = () => {
       if (!Array.isArray(extraState.exportColumns) || extraState.exportColumns.length === 0) {
         extraState.setExportColumns([...DEFAULT_ADJUNCT_EXPORT_COLUMNS]);
@@ -1531,15 +1483,6 @@ const adjunctDirectoryConfig = {
         >
           <Download size={18} /> Export CSV
         </button>
-        {state.changeHistory.length > 0 && (
-          <button
-            onClick={() => state.setShowHistory(!state.showHistory)}
-            className="flex items-center gap-2 px-3 py-2 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 transition-colors"
-          >
-            <History size={16} />
-            Changes ({state.changeHistory.length})
-          </button>
-        )}
         <button
           onClick={handlers.handleCreate}
           className="btn-primary"
@@ -1634,31 +1577,6 @@ const adjunctDirectoryConfig = {
   ),
   onClearFilters: ({ extraState }) => {
     extraState.setShowOnlyWithCourses(false);
-  },
-  bodyTop: ({ state, onUpdate, onRelatedUpdate }) => {
-    const undoChange = async (change) => {
-      if (change.action !== 'update') return;
-
-      try {
-        const dataToRestore = { ...change.originalData };
-        if (dataToRestore.isAlsoStaff && onRelatedUpdate) {
-          await onRelatedUpdate(dataToRestore);
-        } else if (onUpdate) {
-          await onUpdate(dataToRestore);
-        }
-        state.setChangeHistory((prev) => prev.filter((item) => item.id !== change.id));
-      } catch (error) {
-        console.error('Error undoing change:', error);
-      }
-    };
-
-    return renderHistoryPanel({
-      changeHistory: state.changeHistory,
-      showHistory: state.showHistory,
-      title: 'Recent Changes',
-      labelKey: 'facultyName',
-      onUndo: undoChange
-    });
   },
   renderContactCard: ({ record, onClose }) => (
     <FacultyContactCard person={record} onClose={onClose} />

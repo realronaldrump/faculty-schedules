@@ -12,6 +12,10 @@ import TechnicalDetailsPanel from "./TechnicalDetailsPanel";
 import {
   summarizeBaselinePreview,
   summarizeBaselineReport,
+  summarizeBaylorIdCleanupPreview,
+  summarizeBaylorIdCleanupReport,
+  summarizeDirectorMigrationPreview,
+  summarizeDirectorMigrationReport,
   summarizeLocationApplyReport,
   summarizeLocationPreview,
   summarizeOrphanCleanup,
@@ -81,6 +85,13 @@ const RareRepairToolsSection = ({
   onLoadLocationPreview,
   onRequestLocationConfirm,
 
+  directorMigrationPreview,
+  directorMigrationReport,
+  isLoadingDirectorMigrationPreview,
+  isApplyingDirectorMigration,
+  onLoadDirectorMigrationPreview,
+  onRequestDirectorMigrationConfirm,
+
   orphanTermFilter,
   setOrphanTermFilter,
   orphanScan,
@@ -90,6 +101,13 @@ const RareRepairToolsSection = ({
   isApplyingOrphanCleanup,
   onScanOrphans,
   onRequestOrphanConfirm,
+
+  baylorIdCleanupPreview,
+  baylorIdCleanupReport,
+  isLoadingBaylorIdCleanupPreview,
+  isApplyingBaylorIdCleanup,
+  onLoadBaylorIdCleanupPreview,
+  onRequestBaylorIdCleanupConfirm,
 }) => {
   const baselinePreviewSummary = summarizeBaselinePreview(baselinePreviewReport);
   const baselineSummary = summarizeBaselineReport(baselineReport);
@@ -100,13 +118,26 @@ const RareRepairToolsSection = ({
   const termSummary = summarizeTermRepairReport(termRepairReport, termCode);
   const locationPreviewSummary = summarizeLocationPreview(locationPreview);
   const locationApplySummary = summarizeLocationApplyReport(locationApplyReport);
+  const directorMigrationPreviewSummary = summarizeDirectorMigrationPreview(
+    directorMigrationPreview,
+  );
+  const directorMigrationReportSummary = summarizeDirectorMigrationReport(
+    directorMigrationReport,
+  );
   const orphanScanSummary = summarizeOrphanScan(orphanScan, orphanTermFilter);
   const orphanCleanupSummary = summarizeOrphanCleanup(
     orphanCleanupResult,
     orphanTermFilter,
   );
+  const baylorIdCleanupPreviewSummary = summarizeBaylorIdCleanupPreview(
+    baylorIdCleanupPreview,
+  );
+  const baylorIdCleanupReportSummary = summarizeBaylorIdCleanupReport(
+    baylorIdCleanupReport,
+  );
   const hasBaselinePreview = Boolean(baselinePreviewReport);
   const hasTermRepairPreview = Boolean(termRepairPreviewReport);
+  const hasBaylorIdCleanupPreview = Boolean(baylorIdCleanupPreview);
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-5 sm:p-6">
@@ -368,6 +399,188 @@ const RareRepairToolsSection = ({
             <TechnicalDetailsPanel
               title="Troubleshooting details (optional)"
               data={locationApplyReport}
+            />
+          </section>
+
+          <section className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div>
+              <h4 className="text-sm font-semibold text-gray-900">
+                Migrate program directors (one-time)
+              </h4>
+              <p className="mt-1 text-xs text-gray-600">
+                Moves legacy UPD data (person flags and program UPD lists) into
+                the canonical director assignments on program records, then
+                removes the legacy fields. Preview first; conflicts are listed
+                below before anything changes.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={onLoadDirectorMigrationPreview}
+                disabled={isLoadingDirectorMigrationPreview}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+              >
+                {isLoadingDirectorMigrationPreview ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Search className="h-4 w-4" />
+                    Preview director migration
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={onRequestDirectorMigrationConfirm}
+                disabled={isApplyingDirectorMigration || !directorMigrationPreview}
+                className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-50"
+              >
+                {isApplyingDirectorMigration ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Applying...
+                  </>
+                ) : (
+                  "Migrate directors"
+                )}
+              </button>
+            </div>
+
+            <SummaryCard summary={directorMigrationPreviewSummary} tone="blue" />
+            <SummaryCard summary={directorMigrationReportSummary} tone="green" />
+
+            {(directorMigrationPreview?.manualReview?.length || 0) > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <div className="text-sm font-semibold text-amber-900">
+                  Needs manual review
+                </div>
+                <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-amber-900">
+                  {directorMigrationPreview.manualReview.map((entry) => (
+                    <li key={entry.personId}>
+                      <span className="font-medium">{entry.personName}</span> —{" "}
+                      {entry.reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {(directorMigrationPreview?.orphaned?.length || 0) > 0 && (
+              <div className="rounded-lg border border-gray-300 bg-white p-3">
+                <div className="text-sm font-semibold text-gray-800">
+                  Orphaned references (will be dropped)
+                </div>
+                <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-gray-700">
+                  {directorMigrationPreview.orphaned.map((entry) => (
+                    <li key={`${entry.programId}:${entry.personId}`}>
+                      Program <span className="font-medium">{entry.programName}</span>{" "}
+                      references missing person {entry.personId}.
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <TechnicalDetailsPanel
+              title="Troubleshooting details (optional)"
+              data={directorMigrationPreview}
+            />
+            <TechnicalDetailsPanel
+              title="Troubleshooting details (optional)"
+              data={directorMigrationReport}
+            />
+          </section>
+
+          <section className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div>
+              <h4 className="text-sm font-semibold text-gray-900">
+                Baylor ID optionality cleanup
+              </h4>
+              <p className="mt-1 text-xs text-gray-600">
+                Normalizes unassigned IDs, syncs active app mirrors, and scrubs
+                Baylor ID values from app-managed history records. Preview first;
+                active import previews are skipped.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={onLoadBaylorIdCleanupPreview}
+                disabled={isLoadingBaylorIdCleanupPreview || isApplyingBaylorIdCleanup}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+              >
+                {isLoadingBaylorIdCleanupPreview ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Search className="h-4 w-4" />
+                    Preview Baylor ID cleanup
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={onRequestBaylorIdCleanupConfirm}
+                disabled={isApplyingBaylorIdCleanup || !hasBaylorIdCleanupPreview}
+                className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-50"
+              >
+                {isApplyingBaylorIdCleanup ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Applying...
+                  </>
+                ) : (
+                  "Apply Baylor ID cleanup"
+                )}
+              </button>
+            </div>
+
+            {!hasBaylorIdCleanupPreview && (
+              <p className="text-xs text-gray-700">
+                Apply is enabled only after you preview the expected changes.
+              </p>
+            )}
+
+            <SummaryCard summary={baylorIdCleanupPreviewSummary} tone="blue" />
+            <SummaryCard summary={baylorIdCleanupReportSummary} tone="green" />
+
+            {(baylorIdCleanupPreview?.people?.manualReview?.length || 0) > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <div className="text-sm font-semibold text-amber-900">
+                  Needs manual review
+                </div>
+                <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-amber-900">
+                  {baylorIdCleanupPreview.people.manualReview
+                    .slice(0, 10)
+                    .map((entry, index) => (
+                      <li key={`${entry.person}:${index}`}>
+                        <span className="font-medium">{entry.person}</span>{" "}
+                        -{" "}
+                        {entry.reason}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
+
+            <TechnicalDetailsPanel
+              title="Troubleshooting details (optional)"
+              data={baylorIdCleanupPreview}
+            />
+            <TechnicalDetailsPanel
+              title="Troubleshooting details (optional)"
+              data={baylorIdCleanupReport}
             />
           </section>
 

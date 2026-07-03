@@ -6,8 +6,9 @@
  */
 
 import { useCallback } from "react";
-import { db, COLLECTIONS } from "../firebase";
-import { collection, doc, getDoc, setDoc, updateDoc, addDoc, deleteField } from "firebase/firestore";
+import { db, COLLECTIONS, functions as firebaseFunctions } from "../firebase";
+import { collection, doc, setDoc, updateDoc, addDoc, deleteField } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import { logCreate, logUpdate, logDelete } from "../utils/changeLogger";
 import { useData } from "../contexts/DataContext";
 import { usePeople } from "../contexts/PeopleContext";
@@ -17,6 +18,15 @@ import {
   isReservedProgramName,
   normalizeProgramName,
 } from "../utils/programUtils";
+import {
+  addDirector,
+  getDirectorEligibilityError,
+  getDirectorRoleLabel,
+  getProgramDirectors,
+  hasDirector,
+  isDirectorRole,
+  removeDirector,
+} from "../utils/directorAssignments";
 import { deletePersonSafely } from "../utils/dataHygiene";
 import { standardizePerson } from "../utils/hygieneCore";
 import {
@@ -946,7 +956,7 @@ const usePeopleOperations = () => {
         const programData = {
           name: normalizedName,
           code: normalizedCode,
-          updIds: [],
+          directors: [],
           createdAt: now,
           updatedAt: now,
         };
@@ -1094,6 +1104,113 @@ const usePeopleOperations = () => {
     [rawPrograms, loadPrograms, canCreateProgram, showNotification],
   );
 
+  /**
+   * Assign or remove a program-director role. The canonical relationship is
+   * programs/{id}.directors, so every change is a single-document update and
+   * can never leave person/program state out of sync.
+   */
+  const handleDirectorAssignmentChange = useCallback(
+    async ({ programId, personId, role, assign }) => {
+      if (!canEdit("people/programs")) {
+        showNotification(
+          "warning",
+          "Permission Denied",
+          "You do not have permission to manage program directors.",
+        );
+        return false;
+      }
+
+      const roleLabel = getDirectorRoleLabel(role) || "program director";
+      const program = (rawPrograms || []).find((p) => p.id === programId);
+      const person = (rawPeople || []).find((p) => p.id === personId);
+
+      if (!isDirectorRole(role)) {
+        showNotification("error", "Invalid Role", "Unknown director role.");
+        return false;
+      }
+      if (!program) {
+        showNotification(
+          "error",
+          "Program Not Found",
+          "This program no longer exists. Refresh and try again.",
+        );
+        return false;
+      }
+      if (!person) {
+        showNotification(
+          "error",
+          "Person Not Found",
+          "This person no longer exists. Refresh and try again.",
+        );
+        return false;
+      }
+      if (assign) {
+        const eligibilityError = getDirectorEligibilityError(person);
+        if (eligibilityError) {
+          showNotification("error", "Cannot Assign Director", eligibilityError);
+          return false;
+        }
+        if (hasDirector(program.directors, personId, role)) {
+          showNotification(
+            "info",
+            "Already Assigned",
+            `${person.name || "This person"} is already a ${roleLabel} for ${program.name}.`,
+          );
+          return false;
+        }
+      } else if (!hasDirector(program.directors, personId, role)) {
+        showNotification(
+          "info",
+          "Not Assigned",
+          `${person.name || "This person"} is not currently a ${roleLabel} for ${program.name}.`,
+        );
+        return false;
+      }
+
+      try {
+        const currentDirectors = getProgramDirectors(program);
+        const nextDirectors = assign
+          ? addDirector(currentDirectors, personId, role)
+          : removeDirector(currentDirectors, personId, role);
+        const updateData = {
+          directors: nextDirectors,
+          updatedAt: new Date().toISOString(),
+        };
+
+        await updateDoc(doc(db, COLLECTIONS.PROGRAMS, programId), updateData);
+
+        await logUpdate(
+          `Program Director ${assign ? "Assigned" : "Removed"} - ${program.name}: ${person.name || personId} (${roleLabel})`,
+          COLLECTIONS.PROGRAMS,
+          programId,
+          updateData,
+          { directors: currentDirectors },
+          "usePeopleOperations - handleDirectorAssignmentChange",
+        );
+
+        await loadPrograms({ force: true });
+
+        showNotification(
+          "success",
+          assign ? "Director Assigned" : "Director Removed",
+          assign
+            ? `${person.name || "Person"} is now a ${roleLabel} for ${program.name}.`
+            : `${person.name || "Person"} is no longer a ${roleLabel} for ${program.name}.`,
+        );
+        return true;
+      } catch (error) {
+        console.error("❌ Error updating program directors:", error);
+        showNotification(
+          "error",
+          "Update Failed",
+          "Failed to update program directors. Please try again.",
+        );
+        return false;
+      }
+    },
+    [rawPrograms, rawPeople, loadPrograms, canEdit, showNotification],
+  );
+
   // Handle revert change (placeholder)
   const handleRevertChange = useCallback(
     async (changeToRevert) => {
@@ -1119,7 +1236,7 @@ const usePeopleOperations = () => {
 
   // Handle Baylor ID update - minimal update that preserves roles
   const handleBaylorIdUpdate = useCallback(
-    async (personId, baylorId) => {
+    async (personId, baylorId, options = {}) => {
       if (!personId) {
         showNotification(
           "error",
@@ -1132,45 +1249,38 @@ const usePeopleOperations = () => {
       console.log("🎫 Updating Baylor ID for person:", personId);
 
       try {
-        const personRef = doc(db, "people", personId);
-        const personSnap = await getDoc(personRef);
+        const updateBaylorId = httpsCallable(firebaseFunctions, "updateBaylorId");
+        const remove = options.remove === true || baylorId === null;
+        const cleanedBaylorId =
+          typeof baylorId === "string" ? baylorId.trim() : baylorId;
 
-        if (!personSnap.exists()) {
-          showNotification("error", "Not Found", "Person record not found.");
-          return;
-        }
-
-        const originalData = { id: personId, ...personSnap.data() };
-        const updateData = {
-          baylorId: baylorId || "",
-          updatedAt: new Date().toISOString(),
-        };
-
-        await updateDoc(personRef, updateData);
-
-        await logUpdate(
-          `Person - ${originalData.name || "Unknown"}`,
-          "people",
+        const result = await updateBaylorId({
           personId,
-          updateData,
-          originalData,
-          "usePeopleOperations - handleBaylorIdUpdate",
-        );
+          baylorId: remove ? null : cleanedBaylorId,
+          remove,
+        });
 
         await loadPeople({ force: true });
 
+        const action = result?.data?.action;
         showNotification(
           "success",
-          "Baylor ID Updated",
-          `Baylor ID has been updated successfully.`,
+          action === "removed" ? "Baylor ID Removed" : "Baylor ID Updated",
+          action === "removed"
+            ? "Baylor ID has been permanently removed."
+            : "Baylor ID has been updated successfully.",
         );
       } catch (error) {
         console.error("❌ Error updating Baylor ID:", error);
+        const message =
+          error?.message ||
+          "Failed to update Baylor ID. Please try again.";
         showNotification(
           "error",
           "Update Failed",
-          "Failed to update Baylor ID. Please try again.",
+          message,
         );
+        throw error;
       }
     },
     [loadPeople, showNotification],
@@ -1185,6 +1295,7 @@ const usePeopleOperations = () => {
     handleStudentDelete,
     handleProgramCreate,
     handleProgramUpdate,
+    handleDirectorAssignmentChange,
     handleRevertChange,
     handleBaylorIdUpdate,
   };

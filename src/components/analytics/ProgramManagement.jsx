@@ -3,15 +3,23 @@ import { Users, Edit, Save, X, Plus, Search, GripVertical, UserCog, Building2, C
 import FacultyContactCard from "../FacultyContactCard";
 import Modal from "../shared/Modal";
 import ConfirmDialog from "../shared/ConfirmDialog";
-import { doc, updateDoc, deleteDoc } from "firebase/firestore";
+import DirectorRoleBadge from "../shared/DirectorRoleBadge";
+import { doc, deleteDoc } from "firebase/firestore";
 import { db, COLLECTIONS } from "../../firebase";
-import { logUpdate, logDelete } from "../../utils/changeLogger";
+import { logDelete } from "../../utils/changeLogger";
 import { usePermissions } from "../../utils/permissions";
 import {
   getProgramNameKey,
   isReservedProgramName,
   normalizeProgramName,
 } from "../../utils/programUtils";
+import {
+  DIRECTOR_ROLE_META,
+  DIRECTOR_ROLE_ORDER,
+  getDirectorRoleAbbreviation,
+  getProgramDirectors,
+  hasDirector,
+} from "../../utils/directorAssignments";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { usePeopleOperations } from "../../hooks";
@@ -19,16 +27,21 @@ import { useUI } from "../../contexts/UIContext";
 
 import SelectDropdown from "../SelectDropdown";
 const ProgramManagement = ({ embedded = false }) => {
-  const { facultyData = [], programs = [], loadPrograms } = useData();
+  const { facultyData = [], programs = [], rawPeople = [], loadPrograms } = useData();
   const { loadPeople } = usePeople();
-  const { handleProgramCreate, handleProgramUpdate, handleFacultyUpdate } =
-    usePeopleOperations();
+  const {
+    handleProgramCreate,
+    handleProgramUpdate,
+    handleFacultyUpdate,
+    handleDirectorAssignmentChange,
+  } = usePeopleOperations();
   const { showNotification } = useUI();
   const { canEdit } = usePermissions();
   const canEditHere = canEdit("people/programs");
 
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
-  const [editingUPD, setEditingUPD] = useState(null);
+  const [managingDirectorsFor, setManagingDirectorsFor] = useState(null);
+  const [extraDirectorCandidates, setExtraDirectorCandidates] = useState({});
   const [searchText, setSearchText] = useState("");
   const [showCreateProgram, setShowCreateProgram] = useState(false);
   const [newProgramName, setNewProgramName] = useState("");
@@ -54,7 +67,14 @@ const ProgramManagement = ({ embedded = false }) => {
     loadPrograms();
   }, [loadPeople, loadPrograms]);
 
-  // Organize faculty by program using the reliable program data
+  const peopleById = useMemo(
+    () => new Map((rawPeople || []).map((person) => [person.id, person])),
+    [rawPeople],
+  );
+
+  // Organize faculty by program using the reliable program data. Director
+  // assignments come straight from the canonical programs/{id}.directors
+  // relationship — never from person-side flags.
   const programData = useMemo(() => {
     if (!facultyData || !Array.isArray(facultyData)) return {};
 
@@ -65,7 +85,7 @@ const ProgramManagement = ({ embedded = false }) => {
       programGroups[p.name] = {
         name: p.name,
         faculty: [],
-        upds: [],
+        directors: getProgramDirectors(p),
         programId: p.id,
         rawProgram: p,
       };
@@ -76,7 +96,7 @@ const ProgramManagement = ({ embedded = false }) => {
       programGroups["Unassigned"] = {
         name: "Unassigned",
         faculty: [],
-        upds: [],
+        directors: [],
         programId: null,
         rawProgram: null,
       };
@@ -101,30 +121,13 @@ const ProgramManagement = ({ embedded = false }) => {
         programGroups[programName] = {
           name: programName,
           faculty: [],
-          upds: [],
+          directors: [],
           programId: faculty.programId,
           rawProgram: null,
         };
       }
 
       programGroups[programName].faculty.push(faculty);
-
-      // Check if this faculty member is marked as UPD
-      if (faculty.isUPD) {
-        const programInfo = programs.find((p) => p.id === faculty.programId);
-        const updIds = Array.isArray(programInfo?.updIds)
-          ? programInfo.updIds
-          : programInfo?.updId
-            ? [programInfo.updId]
-            : [];
-        if (updIds.includes(faculty.id)) {
-          const existing = programGroups[programName].upds || [];
-          if (!existing.some((u) => u.id === faculty.id)) {
-            existing.push(faculty);
-            programGroups[programName].upds = existing.slice(0, 2);
-          }
-        }
-      }
     });
 
     return programGroups;
@@ -194,143 +197,66 @@ const ProgramManagement = ({ embedded = false }) => {
     return true;
   }, [unassignedProgram, selectedProgramFilter, searchText]);
 
-  // Handle UPD designation
-  const handleSetUPD = async (programName, faculty) => {
-    if (!canEditHere) {
-      showNotification(
-        "warning",
-        "Permission Denied",
-        "You do not have permission to assign Undergraduate Program Directors.",
-      );
-      return;
-    }
-
-    try {
-      if (faculty.isAdjunct) {
-        showNotification(
-          "error",
-          "Cannot Assign UPD",
-          "Adjunct faculty cannot be assigned as Undergraduate Program Director",
-        );
-        return;
-      }
-
-      const program = programData[programName];
-      if (!program || !program.programId) {
-        showNotification(
-          "error",
-          "Program Error",
-          "Cannot find program information. Please refresh and try again.",
-        );
-        return;
-      }
-
-      const currentUPDs = Array.isArray(program.upds) ? program.upds : [];
-      if (currentUPDs.some((u) => u.id === faculty.id)) {
-        showNotification(
-          "info",
-          "Already UPD",
-          `${faculty.name} is already an Undergraduate Program Director for ${programName}`,
-        );
-        setEditingUPD(null);
-        return;
-      }
-      if (currentUPDs.length >= 2) {
-        showNotification(
-          "error",
-          "UPD Limit Reached",
-          "This program already has two UPDs. Remove one before adding another.",
-        );
-        return;
-      }
-
-      await handleFacultyUpdate({
-        ...faculty,
-        isUPD: true,
-        updatedAt: new Date().toISOString(),
-      });
-
-      const programRef = doc(db, COLLECTIONS.PROGRAMS, program.programId);
-      const prevUpdIds = currentUPDs.map((u) => u.id);
-      const newUpdIds = [...prevUpdIds, faculty.id];
-      const updateData = {
-        updIds: newUpdIds,
-        updatedAt: new Date().toISOString(),
-      };
-
-      await updateDoc(programRef, updateData);
-
-      await logUpdate(
-        `Program UPD Assignment - ${programName} → ${faculty.name}`,
-        "programs",
-        program.programId,
-        updateData,
-        { updIds: prevUpdIds },
-        "ProgramManagement.jsx - handleSetUPD",
-      );
-
-      showNotification(
-        "success",
-        "UPD Updated",
-        `${faculty.name} is now an Undergraduate Program Director for ${programName}`,
-      );
-
-      setEditingUPD(null);
-    } catch (error) {
-      console.error("Error setting UPD:", error);
-      showNotification(
-        "error",
-        "Error",
-        "Failed to update UPD designation. Please try again.",
-      );
-    }
+  // Toggle a director role (UPD/GPD) for a person on a program. All
+  // validation and the single-document write live in usePeopleOperations.
+  const handleToggleDirector = async (program, person, role) => {
+    if (!program?.programId || !person?.id) return;
+    const assign = !hasDirector(program.rawProgram?.directors, person.id, role);
+    await handleDirectorAssignmentChange({
+      programId: program.programId,
+      personId: person.id,
+      role,
+      assign,
+    });
   };
 
-  // Handle removing UPD
-  const handleRemoveUPD = async (programName, faculty) => {
-    if (!canEditHere) {
-      showNotification(
-        "warning",
-        "Permission Denied",
-        "You do not have permission to remove Undergraduate Program Directors.",
-      );
-      return;
+  // Resolve a director entry to a person record for display. Directors can
+  // belong to other programs (or be inactive), so resolve against all people.
+  const resolveDirectorPerson = (personId) => {
+    const person = peopleById.get(personId);
+    if (person) {
+      return {
+        id: person.id,
+        name:
+          person.name ||
+          `${person.firstName || ""} ${person.lastName || ""}`.trim() ||
+          person.email ||
+          personId,
+        jobTitle: person.jobTitle || "",
+        isAdjunct: person.isAdjunct === true,
+      };
     }
+    return { id: personId, name: "Unknown person", jobTitle: "", missing: true };
+  };
 
-    try {
-      const program = programData[programName];
-      if (!program || !program.programId) return;
+  // Candidates offered in the manage view: the program's own non-adjunct
+  // faculty, anyone currently holding a role, plus any faculty explicitly
+  // added via the cross-program picker.
+  const getDirectorCandidates = (program) => {
+    const candidates = new Map();
+    program.faculty
+      .filter((f) => !f.isAdjunct)
+      .forEach((f) => candidates.set(f.id, f));
+    program.directors.forEach(({ personId }) => {
+      if (!candidates.has(personId)) {
+        candidates.set(personId, resolveDirectorPerson(personId));
+      }
+    });
+    (extraDirectorCandidates[program.programId] || []).forEach((personId) => {
+      if (!candidates.has(personId)) {
+        candidates.set(personId, resolveDirectorPerson(personId));
+      }
+    });
+    return Array.from(candidates.values());
+  };
 
-      const currentUPDs = Array.isArray(program.upds) ? program.upds : [];
-      const newUpdIds = currentUPDs
-        .filter((u) => u.id !== faculty.id)
-        .map((u) => u.id);
-
-      const programRef = doc(db, COLLECTIONS.PROGRAMS, program.programId);
-      await updateDoc(programRef, {
-        updIds: newUpdIds,
-        updatedAt: new Date().toISOString(),
-      });
-
-      await handleFacultyUpdate({
-        ...faculty,
-        isUPD: false,
-        updatedAt: new Date().toISOString(),
-      });
-
-      showNotification(
-        "success",
-        "UPD Removed",
-        `${faculty.name} is no longer an Undergraduate Program Director for ${programName}`,
-      );
-    } catch (error) {
-      console.error("Error removing UPD:", error);
-      showNotification(
-        "error",
-        "Error",
-        "Failed to remove UPD designation. Please try again.",
-      );
-    }
+  const addExtraDirectorCandidate = (program, personId) => {
+    if (!personId) return;
+    setExtraDirectorCandidates((prev) => {
+      const current = prev[program.programId] || [];
+      if (current.includes(personId)) return prev;
+      return { ...prev, [program.programId]: [...current, personId] };
+    });
   };
 
   // Drag and drop handlers
@@ -628,15 +554,15 @@ const ProgramManagement = ({ embedded = false }) => {
             <div>
               {embedded ? (
                 <h2 className="text-xl font-semibold text-gray-900">
-                  Programs & UPDs
+                  Programs & Directors
                 </h2>
               ) : (
                 <h1 className="text-2xl font-bold text-gray-900">
-                  Programs & UPDs
+                  Programs & Directors
                 </h1>
               )}
               <p className="text-sm text-gray-500 mt-1">
-                Manage programs, assign UPDs, and organize faculty
+                Manage programs, assign UPDs and GPDs, and organize faculty
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -939,12 +865,25 @@ const ProgramManagement = ({ embedded = false }) => {
                             <Users size={12} className="mr-1" />
                             {facultyCount} faculty
                           </span>
-                          {program.upds.length > 0 && (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                              <Star size={12} className="mr-1" />
-                              {program.upds.length} UPD
-                            </span>
-                          )}
+                          {DIRECTOR_ROLE_ORDER.map((role) => {
+                            const count = program.directors.filter(
+                              (entry) => entry.role === role,
+                            ).length;
+                            if (count === 0) return null;
+                            return (
+                              <span
+                                key={role}
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  role === "upd"
+                                    ? "bg-amber-100 text-amber-800"
+                                    : "bg-sky-100 text-sky-800"
+                                }`}
+                              >
+                                <Star size={12} className="mr-1" />
+                                {count} {getDirectorRoleAbbreviation(role)}
+                              </span>
+                            );
+                          })}
                         </div>
                       </div>
 
@@ -969,107 +908,188 @@ const ProgramManagement = ({ embedded = false }) => {
                     </div>
                   </div>
 
-                  {/* UPD Section */}
+                  {/* Directors Section */}
                   <div className="px-5 py-4 bg-gray-50/50 border-b border-gray-100">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
                         <UserCog size={16} className="text-amber-600" />
                         Program Directors
                       </div>
-                      {canEditHere && (
+                      {canEditHere && program.programId && (
                         <button
                           onClick={() =>
-                            setEditingUPD(
-                              editingUPD === programName ? null : programName,
+                            setManagingDirectorsFor(
+                              managingDirectorsFor === programName
+                                ? null
+                                : programName,
                             )
                           }
                           className="text-xs text-[#154734] hover:text-[#0f3526] font-medium transition-colors"
                         >
-                          {editingUPD === programName ? "Done" : "Manage"}
+                          {managingDirectorsFor === programName
+                            ? "Done"
+                            : "Manage"}
                         </button>
                       )}
                     </div>
 
-                    {editingUPD === programName ? (
-                      <div className="space-y-2 max-h-40 overflow-y-auto">
-                        {program.faculty
-                          .filter((f) => !f.isAdjunct)
-                          .map((faculty) => {
-                            const isUPD = program.upds.some(
-                              (u) => u.id === faculty.id,
-                            );
-                            return (
-                              <button
-                                key={faculty.id}
-                                onClick={() =>
-                                  isUPD
-                                    ? handleRemoveUPD(programName, faculty)
-                                    : handleSetUPD(programName, faculty)
-                                }
-                                className={`w-full text-left p-2.5 rounded-lg border transition-all ${
-                                  isUPD
-                                    ? "bg-amber-50 border-amber-200"
-                                    : "bg-white border-gray-200 hover:border-[#154734]/30 hover:bg-[#154734]/5"
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <div
-                                      className={`font-medium text-sm ${isUPD ? "text-amber-900" : "text-gray-900"}`}
-                                    >
-                                      {faculty.name}
-                                    </div>
-                                    <div className="text-gray-500 text-xs">
-                                      {faculty.jobTitle}
-                                    </div>
-                                  </div>
-                                  {isUPD && (
-                                    <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-1 rounded">
-                                      Current UPD
-                                    </span>
-                                  )}
-                                </div>
-                              </button>
-                            );
-                          })}
-                        {program.faculty.filter((f) => !f.isAdjunct).length ===
-                          0 && (
-                          <div className="text-sm text-gray-500 italic p-2">
-                            No eligible faculty members (adjuncts cannot be
-                            UPDs)
-                          </div>
-                        )}
-                      </div>
-                    ) : (
+                    {managingDirectorsFor === programName ? (
                       <div className="space-y-2">
-                        {program.upds.length > 0 ? (
-                          program.upds.map((upd) => (
+                        <div className="space-y-2 max-h-52 overflow-y-auto">
+                          {getDirectorCandidates(program).map((person) => (
                             <div
-                              key={upd.id}
-                              className="flex items-center gap-3 p-2.5 bg-white rounded-lg border border-amber-200"
+                              key={person.id}
+                              className="flex items-center justify-between gap-3 p-2.5 bg-white rounded-lg border border-gray-200"
                             >
-                              <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-                                <Star size={14} className="text-amber-700" />
-                              </div>
                               <div className="flex-1 min-w-0">
                                 <div className="font-medium text-sm text-gray-900 truncate">
-                                  {upd.name}
+                                  {person.name}
                                 </div>
-                                <div className="text-xs text-gray-500 truncate">
-                                  {upd.jobTitle}
+                                <div className="text-gray-500 text-xs truncate">
+                                  {person.jobTitle}
                                 </div>
                               </div>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                {DIRECTOR_ROLE_ORDER.map((role) => {
+                                  const assigned = hasDirector(
+                                    program.rawProgram?.directors,
+                                    person.id,
+                                    role,
+                                  );
+                                  const abbreviation =
+                                    getDirectorRoleAbbreviation(role);
+                                  return (
+                                    <button
+                                      key={role}
+                                      onClick={() =>
+                                        handleToggleDirector(
+                                          program,
+                                          person,
+                                          role,
+                                        )
+                                      }
+                                      title={`${assigned ? "Remove" : "Assign"} ${DIRECTOR_ROLE_META[role].label}`}
+                                      className={`px-2 py-1 rounded-md border text-xs font-medium transition-colors ${
+                                        assigned
+                                          ? role === "upd"
+                                            ? "bg-amber-100 text-amber-800 border-amber-300"
+                                            : "bg-sky-100 text-sky-800 border-sky-300"
+                                          : "bg-white text-gray-400 border-gray-200 hover:text-gray-700 hover:border-gray-300"
+                                      }`}
+                                    >
+                                      {abbreviation}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          ))
-                        ) : (
+                          ))}
+                          {getDirectorCandidates(program).length === 0 && (
+                            <div className="text-sm text-gray-500 italic p-2">
+                              No eligible faculty members (adjuncts cannot hold
+                              director roles)
+                            </div>
+                          )}
+                        </div>
+                        <SelectDropdown
+                          value=""
+                          onChange={(e) =>
+                            addExtraDirectorCandidate(program, e.target.value)
+                          }
+                          className="w-full px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 bg-white"
+                        >
+                          <option value="">
+                            Add faculty from another program…
+                          </option>
+                          {facultyData
+                            .filter(
+                              (f) =>
+                                !f.isAdjunct &&
+                                !getDirectorCandidates(program).some(
+                                  (candidate) => candidate.id === f.id,
+                                ),
+                            )
+                            .sort((a, b) =>
+                              (a.name || "").localeCompare(b.name || ""),
+                            )
+                            .map((f) => (
+                              <option key={f.id} value={f.id}>
+                                {f.name}
+                              </option>
+                            ))}
+                        </SelectDropdown>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {program.directors.length === 0 ? (
                           <div className="flex items-center gap-3 p-2.5 bg-white rounded-lg border border-dashed border-gray-300">
                             <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
                               <UserCog size={14} className="text-gray-400" />
                             </div>
                             <div className="text-sm text-gray-500">
-                              No UPD assigned
+                              No program directors assigned
                             </div>
                           </div>
+                        ) : (
+                          DIRECTOR_ROLE_ORDER.map((role) => {
+                            const roleDirectors = program.directors.filter(
+                              (entry) => entry.role === role,
+                            );
+                            return (
+                              <div key={role}>
+                                <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-1.5">
+                                  {DIRECTOR_ROLE_META[role].groupLabel}
+                                </div>
+                                {roleDirectors.length === 0 ? (
+                                  <div className="text-xs text-gray-400 italic px-1">
+                                    None assigned
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {roleDirectors.map(({ personId }) => {
+                                      const person =
+                                        resolveDirectorPerson(personId);
+                                      return (
+                                        <div
+                                          key={`${personId}-${role}`}
+                                          className={`flex items-center gap-3 p-2.5 bg-white rounded-lg border ${
+                                            role === "upd"
+                                              ? "border-amber-200"
+                                              : "border-sky-200"
+                                          }`}
+                                        >
+                                          <div
+                                            className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                              role === "upd"
+                                                ? "bg-amber-100"
+                                                : "bg-sky-100"
+                                            }`}
+                                          >
+                                            <Star
+                                              size={14}
+                                              className={
+                                                role === "upd"
+                                                  ? "text-amber-700"
+                                                  : "text-sky-700"
+                                              }
+                                            />
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="font-medium text-sm text-gray-900 truncate">
+                                              {person.name}
+                                            </div>
+                                            <div className="text-xs text-gray-500 truncate">
+                                              {person.jobTitle}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
                         )}
                       </div>
                     )}
@@ -1132,14 +1152,17 @@ const ProgramManagement = ({ embedded = false }) => {
                                   <span className="font-medium text-sm text-gray-900 truncate">
                                     {faculty.name}
                                   </span>
-                                  {program.upds.some(
-                                    (u) => u.id === faculty.id,
-                                  ) && (
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
-                                      <Star size={10} className="mr-0.5" />
-                                      UPD
-                                    </span>
-                                  )}
+                                  {program.directors
+                                    .filter(
+                                      (entry) => entry.personId === faculty.id,
+                                    )
+                                    .map((entry) => (
+                                      <DirectorRoleBadge
+                                        key={entry.role}
+                                        role={entry.role}
+                                        programName={programName}
+                                      />
+                                    ))}
                                 </div>
                                 <div className="text-xs text-gray-500 truncate">
                                   {faculty.jobTitle}

@@ -63,7 +63,7 @@ export const SHEET_DEFINITIONS = Object.freeze({
       column("office", "Office", 20),
       column("officeSpaces", "Office Spaces", 28),
       column("isAdjunct", "Adjunct", 12),
-      column("isUPD", "UPD", 10),
+      column("directorRoles", "Director Roles", 30),
       column("isFullTime", "Full Time", 12),
       column("isTenured", "Tenured", 12),
       column("isRemote", "Remote", 12),
@@ -157,12 +157,14 @@ export const SHEET_DEFINITIONS = Object.freeze({
   [SHEET_IDS.programs]: {
     id: SHEET_IDS.programs,
     name: "Programs",
-    description: "Program ownership and UPD assignments.",
+    description: "Program ownership and director (UPD/GPD) assignments.",
     columns: [
       column("programName", "Program Name", 26),
       column("programCode", "Program Code", 14),
       column("updNames", "UPD Names", 34),
       column("updCount", "UPD Count", 12),
+      column("gpdNames", "GPD Names", 34),
+      column("gpdCount", "GPD Count", 12),
       column("status", "Status", 12),
     ],
   },
@@ -257,7 +259,7 @@ export const INDIVIDUAL_EXPORT_OPTIONS = Object.freeze([
   {
     id: SHEET_IDS.programs,
     label: "Programs",
-    description: "Program list and UPD assignments.",
+    description: "Program list and director (UPD/GPD) assignments.",
     sheetIds: [SHEET_IDS.programs],
   },
   {

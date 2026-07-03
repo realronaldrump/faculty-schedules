@@ -36,6 +36,7 @@ import {
   UNASSIGNED,
 } from "../utils/dataAdapter";
 import { fetchRecentChanges } from "../utils/recentChanges";
+import { buildDirectorIndex } from "../utils/directorAssignments";
 import { usePermissions } from "../utils/permissions";
 import { buildCourseSectionKey, parseCourseCode } from "../utils/courseUtils";
 import { applySemesterSchedule } from "../utils/studentWorkers";
@@ -117,6 +118,13 @@ export const DataProvider = ({ children }) => {
   const peopleById = useMemo(() => {
     return new Map((rawPeople || []).map((person) => [person.id, person]));
   }, [rawPeople]);
+
+  // Canonical program-director relationships derived from programs/{id}.directors:
+  // Map<personId, [{ programId, programName, role }]>
+  const directorIndex = useMemo(
+    () => buildDirectorIndex(rawPrograms),
+    [rawPrograms],
+  );
 
   const buildInstructorInfo = useCallback(
     (schedule) => {
@@ -668,6 +676,7 @@ export const DataProvider = ({ children }) => {
       programs: rawPrograms,
       courses: rawCourses,
       directoryData: rawPeople,
+      directorIndex,
 
       analytics,
       editHistory,
@@ -714,6 +723,7 @@ export const DataProvider = ({ children }) => {
       peopleIndex,
       rawPrograms,
       rawCourses,
+      directorIndex,
       scheduleData,
       allFacultyData,
       facultyData,

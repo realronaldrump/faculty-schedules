@@ -16,7 +16,6 @@ const enforceAdjunctTenureRule = (record) => {
  * @param {Function} options.onDelete Callback to delete a record
  * @param {Function} options.validate Validation function (data) => errors object
  * @param {Function} options.preparePayload Optional function to transform data before save
- * @param {Function} options.trackChange Optional function to track changes for undo
  * @returns {Object} Handler functions
  */
 function useDirectoryHandlers({
@@ -25,8 +24,7 @@ function useDirectoryHandlers({
     onUpdate,
     onDelete,
     validate = () => ({}),
-    preparePayload = (d) => d,
-    trackChange
+    preparePayload = (d) => d
 } = {}) {
     const {
         editingId,
@@ -68,11 +66,6 @@ function useDirectoryHandlers({
         const originalData = data.find(r => r.id === editingId);
         const payload = preparePayload(editFormData);
 
-        // Track change for undo if tracker provided
-        if (trackChange && originalData) {
-            trackChange(originalData, payload, 'update');
-        }
-
         try {
             await onUpdate(payload, originalData);
             resetEditState();
@@ -82,7 +75,7 @@ function useDirectoryHandlers({
             setErrors({ general: 'Failed to save. Please try again.' });
             return false;
         }
-    }, [editFormData, editingId, data, validate, preparePayload, onUpdate, resetEditState, setErrors, trackChange]);
+    }, [editFormData, editingId, data, validate, preparePayload, onUpdate, resetEditState, setErrors]);
 
     // Form change handler
     const handleChange = useCallback((e) => {
@@ -160,11 +153,6 @@ function useDirectoryHandlers({
 
         const payload = preparePayload(newRecord);
 
-        // Track creation if tracker provided
-        if (trackChange) {
-            trackChange({}, payload, 'create');
-        }
-
         try {
             await onUpdate(payload);
             resetCreateState();
@@ -174,7 +162,7 @@ function useDirectoryHandlers({
             setErrors({ general: 'Failed to create. Please try again.' });
             return false;
         }
-    }, [newRecord, validate, preparePayload, onUpdate, resetCreateState, setErrors, trackChange]);
+    }, [newRecord, validate, preparePayload, onUpdate, resetCreateState, setErrors]);
 
     // Sort handler
     const handleSort = useCallback((key) => {

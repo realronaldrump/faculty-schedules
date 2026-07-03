@@ -1,11 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X, Mail, Phone, Building, BookOpen, Clock, GraduationCap, Wifi, ChevronDown, User } from 'lucide-react';
-import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
-import { logUpdate } from '../utils/changeLogger';
+import { usePeopleOperations } from '../hooks';
 import StudentWorkerScheduleView from './analytics/StudentWorkerScheduleView';
 import Modal from './shared/Modal';
 import { useAppConfig } from '../contexts/AppConfigContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useData } from '../contexts/DataContext';
+import {
+    DIRECTOR_ROLES,
+    formatDirectorAssignment,
+    getDirectorAssignments,
+    getDirectorRoleLabel,
+} from '../utils/directorAssignments';
 import { formatTermFromCode, formatTermLabel, sortTerms } from '../utils/termUtils';
 import { resolveOfficeLocations } from '../utils/spaceUtils';
 import { parseTime } from '../utils/timeUtils';
@@ -33,6 +41,9 @@ const formatPhoneNumber = (phoneStr) => {
 };
 
 const normalizeValue = (value) => (value === undefined || value === null ? '' : String(value).trim());
+
+const getBaylorIdValue = (person) =>
+    normalizeValue(person?.baylorId || person?.externalIds?.baylorId);
 
 const isNoRoomLocation = (locationType = '') => {
     const normalized = locationType.toLowerCase();
@@ -183,18 +194,23 @@ const FacultyContactCard = ({
     studentAssignments = [],
 }) => {
     const contactPerson = person;
+    const { handleBaylorIdUpdate } = usePeopleOperations();
+    const { isAdmin } = useAuth();
     const { termConfig, termConfigVersion } = useAppConfig();
+    const { directorIndex } = useData();
+    // Canonical program-director assignments (programs/{id}.directors)
+    const directorAssignments = getDirectorAssignments(directorIndex, contactPerson?.id);
 
     const [externalSchedules, setExternalSchedules] = useState([]);
     const [isEditingBaylorId, setIsEditingBaylorId] = useState(false);
-    const [baylorIdValue, setBaylorIdValue] = useState(contactPerson?.baylorId || '');
+    const [baylorIdValue, setBaylorIdValue] = useState(getBaylorIdValue(contactPerson));
     const [baylorIdError, setBaylorIdError] = useState('');
     const [savingBaylorId, setSavingBaylorId] = useState(false);
     const [expandedCourseKey, setExpandedCourseKey] = useState(null);
 
     // Keep local value in sync when opening different people
     useEffect(() => {
-        setBaylorIdValue(contactPerson?.baylorId || '');
+        setBaylorIdValue(getBaylorIdValue(contactPerson));
         setBaylorIdError('');
         setIsEditingBaylorId(false);
         setExpandedCourseKey(null);
@@ -415,7 +431,7 @@ const FacultyContactCard = ({
     };
 
     const validateBaylorId = (val) => {
-        if (!val) return 'Baylor ID is required';
+        if (!val) return 'Enter a 9-digit Baylor ID. Use the Baylor IDs page to remove an assigned ID.';
         if (!/^\d{9}$/.test(val)) return 'Baylor ID must be exactly 9 digits';
         return '';
     };
@@ -430,18 +446,7 @@ const FacultyContactCard = ({
         }
         try {
             setSavingBaylorId(true);
-            const updates = { baylorId: baylorIdValue, updatedAt: new Date().toISOString() };
-            await updateDoc(doc(db, COLLECTIONS.PEOPLE, contactPerson.id), updates);
-            // Fire-and-forget change logging
-            logUpdate(
-                `Person - ${contactPerson.name || contactPerson.email || contactPerson.id}`,
-                COLLECTIONS.PEOPLE,
-                contactPerson.id,
-                updates,
-                contactPerson,
-                'FacultyContactCard.jsx - saveBaylorId'
-            ).catch(err => console.error('Change logging error:', err));
-            // Reflect locally
+            await handleBaylorIdUpdate(contactPerson.id, baylorIdValue);
             setIsEditingBaylorId(false);
             setBaylorIdError('');
         } catch (e) {
@@ -544,12 +549,20 @@ const FacultyContactCard = ({
                                         PhD
                                     </span>
                                 )}
-                                {personType !== 'student' && contactPerson.isUPD && (
-                                    <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
+                                {personType !== 'student' && directorAssignments.map((assignment) => (
+                                    <span
+                                        key={`${assignment.programId}-${assignment.role}`}
+                                        title={getDirectorRoleLabel(assignment.role)}
+                                        className={`inline-flex items-center rounded-full border px-2 py-1 text-xs font-medium ${
+                                            assignment.role === DIRECTOR_ROLES.UPD
+                                                ? 'border-amber-200 bg-amber-50 text-amber-800'
+                                                : 'border-sky-200 bg-sky-50 text-sky-800'
+                                        }`}
+                                    >
                                         <BookOpen size={12} className="mr-1" />
-                                        UPD
+                                        {formatDirectorAssignment(assignment)}
                                     </span>
-                                )}
+                                ))}
                                 {personType !== 'student' && contactPerson.isRemote && (
                                     <span className="inline-flex items-center rounded-full border border-link-green/20 bg-link-green/10 px-2 py-1 text-xs font-medium text-link-green">
                                         <Wifi size={12} className="mr-1" />
@@ -645,7 +658,7 @@ const FacultyContactCard = ({
                                             {savingBaylorId ? 'Saving...' : 'Save'}
                                         </button>
                                         <button
-                                            onClick={() => { setIsEditingBaylorId(false); setBaylorIdValue(contactPerson?.baylorId || ''); setBaylorIdError(''); }}
+                                            onClick={() => { setIsEditingBaylorId(false); setBaylorIdValue(getBaylorIdValue(contactPerson)); setBaylorIdError(''); }}
                                             disabled={savingBaylorId}
                                             className="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-100 text-gray-700"
                                         >
@@ -665,12 +678,14 @@ const FacultyContactCard = ({
                                             Copy
                                         </button>
                                     )}
-                                    <button
-                                        onClick={() => setIsEditingBaylorId(true)}
-                                        className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-100 text-gray-700"
-                                    >
-                                        {baylorIdValue ? 'Edit' : 'Add'}
-                                    </button>
+                                    {isAdmin && (
+                                        <button
+                                            onClick={() => setIsEditingBaylorId(true)}
+                                            className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-100 text-gray-700"
+                                        >
+                                            {baylorIdValue ? 'Edit' : 'Add'}
+                                        </button>
+                                    )}
                                 </div>
                             )}
                             {baylorIdError && (

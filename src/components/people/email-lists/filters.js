@@ -7,7 +7,7 @@ export const createDefaultDirectoryFilters = () => ({
   roleFilter: "all",
   adjunct: "exclude",
   tenured: "all",
-  upd: "all",
+  director: "all",
   isRemote: "all",
 });
 

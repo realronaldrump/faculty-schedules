@@ -18,16 +18,18 @@ import MaintenancePage from "./components/MaintenancePage";
 import Notification from "./components/Notification";
 import SelectDropdown from "./components/SelectDropdown";
 import TutorialOverlay from "./components/help/TutorialOverlay";
+import { WhatsNewToast, WhatsNewModal } from "./components/WhatsNew";
 
 import { useAuth } from "./contexts/AuthContext.jsx";
 import { useUI } from "./contexts/UIContext.jsx";
 import { useSchedules } from "./contexts/ScheduleContext.jsx";
 import useUserActivityTracker from "./hooks/useUserActivityTracker";
+import { useWhatsNew } from "./hooks";
 import { registerNavigationPages } from "./utils/pageRegistry";
 import { navigationItems } from "./utils/navigationConfig";
 import { normalizeRoleList } from "./utils/authz";
 
-import { Calendar, GraduationCap, Menu, LogOut } from "lucide-react";
+import { Calendar, GraduationCap, Menu, LogOut, Sparkles } from "lucide-react";
 
 // ==================== MAINTENANCE MODE CONFIG ====================
 
@@ -73,6 +75,8 @@ function App() {
     showLogoutConfirm,
     setShowLogoutConfirm,
   } = useUI();
+
+  const whatsNew = useWhatsNew();
 
   // Router hooks
   const location = useLocation();
@@ -371,6 +375,22 @@ function App() {
                 ))}
               </SelectDropdown>
 
+              {/* What's New */}
+              <button
+                onClick={whatsNew.openWhatsNew}
+                className="btn-icon-secondary relative"
+                title="What's New"
+                aria-label="What's New"
+              >
+                <Sparkles className="w-4 h-4" />
+                {whatsNew.hasUnseen && (
+                  <span
+                    className="absolute top-1 right-1 h-2 w-2 rounded-full bg-baylor-gold ring-2 ring-white"
+                    aria-hidden="true"
+                  />
+                )}
+              </button>
+
               {/* Logout Button */}
               <button
                 onClick={handleLogout}
@@ -453,6 +473,20 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* What's New release notes: one-time toast + full history modal */}
+      {whatsNew.showToast && (
+        <WhatsNewToast
+          release={whatsNew.latestRelease}
+          onOpen={whatsNew.openWhatsNew}
+          onDismiss={whatsNew.dismissToast}
+        />
+      )}
+      <WhatsNewModal
+        isOpen={whatsNew.isModalOpen}
+        releases={whatsNew.releases}
+        onClose={whatsNew.closeWhatsNew}
+      />
 
       {/* Notification */}
       <Notification

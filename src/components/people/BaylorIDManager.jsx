@@ -7,10 +7,13 @@ import {
   CheckCircle2,
   AlertCircle,
   Download,
+  Trash2,
 } from "lucide-react";
 import UniversalDirectory from "../shared/UniversalDirectory";
 import FacultyContactCard from "../FacultyContactCard";
+import ConfirmDialog from "../shared/ConfirmDialog";
 import { usePeople } from "../../contexts/PeopleContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { usePeopleOperations } from "../../hooks";
 import { useUI } from "../../contexts/UIContext";
 import { usePermissions } from "../../utils/permissions";
@@ -36,7 +39,8 @@ const BaylorIDManager = ({ embedded = false }) => {
   const { handleBaylorIdUpdate } = usePeopleOperations();
   const { showNotification } = useUI();
   const { canEdit } = usePermissions();
-  const canEditIds = canEdit("people/baylor-id-manager");
+  const { isAdmin } = useAuth();
+  const canEditIds = isAdmin && canEdit("people/baylor-id-manager");
   const [filterText, setFilterText] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [roleChecks, setRoleChecks] = useState({
@@ -50,6 +54,8 @@ const BaylorIDManager = ({ embedded = false }) => {
   const [editingId, setEditingId] = useState(null);
   const [baylorIdDraft, setBaylorIdDraft] = useState("");
   const [error, setError] = useState("");
+  const [removeTarget, setRemoveTarget] = useState(null);
+  const [isRemoving, setIsRemoving] = useState(false);
   const [selectedPersonForCard, setSelectedPersonForCard] = useState(null);
   const [sortConfig, setSortConfig] = useState({
     key: "name",
@@ -65,6 +71,11 @@ const BaylorIDManager = ({ embedded = false }) => {
     [directoryData],
   );
 
+  const getBaylorId = useCallback((person) => {
+    const raw = person?.baylorId || person?.externalIds?.baylorId || "";
+    return raw ? String(raw).trim() : "";
+  }, []);
+
   const filtered = useMemo(() => {
     const term = filterText.trim().toLowerCase();
     return people
@@ -77,11 +88,12 @@ const BaylorIDManager = ({ embedded = false }) => {
           (roleChecks.staff && hasRole(p, "staff")) ||
           (roleChecks.studentWorkers && hasRole(p, "student"));
         if (!includeByRole) return false;
-        if (onlyMissing && p.baylorId && p.baylorId.trim() !== "") return false;
+        const baylorId = getBaylorId(p);
+        if (onlyMissing && baylorId) return false;
         if (!term) return true;
         const name = (p.name || "").toLowerCase();
         const email = (p.email || "").toLowerCase();
-        const id = (p.baylorId || "").toLowerCase();
+        const id = baylorId.toLowerCase();
         return name.includes(term) || email.includes(term) || id.includes(term);
       })
       .sort((a, b) => {
@@ -90,8 +102,8 @@ const BaylorIDManager = ({ embedded = false }) => {
           valA = (a.name || "").toLowerCase();
           valB = (b.name || "").toLowerCase();
         } else if (sortConfig.key === "baylorId") {
-          valA = (a.baylorId || "").toLowerCase();
-          valB = (b.baylorId || "").toLowerCase();
+          valA = getBaylorId(a).toLowerCase();
+          valB = getBaylorId(b).toLowerCase();
         } else {
           valA = (a[sortConfig.key] || "").toString().toLowerCase();
           valB = (b[sortConfig.key] || "").toString().toLowerCase();
@@ -100,13 +112,21 @@ const BaylorIDManager = ({ embedded = false }) => {
         if (valA > valB) return sortConfig.direction === "ascending" ? 1 : -1;
         return 0;
       });
-  }, [people, filterText, roleChecks, onlyMissing, includeInactive, sortConfig]);
+  }, [
+    people,
+    filterText,
+    roleChecks,
+    onlyMissing,
+    includeInactive,
+    sortConfig,
+    getBaylorId,
+  ]);
 
   const exportToCSV = () => {
     const headers = ["Name", "Baylor ID"];
     const rows = filtered.map((person) => [
       person.name || "",
-      person.baylorId || "",
+      getBaylorId(person),
     ]);
 
     const csvContent = [headers, ...rows]
@@ -131,7 +151,7 @@ const BaylorIDManager = ({ embedded = false }) => {
 
   const startEdit = (person) => {
     setEditingId(person.id);
-    setBaylorIdDraft(person.baylorId || "");
+    setBaylorIdDraft(getBaylorId(person));
     setError("");
   };
 
@@ -141,15 +161,19 @@ const BaylorIDManager = ({ embedded = false }) => {
     setError("");
   };
 
-  const validateId = (value) => {
-    if (!value) return "Baylor ID must be 9 digits";
+  const validateId = (value, person) => {
     const digits = value.replace(/\D/g, "");
+    if (!digits) {
+      return getBaylorId(person)
+        ? "Use Remove ID to permanently delete an assigned Baylor ID."
+        : "Baylor ID must be 9 digits.";
+    }
     if (digits.length !== 9) return "Baylor ID must be exactly 9 digits";
     return "";
   };
 
   const saveId = async (person) => {
-    const validation = validateId(baylorIdDraft);
+    const validation = validateId(baylorIdDraft, person);
     if (validation) {
       setError(validation);
       return;
@@ -170,6 +194,31 @@ const BaylorIDManager = ({ embedded = false }) => {
       setError("");
     } catch (e) {
       setError(e?.message || "Failed to save.");
+    }
+  };
+
+  const confirmRemoveId = async () => {
+    if (!removeTarget) return;
+    if (!canEditIds) {
+      showNotification?.(
+        "warning",
+        "Permission Denied",
+        "You do not have permission to remove Baylor IDs.",
+      );
+      return;
+    }
+
+    try {
+      setIsRemoving(true);
+      await handleBaylorIdUpdate(removeTarget.id, null, { remove: true });
+      setRemoveTarget(null);
+      setEditingId(null);
+      setBaylorIdDraft("");
+      setError("");
+    } catch (e) {
+      setError(e?.message || "Failed to remove Baylor ID.");
+    } finally {
+      setIsRemoving(false);
     }
   };
 
@@ -240,7 +289,8 @@ const BaylorIDManager = ({ embedded = false }) => {
         label: "Baylor ID",
         render: (person) => {
           const isEditing = editingId === person.id;
-          const hasId = person.baylorId && person.baylorId.trim() !== "";
+          const baylorId = getBaylorId(person);
+          const hasId = Boolean(baylorId);
 
           if (isEditing) {
             return (
@@ -270,22 +320,23 @@ const BaylorIDManager = ({ embedded = false }) => {
               {hasId ? (
                 <span className="inline-flex items-center gap-1 text-gray-800">
                   <CheckCircle2 size={14} className="text-green-600" />
-                  {person.baylorId}
+                  {baylorId}
                 </span>
               ) : (
-                <span className="text-gray-500 italic">Missing</span>
+                <span className="text-gray-500 italic">Not assigned</span>
               )}
             </div>
           );
         },
       },
     ],
-    [editingId, baylorIdDraft, error],
+    [editingId, baylorIdDraft, error, getBaylorId],
   );
 
   // Actions column renderer
   const renderActions = useCallback(
     (person) => {
+      if (!canEditIds) return null;
       const isEditing = editingId === person.id;
       if (isEditing) {
         return (
@@ -309,16 +360,27 @@ const BaylorIDManager = ({ embedded = false }) => {
       }
 
       return (
-        <button
-          onClick={() => startEdit(person)}
-          className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
-          title="Edit Baylor ID"
-        >
-          <Edit size={16} />
-        </button>
+        <div className="flex gap-1 justify-end">
+          <button
+            onClick={() => startEdit(person)}
+            className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
+            title={getBaylorId(person) ? "Edit Baylor ID" : "Add Baylor ID"}
+          >
+            <Edit size={16} />
+          </button>
+          {getBaylorId(person) && (
+            <button
+              onClick={() => setRemoveTarget(person)}
+              className="p-2 text-red-600 hover:bg-red-100 rounded-full"
+              title="Permanently remove Baylor ID"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
+        </div>
       );
     },
-    [editingId],
+    [canEditIds, editingId, getBaylorId],
   );
 
   // Filter content for the collapsible panel
@@ -360,7 +422,7 @@ const BaylorIDManager = ({ embedded = false }) => {
               onChange={(e) => setOnlyMissing(e.target.checked)}
               className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
             />
-            Only show missing IDs
+            Only show unassigned IDs
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -428,6 +490,27 @@ const BaylorIDManager = ({ embedded = false }) => {
           personType={getPersonType(selectedPersonForCard)}
         />
       )}
+
+      <ConfirmDialog
+        isOpen={Boolean(removeTarget)}
+        title="Remove Baylor ID"
+        message={
+          <span>
+            Permanently remove the Baylor ID from{" "}
+            <strong>{removeTarget?.name || "this person"}</strong>? The ID
+            number will be deleted from the active record and application-managed
+            history. This cannot be undone.
+          </span>
+        }
+        onConfirm={confirmRemoveId}
+        onCancel={() => {
+          if (!isRemoving) setRemoveTarget(null);
+        }}
+        confirmText={isRemoving ? "Removing..." : "Remove ID"}
+        cancelText="Cancel"
+        variant="danger"
+        confirmDisabled={isRemoving}
+      />
     </div>
   );
 };

@@ -511,7 +511,6 @@ const ConfiguredPersonDirectory = (props) => {
     emptyMessage = 'No records found.',
     tableProps,
     onClearFilters,
-    changeTracking,
     getFilterOptions,
     getColumns,
     leadingActions,
@@ -548,27 +547,9 @@ const ConfiguredPersonDirectory = (props) => {
     isCreating,
     newRecord,
     setNewRecord,
-    setChangeHistory,
     selectedRecord,
     setSelectedRecord
   } = state;
-
-  const trackChange = useMemo(() => {
-    if (!changeTracking) return undefined;
-    const { idKey, nameKey } = changeTracking;
-    return (originalData, updatedData, action) => {
-      const change = {
-        id: Date.now(),
-        timestamp: new Date().toISOString(),
-        action,
-        originalData: { ...originalData },
-        updatedData: { ...updatedData },
-        [idKey]: originalData.id || updatedData.id,
-        [nameKey]: originalData.name || updatedData.name
-      };
-      setChangeHistory((prev) => [change, ...prev.slice(0, 19)]);
-    };
-  }, [changeTracking, setChangeHistory]);
 
   const handlers = useDirectoryHandlers({
     state,
@@ -576,8 +557,7 @@ const ConfiguredPersonDirectory = (props) => {
     onUpdate,
     onDelete,
     validate,
-    preparePayload,
-    trackChange
+    preparePayload
   });
 
   const {

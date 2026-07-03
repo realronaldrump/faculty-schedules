@@ -9,6 +9,38 @@ import { collection, addDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { trackActionThrottled } from './activityTracking';
 
+const SENSITIVE_FIELD_KEYS = new Set(['baylorId', 'Baylor ID', 'BaylorID']);
+const REDACTED_BAYLOR_ID = '[redacted-baylor-id]';
+
+const redactSensitiveAuditValues = (value, path = []) => {
+  if (value === null || value === undefined) return value;
+
+  const currentKey = path[path.length - 1] || '';
+  const containsSensitiveKey = path.some((key) => SENSITIVE_FIELD_KEYS.has(key));
+
+  if (Array.isArray(value)) {
+    return value.map((item, index) =>
+      redactSensitiveAuditValues(item, [...path, String(index)]),
+    );
+  }
+
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [
+        key,
+        redactSensitiveAuditValues(child, [...path, key]),
+      ]),
+    );
+  }
+
+  if (SENSITIVE_FIELD_KEYS.has(currentKey) || containsSensitiveKey) {
+    if (value === '') return value;
+    return REDACTED_BAYLOR_ID;
+  }
+
+  return value;
+};
+
 /**
  * Log a data change to the database
  * @param {Object} changeData - The change information
@@ -36,10 +68,10 @@ const logChange = async (changeData) => {
       entity: changeData.entity,
       collection: changeData.collection,
       documentId: changeData.documentId || null,
-      changes: changeData.changes || null,
-      originalData: changeData.originalData || null,
+      changes: redactSensitiveAuditValues(changeData.changes || null),
+      originalData: redactSensitiveAuditValues(changeData.originalData || null),
       source: changeData.source || 'Unknown',
-      metadata: changeData.metadata || {},
+      metadata: redactSensitiveAuditValues(changeData.metadata || {}),
       userId: actor.uid,
       actor,
     };

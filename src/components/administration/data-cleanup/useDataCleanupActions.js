@@ -13,11 +13,17 @@ import {
   runPostImportCleanup,
   previewLocationMigration,
   applyLocationMigration,
+  previewBaylorIdOptionalityCleanup,
+  applyBaylorIdOptionalityCleanup,
 } from "../../../utils/dataHygiene";
 import {
   findOrphanedImportedData,
   cleanupOrphanedImportedData,
 } from "../../../utils/import/core";
+import {
+  previewDirectorMigration,
+  applyDirectorMigration,
+} from "../../../utils/directorMigration";
 import {
   buildBlockingCategories,
   getDuplicatePairKey,
@@ -62,11 +68,25 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
   const [isApplyingLocationMigration, setIsApplyingLocationMigration] =
     useState(false);
 
+  const [directorMigrationPreview, setDirectorMigrationPreview] = useState(null);
+  const [directorMigrationReport, setDirectorMigrationReport] = useState(null);
+  const [isLoadingDirectorMigrationPreview, setIsLoadingDirectorMigrationPreview] =
+    useState(false);
+  const [isApplyingDirectorMigration, setIsApplyingDirectorMigration] =
+    useState(false);
+
   const [orphanTermFilter, setOrphanTermFilter] = useState("");
   const [orphanScan, setOrphanScan] = useState(null);
   const [orphanCleanupResult, setOrphanCleanupResult] = useState(null);
   const [isScanningOrphans, setIsScanningOrphans] = useState(false);
   const [isApplyingOrphanCleanup, setIsApplyingOrphanCleanup] = useState(false);
+
+  const [baylorIdCleanupPreview, setBaylorIdCleanupPreview] = useState(null);
+  const [baylorIdCleanupReport, setBaylorIdCleanupReport] = useState(null);
+  const [isLoadingBaylorIdCleanupPreview, setIsLoadingBaylorIdCleanupPreview] =
+    useState(false);
+  const [isApplyingBaylorIdCleanup, setIsApplyingBaylorIdCleanup] =
+    useState(false);
 
   const blockingCategories = useMemo(
     () => buildBlockingCategories(scanResult),
@@ -595,6 +615,58 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
     }
   };
 
+  const loadDirectorMigrationPreview = async () => {
+    setIsLoadingDirectorMigrationPreview(true);
+    try {
+      const plan = await previewDirectorMigration();
+      setDirectorMigrationPreview(plan);
+      setDirectorMigrationReport(null);
+      notify(
+        showNotification,
+        "success",
+        "Director Migration Preview Ready",
+        `${plan?.summary?.migratedAssignments || 0} UPD assignment${(plan?.summary?.migratedAssignments || 0) === 1 ? "" : "s"} ready to migrate.`,
+      );
+      return plan;
+    } catch (error) {
+      notify(
+        showNotification,
+        "error",
+        "Director Migration Preview Could Not Finish",
+        error?.message || "Could not preview the director migration.",
+      );
+      throw error;
+    } finally {
+      setIsLoadingDirectorMigrationPreview(false);
+    }
+  };
+
+  const applyDirectorMigrationChanges = async () => {
+    setIsApplyingDirectorMigration(true);
+    try {
+      const report = await applyDirectorMigration();
+      setDirectorMigrationReport(report);
+      setDirectorMigrationPreview(null);
+      notify(
+        showNotification,
+        "success",
+        "Director Migration Complete",
+        `Updated ${report?.applied?.programsUpdated || 0} programs and cleaned ${report?.applied?.peopleUpdated || 0} people.`,
+      );
+      return report;
+    } catch (error) {
+      notify(
+        showNotification,
+        "error",
+        "Director Migration Could Not Finish",
+        error?.message || "Failed to apply the director migration.",
+      );
+      throw error;
+    } finally {
+      setIsApplyingDirectorMigration(false);
+    }
+  };
+
   const updateOrphanTermFilter = (value) => {
     setOrphanTermFilter(value);
     setOrphanScan(null);
@@ -675,6 +747,62 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
     }
   };
 
+  const loadBaylorIdCleanupPreview = async () => {
+    setIsLoadingBaylorIdCleanupPreview(true);
+    try {
+      const preview = await previewBaylorIdOptionalityCleanup();
+      setBaylorIdCleanupPreview(preview);
+      setBaylorIdCleanupReport(null);
+      notify(
+        showNotification,
+        "success",
+        "Baylor ID Cleanup Preview Ready",
+        `${preview?.summary?.totalWritesPlanned || 0} cleanup write${
+          (preview?.summary?.totalWritesPlanned || 0) === 1 ? "" : "s"
+        } planned.`,
+      );
+      return preview;
+    } catch (error) {
+      notify(
+        showNotification,
+        "error",
+        "Baylor ID Cleanup Preview Could Not Finish",
+        error?.message || "Could not preview Baylor ID cleanup.",
+      );
+      throw error;
+    } finally {
+      setIsLoadingBaylorIdCleanupPreview(false);
+    }
+  };
+
+  const applyBaylorIdCleanup = async () => {
+    setIsApplyingBaylorIdCleanup(true);
+    try {
+      const report = await applyBaylorIdOptionalityCleanup();
+      setBaylorIdCleanupReport(report);
+      setBaylorIdCleanupPreview(report);
+      notify(
+        showNotification,
+        "success",
+        "Baylor ID Cleanup Complete",
+        `Applied ${report?.summary?.totalWritesApplied || 0} cleanup write${
+          (report?.summary?.totalWritesApplied || 0) === 1 ? "" : "s"
+        }.`,
+      );
+      return report;
+    } catch (error) {
+      notify(
+        showNotification,
+        "error",
+        "Baylor ID Cleanup Could Not Finish",
+        error?.message || "Failed to apply Baylor ID cleanup.",
+      );
+      throw error;
+    } finally {
+      setIsApplyingBaylorIdCleanup(false);
+    }
+  };
+
   return {
     activeStep,
     setActiveStep,
@@ -703,12 +831,20 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
     locationApplyReport,
     isLoadingLocationPreview,
     isApplyingLocationMigration,
+    directorMigrationPreview,
+    directorMigrationReport,
+    isLoadingDirectorMigrationPreview,
+    isApplyingDirectorMigration,
     orphanTermFilter,
     orphanScan,
     orphanCleanupResult,
     orphanTotal,
     isScanningOrphans,
     isApplyingOrphanCleanup,
+    baylorIdCleanupPreview,
+    baylorIdCleanupReport,
+    isLoadingBaylorIdCleanupPreview,
+    isApplyingBaylorIdCleanup,
 
     handleScan,
     handleSafeFix,
@@ -727,9 +863,13 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
     runTermRepair,
     loadLocationPreview,
     applyLocationChanges,
+    loadDirectorMigrationPreview,
+    applyDirectorMigrationChanges,
     setOrphanTermFilter: updateOrphanTermFilter,
     scanOrphans,
     applyOrphanCleanup,
+    loadBaylorIdCleanupPreview,
+    applyBaylorIdCleanup,
   };
 };
 

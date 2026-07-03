@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
-import { Building2, MapPin, Search, Filter, Mail, Phone, PhoneOff, ChevronDown, ChevronRight, UserCog, Eye, Wifi } from "lucide-react";
+import { Building2, MapPin, Search, Filter, Mail, Phone, PhoneOff, ChevronDown, ChevronRight, Eye, Wifi } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
+import DirectorRoleBadge from "../shared/DirectorRoleBadge";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { buildOfficeBuildingData } from "../../utils/buildingDirectoryUtils";
@@ -328,12 +329,14 @@ const BuildingDirectory = ({ embedded = false }) => {
                                     <div>
                                       <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
                                         {person.name}
-                                        {person.isUPD && (
-                                          <UserCog
-                                            size={14}
-                                            className="text-amber-600"
-                                            title="Undergraduate Program Director"
-                                          />
+                                        {(person.directorAssignments || []).map(
+                                          (assignment) => (
+                                            <DirectorRoleBadge
+                                              key={`${assignment.programId}-${assignment.role}`}
+                                              role={assignment.role}
+                                              programName={assignment.programName}
+                                            />
+                                          ),
                                         )}
                                       </div>
                                       <div className="text-xs text-gray-600">

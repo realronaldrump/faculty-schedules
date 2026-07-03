@@ -310,6 +310,18 @@ service cloud.firestore {
       return value is string && value.size() > 0;
     }
 
+    function isOptionalBaylorIdValue(value) {
+      return value == null ||
+        (value is string && (value.size() == 0 || value.matches('^[0-9]{9}$')));
+    }
+
+    function hasValidOptionalBaylorIds(data) {
+      return (!('baylorId' in data) || isOptionalBaylorIdValue(data.baylorId)) &&
+        (!(data.externalIds is map) ||
+          !('baylorId' in data.externalIds) ||
+          isOptionalBaylorIdValue(data.externalIds.baylorId));
+    }
+
     function isValidSpaceKey(value) {
       return value is string && value.matches('^[A-Z0-9_]+:[A-Z0-9./-]+$');
     }
@@ -459,15 +471,29 @@ service cloud.firestore {
     }
 
     // People collection (faculty, staff, adjunct, students): granular permissions
+    // hasNoLegacyDirectorFlag: program-director assignments live exclusively on
+    // programs/{id}.directors — writes must never reintroduce people.isUPD.
+    // NOTE: deploy these rules only AFTER running the one-time director
+    // migration (Data Cleanup -> Rare Repair Tools), because pre-migration
+    // documents still carry the legacy field and would fail this check.
+    function hasNoLegacyDirectorFlag() {
+      return !('isUPD' in request.resource.data);
+    }
+
     match /people/{id} {
       allow read: if canReadAppData();
 
       // Create operations - allow users with people directory access (or import wizard)
-      allow create: if canManagePeople() && isValidPersonCreate(request.resource.data);
+      allow create: if canManagePeople() &&
+        isValidPersonCreate(request.resource.data) &&
+        hasValidOptionalBaylorIds(request.resource.data) &&
+        hasNoLegacyDirectorFlag();
 
       // Update operations - allow people managers, or restricted Ignite # edits from PAF workflow
-      allow update: if canManagePeople() ||
-        (canManagePafWorkflow() && isValidPafIgniteUpdate());
+      allow update: if (canManagePeople() ||
+        (canManagePafWorkflow() && isValidPafIgniteUpdate())) &&
+        hasValidOptionalBaylorIds(request.resource.data) &&
+        hasNoLegacyDirectorFlag();
 
       // Delete operations - allow users with people directory access (or import wizard)
       allow delete: if canManagePeople();
@@ -491,10 +517,22 @@ service cloud.firestore {
     }
 
     // Programs collection: granular permissions
+    // Canonical program-director model: the only director representation is
+    // the `directors` list ([{ personId, role: 'upd'|'gpd' }]); legacy
+    // updIds/updId fields are rejected. Per-entry validation happens in the
+    // app's single write path (rules cannot iterate lists).
+    // NOTE: deploy only AFTER running the one-time director migration.
+    function hasValidDirectorsShape() {
+      return (!('directors' in request.resource.data) ||
+          request.resource.data.directors is list) &&
+        !('updIds' in request.resource.data) &&
+        !('updId' in request.resource.data);
+    }
+
     match /programs/{id} {
       allow read: if canReadAppData();
-      allow create: if canManagePrograms();
-      allow update: if canManagePrograms();
+      allow create: if canManagePrograms() && hasValidDirectorsShape();
+      allow update: if canManagePrograms() && hasValidDirectorsShape();
       allow delete: if canManagePrograms();
     }
 

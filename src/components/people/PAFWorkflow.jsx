@@ -33,6 +33,10 @@ import {
 } from "../../utils/pafUtils";
 
 import SelectDropdown from "../SelectDropdown";
+
+const getBaylorId = (person) =>
+  (person?.baylorId || person?.externalIds?.baylorId || "").toString().trim();
+
 const PAFWorkflow = ({ embedded = false }) => {
   const { people: directoryData, loadPeople } = usePeople();
   const { scheduleData, selectedSemester, availableSemesters, setSelectedSemester } = useData();
@@ -91,7 +95,7 @@ const PAFWorkflow = ({ embedded = false }) => {
     return adjunctsWithCourses.filter((a) => {
       const name = `${a.firstName || ""} ${a.lastName || ""}`.toLowerCase();
       const email = (a.email || "").toLowerCase();
-      const baylorId = (a.baylorId || "").toLowerCase();
+      const baylorId = getBaylorId(a).toLowerCase();
       return (
         name.includes(term) ||
         email.includes(term) ||
@@ -394,11 +398,11 @@ const PAFWorkflow = ({ embedded = false }) => {
                           <div className="flex items-center gap-2">
                             <span className="text-gray-500 w-24">Baylor ID:</span>
                             <span className="font-mono text-gray-800">
-                              {adjunct.baylorId || "-"}
+                              {getBaylorId(adjunct) || "-"}
                             </span>
-                            {adjunct.baylorId && (
+                            {getBaylorId(adjunct) && (
                               <CopyButton
-                                text={adjunct.baylorId}
+                                text={getBaylorId(adjunct)}
                                 fieldKey={`baylorid-${adjunct.id}`}
                                 label="Baylor ID"
                               />

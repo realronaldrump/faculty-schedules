@@ -46,6 +46,9 @@ Legacy examples that should be removed by hygiene:
 - `primaryBuildings`
 - `weeklySchedule`
 
+Baylor ID numbers are optional. Missing values are stored as `null` on both
+`baylorId` and `externalIds.baylorId`; duplicate non-null values are rejected.
+
 Legacy examples that should be migrated/removed:
 
 - top-level `clssInstructorId`

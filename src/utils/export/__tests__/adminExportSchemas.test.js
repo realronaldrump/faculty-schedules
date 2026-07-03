@@ -43,12 +43,27 @@ describe("adminExportSchemas", () => {
       "Office",
       "Office Spaces",
       "Adjunct",
-      "UPD",
+      "Director Roles",
       "Full Time",
       "Tenured",
       "Remote",
       "Has No Phone",
       "Has No Office",
+    ]);
+  });
+
+  it("keeps Programs headers covering both director roles", () => {
+    const headers = SHEET_DEFINITIONS[SHEET_IDS.programs].columns.map(
+      (column) => column.header,
+    );
+    expect(headers).toEqual([
+      "Program Name",
+      "Program Code",
+      "UPD Names",
+      "UPD Count",
+      "GPD Names",
+      "GPD Count",
+      "Status",
     ]);
   });
 

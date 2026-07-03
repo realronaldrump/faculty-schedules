@@ -74,6 +74,22 @@ const DataCleanupRepairsPage = () => {
       };
     }
 
+    if (confirmType === "directors") {
+      return {
+        variant: "warning",
+        title: "Migrate program directors?",
+        message:
+          "This moves all legacy UPD data into the canonical director assignments on program records and removes the legacy fields. Review the preview (including any manual-review items) first.",
+        confirmText: "Migrate Directors",
+        confirmDisabled:
+          actions.isApplyingDirectorMigration ||
+          !actions.directorMigrationPreview,
+        onConfirm: async () => {
+          await actions.applyDirectorMigrationChanges();
+        },
+      };
+    }
+
     if (confirmType === "orphans") {
       return {
         variant: "danger",
@@ -85,6 +101,21 @@ const DataCleanupRepairsPage = () => {
           actions.isApplyingOrphanCleanup || actions.orphanTotal === 0,
         onConfirm: async () => {
           await actions.applyOrphanCleanup();
+        },
+      };
+    }
+
+    if (confirmType === "baylor-id-cleanup") {
+      return {
+        variant: "warning",
+        title: "Apply Baylor ID cleanup?",
+        message:
+          "This applies the previewed Baylor ID cleanup inside the app. It normalizes unassigned IDs and scrubs Baylor ID values from app-managed history records.",
+        confirmText: "Apply Cleanup",
+        confirmDisabled:
+          actions.isApplyingBaylorIdCleanup || !actions.baylorIdCleanupPreview,
+        onConfirm: async () => {
+          await actions.applyBaylorIdCleanup();
         },
       };
     }
@@ -193,6 +224,12 @@ const DataCleanupRepairsPage = () => {
         isApplyingLocationMigration={actions.isApplyingLocationMigration}
         onLoadLocationPreview={actions.loadLocationPreview}
         onRequestLocationConfirm={() => setConfirmType("location")}
+        directorMigrationPreview={actions.directorMigrationPreview}
+        directorMigrationReport={actions.directorMigrationReport}
+        isLoadingDirectorMigrationPreview={actions.isLoadingDirectorMigrationPreview}
+        isApplyingDirectorMigration={actions.isApplyingDirectorMigration}
+        onLoadDirectorMigrationPreview={actions.loadDirectorMigrationPreview}
+        onRequestDirectorMigrationConfirm={() => setConfirmType("directors")}
         orphanTermFilter={actions.orphanTermFilter}
         setOrphanTermFilter={actions.setOrphanTermFilter}
         orphanScan={actions.orphanScan}
@@ -202,6 +239,16 @@ const DataCleanupRepairsPage = () => {
         isApplyingOrphanCleanup={actions.isApplyingOrphanCleanup}
         onScanOrphans={actions.scanOrphans}
         onRequestOrphanConfirm={() => setConfirmType("orphans")}
+        baylorIdCleanupPreview={actions.baylorIdCleanupPreview}
+        baylorIdCleanupReport={actions.baylorIdCleanupReport}
+        isLoadingBaylorIdCleanupPreview={
+          actions.isLoadingBaylorIdCleanupPreview
+        }
+        isApplyingBaylorIdCleanup={actions.isApplyingBaylorIdCleanup}
+        onLoadBaylorIdCleanupPreview={actions.loadBaylorIdCleanupPreview}
+        onRequestBaylorIdCleanupConfirm={() =>
+          setConfirmType("baylor-id-cleanup")
+        }
       />
 
       <ConfirmDialog

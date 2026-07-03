@@ -1,3 +1,5 @@
+import { formatDirectorAssignmentList } from "../../../utils/directorAssignments";
+
 const csvQuote = (value) => `"${value || ""}"`;
 
 const rowsToCsv = (headers, rows) => {
@@ -54,7 +56,7 @@ export const buildDirectoryCsv = (
     "Building",
     "Is Adjunct",
     "Is Tenured",
-    "Is UPD",
+    "Director Roles",
     "Is Remote",
     "Course Count (current semester)",
     "Courses Taught (current semester)",
@@ -71,7 +73,7 @@ export const buildDirectoryCsv = (
     Building: resolveBuildingName(person) || "No Building",
     "Is Adjunct": person.isAdjunct ? "Yes" : "No",
     "Is Tenured": person.isTenured ? "Yes" : "No",
-    "Is UPD": person.isUPD ? "Yes" : "No",
+    "Director Roles": formatDirectorAssignmentList(person.directorAssignments),
     "Is Remote": person.isRemote ? "Yes" : "No",
     "Course Count (current semester)": person.courseCount || 0,
     "Courses Taught (current semester)":

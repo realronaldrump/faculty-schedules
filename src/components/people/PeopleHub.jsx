@@ -32,7 +32,7 @@ const TAB_DEFINITIONS = [
   },
   {
     id: "programs",
-    label: "Programs & UPDs",
+    label: "Programs & Directors",
     path: "people/programs",
     accessId: "people/programs",
     component: ProgramManagement,

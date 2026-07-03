@@ -28,6 +28,12 @@ import {
   SPACE_TYPE,
 } from "./locationService";
 import { normalizeSpaceRecord } from "./spaceUtils";
+import {
+  directorsAreEqual,
+  reassignDirectorPerson,
+  removePersonFromDirectors,
+} from "./directorAssignments";
+import { buildDirectorMigrationPlan } from "./directorMigration";
 import { deriveScheduleIdentityFromSchedule } from "./importIdentityUtils";
 import { standardizePerson, standardizeSchedule, standardizeRoom, detectPeopleDuplicates, detectScheduleDuplicates, detectRoomDuplicates, detectCrossCollectionIssues, mergePeopleData, mergeScheduleData, mergeRoomData, detectTeachingConflicts } from "./hygieneCore";
 import {
@@ -547,6 +553,24 @@ export const mergePeople = async (
   await reassignSchedulesToPrimary(duplicate.id, primary.id, instructorName);
 
   try {
+    // Re-point any director assignments held by the duplicate to the primary
+    // (deduped if the primary already holds the same role).
+    const programsSnapshot = await getDocs(collection(db, "programs"));
+    for (const programDoc of programsSnapshot.docs) {
+      const program = programDoc.data();
+      const nextDirectors = reassignDirectorPerson(
+        program.directors,
+        duplicate.id,
+        primary.id,
+      );
+      if (!directorsAreEqual(program.directors, nextDirectors)) {
+        await updateDoc(doc(db, "programs", programDoc.id), {
+          directors: nextDirectors,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    }
+
     await updateEmailListPresetsForPerson(duplicate.id, primary.id);
   } catch (error) {
     await updateDoc(doc(db, "people", duplicate.id), {
@@ -611,6 +635,20 @@ export const deletePersonSafely = async (personId) => {
     throw new Error(
       "Cannot delete a person while they are assigned to schedules. Reassign or merge first.",
     );
+  }
+
+  // Referential cleanup: drop any director assignments held by this person
+  // (the canonical relationship lives on program documents).
+  const programsSnapshot = await getDocs(collection(db, "programs"));
+  for (const programDoc of programsSnapshot.docs) {
+    const program = programDoc.data();
+    const nextDirectors = removePersonFromDirectors(program.directors, personId);
+    if (!directorsAreEqual(program.directors, nextDirectors)) {
+      await updateDoc(doc(db, "programs", programDoc.id), {
+        directors: nextDirectors,
+        updatedAt: new Date().toISOString(),
+      });
+    }
   }
 
   await updateEmailListPresetsForPerson(personId, null);
@@ -1625,9 +1663,7 @@ export const validateAndCleanBeforeSave = async (data, collection_name) => {
         baylorDuplicates.length > 0 &&
         !baylorDuplicates.find((p) => p.id === cleanPerson.id)
       ) {
-        duplicateWarnings.push(
-          `Baylor ID ${cleanPerson.baylorId} already exists`,
-        );
+        duplicateWarnings.push("Baylor ID already exists");
       }
 
       // After cleaning
@@ -3066,6 +3102,486 @@ const areLegacyValuesEqual = (left, right) =>
   JSON.stringify(normalizeComparableValue(left)) ===
   JSON.stringify(normalizeComparableValue(right));
 
+const BAYLOR_ID_REDACTION = "[redacted-baylor-id]";
+const BAYLOR_ID_FIELD_KEYS = new Set([
+  "baylorid",
+  "instructorbaylorid",
+]);
+const BAYLOR_ID_ACTIVE_IMPORT_STATUSES = new Set(["preview"]);
+
+const normalizeBaylorIdKey = (key) =>
+  String(key || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+const isBaylorIdFieldKey = (key) => {
+  const normalized = normalizeBaylorIdKey(key);
+  return (
+    BAYLOR_ID_FIELD_KEYS.has(normalized) ||
+    normalized.endsWith("baylorid")
+  );
+};
+
+const isPlainCleanupObject = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+};
+
+const objectDescribesBaylorIdField = (value) => {
+  if (!isPlainCleanupObject(value)) return false;
+  return ["key", "field", "fieldName", "path"].some((name) =>
+    isBaylorIdFieldKey(value[name]),
+  );
+};
+
+const classifyOptionalBaylorId = (value) => {
+  if (value === undefined || value === null) {
+    return { state: "empty", value: null, raw: value };
+  }
+  const raw = String(value).trim();
+  if (!raw) return { state: "empty", value: null, raw };
+  const digits = raw.replace(/\D/g, "");
+  if (/^\d{9}$/.test(digits)) {
+    return { state: "valid", value: digits, raw };
+  }
+  return { state: "invalid", value: null, raw };
+};
+
+const getPersonBaylorIdForCleanup = (person = {}) => {
+  const topLevel = classifyOptionalBaylorId(person.baylorId);
+  const external = classifyOptionalBaylorId(person.externalIds?.baylorId);
+  if (topLevel.state === "valid") return topLevel.value;
+  if (external.state === "valid") return external.value;
+  return null;
+};
+
+const sanitizeBaylorIdCleanupLabel = (value) =>
+  String(value || "")
+    .replace(/baylor:\d{9}/gi, `baylor:${BAYLOR_ID_REDACTION}`)
+    .replace(/\b\d{9}\b/g, BAYLOR_ID_REDACTION);
+
+const getPersonCleanupLabel = (person = {}) =>
+  sanitizeBaylorIdCleanupLabel(
+    person.name ||
+    `${person.firstName || ""} ${person.lastName || ""}`.trim() ||
+    person.email ||
+    "Unlabeled person",
+  );
+
+const getScheduleCleanupLabel = (schedule = {}) => {
+  const course = [schedule.courseCode, schedule.section].filter(Boolean).join(" ");
+  const term = schedule.term || schedule.termCode || "";
+  if (course && term) return sanitizeBaylorIdCleanupLabel(`${course} (${term})`);
+  return sanitizeBaylorIdCleanupLabel(
+    course || schedule.courseTitle || term || "Unlabeled schedule",
+  );
+};
+
+const hasBaylorIdentityKey = (value) =>
+  typeof value === "string" && value.trim().toLowerCase().startsWith("baylor:");
+
+const scrubBaylorIdHistoryValue = (value, key = "") => {
+  if (isBaylorIdFieldKey(key)) {
+    if (value === undefined || value === null || value === "") return null;
+    return BAYLOR_ID_REDACTION;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => scrubBaylorIdHistoryValue(item, key));
+  }
+
+  if (isPlainCleanupObject(value)) {
+    const describesBaylorIdField = objectDescribesBaylorIdField(value);
+    return Object.entries(value).reduce((scrubbed, [entryKey, entryValue]) => {
+      if (
+        describesBaylorIdField &&
+        !["key", "field", "fieldName", "path", "message", "reason"].includes(
+          entryKey,
+        )
+      ) {
+        scrubbed[entryKey] = scrubBaylorIdHistoryValue(
+          entryValue,
+          "baylorId",
+        );
+        return scrubbed;
+      }
+      scrubbed[entryKey] = scrubBaylorIdHistoryValue(entryValue, entryKey);
+      return scrubbed;
+    }, {});
+  }
+
+  if (typeof value !== "string") return value;
+
+  return value
+    .replace(/baylor:\d{9}/gi, `baylor:${BAYLOR_ID_REDACTION}`)
+    .replace(
+      /\b(Baylor\s*ID(?:\s*(?:from|to|:|=|#))?\s*)\d{9}\b/gi,
+      `$1${BAYLOR_ID_REDACTION}`,
+    );
+};
+
+const hasBaylorIdHistoryChange = (before, after) =>
+  JSON.stringify(normalizeComparableValue(before)) !==
+  JSON.stringify(normalizeComparableValue(after));
+
+export const scrubBaylorIdHistoryData = (data = {}) =>
+  scrubBaylorIdHistoryValue(data);
+
+export const buildBaylorIdOptionalityCleanupPlan = ({
+  peopleDocs = [],
+  scheduleDocs = [],
+  historyDocsByCollection = {},
+  importTransactionDocs = [],
+} = {}) => {
+  const peopleRecords = Array.isArray(peopleDocs) ? peopleDocs : [];
+  const scheduleRecords = Array.isArray(scheduleDocs) ? scheduleDocs : [];
+  const importRecords = Array.isArray(importTransactionDocs)
+    ? importTransactionDocs
+    : [];
+  const now = new Date().toISOString();
+
+  const report = {
+    mode: "preview",
+    timestamp: now,
+    summary: {
+      peopleScanned: peopleRecords.length,
+      peopleToUpdate: 0,
+      peopleManualReview: 0,
+      duplicateBaylorIdGroups: 0,
+      schedulesScanned: scheduleRecords.length,
+      schedulesToUpdate: 0,
+      historyDocsScanned: 0,
+      historyDocsToScrub: 0,
+      importTransactionsScanned: importRecords.length,
+      importTransactionsToScrub: 0,
+      activeImportTransactionsSkipped: 0,
+      totalWritesPlanned: 0,
+    },
+    people: {
+      normalizeBlankToNull: [],
+      mirrorTopLevelToExternal: [],
+      mirrorExternalToTopLevel: [],
+      clearBaylorIdentityMetadata: [],
+      manualReview: [],
+    },
+    duplicateBaylorIdGroups: [],
+    schedules: {
+      clearBlankOrInvalid: [],
+      syncFromLinkedPerson: [],
+    },
+    history: {
+      changeLog: { scanned: 0, toScrub: 0 },
+      editHistory: { scanned: 0, toScrub: 0 },
+    },
+    importTransactions: {
+      scanned: importRecords.length,
+      toScrub: 0,
+      activeSkipped: 0,
+    },
+    errors: [],
+  };
+
+  const valueOwners = new Map();
+  const peopleById = new Map();
+
+  peopleRecords.forEach(({ id, data }) => {
+    const person = data || {};
+    peopleById.set(id, { id, ...person });
+
+    const topLevel = classifyOptionalBaylorId(person.baylorId);
+    const external = classifyOptionalBaylorId(person.externalIds?.baylorId);
+    const values = new Set();
+    if (topLevel.state === "valid") values.add(topLevel.value);
+    if (external.state === "valid") values.add(external.value);
+    values.forEach((value) => {
+      if (!valueOwners.has(value)) valueOwners.set(value, new Set());
+      valueOwners.get(value).add(id);
+    });
+  });
+
+  const duplicateValueSet = new Set();
+  valueOwners.forEach((owners, value) => {
+    if (owners.size <= 1) return;
+    duplicateValueSet.add(value);
+    report.duplicateBaylorIdGroups.push({
+      people: Array.from(owners)
+        .map((personId) => getPersonCleanupLabel(peopleById.get(personId)))
+        .slice(0, 5),
+      count: owners.size,
+    });
+  });
+  report.summary.duplicateBaylorIdGroups = report.duplicateBaylorIdGroups.length;
+
+  const personPlans = [];
+  peopleRecords.forEach(({ id, ref, data }) => {
+    const person = data || {};
+    const label = getPersonCleanupLabel(person);
+    const topLevel = classifyOptionalBaylorId(person.baylorId);
+    const external = classifyOptionalBaylorId(person.externalIds?.baylorId);
+    const topHasValid = topLevel.state === "valid";
+    const externalHasValid = external.state === "valid";
+    const validBaylorId = topLevel.value || external.value || null;
+    const hasInvalidValue =
+      topLevel.state === "invalid" || external.state === "invalid";
+    const hasConflictingValidValues =
+      topHasValid && externalHasValid && topLevel.value !== external.value;
+    const isDuplicate = validBaylorId && duplicateValueSet.has(validBaylorId);
+
+    if (hasInvalidValue || hasConflictingValidValues || isDuplicate) {
+      const reason = hasInvalidValue
+        ? "Non-empty Baylor ID is not a valid 9-digit value."
+        : hasConflictingValidValues
+          ? "Top-level and external Baylor ID values do not match."
+          : "Baylor ID appears on more than one person.";
+      report.people.manualReview.push({ person: label, reason });
+      return;
+    }
+
+    const externalIds =
+      person.externalIds && typeof person.externalIds === "object"
+        ? { ...person.externalIds }
+        : {};
+    const updates = {};
+    const reasons = [];
+
+    if (validBaylorId) {
+      if (person.baylorId !== validBaylorId) {
+        updates.baylorId = validBaylorId;
+        if (!person.baylorId) {
+          report.people.mirrorExternalToTopLevel.push({ person: label });
+        }
+      }
+      if (externalIds.baylorId !== validBaylorId) {
+        externalIds.baylorId = validBaylorId;
+        updates.externalIds = externalIds;
+        if (!person.externalIds?.baylorId) {
+          report.people.mirrorTopLevelToExternal.push({ person: label });
+        }
+      }
+    } else {
+      if (person.baylorId !== null) {
+        updates.baylorId = null;
+        reasons.push("baylorId");
+        report.people.normalizeBlankToNull.push({ person: label });
+      }
+      if (externalIds.baylorId !== null) {
+        externalIds.baylorId = null;
+        updates.externalIds = externalIds;
+        reasons.push("externalIds.baylorId");
+      }
+      if (hasBaylorIdentityKey(person.identityKey)) {
+        updates.identityKey = deleteField();
+        reasons.push("identityKey");
+      }
+      if (Array.isArray(person.identityKeys)) {
+        const filteredIdentityKeys = person.identityKeys.filter(
+          (key) => !hasBaylorIdentityKey(key),
+        );
+        if (filteredIdentityKeys.length !== person.identityKeys.length) {
+          updates.identityKeys = filteredIdentityKeys;
+          reasons.push("identityKeys");
+        }
+      }
+      if (String(person.identitySource || "").trim().toLowerCase() === "baylor") {
+        updates.identitySource = deleteField();
+        reasons.push("identitySource");
+      }
+      if (reasons.some((reason) => reason.startsWith("identity"))) {
+        report.people.clearBaylorIdentityMetadata.push({ person: label });
+      }
+    }
+
+    if (Object.keys(updates).length === 0) return;
+    personPlans.push({ ref, id, updates: { ...updates, updatedAt: now } });
+  });
+
+  const schedulePlans = [];
+  scheduleRecords.forEach(({ id, ref, data }) => {
+    const schedule = data || {};
+    const classified = classifyOptionalBaylorId(schedule.instructorBaylorId);
+    const linkedPersonId =
+      schedule.instructorId ||
+      (Array.isArray(schedule.instructorAssignments)
+        ? schedule.instructorAssignments.find((assignment) => assignment?.isPrimary)
+            ?.personId || schedule.instructorAssignments[0]?.personId
+        : "") ||
+      (Array.isArray(schedule.instructorIds) ? schedule.instructorIds[0] : "");
+    const linkedPerson = linkedPersonId ? peopleById.get(linkedPersonId) : null;
+    const linkedBaylorId = linkedPerson
+      ? getPersonBaylorIdForCleanup(linkedPerson)
+      : null;
+    let desiredValue = undefined;
+
+    if (linkedPerson) {
+      desiredValue = linkedBaylorId || null;
+    } else if (classified.state === "empty") {
+      desiredValue =
+        schedule.instructorBaylorId === undefined || schedule.instructorBaylorId === null
+          ? undefined
+          : null;
+    } else if (classified.state === "invalid") {
+      desiredValue = null;
+    } else if (classified.raw !== classified.value) {
+      desiredValue = classified.value;
+    }
+
+    if (desiredValue === undefined) return;
+    if (schedule.instructorBaylorId === desiredValue) return;
+
+    schedulePlans.push({
+      ref,
+      id,
+      updates: {
+        instructorBaylorId: desiredValue,
+        updatedAt: now,
+      },
+    });
+    const entry = { schedule: getScheduleCleanupLabel(schedule) };
+    if (linkedPerson) {
+      report.schedules.syncFromLinkedPerson.push(entry);
+    } else {
+      report.schedules.clearBlankOrInvalid.push(entry);
+    }
+  });
+
+  const historyPlans = [];
+  Object.entries(historyDocsByCollection || {}).forEach(([collectionName, docs]) => {
+    const records = Array.isArray(docs) ? docs : [];
+    if (!report.history[collectionName]) {
+      report.history[collectionName] = { scanned: 0, toScrub: 0 };
+    }
+    report.history[collectionName].scanned = records.length;
+    report.summary.historyDocsScanned += records.length;
+
+    records.forEach(({ ref, data }) => {
+      const original = data || {};
+      const scrubbed = scrubBaylorIdHistoryData(original);
+      if (!hasBaylorIdHistoryChange(original, scrubbed)) return;
+      historyPlans.push({ ref, updates: { ...scrubbed, scrubbedAt: now } });
+      report.history[collectionName].toScrub += 1;
+      report.summary.historyDocsToScrub += 1;
+    });
+  });
+
+  const importTransactionPlans = [];
+  importRecords.forEach(({ ref, data }) => {
+    const transaction = data || {};
+    const status = String(transaction.status || "").trim().toLowerCase();
+    if (BAYLOR_ID_ACTIVE_IMPORT_STATUSES.has(status)) {
+      report.importTransactions.activeSkipped += 1;
+      report.summary.activeImportTransactionsSkipped += 1;
+      return;
+    }
+    const scrubbed = scrubBaylorIdHistoryData(transaction);
+    if (!hasBaylorIdHistoryChange(transaction, scrubbed)) return;
+    importTransactionPlans.push({
+      ref,
+      updates: { ...scrubbed, scrubbedAt: now },
+    });
+    report.importTransactions.toScrub += 1;
+    report.summary.importTransactionsToScrub += 1;
+  });
+
+  report.summary.peopleToUpdate = personPlans.length;
+  report.summary.peopleManualReview = report.people.manualReview.length;
+  report.summary.schedulesToUpdate = schedulePlans.length;
+  report.summary.totalWritesPlanned =
+    personPlans.length +
+    schedulePlans.length +
+    historyPlans.length +
+    importTransactionPlans.length;
+
+  return {
+    report,
+    plans: {
+      people: personPlans,
+      schedules: schedulePlans,
+      history: historyPlans,
+      importTransactions: importTransactionPlans,
+    },
+  };
+};
+
+const loadBaylorIdOptionalityCleanupInputs = async () => {
+  const [
+    peopleSnapshot,
+    schedulesSnapshot,
+    changeLogSnapshot,
+    editHistorySnapshot,
+    importTransactionsSnapshot,
+  ] = await Promise.all([
+    getDocs(collection(db, "people")),
+    getDocs(collection(db, "schedules")),
+    getDocs(collection(db, "changeLog")),
+    getDocs(collection(db, "editHistory")),
+    getDocs(collection(db, "importTransactions")),
+  ]);
+
+  const toDocs = (snapshot) =>
+    snapshot.docs.map((docSnap) => ({
+      id: docSnap.id,
+      ref: docSnap.ref,
+      data: docSnap.data() || {},
+    }));
+
+  return {
+    peopleDocs: toDocs(peopleSnapshot),
+    scheduleDocs: toDocs(schedulesSnapshot),
+    historyDocsByCollection: {
+      changeLog: toDocs(changeLogSnapshot),
+      editHistory: toDocs(editHistorySnapshot),
+    },
+    importTransactionDocs: toDocs(importTransactionsSnapshot),
+  };
+};
+
+export const previewBaylorIdOptionalityCleanup = async () => {
+  const inputs = await loadBaylorIdOptionalityCleanupInputs();
+  const { report } = buildBaylorIdOptionalityCleanupPlan(inputs);
+  return report;
+};
+
+export const applyBaylorIdOptionalityCleanup = async () => {
+  const inputs = await loadBaylorIdOptionalityCleanupInputs();
+  const { report, plans } = buildBaylorIdOptionalityCleanupPlan(inputs);
+  const batchWriter = createBatchWriter();
+  let writes = 0;
+
+  for (const plan of [
+    ...plans.people,
+    ...plans.schedules,
+    ...plans.history,
+    ...plans.importTransactions,
+  ]) {
+    if (!plan?.ref || !plan?.updates) continue;
+    await batchWriter.add((batch) => batch.update(plan.ref, plan.updates));
+    writes += 1;
+  }
+
+  await batchWriter.flush();
+
+  if (writes > 0) {
+    await logBulkUpdate(
+      "Baylor ID optionality cleanup",
+      "multiple",
+      writes,
+      "dataHygiene.js - applyBaylorIdOptionalityCleanup",
+    );
+  }
+
+  return {
+    ...report,
+    mode: "apply",
+    summary: {
+      ...report.summary,
+      totalWritesApplied: writes,
+      peopleUpdated: plans.people.length,
+      schedulesUpdated: plans.schedules.length,
+      historyDocsScrubbed: plans.history.length,
+      importTransactionsScrubbed: plans.importTransactions.length,
+    },
+  };
+};
+
 const normalizeLegacyString = (value) => {
   if (value === undefined || value === null) return "";
   return String(value).trim();
@@ -3301,8 +3817,43 @@ const buildPersonLegacyFixUpdates = (person = {}) => {
   };
 };
 
-const detectLegacyModelIssues = (people = [], schedules = []) => {
+const detectLegacyModelIssues = (people = [], schedules = [], programs = []) => {
   const issues = [];
+
+  // Legacy program-director state (programs.updIds/updId, people.isUPD).
+  // The updates reuse the deterministic migration plan so the health-scan
+  // auto-fix and the Rare Repair migration can never disagree. Program
+  // issues are pushed before person-flag issues so legacy assignment data
+  // is always canonicalized before the flags that back it are removed.
+  if (Array.isArray(programs) && programs.length > 0) {
+    const directorPlan = buildDirectorMigrationPlan(people, programs);
+    directorPlan.programUpdates.forEach((update) => {
+      issues.push({
+        id: `legacy-program-directors:${update.programId}`,
+        type: "legacy_program_director_fields",
+        recordType: "programs",
+        record: { id: update.programId, name: update.programName },
+        touchedFields: ["directors", "updIds", "updId"],
+        message: `Program ${update.programName || update.programId} carries legacy UPD fields or non-canonical director data.`,
+        updates: {
+          directors: update.directors,
+          updIds: deleteField(),
+          updId: deleteField(),
+        },
+      });
+    });
+    directorPlan.peopleCleanups.forEach((cleanup) => {
+      issues.push({
+        id: `legacy-person-upd-flag:${cleanup.personId}`,
+        type: "legacy_person_director_flag",
+        recordType: "people",
+        record: { id: cleanup.personId, name: cleanup.personName },
+        touchedFields: ["isUPD"],
+        message: `Person ${cleanup.personName} carries the legacy isUPD flag.`,
+        updates: { isUPD: deleteField() },
+      });
+    });
+  }
 
   schedules.forEach((schedule) => {
     const { updates, touchedFields } = buildScheduleLegacyFixUpdates(schedule);
@@ -3383,6 +3934,7 @@ export const scanDataHealth = async () => {
     peopleSnapshot,
     schedulesSnapshot,
     roomsSnapshot,
+    programsSnapshot,
     peopleDecisions,
     scheduleDecisions,
     roomDecisions,
@@ -3390,6 +3942,7 @@ export const scanDataHealth = async () => {
     getDocs(collection(db, "people")),
     getDocs(collection(db, "schedules")),
     getDocs(collection(db, "rooms")),
+    getDocs(collection(db, "programs")),
     fetchDedupeDecisions("people"),
     fetchDedupeDecisions("schedules"),
     fetchDedupeDecisions("rooms"),
@@ -3403,6 +3956,10 @@ export const scanDataHealth = async () => {
     ...docSnap.data(),
   }));
   const rooms = roomsSnapshot.docs.map((docSnap) => ({
+    id: docSnap.id,
+    ...docSnap.data(),
+  }));
+  const programs = programsSnapshot.docs.map((docSnap) => ({
     id: docSnap.id,
     ...docSnap.data(),
   }));
@@ -3423,7 +3980,7 @@ export const scanDataHealth = async () => {
   const teachingConflicts = detectTeachingConflicts(schedules, {
     blockedSchedulePairs: scheduleBlocks,
   });
-  const legacyModelIssues = detectLegacyModelIssues(people, schedules);
+  const legacyModelIssues = detectLegacyModelIssues(people, schedules, programs);
 
   const highConfidencePeopleDuplicates = peopleDuplicates.filter(
     (entry) => Number(entry?.confidence || 0) >= 0.95,
@@ -3606,25 +4163,17 @@ export const autoFixAllIssues = async (options = {}) => {
   };
 
   try {
-    // 0. Standardize all data formats first.
-    // Legacy cleanup runs after this so standardization does not reintroduce
-    // fields that were just removed by cleanup.
-    if (standardizeData) {
-      try {
-        const standardResult = await standardizeAllData();
-        results.standardization.updated = standardResult.updatedRecords || 0;
-      } catch (error) {
-        results.errors.push(`Standardization failed: ${error.message}`);
-      }
-    }
-
-    // 1. Normalize legacy model mirrors and identity shadow fields.
+    // 0. Normalize legacy model mirrors and identity shadow fields.
+    // Director migration must run before broad standardization because
+    // standardizePerson intentionally strips the legacy people.isUPD flag.
     if (fixLegacyModel) {
       try {
-        const [peopleSnapshot, schedulesSnapshot] = await Promise.all([
-          getDocs(collection(db, "people")),
-          getDocs(collection(db, "schedules")),
-        ]);
+        const [peopleSnapshot, schedulesSnapshot, programsSnapshot] =
+          await Promise.all([
+            getDocs(collection(db, "people")),
+            getDocs(collection(db, "schedules")),
+            getDocs(collection(db, "programs")),
+          ]);
         const people = peopleSnapshot.docs.map((docSnap) => ({
           id: docSnap.id,
           ...docSnap.data(),
@@ -3633,7 +4182,11 @@ export const autoFixAllIssues = async (options = {}) => {
           id: docSnap.id,
           ...docSnap.data(),
         }));
-        const legacyIssues = detectLegacyModelIssues(people, schedules);
+        const programs = programsSnapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+        }));
+        const legacyIssues = detectLegacyModelIssues(people, schedules, programs);
         const legacyResult = await applyLegacyModelFixes(legacyIssues);
         results.legacyModel = {
           fixed: legacyResult.fixed || 0,
@@ -3644,6 +4197,17 @@ export const autoFixAllIssues = async (options = {}) => {
         }
       } catch (error) {
         results.errors.push(`Legacy model cleanup failed: ${error.message}`);
+      }
+    }
+
+    // 1. Standardize remaining data formats after legacy cleanup so general
+    // normalization cannot erase migration inputs before they are consumed.
+    if (standardizeData) {
+      try {
+        const standardResult = await standardizeAllData();
+        results.standardization.updated = standardResult.updatedRecords || 0;
+      } catch (error) {
+        results.errors.push(`Standardization failed: ${error.message}`);
       }
     }
 

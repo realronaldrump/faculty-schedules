@@ -7,6 +7,13 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../firebase";
+import {
+  DIRECTOR_ROLES,
+  buildDirectorIndex,
+  formatDirectorAssignmentList,
+  getDirectorAssignments,
+  getProgramDirectors,
+} from "../directorAssignments";
 import { buildPeopleIndex } from "../peopleUtils";
 import {
   getAssignmentStatusForSemester,
@@ -252,6 +259,7 @@ const statusFromTermRecord = (term = {}) => {
 };
 
 const buildPeopleRows = ({ canonicalPeople = [], programsById = new Map(), spacesByKey = new Map() }) => {
+  const directorIndex = buildDirectorIndex(Array.from(programsById.values()));
   return canonicalPeople
     .map((person) => {
       const roles = normalizeRoleList(person.roles);
@@ -285,7 +293,9 @@ const buildPeopleRows = ({ canonicalPeople = [], programsById = new Map(), space
         office: person.office || joinValues(person.offices || []),
         officeSpaces: joinValues(officeSpaces),
         isAdjunct: getBooleanStatusLabel(person.isAdjunct === true),
-        isUPD: getBooleanStatusLabel(person.isUPD === true),
+        directorRoles: formatDirectorAssignmentList(
+          getDirectorAssignments(directorIndex, person.id),
+        ),
         isFullTime: getBooleanStatusLabel(person.isFullTime !== false),
         isTenured: getBooleanStatusLabel(person.isTenured === true),
         isRemote: getBooleanStatusLabel(person.isRemote === true),
@@ -472,30 +482,28 @@ const buildCourseRows = ({ courses = [] }) => {
 };
 
 const buildProgramRows = ({ programs = [], canonicalPeople = [] }) => {
+  const peopleById = new Map(canonicalPeople.map((person) => [person.id, person]));
+  const directorNamesForRole = (program, role) =>
+    getProgramDirectors(program, role)
+      .map(({ personId }) => {
+        const person = peopleById.get(personId);
+        return person ? getPersonDisplayName(person) : "";
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+
   return programs
     .map((program) => {
-      const updNameSet = new Set();
-      const updIds = Array.isArray(program.updIds) ? program.updIds : [];
-
-      canonicalPeople.forEach((person) => {
-        if (person?.programId === program.id && person?.isUPD === true) {
-          updNameSet.add(getPersonDisplayName(person));
-        }
-      });
-
-      updIds.forEach((personId) => {
-        const person = canonicalPeople.find((candidate) => candidate.id === personId);
-        if (!person) return;
-        updNameSet.add(getPersonDisplayName(person));
-      });
-
-      const updNames = Array.from(updNameSet).sort((a, b) => a.localeCompare(b));
+      const updNames = directorNamesForRole(program, DIRECTOR_ROLES.UPD);
+      const gpdNames = directorNamesForRole(program, DIRECTOR_ROLES.GPD);
 
       return {
         programName: program.name || "",
         programCode: program.code || "",
         updNames: joinValues(updNames),
         updCount: updNames.length,
+        gpdNames: joinValues(gpdNames),
+        gpdCount: gpdNames.length,
         status: getActiveStatusLabel(program.isActive),
       };
     })

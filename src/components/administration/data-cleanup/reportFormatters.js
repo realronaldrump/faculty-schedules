@@ -586,6 +586,134 @@ export const summarizeLocationApplyReport = (report) => {
   return buildSummary("Room link update complete", items, nextStep);
 };
 
+export const summarizeDirectorMigrationPreview = (plan) => {
+  if (!plan) return null;
+  const items = [
+    {
+      label: "UPD assignments to migrate",
+      value: Number(plan?.summary?.migratedAssignments || 0),
+    },
+    {
+      label: "Programs to update",
+      value: Number(plan?.summary?.programsToUpdate || 0),
+    },
+    {
+      label: "Legacy person flags to remove",
+      value: Number(plan?.summary?.peopleFlagsToRemove || 0),
+    },
+    {
+      label: "Orphaned references (dropped)",
+      value: Number(plan?.summary?.orphanedReferences || 0),
+    },
+    {
+      label: "Needs manual review",
+      value: Number(plan?.summary?.manualReviewCount || 0),
+    },
+  ];
+  const nextStep =
+    Number(plan?.summary?.manualReviewCount || 0) > 0
+      ? "Review the flagged people below, then apply. Their legacy flags are removed on apply, so note any directorship you want to re-create manually."
+      : "Review the counts, then apply to move all UPD data into the canonical director model.";
+  return buildSummary("Director migration preview ready", items, nextStep);
+};
+
+export const summarizeDirectorMigrationReport = (report) => {
+  if (!report) return null;
+  const items = [
+    {
+      label: "Assignments migrated",
+      value: Number(report?.summary?.migratedAssignments || 0),
+    },
+    {
+      label: "Programs updated",
+      value: Number(report?.applied?.programsUpdated || 0),
+    },
+    {
+      label: "People cleaned up",
+      value: Number(report?.applied?.peopleUpdated || 0),
+    },
+    {
+      label: "Document writes",
+      value: Number(report?.applied?.documentWrites || 0),
+    },
+  ];
+  const nextStep =
+    Number(report?.summary?.manualReviewCount || 0) > 0
+      ? "Migration complete. Re-create any manually reviewed directorships from the Programs page if needed."
+      : "Migration complete. Program directors now live only on program records.";
+  return buildSummary("Director migration complete", items, nextStep);
+};
+
+export const summarizeBaylorIdCleanupPreview = (report) => {
+  if (!report) return null;
+  const items = [
+    {
+      label: "Cleanup writes planned",
+      value: Number(report?.summary?.totalWritesPlanned || 0),
+    },
+    {
+      label: "People to update",
+      value: Number(report?.summary?.peopleToUpdate || 0),
+    },
+    {
+      label: "Schedule links to update",
+      value: Number(report?.summary?.schedulesToUpdate || 0),
+    },
+    {
+      label: "History records to scrub",
+      value: Number(report?.summary?.historyDocsToScrub || 0),
+    },
+    {
+      label: "Import records to scrub",
+      value: Number(report?.summary?.importTransactionsToScrub || 0),
+    },
+    {
+      label: "Needs manual review",
+      value: Number(report?.summary?.peopleManualReview || 0),
+    },
+  ];
+  const nextStep =
+    Number(report?.summary?.peopleManualReview || 0) > 0
+      ? "Review the manual-review count before applying. Duplicate or invalid active IDs are not changed automatically."
+      : "If these counts look correct, apply the Baylor ID cleanup.";
+  return buildSummary("Baylor ID cleanup preview ready", items, nextStep);
+};
+
+export const summarizeBaylorIdCleanupReport = (report) => {
+  if (!report) return null;
+  const items = [
+    {
+      label: "Cleanup writes applied",
+      value: Number(report?.summary?.totalWritesApplied || 0),
+    },
+    {
+      label: "People updated",
+      value: Number(report?.summary?.peopleUpdated || 0),
+    },
+    {
+      label: "Schedules updated",
+      value: Number(report?.summary?.schedulesUpdated || 0),
+    },
+    {
+      label: "History records scrubbed",
+      value: Number(report?.summary?.historyDocsScrubbed || 0),
+    },
+    {
+      label: "Import records scrubbed",
+      value: Number(report?.summary?.importTransactionsScrubbed || 0),
+    },
+    {
+      label: "Active imports skipped",
+      value: Number(report?.summary?.activeImportTransactionsSkipped || 0),
+    },
+  ];
+  const nextStep =
+    Number(report?.summary?.peopleManualReview || 0) > 0
+      ? "Cleanup finished. Resolve manual-review people from the Baylor IDs page."
+      : "Cleanup finished. Baylor IDs remain optional.";
+  return buildSummary("Baylor ID cleanup complete", items, nextStep);
+};
+
 export const summarizeOrphanScan = (scan, termLabel = "") => {
   if (!scan) return null;
   const items = [

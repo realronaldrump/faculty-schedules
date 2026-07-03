@@ -37,10 +37,6 @@ function useDirectoryState({
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [recordToDelete, setRecordToDelete] = useState(null);
 
-    // Change history (for undo)
-    const [changeHistory, setChangeHistory] = useState([]);
-    const [showHistory, setShowHistory] = useState(false);
-
     // Selected record for contact card
     const [selectedRecord, setSelectedRecord] = useState(null);
 
@@ -96,12 +92,6 @@ function useDirectoryState({
         setShowDeleteConfirm,
         recordToDelete,
         setRecordToDelete,
-
-        // History state
-        changeHistory,
-        setChangeHistory,
-        showHistory,
-        setShowHistory,
 
         // Selected record
         selectedRecord,

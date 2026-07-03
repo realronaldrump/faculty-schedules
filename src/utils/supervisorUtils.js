@@ -4,23 +4,30 @@ import { getRoleList } from "./peopleUtils";
 const normalizeSupervisorKey = (value) =>
   String(value || "").trim().toLowerCase();
 
-const isSupervisorCandidate = (person) => {
+const isSupervisorCandidate = (person, directorIndex) => {
   const roles = getRoleList(person?.roles);
   return (
     roles.includes("staff") ||
     roles.includes("faculty") ||
     person?.isAdjunct ||
-    person?.isUPD
+    (directorIndex instanceof Map && directorIndex.has(person?.id))
   );
 };
 
-export const buildSupervisorIndex = (people = []) => {
+/**
+ * @param {Array} people - raw people records
+ * @param {Object} [options]
+ * @param {Map} [options.directorIndex] - canonical program-director index
+ *   (Map<personId, assignments>) so directors qualify even without an
+ *   explicit faculty/staff role.
+ */
+export const buildSupervisorIndex = (people = [], { directorIndex } = {}) => {
   const options = [];
   const byId = new Map();
   const nameToIds = new Map();
 
   people.forEach((person) => {
-    if (!person?.id || !isSupervisorCandidate(person)) return;
+    if (!person?.id || !isSupervisorCandidate(person, directorIndex)) return;
 
     const label =
       formatPersonDisplayName(person) || person.name || person.email || "";

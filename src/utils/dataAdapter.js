@@ -16,6 +16,7 @@
 
 import { collection, getDocs } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
+import { buildDirectorIndex, getDirectorAssignments } from './directorAssignments';
 
 // ==================== CONSTANTS ====================
 
@@ -53,6 +54,8 @@ export const adaptPeopleToFaculty = (
   const { includeInactive = false } = options;
   // Create lookup map for programs
   const programsMap = new Map(programs.map(program => [program.id, program]));
+  // Canonical program-director relationships (programs/{id}.directors)
+  const directorIndex = buildDirectorIndex(programs);
   const normalizedPeople = people.filter(person => !person?.mergedInto);
 
   return normalizedPeople
@@ -63,7 +66,7 @@ export const adaptPeopleToFaculty = (
         : (typeof person.roles === 'object' && person.roles !== null
           ? person.roles.faculty === true
           : false);
-      return hasFacultyRole || person.isAdjunct === true || person.isUPD === true;
+      return hasFacultyRole || person.isAdjunct === true || directorIndex.has(person.id);
     })
     .map(person => {
       const facultyName = `${person.firstName || ""} ${person.lastName || ""}`.trim();
@@ -106,11 +109,11 @@ export const adaptPeopleToFaculty = (
         isAdjunct,
         isTenured: isAdjunct ? false : (person.isTenured || false),
         isAlsoStaff: hasRole('staff'),
-        isUPD: person.isUPD || false,
+        directorAssignments: getDirectorAssignments(directorIndex, person.id),
         isActive: person.isActive !== false,
         inactiveAt: person.inactiveAt || '',
         inactiveReason: person.inactiveReason || '',
-        baylorId: person.baylorId || '', // 9-digit Baylor ID number
+        baylorId: person.baylorId || person.externalIds?.baylorId || '', // 9-digit Baylor ID number
         hasNoPhone: person.hasNoPhone || false,
         hasNoOffice: person.hasNoOffice || false,
         program: program // Ensure program is set last so it isn't overwritten
@@ -121,8 +124,9 @@ export const adaptPeopleToFaculty = (
 /**
  * Convert normalized people data to staff format for components
  */
-export const adaptPeopleToStaff = (people, _scheduleData = [], _programs = [], options = {}) => {
+export const adaptPeopleToStaff = (people, _scheduleData = [], programs = [], options = {}) => {
   const { includeInactive = false } = options;
+  const directorIndex = buildDirectorIndex(programs);
   const normalizedPeople = people.filter(person => !person?.mergedInto);
   return normalizedPeople
     .filter(person => {
@@ -163,6 +167,7 @@ export const adaptPeopleToStaff = (people, _scheduleData = [], _programs = [], o
         isFullTime: person.isFullTime,
         isTenured: hasRole('faculty') && !isAdjunct ? (person.isTenured || false) : false,
         isAlsoFaculty: hasRole('faculty'),
+        directorAssignments: getDirectorAssignments(directorIndex, person.id),
         isActive: person.isActive !== false,
         inactiveAt: person.inactiveAt || '',
         inactiveReason: person.inactiveReason || '',

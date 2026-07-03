@@ -30,11 +30,10 @@ export const DEFAULT_PERSON_SCHEMA = {
   isAdjunct: false,
   isFullTime: true,
   isTenured: false,
-  isUPD: false,
   // Relational references
   programId: null,
   // Identity helpers
-  baylorId: "",
+  baylorId: null,
   ignitePersonNumber: "",
   externalIds: {
     clssInstructorId: null,
@@ -80,8 +79,9 @@ const standardizePhone = (phone) => {
 };
 
 const standardizeBaylorId = (baylorId) => {
-  if (!baylorId) return "";
-  return String(baylorId).replace(/\D/g, "");
+  if (baylorId === undefined || baylorId === null) return null;
+  const digits = String(baylorId).trim().replace(/\D/g, "");
+  return digits || null;
 };
 
 const standardizeIgnitePersonNumber = (value) => {
@@ -179,7 +179,13 @@ const normalizeSemesterSchedules = (semesterSchedules) => {
 
 const normalizeExternalIds = (
   externalIds,
-  { email, baylorId, clssInstructorId, ignitePersonNumber } = {},
+  {
+    email,
+    baylorId,
+    clssInstructorId,
+    ignitePersonNumber,
+    clearBaylorId = false,
+  } = {},
 ) => {
   const base =
     externalIds && typeof externalIds === "object" ? { ...externalIds } : {};
@@ -199,7 +205,13 @@ const normalizeExternalIds = (
     normalized.clssInstructorId = clssInstructorId;
   }
   if (!normalized.clssInstructorId) normalized.clssInstructorId = null;
-  if (baylorId && !normalized.baylorId) normalized.baylorId = baylorId;
+  if (clearBaylorId) {
+    normalized.baylorId = null;
+  } else if (baylorId) {
+    normalized.baylorId = baylorId;
+  } else {
+    normalized.baylorId = standardizeBaylorId(normalized.baylorId);
+  }
 
   const normalizedIgnite = standardizeIgnitePersonNumber(
     ignitePersonNumber ||
@@ -242,7 +254,13 @@ export const standardizePerson = (person = {}, options = {}) => {
 
   const email = normalizeEmail(source.email);
   const phone = standardizePhone(source.phone);
-  const baylorId = standardizeBaylorId(source.baylorId);
+  const hasTopLevelBaylorId = Object.prototype.hasOwnProperty.call(
+    source,
+    "baylorId",
+  );
+  const baylorId = standardizeBaylorId(
+    hasTopLevelBaylorId ? source.baylorId : source.externalIds?.baylorId,
+  );
   const clssInstructorId = normalizeString(
     source.clssInstructorId || source.externalIds?.clssInstructorId,
   );
@@ -300,12 +318,19 @@ export const standardizePerson = (person = {}, options = {}) => {
       baylorId,
       clssInstructorId,
       ignitePersonNumber,
+      clearBaylorId: hasTopLevelBaylorId && !baylorId,
     }),
     updatedAt: updateTimestamp ? new Date().toISOString() : source.updatedAt,
   };
 
   if (Object.prototype.hasOwnProperty.call(standardized, "clssInstructorId")) {
     delete standardized.clssInstructorId;
+  }
+
+  // Director assignments live exclusively on programs/{id}.directors; the
+  // legacy person-side flag must never re-enter the people collection.
+  if (Object.prototype.hasOwnProperty.call(standardized, "isUPD")) {
+    delete standardized.isUPD;
   }
 
   const isStudentOnly =
@@ -1305,7 +1330,7 @@ export const mergePeopleData = (primary, secondary, fieldChoices = {}) => {
   merged.baylorId =
     standardizeBaylorId(merged.baylorId) ||
     standardizeBaylorId(secondaryData.baylorId) ||
-    "";
+    null;
 
   Object.entries(fieldChoices).forEach(([field, source]) => {
     if (source === "primary") merged[field] = stripId(primary)[field];

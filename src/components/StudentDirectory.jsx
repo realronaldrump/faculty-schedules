@@ -4,13 +4,10 @@ import {
   GraduationCap,
   Search,
   Plus,
-  RotateCcw,
-  History,
   Filter,
   Download,
   BarChart3,
   ArrowRight,
-  X,
 } from "lucide-react";
 import MultiSelectDropdown from "./MultiSelectDropdown";
 import FacultyContactCard from "./FacultyContactCard";
@@ -219,6 +216,7 @@ const StudentDirectory = () => {
     selectedSemesterMeta,
     rawPeople,
     peopleIndex,
+    directorIndex,
   } = useData();
   const { handleStudentUpdate, handleStudentDelete } = usePeopleOperations();
   const { showNotification } = useUI();
@@ -252,10 +250,6 @@ const StudentDirectory = () => {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [studentToDelete, setStudentToDelete] = useState(null);
-
-  // Undo functionality
-  const [changeHistory, setChangeHistory] = useState([]);
-  const [showHistory, setShowHistory] = useState(false);
 
   // Advanced filters
   const [showFilters, setShowFilters] = useState(false);
@@ -292,8 +286,8 @@ const StudentDirectory = () => {
   }, [studentData, buildingConfigVersion]);
 
   const supervisorIndex = useMemo(
-    () => buildSupervisorIndex(rawPeople || []),
-    [rawPeople],
+    () => buildSupervisorIndex(rawPeople || [], { directorIndex }),
+    [rawPeople, directorIndex],
   );
   const supervisorOptions = supervisorIndex.options || [];
 
@@ -511,7 +505,7 @@ const StudentDirectory = () => {
     navigate("/analytics/student-worker-analytics");
   };
 
-  // Save handlers with undo tracking
+  // Save handlers
   const handleCreateStudent = async (studentFormData) => {
     try {
       const payload = prepareStudentPayload(studentFormData, {
@@ -603,17 +597,6 @@ const StudentDirectory = () => {
         peopleIndex,
       });
 
-      // Track change for undo
-      setChangeHistory((prev) => [
-        ...prev,
-        {
-          type: "update",
-          timestamp: new Date().toISOString(),
-          originalData: originalSnapshot,
-          newData: updatedStudent,
-        },
-      ]);
-
       // Update semester schedule
       const existingSchedules = originalSnapshot?.semesterSchedules || {};
       const scheduleEntry = {
@@ -657,15 +640,6 @@ const StudentDirectory = () => {
   const executeDelete = async () => {
     if (studentToDelete) {
       try {
-        setChangeHistory((prev) => [
-          ...prev,
-          {
-            type: "delete",
-            timestamp: new Date().toISOString(),
-            originalData: studentToDelete,
-          },
-        ]);
-
         await handleStudentDelete(studentToDelete.id);
         setStudentToDelete(null);
         showNotification("Student worker deleted successfully", "success");
@@ -676,17 +650,6 @@ const StudentDirectory = () => {
           "error",
         );
       }
-    }
-  };
-
-  const undoLastChange = () => {
-    const lastChange = changeHistory[changeHistory.length - 1];
-    if (lastChange) {
-      if (lastChange.type === "update" || lastChange.type === "delete") {
-        handleStudentUpdate(lastChange.originalData);
-        showNotification("Change undone", "success");
-      }
-      setChangeHistory((prev) => prev.slice(0, -1));
     }
   };
 
@@ -1006,24 +969,6 @@ const StudentDirectory = () => {
               <Filter size={16} />
               Filters
             </button>
-            {changeHistory.length > 0 && (
-              <>
-                <button
-                  onClick={() => setShowHistory(!showHistory)}
-                  className="flex items-center gap-2 px-3 py-2 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 transition-colors"
-                >
-                  <History size={16} />
-                  Changes ({changeHistory.length})
-                </button>
-                <button
-                  onClick={undoLastChange}
-                  className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  <RotateCcw size={16} />
-                  Undo
-                </button>
-              </>
-            )}
             <div className="flex items-center gap-3 text-sm">
               <label className="flex items-center gap-2">
                 <input
@@ -1162,42 +1107,6 @@ const StudentDirectory = () => {
         }
         bodyBottom={
           <>
-            {/* Change History */}
-            {showHistory && changeHistory.length > 0 && (
-              <div className="mt-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-medium text-gray-900">Recent Changes</h4>
-                  <button
-                    onClick={() => setShowHistory(false)}
-                    className="text-gray-400 hover:text-gray-600"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {changeHistory
-                    .slice()
-                    .reverse()
-                    .map((change, index) => (
-                      <div
-                        key={index}
-                        className="text-sm flex items-center justify-between p-2 bg-white rounded border"
-                      >
-                        <div>
-                          <span className="font-medium capitalize">
-                            {change.type}
-                          </span>
-                          : {change.originalData?.name}
-                        </div>
-                        <span className="text-gray-500 text-xs">
-                          {new Date(change.timestamp).toLocaleString()}
-                        </span>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            )}
-
             {/* Contact Card Modal */}
             {selectedStudentForCard && (
               <FacultyContactCard

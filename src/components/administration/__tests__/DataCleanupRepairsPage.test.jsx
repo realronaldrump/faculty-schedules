@@ -50,6 +50,10 @@ const createMockActions = () => ({
   orphanTotal: 0,
   isScanningOrphans: false,
   isApplyingOrphanCleanup: false,
+  baylorIdCleanupPreview: null,
+  baylorIdCleanupReport: null,
+  isLoadingBaylorIdCleanupPreview: false,
+  isApplyingBaylorIdCleanup: false,
 
   handleScan: vi.fn(),
   handleSafeFix: vi.fn(),
@@ -69,6 +73,8 @@ const createMockActions = () => ({
   setOrphanTermFilter: vi.fn(),
   scanOrphans: vi.fn(),
   applyOrphanCleanup: vi.fn(async () => {}),
+  loadBaylorIdCleanupPreview: vi.fn(),
+  applyBaylorIdCleanup: vi.fn(async () => {}),
 });
 
 vi.mock("react-router-dom", async (importOriginal) => {
@@ -186,6 +192,38 @@ describe("DataCleanupRepairsPage", () => {
 
     await waitFor(() => {
       expect(mockActions.runBaseline).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("opens confirmation before applying Baylor ID cleanup", async () => {
+    mockActions.baylorIdCleanupPreview = {
+      summary: {
+        totalWritesPlanned: 3,
+        peopleToUpdate: 1,
+        schedulesToUpdate: 1,
+        historyDocsToScrub: 1,
+      },
+      people: { manualReview: [] },
+    };
+
+    render(<DataCleanupRepairsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /support tools/i }));
+    fireEvent.click(screen.getByRole("button", { name: /show support tools/i }));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /apply baylor id cleanup/i }),
+    );
+
+    expect(mockActions.applyBaylorIdCleanup).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: /apply baylor id cleanup\?/i }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /apply cleanup/i }));
+
+    await waitFor(() => {
+      expect(mockActions.applyBaylorIdCleanup).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -73,6 +73,7 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
     selectedSemesterMeta,
     rawPeople,
     peopleIndex,
+    directorIndex,
   } = useData();
   const { loadPeople } = usePeople();
   const [searchText, setSearchText] = useState("");
@@ -99,8 +100,8 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
   }, [loadPeople]);
 
   const supervisorIndex = useMemo(
-    () => buildSupervisorIndex(rawPeople || []),
-    [rawPeople],
+    () => buildSupervisorIndex(rawPeople || [], { directorIndex }),
+    [rawPeople, directorIndex],
   );
 
   const assignments = useMemo(() => {

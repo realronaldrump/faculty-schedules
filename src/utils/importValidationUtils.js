@@ -351,7 +351,7 @@ const validateModifications = (transaction) => {
         collection: 'people',
         type: 'identity_change',
         field: 'baylorId',
-        message: `Changing Baylor ID from '${original.baylorId}' to '${updates.baylorId}'`
+        message: 'Changing Baylor ID'
       });
     }
   });

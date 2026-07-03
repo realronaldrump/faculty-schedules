@@ -23,6 +23,11 @@ import {
   buildOutlookEmailFormat,
   buildStudentWorkersCsv,
 } from "./email-lists/export-utils";
+import {
+  DIRECTOR_FILTER_OPTIONS,
+  matchesDirectorFilter,
+} from "../../utils/directorAssignments";
+import DirectorRoleBadge from "../shared/DirectorRoleBadge";
 
 import SelectDropdown from "../SelectDropdown";
 const EmailLists = ({ embedded = false }) => {
@@ -477,8 +482,8 @@ const EmailLists = ({ embedded = false }) => {
           break;
         case "status":
           // status combines chips: roleType/badges. Approximate with tuple
-          valA = `${a.roleType || ""}-${a.isUPD ? 1 : 0}-${(a.courseCount || 0) > 0 ? 1 : 0}`;
-          valB = `${b.roleType || ""}-${b.isUPD ? 1 : 0}-${(b.courseCount || 0) > 0 ? 1 : 0}`;
+          valA = `${a.roleType || ""}-${(a.directorAssignments || []).length}-${(a.courseCount || 0) > 0 ? 1 : 0}`;
+          valB = `${b.roleType || ""}-${(b.directorAssignments || []).length}-${(b.courseCount || 0) > 0 ? 1 : 0}`;
           break;
         default:
           valA = a[key];
@@ -590,16 +595,11 @@ const EmailLists = ({ embedded = false }) => {
       });
     }
 
-    // UPD filter
-    if (filters.upd !== "all") {
-      filtered = filtered.filter((person) => {
-        if (filters.upd === "include") {
-          return person.isUPD;
-        } else if (filters.upd === "exclude") {
-          return !person.isUPD;
-        }
-        return true;
-      });
+    // Director role filter
+    if (filters.director !== "all") {
+      filtered = filtered.filter((person) =>
+        matchesDirectorFilter(person.directorAssignments, filters.director),
+      );
     }
 
     // Remote filter
@@ -879,7 +879,7 @@ const EmailLists = ({ embedded = false }) => {
     if (filters.roleFilter !== "all") count++;
     if (filters.adjunct !== "all") count++;
     if (filters.tenured !== "all") count++;
-    if (filters.upd !== "all") count++;
+    if (filters.director !== "all") count++;
     if (filters.isRemote !== "all") count++;
     return count;
   }, [filters]);
@@ -893,7 +893,7 @@ const EmailLists = ({ embedded = false }) => {
       filters.roleFilter === "all" &&
       filters.adjunct === "exclude" &&
       filters.tenured === "all" &&
-      filters.upd === "all" &&
+      filters.director === "all" &&
       filters.isRemote === "all" &&
       searchTerm === ""
     );
@@ -1250,18 +1250,23 @@ const EmailLists = ({ embedded = false }) => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      UPD Status
+                      Director Role
                     </label>
                     <SelectDropdown
-                      value={filters.upd}
+                      value={filters.director}
                       onChange={(e) =>
-                        setFilters((prev) => ({ ...prev, upd: e.target.value }))
+                        setFilters((prev) => ({
+                          ...prev,
+                          director: e.target.value,
+                        }))
                       }
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
                     >
-                      <option value="all">All</option>
-                      <option value="include">UPD Only</option>
-                      <option value="exclude">Exclude UPD</option>
+                      {DIRECTOR_FILTER_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
                     </SelectDropdown>
                   </div>
 
@@ -1532,10 +1537,14 @@ const EmailLists = ({ embedded = false }) => {
                           >
                             {person.isAdjunct ? "Adjunct" : person.role}
                           </span>
-                          {person.isUPD && (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                              UPD
-                            </span>
+                          {(person.directorAssignments || []).map(
+                            (assignment) => (
+                              <DirectorRoleBadge
+                                key={`${assignment.programId}-${assignment.role}`}
+                                role={assignment.role}
+                                programName={assignment.programName}
+                              />
+                            ),
                           )}
                           {person.isRemote && (
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-link-green/10 text-link-green">

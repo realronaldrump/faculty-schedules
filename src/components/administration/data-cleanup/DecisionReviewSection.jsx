@@ -5,7 +5,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import {
-  buildDecisionCategoryViewModels,
+  buildReviewCategoryViewModels,
   formatConfidence,
   getDuplicatePairKey,
   getLegacyIssueKey,
@@ -68,9 +68,13 @@ const DecisionReviewSection = ({
   onRepairSpaceIssue,
   onMarkConflictAsDistinct,
   onCopyValue,
+  hideRoutineItems = false,
+  showRemainingCleanupState = false,
 }) => {
   const navigate = useNavigate();
-  const categories = buildDecisionCategoryViewModels(blockingCategories);
+  const categories = buildReviewCategoryViewModels(blockingCategories, {
+    hideRoutineItems,
+  });
 
   if (!scanResult || totalBlockingIssues === 0 || categories.length === 0) {
     return null;
@@ -106,11 +110,14 @@ const DecisionReviewSection = ({
         </div>
         <div>
           <h2 className="text-xl font-bold text-gray-950">
-            Items that need your choice
+            {showRemainingCleanupState
+              ? "Items still showing after cleanup"
+              : "Items that need your choice"}
           </h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-600">
-            Work from the top down. Each card explains what the app found and
-            gives you the clearest next step.
+            {showRemainingCleanupState
+              ? "The automatic pass did not clear these. Work through the cards below, then run the check again."
+              : "Work from the top down. Each card explains what the app found and gives you the clearest next step."}
           </p>
         </div>
       </div>

@@ -38,6 +38,16 @@ const notify = (showNotification, type, title, message) => {
   showNotification?.(type, title, message);
 };
 
+const getPostCleanupCounts = (scanResult) => {
+  const routineCount = getSafeFixableCount(scanResult);
+  const totalCount = getTotalBlockingIssues(buildBlockingCategories(scanResult));
+  return {
+    routineCount,
+    decisionCount: Math.max(0, totalCount - routineCount),
+    totalCount,
+  };
+};
+
 const useDataCleanupActions = ({ showNotification } = {}) => {
   const [activeStep, setActiveStep] = useState(1);
   const [scanResult, setScanResult] = useState(null);
@@ -149,6 +159,11 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
       let refreshed = null;
       let passCount = 0;
       const maxPasses = 2;
+      const passResults = [];
+      let previousRemainingRoutine = getSafeFixableCount(scanResult);
+      if (previousRemainingRoutine <= 0) {
+        previousRemainingRoutine = Number.POSITIVE_INFINITY;
+      }
 
       while (passCount < maxPasses) {
         passCount += 1;
@@ -159,40 +174,64 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
           mergeHighConfidenceDuplicates: true,
           fixLocations: true,
         });
+        passResults.push(result);
         refreshed = await refreshScanResult();
-        const remainingLegacy = Array.isArray(refreshed?.issues?.legacyModelIssues)
-          ? refreshed.issues.legacyModelIssues.length
-          : 0;
-        if (remainingLegacy === 0) break;
+        const { routineCount: remainingRoutine } = getPostCleanupCounts(refreshed);
+        if (
+          remainingRoutine === 0 ||
+          remainingRoutine >= previousRemainingRoutine
+        ) {
+          break;
+        }
+        previousRemainingRoutine = remainingRoutine;
       }
 
+      const totalFixed = passResults.reduce(
+        (total, passResult) => total + Number(passResult?.totalFixed || 0),
+        0,
+      );
+      const errors = passResults.flatMap((passResult) =>
+        Array.isArray(passResult?.errors) ? passResult.errors : [],
+      );
       setSafeFixResult({
         ...(result || {}),
+        totalFixed,
+        errors,
         passes: passCount,
+        passResults,
         postScan: refreshed || null,
       });
       setActiveStep(3);
       setExpandedCategories({});
       setPendingMergeConfirmationKey("");
 
-      const remainingLegacy = Array.isArray(refreshed?.issues?.legacyModelIssues)
-        ? refreshed.issues.legacyModelIssues.length
-        : 0;
-      const errorCount = Array.isArray(result?.errors) ? result.errors.length : 0;
-      const firstError =
-        errorCount > 0 ? String(result.errors[0] || "").trim() : "";
+      const { routineCount: remainingRoutine, decisionCount: remainingDecision } =
+        getPostCleanupCounts(refreshed);
+      const errorCount = errors.length;
+      const firstError = errorCount > 0 ? String(errors[0] || "").trim() : "";
 
-      if (remainingLegacy === 0) {
+      if (remainingRoutine === 0) {
         notify(
           showNotification,
           "success",
           "Routine Cleanup Complete",
-          "Routine cleanup finished.",
+          remainingDecision > 0
+            ? `Routine cleanup finished. ${remainingDecision} item${
+                remainingDecision === 1 ? "" : "s"
+              } still need your choice.`
+            : "Routine cleanup finished.",
         );
       } else {
         const summaryParts = [
-          `${remainingLegacy} older-format item${remainingLegacy === 1 ? "" : "s"} still need review.`,
+          `Cleanup ran, but ${remainingRoutine} routine item${
+            remainingRoutine === 1 ? " is" : "s are"
+          } still showing.`,
         ];
+        if (remainingDecision > 0) {
+          summaryParts.push(
+            `${remainingDecision} item${remainingDecision === 1 ? "" : "s"} also need your choice.`,
+          );
+        }
         if (errorCount > 0) {
           summaryParts.push(
             `${errorCount} cleanup note${errorCount === 1 ? "" : "s"} found.`,

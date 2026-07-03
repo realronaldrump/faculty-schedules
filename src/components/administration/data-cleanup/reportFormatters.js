@@ -356,6 +356,23 @@ export const buildDataHealthViewModel = ({
     };
   }
 
+  if (hasCleanupResult && routineCount > 0) {
+    return {
+      state: DATA_HEALTH_STATES.cleanupReady,
+      title: "Routine cleanup still needs review",
+      eyebrow: "Data Health Check",
+      description:
+        "Cleanup ran and checked again, but some routine items are still showing. Review the remaining items below, then try cleanup again if needed.",
+      primaryAction: "cleanup",
+      primaryLabel: "Try routine cleanup again",
+      metrics,
+      decisionCount,
+      routineCount,
+      checkedAt,
+      hasCleanupResult,
+    };
+  }
+
   if (routineCount > 0) {
     return {
       state: DATA_HEALTH_STATES.cleanupReady,
@@ -416,6 +433,42 @@ export const buildDecisionCategoryViewModels = (categories = []) =>
       description: category.description,
       items: toArray(category.items),
     }));
+
+const isRoutineCleanupItem = (categoryId, item = {}) => {
+  if (
+    categoryId === "high-confidence-duplicates" ||
+    categoryId === "orphaned-spaces" ||
+    categoryId === "legacy-model-issues"
+  ) {
+    return true;
+  }
+
+  if (categoryId === "orphaned-instructors") {
+    return Boolean(item?.record?.instructorName || item?.record?.Instructor);
+  }
+
+  return false;
+};
+
+export const buildReviewCategoryViewModels = (
+  categories = [],
+  { hideRoutineItems = false } = {},
+) =>
+  categories
+    .map((category) => {
+      const items = toArray(category.items).filter((item) =>
+        hideRoutineItems ? !isRoutineCleanupItem(category.id, item) : true,
+      );
+
+      return {
+        id: category.id,
+        label: category.label,
+        count: items.length,
+        description: category.description,
+        items,
+      };
+    })
+    .filter((category) => category.count > 0);
 
 const buildSummary = (title, items = [], nextStep = "") => ({
   title,

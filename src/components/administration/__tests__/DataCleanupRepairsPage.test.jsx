@@ -348,6 +348,126 @@ describe("DataCleanupRepairsPage", () => {
     expect(screen.getByText("MUS 1010 01 (Spring 2026)")).toBeInTheDocument();
   });
 
+  it("shows manual decisions even while routine cleanup is available", () => {
+    mockActions.scanResult = {
+      timestamp: new Date().toISOString(),
+      autoFixable: {
+        highConfidencePeopleDuplicates: 1,
+        highConfidenceScheduleDuplicates: 0,
+        highConfidenceRoomDuplicates: 0,
+        orphanedSchedulesWithName: 0,
+        orphanedSpaceLinks: 0,
+        legacyModelIssues: 0,
+      },
+    };
+    mockActions.safeFixableCount = 1;
+    mockActions.totalBlockingIssues = 2;
+    mockActions.blockingCategories = [
+      {
+        id: "high-confidence-duplicates",
+        label: "Possible duplicates",
+        count: 1,
+        description: "Entries that may be the same person.",
+        items: [
+          {
+            entityType: "people",
+            confidence: 0.99,
+            records: [
+              { id: "person-1", firstName: "Alex", lastName: "Taylor" },
+              { id: "person-2", firstName: "Alec", lastName: "Taylor" },
+            ],
+          },
+        ],
+      },
+      {
+        id: "unresolved-import-issues",
+        label: "Imported names to match",
+        count: 1,
+        description: "Imported people that need to be matched or skipped.",
+        items: [
+          {
+            transactionId: "import_preview_1",
+            status: "preview",
+            issueId: "issue_1",
+            semester: "Spring 2026",
+          },
+        ],
+      },
+    ];
+
+    render(<DataCleanupRepairsPage />);
+
+    expect(
+      screen.getByRole("heading", { name: /items that need your choice/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Imported names to match")).toBeInTheDocument();
+    expect(screen.queryByText("Possible duplicates")).not.toBeInTheDocument();
+  });
+
+  it("shows remaining routine items after cleanup if the fresh scan still finds them", () => {
+    mockActions.scanResult = {
+      timestamp: new Date().toISOString(),
+      autoFixable: {
+        highConfidencePeopleDuplicates: 1,
+        highConfidenceScheduleDuplicates: 0,
+        highConfidenceRoomDuplicates: 0,
+        orphanedSchedulesWithName: 0,
+        orphanedSpaceLinks: 0,
+        legacyModelIssues: 0,
+      },
+      issues: {
+        duplicates: {
+          people: [
+            {
+              records: [
+                { id: "person-1", firstName: "Alex", lastName: "Taylor" },
+                { id: "person-2", firstName: "Alec", lastName: "Taylor" },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    mockActions.safeFixableCount = 1;
+    mockActions.totalBlockingIssues = 1;
+    mockActions.safeFixResult = {
+      totalFixed: 0,
+      errors: ["Failed to merge people: missing permission"],
+    };
+    mockActions.blockingCategories = [
+      {
+        id: "high-confidence-duplicates",
+        label: "Possible duplicates",
+        count: 1,
+        description: "Entries that may be the same person.",
+        items: [
+          {
+            entityType: "people",
+            confidence: 0.99,
+            records: [
+              { id: "person-1", firstName: "Alex", lastName: "Taylor" },
+              { id: "person-2", firstName: "Alec", lastName: "Taylor" },
+            ],
+          },
+        ],
+      },
+    ];
+
+    render(<DataCleanupRepairsPage />);
+
+    expect(
+      screen.getByRole("heading", { name: /routine cleanup still needs review/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/cleanup ran, but 1 routine item is still showing/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /items still showing after cleanup/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Possible duplicates")).toBeInTheDocument();
+    expect(screen.getByText(/Failed to merge people/i)).toBeInTheDocument();
+  });
+
   it("renders manual decision items and triggers handlers", () => {
     const duplicateItem = {
       entityType: "people",

@@ -128,7 +128,27 @@ const RoutineWorkflowSection = ({
   });
   const Icon = STATE_ICON[viewModel.state] || Sparkles;
   const tone = STATE_TONE[viewModel.state] || STATE_TONE[DATA_HEALTH_STATES.checking];
+  const cleanupErrors = Array.isArray(safeFixResult?.errors)
+    ? safeFixResult.errors.filter(Boolean)
+    : [];
+  const firstCleanupError = cleanupErrors[0] || "";
   const showCleanupNote = viewModel.hasCleanupResult && !isFixingSafe;
+  const hasRemainingAfterCleanup =
+    showCleanupNote &&
+    (Number(viewModel.routineCount || 0) > 0 ||
+      Number(viewModel.decisionCount || 0) > 0);
+  const cleanupNoteClass = hasRemainingAfterCleanup
+    ? "border-baylor-gold/40 bg-baylor-gold/10 text-baylor-green"
+    : "border-baylor-green/20 bg-baylor-green/5 text-baylor-green";
+  const routineItemNoun =
+    Number(viewModel.routineCount || 0) === 1 ? "routine item is" : "routine items are";
+  const cleanupNote = hasRemainingAfterCleanup
+    ? Number(viewModel.routineCount || 0) > 0
+      ? `Cleanup ran, but ${viewModel.routineCount} ${routineItemNoun} still showing. Review the cards below to see what remains.`
+      : `Routine cleanup finished. ${viewModel.decisionCount} item${
+          Number(viewModel.decisionCount || 0) === 1 ? "" : "s"
+        } still need your choice.`
+    : "Routine cleanup finished, and the app checked the data again afterward.";
   const routinePreview = useMemo(
     () => buildRoutineCleanupPreview(scanResult),
     [scanResult],
@@ -141,6 +161,12 @@ const RoutineWorkflowSection = ({
       setIsRoutinePreviewOpen(false);
     }
   }, [canShowRoutinePreview]);
+
+  useEffect(() => {
+    if (safeFixResult && canShowRoutinePreview) {
+      setIsRoutinePreviewOpen(true);
+    }
+  }, [canShowRoutinePreview, safeFixResult]);
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
@@ -306,8 +332,13 @@ const RoutineWorkflowSection = ({
       )}
 
       {showCleanupNote && (
-        <div className="mt-4 rounded-lg border border-baylor-green/20 bg-baylor-green/5 px-4 py-3 text-sm text-baylor-green">
-          Routine cleanup finished, and the app checked the data again afterward.
+        <div className={`mt-4 rounded-lg border px-4 py-3 text-sm ${cleanupNoteClass}`}>
+          <div>{cleanupNote}</div>
+          {firstCleanupError && (
+            <div className="mt-2 font-medium">
+              First cleanup note: {firstCleanupError}
+            </div>
+          )}
         </div>
       )}
 

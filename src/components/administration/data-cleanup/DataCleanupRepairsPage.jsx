@@ -150,12 +150,21 @@ const DataCleanupRepairsPage = () => {
     );
   }
 
+  const decisionCount = Math.max(
+    0,
+    Number(actions.totalBlockingIssues || 0) -
+      Number(actions.safeFixableCount || 0),
+  );
+  const showRemainingCleanupState =
+    Boolean(actions.safeFixResult) && Number(actions.safeFixableCount || 0) > 0;
+  const hideRoutineDecisionItems =
+    Number(actions.safeFixableCount || 0) > 0 && !showRemainingCleanupState;
   const shouldShowDecisionQueue =
     Boolean(actions.scanResult) &&
     !actions.isScanning &&
     !actions.isFixingSafe &&
-    actions.safeFixableCount === 0 &&
-    actions.totalBlockingIssues > 0;
+    Number(actions.totalBlockingIssues || 0) > 0 &&
+    (decisionCount > 0 || showRemainingCleanupState);
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6 lg:p-8">
@@ -188,6 +197,8 @@ const DataCleanupRepairsPage = () => {
           onRepairSpaceIssue={actions.handleRepairSpaceIssue}
           onMarkConflictAsDistinct={actions.handleMarkConflictAsDistinct}
           onCopyValue={actions.handleCopyValue}
+          hideRoutineItems={hideRoutineDecisionItems}
+          showRemainingCleanupState={showRemainingCleanupState}
         />
       )}
 

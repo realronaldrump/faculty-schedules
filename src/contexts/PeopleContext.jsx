@@ -21,6 +21,17 @@ import { buildPeopleIndex } from "../utils/peopleUtils";
 
 const PeopleContext = createContext(null);
 
+export const mapPeopleSnapshotDocs = (docs = []) =>
+  docs.map((doc) => {
+    const data = doc.data() || {};
+    return {
+      ...data,
+      // Firestore document id is the writable record id. Some legacy records
+      // contain a stored `id` field that must not replace it in the UI.
+      id: doc.id,
+    };
+  });
+
 export const PeopleProvider = ({ children }) => {
   const [rawPeople, setRawPeople] = useState([]);
   const [loading, setLoading] = useState(false); // Start false, load on demand
@@ -37,10 +48,7 @@ export const PeopleProvider = ({ children }) => {
       try {
         console.log("👥 Loading People Directory...");
         const snapshot = await getDocs(collection(db, "people"));
-        const people = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+        const people = mapPeopleSnapshotDocs(snapshot.docs);
         setRawPeople(people);
         setLoaded(true);
         console.log(`✅ Loaded ${people.length} people.`);

@@ -7,8 +7,10 @@ import {
 import {
   buildReviewCategoryViewModels,
   formatConfidence,
+  formatLegacyIssueFields,
   getDuplicatePairKey,
   getLegacyIssueKey,
+  getLegacyIssueRecordLabel,
   getPersonLabel,
   getRoomLabel,
   getScheduleLabel,
@@ -420,12 +422,14 @@ const DecisionReviewSection = ({
                       const recordType = (item?.recordType || "entry")
                         .toString()
                         .replace(/s$/, "");
+                      const recordLabel = getLegacyIssueRecordLabel(item);
+                      const fieldSummary = formatLegacyIssueFields(item);
 
                       return (
                         <IssueCard
                           key={`${issueKey}:${index}`}
-                          title={`Older ${recordType} format`}
-                          note="This entry is saved in an older format. Routine cleanup can usually refresh it."
+                          title={`${recordLabel}: older ${recordType} format`}
+                          note={`This entry still has ${fieldSummary}. Routine cleanup can usually refresh it.`}
                         >
                           <ButtonRow>
                             <ActionButton

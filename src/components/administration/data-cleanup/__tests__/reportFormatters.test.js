@@ -100,6 +100,7 @@ describe("report formatters", () => {
           {
             recordType: "people",
             record: { firstName: "Jordan", lastName: "Lee" },
+            touchedFields: ["student_payload_mirror_fields"],
           },
         ],
       },
@@ -125,7 +126,7 @@ describe("report formatters", () => {
         expect.objectContaining({
           id: "older-format",
           count: 1,
-          examples: ["Jordan Lee"],
+          examples: ["Jordan Lee: student worker mirror fields"],
         }),
       ]),
     );

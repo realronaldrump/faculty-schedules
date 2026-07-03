@@ -468,6 +468,63 @@ describe("DataCleanupRepairsPage", () => {
     expect(screen.getByText(/Failed to merge people/i)).toBeInTheDocument();
   });
 
+  it("explains older-format items that remain after cleanup", () => {
+    mockActions.scanResult = {
+      timestamp: new Date().toISOString(),
+      autoFixable: {
+        highConfidencePeopleDuplicates: 0,
+        highConfidenceScheduleDuplicates: 0,
+        highConfidenceRoomDuplicates: 0,
+        orphanedSchedulesWithName: 0,
+        orphanedSpaceLinks: 0,
+        legacyModelIssues: 1,
+      },
+      issues: {
+        legacyModelIssues: [
+          {
+            recordType: "people",
+            record: {
+              id: "person-1",
+              name: "Ella Miller",
+            },
+            touchedFields: ["student_payload_mirror_fields"],
+          },
+        ],
+      },
+    };
+    mockActions.safeFixableCount = 1;
+    mockActions.totalBlockingIssues = 1;
+    mockActions.safeFixResult = { totalFixed: 0, errors: [] };
+    mockActions.blockingCategories = [
+      {
+        id: "legacy-model-issues",
+        label: "Older data format",
+        count: 1,
+        description: "Entries saved in an older format.",
+        items: [
+          {
+            recordType: "people",
+            record: {
+              id: "person-1",
+              name: "Ella Miller",
+            },
+            touchedFields: ["student_payload_mirror_fields"],
+          },
+        ],
+      },
+    ];
+
+    render(<DataCleanupRepairsPage />);
+
+    expect(
+      screen.getByText("Ella Miller: student worker mirror fields"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Ella Miller: older people format"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/student worker mirror fields/i).length).toBe(2);
+  });
+
   it("renders manual decision items and triggers handlers", () => {
     const duplicateItem = {
       entityType: "people",

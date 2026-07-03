@@ -46,6 +46,34 @@ export const getTeachingConflictKey = (conflict = {}) => {
 export const getLegacyIssueKey = (issue = {}) =>
   `legacy:${issue?.recordType || "unknown"}:${issue?.record?.id || issue?.id || "unknown"}`;
 
+const LEGACY_FIELD_LABELS = {
+  clssInstructorId: "old instructor ID",
+  jobs: "student worker jobs",
+  primaryBuildings: "building list",
+  roles: "role format",
+  semesterSchedules: "semester schedules",
+  semester_schedule_mirror_fields: "semester schedule mirror fields",
+  student_payload_mirror_fields: "student worker mirror fields",
+  student_payload_promoted_to_job: "student worker job details",
+};
+
+export const formatLegacyIssueFields = (issue = {}) => {
+  const labels = toArray(issue?.touchedFields)
+    .map((field) => LEGACY_FIELD_LABELS[field] || field)
+    .filter(Boolean);
+  if (labels.length === 0) return "older fields";
+  return labels.join(", ");
+};
+
+export const getLegacyIssueRecordLabel = (issue = {}) => {
+  const recordType = (issue?.recordType || "entry").toString();
+  const record = issue?.record || {};
+  if (recordType === "people") return getPersonLabel(record);
+  if (recordType === "schedules") return getScheduleLabel(record);
+  if (recordType === "programs") return record?.name || record?.id || "Program";
+  return issue?.message || `${recordType} entry`;
+};
+
 export const buildBlockingCategories = (scanResult) => {
   if (!scanResult?.issues) return [];
 
@@ -244,13 +272,8 @@ export const buildRoutineCleanupPreview = (scanResult) => {
       count: auto.legacyModelIssues,
       description: "Older fields will be refreshed into the current format.",
       items: scanResult.issues?.legacyModelIssues,
-      getPreviewLabel: (item) => {
-        const recordType = (item?.recordType || "entry").toString();
-        const record = item?.record || {};
-        if (recordType === "people") return getPersonLabel(record);
-        if (recordType === "schedules") return getScheduleLabel(record);
-        return item?.message || `${recordType} entry`;
-      },
+      getPreviewLabel: (item) =>
+        `${getLegacyIssueRecordLabel(item)}: ${formatLegacyIssueFields(item)}`,
     }),
   ].filter(Boolean);
 };

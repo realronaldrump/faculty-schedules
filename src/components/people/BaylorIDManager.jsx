@@ -149,30 +149,28 @@ const BaylorIDManager = ({ embedded = false }) => {
     document.body.removeChild(link);
   };
 
-  const startEdit = (person) => {
+  const startEdit = useCallback((person) => {
     setEditingId(person.id);
     setBaylorIdDraft(getBaylorId(person));
     setError("");
-  };
+  }, [getBaylorId]);
 
-  const cancelEdit = () => {
+  const cancelEdit = useCallback(() => {
     setEditingId(null);
     setBaylorIdDraft("");
     setError("");
-  };
+  }, []);
 
-  const validateId = (value, person) => {
+  const validateId = useCallback((value, person) => {
     const digits = value.replace(/\D/g, "");
     if (!digits) {
-      return getBaylorId(person)
-        ? "Use Remove ID to permanently delete an assigned Baylor ID."
-        : "Baylor ID must be 9 digits.";
+      return getBaylorId(person) ? "" : "Baylor ID must be 9 digits.";
     }
     if (digits.length !== 9) return "Baylor ID must be exactly 9 digits";
     return "";
-  };
+  }, [getBaylorId]);
 
-  const saveId = async (person) => {
+  const saveId = useCallback(async (person) => {
     const validation = validateId(baylorIdDraft, person);
     if (validation) {
       setError(validation);
@@ -187,15 +185,27 @@ const BaylorIDManager = ({ embedded = false }) => {
       return;
     }
     const cleanedId = baylorIdDraft.replace(/\D/g, "");
+    const shouldRemove = !cleanedId && Boolean(getBaylorId(person));
     try {
-      await handleBaylorIdUpdate(person.id, cleanedId);
+      if (shouldRemove) {
+        await handleBaylorIdUpdate(person.id, null, { remove: true });
+      } else {
+        await handleBaylorIdUpdate(person.id, cleanedId);
+      }
       setEditingId(null);
       setBaylorIdDraft("");
       setError("");
     } catch (e) {
       setError(e?.message || "Failed to save.");
     }
-  };
+  }, [
+    baylorIdDraft,
+    canEditIds,
+    getBaylorId,
+    handleBaylorIdUpdate,
+    showNotification,
+    validateId,
+  ]);
 
   const confirmRemoveId = async () => {
     if (!removeTarget) return;
@@ -380,7 +390,7 @@ const BaylorIDManager = ({ embedded = false }) => {
         </div>
       );
     },
-    [canEditIds, editingId, getBaylorId],
+    [canEditIds, cancelEdit, editingId, getBaylorId, saveId, startEdit],
   );
 
   // Filter content for the collapsible panel

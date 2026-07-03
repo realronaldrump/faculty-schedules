@@ -98,4 +98,39 @@ describe("BaylorIDManager", () => {
       );
     });
   });
+
+  it("saves the current draft Baylor ID instead of the original value", async () => {
+    render(<BaylorIDManager embedded />);
+
+    fireEvent.click(screen.getByTitle("Edit Baylor ID"));
+    fireEvent.change(screen.getByPlaceholderText("9 digits"), {
+      target: { value: "987654321" },
+    });
+    fireEvent.click(screen.getByTitle("Save"));
+
+    await waitFor(() => {
+      expect(handleBaylorIdUpdateMock).toHaveBeenCalledWith(
+        "person_with_id",
+        "987654321",
+      );
+    });
+  });
+
+  it("removes an existing Baylor ID when the draft is saved blank", async () => {
+    render(<BaylorIDManager embedded />);
+
+    fireEvent.click(screen.getByTitle("Edit Baylor ID"));
+    fireEvent.change(screen.getByPlaceholderText("9 digits"), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByTitle("Save"));
+
+    await waitFor(() => {
+      expect(handleBaylorIdUpdateMock).toHaveBeenCalledWith(
+        "person_with_id",
+        null,
+        { remove: true },
+      );
+    });
+  });
 });

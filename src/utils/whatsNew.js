@@ -12,14 +12,37 @@
  * 2. Ship it. Users get the one-time toast on their next visit, and the
  *    header Sparkles button shows an unseen dot until they open or dismiss.
  */
-import { BadgeCheck, GraduationCap, IdCard, ListFilter } from "lucide-react";
+import {
+  BadgeCheck,
+  BarChart3,
+  BookOpen,
+  Building2,
+  CalendarCheck,
+  CalendarDays,
+  ChartNoAxesCombined,
+  ClipboardCheck,
+  Download,
+  GraduationCap,
+  History,
+  IdCard,
+  LayoutDashboard,
+  ListFilter,
+  PanelTop,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  UserCheck,
+  Users,
+  Wrench,
+} from "lucide-react";
 
 export const WHATS_NEW_STORAGE_KEY = "whatsNewLastSeenVersion";
 
 export const RELEASES = [
   {
-    version: 1,
-    date: "2026-07-02T21:45:00-06:00",
+    version: 9,
+    date: "2026-07-03T10:55:00-06:00",
     title: "Program directors, upgraded",
     summary:
       "Program director roles get a big upgrade: UPD & GPD badges across the app, new filters, and a redesigned Programs & Directors page.",
@@ -46,7 +69,271 @@ export const RELEASES = [
         icon: IdCard,
         title: "Cleaner Baylor IDs",
         description:
-          "Baylor IDs read “Not assigned” instead of “Missing”, editing gives clearer guidance, and IDs stay consistent across contact cards, the PAF workflow, and the Baylor IDs page.",
+          'Baylor IDs read "Not assigned" instead of "Missing", editing gives clearer guidance, and IDs stay consistent across contact cards, the PAF workflow, and the Baylor IDs page.',
+      },
+      {
+        icon: Sparkles,
+        title: "What's New",
+        description:
+          "The header now has a What's New button and a one-time update card so you can quickly see what changed after a new release.",
+      },
+    ],
+  },
+  {
+    version: 8,
+    date: "2026-06-17T16:00:00-05:00",
+    title: "A more consistent dashboard",
+    summary:
+      "Pages, tabs, dialogs, dropdowns, and tutorials were polished so the dashboard feels more consistent from one section to the next.",
+    highlights: [
+      {
+        icon: PanelTop,
+        title: "Cleaner page layouts",
+        description:
+          "More screens now share the same page headers, tab styles, dialog patterns, and action buttons.",
+      },
+      {
+        icon: ListFilter,
+        title: "Better dropdowns",
+        description:
+          "Selectors across the app are easier to scan, resize more gracefully, and behave more consistently on smaller screens.",
+      },
+      {
+        icon: UserCheck,
+        title: "Richer student worker details",
+        description:
+          "Student worker cards can show supervisor names, and job edits feel smoother when updating student worker information.",
+      },
+      {
+        icon: BookOpen,
+        title: "Tutorial fixes",
+        description:
+          "Tutorial buttons, target recovery, and step handling were tightened up across the dashboard.",
+      },
+    ],
+  },
+  {
+    version: 7,
+    date: "2026-06-16T15:05:00-05:00",
+    title: "Reservations and new analytics",
+    summary:
+      "Scheduling and analytics expanded with room reservations, enrollment capacity review, semester comparison, calendar exports, and clearer Semester wording.",
+    highlights: [
+      {
+        icon: CalendarCheck,
+        title: "Room reservations",
+        description:
+          "Rooms now have a Reservations tab for booking open time around the class schedule, checking conflicts, and exporting reservations to a calendar.",
+      },
+      {
+        icon: BarChart3,
+        title: "Enrollment & Capacity",
+        description:
+          "A new analytics view helps spot overfilled sections, low enrollment, waitlists, and room capacity mismatches.",
+      },
+      {
+        icon: ChartNoAxesCombined,
+        title: "Semester Comparison",
+        description:
+          "Compare two semesters to see what was added, dropped, or changed in the schedule.",
+      },
+      {
+        icon: CalendarDays,
+        title: "Calendar exports",
+        description:
+          "Room schedule and reservation exports now share the same more reliable calendar-file handling.",
+      },
+      {
+        icon: Search,
+        title: "Term is now Semester",
+        description:
+          "The app now uses Semester wording across menus, filters, reports, import screens, and tutorials.",
+      },
+    ],
+  },
+  {
+    version: 6,
+    date: "2026-06-15T23:25:00-05:00",
+    title: "Tutorials that remember progress",
+    summary:
+      "The tutorial system was rebuilt with better guided tours, saved progress, clearer organization, and recovery messages when a step moves.",
+    highlights: [
+      {
+        icon: BookOpen,
+        title: "More guided tours",
+        description:
+          "New and refreshed walkthroughs cover getting started, Today, faculty schedules, the Import Wizard, room reservations, capacity review, and more.",
+      },
+      {
+        icon: ChartNoAxesCombined,
+        title: "Progress you can see",
+        description:
+          "The Tutorials page now shows completion progress and organizes walkthroughs by category.",
+      },
+      {
+        icon: RefreshCw,
+        title: "Resume later",
+        description:
+          "Tutorial progress saves to your account so you can pick up where you left off.",
+      },
+      {
+        icon: ShieldCheck,
+        title: "More reliable access",
+        description:
+          "Profile and permission loading is more tolerant of brief sign-in delays, so pages you can access are less likely to disappear after login.",
+      },
+    ],
+  },
+  {
+    version: 5,
+    date: "2026-06-09T18:20:00-06:00",
+    title: "Cleaner navigation and data health",
+    summary:
+      "Navigation labels, data cleanup, imports, exports, and admin screens were tightened up so routine maintenance work is easier to follow.",
+    highlights: [
+      {
+        icon: LayoutDashboard,
+        title: "Clearer navigation",
+        description:
+          "Sidebar sections, page names, and access labels were cleaned up so related tools are easier to find.",
+      },
+      {
+        icon: Wrench,
+        title: "Data Health Check previews",
+        description:
+          "Routine cleanup now gives clearer previews and summaries before applying safe fixes.",
+      },
+      {
+        icon: ClipboardCheck,
+        title: "Safer standardization",
+        description:
+          "Data cleanup is better at recognizing old formats, avoiding false changes, and explaining what will be updated.",
+      },
+      {
+        icon: Download,
+        title: "Export polish",
+        description:
+          "Admin exports, room schedule exports, and workbook output received small usability and consistency improvements.",
+      },
+    ],
+  },
+  {
+    version: 4,
+    date: "2026-04-24T10:20:00-06:00",
+    title: "Smoother sign-in and safer imports",
+    summary:
+      "Sign-in, loading, and import handling were hardened so the app recovers better from temporary hiccups and reports import problems more clearly.",
+    highlights: [
+      {
+        icon: ShieldCheck,
+        title: "More reliable sign-in",
+        description:
+          "Login and permission checks were made more dependable, especially during the first moments after signing in.",
+      },
+      {
+        icon: RefreshCw,
+        title: "Smoother loading",
+        description:
+          "The app now handles loading transitions more gracefully while schedules, profiles, and app settings are being prepared.",
+      },
+      {
+        icon: ClipboardCheck,
+        title: "Import reliability",
+        description:
+          "The Import Wizard received behind-the-scenes fixes that make previewing, applying, and reviewing imports more consistent.",
+      },
+      {
+        icon: History,
+        title: "Better change history",
+        description:
+          "Recent Changes and related logs are better at showing useful context for updates made inside the dashboard.",
+      },
+    ],
+  },
+  {
+    version: 3,
+    date: "2026-03-16T16:30:00-05:00",
+    title: "The HSD Dashboard name",
+    summary:
+      "The app received its HSD Dashboard identity across the browser tab, loading screen, login screen, sidebar, installable app, and exports.",
+    highlights: [
+      {
+        icon: LayoutDashboard,
+        title: "App identity",
+        description:
+          "The dashboard name and acronym were cleaned up across the places users see when opening the app.",
+      },
+      {
+        icon: PanelTop,
+        title: "Sidebar polish",
+        description:
+          "The sidebar header and loading experience now present a clearer dashboard identity.",
+      },
+      {
+        icon: Download,
+        title: "Export naming",
+        description:
+          "Generated workbooks and app metadata were updated to match the dashboard branding.",
+      },
+    ],
+  },
+  {
+    version: 2,
+    date: "2026-02-13T16:40:00-06:00",
+    title: "Cleaner contact cards",
+    summary:
+      "Person details got a small polish pass, especially when opening people from student schedules.",
+    highlights: [
+      {
+        icon: UserCheck,
+        title: "Centered contact details",
+        description:
+          "Faculty and staff contact cards now present names, roles, and core details in a cleaner centered layout.",
+      },
+      {
+        icon: Users,
+        title: "Student schedule popups",
+        description:
+          "Opening a person from a student schedule now shows the contact card as a self-contained popup instead of feeling like an inline page jump.",
+      },
+      {
+        icon: History,
+        title: "Named updates",
+        description:
+          "Change history started capturing more user context so updates in the dashboard are easier to attribute.",
+      },
+    ],
+  },
+  {
+    version: 1,
+    date: "2026-02-12T17:15:00-06:00",
+    title: "Original working dashboard",
+    summary:
+      "This is the working dashboard foundation that was in place before the February update cycle: search, schedules, people tools, room tools, imports, and admin utilities in one app.",
+    highlights: [
+      {
+        icon: LayoutDashboard,
+        title: "Search-first home",
+        description:
+          "The dashboard home page brought global search, pinned shortcuts, and app sections together as the main launch point.",
+      },
+      {
+        icon: Users,
+        title: "People and schedules",
+        description:
+          "Faculty, staff, adjuncts, student workers, contact cards, and schedule views were already available for day-to-day lookup.",
+      },
+      {
+        icon: Building2,
+        title: "Rooms and facilities",
+        description:
+          "Room schedules, room grids, building information, spaces, and temperature monitoring formed the facilities side of the app.",
+      },
+      {
+        icon: ClipboardCheck,
+        title: "Import and admin tools",
+        description:
+          "The dashboard already included schedule imports, recent changes, access control, app settings, and cleanup tools for maintaining the data.",
       },
     ],
   },

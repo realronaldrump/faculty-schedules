@@ -22,13 +22,13 @@ export const RELEASES = [
     date: "2026-07-02T21:45:00-06:00",
     title: "Program directors, upgraded",
     summary:
-      "Program director roles get a big upgrade — UPD & GPD badges across the app, new filters, and a redesigned Programs & Directors page.",
+      "Program director roles get a big upgrade: UPD & GPD badges across the app, new filters, and a redesigned Programs & Directors page.",
     highlights: [
       {
         icon: GraduationCap,
         title: "Programs & Directors",
         description:
-          "The Programs page is now Programs & Directors. Assign Undergraduate and Graduate Program Directors (UPD & GPD) in one place — programs can have multiple directors, and the graduate role is brand new.",
+          "The Programs page is now Programs & Directors. Assign Undergraduate and Graduate Program Directors (UPD & GPD) in one place; programs can have multiple directors, and the graduate role is brand new.",
       },
       {
         icon: BadgeCheck,

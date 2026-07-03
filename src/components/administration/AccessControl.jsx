@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { db, functions as firebaseFunctions } from "../../firebase";
+import { db } from "../../firebase";
 import {
   doc,
   getDoc,
@@ -11,9 +11,8 @@ import {
   orderBy,
   onSnapshot,
 } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
 import { useAuth } from "../../contexts/AuthContext.jsx";
-import Modal from "../shared/Modal";
+import { useUI } from "../../contexts/UIContext.jsx";
 import { logUpdate } from "../../utils/changeLogger";
 import {
   Shield,
@@ -23,7 +22,6 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
-  Trash2,
   Search,
 } from "lucide-react";
 import {
@@ -40,6 +38,7 @@ const AccessControl = () => {
     getAllNavigationEntries,
     isAdmin,
   } = useAuth();
+  const { showNotification } = useUI();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("roles"); // 'roles' | 'users'
@@ -53,7 +52,6 @@ const AccessControl = () => {
   const [userStatus, setUserStatus] = useState(USER_STATUS.ACTIVE);
   const [pendingPages, setPendingPages] = useState([]);
   const [search, setSearch] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState(null);
   const [userSort, setUserSort] = useState({
     key: "email",
     direction: "asc",
@@ -603,34 +601,12 @@ const AccessControl = () => {
     }
   };
 
-  const openDeleteUserModal = async (uid) => {
-    try {
-      const uRef = doc(db, "users", uid);
-      const snap = await getDoc(uRef);
-      const data = snap.data() || {};
-      setDeleteTarget({ id: uid, email: data.email || "" });
-    } catch (_) {
-      setDeleteTarget({ id: uid, email: "" });
-    }
-  };
-
-  const confirmDeleteUser = async () => {
-    if (!deleteTarget) return;
-    const uid = deleteTarget.id;
-    try {
-      await httpsCallable(firebaseFunctions, "deleteUser")({ uid });
-
-      await loadAccessControl();
-      if (selectedUserId === uid) {
-        setSelectedUserId("");
-        setUserOverrides({});
-        setUserRoles([]);
-      }
-    } catch (e) {
-      console.error("Failed to delete user:", e);
-    } finally {
-      setDeleteTarget(null);
-    }
+  const showDeleteUnavailableWarning = () => {
+    showNotification(
+      "warning",
+      "Delete Unavailable",
+      "Full user deletion is not currently available. Use Disable to block access, or remove the Auth account manually in Firebase if needed.",
+    );
   };
 
   if (!isAdmin) {
@@ -975,7 +951,7 @@ const AccessControl = () => {
                                 </button>
                                 <button
                                   className="text-xs px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
-                                  onClick={() => openDeleteUserModal(u.id)}
+                                  onClick={showDeleteUnavailableWarning}
                                 >
                                   Delete
                                 </button>
@@ -1286,44 +1262,6 @@ const AccessControl = () => {
           }
         </div >
       </div >
-
-      {/* Delete Confirmation Modal */}
-      <Modal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        size="sm"
-        closeOnOverlayClick={false}
-        title={
-          <div className="flex items-center gap-2">
-            <Trash2 className="w-5 h-5 text-red-600" />
-            <h3 className="modal-title">Delete User Account</h3>
-          </div>
-        }
-        footer={
-          <>
-            <button className="btn-ghost" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </button>
-            <button className="btn-danger" onClick={confirmDeleteUser}>
-              Delete User
-            </button>
-          </>
-        }
-      >
-        <p className="text-gray-700 mb-2">
-          This will remove the user's profile and authentication account:
-        </p>
-        <p className="text-gray-900 font-medium bg-gray-100 rounded px-3 py-2">
-          {deleteTarget?.email || deleteTarget?.id}
-        </p>
-        <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
-          <p className="text-sm text-amber-900">
-            <strong>Note:</strong> This deletes the Firebase Authentication
-            account and the Firestore profile. The user will need to sign up
-            again if access is required later.
-          </p>
-        </div>
-      </Modal>
     </div>
   );
 };

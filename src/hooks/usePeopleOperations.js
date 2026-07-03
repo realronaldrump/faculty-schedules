@@ -6,9 +6,19 @@
  */
 
 import { useCallback } from "react";
-import { db, COLLECTIONS, functions as firebaseFunctions } from "../firebase";
-import { collection, doc, setDoc, updateDoc, addDoc, deleteField } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
+import { db, COLLECTIONS } from "../firebase";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  setDoc,
+  updateDoc,
+  addDoc,
+  deleteField,
+  where,
+} from "firebase/firestore";
 import { logCreate, logUpdate, logDelete } from "../utils/changeLogger";
 import { useData } from "../contexts/DataContext";
 import { usePeople } from "../contexts/PeopleContext";
@@ -75,6 +85,18 @@ const normalizeProgramCode = (value) => {
   if (value === undefined || value === null) return "";
   return String(value).trim().toUpperCase();
 };
+
+const normalizeBaylorIdDigits = (value) => {
+  if (value === undefined || value === null) return "";
+  return String(value).trim().replace(/\D/g, "");
+};
+
+const getPersonDisplayName = (person = {}) =>
+  person.name ||
+  `${person.firstName || ""} ${person.lastName || ""}`.trim() ||
+  person.email ||
+  person.id ||
+  "Unknown";
 
 const usePeopleOperations = () => {
   const {
@@ -1234,7 +1256,8 @@ const usePeopleOperations = () => {
     [showNotification],
   );
 
-  // Handle Baylor ID update - minimal update that preserves roles
+  // Handle Baylor ID update using Spark-compatible Firestore writes. The
+  // Data Cleanup Baylor ID tool handles broader historical scrubbing.
   const handleBaylorIdUpdate = useCallback(
     async (personId, baylorId, options = {}) => {
       if (!personId) {
@@ -1249,24 +1272,107 @@ const usePeopleOperations = () => {
       console.log("🎫 Updating Baylor ID for person:", personId);
 
       try {
-        const updateBaylorId = httpsCallable(firebaseFunctions, "updateBaylorId");
         const remove = options.remove === true || baylorId === null;
-        const cleanedBaylorId =
-          typeof baylorId === "string" ? baylorId.trim() : baylorId;
+        const cleanedBaylorId = normalizeBaylorIdDigits(baylorId);
 
-        const result = await updateBaylorId({
+        if (!remove && !/^\d{9}$/.test(cleanedBaylorId)) {
+          throw new Error("Baylor ID must be exactly 9 digits.");
+        }
+
+        const personRef = doc(db, COLLECTIONS.PEOPLE, personId);
+        const personSnap = await getDoc(personRef);
+
+        if (!personSnap.exists()) {
+          throw new Error("Person record not found.");
+        }
+
+        const originalData = { id: personId, ...personSnap.data() };
+
+        if (!remove) {
+          const [topLevelMatches, externalMatches] = await Promise.all([
+            getDocs(
+              query(
+                collection(db, COLLECTIONS.PEOPLE),
+                where("baylorId", "==", cleanedBaylorId),
+              ),
+            ),
+            getDocs(
+              query(
+                collection(db, COLLECTIONS.PEOPLE),
+                where("externalIds.baylorId", "==", cleanedBaylorId),
+              ),
+            ),
+          ]);
+
+          const duplicate = [...topLevelMatches.docs, ...externalMatches.docs].find(
+            (docSnap) => docSnap.id !== personId,
+          );
+          if (duplicate) {
+            throw new Error("Another person already has that Baylor ID.");
+          }
+        }
+
+        const currentBaylorId =
+          normalizeBaylorIdDigits(originalData.baylorId) ||
+          normalizeBaylorIdDigits(originalData.externalIds?.baylorId);
+        const updateData = remove
+          ? {
+              baylorId: null,
+              "externalIds.baylorId": null,
+              updatedAt: new Date().toISOString(),
+            }
+          : {
+              baylorId: cleanedBaylorId,
+              "externalIds.baylorId": cleanedBaylorId,
+              updatedAt: new Date().toISOString(),
+            };
+
+        if (remove && currentBaylorId) {
+          const removedIdentityKey = `baylor:${currentBaylorId}`;
+          const identityKeys = Array.isArray(originalData.identityKeys)
+            ? originalData.identityKeys.filter((key) => key !== removedIdentityKey)
+            : [];
+          if (Array.isArray(originalData.identityKeys)) {
+            updateData.identityKeys = identityKeys;
+          }
+          if (originalData.identityKey === removedIdentityKey) {
+            updateData.identityKey = identityKeys[0] || null;
+          }
+          if (
+            String(originalData.identitySource || "").trim().toLowerCase() ===
+              "baylor" &&
+            !updateData.identityKey
+          ) {
+            updateData.identitySource = null;
+          }
+        }
+
+        await updateDoc(personRef, updateData);
+
+        await logUpdate(
+          `Person - ${getPersonDisplayName(originalData)}`,
+          COLLECTIONS.PEOPLE,
           personId,
-          baylorId: remove ? null : cleanedBaylorId,
-          remove,
-        });
+          remove
+            ? { baylorId: null, externalIds: { baylorId: null } }
+            : {
+                baylorId: cleanedBaylorId,
+                externalIds: { baylorId: cleanedBaylorId },
+              },
+          originalData,
+          "usePeopleOperations - handleBaylorIdUpdate",
+          {
+            fields: ["baylorId", "externalIds.baylorId"],
+            historyScrubbed: false,
+          },
+        );
 
         await loadPeople({ force: true });
 
-        const action = result?.data?.action;
         showNotification(
           "success",
-          action === "removed" ? "Baylor ID Removed" : "Baylor ID Updated",
-          action === "removed"
+          remove ? "Baylor ID Removed" : "Baylor ID Updated",
+          remove
             ? "Baylor ID has been permanently removed."
             : "Baylor ID has been updated successfully.",
         );

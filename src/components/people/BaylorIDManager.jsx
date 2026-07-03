@@ -498,8 +498,8 @@ const BaylorIDManager = ({ embedded = false }) => {
           <span>
             Permanently remove the Baylor ID from{" "}
             <strong>{removeTarget?.name || "this person"}</strong>? The ID
-            number will be deleted from the active record and application-managed
-            history. This cannot be undone.
+            number will be deleted from the active record. Use the Data Cleanup
+            Baylor ID tool afterward to scrub application-managed history.
           </span>
         }
         onConfirm={confirmRemoveId}

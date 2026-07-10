@@ -14,7 +14,6 @@
     "test:coverage": "vitest --coverage",
     "emulators": "firebase emulators:start",
     "deploy": "firebase deploy",
-    "deploy:hosting": "firebase deploy --only hosting",
     "deploy:firestore": "firebase deploy --only firestore",
     "deploy:indexes": "firebase deploy --only firestore:indexes"
   },
@@ -75,25 +74,6 @@
       "last 1 safari version"
     ]
   },
-  "keywords": [
-    "react",
-    "firebase",
-    "firestore",
-    "tailwindcss",
-    "faculty-management",
-    "scheduling",
-    "university",
-    "baylor",
-    "dashboard"
-  ],
   "author": "Private Maintainer",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/your-org/hsd-faculty-dashboard.git"
-  },
-  "bugs": {
-    "url": "https://github.com/your-org/hsd-faculty-dashboard/issues"
-  },
-  "homepage": "https://your-org.github.io/hsd-faculty-dashboard",
   "license": "MIT"
 }

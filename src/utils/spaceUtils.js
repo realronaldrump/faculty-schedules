@@ -114,23 +114,36 @@ export const resolveScheduleSpaces = (schedule, spacesByKey) => {
     return { displayNames: [], display: '' };
   }
 
-  if (schedule.isOnline || schedule.locationType === 'virtual') {
+  const spaceIds = Array.isArray(schedule.spaceIds)
+    ? schedule.spaceIds.filter(Boolean)
+    : [];
+  const hasPhysicalSpaces = spaceIds.length > 0;
+
+  if (
+    (schedule.isOnline || schedule.locationType === 'virtual') &&
+    !hasPhysicalSpaces
+  ) {
     return { displayNames: [], display: schedule.locationLabel || 'Online' };
   }
   if (schedule.locationType === 'no_room' || schedule.locationType === 'none') {
     return { displayNames: [], display: schedule.locationLabel || 'No Room Needed' };
   }
 
-  const spaceIds = Array.isArray(schedule.spaceIds)
-    ? schedule.spaceIds.filter(Boolean)
-    : [];
   const displayNames = spaceIds
     .map((id) => resolveSpaceDisplayName(id, spacesByKey))
     .filter(Boolean);
 
+  const onlineLabel = schedule.isOnline
+    ? schedule.locationLabel || 'Online'
+    : '';
+  const displayParts = [
+    ...displayNames,
+    ...(onlineLabel ? [onlineLabel] : []),
+  ];
+
   return {
     displayNames,
-    display: displayNames.join('; '),
+    display: displayParts.join('; '),
   };
 };
 

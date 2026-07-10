@@ -2,14 +2,12 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
-import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 
 // Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyAhfG2PP_ewf0tC_lSwN8ca5wlWQV-_lPM",
   authDomain: "faculty-schedules-be0e9.firebaseapp.com",
   projectId: "faculty-schedules-be0e9",
-  storageBucket: "faculty-schedules-be0e9.firebasestorage.app",
   messagingSenderId: "714558284379",
   appId: "1:714558284379:web:44a476b2058b8a950e557e",
   measurementId: "G-PHSBFLLYSL",
@@ -24,9 +22,6 @@ export const db = getFirestore(app);
 
 // Initialize Auth
 export const auth = getAuth(app);
-
-// Initialize Functions
-export const functions = getFunctions(app);
 
 // Development environment setup
 const isDevelopment = import.meta.env.DEV;
@@ -47,14 +42,6 @@ if (isDevelopment && useEmulators) {
     console.log("🔧 Connected to Auth Emulator");
   } catch (error) {
     console.warn("⚠️  Could not connect to Auth Emulator:", error.message);
-  }
-
-  // Connect to Functions emulator
-  try {
-    connectFunctionsEmulator(functions, "localhost", 5001);
-    console.log("🔧 Connected to Functions Emulator");
-  } catch (error) {
-    console.warn("⚠️  Could not connect to Functions Emulator:", error.message);
   }
 }
 

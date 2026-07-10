@@ -45,14 +45,14 @@ export const weekdayFromDateStr = (dateStr) => {
 };
 
 /** Map a schedule row's Day token (M/T/W/R/F/Mon/Monday/...) to a JS weekday. */
-export const weekdayFromDayToken = (token) => {
+const weekdayFromDayToken = (token) => {
   if (!token) return null;
   const meta = dayMetadata[token.toString().trim().toUpperCase()];
   return meta ? meta.js : null;
 };
 
 /** Whether a schedule row is held in the given room display label. */
-export const roomMatchesLabel = (row, roomLabel) => {
+const roomMatchesLabel = (row, roomLabel) => {
   if (!row || !roomLabel) return false;
   const target = roomLabel.toString().trim().toLowerCase();
   return splitMultiRoom(row.Room || "").some(

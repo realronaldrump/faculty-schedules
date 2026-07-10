@@ -52,17 +52,40 @@ const buildHeaderMatchForRow = (row = [], profile) => {
     return ranked;
   };
 
-  profile.fields.forEach((field) => {
-    const candidates = rankCandidates(field);
-    if (candidates.length === 0) return;
-
-    const winner = candidates[0];
+  const assignWinner = (field, winner) => {
     fieldToIndex[field.fieldId] = winner.index;
     usedIndexes.add(winner.index);
     if (winner.weight === 2) exactMatches += 1;
 
     if (field.required) matchedRequired += 1;
     else matchedOptional += 1;
+  };
+
+  // Reserve every exact alias match before considering partial matches. This
+  // prevents a broad optional field such as "Enrollment" from consuming the
+  // exact "Maximum Enrollment" column before its specific field is visited.
+  profile.fields.forEach((field) => {
+    const candidates = normalizedHeaders
+      .map((normalizedHeader, index) => {
+        if (!normalizedHeader || usedIndexes.has(index)) return null;
+        const match = findBestAliasMatch(
+          normalizedHeader,
+          field.normalizedAliases,
+          { allowPartial: false },
+        );
+        return match.matched ? { index, weight: 2 } : null;
+      })
+      .filter(Boolean);
+    if (candidates.length > 0) assignWinner(field, candidates[0]);
+  });
+
+  // Required fields intentionally never use partial matching. Optional fields
+  // retain the defensive partial-alias fallback after exact columns are safe.
+  profile.fields.forEach((field) => {
+    if (field.required || fieldToIndex[field.fieldId] !== undefined) return;
+    const candidates = rankCandidates(field);
+    if (candidates.length === 0) return;
+    assignWinner(field, candidates[0]);
   });
 
   const nonEmptyHeaderIndexes = normalizedHeaders

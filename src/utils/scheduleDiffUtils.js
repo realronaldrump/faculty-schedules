@@ -8,7 +8,14 @@
 
 import { getMaxEnrollment } from "./enrollmentUtils";
 
-const DAY_ORDER = ["M", "T", "W", "R", "F", "SA", "SU"];
+const DAY_ORDER = ["M", "T", "W", "R", "F", "S", "U"];
+
+const normalizeDayToken = (value) => {
+  const token = (value || "").toString().trim().toUpperCase();
+  if (token === "SA") return "S";
+  if (token === "SU") return "U";
+  return token;
+};
 
 const sectionKey = (course, section) =>
   `${(course || "").toString().trim().toUpperCase()}|${(section || "")
@@ -23,7 +30,8 @@ const formatMeetingPattern = (meetings = []) => {
   meetings.forEach((m) => {
     const time = `${m.start || ""}-${m.end || ""}`;
     if (!byTime.has(time)) byTime.set(time, new Set());
-    if (m.day) byTime.get(time).add(m.day.toString().trim().toUpperCase());
+    const day = normalizeDayToken(m.day);
+    if (day) byTime.get(time).add(day);
   });
   return Array.from(byTime.entries())
     .map(([time, daySet]) => {

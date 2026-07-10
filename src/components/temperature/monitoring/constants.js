@@ -1,5 +1,4 @@
 export const DEFAULT_TIMEZONE = "America/Chicago";
-export const AUTO_MATCH_THRESHOLD = 0.85;
 
 export const DEFAULT_SNAPSHOT_TIMES = [
   { label: "8:30 AM", minutes: 8 * 60 + 30, toleranceMinutes: 15 },

@@ -488,6 +488,8 @@ describe("DataCleanupRepairsPage", () => {
               name: "Ella Miller",
             },
             touchedFields: ["student_payload_mirror_fields"],
+            autoFixable: true,
+            updates: { jobs: [] },
           },
         ],
       },

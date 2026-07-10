@@ -31,7 +31,10 @@ import {
   formatImportReportForLog
 } from '../importReportUtils';
 import { preprocessImportData } from '../importPreprocessor';
-import { validateImportTransaction } from '../importValidationUtils';
+import {
+  assertNoBlockingPreprocessErrors,
+  validateImportTransaction
+} from '../importValidationUtils';
 import { buildPeopleIndex } from '../peopleUtils';
 import { extractScheduleRowBaseData } from '../importScheduleRowUtils';
 import { getScheduleInstructorReferenceIds } from '../scheduleReferenceUtils';
@@ -1056,6 +1059,25 @@ const previewScheduleChanges = async (
       identitySource: identity.source
     };
 
+    const matchResult = resolveScheduleIdentityMatch(identity.keys, scheduleIdentityIndex);
+    if (matchResult.ambiguous) {
+      const candidateIds = matchResult.candidates
+        .map((schedule) => schedule?.id)
+        .filter(Boolean)
+        .join(', ');
+      addValidation(
+        'error',
+        `${rowLabel}: Identity keys resolve to different schedules${candidateIds ? ` (${candidateIds})` : ''}`
+      );
+      transaction.addRowLineage({
+        ...rowLineageIdentity,
+        action: 'skipped',
+        reason: 'Conflicting schedule identity keys'
+      });
+      summary.rowsSkipped += 1;
+      continue;
+    }
+
     // Precompute key fields and group key for cascading selection
     const preCourseCode = baseData.courseCode;
     const preSection = baseData.section;
@@ -1294,7 +1316,6 @@ const previewScheduleChanges = async (
     const section = preSection;
     const term = preTerm;
 
-    const matchResult = resolveScheduleIdentityMatch(identity.keys, scheduleIdentityIndex);
     let existingSchedule = matchResult.schedule || null;
     const importMeta = {
       rowIndex,
@@ -1498,6 +1519,7 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
   const { includeOfficeRooms = true } = options;
   const peopleIndex = buildPeopleIndex(existingPeople);
   const { peopleById, resolvePersonId } = peopleIndex;
+  const { index: personIdentityIndex } = buildPersonIdentityIndex(existingPeople);
 
   existingRooms.forEach((room) => {
     const spaceKey = room?.spaceKey || '';
@@ -1586,6 +1608,28 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
     const personIdentityKey = normalizedPerson.identityKey || '';
     const personData = normalizedPerson;
 
+    const identityMatch = resolvePersonIdentityMatch(personData, personIdentityIndex, {
+      strongOnly: true
+    });
+    if (identityMatch.ambiguous) {
+      const candidateIds = identityMatch.candidates
+        .map((person) => person?.id)
+        .filter(Boolean)
+        .join(', ');
+      transaction.validation.errors.push(
+        `Directory row ${rowEntry?.__rowIndex || 'unknown'}: Identity keys resolve to different people${candidateIds ? ` (${candidateIds})` : ''}`
+      );
+      transaction.addRowLineage({
+        rowIndex: rowEntry?.__rowIndex || null,
+        rowHash: rowEntry?.__rowHash || '',
+        identityKey: personIdentityKey,
+        identityKeys: identityMatch.identity?.keys || [],
+        action: 'skipped',
+        reason: 'Conflicting person identity keys'
+      });
+      continue;
+    }
+
     const matchResult = findPersonMatch({
       firstName,
       lastName,
@@ -1595,7 +1639,8 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
       clssInstructorId: rawClssInstructorId || normalizedPerson.externalIds?.clssInstructorId,
       externalIds: normalizedPerson.externalIds
     }, existingPeople, { minScore: 0.85, maxCandidates: 5 });
-    const matchedPerson = matchResult.status === 'exact' ? matchResult.person : null;
+    const matchedPerson = identityMatch.person ||
+      (matchResult.status === 'exact' ? matchResult.person : null);
     const existingPerson = matchedPerson?.id
       ? (peopleById.get(resolvePersonId(matchedPerson.id)) || matchedPerson)
       : null;
@@ -1797,6 +1842,8 @@ export const commitTransaction = async (
   if (transaction.status !== 'preview') {
     throw new Error('Transaction is not in preview state');
   }
+
+  assertNoBlockingPreprocessErrors(transaction);
 
   if (transaction.type === 'schedule') {
     const missingRequired = Array.isArray(transaction.importMetadata?.missingRequired)
@@ -2216,6 +2263,24 @@ export const commitTransaction = async (
     change.newData = personPayload;
   });
 
+  // Resolve every person create against the existing identity index before any
+  // writes are queued. A split-key match must fail the whole import atomically,
+  // rather than being discovered after an earlier batch has already flushed.
+  changesToApply.forEach((change) => {
+    if (change?.collection !== 'people' || change?.action !== 'add') return;
+    const identityMatch = resolvePersonIdentityMatch(change.newData, personIdentityIndex, {
+      strongOnly: true
+    });
+    if (!identityMatch.ambiguous) return;
+    const candidateIds = identityMatch.candidates
+      .map((person) => person?.id)
+      .filter(Boolean)
+      .join(', ');
+    throw new Error(
+      `Import blocked: person identity keys resolve to different records${candidateIds ? ` (${candidateIds})` : ''}`
+    );
+  });
+
   // Validate immediately before any writes (fail-fast on errors, allow warnings).
   const commitValidationReport = validateImportTransaction(
     buildValidationSubset(changesToApply),
@@ -2395,6 +2460,15 @@ export const commitTransaction = async (
         const identityMatch = resolvePersonIdentityMatch(personPayload, personIdentityIndex, {
           strongOnly: true
         });
+        if (identityMatch.ambiguous) {
+          const candidateIds = identityMatch.candidates
+            .map((person) => person?.id)
+            .filter(Boolean)
+            .join(', ');
+          throw new Error(
+            `Import blocked: person identity keys resolve to different records${candidateIds ? ` (${candidateIds})` : ''}`
+          );
+        }
         if (identityMatch.person?.id) {
           const canonicalId = resolvePersonId(identityMatch.person.id);
           const existingPerson = peopleById.get(canonicalId) || identityMatch.person;

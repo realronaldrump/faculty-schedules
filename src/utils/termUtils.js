@@ -1,13 +1,26 @@
+const CANONICAL_CODE_TO_SEASON = {
+  '10': 'Spring',
+  '30': 'Summer',
+  '40': 'Fall',
+  '50': 'Winter'
+};
+
+const CANONICAL_SEASON_ORDER = ['Spring', 'Summer', 'Fall', 'Winter'];
+
+const LEGACY_DEFAULT_CODE_TO_SEASON = {
+  '10': 'Winter',
+  '30': 'Fall',
+  '40': 'Spring',
+  '50': 'Summer'
+};
+
+const LEGACY_DEFAULT_SEASON_ORDER = ['Winter', 'Spring', 'Summer', 'Fall'];
+
 export const DEFAULT_TERM_CONFIG = {
-  version: 1,
-  codeToSeason: {
-    '10': 'Winter',
-    '30': 'Fall',
-    '40': 'Spring',
-    '50': 'Summer'
-  },
+  version: 2,
+  codeToSeason: { ...CANONICAL_CODE_TO_SEASON },
   // Order is least to most recent within the same year.
-  seasonOrder: ['Winter', 'Spring', 'Summer', 'Fall'],
+  seasonOrder: [...CANONICAL_SEASON_ORDER],
   twoDigitYearBase: 2000
 };
 
@@ -26,6 +39,25 @@ const normalizeSeasonList = (value) => {
   if (!Array.isArray(value)) return [];
   return Array.from(new Set(value.map((item) => (item || '').trim()).filter(Boolean)));
 };
+
+const hasExactEntries = (actual, expected) => {
+  if (!actual || typeof actual !== 'object' || Array.isArray(actual)) return false;
+  const actualKeys = Object.keys(actual);
+  const expectedKeys = Object.keys(expected);
+  return actualKeys.length === expectedKeys.length &&
+    expectedKeys.every((key) => actual[key] === expected[key]);
+};
+
+const hasExactOrder = (actual, expected) =>
+  Array.isArray(actual) &&
+  actual.length === expected.length &&
+  expected.every((value, index) => actual[index] === value);
+
+export const isLegacyDefaultTermConfig = (raw = {}) =>
+  Number(raw?.version || 1) <= 1 &&
+  hasExactEntries(raw?.codeToSeason, LEGACY_DEFAULT_CODE_TO_SEASON) &&
+  hasExactOrder(raw?.seasonOrder, LEGACY_DEFAULT_SEASON_ORDER) &&
+  (raw?.twoDigitYearBase === undefined || raw.twoDigitYearBase === 2000);
 
 const pad2 = (value) => String(value).padStart(2, '0');
 
@@ -67,23 +99,31 @@ export const parseTermDate = (value) => {
 };
 
 export const normalizeTermConfig = (raw = {}) => {
+  const source = isLegacyDefaultTermConfig(raw)
+    ? {
+        ...raw,
+        version: DEFAULT_TERM_CONFIG.version,
+        codeToSeason: { ...DEFAULT_TERM_CONFIG.codeToSeason },
+        seasonOrder: [...DEFAULT_TERM_CONFIG.seasonOrder]
+      }
+    : raw;
   const codeToSeason =
-    raw && typeof raw.codeToSeason === 'object' && !Array.isArray(raw.codeToSeason)
+    source && typeof source.codeToSeason === 'object' && !Array.isArray(source.codeToSeason)
       ? Object.fromEntries(
-          Object.entries(raw.codeToSeason).map(([key, val]) => [
+          Object.entries(source.codeToSeason).map(([key, val]) => [
             String(key).trim(),
             (val || '').trim()
           ])
         )
       : { ...DEFAULT_TERM_CONFIG.codeToSeason };
 
-  const seasonOrder = normalizeSeasonList(raw.seasonOrder);
-  const twoDigitYearBase = Number.isInteger(raw.twoDigitYearBase)
-    ? raw.twoDigitYearBase
+  const seasonOrder = normalizeSeasonList(source.seasonOrder);
+  const twoDigitYearBase = Number.isInteger(source.twoDigitYearBase)
+    ? source.twoDigitYearBase
     : DEFAULT_TERM_CONFIG.twoDigitYearBase;
 
   return {
-    version: raw.version || DEFAULT_TERM_CONFIG.version,
+    version: source.version || DEFAULT_TERM_CONFIG.version,
     codeToSeason,
     seasonOrder: seasonOrder.length > 0 ? seasonOrder : [...DEFAULT_TERM_CONFIG.seasonOrder],
     twoDigitYearBase
@@ -243,7 +283,7 @@ export const buildTermLabelRegex = (termConfig = getTermConfig()) => {
   return new RegExp(`^(${escaped.join('|')})\\s+\\d{4}$`, 'i');
 };
 
-export const deriveTermInfo = ({ term, termCode } = {}, termConfig = getTermConfig()) => {
+const deriveTermInfo = ({ term, termCode } = {}, termConfig = getTermConfig()) => {
   const normalizedTerm = normalizeTermLabel(term || '', termConfig);
   let parsed = parseTermLabel(normalizedTerm, termConfig);
 

@@ -10,7 +10,11 @@ import { useUI } from '../../contexts/UIContext';
 import { useAppConfig } from '../../contexts/AppConfigContext';
 import PageHeader from '../shared/PageHeader';
 import { backfillTermMetadata } from '../../utils/termDataUtils';
-import { normalizeTermDateValue, parseTermDate } from '../../utils/termUtils';
+import {
+  DEFAULT_TERM_CONFIG,
+  normalizeTermDateValue,
+  parseTermDate
+} from '../../utils/termUtils';
 import { deleteSemesterImport } from '../../utils/importLifecycleUtils';
 import ConfirmDialog from '../shared/ConfirmDialog';
 import BuildingManagement from './BuildingManagement';
@@ -62,7 +66,7 @@ const AppSettings = () => {
         season
       }));
       setSeasonMappings(mappings);
-      setSeasonOrder(termConfig.seasonOrder || ['Winter', 'Spring', 'Summer', 'Fall']);
+      setSeasonOrder(termConfig.seasonOrder || [...DEFAULT_TERM_CONFIG.seasonOrder]);
     }
   }, [termConfig]);
 

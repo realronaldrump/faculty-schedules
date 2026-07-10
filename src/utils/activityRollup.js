@@ -46,74 +46,10 @@ const getZonedParts = (date, timeZone = ACTIVITY_ROLLUP_TIME_ZONE) => {
   };
 };
 
-const getTimeZoneOffsetMs = (date, timeZone = ACTIVITY_ROLLUP_TIME_ZONE) => {
-  const parts = getZonedParts(date, timeZone);
-  const asUtc = Date.UTC(
-    parts.year,
-    Math.max(0, parts.month - 1),
-    parts.day,
-    parts.hour,
-    parts.minute,
-    parts.second,
-  );
-  return asUtc - date.getTime();
-};
-
-const zonedDateTimeToUtc = (
-  input,
-  timeZone = ACTIVITY_ROLLUP_TIME_ZONE,
-) => {
-  const year = Number(input?.year || 0);
-  const month = Number(input?.month || 1);
-  const day = Number(input?.day || 1);
-  const hour = Number(input?.hour || 0);
-  const minute = Number(input?.minute || 0);
-  const second = Number(input?.second || 0);
-
-  const initialUtc = Date.UTC(year, month - 1, day, hour, minute, second);
-  const initialDate = new Date(initialUtc);
-  const initialOffset = getTimeZoneOffsetMs(initialDate, timeZone);
-  let adjustedUtc = initialUtc - initialOffset;
-  const adjustedDate = new Date(adjustedUtc);
-  const adjustedOffset = getTimeZoneOffsetMs(adjustedDate, timeZone);
-  if (adjustedOffset !== initialOffset) {
-    adjustedUtc = initialUtc - adjustedOffset;
-  }
-  return new Date(adjustedUtc);
-};
-
 const addDaysToDateKey = (dateKey, days) => {
   const baseDate = new Date(`${dateKey}T00:00:00Z`);
   baseDate.setUTCDate(baseDate.getUTCDate() + days);
   return baseDate.toISOString().slice(0, 10);
-};
-
-const getDateKeyUtcRange = (
-  dateKey,
-  timeZone = ACTIVITY_ROLLUP_TIME_ZONE,
-) => {
-  const [year, month, day] = String(dateKey || "")
-    .split("-")
-    .map((value) => Number(value));
-
-  if (!year || !month || !day) {
-    throw new Error(`Invalid dateKey: ${dateKey}`);
-  }
-
-  const start = zonedDateTimeToUtc(
-    { year, month, day, hour: 0, minute: 0, second: 0 },
-    timeZone,
-  );
-  const nextDateKey = addDaysToDateKey(dateKey, 1);
-  const [nextYear, nextMonth, nextDay] = nextDateKey
-    .split("-")
-    .map((value) => Number(value));
-  const end = zonedDateTimeToUtc(
-    { year: nextYear, month: nextMonth, day: nextDay, hour: 0, minute: 0, second: 0 },
-    timeZone,
-  );
-
-  return { start, end };
 };
 
 const enumerateDateKeys = (startDateKey, endDateKey) => {
@@ -723,6 +659,5 @@ const rollupActivityForDateKeys = (rawEvents, dateKeys) => {
 export {
   addDaysToDateKey,
   enumerateDateKeys,
-  getDateKeyUtcRange,
   rollupActivityForDateKeys,
 };

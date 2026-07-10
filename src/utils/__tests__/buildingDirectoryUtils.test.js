@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { buildOfficeBuildingData } from "./buildingDirectoryUtils";
-import { applyBuildingConfig, normalizeBuildingConfig } from "./locationService";
+import { buildOfficeBuildingData } from "../buildingDirectoryUtils";
+import { applyBuildingConfig, normalizeBuildingConfig } from "../locationService";
 
 beforeEach(() => {
   applyBuildingConfig(

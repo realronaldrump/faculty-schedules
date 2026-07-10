@@ -10,6 +10,7 @@ import {
 } from '../utils/locationService';
 import {
   DEFAULT_TERM_CONFIG,
+  isLegacyDefaultTermConfig,
   normalizeTermConfig,
   setTermConfig as applyTermConfig
 } from '../utils/termUtils';
@@ -106,10 +107,15 @@ export const AppConfigProvider = ({ children }) => {
       (snap) => {
         if (!active) return;
         if (snap.exists()) {
-          const normalized = normalizeTermConfig(snap.data());
+          const storedConfig = snap.data();
+          const shouldPersistMigration = isLegacyDefaultTermConfig(storedConfig);
+          const normalized = normalizeTermConfig(storedConfig);
           setTermConfigState(normalized);
           applyTermConfig(normalized);
           setTermConfigVersion((v) => v + 1);
+          if (shouldPersistMigration) {
+            seedDefaults(termRef, normalized, storedConfig);
+          }
         } else {
           const normalized = normalizeTermConfig(DEFAULT_TERM_CONFIG);
           setTermConfigState(normalized);

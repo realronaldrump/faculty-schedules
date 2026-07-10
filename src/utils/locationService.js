@@ -612,9 +612,13 @@ export const parseMultiRoom = (value) => {
     };
   }
 
+  // Split before classifying the whole string so a mixed physical/virtual label
+  // retains its physical rooms (for example, "Goebel 101; ONLINE").
+  const parts = splitMultiRoom(raw);
+
   // Check if the entire string is virtual/no-room
   const wholeType = detectLocationType(raw);
-  if (wholeType !== LOCATION_TYPE.PHYSICAL) {
+  if (wholeType !== LOCATION_TYPE.PHYSICAL && parts.length <= 1) {
     return {
       raw,
       locationType: wholeType,
@@ -626,7 +630,6 @@ export const parseMultiRoom = (value) => {
   }
 
   // Split and parse each room
-  const parts = splitMultiRoom(raw);
   const rooms = [];
   const spaceKeys = [];
   const displayNames = [];
@@ -648,10 +651,18 @@ export const parseMultiRoom = (value) => {
 
   return {
     raw,
-    locationType: rooms.length > 0 ? LOCATION_TYPE.PHYSICAL : LOCATION_TYPE.UNKNOWN,
+    locationType:
+      rooms.length > 0
+        ? LOCATION_TYPE.PHYSICAL
+        : wholeType !== LOCATION_TYPE.PHYSICAL
+          ? wholeType
+          : LOCATION_TYPE.UNKNOWN,
     rooms,
     spaceKeys,
     displayNames,
+    ...(rooms.length === 0 && wholeType !== LOCATION_TYPE.PHYSICAL
+      ? { locationLabel: raw }
+      : {}),
     errors: errors.length > 0 ? errors : undefined
   };
 };

@@ -36,6 +36,7 @@ import { logUpdate } from "./changeLogger";
 import {
   DIRECTOR_ROLES,
   directorsAreEqual,
+  getDirectorEligibilityError,
   normalizeDirectors,
 } from "./directorAssignments";
 
@@ -101,6 +102,7 @@ export const buildDirectorMigrationPlan = (people = [], programs = []) => {
   const assignments = [];
   const orphaned = [];
   const manualReview = [];
+  const manualReviewKeys = new Set();
   const directorsByProgramId = new Map();
   const coveredByUpdIds = new Set(); // personId::programId pairs from program-side lists
 
@@ -108,7 +110,47 @@ export const buildDirectorMigrationPlan = (people = [], programs = []) => {
     directorsByProgramId.set(program.id, normalizeDirectors(program.directors));
   });
 
-  const addAssignment = (program, person, source) => {
+  const recordManualReview = ({
+    person,
+    program = null,
+    sourcePersonId = null,
+    reason,
+  }) => {
+    const personId = person?.id || sourcePersonId;
+    if (!personId) return;
+    const key = `${personId}::${program?.id || ""}::${reason}`;
+    if (manualReviewKeys.has(key)) return;
+    manualReviewKeys.add(key);
+    manualReview.push({
+      personId,
+      personName: personDisplayName(person),
+      ...(sourcePersonId && sourcePersonId !== personId
+        ? { sourcePersonId }
+        : {}),
+      ...(program
+        ? { programId: program.id, programName: program.name || "" }
+        : {}),
+      reason,
+    });
+  };
+
+  const addAssignment = (
+    program,
+    person,
+    source,
+    { sourcePersonId = null } = {},
+  ) => {
+    const eligibilityError = getDirectorEligibilityError(person);
+    if (eligibilityError) {
+      recordManualReview({
+        person,
+        program,
+        sourcePersonId,
+        reason: `Legacy UPD assignment cannot be migrated automatically: ${eligibilityError}`,
+      });
+      return;
+    }
+
     const existing = directorsByProgramId.get(program.id) || [];
     const already = existing.some(
       (entry) =>
@@ -148,29 +190,44 @@ export const buildDirectorMigrationPlan = (people = [], programs = []) => {
         return;
       }
       coveredByUpdIds.add(`${person.id}::${program.id}`);
-      addAssignment(program, person, "program updIds");
+      addAssignment(program, person, "program updIds", {
+        sourcePersonId: rawPersonId,
+      });
     });
   });
 
   // Pass 2: directory flags (people.isUPD) not covered by any program list.
   (people || []).forEach((rawPerson) => {
-    if (rawPerson?.isUPD !== true || rawPerson?.mergedInto) return;
-    const person = resolveCanonicalPerson(peopleById, rawPerson.id) || rawPerson;
-    const program = person.programId
-      ? programsById.get(person.programId)
+    if (rawPerson?.isUPD !== true) return;
+    const person = resolveCanonicalPerson(peopleById, rawPerson.id);
+    if (!person) {
+      recordManualReview({
+        person: rawPerson,
+        sourcePersonId: rawPerson.id,
+        reason: rawPerson.mergedInto
+          ? `Flagged as UPD but mergedInto "${rawPerson.mergedInto}" does not resolve to a surviving person.`
+          : "Flagged as UPD but the person record cannot be resolved.",
+      });
+      return;
+    }
+    const programId = rawPerson.programId || person.programId;
+    const program = programId
+      ? programsById.get(programId)
       : null;
     if (!program) {
-      manualReview.push({
-        personId: person.id,
-        personName: personDisplayName(person),
-        reason: person.programId
-          ? `Flagged as UPD but programId "${person.programId}" does not match any program.`
+      recordManualReview({
+        person,
+        sourcePersonId: rawPerson.id,
+        reason: programId
+          ? `Flagged as UPD but programId "${programId}" does not match any program.`
           : "Flagged as UPD but has no program assignment to attach the directorship to.",
       });
       return;
     }
     if (coveredByUpdIds.has(`${person.id}::${program.id}`)) return;
-    addAssignment(program, person, "directory flag + program membership");
+    addAssignment(program, person, "directory flag + program membership", {
+      sourcePersonId: rawPerson.id,
+    });
   });
 
   // Program writes: canonical directors + legacy field removal.
@@ -199,7 +256,21 @@ export const buildDirectorMigrationPlan = (people = [], programs = []) => {
   // Flags belonging to manual-review people are separated so the routine
   // health-scan auto-fix never removes them; only the explicit migration
   // apply (which surfaces the manual-review report first) clears those.
-  const manualReviewIds = new Set(manualReview.map((entry) => entry.personId));
+  const manualReviewCanonicalIds = new Set(
+    manualReview.map((entry) => entry.personId),
+  );
+  const manualReviewIds = new Set();
+  manualReview.forEach((entry) => {
+    manualReviewIds.add(entry.personId);
+    if (entry.sourcePersonId) manualReviewIds.add(entry.sourcePersonId);
+  });
+  (people || []).forEach((person) => {
+    if (!person?.id) return;
+    const canonical = resolveCanonicalPerson(peopleById, person.id);
+    if (canonical && manualReviewCanonicalIds.has(canonical.id)) {
+      manualReviewIds.add(person.id);
+    }
+  });
   const peopleWithLegacyFlag = (people || [])
     .filter(
       (person) =>

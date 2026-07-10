@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { usePeople } from '../../contexts/PeopleContext';
 import { buildGroupedChanges } from '../../utils/import/transaction-model';
+import { getBlockingPreprocessErrors } from '../../utils/importValidationUtils';
 
 const INTERNAL_SCHEDULE_DIFF_KEYS = new Set([
   'identityKey',
@@ -188,6 +189,11 @@ const ImportPreviewModal = ({
   const validation = useMemo(() => transaction?.validation || {}, [transaction]);
   const validationErrors = Array.isArray(validation.errors) ? validation.errors : [];
   const validationWarnings = Array.isArray(validation.warnings) ? validation.warnings : [];
+  const blockingPreprocessErrors = useMemo(
+    () => getBlockingPreprocessErrors(transaction),
+    [transaction],
+  );
+  const hasBlockingPreprocessErrors = blockingPreprocessErrors.length > 0;
   const collisionSummary = validation?.identityCollisionSummary || null;
   const displayWarnings = useMemo(
     () => validationWarnings.filter((warn) => !/duplicate schedule identities/i.test(warn)),
@@ -1083,7 +1089,14 @@ const ImportPreviewModal = ({
         {/* Footer */}
         <div className="p-6 border-t border-gray-200 bg-gray-50">
           <div className="flex items-center justify-between">
-            {unresolvedMatchCount > 0 ? (
+            {hasBlockingPreprocessErrors ? (
+              <div className="flex items-center space-x-2 text-sm text-red-600">
+                <AlertTriangle className="w-4 h-4" />
+                <span>
+                  Fix the source rows with preprocessing errors and generate a new preview before applying changes.
+                </span>
+              </div>
+            ) : unresolvedMatchCount > 0 ? (
               <div className="flex items-center space-x-2 text-sm text-red-600">
                 <AlertTriangle className="w-4 h-4" />
                 <span>
@@ -1109,7 +1122,12 @@ const ImportPreviewModal = ({
               </button>
               <button
                 onClick={handleCommit}
-                disabled={stats.selectedTotal === 0 || unresolvedMatchCount > 0 || isCommitting}
+                disabled={
+                  stats.selectedTotal === 0 ||
+                  hasBlockingPreprocessErrors ||
+                  unresolvedMatchCount > 0 ||
+                  isCommitting
+                }
                 className="px-6 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >
                 {isCommitting ? (

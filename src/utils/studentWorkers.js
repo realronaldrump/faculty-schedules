@@ -106,9 +106,29 @@ const parseDateValue = (value, { endOfDay = false } = {}) => {
   const raw = String(value || "").trim();
   if (!raw) return null;
   const dateOnly = raw.split("T")[0];
-  if (!dateOnly) return null;
-  const parsed = new Date(`${dateOnly}T${endOfDay ? "23:59:59" : "00:00:00"}`);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  const match = dateOnly.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(
+    year,
+    month - 1,
+    day,
+    endOfDay ? 23 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 999 : 0,
+  );
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+  return parsed;
 };
 
 /**
@@ -168,6 +188,9 @@ export const getAssignmentStatusForSemester = (
   const semesterWindow = buildSemesterWindow(semesterMeta);
 
   // Missing or invalid dates should not be treated as active.
+  if ((range.startDate && !range.start) || (range.endDate && !range.end)) {
+    return { status: "Inactive", isActive: false };
+  }
   if (!range.start && !range.end) {
     return { status: "Inactive", isActive: false };
   }

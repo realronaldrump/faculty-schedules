@@ -12,74 +12,6 @@ import { normalizeTermLabel, termCodeFromLabel } from "./termUtils";
 // Import from centralized location service
 import { resolveScheduleSpaces } from "./spaceUtils";
 
-// ==================== CORE DATA MODELS ====================
-
-/**
- * Schedule Model with ID-based references
- */
-// ==================== UPSERT HELPERS ====================
-
-/**
- * Determine whether a value should be considered "empty" for merge purposes
- */
-const isEmptyForMerge = (value) => {
-  if (value === null || value === undefined) return true;
-  if (typeof value === "string") return value.trim() === "";
-  if (Array.isArray(value)) return value.length === 0;
-  if (typeof value === "object") return Object.keys(value).length === 0;
-  return false;
-};
-
-/**
- * Build an updates object applying upsert rules:
- * - If CSV has a non-empty value, it overwrites existing
- * - If CSV value is empty, leave existing field unchanged (omit from updates)
- * - Always refresh updatedAt
- */
-export const buildUpsertUpdates = (
-  existingRecord,
-  incomingRecord,
-  options = {},
-) => {
-  const allowEmptyFields = new Set(options.allowEmptyFields || []);
-  const updates = {};
-  let hasChanges = false;
-
-  const deepEqual = (a, b) => {
-    if (a === b) return true;
-    if (typeof a !== typeof b) return false;
-    if (a && b && typeof a === "object") {
-      try {
-        return JSON.stringify(a) === JSON.stringify(b);
-      } catch (e) {
-        return false;
-      }
-    }
-    return false;
-  };
-
-  Object.keys(incomingRecord).forEach((key) => {
-    if (key === "createdAt" || key === "updatedAt") return; // ignore timestamps for diff
-
-    const incoming = incomingRecord[key];
-    if (isEmptyForMerge(incoming) && !allowEmptyFields.has(key)) return; // don't overwrite with empty
-
-    const existing = existingRecord[key];
-    const valuesEqual = deepEqual(incoming, existing);
-
-    if (!valuesEqual) {
-      updates[key] = incoming;
-      hasChanges = true;
-    }
-  });
-
-  if (hasChanges) {
-    updates.updatedAt = new Date().toISOString();
-  }
-
-  return { updates, hasChanges };
-};
-
 /**
  * Parse instructor field from CLSS format: "LastName, FirstName (ID) [Primary, 100%]"
  */
@@ -88,8 +20,10 @@ export const parseInstructorField = (instructorField) => {
 
   const cleanField = instructorField.trim();
 
-  // Handle "Staff" case
-  if (cleanField.toLowerCase().includes("staff")) {
+  // Handle the unassigned "Staff" placeholder without treating real surnames
+  // such as "Stafford" as placeholder records. CLSS may append bracketed or
+  // parenthesized metadata to the placeholder.
+  if (/^staff(?:\s*(?:\([^)]*\)|\[[^\]]*\]))*$/i.test(cleanField)) {
     return {
       lastName: "Staff",
       firstName: "",

@@ -48,15 +48,22 @@ export const normalizePageId = (pageId) => {
 const normalizePagePermissions = (pages) => {
   if (!pages || typeof pages !== "object") return {};
   const normalized = {};
+  const priorities = {};
   Object.entries(pages).forEach(([key, value]) => {
     const normalizedKey = normalizePageId(key);
     if (!normalizedKey) return;
-    if (value === true) {
-      normalized[normalizedKey] = true;
-      return;
-    }
-    if (!Object.prototype.hasOwnProperty.call(normalized, normalizedKey)) {
+    const rawKey = String(key).trim().replace(/^\/+/, "").split(/[?#]/)[0];
+    const priority = rawKey === normalizedKey ? 2 : 1;
+    const previousPriority = priorities[normalizedKey] || 0;
+
+    // Canonical keys always beat aliases. At the same precedence, deny wins so
+    // conflicting duplicate spellings cannot accidentally broaden access.
+    if (
+      priority > previousPriority ||
+      (priority === previousPriority && value === false)
+    ) {
       normalized[normalizedKey] = Boolean(value);
+      priorities[normalizedKey] = priority;
     }
   });
   return normalized;
@@ -151,6 +158,19 @@ export const canAccessPage = ({ userProfile, rolePermissions, pageId }) => {
   );
   if (isUserAdmin(userProfile)) return true;
   if (!isUserActive(userProfile)) return false;
+
+  // A permission stored under the canonical page id is the most explicit
+  // user-level decision. Check it before normalizing legacy aliases so a stale
+  // legacy grant cannot overwrite a newer canonical deny.
+  if (
+    userProfile.permissions &&
+    Object.prototype.hasOwnProperty.call(
+      userProfile.permissions,
+      normalizedId,
+    )
+  ) {
+    return Boolean(userProfile.permissions[normalizedId]);
+  }
 
   const normalizedUserPermissions = normalizePagePermissions(
     userProfile.permissions,

@@ -519,15 +519,3 @@ const executeDeleteSemester = async (report) => {
     throw error;
   }
 };
-
-/**
- * Preview what would be deleted without actually deleting
- * Convenience wrapper for deleteSemesterImport with dryRun=true
- *
- * @param {string} termCode - The term code to preview deletion for
- * @param {Object} options - Same options as deleteSemesterImport (dryRun is forced true)
- * @returns {Object} Report of what would be deleted
- */
-export const previewSemesterDeletion = async (termCode, options = {}) => {
-  return deleteSemesterImport(termCode, { ...options, dryRun: true });
-};

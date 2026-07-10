@@ -232,6 +232,8 @@ export const buildPAFCoursesByInstructorId = (
     getPersonNameKeys(person).forEach((nameKey) => {
       if (!personIdByName.has(nameKey)) {
         personIdByName.set(nameKey, person.id);
+      } else if (personIdByName.get(nameKey) !== person.id) {
+        personIdByName.set(nameKey, null);
       }
     });
   });

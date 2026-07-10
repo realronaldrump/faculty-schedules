@@ -223,6 +223,14 @@ export const buildRoutineCleanupPreview = (scanResult) => {
   const safeSpaceLinks = orphaned.filter(
     (issue) => issue?.type === "orphaned_space",
   );
+  const safeLegacyModelIssues = toArray(
+    scanResult.issues?.legacyModelIssues,
+  ).filter(
+    (issue) =>
+      issue?.autoFixable !== false &&
+      issue?.updates &&
+      Object.keys(issue.updates).length > 0,
+  );
 
   return [
     getRoutineCategory({
@@ -271,7 +279,7 @@ export const buildRoutineCleanupPreview = (scanResult) => {
       label: "Older data format",
       count: auto.legacyModelIssues,
       description: "Older fields will be refreshed into the current format.",
-      items: scanResult.issues?.legacyModelIssues,
+      items: safeLegacyModelIssues,
       getPreviewLabel: (item) =>
         `${getLegacyIssueRecordLabel(item)}: ${formatLegacyIssueFields(item)}`,
     }),
@@ -446,24 +454,16 @@ export const buildDataHealthViewModel = ({
   };
 };
 
-export const buildDecisionCategoryViewModels = (categories = []) =>
-  categories
-    .filter((category) => Number(category?.count || 0) > 0)
-    .map((category) => ({
-      id: category.id,
-      label: category.label,
-      count: Number(category.count || 0),
-      description: category.description,
-      items: toArray(category.items),
-    }));
-
 const isRoutineCleanupItem = (categoryId, item = {}) => {
   if (
     categoryId === "high-confidence-duplicates" ||
-    categoryId === "orphaned-spaces" ||
-    categoryId === "legacy-model-issues"
+    categoryId === "orphaned-spaces"
   ) {
     return true;
+  }
+
+  if (categoryId === "legacy-model-issues") {
+    return item?.autoFixable !== false;
   }
 
   if (categoryId === "orphaned-instructors") {

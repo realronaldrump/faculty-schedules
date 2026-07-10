@@ -6,7 +6,7 @@ Operational dashboard for Baylor Human Sciences & Design scheduling, people dire
 
 - Repository visibility: **Private** (verified via GitHub CLI on 2026-02-12).
 - Hosting target: Vercel (existing deployment).
-- Data backend: Firebase (Firestore + Storage + Auth).
+- Data backend: Firebase (Firestore + Auth).
 
 ## Local Setup
 
@@ -41,8 +41,7 @@ npm test -- --run
 
 ### Import transaction pipeline
 
-- Import engine entry point: `src/utils/import/core.js`
-- Core implementation: `src/utils/import/core.js`
+- Import engine: `src/utils/import/core.js`
 
 ### CLSS contract layer
 
@@ -54,8 +53,7 @@ npm test -- --run
 
 ### Data hygiene pipeline
 
-- Public facade (imports remain stable): `src/utils/dataHygiene.js`
-- Core implementation: `src/utils/dataHygiene.js`
+- `src/utils/dataHygiene.js` (Firestore-coupled operations) over `src/utils/hygieneCore.js` (pure logic)
 
 ### Permission layer
 

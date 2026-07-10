@@ -4,12 +4,11 @@
  * Features:
  * - Multiple positions (top, bottom, left, right)
  * - Optional "learn more" link to tutorials
- * - Dismissible hints
  * - Respects user tooltip preferences
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { HelpCircle, X, BookOpen, Info, AlertCircle, Lightbulb } from 'lucide-react';
+import { HelpCircle, Info, AlertCircle, Lightbulb } from 'lucide-react';
 import { useTutorial } from '../../contexts/TutorialContext';
 
 // Icon variants for different tooltip types
@@ -189,78 +188,5 @@ export const HelpTooltip = ({
         className={`cursor-help transition-colors ${styles.icon} ${className}`}
       />
     </Tooltip>
-  );
-};
-
-/**
- * HintBanner - Dismissible hint/tip banner
- * Shows contextual help that users can dismiss
- */
-export const HintBanner = ({
-  hintId,
-  title,
-  content,
-  variant = 'tip',
-  tutorialId,
-  onStartTutorial
-}) => {
-  const { showTooltips, isHintDismissed, dismissHint, startTutorial } = useTutorial();
-
-  if (!showTooltips || isHintDismissed(hintId)) {
-    return null;
-  }
-
-  const Icon = iconVariants[variant];
-
-  const handleStartTutorial = () => {
-    if (tutorialId) {
-      if (onStartTutorial) {
-        onStartTutorial(tutorialId);
-      } else {
-        startTutorial(tutorialId);
-      }
-    }
-  };
-
-  const bannerStyles = {
-    help: 'bg-gray-50 border-gray-200 text-gray-700',
-    info: 'bg-blue-50 border-blue-200 text-blue-700',
-    warning: 'bg-amber-50 border-amber-200 text-amber-700',
-    tip: 'bg-baylor-green/5 border-baylor-green/20 text-gray-700'
-  };
-
-  const iconStyles = {
-    help: 'bg-gray-100 text-gray-500',
-    info: 'bg-blue-100 text-blue-600',
-    warning: 'bg-amber-100 text-amber-600',
-    tip: 'bg-baylor-green/10 text-baylor-green'
-  };
-
-  return (
-    <div className={`relative flex items-start gap-3 p-4 rounded-lg border ${bannerStyles[variant]}`}>
-      <div className={`p-2 rounded-lg flex-shrink-0 ${iconStyles[variant]}`}>
-        <Icon className="w-5 h-5" />
-      </div>
-      <div className="flex-1 min-w-0">
-        {title && <h4 className="font-medium mb-1">{title}</h4>}
-        <p className="text-sm">{content}</p>
-        {tutorialId && (
-          <button
-            onClick={handleStartTutorial}
-            className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-baylor-green hover:underline"
-          >
-            <BookOpen className="w-4 h-4" />
-            Learn more in tutorial
-          </button>
-        )}
-      </div>
-      <button
-        onClick={() => dismissHint(hintId)}
-        className="flex-shrink-0 p-1 rounded hover:bg-black/5 transition-colors"
-        aria-label="Dismiss hint"
-      >
-        <X className="w-4 h-4 text-gray-400" />
-      </button>
-    </div>
   );
 };

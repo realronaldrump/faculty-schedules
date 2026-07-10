@@ -111,5 +111,3 @@ export function useHubTabs({
 
   return { availableTabs, activeTab, handleTabChange };
 }
-
-export default useHubTabs;

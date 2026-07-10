@@ -461,8 +461,10 @@ const RareRepairToolsSection = ({
                   Needs manual review
                 </div>
                 <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-amber-900">
-                  {directorMigrationPreview.manualReview.map((entry) => (
-                    <li key={entry.personId}>
+                  {directorMigrationPreview.manualReview.map((entry, index) => (
+                    <li
+                      key={`${entry.programId || "unassigned"}:${entry.personId}:${index}`}
+                    >
                       <span className="font-medium">{entry.personName}</span> —{" "}
                       {entry.reason}
                     </li>

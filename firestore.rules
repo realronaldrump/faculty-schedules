@@ -642,6 +642,14 @@ service cloud.firestore {
       allow write: if canManageDataHygiene();
     }
 
+    // Maintenance reports: audit trail saved by the historical-baseline backfill
+    // (Data Cleanup). Append-only.
+    match /maintenanceReports/{id} {
+      allow read: if canManageDataHygiene();
+      allow create: if canManageDataHygiene();
+      allow update, delete: if false;
+    }
+
     // Room grids: allow writes for users who can access room scheduling tools
     match /roomGrids/{id} {
       allow read: if canReadAppData();

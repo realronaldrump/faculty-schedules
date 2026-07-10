@@ -73,16 +73,6 @@ export const normalizeSectionNumber = (sectionField) => {
   return firstToken.toUpperCase();
 };
 
-/**
- * Extract CRN from section field if embedded.
- * "01 (33070)" -> "33070"
- */
-export const extractCrnFromSection = (sectionField) => {
-  if (!sectionField) return null;
-  const match = sectionField.toString().match(/\((\d{5,6})\)/);
-  return match ? match[1] : null;
-};
-
 // ============================================================================
 // VALIDATION RULES
 // ============================================================================
@@ -191,7 +181,11 @@ export const validateSection = (section) => {
 /**
  * Validate a person record
  */
-export const validatePerson = (person) => {
+export const validatePerson = (person, options = {}) => {
+  const {
+    requireCreatedAt = true,
+    requireUpdatedAt = true,
+  } = options;
   const errors = [];
   const warnings = [];
 
@@ -214,10 +208,16 @@ export const validatePerson = (person) => {
   }
 
   // Require timestamps for new writes (import/create-time hygiene)
-  if (!person.createdAt || !String(person.createdAt).trim()) {
+  if (
+    requireCreatedAt &&
+    (!person.createdAt || !String(person.createdAt).trim())
+  ) {
     errors.push("createdAt timestamp is required");
   }
-  if (!person.updatedAt || !String(person.updatedAt).trim()) {
+  if (
+    requireUpdatedAt &&
+    (!person.updatedAt || !String(person.updatedAt).trim())
+  ) {
     errors.push("updatedAt timestamp is required");
   }
 
@@ -287,78 +287,3 @@ export const validateSpace = (space) => {
     warnings,
   };
 };
-
-// ============================================================================
-// DEDUPLICATION RULES
-// ============================================================================
-
-/**
- * Determine if two sections represent the same logical section.
- *
- * Two sections are the same if they have the same:
- * - courseCode (normalized)
- * - sectionNumber (normalized)
- * - termCode
- *
- * Different instructors or rooms do NOT make them different sections.
- * Those are updates to the same section.
- */
-export const areSameSectionIdentity = (section1, section2) => {
-  const id1 = generateSectionId({
-    termCode: section1.termCode,
-    courseCode: section1.courseCode,
-    sectionNumber: section1.sectionNumber,
-  });
-
-  const id2 = generateSectionId({
-    termCode: section2.termCode,
-    courseCode: section2.courseCode,
-    sectionNumber: section2.sectionNumber,
-  });
-
-  return id1 && id2 && id1 === id2;
-};
-
-/**
- * Determine if two persons represent the same individual.
- *
- * Match priority:
- * 1. CLSS Instructor ID (exact match - definitive)
- * 2. Baylor ID (exact match - definitive)
- * 3. Email (exact match - high confidence)
- * 4. First name + Last name (exact match, case-insensitive - needs verification)
- */
-export const areSamePersonIdentity = (person1, person2) => {
-  // CLSS ID match (definitive)
-  if (person1.clssInstructorId && person2.clssInstructorId) {
-    return person1.clssInstructorId === person2.clssInstructorId;
-  }
-
-  // Baylor ID match (definitive)
-  if (person1.baylorId && person2.baylorId) {
-    return person1.baylorId === person2.baylorId;
-  }
-
-  // Email match (high confidence)
-  const email1 = (person1.email || "").toLowerCase().trim();
-  const email2 = (person2.email || "").toLowerCase().trim();
-  if (email1 && email2 && email1 === email2) {
-    return true;
-  }
-
-  // Name match (needs verification - could be different people with same name)
-  const name1 =
-    `${(person1.firstName || "").trim()} ${(person1.lastName || "").trim()}`
-      .toLowerCase()
-      .trim();
-  const name2 =
-    `${(person2.firstName || "").trim()} ${(person2.lastName || "").trim()}`
-      .toLowerCase()
-      .trim();
-  if (name1 && name2 && name1 === name2 && name1.length > 3) {
-    return "possible"; // Needs manual verification
-  }
-
-  return false;
-};
-

@@ -6,7 +6,7 @@ This runbook is for maintainers taking ownership of the Faculty Schedules dashbo
 
 - GitHub repo admin on `<org-or-account>/faculty-schedules`
 - Vercel project admin for production deployment
-- Firebase project editor/admin (Firestore, Storage, Auth)
+- Firebase project editor/admin (Firestore, Auth)
 - Access to production environment variables
 
 Use `docs/ACCESS_TRANSFER_CHECKLIST.md` to verify transfer completion.

@@ -156,4 +156,35 @@ describe("ImportPreviewModal field selection", () => {
       expect(screen.getByRole("button", { name: /apply selected changes \(2/i })).toBeEnabled();
     });
   });
+
+  it("blocks applying a preview with preprocessing errors", async () => {
+    const { transaction } = createModifyTransaction();
+    transaction.preprocessReport = {
+      errors: [
+        {
+          type: "conflicting_within_batch_identity",
+          message: "Rows 1 and 2 have conflicting identity values",
+        },
+      ],
+    };
+    transaction.validation.errors.push(
+      "Rows 1 and 2 have conflicting identity values",
+    );
+
+    render(
+      <ImportPreviewModal
+        transaction={transaction}
+        onClose={vi.fn()}
+        onCancel={vi.fn()}
+        onCommit={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /apply selected changes/i }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/fix the source rows with preprocessing errors/i),
+    ).toBeInTheDocument();
+  });
 });

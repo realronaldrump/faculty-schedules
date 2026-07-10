@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DATA_HEALTH_STATES,
   buildDataHealthViewModel,
+  buildReviewCategoryViewModels,
   buildRoutineCleanupPreview,
   summarizeBaselinePreview,
   summarizeBaselineReport,
@@ -101,6 +102,14 @@ describe("report formatters", () => {
             recordType: "people",
             record: { firstName: "Jordan", lastName: "Lee" },
             touchedFields: ["student_payload_mirror_fields"],
+            autoFixable: true,
+            updates: { jobs: [] },
+          },
+          {
+            recordType: "programs",
+            record: { id: "program-1", name: "Program One" },
+            touchedFields: ["directors", "updIds"],
+            autoFixable: false,
           },
         ],
       },
@@ -130,6 +139,30 @@ describe("report formatters", () => {
         }),
       ]),
     );
+  });
+
+  it("keeps manual legacy issues in decision review after hiding routine work", () => {
+    const categories = buildReviewCategoryViewModels(
+      [
+        {
+          id: "legacy-model-issues",
+          label: "Older data format",
+          items: [
+            { id: "safe", autoFixable: true },
+            { id: "manual", autoFixable: false },
+          ],
+        },
+      ],
+      { hideRoutineItems: true },
+    );
+
+    expect(categories).toEqual([
+      expect.objectContaining({
+        id: "legacy-model-issues",
+        count: 1,
+        items: [expect.objectContaining({ id: "manual" })],
+      }),
+    ]);
   });
 
   it("formats full data refresh summary", () => {

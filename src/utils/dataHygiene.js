@@ -11,7 +11,6 @@
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, deleteDoc, writeBatch, addDoc, limit, deleteField, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { logStandardization, logMerge, logBulkUpdate } from "./changeLogger";
-import { normalizedSchema } from "./normalizedSchema";
 import {
   parseRoomLabel,
   parseMultiRoom,
@@ -41,11 +40,6 @@ import {
   computeCrossListAutoLinkGroups,
 } from "./scheduleLinkUtils";
 import { scheduleReferencesPerson } from "./scheduleReferenceUtils";
-
-export {
-  getScheduleInstructorReferenceIds,
-  scheduleReferencesPerson,
-} from "./scheduleReferenceUtils";
 
 const MAX_BATCH_OPERATIONS = 450;
 
@@ -879,120 +873,6 @@ const standardizeAllData = async (options = {}) => {
   return { updatedRecords: updateCount };
 };
 
-/**
- * Automatically merge obvious duplicates (high confidence only)
- * Returns a report of what was merged
- */
-export const autoMergeObviousDuplicates = async () => {
-  const [peopleDecisions, scheduleDecisions, roomDecisions] = await Promise.all(
-    [
-      fetchDedupeDecisions("people"),
-      fetchDedupeDecisions("schedules"),
-      fetchDedupeDecisions("rooms"),
-    ],
-  );
-
-  // Existing people merging
-  const duplicates = await findDuplicatePeople({
-    blockedPairs: peopleDecisions,
-  });
-  const results = {
-    mergedPeople: 0,
-    mergedSchedules: 0,
-    mergedRooms: 0,
-    skipped: 0,
-    errors: [],
-    mergedPairs: [],
-  };
-
-  // Merge people
-  for (const duplicate of duplicates) {
-    if (duplicate.confidence >= 0.95) {
-      try {
-        const [primary, secondary] = duplicate.records;
-        await mergePeople(primary.id, secondary.id);
-        results.mergedPeople++;
-        results.mergedPairs.push({
-          type: "person",
-          kept: `${primary.firstName || ""} ${primary.lastName || ""}`.trim(),
-          removed:
-            `${secondary.firstName || ""} ${secondary.lastName || ""}`.trim(),
-          reason: duplicate.reason,
-        });
-      } catch (error) {
-        const [, secondary] = duplicate.records;
-        results.errors.push(
-          `Failed to merge person ${(secondary?.firstName || "").trim()} ${(secondary?.lastName || "").trim()}: ${error.message}`,
-        );
-      }
-    } else {
-      results.skipped++;
-    }
-  }
-
-  // Fetch schedules and rooms for duplicate detection
-  const schedulesSnapshot = await getDocs(collection(db, "schedules"));
-  const schedules = schedulesSnapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  }));
-  const roomsSnapshot = await getDocs(collection(db, "rooms"));
-  const rooms = roomsSnapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  }));
-
-  // Merge schedules
-  const linkedPairs = buildLinkedSchedulePairSet(schedules);
-  const scheduleBlocks = new Set([...scheduleDecisions, ...linkedPairs]);
-  const scheduleDuplicates = detectScheduleDuplicates(schedules, {
-    blockedPairs: scheduleBlocks,
-  });
-  for (const dup of scheduleDuplicates) {
-    if (dup.confidence >= 0.98) {
-      try {
-        const mergeResult = await mergeScheduleRecords(dup);
-        results.mergedSchedules++;
-        results.mergedPairs.push({
-          type: "schedule",
-          kept: mergeResult.primaryId,
-          removed: mergeResult.secondaryId,
-          reason: dup.reason,
-        });
-      } catch (error) {
-        results.errors.push(`Failed to merge schedule: ${error.message}`);
-      }
-    } else {
-      results.skipped++;
-    }
-  }
-
-  // Merge rooms
-  const roomDuplicates = detectRoomDuplicates(rooms, {
-    blockedPairs: roomDecisions,
-  });
-  for (const dup of roomDuplicates) {
-    if (dup.confidence >= 0.95) {
-      try {
-        const mergeResult = await mergeRoomRecords(dup);
-        results.mergedRooms++;
-        results.mergedPairs.push({
-          type: "room",
-          kept: mergeResult.primaryId,
-          removed: mergeResult.secondaryId,
-          reason: dup.reason,
-        });
-      } catch (error) {
-        results.errors.push(`Failed to merge room: ${error.message}`);
-      }
-    } else {
-      results.skipped++;
-    }
-  }
-
-  return results;
-};
-
 const chunkTermCodes = (items, size = 10) => {
   const chunks = [];
   for (let i = 0; i < items.length; i += size) {
@@ -1637,98 +1517,6 @@ export const previewHistoricalBaselineBackfill = async (options = {}) =>
     dryRun: true,
     saveReport: false,
   });
-
-// ==================== REAL-TIME VALIDATION ====================
-
-/**
- * Validate and clean data before saving
- */
-export const validateAndCleanBeforeSave = async (data, collection_name) => {
-  switch (collection_name) {
-    case "people": {
-      const cleanPerson = standardizePerson(data);
-
-      // Check for potential duplicates
-      const emailDuplicates = await findPeopleByEmail(cleanPerson.email);
-      const baylorDuplicates = await findPeopleByBaylorId(cleanPerson.baylorId);
-      const duplicateWarnings = [];
-
-      if (
-        emailDuplicates.length > 0 &&
-        !emailDuplicates.find((p) => p.id === cleanPerson.id)
-      ) {
-        duplicateWarnings.push(`Email ${cleanPerson.email} already exists`);
-      }
-      if (
-        baylorDuplicates.length > 0 &&
-        !baylorDuplicates.find((p) => p.id === cleanPerson.id)
-      ) {
-        duplicateWarnings.push("Baylor ID already exists");
-      }
-
-      // After cleaning
-      // Enforce schema
-      const schema = normalizedSchema.tables[collection_name];
-      if (schema) {
-        Object.keys(schema.fields).forEach((key) => {
-          if (cleanPerson[key] === undefined) {
-            cleanPerson[key] = null; // Or default value from schema
-          }
-        });
-        // Remove extra fields
-        Object.keys(cleanPerson).forEach((key) => {
-          if (!schema.fields[key]) delete cleanPerson[key];
-        });
-      }
-
-      return {
-        cleanData: cleanPerson,
-        warnings: duplicateWarnings,
-        isValid: duplicateWarnings.length === 0,
-      };
-    }
-
-    case "schedules": {
-      return {
-        cleanData: standardizeSchedule(data),
-        warnings: [],
-        isValid: true,
-      };
-    }
-
-    default: {
-      return {
-        cleanData: data,
-        warnings: [],
-        isValid: true,
-      };
-    }
-  }
-};
-
-/**
- * Find people by email
- */
-const findPeopleByEmail = async (email) => {
-  if (!email) return [];
-
-  const peopleSnapshot = await getDocs(
-    query(
-      collection(db, "people"),
-      where("email", "==", email.toLowerCase().trim()),
-    ),
-  );
-  return peopleSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-};
-
-const findPeopleByBaylorId = async (baylorId) => {
-  if (!baylorId) return [];
-
-  const peopleSnapshot = await getDocs(
-    query(collection(db, "people"), where("baylorId", "==", baylorId)),
-  );
-  return peopleSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-};
 
 // ---------------------------------------------------------------------------
 // SCHEDULE IDENTITY BACKFILL
@@ -3637,6 +3425,49 @@ const buildCanonicalStudentJob = ({
   return hasMeaningfulData ? canonicalJob : null;
 };
 
+const LEGACY_STUDENT_JOB_MIRROR_FIELDS = [
+  "jobTitle",
+  "supervisor",
+  "supervisorId",
+  "hourlyRate",
+];
+
+const backfillLegacyStudentJobMirrors = (jobs = [], source = {}) => {
+  if (!Array.isArray(jobs) || jobs.length === 0) {
+    return { jobs, changed: false };
+  }
+
+  const sourceJobTitle = normalizeLegacyString(source.jobTitle);
+  const matchingIndex = sourceJobTitle
+    ? jobs.findIndex(
+        (job) =>
+          normalizeLegacyString(job?.jobTitle).toLowerCase() ===
+          sourceJobTitle.toLowerCase(),
+      )
+    : -1;
+  const targetIndex = matchingIndex >= 0 ? matchingIndex : 0;
+  const currentTarget =
+    jobs[targetIndex] && typeof jobs[targetIndex] === "object"
+      ? jobs[targetIndex]
+      : {};
+  const nextTarget = { ...currentTarget };
+  let changed = false;
+
+  LEGACY_STUDENT_JOB_MIRROR_FIELDS.forEach((field) => {
+    if (!hasNonEmptyValue(source[field]) || hasNonEmptyValue(nextTarget[field])) {
+      return;
+    }
+    nextTarget[field] = normalizeLegacyString(source[field]);
+    changed = true;
+  });
+
+  if (!changed) return { jobs, changed: false };
+  const nextJobs = jobs.map((job, index) =>
+    index === targetIndex ? nextTarget : job,
+  );
+  return { jobs: nextJobs, changed: true };
+};
+
 const cleanSemesterScheduleEntry = (entry = {}, person = {}) => {
   if (!entry || typeof entry !== "object") {
     return {
@@ -3647,7 +3478,7 @@ const cleanSemesterScheduleEntry = (entry = {}, person = {}) => {
 
   const cleaned = { ...entry };
   let changed = false;
-  const jobs = Array.isArray(cleaned.jobs) ? cleaned.jobs : [];
+  let jobs = Array.isArray(cleaned.jobs) ? cleaned.jobs : [];
   const hasEntryLegacyMirror =
     hasNonEmptyValue(cleaned.jobTitle) ||
     hasNonEmptyValue(cleaned.supervisor) ||
@@ -3669,7 +3500,15 @@ const cleanSemesterScheduleEntry = (entry = {}, person = {}) => {
       endDate: cleaned.endDate || person.endDate,
     });
     if (synthesizedEntryJob) {
-      cleaned.jobs = [synthesizedEntryJob];
+      jobs = [synthesizedEntryJob];
+      cleaned.jobs = jobs;
+      changed = true;
+    }
+  } else {
+    const backfilled = backfillLegacyStudentJobMirrors(jobs, cleaned);
+    if (backfilled.changed) {
+      jobs = backfilled.jobs;
+      cleaned.jobs = jobs;
       changed = true;
     }
   }
@@ -3761,6 +3600,14 @@ const buildPersonLegacyFixUpdates = (person = {}) => {
         addTouched("jobs");
         addTouched("student_payload_promoted_to_job");
       }
+    } else {
+      const backfilled = backfillLegacyStudentJobMirrors(currentJobs, person);
+      if (backfilled.changed) {
+        canonicalJobs = backfilled.jobs;
+        updates.jobs = canonicalJobs;
+        addTouched("jobs");
+        addTouched("student_payload_backfilled_to_job");
+      }
     }
 
     if (person.semesterSchedules && typeof person.semesterSchedules === "object") {
@@ -3827,19 +3674,70 @@ const detectLegacyModelIssues = (people = [], schedules = [], programs = []) => 
   // is always canonicalized before the flags that back it are removed.
   if (Array.isArray(programs) && programs.length > 0) {
     const directorPlan = buildDirectorMigrationPlan(people, programs);
+    const includedManualReviews = new Set();
+    const manualReviewByProgramId = new Map();
+    [...directorPlan.manualReview, ...directorPlan.orphaned].forEach((entry) => {
+      if (!entry?.programId) return;
+      if (!manualReviewByProgramId.has(entry.programId)) {
+        manualReviewByProgramId.set(entry.programId, []);
+      }
+      manualReviewByProgramId.get(entry.programId).push(entry);
+    });
     directorPlan.programUpdates.forEach((update) => {
+      const manualReview = manualReviewByProgramId.get(update.programId) || [];
+      directorPlan.manualReview
+        .filter((entry) => entry?.programId === update.programId)
+        .forEach((entry) => includedManualReviews.add(entry));
+      const autoFixable = manualReview.length === 0;
       issues.push({
         id: `legacy-program-directors:${update.programId}`,
         type: "legacy_program_director_fields",
         recordType: "programs",
         record: { id: update.programId, name: update.programName },
         touchedFields: ["directors", "updIds", "updId"],
-        message: `Program ${update.programName || update.programId} carries legacy UPD fields or non-canonical director data.`,
-        updates: {
-          directors: update.directors,
-          updIds: deleteField(),
-          updId: deleteField(),
+        message: autoFixable
+          ? `Program ${update.programName || update.programId} carries legacy UPD fields or non-canonical director data.`
+          : `Program ${update.programName || update.programId} has legacy director assignments requiring manual review.`,
+        autoFixable,
+        ...(manualReview.length > 0 ? { manualReview } : {}),
+        ...(autoFixable
+          ? {
+              updates: {
+                directors: update.directors,
+                updIds: deleteField(),
+                updId: deleteField(),
+              },
+            }
+          : {}),
+      });
+    });
+
+    const standaloneManualReviews = new Map();
+    directorPlan.manualReview.forEach((entry) => {
+      if (includedManualReviews.has(entry)) return;
+      const personId = entry?.sourcePersonId || entry?.personId;
+      if (!personId) return;
+      if (!standaloneManualReviews.has(personId)) {
+        standaloneManualReviews.set(personId, []);
+      }
+      standaloneManualReviews.get(personId).push(entry);
+    });
+    standaloneManualReviews.forEach((manualReview, personId) => {
+      const cleanup = directorPlan.manualReviewCleanups.find(
+        (entry) => entry.personId === personId,
+      );
+      issues.push({
+        id: `legacy-person-director-review:${personId}`,
+        type: "legacy_person_director_flag",
+        recordType: "people",
+        record: {
+          id: personId,
+          name: cleanup?.personName || manualReview[0]?.personName || "",
         },
+        touchedFields: ["isUPD"],
+        message: `Person ${cleanup?.personName || manualReview[0]?.personName || personId} has a legacy director assignment requiring manual review.`,
+        autoFixable: false,
+        manualReview,
       });
     });
     directorPlan.peopleCleanups.forEach((cleanup) => {
@@ -3850,6 +3748,7 @@ const detectLegacyModelIssues = (people = [], schedules = [], programs = []) => 
         record: { id: cleanup.personId, name: cleanup.personName },
         touchedFields: ["isUPD"],
         message: `Person ${cleanup.personName} carries the legacy isUPD flag.`,
+        autoFixable: true,
         updates: { isUPD: deleteField() },
       });
     });
@@ -3870,6 +3769,7 @@ const detectLegacyModelIssues = (people = [], schedules = [], programs = []) => 
       },
       touchedFields,
       message: `Schedule ${schedule.id} contains legacy mirrored fields.`,
+      autoFixable: true,
       updates,
     });
   });
@@ -3891,6 +3791,7 @@ const detectLegacyModelIssues = (people = [], schedules = [], programs = []) => 
       },
       touchedFields,
       message: `Person ${person.id} contains legacy identity or payload fields.`,
+      autoFixable: true,
       updates,
     });
   });
@@ -4043,6 +3944,12 @@ export const scanDataHealth = async () => {
       : Math.max(0, Math.round(100 - (totalIssues / totalRecords) * 100));
 
   // Count auto-fixable issues
+  const autoFixableLegacyModelIssues = legacyModelIssues.filter(
+    (issue) =>
+      issue?.autoFixable !== false &&
+      issue?.updates &&
+      Object.keys(issue.updates).length > 0,
+  );
   const autoFixable = {
     highConfidencePeopleDuplicates: highConfidencePeopleDuplicates.length,
     highConfidenceScheduleDuplicates: highConfidenceScheduleDuplicates.length,
@@ -4055,7 +3962,7 @@ export const scanDataHealth = async () => {
     orphanedSpaceLinks: orphanedIssues.filter(
       (i) => i.type === "orphaned_space",
     ).length,
-    legacyModelIssues: legacyModelIssues.length,
+    legacyModelIssues: autoFixableLegacyModelIssues.length,
   };
 
   const blockingSummary = {
@@ -4381,8 +4288,6 @@ export const autoFixAllIssues = async (options = {}) => {
 };
 
 export {
-  standardizePerson,
-  standardizeSchedule,
   buildScheduleLegacyFixUpdates,
   buildPersonLegacyFixUpdates,
   detectLegacyModelIssues,

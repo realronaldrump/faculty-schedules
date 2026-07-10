@@ -41,6 +41,45 @@ export const WHATS_NEW_STORAGE_KEY = "whatsNewLastSeenVersion";
 
 export const RELEASES = [
   {
+    version: 10,
+    date: "2026-07-10T12:00:00-06:00",
+    title: "Safer imports and cleaner data",
+    summary:
+      "Imports now preserve stable identifiers, block contradictory rows, and handle schedules, cleanup reviews, and legacy data more safely.",
+    highlights: [
+      {
+        icon: ShieldCheck,
+        title: "Safer import previews",
+        description:
+          "The Import Wizard now blocks contradictory identities, preserves CLSS and CRN matches while merging duplicate rows, and validates both new and updated records.",
+      },
+      {
+        icon: CalendarCheck,
+        title: "More accurate schedule checks",
+        description:
+          "Conflict checks now include updated classes, weekend meeting comparisons are consistent, and hybrid online and in-person classes keep their physical room assignments.",
+      },
+      {
+        icon: Wrench,
+        title: "Safer cleanup reviews",
+        description:
+          "Data Cleanup surfaces uncertain director migrations for manual review, keeps them out of routine fixes, and preserves partial student job details while modernizing older records.",
+      },
+      {
+        icon: UserCheck,
+        title: "Better status and matching accuracy",
+        description:
+          "Student worker dates are validated more strictly, ambiguous instructor names are left unmatched, and legacy default semester codes upgrade to the correct seasons.",
+      },
+      {
+        icon: Sparkles,
+        title: "Installable app polish",
+        description:
+          "The installed HSD Dashboard now launches from the correct location and includes crisp, correctly sized app icons.",
+      },
+    ],
+  },
+  {
     version: 9,
     date: "2026-07-03T10:55:00-06:00",
     title: "Program directors, upgraded",
@@ -346,8 +385,10 @@ export const LATEST_RELEASE = RELEASES[0];
 export const getLastSeenVersion = () => {
   try {
     const raw = window.localStorage.getItem(WHATS_NEW_STORAGE_KEY);
-    const parsed = Number.parseInt(raw ?? "", 10);
-    return Number.isFinite(parsed) ? parsed : 0;
+    const normalized = (raw ?? "").trim();
+    if (!/^\d+$/.test(normalized)) return 0;
+    const parsed = Number(normalized);
+    return Number.isSafeInteger(parsed) ? parsed : 0;
   } catch (error) {
     console.error("Failed to read What's New seen-state", error);
     // Fail closed: if storage is unavailable a dismissal can't persist either,

@@ -67,23 +67,40 @@ const buildSummary = (transaction) => {
 const buildNormalizationReport = (transaction) => {
   const previewSummary = transaction.previewSummary || {};
   const metadata = transaction.importMetadata || {};
+  const preprocess = transaction.preprocessReport || {};
 
   // Count skipped rows by reason
   const skippedReasons = {};
   const validation = transaction.validation || {};
+  const preprocessingWarnings = Array.isArray(preprocess.warnings)
+    ? preprocess.warnings
+    : [];
+  const warnings = preprocessingWarnings.length > 0
+    ? preprocessingWarnings
+    : (validation.warnings || []);
 
-  (validation.warnings || []).forEach(warning => {
-    if (warning.message?.includes('Skipped')) {
-      const reason = extractSkipReason(warning.message);
+  warnings.forEach(warning => {
+    const message = typeof warning === 'string' ? warning : warning?.message;
+    if (message?.includes('Skipped')) {
+      const reason = extractSkipReason(message);
       skippedReasons[reason] = (skippedReasons[reason] || 0) + 1;
     }
   });
 
+  const firstDefined = (...values) => values.find(
+    (value) => value !== undefined && value !== null
+  );
+
   return {
-    rowsProcessed: previewSummary.rowsProcessed || metadata.rowCount || 0,
-    rowsValid: previewSummary.rowsValid || 0,
-    rowsSkipped: previewSummary.rowsSkipped || 0,
-    rowsInvalid: previewSummary.rowsInvalid || 0,
+    rowsProcessed: firstDefined(preprocess.totalRows, previewSummary.rowsProcessed, metadata.rowCount, 0),
+    rowsValid: firstDefined(preprocess.validRows, previewSummary.rowsValid, 0),
+    rowsSkipped: firstDefined(preprocess.skippedRows, previewSummary.rowsSkipped, 0),
+    rowsInvalid: firstDefined(
+      preprocess.invalidRows,
+      previewSummary.rowsInvalid,
+      Array.isArray(preprocess.errors) ? preprocess.errors.length : undefined,
+      0
+    ),
     skippedReasons
   };
 };
@@ -94,14 +111,15 @@ const buildNormalizationReport = (transaction) => {
 const buildDuplicatePreventionReport = (transaction) => {
   const previewSummary = transaction.previewSummary || {};
   const validation = transaction.validation || {};
+  const preprocess = transaction.preprocessReport || {};
 
   // Count within-batch duplicates from warnings
-  let withinBatchDuplicates = 0;
-  (validation.warnings || []).forEach(warning => {
-    if (warning.type === 'within_batch_duplicate') {
-      withinBatchDuplicates++;
-    }
-  });
+  const fallbackDuplicateCount = (validation.warnings || []).reduce((count, warning) => (
+    warning?.type === 'within_batch_duplicate' ? count + 1 : count
+  ), 0);
+  const withinBatchDuplicates = Number.isFinite(preprocess.withinBatchDuplicates)
+    ? preprocess.withinBatchDuplicates
+    : fallbackDuplicateCount;
 
   // Count matched existing records
   const schedulesUpdated = transaction.changes?.schedules?.modified?.length || 0;
@@ -109,7 +127,11 @@ const buildDuplicatePreventionReport = (transaction) => {
 
   return {
     withinBatchDuplicates,
-    withinBatchMerged: previewSummary.withinBatchMerged || 0,
+    withinBatchMerged: Number.isFinite(preprocess.withinBatchDuplicates)
+      ? preprocess.withinBatchDuplicates
+      : (Number.isFinite(previewSummary.withinBatchMerged)
+          ? previewSummary.withinBatchMerged
+          : withinBatchDuplicates),
     matchedExisting: schedulesUpdated + peopleMatchedExisting,
     identityKeysGenerated: countIdentityKeys(transaction)
   };

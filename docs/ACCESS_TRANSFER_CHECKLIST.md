@@ -19,7 +19,7 @@ Use this checklist during handoff.
 ## Firebase / Google Cloud
 
 - [ ] Grant Firebase roles to maintainers.
-- [ ] Verify Firestore, Storage, and Auth access.
+- [ ] Verify Firestore and Auth access.
 - [ ] Confirm ability to view logs and usage.
 - [ ] Confirm who can deploy rules and indexes.
 

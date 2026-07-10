@@ -17,7 +17,7 @@ export default defineConfig({
           if (packageName === 'firebase') {
             const firebaseService = packageSegments[1] || 'app'
             if (
-              ['app', 'auth', 'firestore', 'functions', 'storage'].includes(
+              ['app', 'auth', 'firestore', 'functions'].includes(
                 firebaseService,
               )
             ) {

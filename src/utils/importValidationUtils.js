@@ -14,6 +14,33 @@ import {
 import { detectTeachingConflicts } from './hygieneCore';
 
 /**
+ * Return row-level preprocessing errors that make an import unsafe to apply.
+ * These errors are produced before change selection, so they cannot be safely
+ * cleared by deselecting an individual generated change.
+ */
+export const getBlockingPreprocessErrors = (transaction) => {
+  const errors = transaction?.preprocessReport?.errors;
+  if (!Array.isArray(errors)) return [];
+
+  return errors
+    .map((error) => {
+      if (typeof error === 'string') return error.trim();
+      return typeof error?.message === 'string' ? error.message.trim() : '';
+    })
+    .filter(Boolean);
+};
+
+export const assertNoBlockingPreprocessErrors = (transaction) => {
+  const errors = getBlockingPreprocessErrors(transaction);
+  if (errors.length === 0) return;
+
+  const examples = errors.slice(0, 3).join(' | ');
+  throw new Error(
+    `Cannot commit import: preprocessing found ${errors.length} blocking error${errors.length === 1 ? '' : 's'}. ${examples}`,
+  );
+};
+
+/**
  * Validate an import transaction before commit
  *
  * @param {ImportTransaction} transaction - The transaction to validate
@@ -127,6 +154,39 @@ export const validateImportTransaction = (transaction, existingData = {}) => {
       });
     });
   });
+
+  const validateModifiedRecords = (collection, validator) => {
+    (transaction.changes?.[collection]?.modified || []).forEach((change) => {
+      const updates = change?.newData;
+      const original = change?.originalData;
+      if (!updates || !original) return;
+
+      const merged = { ...original, ...updates };
+      const result = validator(merged);
+      result.errors.forEach((message) => {
+        errors.push({
+          changeId: change.id,
+          collection,
+          field: extractFieldFromError(message),
+          message,
+        });
+      });
+      result.warnings.forEach((message) => {
+        warnings.push({
+          changeId: change.id,
+          collection,
+          field: extractFieldFromError(message),
+          message,
+        });
+      });
+    });
+  };
+
+  validateModifiedRecords('people', (person) =>
+    validatePerson(person, { requireCreatedAt: false }),
+  );
+  validateModifiedRecords('rooms', validateSpace);
+  validateModifiedRecords('schedules', validateSection);
 
   // 4. Cross-reference validation: Check instructor references
   const crossRefWarnings = validateCrossReferences(
@@ -245,37 +305,59 @@ const validateCrossReferences = (transaction, lookups) => {
 const validateTeachingConflicts = (transaction, existingSchedules) => {
   const warnings = [];
 
-  // Get all new schedules
-  const newSchedules = (transaction.changes?.schedules?.added || []).map(c => c.newData).filter(Boolean);
+  // Check both additions and the post-update shape of modifications. Exclude
+  // modified originals from the existing-data side so a schedule cannot
+  // conflict with its own previous version.
+  const newSchedules = (transaction.changes?.schedules?.added || [])
+    .map(c => c.newData)
+    .filter(Boolean);
+  const modifiedSchedules = (transaction.changes?.schedules?.modified || [])
+    .filter((change) => change?.originalData && change?.newData)
+    .map((change) => ({ ...change.originalData, ...change.newData }));
+  const changedSchedules = [...newSchedules, ...modifiedSchedules];
 
-  if (newSchedules.length === 0) {
+  if (changedSchedules.length === 0) {
     return warnings;
   }
 
   // Combine with existing schedules for the same term(s)
-  const termCodes = new Set(newSchedules.map(s => s.termCode).filter(Boolean));
-  const relevantExisting = existingSchedules.filter(s => termCodes.has(s.termCode));
+  const termCodes = new Set(changedSchedules.map(s => s.termCode).filter(Boolean));
+  const modifiedIds = new Set(
+    modifiedSchedules.map((schedule) => schedule?.id).filter(Boolean),
+  );
+  const relevantExisting = existingSchedules.filter(
+    (schedule) =>
+      termCodes.has(schedule.termCode) &&
+      (!schedule.id || !modifiedIds.has(schedule.id)),
+  );
 
-  const allSchedules = [...relevantExisting, ...newSchedules];
+  const allSchedules = [...relevantExisting, ...changedSchedules];
+  const changedScheduleSet = new Set(changedSchedules);
 
   // Use existing conflict detection
   try {
     const conflicts = detectTeachingConflicts(allSchedules, { includeNewOnly: true });
 
     conflicts.forEach(conflict => {
-      // Only warn about conflicts involving new schedules
-      const involvesNew = newSchedules.some(ns =>
-        conflict.scheduleIds?.includes(ns.identityKey) ||
-        conflict.schedule1?.identityKey === ns.identityKey ||
-        conflict.schedule2?.identityKey === ns.identityKey
-      );
+      // Only warn about conflicts involving an added or modified schedule.
+      const conflictSchedules = Array.isArray(conflict.schedules)
+        ? conflict.schedules
+        : [conflict.schedule1, conflict.schedule2].filter(Boolean);
+      const involvesNew = conflictSchedules.some((schedule) => (
+        changedScheduleSet.has(schedule) ||
+        changedSchedules.some((changedSchedule) => (
+          (schedule?.id && schedule.id === changedSchedule?.id) ||
+          (schedule?.identityKey && schedule.identityKey === changedSchedule?.identityKey)
+        ))
+      ));
 
       if (involvesNew) {
         warnings.push({
           type: 'potential_teaching_conflict',
           collection: 'schedules',
           severity: 'medium',
-          message: `Potential teaching conflict: ${conflict.instructorName || 'instructor'} may be double-booked on ${conflict.day} at ${conflict.overlapStart}-${conflict.overlapEnd}`
+          message: conflict.reason ||
+            `Potential teaching conflict for ${conflict.instructorId || 'instructor'} on ${conflict.day}: ${conflict.overlapDescription || 'overlapping meeting times'}`
         });
       }
     });
@@ -364,8 +446,11 @@ const validateModifications = (transaction) => {
  */
 const buildValidationSummary = (transaction, errors, warnings) => {
   const schedulesAdded = transaction.changes?.schedules?.added?.length || 0;
+  const schedulesModified = transaction.changes?.schedules?.modified?.length || 0;
   const peopleAdded = transaction.changes?.people?.added?.length || 0;
+  const peopleModified = transaction.changes?.people?.modified?.length || 0;
   const roomsAdded = transaction.changes?.rooms?.added?.length || 0;
+  const roomsModified = transaction.changes?.rooms?.modified?.length || 0;
 
   const countInvalidChanges = (collection, addedCount) => {
     const scoped = errors
@@ -383,18 +468,21 @@ const buildValidationSummary = (transaction, errors, warnings) => {
     return Math.min(scopedInvalid + estimatedUnscopedInvalid, addedCount);
   };
 
-  const schedulesInvalid = countInvalidChanges('schedules', schedulesAdded);
-  const peopleInvalid = countInvalidChanges('people', peopleAdded);
-  const roomsInvalid = countInvalidChanges('rooms', roomsAdded);
+  const schedulesTotal = schedulesAdded + schedulesModified;
+  const peopleTotal = peopleAdded + peopleModified;
+  const roomsTotal = roomsAdded + roomsModified;
+  const schedulesInvalid = countInvalidChanges('schedules', schedulesTotal);
+  const peopleInvalid = countInvalidChanges('people', peopleTotal);
+  const roomsInvalid = countInvalidChanges('rooms', roomsTotal);
 
   return {
     errorCount: errors.length,
     warningCount: warnings.length,
-    schedulesValid: Math.max(0, schedulesAdded - schedulesInvalid),
+    schedulesValid: Math.max(0, schedulesTotal - schedulesInvalid),
     schedulesInvalid,
-    peopleValid: Math.max(0, peopleAdded - peopleInvalid),
+    peopleValid: Math.max(0, peopleTotal - peopleInvalid),
     peopleInvalid,
-    roomsValid: Math.max(0, roomsAdded - roomsInvalid),
+    roomsValid: Math.max(0, roomsTotal - roomsInvalid),
     roomsInvalid,
     orphanedReferences: warnings.filter(w => w.type === 'orphaned_reference').length,
     potentialConflicts: warnings.filter(w => w.type === 'potential_teaching_conflict').length

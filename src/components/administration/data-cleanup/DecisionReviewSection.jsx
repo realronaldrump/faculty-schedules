@@ -424,23 +424,45 @@ const DecisionReviewSection = ({
                         .replace(/s$/, "");
                       const recordLabel = getLegacyIssueRecordLabel(item);
                       const fieldSummary = formatLegacyIssueFields(item);
+                      const requiresManualReview = item?.autoFixable === false;
+                      const reviewReasons = toArray(item?.manualReview)
+                        .map((entry) => entry?.reason)
+                        .filter(Boolean)
+                        .join(" ");
 
                       return (
                         <IssueCard
                           key={`${issueKey}:${index}`}
                           title={`${recordLabel}: older ${recordType} format`}
-                          note={`This entry still has ${fieldSummary}. Routine cleanup can usually refresh it.`}
+                          note={
+                            requiresManualReview
+                              ? `This entry still has ${fieldSummary}. Routine cleanup will leave it unchanged. Use “Migrate program directors” in Rare repair tools below to preview the conflict.${reviewReasons ? ` ${reviewReasons}` : ""}`
+                              : `This entry still has ${fieldSummary}. Routine cleanup can usually refresh it.`
+                          }
                         >
                           <ButtonRow>
-                            <ActionButton
-                              variant="primary"
-                              onClick={onRunSafeFix}
-                              disabled={isFixingSafe}
-                            >
-                              {isFixingSafe
-                                ? "Cleaning up..."
-                                : "Clean up routine items"}
-                            </ActionButton>
+                            {requiresManualReview ? (
+                              <ActionButton
+                                onClick={() =>
+                                  onCopyValue(
+                                    JSON.stringify(item?.manualReview || item),
+                                    "Director migration review details",
+                                  )
+                                }
+                              >
+                                Copy review details
+                              </ActionButton>
+                            ) : (
+                              <ActionButton
+                                variant="primary"
+                                onClick={onRunSafeFix}
+                                disabled={isFixingSafe}
+                              >
+                                {isFixingSafe
+                                  ? "Cleaning up..."
+                                  : "Clean up routine items"}
+                              </ActionButton>
+                            )}
                           </ButtonRow>
                         </IssueCard>
                       );

@@ -227,12 +227,47 @@ export const resolvePersonIdentityMatch = (personOrIdentity, index, options = {}
     ? (identity.strongKeys || []).filter(Boolean)
     : (identity.keys || []).filter(Boolean);
 
+  const matches = [];
   for (const key of keys) {
     if (index.has(key)) {
-      return { person: index.get(key).person, matchedKey: key, identity };
+      matches.push({ key, person: index.get(key).person });
     }
   }
-  return { person: null, matchedKey: '', identity };
+
+  const candidates = [];
+  const candidateIds = new Set();
+  matches.forEach(({ person }) => {
+    if (!person) return;
+    const id = normalizeString(person.id);
+    if (id) {
+      if (candidateIds.has(id)) return;
+      candidateIds.add(id);
+    } else if (candidates.includes(person)) {
+      return;
+    }
+    candidates.push(person);
+  });
+
+  if (candidates.length > 1) {
+    return {
+      person: null,
+      matchedKey: '',
+      matchedKeys: matches.map(({ key }) => key),
+      identity,
+      ambiguous: true,
+      candidates,
+      conflicts: matches,
+    };
+  }
+
+  return {
+    person: candidates[0] || null,
+    matchedKey: matches[0]?.key || '',
+    matchedKeys: matches.map(({ key }) => key),
+    identity,
+    ambiguous: false,
+    candidates,
+  };
 };
 
 const mergeExternalIdsForImport = (existing = {}, incoming = {}) => {

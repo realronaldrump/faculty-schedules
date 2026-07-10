@@ -13,16 +13,14 @@
  */
 
 import {
-  collection,
   doc,
-  getDocs,
   onSnapshot,
   serverTimestamp,
   setDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
-export const TUTORIAL_PROGRESS_COLLECTION = "tutorialProgress";
+const TUTORIAL_PROGRESS_COLLECTION = "tutorialProgress";
 
 const tutorialDocRef = (uid) => doc(db, TUTORIAL_PROGRESS_COLLECTION, uid);
 
@@ -143,10 +141,4 @@ export const resetTutorialProgress = async (actor) => {
     },
     { merge: false },
   );
-};
-
-/** Admin-only: read every user's progress document. */
-export const fetchAllTutorialProgress = async () => {
-  const snapshot = await getDocs(collection(db, TUTORIAL_PROGRESS_COLLECTION));
-  return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
 };

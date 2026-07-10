@@ -1158,7 +1158,10 @@ const usePeopleOperations = () => {
         );
         return false;
       }
-      if (!person) {
+      // Assignments require a live person record. Removal only needs the
+      // canonical program-side pair, which lets admins clean up a dangling
+      // director reference after its person document has already disappeared.
+      if (assign && !person) {
         showNotification(
           "error",
           "Person Not Found",
@@ -1166,6 +1169,7 @@ const usePeopleOperations = () => {
         );
         return false;
       }
+      const personLabel = person?.name || personId || "This person";
       if (assign) {
         const eligibilityError = getDirectorEligibilityError(person);
         if (eligibilityError) {
@@ -1176,7 +1180,7 @@ const usePeopleOperations = () => {
           showNotification(
             "info",
             "Already Assigned",
-            `${person.name || "This person"} is already a ${roleLabel} for ${program.name}.`,
+            `${personLabel} is already a ${roleLabel} for ${program.name}.`,
           );
           return false;
         }
@@ -1184,7 +1188,7 @@ const usePeopleOperations = () => {
         showNotification(
           "info",
           "Not Assigned",
-          `${person.name || "This person"} is not currently a ${roleLabel} for ${program.name}.`,
+          `${personLabel} is not currently a ${roleLabel} for ${program.name}.`,
         );
         return false;
       }
@@ -1202,7 +1206,7 @@ const usePeopleOperations = () => {
         await updateDoc(doc(db, COLLECTIONS.PROGRAMS, programId), updateData);
 
         await logUpdate(
-          `Program Director ${assign ? "Assigned" : "Removed"} - ${program.name}: ${person.name || personId} (${roleLabel})`,
+          `Program Director ${assign ? "Assigned" : "Removed"} - ${program.name}: ${personLabel} (${roleLabel})`,
           COLLECTIONS.PROGRAMS,
           programId,
           updateData,
@@ -1216,8 +1220,8 @@ const usePeopleOperations = () => {
           "success",
           assign ? "Director Assigned" : "Director Removed",
           assign
-            ? `${person.name || "Person"} is now a ${roleLabel} for ${program.name}.`
-            : `${person.name || "Person"} is no longer a ${roleLabel} for ${program.name}.`,
+            ? `${personLabel} is now a ${roleLabel} for ${program.name}.`
+            : `${personLabel} is no longer a ${roleLabel} for ${program.name}.`,
         );
         return true;
       } catch (error) {

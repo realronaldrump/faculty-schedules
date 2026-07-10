@@ -273,14 +273,63 @@ export const buildScheduleIdentityIndex = (schedules = []) => {
 
 export const resolveScheduleIdentityMatch = (identityKeys, index) => {
   if (!Array.isArray(identityKeys) || identityKeys.length === 0) {
-    return { schedule: null, matchedKey: null };
+    return {
+      schedule: null,
+      matchedKey: null,
+      matchedKeys: [],
+      ambiguous: false,
+      candidates: [],
+    };
   }
+
+  const matches = [];
   for (const key of identityKeys) {
     if (index.has(key)) {
-      return { schedule: index.get(key).schedule, matchedKey: key };
+      matches.push({ key, schedule: index.get(key).schedule });
     }
   }
-  return { schedule: null, matchedKey: null };
+
+  // Composite identities are intentionally a last-resort fallback. They can
+  // collide for distinct sections of the same course that share a room and
+  // meeting pattern, so they must not overrule a stable CLSS/CRN/section match.
+  const stableMatches = matches.filter(
+    ({ key }) => !String(key).startsWith("composite:"),
+  );
+  const authoritativeMatches =
+    stableMatches.length > 0 ? stableMatches : matches;
+
+  const candidates = [];
+  const candidateIds = new Set();
+  authoritativeMatches.forEach(({ schedule }) => {
+    if (!schedule) return;
+    const id = normalizeString(schedule.id);
+    if (id) {
+      if (candidateIds.has(id)) return;
+      candidateIds.add(id);
+    } else if (candidates.includes(schedule)) {
+      return;
+    }
+    candidates.push(schedule);
+  });
+
+  if (candidates.length > 1) {
+    return {
+      schedule: null,
+      matchedKey: null,
+      matchedKeys: authoritativeMatches.map(({ key }) => key),
+      ambiguous: true,
+      candidates,
+      conflicts: authoritativeMatches,
+    };
+  }
+
+  return {
+    schedule: candidates[0] || null,
+    matchedKey: authoritativeMatches[0]?.key || null,
+    matchedKeys: authoritativeMatches.map(({ key }) => key),
+    ambiguous: false,
+    candidates,
+  };
 };
 
 export const buildScheduleDocId = (identity) => {

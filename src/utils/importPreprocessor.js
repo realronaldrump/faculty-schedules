@@ -62,6 +62,105 @@ const readDirectoryField = (row = {}, headers = []) => {
   return '';
 };
 
+const groupRowsByOverlappingIdentityKeys = (
+  rows = [],
+  selectKeys = () => [],
+  exclusiveIdentityTypes = []
+) => {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const exclusiveTypes = new Set(exclusiveIdentityTypes);
+  const parents = safeRows.map((_, index) => index);
+  const find = (index) => {
+    let root = index;
+    while (parents[root] !== root) root = parents[root];
+    while (parents[index] !== index) {
+      const next = parents[index];
+      parents[index] = root;
+      index = next;
+    }
+    return root;
+  };
+  const keysByRow = safeRows.map((row) => Array.from(
+    new Set((selectKeys(row) || []).map((key) => String(key || '').trim()).filter(Boolean))
+  ));
+  const union = (left, right) => {
+    const leftRoot = find(left);
+    const rightRoot = find(right);
+    if (leftRoot === rightRoot) return;
+    const root = Math.min(leftRoot, rightRoot);
+    parents[leftRoot] = root;
+    parents[rightRoot] = root;
+  };
+
+  const keyOwners = new Map();
+  keysByRow.forEach((keys, index) => {
+    keys.forEach((key) => {
+      if (keyOwners.has(key)) {
+        union(index, keyOwners.get(key));
+      } else {
+        keyOwners.set(key, index);
+      }
+    });
+  });
+
+  const componentIndexesByRoot = new Map();
+  const unkeyedRows = [];
+  safeRows.forEach((row, index) => {
+    if (keysByRow[index].length === 0) {
+      unkeyedRows.push(row);
+      return;
+    }
+    const root = find(index);
+    if (!componentIndexesByRoot.has(root)) componentIndexesByRoot.set(root, []);
+    componentIndexesByRoot.get(root).push(index);
+  });
+
+  const identityGroups = new Map();
+  const conflicts = [];
+  componentIndexesByRoot.forEach((indexes, root) => {
+    const valuesByType = new Map();
+    indexes.forEach((index) => {
+      keysByRow[index].forEach((key) => {
+        const separatorIndex = key.indexOf(':');
+        const type = separatorIndex >= 0 ? key.slice(0, separatorIndex) : key;
+        if (!exclusiveTypes.has(type)) return;
+        if (!valuesByType.has(type)) valuesByType.set(type, new Set());
+        valuesByType.get(type).add(key);
+      });
+    });
+    const conflictingTypes = Array.from(exclusiveTypes).filter(
+      (type) => (valuesByType.get(type)?.size || 0) > 1
+    );
+    const componentRows = indexes.map((index) => safeRows[index]);
+
+    if (conflictingTypes.length > 0) {
+      conflicts.push({ rows: componentRows, conflictingTypes });
+      indexes.forEach((index) => {
+        const row = safeRows[index];
+        const label = row?.__identityKey || keysByRow[index]?.[0] || `identity-row-${index}`;
+        identityGroups.set(`${label}#${index}`, [row]);
+      });
+      return;
+    }
+
+    const label = componentRows[0]?.__identityKey || keysByRow[root]?.[0] || `identity-group-${root}`;
+    identityGroups.set(`${label}#${root}`, componentRows);
+  });
+  return { identityGroups, unkeyedRows, conflicts };
+};
+
+const selectScheduleGroupingKeys = (row) =>
+  (Array.isArray(row?.__identityKeys) ? row.__identityKeys : []).filter(
+    (key) => !String(key).startsWith('composite:')
+  );
+
+const selectPersonStrongIdentityKeys = (row) =>
+  (Array.isArray(row?.__identityKeys) ? row.__identityKeys : []).filter(
+    (key) => !String(key).startsWith('name:')
+  );
+
+const displayIdentityGroupKey = (key) => String(key || '').replace(/#\d+$/, '');
+
 /**
  * Preprocess all import rows, normalizing and detecting within-batch duplicates
  *
@@ -119,10 +218,6 @@ const preprocessScheduleRows = (rows, fallbackTerm) => {
   const errors = [];
   let skippedRows = 0;
 
-  // Group rows by identity key for duplicate detection
-  const identityGroups = new Map();
-  const unkeyedRows = [];
-
   rows.forEach((row, index) => {
     const rowIndex = row.__rowIndex || index + 1;
 
@@ -165,23 +260,27 @@ const preprocessScheduleRows = (rows, fallbackTerm) => {
 
       normalizedRows.push(normalizedRow);
 
-      // Track for duplicate detection
-      const primaryKey = identity.primaryKey;
-      if (primaryKey) {
-        if (!identityGroups.has(primaryKey)) {
-          identityGroups.set(primaryKey, []);
-        }
-        identityGroups.get(primaryKey).push(normalizedRow);
-      } else {
-        // Keep rows even if we can't derive an identity key yet; downstream preview will surface errors.
-        unkeyedRows.push(normalizedRow);
-      }
     } catch (err) {
       errors.push({
         rowIndex,
         message: `Error processing row ${rowIndex}: ${err.message}`
       });
     }
+  });
+
+  const { identityGroups, unkeyedRows, conflicts } = groupRowsByOverlappingIdentityKeys(
+    normalizedRows,
+    selectScheduleGroupingKeys,
+    ['clss', 'crn', 'section']
+  );
+  conflicts.forEach((conflict) => {
+    const rowIndexes = conflict.rows.map((row) => row?.__rowIndex).filter(Boolean);
+    errors.push({
+      type: 'conflicting_within_batch_identity',
+      rowIndexes,
+      conflictingTypes: conflict.conflictingTypes,
+      message: `Rows ${rowIndexes.join(', ')} share an identity key but have conflicting ${conflict.conflictingTypes.join('/')} values; keeping them separate`
+    });
   });
 
   // Merge within-batch duplicates
@@ -223,11 +322,12 @@ const mergeWithinBatchDuplicates = (identityGroups) => {
     duplicateCount += group.length - 1;
     const rowIndexes = group.map(r => r.__rowIndex).join(', ');
 
+    const identityKey = displayIdentityGroupKey(key);
     mergeWarnings.push({
       type: 'within_batch_duplicate',
-      identityKey: key,
+      identityKey,
       rowIndexes: group.map(r => r.__rowIndex),
-      message: `Rows ${rowIndexes} have same identity (${key}) - merging into single record`
+      message: `Rows ${rowIndexes} have same identity (${identityKey}) - merging into single record`
     });
 
     // Merge the group - take the most complete row as base and merge others into it
@@ -265,6 +365,21 @@ const mergeScheduleRowGroup = (group) => {
     const other = scored[i].row.baseData;
     const otherKeys = scored[i].row.__identityKeys || [];
     otherKeys.forEach((key) => key && mergedIdentityKeys.add(key));
+
+    // Preserve the strongest stable identity components even when the most
+    // content-complete row is missing one of them.
+    for (const field of [
+      'clssId',
+      'crn',
+      'courseCode',
+      'section',
+      'term',
+      'termCode'
+    ]) {
+      if (!baseData[field] && other[field]) {
+        baseData[field] = other[field];
+      }
+    }
 
     // Merge meeting patterns (combine all unique patterns)
     if (Array.isArray(other.meetingPatterns) && other.meetingPatterns.length > 0) {
@@ -404,10 +519,32 @@ const mergeScheduleRowGroup = (group) => {
     baseData.crossListCrns = Array.from(crossListSet);
   }
 
+  const mergedIdentity = deriveScheduleIdentity({
+    courseCode: baseData.courseCode,
+    section: baseData.section,
+    term: baseData.term,
+    termCode: baseData.termCode,
+    clssId: baseData.clssId,
+    crn: baseData.crn,
+    meetingPatterns: baseData.meetingPatterns,
+    spaceIds: baseData.spaceIds,
+    spaceDisplayNames: baseData.spaceDisplayNames
+  });
+  const stableMergedKeys = Array.from(mergedIdentityKeys).filter(
+    (key) => !String(key).startsWith('composite:')
+  );
+  const canonicalIdentityKeys = Array.from(new Set([
+    ...mergedIdentity.keys,
+    ...stableMergedKeys
+  ])).filter(Boolean);
+
   base.baseData = baseData;
   base.__merged = true;
   base.__mergedFromRows = group.map(r => r.__rowIndex);
-  base.__identityKeys = Array.from(mergedIdentityKeys).filter(Boolean);
+  base.__identityKey = mergedIdentity.primaryKey || canonicalIdentityKeys[0] || '';
+  base.__identityKeys = canonicalIdentityKeys;
+  base.__identitySource = mergedIdentity.source ||
+    (base.__identityKey ? base.__identityKey.split(':')[0] : '');
 
   return base;
 };
@@ -465,9 +602,7 @@ const preprocessDirectoryRows = (rows) => {
   const errors = [];
   let skippedRows = 0;
 
-  const identityGroups = new Map();
   const nameMap = new Map();
-  const unkeyedRows = [];
 
   rows.forEach((row, index) => {
     const rowIndex = row.__rowIndex || index + 1;
@@ -525,15 +660,6 @@ const preprocessDirectoryRows = (rows) => {
 
       normalizedRows.push(normalizedRow);
 
-      if (primaryKey) {
-        if (!identityGroups.has(primaryKey)) {
-          identityGroups.set(primaryKey, []);
-        }
-        identityGroups.get(primaryKey).push(normalizedRow);
-      } else {
-        unkeyedRows.push(normalizedRow);
-      }
-
       if (nameKey) {
         if (!nameMap.has(nameKey)) {
           nameMap.set(nameKey, []);
@@ -546,6 +672,21 @@ const preprocessDirectoryRows = (rows) => {
         message: `Error processing row ${rowIndex}: ${err.message}`
       });
     }
+  });
+
+  const { identityGroups, unkeyedRows, conflicts } = groupRowsByOverlappingIdentityKeys(
+    normalizedRows,
+    selectPersonStrongIdentityKeys,
+    ['baylor', 'clss-instructor', 'email', 'ignite']
+  );
+  conflicts.forEach((conflict) => {
+    const rowIndexes = conflict.rows.map((row) => row?.__rowIndex).filter(Boolean);
+    errors.push({
+      type: 'conflicting_within_batch_identity',
+      rowIndexes,
+      conflictingTypes: conflict.conflictingTypes,
+      message: `Rows ${rowIndexes.join(', ')} share a person identity key but have conflicting ${conflict.conflictingTypes.join('/')} values; keeping them separate`
+    });
   });
 
   const { dedupedRows, mergeWarnings, duplicateCount } = mergeDirectoryIdentityGroups(identityGroups);
@@ -595,11 +736,12 @@ const mergeDirectoryIdentityGroups = (identityGroups) => {
 
     duplicateCount += group.length - 1;
     const rowIndexes = group.map(r => r.__rowIndex).join(', ');
+    const identityKey = displayIdentityGroupKey(key);
     mergeWarnings.push({
       type: 'within_batch_duplicate',
-      identityKey: key,
+      identityKey,
       rowIndexes: group.map(r => r.__rowIndex),
-      message: `Rows ${rowIndexes} have the same person identity (${key}) - merging into one canonical person row`
+      message: `Rows ${rowIndexes} have the same person identity (${identityKey}) - merging into one canonical person row`
     });
     dedupedRows.push(mergeDirectoryRowGroup(group));
   }

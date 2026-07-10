@@ -50,7 +50,7 @@ const roomCapacityFor = (roomLabel, capacityByLabel) => {
 };
 
 /** Collapse per-meeting schedule rows into one record per section. */
-export const buildSections = (scheduleRows = [], term = null) => {
+const buildSections = (scheduleRows = [], term = null) => {
   const byId = new Map();
   scheduleRows.forEach((row) => {
     if (term && row.Term !== term) return;

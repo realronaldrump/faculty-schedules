@@ -399,13 +399,25 @@ export const standardizeSchedule = (schedule = {}) => {
       const baseSpaceDisplayNames = Array.isArray(schedule.spaceDisplayNames)
         ? schedule.spaceDisplayNames.map(standardizeSpaceLabel).filter(Boolean)
         : [];
+      const baseSpaceIds = Array.isArray(schedule.spaceIds)
+        ? schedule.spaceIds.filter(Boolean)
+        : [];
       const hasRoomlessLabel = baseSpaceDisplayNames.some((name) =>
         normalizeRoomlessLabel(name),
       );
+      const physicalSpaceDisplayNames = baseSpaceDisplayNames.filter(
+        (name) => !normalizeRoomlessLabel(name),
+      );
+      const hasPhysicalSpaceData =
+        baseSpaceIds.length > 0 || physicalSpaceDisplayNames.length > 0;
+      const preservePhysicalRoom =
+        schedule.locationType === "room" && hasPhysicalSpaceData;
       const locationType =
-        schedule.locationType === "no_room" ||
-        schedule.isOnline ||
-        hasRoomlessLabel
+        preservePhysicalRoom
+          ? "room"
+          : schedule.locationType === "no_room" ||
+              schedule.isOnline ||
+              hasRoomlessLabel
           ? "no_room"
           : "room";
       const locationLabel =
@@ -415,15 +427,11 @@ export const standardizeSchedule = (schedule = {}) => {
       const spaceDisplayNames =
         locationType === "no_room"
           ? []
-          : baseSpaceDisplayNames.filter(
-              (name) => !normalizeRoomlessLabel(name),
-            );
+          : physicalSpaceDisplayNames;
       const spaceIds =
         locationType === "no_room"
           ? []
-          : Array.isArray(schedule.spaceIds)
-            ? schedule.spaceIds.filter(Boolean)
-            : [];
+          : baseSpaceIds;
 
       const baseAssignments = Array.isArray(schedule.instructorAssignments)
         ? schedule.instructorAssignments
@@ -1614,7 +1622,7 @@ export const detectTeachingConflicts = (schedules = [], options = {}) => {
           ? scheduleB.meetingPatterns
           : [];
 
-        for (const patternA of patternsA) {
+        patternComparison: for (const patternA of patternsA) {
           for (const patternB of patternsB) {
             // Must be same day
             if (
@@ -1641,7 +1649,7 @@ export const detectTeachingConflicts = (schedules = [], options = {}) => {
                 likelyCause: "duplicate_schedule",
                 fix: "merge_duplicate_schedules",
               });
-              break; // Only report one conflict per schedule pair
+              break patternComparison; // Only report one conflict per schedule pair
             }
           }
         }
@@ -1650,26 +1658,4 @@ export const detectTeachingConflicts = (schedules = [], options = {}) => {
   }
 
   return conflicts;
-};
-
-/**
- * Enhanced cross-collection detection that includes teaching conflicts
- */
-export const detectAllDataIssues = (
-  people = [],
-  schedules = [],
-  rooms = [],
-  options = {},
-) => {
-  const issues = {
-    duplicates: {
-      people: detectPeopleDuplicates(people, options),
-      schedules: detectScheduleDuplicates(schedules, options),
-      rooms: detectRoomDuplicates(rooms, options),
-    },
-    orphaned: detectCrossCollectionIssues(people, schedules, rooms),
-    teachingConflicts: detectTeachingConflicts(schedules, options),
-  };
-
-  return issues;
 };

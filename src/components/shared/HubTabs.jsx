@@ -18,18 +18,23 @@ const HubTabs = ({ tabs, activeTab, onChange, dataTutorialPrefix, className = ""
   if (!tabs || tabs.length <= 1) return null;
 
   return (
-    <div className={`flex flex-wrap gap-2 ${className}`}>
+    <nav
+      className={`-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 ${className}`}
+      aria-label="Page views"
+    >
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = tab.id === activeTab;
         return (
           <button
+            type="button"
             key={tab.id}
+            aria-pressed={isActive}
             data-tutorial={
               dataTutorialPrefix ? `${dataTutorialPrefix}${tab.id}` : undefined
             }
             onClick={() => onChange(tab.id)}
-            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm border transition-colors ${
+            className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors ${
               isActive
                 ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
                 : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
@@ -40,7 +45,7 @@ const HubTabs = ({ tabs, activeTab, onChange, dataTutorialPrefix, className = ""
           </button>
         );
       })}
-    </div>
+    </nav>
   );
 };
 

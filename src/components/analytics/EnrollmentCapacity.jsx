@@ -212,19 +212,24 @@ const EnrollmentCapacity = () => {
         subtitle="Actionable flags from the official schedule — what needs a section, a bigger room, or a second look."
         className="mb-0"
         actions={
-          <SelectDropdown
-            data-tutorial="capacity-term"
-            value={effectiveTerm}
-            onChange={(e) => setTerm(e.target.value)}
-            className="rounded-lg border border-gray-300 px-3 py-2 focus:border-baylor-green focus:outline-none focus:ring-1 focus:ring-baylor-green"
-          >
-            {termOptions.length === 0 && <option value="">No terms</option>}
-            {termOptions.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </SelectDropdown>
+          <div className="min-w-40">
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+              Analysis term
+            </label>
+            <SelectDropdown
+              data-tutorial="capacity-term"
+              value={effectiveTerm}
+              onChange={(e) => setTerm(e.target.value)}
+              className="rounded-lg border border-gray-300 px-3 py-2 focus:border-baylor-green focus:outline-none focus:ring-1 focus:ring-baylor-green"
+            >
+              {termOptions.length === 0 && <option value="">No terms</option>}
+              {termOptions.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </SelectDropdown>
+          </div>
         }
       />
 

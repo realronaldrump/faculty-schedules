@@ -11,6 +11,7 @@ import { getBuildingDisplay, splitMultiRoom } from "../../utils/locationService"
 import { getMaxEnrollment } from "../../utils/enrollmentUtils";
 import { useData } from "../../contexts/DataContext";
 import { useAppConfig } from "../../contexts/AppConfigContext";
+import ResponsiveTableScroll from "../shared/ResponsiveTableScroll";
 
 const COURSE_ROW_HEIGHT = 58;
 const COURSE_TABLE_MAX_HEIGHT = 560;
@@ -618,7 +619,7 @@ const CourseBrowser = ({ embedded = false }) => {
 
       {/* Course Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
+        <ResponsiveTableScroll label="Course schedule results">
           <div
             role="table"
             aria-label="Course schedule results"
@@ -668,7 +669,7 @@ const CourseBrowser = ({ embedded = false }) => {
               </div>
             )}
           </div>
-        </div>
+        </ResponsiveTableScroll>
 
         {/* Results count footer */}
         {sortedData.length > 0 && (

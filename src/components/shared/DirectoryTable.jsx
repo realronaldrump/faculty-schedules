@@ -1,4 +1,5 @@
 import SortableHeader from './SortableHeader';
+import ResponsiveTableScroll from './ResponsiveTableScroll';
 
 /**
  * Standard HTML table component for directory views.
@@ -19,7 +20,7 @@ const DirectoryTable = ({
     rowKeyField = 'id'
 }) => {
     return (
-        <div className="overflow-x-auto">
+        <ResponsiveTableScroll label="Directory table">
             <table className="university-table">
                 <thead>
                     <tr>
@@ -93,7 +94,7 @@ const DirectoryTable = ({
                     )}
                 </tbody>
             </table>
-        </div>
+        </ResponsiveTableScroll>
     );
 };
 

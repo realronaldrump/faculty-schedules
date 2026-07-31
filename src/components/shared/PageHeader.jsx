@@ -19,7 +19,11 @@ const PageHeader = ({ title, subtitle, actions, children, className = "" }) => (
       {subtitle && <p className="text-gray-600">{subtitle}</p>}
       {children}
     </div>
-    {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
+    {actions && (
+      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">
+        {actions}
+      </div>
+    )}
   </div>
 );
 

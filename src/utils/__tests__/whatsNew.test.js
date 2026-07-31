@@ -41,15 +41,12 @@ describe("whatsNew releases", () => {
     expect(formatReleaseTimestamp(LATEST_RELEASE.date)).toContain("2026");
   });
 
-  it("announces the July reliability improvements", () => {
-    expect(LATEST_RELEASE.version).toBe(10);
-    expect(LATEST_RELEASE.title).toBe("Safer imports and cleaner data");
+  it("announces the responsive layout improvements", () => {
+    expect(LATEST_RELEASE.version).toBe(11);
+    expect(LATEST_RELEASE.title).toBe("Better on every screen");
     expect(LATEST_RELEASE.highlights.map(({ title }) => title)).toEqual([
-      "Safer import previews",
-      "More accurate schedule checks",
-      "Safer cleanup reviews",
-      "Better status and matching accuracy",
-      "Installable app polish",
+      "Cleaner mobile layouts",
+      "Easier controls and tables",
     ]);
   });
 });

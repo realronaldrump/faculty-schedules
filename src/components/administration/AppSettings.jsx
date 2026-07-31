@@ -589,15 +589,6 @@ const AppSettings = () => {
         onCancel={handleCancelBackfillTerms}
       />
 
-      {/* Back Navigation */}
-      <button 
-        onClick={() => navigate('/dashboard')}
-        className="flex items-center text-baylor-green hover:text-baylor-green/80 transition-colors font-medium"
-      >
-        <ArrowLeft size={20} className="mr-2" />
-        Back to Dashboard
-      </button>
-
       <PageHeader
         title="App Settings"
         subtitle="Configure application-wide settings, semesters, and locations"

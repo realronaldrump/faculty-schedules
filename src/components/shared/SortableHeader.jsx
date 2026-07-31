@@ -27,7 +27,7 @@ const SortableHeader = ({
     return (
         <Component className={`table-header-cell ${className}`}>
             <button
-                className="flex items-center gap-2 hover:text-baylor-green/80 transition-colors"
+                className="flex min-h-11 items-center gap-2 transition-colors hover:text-baylor-green/80 sm:min-h-0"
                 onClick={() => onSort(columnKey)}
             >
                 {label}

@@ -289,22 +289,13 @@ export const TUTORIALS = {
       },
       {
         id: "category-cards",
-        title: "Quick Access Cards",
+        title: "Directory Categories",
         content:
-          "Click any of these cards to quickly jump to a specific category. The active category is highlighted with a green border.",
+          "Choose a category to view faculty, staff, adjuncts, or student workers. The active category is highlighted with a green border.",
         target: '[data-tutorial="category-cards"]',
         position: "bottom",
-        action: "Try clicking a different category card",
+        action: "Try selecting a different category",
         actionType: "click",
-      },
-      {
-        id: "directory-tabs",
-        title: "Directory Tabs",
-        content:
-          "The tab bar provides another way to switch between categories. Both the cards above and these tabs stay in sync.",
-        target: '[data-tutorial="directory-tabs"]',
-        position: "bottom",
-        action: null,
       },
       {
         id: "directory-content",

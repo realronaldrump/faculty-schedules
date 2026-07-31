@@ -24,12 +24,19 @@ import {
   XCircle,
   Search,
 } from "lucide-react";
+import HubTabs from "../shared/HubTabs";
+import PageHeader from "../shared/PageHeader";
 import {
   USER_STATUS,
   normalizeRoleList,
   normalizeRolePermissions,
   resolveUserStatus,
 } from "../../utils/authz";
+
+const ACCESS_TABS = [
+  { id: "roles", label: "Role Permissions", icon: Lock },
+  { id: "users", label: "User Management", icon: Users },
+];
 
 const AccessControl = () => {
   const {
@@ -642,44 +649,17 @@ const AccessControl = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header - University Header Pattern */}
-      <div className="university-header rounded-xl p-8">
-        <div className="university-brand">
-          <div className="university-logo">
-            <Shield className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="university-title">Access Control</h1>
-            <p className="university-subtitle">
-              Manage role-based permissions and user access across the application
-            </p>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title="Access Control"
+        subtitle="Manage role-based permissions and user access across the application."
+        className="mb-0"
+      />
 
-      {/* Pill-style Tab Navigation */}
-      <div className="flex flex-wrap gap-2">
-        <button
-          onClick={() => setActiveTab("roles")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition-colors ${activeTab === "roles"
-            ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
-            : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-            }`}
-        >
-          <Lock className="w-4 h-4" />
-          Role Permissions
-        </button>
-        <button
-          onClick={() => setActiveTab("users")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition-colors ${activeTab === "users"
-            ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
-            : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-            }`}
-        >
-          <Users className="w-4 h-4" />
-          User Management
-        </button>
-      </div>
+      <HubTabs
+        tabs={ACCESS_TABS}
+        activeTab={activeTab}
+        onChange={setActiveTab}
+      />
 
       {/* Main Content */}
       <div className="university-card">

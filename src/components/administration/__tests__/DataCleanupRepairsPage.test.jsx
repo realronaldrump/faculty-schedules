@@ -123,7 +123,9 @@ describe("DataCleanupRepairsPage", () => {
     render(<DataCleanupRepairsPage />);
 
     expect(mockActions.handleScan).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("Data Health Check")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Data Health Check" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Checking your data" }),
     ).toBeInTheDocument();

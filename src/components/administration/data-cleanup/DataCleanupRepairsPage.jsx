@@ -4,6 +4,7 @@ import { useAuth } from "../../../contexts/AuthContext";
 import { useUI } from "../../../contexts/UIContext";
 import { useSchedules } from "../../../contexts/ScheduleContext";
 import ConfirmDialog from "../../shared/ConfirmDialog";
+import PageHeader from "../../shared/PageHeader";
 import DecisionReviewSection from "./DecisionReviewSection";
 import RareRepairToolsSection from "./RareRepairToolsSection";
 import RoutineWorkflowSection from "./RoutineWorkflowSection";
@@ -167,7 +168,13 @@ const DataCleanupRepairsPage = () => {
     (decisionCount > 0 || showRemainingCleanupState);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6">
+      <PageHeader
+        title="Data Health Check"
+        subtitle="Review routine cleanup, resolve data conflicts, and access guided repair tools."
+        className="mb-0"
+      />
+
       <RoutineWorkflowSection
         scanResult={actions.scanResult}
         safeFixResult={actions.safeFixResult}

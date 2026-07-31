@@ -21,6 +21,7 @@ import { parseCSVRecords } from "../../utils/csvUtils";
 import { parseClssFile } from "../../utils/import/clss/parse-clss-file";
 import ImportPreviewModal from "./ImportPreviewModal";
 import ImportHistoryModal from "./ImportHistoryModal";
+import PageHeader from "../shared/PageHeader";
 import { useSchedules } from "../../contexts/ScheduleContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { useUI } from "../../contexts/UIContext";
@@ -520,34 +521,26 @@ const ImportWizard = ({ embedded = false }) => {
   const clssHeaderMappings = Object.entries(clssSchemaReport?.headerMap || {});
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          {embedded ? (
-            <h2 className="text-2xl font-semibold text-gray-900">
-              Import Wizard
-            </h2>
-          ) : (
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              Import Wizard
-            </h1>
-          )}
-          <p className="text-gray-600">
-            Upload a CLSS CSV and apply changes with a simple, safe workflow
-          </p>
-        </div>
-        <button
-          data-tutorial="import-history"
-          onClick={() => {
-            setHistoryTransactionId("");
-            setShowHistory(true);
-          }}
-          className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-        >
-          <History className="w-4 h-4" />
-          <span>Import History</span>
-        </button>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title={embedded ? <span className="text-xl">Import Wizard</span> : "Import Wizard"}
+        subtitle="Upload a CLSS CSV and apply changes with a simple, safe workflow."
+        className="mb-0"
+        actions={
+          <button
+            type="button"
+            data-tutorial="import-history"
+            onClick={() => {
+              setHistoryTransactionId("");
+              setShowHistory(true);
+            }}
+            className="btn-secondary"
+          >
+            <History className="w-4 h-4" />
+            <span>Import History</span>
+          </button>
+        }
+      />
 
       <div data-tutorial="import-stepper" className="flex items-center mb-6 text-sm">
         <div

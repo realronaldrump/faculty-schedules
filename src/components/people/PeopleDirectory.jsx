@@ -8,7 +8,6 @@ import {
   staffDirectoryConfig,
 } from "../person-directory-configs/configs-core";
 import {
-  Users,
   GraduationCap,
   UserCheck,
   UserPlus,
@@ -115,7 +114,7 @@ const PeopleDirectory = ({ embedded = false, initialTab = "faculty" }) => {
             setActiveTab("faculty");
             startTutorial("people-directory");
           }}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm text-baylor-green border border-baylor-green rounded-lg hover:bg-baylor-green/5 transition-colors"
+          className="flex min-h-11 items-center gap-2 rounded-lg border border-baylor-green px-3 py-2 text-sm text-baylor-green transition-colors hover:bg-baylor-green/5"
           title="Learn how to use People Directory"
         >
           <Play className="w-4 h-4" />
@@ -124,87 +123,53 @@ const PeopleDirectory = ({ embedded = false, initialTab = "faculty" }) => {
       </div>
 
       {/* Quick Access Cards */}
-      <div
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
-        data-tutorial="category-cards"
-      >
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => handleTabChange(tab.id)}
-              className={`p-4 rounded-lg border-2 transition-all duration-200 hover:shadow-md ${activeTab === tab.id
-                  ? "border-baylor-green bg-baylor-green/5 shadow-md"
-                  : "border-gray-200 bg-white hover:border-baylor-green/30 hover:bg-baylor-green/2"
-                }`}
-              {...(tab.id === "student" ? { "data-tutorial": "student-workers-card" } : {})}
-            >
-              <div className="flex items-center space-x-3">
-                <div
-                  className={`p-2 rounded-lg ${activeTab === tab.id
-                      ? "bg-baylor-green text-white"
-                      : "bg-gray-100 text-gray-600"
-                    }`}
-                >
-                  <Icon className="h-5 w-5" />
-                </div>
-                <div className="text-left">
-                  <h3
-                    className={`font-medium text-sm ${activeTab === tab.id
-                        ? "text-baylor-green"
-                        : "text-gray-900"
+      <div className="overflow-x-auto pb-1 md:overflow-visible" data-tutorial="category-cards">
+        <div className="flex gap-3 md:grid md:grid-cols-2 lg:grid-cols-4">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                type="button"
+                key={tab.id}
+                onClick={() => handleTabChange(tab.id)}
+                aria-pressed={activeTab === tab.id}
+                className={`min-h-11 min-w-[15rem] rounded-lg border-2 p-4 transition-all duration-200 hover:shadow-md md:min-w-0 ${activeTab === tab.id
+                    ? "border-baylor-green bg-baylor-green/5 shadow-md"
+                    : "border-gray-200 bg-white hover:border-baylor-green/30 hover:bg-baylor-green/2"
+                  }`}
+                {...(tab.id === "student" ? { "data-tutorial": "student-workers-card" } : {})}
+              >
+                <div className="flex items-center space-x-3">
+                  <div
+                    className={`rounded-lg p-2 ${activeTab === tab.id
+                        ? "bg-baylor-green text-white"
+                        : "bg-gray-100 text-gray-600"
                       }`}
                   >
-                    {tab.label}
-                  </h3>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {tab.description}
-                  </p>
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="text-left">
+                    <h3
+                      className={`text-sm font-medium ${activeTab === tab.id
+                          ? "text-baylor-green"
+                          : "text-gray-900"
+                        }`}
+                    >
+                      {tab.label}
+                    </h3>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {tab.description}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </button>
-          );
-        })}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Main Directory Content */}
-      <div className="university-card" data-tutorial="directory-content">
-        <div className="university-card-header flex justify-between items-center">
-          <div>
-            <h2 className="university-card-title">People Directory</h2>
-            <p className="university-card-subtitle">
-              Manage faculty, staff, adjunct, and student worker information.
-            </p>
-          </div>
-          <div className="p-3 bg-baylor-green/10 rounded-lg">
-            <Users className="h-6 w-6 text-baylor-green" />
-          </div>
-        </div>
-
-        <div className="university-card-content">
-          <div
-            className="border-b border-gray-200"
-            data-tutorial="directory-tabs"
-          >
-            <nav className="-mb-px flex space-x-6" aria-label="Tabs">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => handleTabChange(tab.id)}
-                  className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors duration-150 focus:outline-none ${activeTab === tab.id
-                      ? "border-baylor-green text-baylor-green"
-                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                    }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </nav>
-          </div>
-
-          {/* Content */}
-          <div className="mt-6">
+      <div data-tutorial="directory-content">
             {activeTab === "faculty" && (
               <PersonDirectory
                 config={facultyDirectoryConfig}
@@ -238,8 +203,6 @@ const PeopleDirectory = ({ embedded = false, initialTab = "faculty" }) => {
               />
             )}
             {activeTab === "student" && <StudentDirectory />}
-          </div>
-        </div>
       </div>
     </div>
   );

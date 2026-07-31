@@ -82,7 +82,7 @@ export const navigationItems = [
       },
       {
         id: "programs",
-        label: "Programs",
+        label: "Programs & Directors",
         path: "people/programs",
         canonicalId: "people/programs",
         description: "Programs, directors (UPD/GPD), and affiliations.",

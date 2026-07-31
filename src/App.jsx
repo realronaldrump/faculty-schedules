@@ -9,7 +9,7 @@
  * Current size: ~600 lines (focused on layout, routing, and navigation)
  */
 
-import React, { useCallback, useEffect, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import PageRouter from "./components/app/PageRouter.jsx";
@@ -27,7 +27,6 @@ import useUserActivityTracker from "./hooks/useUserActivityTracker";
 import { useWhatsNew } from "./hooks";
 import { registerNavigationPages } from "./utils/pageRegistry";
 import { navigationItems } from "./utils/navigationConfig";
-import { normalizeRoleList } from "./utils/authz";
 
 import { Calendar, GraduationCap, Menu, LogOut, Sparkles } from "lucide-react";
 
@@ -42,15 +41,7 @@ const MAINTENANCE_UNTIL = "2025-07-03T08:00:00";
 
 function App() {
   // Context hooks
-  const {
-    user,
-    signOut,
-    isAdmin,
-    canAccess,
-    isActivityOwner,
-    userProfile,
-    loading: authLoading,
-  } = useAuth();
+  const { user, signOut, isAdmin, loading: authLoading } = useAuth();
   const {
     selectedSemester,
     setSelectedSemester,
@@ -88,25 +79,6 @@ function App() {
     return path === "" ? "dashboard" : path;
   }, [location.pathname]);
 
-  const userRoles = useMemo(
-    () => normalizeRoleList(userProfile?.roles),
-    [userProfile?.roles],
-  );
-
-  const shouldHideNavItem = useCallback(
-    (item) => {
-      if (!item) return true;
-      if (item.adminOnly && !isAdmin) return true;
-      if (item.ownerOnly && !isActivityOwner) return true;
-      if (item.hidden) return true;
-      const hiddenRoles = item.permissions?.hideFromRoles;
-      if (!Array.isArray(hiddenRoles) || hiddenRoles.length === 0) return false;
-      if (userRoles.length === 0) return false;
-      return userRoles.some((role) => hiddenRoles.includes(role));
-    },
-    [isActivityOwner, isAdmin, userRoles],
-  );
-
   const activeSection = useMemo(() => {
     if (!currentPage) return null;
     return (
@@ -119,15 +91,6 @@ function App() {
       }) || null
     );
   }, [currentPage]);
-
-  const visibleActiveSectionChildren = useMemo(() => {
-    if (!activeSection?.children) return [];
-    return activeSection.children.filter((child) => {
-      if (shouldHideNavItem(child)) return false;
-      const accessId = child.accessId || child.path || child.id;
-      return accessId ? canAccess(accessId) : true;
-    });
-  }, [activeSection?.children, canAccess, shouldHideNavItem]);
 
   const termMetaByLabel = useMemo(() => {
     const map = new Map();
@@ -274,48 +237,58 @@ function App() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <header className="bg-white border-b border-gray-200 shadow-sm">
-          <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 md:px-6 md:py-4">
             {/* Left: Mobile menu + Breadcrumb */}
-            <div className="flex items-center space-x-3">
+            <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
               <button
-                className="md:hidden p-2 rounded-md hover:bg-gray-100"
+                className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md hover:bg-gray-100 md:hidden"
                 aria-label="Open menu"
                 onClick={() => setMobileSidebarOpen(true)}
               >
                 <Menu className="w-5 h-5 text-gray-700" />
               </button>
-              <div className="flex items-center space-x-2">
-                <GraduationCap className="w-5 h-5 text-baylor-green" />
-                <nav className="flex items-center space-x-2 text-sm">
+              <div className="flex min-w-0 items-center gap-2">
+                <GraduationCap className="hidden h-5 w-5 shrink-0 text-baylor-green sm:block" />
+                <nav
+                  className="flex min-w-0 items-center gap-2 overflow-hidden text-sm"
+                  aria-label="Breadcrumb"
+                >
                   {getCurrentBreadcrumb().map((crumb, index, arr) => (
-                    <React.Fragment key={index}>
-                      {index > 0 && <span className="text-gray-400">/</span>}
+                    <span
+                      key={`${crumb.label}-${index}`}
+                      className={`min-w-0 items-center gap-2 ${
+                        index === arr.length - 1 ? "flex" : "hidden sm:flex"
+                      }`}
+                    >
+                      {index > 0 && (
+                        <span className="shrink-0 text-gray-400">/</span>
+                      )}
                       {crumb.path ? (
                         <button
-                          className="text-gray-600 hover:text-baylor-green"
+                          className="min-h-11 truncate text-gray-600 hover:text-baylor-green sm:min-h-0"
                           onClick={() => handleNavigate(crumb.path)}
                         >
                           {crumb.label}
                         </button>
                       ) : (
                         <span
-                          className={
+                          className={`truncate ${
                             index === arr.length - 1
-                              ? "text-baylor-green font-medium"
+                              ? "font-medium text-baylor-green"
                               : "text-gray-600"
-                          }
+                          }`}
                         >
                           {crumb.label}
                         </span>
                       )}
-                    </React.Fragment>
+                    </span>
                   ))}
                 </nav>
               </div>
             </div>
 
             {/* Right: Actions */}
-            <div className="flex items-center space-x-2 md:space-x-4">
+            <div className="flex w-full items-center justify-end gap-2 lg:w-auto lg:gap-4">
               {/* Semester Selector */}
               <SelectDropdown
                 value={selectedSemester}
@@ -394,8 +367,9 @@ function App() {
               {/* Logout Button */}
               <button
                 onClick={handleLogout}
-                className="btn-ghost"
+                className="btn-ghost min-w-11"
                 title="Logout"
+                aria-label="Logout"
               >
                 <LogOut className="w-4 h-4" />
                 <span className="ml-2 hidden sm:inline">Logout</span>
@@ -403,26 +377,6 @@ function App() {
             </div>
           </div>
 
-          {/* Section Sub-navigation */}
-          {visibleActiveSectionChildren.length > 0 && (
-              <div className="px-4 md:px-6 pb-2">
-                <div className="flex flex-wrap gap-2">
-                  {visibleActiveSectionChildren.map((child) => (
-                    <button
-                      key={child.id}
-                      onClick={() => handleNavigate(child.path)}
-                      className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                        currentPage === child.path
-                          ? "bg-baylor-green/10 text-baylor-green border-baylor-green/30"
-                          : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                      }`}
-                    >
-                      {child.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
         </header>
 
         {selectedTermMeta && isSelectedTermLocked && (

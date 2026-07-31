@@ -32,14 +32,12 @@ import {
   copyToClipboard,
 } from "../../utils/pafUtils";
 
-import SelectDropdown from "../SelectDropdown";
-
 const getBaylorId = (person) =>
   (person?.baylorId || person?.externalIds?.baylorId || "").toString().trim();
 
 const PAFWorkflow = ({ embedded = false }) => {
   const { people: directoryData, loadPeople } = usePeople();
-  const { scheduleData, selectedSemester, availableSemesters, setSelectedSemester } = useData();
+  const { scheduleData, selectedSemester } = useData();
   const { showNotification } = useUI();
   const { canEdit } = usePermissions();
   const canEditPAF = canEdit(PAF_PAGE_ID);
@@ -268,17 +266,9 @@ const PAFWorkflow = ({ embedded = false }) => {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <SelectDropdown
-              value={selectedSemester}
-              onChange={(e) => setSelectedSemester(e.target.value)}
-              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-baylor-green focus:border-baylor-green"
-            >
-              {availableSemesters.map((sem) => (
-                <option key={sem} value={sem}>
-                  {sem}
-                </option>
-              ))}
-            </SelectDropdown>
+            <span className="rounded-full bg-baylor-green/10 px-3 py-1.5 text-sm font-medium text-baylor-green">
+              {selectedSemester}
+            </span>
             <div className="p-3 bg-baylor-green/10 rounded-lg">
               <FileText className="h-6 w-6 text-baylor-green" />
             </div>

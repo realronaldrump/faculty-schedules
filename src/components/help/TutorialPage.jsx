@@ -209,7 +209,7 @@ const TutorialPage = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
             <BookOpen className="w-8 h-8 text-baylor-green" />
-            Help & Tutorials
+            Tutorials
           </h1>
           <p className="text-gray-600 mt-1">
             Learn how to use the dashboard with interactive step-by-step tutorials
@@ -262,7 +262,7 @@ const TutorialPage = () => {
           <div className="relative" ref={settingsRef}>
             <button
               onClick={() => setShowSettings((s) => !s)}
-              className={`p-2 rounded-lg border transition-colors ${
+              className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border p-2 transition-colors ${
                 showSettings
                   ? "bg-gray-100 border-gray-300 text-gray-800"
                   : "border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700"

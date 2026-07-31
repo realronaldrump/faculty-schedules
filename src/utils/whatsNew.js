@@ -41,6 +41,27 @@ export const WHATS_NEW_STORAGE_KEY = "whatsNewLastSeenVersion";
 
 export const RELEASES = [
   {
+    version: 11,
+    date: "2026-07-30T12:00:00-06:00",
+    title: "Better on every screen",
+    summary:
+      "Navigation, tables, and common controls now adapt more smoothly to phones and smaller screens.",
+    highlights: [
+      {
+        icon: PanelTop,
+        title: "Cleaner mobile layouts",
+        description:
+          "Headers, breadcrumbs, tabs, and directories now fit smaller screens with less crowding and duplication.",
+      },
+      {
+        icon: Sparkles,
+        title: "Easier controls and tables",
+        description:
+          "Larger touch targets and clearer horizontal scrolling make actions and wide tables easier to use.",
+      },
+    ],
+  },
+  {
     version: 10,
     date: "2026-07-10T12:00:00-06:00",
     title: "Safer imports and cleaner data",

@@ -60,6 +60,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../../firebase";
 import SpaceUsageDetailModal from "./SpaceUsageDetailModal";
+import ResponsiveTableScroll from "../shared/ResponsiveTableScroll";
 
 import SelectDropdown from "../SelectDropdown";
 const getCanonicalSpaceKeyFromSpace = (space) => {
@@ -1726,7 +1727,7 @@ const SpaceManagement = () => {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <ResponsiveTableScroll label="Space inventory">
             <table className="university-table">
               <thead>
                 <tr>
@@ -1864,7 +1865,7 @@ const SpaceManagement = () => {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ResponsiveTableScroll>
         )}
       </div>
 

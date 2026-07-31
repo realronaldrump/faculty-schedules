@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const getDocsMock = vi.fn();
 const syncActivityRollupsMock = vi.fn();
 const loadActivitySummariesMock = vi.fn();
+const loadTodayActivitySummaryMock = vi.fn();
 
 vi.mock("../../../contexts/AuthContext.jsx", () => ({
   useAuth: () => ({ isActivityOwner: true }),
@@ -27,6 +28,7 @@ vi.mock("../../../utils/activitySync", () => ({
   SUMMARY_LOOKBACK_DAYS: 90,
   syncActivityRollups: (...args) => syncActivityRollupsMock(...args),
   loadActivitySummaries: (...args) => loadActivitySummariesMock(...args),
+  loadTodayActivitySummary: (...args) => loadTodayActivitySummaryMock(...args),
 }));
 
 import UserActivityPage from "../UserActivityPage";
@@ -106,10 +108,13 @@ describe("UserActivityPage", () => {
     });
     loadActivitySummariesMock.mockReset();
     loadActivitySummariesMock.mockResolvedValue(emptySummaries);
+    loadTodayActivitySummaryMock.mockReset();
+    loadTodayActivitySummaryMock.mockResolvedValue(emptySummaries);
   });
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
   });
 
   it("loads bounded summaries automatically on open and reports up-to-date status", async () => {
@@ -163,5 +168,27 @@ describe("UserActivityPage", () => {
     expect(
       await screen.findByText(/No users match the current filters/i),
     ).toBeInTheDocument();
+  });
+
+  it("refreshes today's summary rows each minute without reloading history", async () => {
+    let minuteTick;
+    vi.spyOn(globalThis, "setInterval").mockImplementation((callback) => {
+      minuteTick = callback;
+      return 1;
+    });
+    vi.spyOn(globalThis, "clearInterval").mockImplementation(() => {});
+    render(<UserActivityPage />);
+
+    await waitFor(() => {
+      expect(loadActivitySummariesMock).toHaveBeenCalledTimes(1);
+    });
+    expect(minuteTick).toBeTypeOf("function");
+
+    await minuteTick();
+
+    await waitFor(() => {
+      expect(loadTodayActivitySummaryMock).toHaveBeenCalledTimes(1);
+    });
+    expect(loadActivitySummariesMock).toHaveBeenCalledTimes(1);
   });
 });

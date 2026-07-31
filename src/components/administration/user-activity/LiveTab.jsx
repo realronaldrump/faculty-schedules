@@ -159,7 +159,6 @@ const LiveTab = ({ liveUsers, timelineRows, loading }) => {
                     </p>
                     <p className="mt-0.5 text-xs text-gray-500">
                       {formatDateTime(row.timestamp)} · {row.sectionLabel}
-                      {isNavigation ? ` · ~${row.approxMinutes}m on page` : ""}
                     </p>
                   </div>
                 </div>

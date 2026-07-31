@@ -18,11 +18,11 @@ import {
   ACTIVITY_RANGE_OPTIONS,
   buildActivityAnalyticsModel,
   formatDateKeyInTimeZone,
-  toDate,
 } from "../../utils/activityAnalytics";
 import {
   SUMMARY_LOOKBACK_DAYS,
   loadActivitySummaries,
+  loadTodayActivitySummary,
   syncActivityRollups,
 } from "../../utils/activitySync";
 import { getNavigationMeta } from "../../utils/navigationMeta";
@@ -36,6 +36,11 @@ import { formatTimeAgo, getActivityStatus } from "./user-activity/activityDispla
 const LIVE_REFRESH_INTERVAL_MS = 60 * 1000;
 const TIMELINE_LIMIT = 60;
 const PRESENCE_LIMIT = 120;
+
+const replaceDateRows = (rows, replacementRows, dateKey) => [
+  ...rows.filter((row) => row.dateKey !== dateKey),
+  ...replacementRows,
+];
 
 const TABS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -73,44 +78,6 @@ const formatSyncError = (error) => {
     String(error?.message || "").trim() ||
     "Summary status could not be checked right now — showing the latest stored data."
   );
-};
-
-// Approximate per-event dwell for the live timeline from gaps between page
-// entries in the same session.
-const deriveTimelineDwellMinutes = (events) => {
-  const groupedBySession = new Map();
-  const dwellByEventId = new Map();
-
-  events.forEach((event) => {
-    const timestampDate = toDate(event.timestamp);
-    if (!timestampDate || event.eventType !== "page_enter") return;
-    const sessionKey = `${event.uid || "unknown"}:${event.sessionId || "default"}`;
-    const existing = groupedBySession.get(sessionKey) || [];
-    existing.push({ ...event, timestampDate });
-    groupedBySession.set(sessionKey, existing);
-  });
-
-  groupedBySession.forEach((sessionEvents) => {
-    const ordered = sessionEvents.sort(
-      (left, right) => left.timestampDate.getTime() - right.timestampDate.getTime(),
-    );
-    ordered.forEach((event, index) => {
-      const next = ordered[index + 1];
-      let minutes = 1;
-      if (next) {
-        const rawDiffMinutes = Math.round(
-          (next.timestampDate.getTime() - event.timestampDate.getTime()) /
-            (1000 * 60),
-        );
-        if (Number.isFinite(rawDiffMinutes) && rawDiffMinutes > 0) {
-          minutes = Math.max(1, Math.min(30, rawDiffMinutes));
-        }
-      }
-      dwellByEventId.set(event.id, minutes);
-    });
-  });
-
-  return dwellByEventId;
 };
 
 const SyncStatus = ({ syncState }) => {
@@ -203,6 +170,29 @@ const UserActivityPage = () => {
     );
   }, [isActivityOwner]);
 
+  const refreshTodaySummary = useCallback(async () => {
+    if (!isActivityOwner) return;
+    const today = await loadTodayActivitySummary();
+    setSummaries((current) => ({
+      todayDateKey: today.todayDateKey,
+      analyticsRows: replaceDateRows(
+        current.analyticsRows,
+        today.analyticsRows,
+        today.todayDateKey,
+      ),
+      pageDailyRows: replaceDateRows(
+        current.pageDailyRows,
+        today.pageDailyRows,
+        today.todayDateKey,
+      ),
+      userDailyRows: replaceDateRows(
+        current.userDailyRows,
+        today.userDailyRows,
+        today.todayDateKey,
+      ),
+    }));
+  }, [isActivityOwner]);
+
   // The whole pipeline is automatic: activity writes maintain daily summaries,
   // while this page only reloads those bounded summaries and live presence.
   const initialize = useCallback(
@@ -249,8 +239,8 @@ const UserActivityPage = () => {
     void initialize();
   }, [initialize, isActivityOwner]);
 
-  // Live data refreshes each minute while the tab is visible. If the local day
-  // rolls over while the page stays open, reload bounded summaries automatically.
+  // Live data and today's bounded summary refresh each minute while visible. If
+  // the local day rolls over, reload the complete bounded history once.
   useEffect(() => {
     if (!isActivityOwner || typeof document === "undefined") return undefined;
 
@@ -266,6 +256,9 @@ const UserActivityPage = () => {
       void loadLiveData().catch((error) => {
         console.error("Failed to refresh live activity:", error);
       });
+      void refreshTodaySummary().catch((error) => {
+        console.error("Failed to refresh today's activity summary:", error);
+      });
     };
 
     const intervalId = setInterval(tick, LIVE_REFRESH_INTERVAL_MS);
@@ -274,7 +267,13 @@ const UserActivityPage = () => {
       clearInterval(intervalId);
       document.removeEventListener("visibilitychange", tick);
     };
-  }, [initialize, isActivityOwner, loadLiveData, summaries.todayDateKey]);
+  }, [
+    initialize,
+    isActivityOwner,
+    loadLiveData,
+    refreshTodaySummary,
+    summaries.todayDateKey,
+  ]);
 
   const model = useMemo(
     () =>
@@ -313,7 +312,6 @@ const UserActivityPage = () => {
   );
 
   const timelineRows = useMemo(() => {
-    const dwellByEventId = deriveTimelineDwellMinutes(eventRows);
     return eventRows.map((event) => {
       const pageMeta = getNavigationMeta(event.pageId);
       return {
@@ -321,7 +319,6 @@ const UserActivityPage = () => {
         actorName: event.displayName || event.email || event.uid || "Unknown User",
         pageLabel: event.pageLabel || pageMeta.pageLabel,
         sectionLabel: event.sectionLabel || pageMeta.sectionLabel,
-        approxMinutes: dwellByEventId.get(event.id) || 1,
       };
     });
   }, [eventRows]);

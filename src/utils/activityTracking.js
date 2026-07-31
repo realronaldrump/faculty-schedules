@@ -14,6 +14,8 @@ import { getNavigationMeta } from "./navigationMeta";
 const ACTIVITY_SESSION_STORAGE_KEY = "activitySession";
 const ACTIVITY_TIME_ZONE = "America/Chicago";
 const NAVIGATION_ACTION_KEY = "navigate";
+const DURATION_EVENT_TYPE = "duration";
+const MAX_DURATION_MINUTES_PER_WRITE = 2;
 const warnedWriteFailures = new Set();
 
 const normalizeRoleList = (roles) => {
@@ -142,20 +144,30 @@ const getActivityHour = (date) => {
 const buildDailySummaryUpdate = ({
   actor,
   pageMeta,
+  previousPageMeta = null,
   sessionId,
   eventPayload,
+  durationMinutes = 0,
   now,
 }) => {
   const isPageEnter = eventPayload.eventType === "page_enter";
-  const isSemanticAction = !isPageEnter;
+  const isDuration = eventPayload.eventType === DURATION_EVENT_TYPE;
+  const isSemanticAction = !isPageEnter && !isDuration;
   const pageEnterDelta = isPageEnter ? 1 : 0;
   const semanticDelta = isSemanticAction ? 1 : 0;
-  const minutesDelta = isPageEnter ? 1 : 0;
+  const minutesDelta = Number.isFinite(durationMinutes) ? durationMinutes : 0;
   const dateKey = formatDateKeyInTimeZone(now, ACTIVITY_TIME_ZONE);
   const hour = getActivityHour(now);
   const pageKey = safeMapKey(pageMeta.pageId);
   const actionKey = eventPayload.actionKey || eventPayload.eventType || "action";
   const actionMapKey = safeMapKey(actionKey);
+  const isTransition =
+    isPageEnter &&
+    previousPageMeta?.pageId &&
+    previousPageMeta.pageId !== pageMeta.pageId;
+  const transitionMapKey = isTransition
+    ? safeMapKey(`${previousPageMeta.pageId}>>${pageMeta.pageId}`)
+    : "";
 
   const pageSummary = {
     pageId: pageMeta.pageId,
@@ -163,15 +175,19 @@ const buildDailySummaryUpdate = ({
     sectionLabel: pageMeta.sectionLabel,
     uniqueUsers: 1,
     pageEnterCount: increment(pageEnterDelta),
+    trackedPageEnterCount: increment(pageEnterDelta),
     semanticEventCount: increment(semanticDelta),
     count: increment(pageEnterDelta),
     totalMinutesApprox: increment(minutesDelta),
+    measuredMinutes: increment(minutesDelta),
     hourlyBuckets: {
       [`h${String(hour).padStart(2, "0")}`]: {
         hour,
         pageEnterCount: increment(pageEnterDelta),
+        trackedPageEnterCount: increment(pageEnterDelta),
         semanticEventCount: increment(semanticDelta),
         totalMinutesApprox: increment(minutesDelta),
+        measuredMinutes: increment(minutesDelta),
         uniqueUsers: 1,
       },
     },
@@ -189,7 +205,7 @@ const buildDailySummaryUpdate = ({
   return {
     ref: doc(db, "userActivityDaily", `${dateKey}_${actor.uid}`),
     data: {
-      schemaVersion: 2,
+      schemaVersion: 3,
       dateKey,
       uid: actor.uid,
       email: actor.email,
@@ -197,9 +213,12 @@ const buildDailySummaryUpdate = ({
       role: actor.role,
       sessionIds: arrayUnion(sessionId),
       pageEnterCount: increment(pageEnterDelta),
+      trackedPageEnterCount: increment(pageEnterDelta),
       semanticEventCount: increment(semanticDelta),
       pagesVisitedCount: increment(pageEnterDelta),
+      ...(isPageEnter ? { pageIds: arrayUnion(pageMeta.pageId) } : {}),
       totalMinutesApprox: increment(minutesDelta),
+      measuredMinutes: increment(minutesDelta),
       pageCounts: {
         [pageKey]: pageSummary,
       },
@@ -207,8 +226,10 @@ const buildDailySummaryUpdate = ({
         [`h${String(hour).padStart(2, "0")}`]: {
           hour,
           pageEnterCount: increment(pageEnterDelta),
+          trackedPageEnterCount: increment(pageEnterDelta),
           semanticEventCount: increment(semanticDelta),
           totalMinutesApprox: increment(minutesDelta),
+          measuredMinutes: increment(minutesDelta),
           uniqueUsers: 1,
         },
       },
@@ -217,6 +238,19 @@ const buildDailySummaryUpdate = ({
             actionCounts: {
               [actionMapKey]: {
                 actionKey,
+                count: increment(1),
+              },
+            },
+          }
+        : {}),
+      ...(isTransition
+        ? {
+            transitionCounts: {
+              [transitionMapKey]: {
+                fromPageId: previousPageMeta.pageId,
+                fromPageLabel: previousPageMeta.pageLabel,
+                toPageId: pageMeta.pageId,
+                toPageLabel: pageMeta.pageLabel,
                 count: increment(1),
               },
             },
@@ -306,6 +340,7 @@ export const trackActionThrottled = (actionKey, metadata = {}) => {
 export const logUserActivityEvent = async ({
   actor,
   currentPage,
+  previousPage = "",
   eventType = "action",
   actionKey = "",
   metadata = {},
@@ -314,6 +349,7 @@ export const logUserActivityEvent = async ({
   if (!actor?.uid || !currentPage) return null;
 
   const pageMeta = getNavigationMeta(currentPage);
+  const previousPageMeta = previousPage ? getNavigationMeta(previousPage) : null;
   const sessionId = getActivitySessionId(actor.uid);
   const normalizedEventType =
     typeof eventType === "string" && eventType.trim() ? eventType.trim() : "action";
@@ -335,6 +371,12 @@ export const logUserActivityEvent = async ({
     pageId: pageMeta.pageId,
     pageLabel: pageMeta.pageLabel,
     sectionLabel: pageMeta.sectionLabel,
+    ...(previousPageMeta?.pageId && previousPageMeta.pageId !== pageMeta.pageId
+      ? {
+          previousPageId: previousPageMeta.pageId,
+          previousPageLabel: previousPageMeta.pageLabel,
+        }
+      : {}),
     metadata: sanitizeMetadata(metadata),
     timestamp: serverTimestamp(),
   };
@@ -343,6 +385,7 @@ export const logUserActivityEvent = async ({
   const summaryUpdate = buildDailySummaryUpdate({
     actor,
     pageMeta,
+    previousPageMeta,
     sessionId,
     eventPayload,
     now,
@@ -355,11 +398,10 @@ export const logUserActivityEvent = async ({
     },
   ];
 
-  // Navigation volume belongs in per-user daily summaries and presence. Keep raw
-  // event rows for semantic actions only so the live timeline remains useful
-  // without letting route changes grow an unbounded collection.
+  // Keep navigation rows as well as semantic actions. Navigation powers the
+  // Live filter, transition history, and the bounded historical rollup fallback.
   if (
-    normalizedEventType !== "page_enter" &&
+    normalizedEventType === "page_enter" ||
     normalizedActionKey !== NAVIGATION_ACTION_KEY
   ) {
     writes.push({
@@ -390,5 +432,45 @@ export const logUserActivityEvent = async ({
       warnWriteFailureOnce(writes[index].label, result.reason);
     }
   });
+  return sessionId;
+};
+
+// Visible-tab dwell is measured independently from navigation. This keeps a
+// page view as exactly one page view and lets the hook periodically add only the
+// time that actually elapsed while the page was visible. The per-write cap
+// avoids counting laptop sleep or heavily throttled background timers as use.
+export const recordActivityDuration = async ({
+  actor,
+  currentPage,
+  durationMinutes,
+}) => {
+  if (!actor?.uid || !currentPage) return null;
+
+  const rawMinutes = Number(durationMinutes);
+  if (!Number.isFinite(rawMinutes) || rawMinutes <= 0) return null;
+  const normalizedMinutes = Number(
+    Math.min(rawMinutes, MAX_DURATION_MINUTES_PER_WRITE).toFixed(4),
+  );
+  if (normalizedMinutes <= 0) return null;
+
+  const pageMeta = getNavigationMeta(currentPage);
+  const sessionId = getActivitySessionId(actor.uid);
+  const summaryUpdate = buildDailySummaryUpdate({
+    actor,
+    pageMeta,
+    sessionId,
+    eventPayload: {
+      eventType: DURATION_EVENT_TYPE,
+      actionKey: "",
+    },
+    durationMinutes: normalizedMinutes,
+    now: new Date(),
+  });
+
+  try {
+    await setDoc(summaryUpdate.ref, summaryUpdate.data, { merge: true });
+  } catch (error) {
+    warnWriteFailureOnce("duration summary", error);
+  }
   return sessionId;
 };

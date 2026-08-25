@@ -43,6 +43,11 @@ describe("ScheduleGridLibraryModal", () => {
       />,
     );
 
+    expect(document.body.querySelectorAll("select")).toHaveLength(0);
+    expect(
+      screen.getByRole("button", { name: "Filter by folder" }),
+    ).toHaveAttribute("aria-haspopup", "listbox");
+
     fireEvent.change(screen.getByRole("searchbox"), {
       target: { value: "207" },
     });

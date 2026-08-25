@@ -12,6 +12,7 @@ import {
 import Badge from "../../shared/Badge";
 import ConfirmDialog from "../../shared/ConfirmDialog";
 import Modal from "../../shared/Modal";
+import SelectDropdown from "../../SelectDropdown";
 
 const getTimestamp = (value) => {
   if (typeof value === "number") return value;
@@ -127,12 +128,16 @@ const ScheduleGridLibraryModal = ({
                 placeholder="Search name, room, semester, or tag"
               />
             </label>
-            <label className="sm:w-52">
-              <span className="sr-only">Filter by folder</span>
-              <select
+            <div className="sm:w-52">
+              <span id="studio-library-folder-label" className="sr-only">
+                Filter by folder
+              </span>
+              <SelectDropdown
+                id="studio-library-folder"
+                aria-labelledby="studio-library-folder-label"
                 value={folder}
                 onChange={(event) => setFolder(event.target.value)}
-                className="form-select w-full"
+                className="w-full"
               >
                 <option value="all">All folders</option>
                 {folders.map((folderName) => (
@@ -140,8 +145,8 @@ const ScheduleGridLibraryModal = ({
                     {folderName}
                   </option>
                 ))}
-              </select>
-            </label>
+              </SelectDropdown>
+            </div>
             <button
               type="button"
               onClick={onRefresh}

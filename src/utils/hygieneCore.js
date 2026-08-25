@@ -1386,7 +1386,15 @@ export const mergeScheduleData = (primary, secondary) => {
   );
 
   const patternKey = (p) =>
-    `${p?.day || ""}|${p?.startTime || ""}|${p?.endTime || ""}`;
+    [
+      p?.day || "",
+      p?.startTime || "",
+      p?.endTime || "",
+      ...(Array.isArray(p?.spaceIds) ? [...p.spaceIds].sort() : []),
+      ...(Array.isArray(p?.spaceDisplayNames)
+        ? [...p.spaceDisplayNames].sort()
+        : []),
+    ].join("|");
   const combinedPatterns = mergeArrayValues(
     primary.meetingPatterns,
     secondary.meetingPatterns,

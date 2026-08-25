@@ -60,6 +60,12 @@ export const RELEASES = [
         description:
           "Save, update, duplicate, favorite, tag, search, and organize schedule templates before exporting a correctly sized PDF.",
       },
+      {
+        icon: CalendarCheck,
+        title: "More reliable room calendars",
+        description:
+          "Room Calendar Export now loads the selected semester, keeps multi-room meeting times with the right rooms, honors shared no-class dates, and avoids empty or conflicting calendar files.",
+      },
     ],
   },
   {

@@ -257,8 +257,93 @@ service cloud.firestore {
       return userHasPage('help/acronyms');
     }
 
+    function profileHasRole(profile, role) {
+      return
+        (profile.roles is list && role in profile.roles) ||
+        (profile.roles is map && role in profile.roles &&
+          roleValueIsTruthy(profile.roles[role])) ||
+        (profile.roles is string && profile.roles == role);
+    }
+
+    function profileIsActive(profile, hasKnownRole) {
+      return profile.disabled != true &&
+        profile.status != 'disabled' &&
+        (
+          profile.status == 'active' ||
+          (profile.status == null && hasKnownRole)
+        );
+    }
+
+    function profileHasDirectRoomGrant(profile) {
+      return profile.permissions is map &&
+        (
+          ('scheduling/rooms' in profile.permissions &&
+            profile.permissions['scheduling/rooms'] == true) ||
+          ('*' in profile.permissions && profile.permissions['*'] == true)
+        );
+    }
+
+    function profileHasDirectRoomDeny(profile) {
+      return profile.permissions is map &&
+        (
+          ('scheduling/rooms' in profile.permissions &&
+            profile.permissions['scheduling/rooms'] == false) ||
+          ('*' in profile.permissions && profile.permissions['*'] == false)
+        );
+    }
+
+    function profileHasConfiguredRoomGrant(hasAdminRole, hasStaffRole, hasFacultyRole) {
+      let configured = get(accessControlDoc()).data.rolePermissions;
+      return configured is map && (
+        (hasAdminRole &&
+          configured.admin is map &&
+          configured.admin.pages is map &&
+          (('scheduling/rooms' in configured.admin.pages &&
+            configured.admin.pages['scheduling/rooms'] == true) ||
+            ('*' in configured.admin.pages &&
+              configured.admin.pages['*'] == true))) ||
+        (hasStaffRole &&
+          configured.staff is map &&
+          configured.staff.pages is map &&
+          (('scheduling/rooms' in configured.staff.pages &&
+            configured.staff.pages['scheduling/rooms'] == true) ||
+            ('*' in configured.staff.pages &&
+              configured.staff.pages['*'] == true))) ||
+        (hasFacultyRole &&
+          configured.faculty is map &&
+          configured.faculty.pages is map &&
+          (('scheduling/rooms' in configured.faculty.pages &&
+            configured.faculty.pages['scheduling/rooms'] == true) ||
+            ('*' in configured.faculty.pages &&
+              configured.faculty.pages['*'] == true)))
+      );
+    }
+
+    function canManageRoomGridsForProfile(profile) {
+      let hasAdminRole = profileHasRole(profile, 'admin');
+      let hasStaffRole = profileHasRole(profile, 'staff');
+      let hasFacultyRole = profileHasRole(profile, 'faculty');
+      let hasKnownRole = hasAdminRole || hasStaffRole || hasFacultyRole;
+      return hasAdminRole ||
+        (
+          profileIsActive(profile, hasKnownRole) &&
+          !profileHasDirectRoomDeny(profile) &&
+          (
+            profileHasDirectRoomGrant(profile) ||
+            (exists(accessControlDoc()) &&
+              profileHasConfiguredRoomGrant(
+                hasAdminRole,
+                hasStaffRole,
+                hasFacultyRole
+              ))
+          )
+        );
+    }
+
     function canManageRoomGrids() {
-      return userHasPage('scheduling/rooms');
+      return isSignedIn() &&
+        exists(userDoc()) &&
+        canManageRoomGridsForProfile(get(userDoc()).data);
     }
 
     function canManageImports() {
@@ -648,6 +733,12 @@ service cloud.firestore {
       allow read: if canManageDataHygiene();
       allow create: if canManageDataHygiene();
       allow update, delete: if false;
+    }
+
+    // Shared no-class dates used by Room Calendar Export.
+    match /outlookExceptions/{id} {
+      allow read: if canReadAppData();
+      allow create, update, delete: if canManageRoomGrids();
     }
 
     // Room grids: allow writes for users who can access room scheduling tools

@@ -15,6 +15,33 @@ import ScheduleGridStudio from "../ScheduleGridStudio";
 afterEach(cleanup);
 
 describe("ScheduleGridStudio", () => {
+  it("uses branded dropdowns for Studio layout and entry controls", () => {
+    render(
+      <ScheduleGridStudio
+        initialDocument={createBlankStudioDocument({
+          entries: [{ course: "CFS 1305", days: ["M"] }],
+        })}
+        onBack={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Layout" }));
+
+    expect(document.body.querySelectorAll("select")).toHaveLength(0);
+    expect(
+      screen.getByRole("button", { name: "Page size" }),
+    ).toHaveAttribute("aria-haspopup", "listbox");
+    expect(
+      screen.getByRole("button", { name: "Time guides" }),
+    ).toHaveAttribute("aria-haspopup", "listbox");
+    expect(
+      screen.getByRole("button", { name: "Instructor names" }),
+    ).toHaveAttribute("aria-haspopup", "listbox");
+    expect(
+      screen.getByRole("button", { name: "Block detail" }),
+    ).toHaveAttribute("aria-haspopup", "listbox");
+  });
+
   it("creates and saves a manual in-app schedule", async () => {
     const onSaveTemplate = vi.fn().mockResolvedValue({ id: "saved-grid-1" });
     render(

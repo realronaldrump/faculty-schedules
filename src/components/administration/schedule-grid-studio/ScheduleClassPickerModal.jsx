@@ -8,6 +8,7 @@ import { Check, Layers3, Loader2, Plus, Search } from "lucide-react";
 
 import Badge from "../../shared/Badge";
 import Modal from "../../shared/Modal";
+import SelectDropdown from "../../SelectDropdown";
 import {
   createStudioCatalogEntry,
   formatStudioTime,
@@ -217,23 +218,31 @@ const ScheduleClassPickerModal = ({
       <div className="space-y-4 border-b border-gray-200 bg-gray-50 px-6 py-4">
         {availableSemesters.length > 0 ? (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <label className="min-w-0 flex-1">
-              <span className="mb-1.5 block text-sm font-semibold text-gray-700">
+            <div className="min-w-0 flex-1">
+              <span
+                id="class-picker-semester-label"
+                className="mb-1.5 block text-sm font-semibold text-gray-700"
+              >
                 Dashboard semester
               </span>
-              <select
+              <SelectDropdown
+                id="class-picker-semester"
+                aria-labelledby="class-picker-semester-label"
                 value={targetSemester}
                 onChange={(event) => setTargetSemester(event.target.value)}
-                className="form-select w-full"
+                className="w-full"
+                placeholder="Choose semester…"
               >
-                <option value="">Choose semester…</option>
+                <option value="" disabled>
+                  Choose semester…
+                </option>
                 {availableSemesters.map((semester) => (
                   <option key={semester} value={semester}>
                     {semester}
                   </option>
                 ))}
-              </select>
-            </label>
+              </SelectDropdown>
+            </div>
             <button
               type="button"
               onClick={loadSemester}
@@ -276,12 +285,16 @@ const ScheduleClassPickerModal = ({
               placeholder="Search course, instructor, room, day, or time"
             />
           </label>
-          <label>
-            <span className="sr-only">Class scope</span>
-            <select
+          <div>
+            <span id="class-picker-scope-label" className="sr-only">
+              Class scope
+            </span>
+            <SelectDropdown
+              id="class-picker-scope"
+              aria-labelledby="class-picker-scope-label"
               value={scope}
               onChange={(event) => setScope(event.target.value)}
-              className="form-select w-full"
+              className="w-full"
             >
               {currentBuilding && currentRoom ? (
                 <option value="room">
@@ -289,15 +302,19 @@ const ScheduleClassPickerModal = ({
                 </option>
               ) : null}
               <option value="all">All rooms</option>
-            </select>
-          </label>
-          <label>
-            <span className="sr-only">Building filter</span>
-            <select
+            </SelectDropdown>
+          </div>
+          <div>
+            <span id="class-picker-building-label" className="sr-only">
+              Building filter
+            </span>
+            <SelectDropdown
+              id="class-picker-building"
+              aria-labelledby="class-picker-building-label"
               value={buildingFilter}
               onChange={(event) => setBuildingFilter(event.target.value)}
               disabled={scope === "room"}
-              className="form-select w-full"
+              className="w-full"
             >
               <option value="all">All buildings</option>
               {buildings.map((building) => (
@@ -305,8 +322,8 @@ const ScheduleClassPickerModal = ({
                   {building}
                 </option>
               ))}
-            </select>
-          </label>
+            </SelectDropdown>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm">

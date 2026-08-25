@@ -71,20 +71,34 @@ export const escapeICS = (text) =>
     .replace(/;/g, "\\;");
 
 export const foldICSLines = (lines) => {
-  const maxLen = 75;
+  const maxOctets = 75;
+  const encoder = new TextEncoder();
   const folded = [];
   lines.forEach((line) => {
     const stringLine = typeof line === "string" ? line : String(line || "");
-    if (stringLine.length <= maxLen) {
+    if (encoder.encode(stringLine).length <= maxOctets) {
       folded.push(stringLine);
       return;
     }
-    folded.push(stringLine.slice(0, maxLen));
-    let pos = maxLen;
-    const continuationMax = maxLen - 1;
-    while (pos < stringLine.length) {
-      folded.push(` ${stringLine.slice(pos, pos + continuationMax)}`);
-      pos += continuationMax;
+
+    let chunk = "";
+    let chunkOctets = 0;
+    let continuation = false;
+    for (const character of stringLine) {
+      const characterOctets = encoder.encode(character).length;
+      const chunkLimit = continuation ? maxOctets - 1 : maxOctets;
+      if (chunk && chunkOctets + characterOctets > chunkLimit) {
+        folded.push(continuation ? ` ${chunk}` : chunk);
+        chunk = character;
+        chunkOctets = characterOctets;
+        continuation = true;
+      } else {
+        chunk += character;
+        chunkOctets += characterOctets;
+      }
+    }
+    if (chunk) {
+      folded.push(continuation ? ` ${chunk}` : chunk);
     }
   });
   return folded;

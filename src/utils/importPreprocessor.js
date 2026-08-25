@@ -386,7 +386,15 @@ const mergeScheduleRowGroup = (group) => {
       baseData.meetingPatterns = mergeArraysUnique(
         baseData.meetingPatterns || [],
         other.meetingPatterns,
-        (p) => `${p.day}|${p.startTime}|${p.endTime}`
+        (p) => [
+          p.day,
+          p.startTime,
+          p.endTime,
+          ...(Array.isArray(p.spaceIds) ? [...p.spaceIds].sort() : []),
+          ...(Array.isArray(p.spaceDisplayNames)
+            ? [...p.spaceDisplayNames].sort()
+            : []),
+        ].join('|')
       );
     }
 

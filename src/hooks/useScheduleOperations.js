@@ -33,6 +33,7 @@ import {
 import { getMaxEnrollment } from "../utils/enrollmentUtils";
 import { standardizeSchedule } from "../utils/hygieneCore";
 import { deriveScheduleIdentity } from "../utils/importIdentityUtils";
+import { assignMeetingPatternSpaces } from "../utils/meetingPatternUtils";
 
 const useScheduleOperations = () => {
   const {
@@ -440,8 +441,21 @@ const useScheduleOperations = () => {
           spaceDisplayNames,
           meetingPatterns:
             meetingPatterns.length > 0
-              ? meetingPatterns
-              : referenceSchedule?.meetingPatterns || [],
+              ? assignMeetingPatternSpaces(meetingPatterns, {
+                  spaceIds,
+                  spaceDisplayNames,
+                  force: true,
+                })
+              : roomsMatch
+                ? referenceSchedule?.meetingPatterns || []
+                : assignMeetingPatternSpaces(
+                    referenceSchedule?.meetingPatterns || [],
+                    {
+                      spaceIds,
+                      spaceDisplayNames,
+                      force: true,
+                    },
+                  ),
           isOnline: isOnlineFlag,
           onlineMode: isOnlineFlag
             ? onlineMode ||

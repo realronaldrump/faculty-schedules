@@ -2,7 +2,7 @@ import { collection, getDocs, getDoc, doc, writeBatch, query, where, documentId 
 import { db, COLLECTIONS } from '../../firebase';
 import { logCreate, logUpdate, logDelete, logImport } from '../changeLogger';
 import { parseCrossListCrns } from '../dataImportUtils';
-import { normalizeTime } from '../meetingPatternUtils';
+import { assignMeetingPatternSpaces, normalizeTime } from '../meetingPatternUtils';
 import { findPersonMatch, makeNameKey, normalizeBaylorId } from '../personMatchUtils';
 import { normalizeTermLabel, termCodeFromLabel, termLabelFromCode } from '../termUtils';
 import { parseRoomLabel, buildSpaceKey, normalizeSingleSpaceKey, normalizeSpaceNumber, parseSpaceKey } from '../locationService';
@@ -567,7 +567,9 @@ const normalizeMeetingPatternToken = (pattern) => {
   const start = normalizeTime(pattern.startTime || '');
   const end = normalizeTime(pattern.endTime || '');
   const mode = normalizeStringValue(pattern.mode).toLowerCase();
-  return [day, start, end, mode].filter(Boolean).join('|');
+  const spaceIds = normalizeListValues(pattern.spaceIds, normalizeIdToken).join(',');
+  const spaceNames = normalizeListValues(pattern.spaceDisplayNames, normalizeRoomToken).join(',');
+  return [day, start, end, mode, spaceIds, spaceNames].filter(Boolean).join('|');
 };
 
 const areEquivalentScheduleValues = (key, existingValue, incomingValue) => {
@@ -1345,6 +1347,11 @@ const previewScheduleChanges = async (
     const spaceDisplayNames = baseData.locationType === 'no_room'
       ? []
       : Array.from(new Set(preferredDisplayNames.filter(Boolean)));
+    const meetingPatterns = assignMeetingPatternSpaces(baseData.meetingPatterns, {
+      spaceIds: uniqueSpaceIds,
+      spaceDisplayNames,
+      force: true,
+    });
 
     const scheduleData = {
       courseCode,
@@ -1382,7 +1389,7 @@ const previewScheduleChanges = async (
       // Multi-room fields
       spaceIds: uniqueSpaceIds,
       spaceDisplayNames,
-      meetingPatterns: baseData.meetingPatterns,
+      meetingPatterns,
       scheduleType: baseData.scheduleType,
       instructionMethod: baseData.instructionMethod || '',
       isOnline: baseData.isOnline === true,

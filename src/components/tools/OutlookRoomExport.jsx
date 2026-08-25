@@ -11,20 +11,12 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import JSZip from "jszip";
-import { doc, onSnapshot, setDoc } from "firebase/firestore";
-import { parseMeetingPatterns } from "../../utils/meetingPatternUtils";
+import { doc, onSnapshot, runTransaction } from "firebase/firestore";
+import { pad2, sanitizeForFile } from "../../utils/icsUtils";
 import {
-  dayMetadata,
-  sanitizeForFile,
-  pad2,
-  formatLocalDate,
-  formatLocalDateTime,
-  formatUtcDateTime,
-  escapeICS,
-  foldICSLines,
-  parseTimeToMinutes,
-  buildVTimezone,
-} from "../../utils/icsUtils";
+  buildRoomCalendarExport,
+  getDetectedRoomReferences,
+} from "../../utils/roomCalendarExport";
 import { useData } from "../../contexts/DataContext";
 import { useSchedules } from "../../contexts/ScheduleContext";
 import { useUI } from "../../contexts/UIContext";
@@ -34,7 +26,6 @@ import {
   normalizeTermLabel,
   sortTerms,
 } from "../../utils/termUtils";
-import { splitMultiRoom } from "../../utils/locationService";
 import { useAuth } from "../../contexts/AuthContext";
 import { db, COLLECTIONS } from "../../firebase";
 
@@ -44,91 +35,24 @@ const EXCEPTIONS_DOC_ID = "rooms";
 
 const defaultTermConfig = { startDate: "", endDate: "", exceptions: [] };
 
-const ensureDate = (value) => {
-  if (!value) return null;
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value;
-  }
-  const parsed = new Date(`${value}T00:00:00`);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const getMeetingPatterns = (schedule) => {
-  if (
-    Array.isArray(schedule?.meetingPatterns) &&
-    schedule.meetingPatterns.length > 0
-  ) {
-    return schedule.meetingPatterns;
-  }
-  if (Array.isArray(schedule?.meetings) && schedule.meetings.length > 0) {
-    return schedule.meetings;
-  }
-  if (schedule?.["Meeting Pattern"] || schedule?.Meetings) {
-    return parseMeetingPatterns(
-      schedule["Meeting Pattern"] || "",
-      schedule.Meetings || "",
-    );
-  }
-  if (schedule?.Day && (schedule["Start Time"] || schedule.startTime)) {
-    return [
-      {
-        day: schedule.Day,
-        startTime: schedule["Start Time"] || schedule.startTime,
-        endTime: schedule["End Time"] || schedule.endTime,
-      },
-    ];
-  }
-  return [];
-};
-
-const splitRoomString = (value) => {
-  if (!value || typeof value !== "string") return [];
-  return splitMultiRoom(value);
-};
-
-const extractRoomNames = (schedule) => {
-  const rooms = new Set();
-  const addRoom = (value) => {
-    if (!value) return;
-    if (typeof value === "string") {
-      splitRoomString(value).forEach((room) => rooms.add(room));
-      return;
-    }
-    const display = value?.displayName;
-    if (display) {
-      splitRoomString(display).forEach((room) => rooms.add(room));
-    }
-  };
-
-  if (Array.isArray(schedule?.spaceDisplayNames)) {
-    schedule.spaceDisplayNames.forEach(addRoom);
-  }
-  if (Array.isArray(schedule?.rooms)) {
-    schedule.rooms.forEach(addRoom);
-  }
-  if (schedule?.room) {
-    addRoom(schedule.room);
-  }
-  if (schedule?.Room) {
-    splitRoomString(schedule.Room).forEach((room) => rooms.add(room));
-  }
-  return Array.from(rooms);
-};
-
 const OutlookRoomExport = () => {
   const { rawScheduleData = [] } = useData();
-  const { availableSemesters = [], termOptions: termMetaOptions = [] } =
-    useSchedules();
+  const {
+    availableSemesters = [],
+    termOptions: termMetaOptions = [],
+    selectedSemester = "",
+    setSelectedSemester,
+  } = useSchedules();
   const { showNotification } = useUI();
   const { termConfig, termConfigVersion } = useAppConfig();
   const { canAccess } = useAuth();
   const [termExceptions, setTermExceptions] = useState({});
   const [exceptionsLoaded, setExceptionsLoaded] = useState(false);
-  const [selectedTerm, setSelectedTerm] = useState("");
   const [roomSearch, setRoomSearch] = useState("");
   const [selectedRooms, setSelectedRooms] = useState([]);
   const [exceptionDraft, setExceptionDraft] = useState({ date: "", label: "" });
   const [exporting, setExporting] = useState(false);
+  const selectedTerm = selectedSemester;
 
   useEffect(() => {
     const docRef = doc(db, COLLECTIONS.OUTLOOK_EXCEPTIONS, EXCEPTIONS_DOC_ID);
@@ -182,13 +106,13 @@ const OutlookRoomExport = () => {
         .filter(Boolean),
     );
     return sortTerms(Array.from(combined).filter(Boolean), termConfig);
-  }, [rawScheduleData, availableSemesters, termConfigVersion]);
+  }, [rawScheduleData, availableSemesters, termConfig, termConfigVersion]);
 
   useEffect(() => {
     if (!selectedTerm && termLabels.length > 0) {
-      setSelectedTerm(termLabels[0]);
+      setSelectedSemester(termLabels[0]);
     }
-  }, [selectedTerm, termLabels]);
+  }, [selectedTerm, setSelectedSemester, termLabels]);
 
   const termMetaByLabel = useMemo(() => {
     const map = new Map();
@@ -212,32 +136,21 @@ const OutlookRoomExport = () => {
 
   const schedulesForTerm = useMemo(() => {
     if (!selectedTerm) return [];
-    return rawScheduleData.filter(
-      (schedule) => schedule?.term === selectedTerm,
-    );
-  }, [rawScheduleData, selectedTerm]);
+    const normalizedSelected = normalizeTermLabel(selectedTerm, termConfig);
+    return rawScheduleData.filter((schedule) => {
+      const normalizedSchedule = normalizeTermLabel(
+        schedule?.term || schedule?.termCode || "",
+        termConfig,
+      );
+      return normalizedSchedule === normalizedSelected;
+    });
+  }, [rawScheduleData, selectedTerm, termConfig, termConfigVersion]);
 
   const roomsForTerm = useMemo(() => {
-    const rooms = new Set();
-    schedulesForTerm.forEach((schedule) => {
-      extractRoomNames(schedule).forEach((room) => {
-        if (!room) return;
-        const normalized = room.trim();
-        if (!normalized) return;
-        const lower = normalized.toLowerCase();
-        if (
-          lower === "online" ||
-          lower.includes("no room") ||
-          lower.includes("general assignment")
-        )
-          return;
-        rooms.add(normalized);
-      });
-    });
-    return Array.from(rooms).sort((a, b) =>
-      a.localeCompare(b, undefined, { numeric: true }),
+    return getDetectedRoomReferences(schedulesForTerm, selectedTerm).map(
+      (room) => room.label,
     );
-  }, [schedulesForTerm]);
+  }, [schedulesForTerm, selectedTerm]);
 
   useEffect(() => {
     setSelectedRooms(roomsForTerm);
@@ -269,20 +182,40 @@ const OutlookRoomExport = () => {
       return;
     }
     const previousExceptions = termExceptions[selectedTerm] || [];
-    const next = {
+    const optimisticNext = {
       ...termExceptions,
       [selectedTerm]: nextExceptions,
     };
-    setTermExceptions(next);
+    setTermExceptions(optimisticNext);
     try {
-      await setDoc(
-        doc(db, COLLECTIONS.OUTLOOK_EXCEPTIONS, EXCEPTIONS_DOC_ID),
-        {
-          termExceptions: next,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true },
+      const docRef = doc(
+        db,
+        COLLECTIONS.OUTLOOK_EXCEPTIONS,
+        EXCEPTIONS_DOC_ID,
       );
+      const committedExceptions = await runTransaction(
+        db,
+        async (transaction) => {
+          const snapshot = await transaction.get(docRef);
+          const remoteExceptions = snapshot.exists()
+            ? snapshot.data()?.termExceptions || {}
+            : {};
+          const mergedExceptions = {
+            ...remoteExceptions,
+            [selectedTerm]: nextExceptions,
+          };
+          transaction.set(
+            docRef,
+            {
+              termExceptions: mergedExceptions,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true },
+          );
+          return mergedExceptions;
+        },
+      );
+      setTermExceptions(committedExceptions);
     } catch (error) {
       console.warn("Failed to save Outlook exceptions", error);
       showNotification?.(
@@ -344,9 +277,7 @@ const OutlookRoomExport = () => {
       );
       return false;
     }
-    const start = ensureDate(activeTermConfig.startDate);
-    const end = ensureDate(activeTermConfig.endDate);
-    if (!start || !end || end < start) {
+    if (activeTermConfig.endDate < activeTermConfig.startDate) {
       showNotification?.(
         "warning",
         "Invalid semester dates",
@@ -365,246 +296,6 @@ const OutlookRoomExport = () => {
     return true;
   };
 
-  const computeFirstOccurrenceForDays = (startDate, jsDays) => {
-    const allowed = new Set(jsDays);
-    const first = new Date(startDate.getTime());
-    for (let i = 0; i < 14; i++) {
-      if (allowed.has(first.getDay())) return first;
-      first.setDate(first.getDate() + 1);
-    }
-    return first;
-  };
-
-  const groupPatternsByTime = (patterns, schedule, config) => {
-    const termStart = ensureDate(config.startDate);
-    const termEnd = ensureDate(config.endDate);
-    if (!termStart || !termEnd || termEnd < termStart) return [];
-
-    const groups = new Map();
-    patterns.forEach((p) => {
-      const startMinutes = parseTimeToMinutes(p?.startTime);
-      const endMinutes = parseTimeToMinutes(p?.endTime);
-      const dayKey = (p?.day || "").toString().trim().toUpperCase();
-      const meta = dayMetadata[dayKey];
-      if (
-        !meta ||
-        startMinutes == null ||
-        endMinutes == null ||
-        endMinutes <= startMinutes
-      )
-        return;
-
-      const key = `${startMinutes}-${endMinutes}`;
-      const patternStart =
-        ensureDate(p?.startDate) ||
-        ensureDate(schedule?.startDate) ||
-        termStart;
-      const patternEnd =
-        ensureDate(p?.endDate) || ensureDate(schedule?.endDate) || termEnd;
-
-      const existing = groups.get(key) || {
-        startMinutes,
-        endMinutes,
-        jsDays: new Set(),
-        icsDays: new Set(),
-        effectiveStart: termStart,
-        effectiveEnd: termEnd,
-      };
-
-      existing.jsDays.add(meta.js);
-      existing.icsDays.add(meta.ics);
-      // Intersect date ranges across patterns in this group
-      existing.effectiveStart =
-        patternStart > existing.effectiveStart
-          ? patternStart
-          : existing.effectiveStart;
-      existing.effectiveEnd =
-        patternEnd < existing.effectiveEnd ? patternEnd : existing.effectiveEnd;
-
-      groups.set(key, existing);
-    });
-
-    return Array.from(groups.values()).filter(
-      (g) => g.effectiveEnd >= g.effectiveStart,
-    );
-  };
-
-  const generateCombinedEventLines = (
-    room,
-    schedule,
-    group,
-    config,
-    exceptions,
-  ) => {
-    if (!group || !group.jsDays || group.jsDays.size === 0)
-      return { lines: [], count: 0 };
-
-    const termStart = ensureDate(config.startDate);
-    const termEnd = ensureDate(config.endDate);
-    if (!termStart || !termEnd || termEnd < termStart)
-      return { lines: [], count: 0 };
-
-    const effectiveStart =
-      group.effectiveStart > termStart ? group.effectiveStart : termStart;
-    const effectiveEnd =
-      group.effectiveEnd < termEnd ? group.effectiveEnd : termEnd;
-    if (effectiveEnd < effectiveStart) return { lines: [], count: 0 };
-
-    const firstOccurrence = computeFirstOccurrenceForDays(
-      effectiveStart,
-      Array.from(group.jsDays),
-    );
-    if (firstOccurrence > effectiveEnd) return { lines: [], count: 0 };
-
-    const startDateTime = new Date(
-      firstOccurrence.getFullYear(),
-      firstOccurrence.getMonth(),
-      firstOccurrence.getDate(),
-      Math.floor(group.startMinutes / 60),
-      group.startMinutes % 60,
-      0,
-    );
-    const endDateTime = new Date(
-      firstOccurrence.getFullYear(),
-      firstOccurrence.getMonth(),
-      firstOccurrence.getDate(),
-      Math.floor(group.endMinutes / 60),
-      group.endMinutes % 60,
-      0,
-    );
-
-    const untilDate = new Date(
-      effectiveEnd.getFullYear(),
-      effectiveEnd.getMonth(),
-      effectiveEnd.getDate(),
-      23,
-      59,
-      59,
-      0,
-    );
-
-    const exceptionLines = (exceptions || [])
-      .map((ex) => ensureDate(ex.date))
-      .filter(
-        (date) =>
-          date &&
-          date >= effectiveStart &&
-          date <= effectiveEnd &&
-          group.jsDays.has(date.getDay()),
-      )
-      .map((date) => {
-        const exDateTime = new Date(
-          date.getFullYear(),
-          date.getMonth(),
-          date.getDate(),
-          Math.floor(group.startMinutes / 60),
-          group.startMinutes % 60,
-          0,
-        );
-        return `EXDATE;TZID=America/Chicago:${formatLocalDateTime(exDateTime)}`;
-      });
-
-    const baseName =
-      schedule?.courseCode || schedule?.Course || schedule?.title || "Class";
-    const summary = [
-      baseName,
-      schedule?.section ? String(schedule.section) : null,
-    ]
-      .filter(Boolean)
-      .join(" - ");
-
-    const descriptionLines = [];
-    if (schedule?.courseTitle || schedule?.["Course Title"])
-      descriptionLines.push(
-        `Title: ${schedule.courseTitle || schedule["Course Title"]}`,
-      );
-    if (schedule?.instructorName || schedule?.Instructor)
-      descriptionLines.push(
-        `Instructor: ${schedule.instructorName || schedule.Instructor}`,
-      );
-    if (schedule?.crn || schedule?.CRN)
-      descriptionLines.push(`CRN: ${schedule.crn || schedule.CRN}`);
-    if (schedule?.term) descriptionLines.push(`Semester: ${schedule.term}`);
-    if (schedule?.notes) descriptionLines.push(schedule.notes);
-
-    const icsDaysSorted = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"].filter(
-      (d) => group.icsDays.has(d),
-    );
-    const byday = icsDaysSorted.join(",");
-
-    const uid = `${sanitizeForFile(room)}-${schedule?.id || schedule?._originalId || "schedule"}-${byday}-${formatLocalDate(startDateTime)}-${pad2(startDateTime.getHours())}${pad2(startDateTime.getMinutes())}`;
-
-    const lines = [
-      "BEGIN:VEVENT",
-      `UID:${escapeICS(uid)}@faculty-schedules`,
-      `DTSTAMP:${formatUtcDateTime(new Date())}`,
-      `SUMMARY:${escapeICS(summary)}`,
-      `LOCATION:${escapeICS(room)}`,
-      `DTSTART;TZID=America/Chicago:${formatLocalDateTime(startDateTime)}`,
-      `DTEND;TZID=America/Chicago:${formatLocalDateTime(endDateTime)}`,
-      `RRULE:FREQ=WEEKLY;BYDAY=${byday};UNTIL=${formatUtcDateTime(untilDate)}`,
-    ];
-
-    if (descriptionLines.length > 0) {
-      lines.splice(
-        4,
-        0,
-        `DESCRIPTION:${escapeICS(descriptionLines.join("\n"))}`,
-      );
-    }
-
-    if (exceptionLines.length > 0) {
-      lines.push(...exceptionLines);
-    }
-
-    lines.push("END:VEVENT");
-
-    return { lines, count: 1 };
-  };
-
-  const generateCalendarForRoom = (room) => {
-    const config = activeTermConfig;
-    const header = [
-      "BEGIN:VCALENDAR",
-      "VERSION:2.0",
-      "PRODID:-//faculty-schedules//OutlookRoomExport//EN",
-      "CALSCALE:GREGORIAN",
-      "METHOD:PUBLISH",
-      "X-WR-TIMEZONE:America/Chicago",
-      `X-WR-CALNAME:${escapeICS(`${room} - ${selectedTerm}`)}`,
-    ];
-
-    const exceptions = config.exceptions || [];
-    const lines = [...header, ...buildVTimezone()];
-    let eventCount = 0;
-
-    schedulesForTerm.forEach((schedule) => {
-      const spaceLabels = extractRoomNames(schedule).map((name) => name.trim());
-      if (!spaceLabels.includes(room)) {
-        return;
-      }
-      const patterns = getMeetingPatterns(schedule);
-      const groups = groupPatternsByTime(patterns, schedule, config);
-      groups.forEach((group) => {
-        const { lines: eventLines, count } = generateCombinedEventLines(
-          room,
-          schedule,
-          group,
-          config,
-          exceptions,
-        );
-        if (count > 0) {
-          lines.push(...eventLines);
-          eventCount += count;
-        }
-      });
-    });
-
-    lines.push("END:VCALENDAR");
-    const folded = foldICSLines(lines);
-    return { ics: `${folded.join("\r\n")}\r\n`, count: eventCount };
-  };
-
   const performDownload = async (mode) => {
     if (!validateBeforeExport()) return;
     setExporting(true);
@@ -612,15 +303,32 @@ const OutlookRoomExport = () => {
       const timestamp = new Date();
       const dateTag = `${timestamp.getFullYear()}${pad2(timestamp.getMonth() + 1)}${pad2(timestamp.getDate())}`;
       const termTag = sanitizeForFile(selectedTerm);
+      const result = buildRoomCalendarExport({
+        schedules: schedulesForTerm,
+        selectedTerm,
+        termConfig: activeTermConfig,
+        selectedRoomLabels: selectedRooms,
+        generatedAt: timestamp,
+      });
+
+      if (result.calendars.length === 0) {
+        showNotification?.(
+          "warning",
+          "Nothing to export",
+          "No valid recurring class meetings were found for the selected rooms.",
+        );
+        return;
+      }
+
+      const skippedRoomMessage =
+        result.emptyRooms.length > 0
+          ? ` ${result.emptyRooms.length} selected room${result.emptyRooms.length === 1 ? "" : "s"} had no valid recurring meetings and were skipped.`
+          : "";
 
       if (mode === "zip") {
         const zip = new JSZip();
-        selectedRooms.forEach((room) => {
-          const { ics, count } = generateCalendarForRoom(room);
-          if (count > 0) {
-            const roomTag = sanitizeForFile(room);
-            zip.file(`${roomTag}.ics`, ics);
-          }
+        result.calendars.forEach((calendar) => {
+          zip.file(`${calendar.filenameBase}.ics`, calendar.ics);
         });
         const blob = await zip.generateAsync({ type: "blob" });
         const url = window.URL.createObjectURL(blob);
@@ -634,18 +342,17 @@ const OutlookRoomExport = () => {
         showNotification?.(
           "success",
           "ZIP ready",
-          "Multi-room Outlook calendar export created successfully.",
+          `Created ${result.calendars.length} room calendar${result.calendars.length === 1 ? "" : "s"} with ${result.totalEventCount} recurring event${result.totalEventCount === 1 ? "" : "s"}.${skippedRoomMessage}`,
         );
       } else {
-        selectedRooms.forEach((room) => {
-          const { ics, count } = generateCalendarForRoom(room);
-          if (count === 0) return;
-          const roomTag = sanitizeForFile(room);
-          const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+        result.calendars.forEach((calendar) => {
+          const blob = new Blob([calendar.ics], {
+            type: "text/calendar;charset=utf-8",
+          });
           const url = window.URL.createObjectURL(blob);
           const link = document.createElement("a");
           link.href = url;
-          link.download = `${roomTag}-${termTag}-${dateTag}.ics`;
+          link.download = `${calendar.filenameBase}-${termTag}-${dateTag}.ics`;
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
@@ -654,7 +361,7 @@ const OutlookRoomExport = () => {
         showNotification?.(
           "success",
           "Download complete",
-          "Outlook calendar files generated for the selected rooms.",
+          `Downloaded ${result.calendars.length} room calendar${result.calendars.length === 1 ? "" : "s"} with ${result.totalEventCount} recurring event${result.totalEventCount === 1 ? "" : "s"}.${skippedRoomMessage}`,
         );
       }
     } catch (error) {
@@ -713,13 +420,19 @@ const OutlookRoomExport = () => {
           <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="lg:col-span-1 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label
+                  htmlFor="room-calendar-semester"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
                   Semester
                 </label>
                 <SelectDropdown
+                  id="room-calendar-semester"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-baylor-green focus:outline-none focus:ring-1 focus:ring-baylor-green"
                   value={selectedTerm}
-                  onChange={(event) => setSelectedTerm(event.target.value)}
+                  onChange={(event) =>
+                    setSelectedSemester(event.target.value)
+                  }
                 >
                   {termLabels.length === 0 && (
                     <option value="">No semesters available</option>
@@ -734,10 +447,14 @@ const OutlookRoomExport = () => {
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="room-calendar-start-date"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     Semester start date
                   </label>
                   <input
+                    id="room-calendar-start-date"
                     type="date"
                     value={activeTermConfig.startDate}
                     readOnly
@@ -746,10 +463,14 @@ const OutlookRoomExport = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="room-calendar-end-date"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     Semester end date
                   </label>
                   <input
+                    id="room-calendar-end-date"
                     type="date"
                     value={activeTermConfig.endDate}
                     readOnly
@@ -805,7 +526,11 @@ const OutlookRoomExport = () => {
                     </button>
                   </div>
                 </div>
+                <label htmlFor="room-calendar-room-search" className="sr-only">
+                  Search rooms
+                </label>
                 <input
+                  id="room-calendar-room-search"
                   type="search"
                   value={roomSearch}
                   onChange={(event) => setRoomSearch(event.target.value)}
@@ -855,10 +580,14 @@ const OutlookRoomExport = () => {
 
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
               <div className="sm:col-span-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Date
+                <label
+                  htmlFor="room-calendar-exception-date"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  No-class date
                 </label>
                 <input
+                  id="room-calendar-exception-date"
                   type="date"
                   value={exceptionDraft.date}
                   onChange={(event) =>
@@ -872,11 +601,15 @@ const OutlookRoomExport = () => {
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Label (optional)
+                <label
+                  htmlFor="room-calendar-exception-label"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Exception label (optional)
                 </label>
                 <div className="flex gap-3">
                   <input
+                    id="room-calendar-exception-label"
                     type="text"
                     value={exceptionDraft.label}
                     onChange={(event) =>

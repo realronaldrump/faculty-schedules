@@ -39,6 +39,25 @@ const classes = [
 ];
 
 describe("ScheduleClassPickerModal", () => {
+  it("uses the app dropdown component instead of browser-native selects", () => {
+    render(
+      <ScheduleClassPickerModal
+        isOpen
+        onClose={vi.fn()}
+        classes={classes}
+        availableSemesters={["Fall 2026", "Spring 2027"]}
+        preferredSemester="Fall 2026"
+      />,
+    );
+
+    expect(document.body.querySelectorAll("select")).toHaveLength(0);
+    expect(
+      screen
+        .getAllByRole("button")
+        .filter((button) => button.matches('[aria-haspopup="listbox"]')),
+    ).toHaveLength(3);
+  });
+
   it("filters to the current room, blocks duplicates, and adds selected classes", () => {
     const onAdd = vi.fn();
     render(

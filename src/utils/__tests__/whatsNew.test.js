@@ -47,6 +47,7 @@ describe("whatsNew releases", () => {
     expect(LATEST_RELEASE.highlights.map(({ title }) => title)).toEqual([
       "Schedule Grid Studio",
       "Reusable in-app templates",
+      "More reliable room calendars",
     ]);
   });
 });

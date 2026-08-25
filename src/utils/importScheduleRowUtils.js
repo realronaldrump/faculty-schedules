@@ -9,7 +9,10 @@
  */
 
 import { parseCourseCode, deriveCreditsFromCatalogNumber } from "./courseUtils";
-import { parseMeetingPatterns } from "./meetingPatternUtils";
+import {
+  assignMeetingPatternSpaces,
+  parseMeetingPatterns,
+} from "./meetingPatternUtils";
 import { normalizeBaylorId } from "./personMatchUtils";
 import { normalizeTermLabel, termCodeFromLabel } from "./termUtils";
 import { hashRecord } from "./hashUtils";
@@ -194,7 +197,7 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = "") => {
     "Meeting Pattern",
     "Meetings",
   ]);
-  const meetingPatterns = parseMeetingPatterns(row);
+  const parsedMeetingPatterns = parseMeetingPatterns(row);
 
   const instructionMethod = readField(row, "instruction_method", [
     "Inst. Method",
@@ -237,6 +240,11 @@ export const extractScheduleRowBaseData = (row, fallbackTerm = "") => {
       : parsedRoomNames.length > 0
         ? parsedRoomNames
         : filteredRoomNames;
+  const meetingPatterns = assignMeetingPatternSpaces(parsedMeetingPatterns, {
+    spaceIds,
+    spaceDisplayNames,
+    force: true,
+  });
   const crossListCrns = parseCrossListCrns(row, { includePrimaryCrn: false });
 
   return {

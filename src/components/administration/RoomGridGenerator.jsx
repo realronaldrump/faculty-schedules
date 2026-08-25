@@ -40,6 +40,7 @@ import { logCreate, logDelete, logUpdate } from "../../utils/changeLogger";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import { usePermissions } from "../../utils/permissions";
 import { fetchSchedulesByTerm } from "../../utils/dataImportUtils";
+import { assignMeetingPatternSpaces } from "../../utils/meetingPatternUtils";
 import {
   extractSpaceNumber,
   getBuildingDisplay,
@@ -262,7 +263,13 @@ const RoomGridGenerator = () => {
         const spaceLabels = Array.isArray(schedule.spaceDisplayNames)
           ? schedule.spaceDisplayNames
           : [];
-        const meetingPatterns = schedule.meetingPatterns || [];
+        const meetingPatterns = assignMeetingPatternSpaces(
+          schedule.meetingPatterns || [],
+          {
+            spaceIds: schedule.spaceIds || [],
+            spaceDisplayNames: spaceLabels,
+          },
+        );
 
         if (spaceLabels.length === 0 || meetingPatterns.length === 0) {
           return [];
@@ -288,14 +295,29 @@ const RoomGridGenerator = () => {
             : "Staff");
 
         // Create entries for each room/pattern combination
-        return spaceLabels.flatMap((roomString) => {
+        return spaceLabels.flatMap((roomString, roomIndex) => {
           const parsedRoom = parseRoomAssignment(roomString);
           if (!parsedRoom) {
             return [];
           }
           const { buildingName, roomNumber } = parsedRoom;
 
+          const roomId = Array.isArray(schedule.spaceIds)
+            ? schedule.spaceIds[roomIndex] || ""
+            : "";
           return meetingPatterns
+            .filter((pattern) => {
+              const assignedIds = Array.isArray(pattern.spaceIds)
+                ? pattern.spaceIds
+                : [];
+              const assignedLabels = Array.isArray(pattern.spaceDisplayNames)
+                ? pattern.spaceDisplayNames
+                : [];
+              return (
+                (roomId && assignedIds.includes(roomId)) ||
+                assignedLabels.includes(roomString)
+              );
+            })
             .map((pattern) => {
               const days = pattern.day || "";
               const time =

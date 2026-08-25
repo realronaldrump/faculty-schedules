@@ -138,6 +138,111 @@ export const parseMeetingPatterns = (source, meetingsStr = '') => {
   return patterns;
 };
 
+const normalizeSpaceValues = (value) => (
+  Array.isArray(value)
+    ? Array.from(new Set(value.map((item) => String(item || '').trim()).filter(Boolean)))
+    : []
+);
+
+const buildSpaceReferences = ({ spaceIds = [], spaceDisplayNames = [] } = {}) => {
+  const ids = normalizeSpaceValues(spaceIds);
+  const labels = normalizeSpaceValues(spaceDisplayNames);
+  const count = Math.max(ids.length, labels.length);
+  const refs = [];
+
+  for (let index = 0; index < count; index += 1) {
+    const id = ids[index] || '';
+    const label = labels[index] || id;
+    if (!id && !label) continue;
+    refs.push({ id, label });
+  }
+
+  return refs;
+};
+
+const patternHasSpaceAssignment = (pattern) =>
+  normalizeSpaceValues(pattern?.spaceIds).length > 0 ||
+  normalizeSpaceValues(pattern?.spaceDisplayNames).length > 0;
+
+/**
+ * Attach canonical room references to meeting patterns.
+ *
+ * CLSS emits parallel semicolon-delimited room and meeting segments. When the
+ * ordered counts match, each source segment belongs to the room at the same
+ * index. A single segment applies to every listed room. Existing explicit
+ * assignments are preserved unless `force` is requested after room resolution.
+ */
+export const assignMeetingPatternSpaces = (
+  meetingPatterns = [],
+  { spaceIds = [], spaceDisplayNames = [], force = false } = {},
+) => {
+  const patterns = Array.isArray(meetingPatterns)
+    ? meetingPatterns.filter(Boolean)
+    : [];
+  const refs = buildSpaceReferences({ spaceIds, spaceDisplayNames });
+  if (patterns.length === 0 || refs.length === 0) {
+    return patterns.map((pattern) => ({ ...pattern }));
+  }
+
+  const allSpaceIds = refs.map((ref) => ref.id).filter(Boolean);
+  const allSpaceDisplayNames = refs.map((ref) => ref.label).filter(Boolean);
+  const hasExistingAssignments = patterns.some(patternHasSpaceAssignment);
+
+  if (hasExistingAssignments && !force) {
+    return patterns.map((pattern) => {
+      if (!patternHasSpaceAssignment(pattern)) {
+        return {
+          ...pattern,
+          spaceIds: allSpaceIds,
+          spaceDisplayNames: allSpaceDisplayNames,
+        };
+      }
+      return {
+        ...pattern,
+        spaceIds: normalizeSpaceValues(pattern.spaceIds),
+        spaceDisplayNames: normalizeSpaceValues(pattern.spaceDisplayNames),
+      };
+    });
+  }
+
+  const rawGroupOrder = [];
+  const rawGroupIndexes = new Map();
+  patterns.forEach((pattern, index) => {
+    const raw = String(pattern?.raw || '').trim().toLowerCase();
+    if (!raw) return;
+    if (!rawGroupIndexes.has(raw)) {
+      rawGroupOrder.push(raw);
+      rawGroupIndexes.set(raw, []);
+    }
+    rawGroupIndexes.get(raw).push(index);
+  });
+
+  const canPairBySourceOrder =
+    refs.length > 1 &&
+    rawGroupOrder.length === refs.length &&
+    patterns.every((pattern) => String(pattern?.raw || '').trim());
+  const refByPatternIndex = new Map();
+
+  if (canPairBySourceOrder) {
+    rawGroupOrder.forEach((raw, groupIndex) => {
+      rawGroupIndexes.get(raw).forEach((patternIndex) => {
+        refByPatternIndex.set(patternIndex, [refs[groupIndex]]);
+      });
+    });
+  }
+
+  return patterns.map((pattern, index) => {
+    const assignedRefs = refByPatternIndex.get(index) || refs;
+    return {
+      ...pattern,
+      spaceIds: assignedRefs.map((ref) => ref.id).filter(Boolean),
+      spaceDisplayNames: assignedRefs
+        .map((ref) => ref.label)
+        .filter(Boolean),
+    };
+  });
+};
+
 const extractTimeToken = (value) => {
   if (!value) return '';
   const match = String(value).match(/(\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{3,4})/i);

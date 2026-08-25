@@ -24,6 +24,9 @@ This app now targets canonical storage shapes across imports and UI reads.
 - `instructorAssignments`
 - `spaceIds`
 - `spaceDisplayNames`
+- `meetingPatterns` entries carry `spaceIds` and `spaceDisplayNames` when a
+  section uses different rooms for different meeting segments. Top-level space
+  arrays remain the aggregate set of rooms used by the section.
 
 Legacy examples that should be removed by hygiene:
 

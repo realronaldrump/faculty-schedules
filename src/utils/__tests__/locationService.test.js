@@ -42,6 +42,32 @@ describe('locationService multi-room parsing', () => {
     expect(parsed.spaceKeys[0]).toMatch(/GOEBEL:101/i);
   });
 
+  it('preserves ordered room-to-meeting associations from CLSS rows', () => {
+    const base = extractScheduleRowBaseData({
+      Course: 'ID 3418',
+      'Section #': '01',
+      Term: 'Fall 2026',
+      CRN: '45775',
+      Instructor: 'Doe, Jane',
+      Room: 'Goebel 109; Goebel 113',
+      Meetings: 'MW 11:15am-2pm; MW 11:15am-2:15pm'
+    });
+
+    const twoPmPatterns = base.meetingPatterns.filter(
+      (pattern) => pattern.endTime === '2:00 PM'
+    );
+    const twoFifteenPatterns = base.meetingPatterns.filter(
+      (pattern) => pattern.endTime === '2:15 PM'
+    );
+
+    expect(twoPmPatterns).toHaveLength(2);
+    expect(twoPmPatterns[0].spaceIds).toEqual(['GOEBEL:109']);
+    expect(twoPmPatterns[0].spaceDisplayNames).toEqual(['Goebel Building 109']);
+    expect(twoFifteenPatterns).toHaveLength(2);
+    expect(twoFifteenPatterns[0].spaceIds).toEqual(['GOEBEL:113']);
+    expect(twoFifteenPatterns[0].spaceDisplayNames).toEqual(['Goebel Building 113']);
+  });
+
   it('flags online locations as virtual', () => {
     const parsed = parseMultiRoom('ONLINE');
     expect(parsed.locationType).toBe(LOCATION_TYPE.VIRTUAL);

@@ -22,6 +22,7 @@ import {
   parseHourlyRate,
 } from "../studentWorkers";
 import { normalizeSpaceRecord } from "../spaceUtils";
+import { assignMeetingPatternSpaces } from "../meetingPatternUtils";
 import {
   BULK_EXPORT_SHEET_IDS,
   getSheetDefinition,
@@ -433,7 +434,10 @@ const buildSectionMeetingRows = ({
     .forEach((schedule) => {
       const meetingPatterns =
         Array.isArray(schedule.meetingPatterns) && schedule.meetingPatterns.length > 0
-          ? schedule.meetingPatterns
+          ? assignMeetingPatternSpaces(schedule.meetingPatterns, {
+              spaceIds: schedule.spaceIds || [],
+              spaceDisplayNames: schedule.spaceDisplayNames || [],
+            })
           : [null];
 
       meetingPatterns.forEach((pattern) => {
@@ -447,7 +451,19 @@ const buildSectionMeetingRows = ({
           day: pattern?.day || "",
           startTime: pattern?.startTime || "",
           endTime: pattern?.endTime || "",
-          locations: resolveLocationDisplay(schedule, spacesByKey),
+          locations: resolveLocationDisplay(
+            pattern
+              ? {
+                  ...schedule,
+                  spaceIds: pattern.spaceIds || schedule.spaceIds || [],
+                  spaceDisplayNames:
+                    pattern.spaceDisplayNames ||
+                    schedule.spaceDisplayNames ||
+                    [],
+                }
+              : schedule,
+            spacesByKey,
+          ),
           instructors: resolveInstructorNames(schedule, peopleIndex),
         });
       });

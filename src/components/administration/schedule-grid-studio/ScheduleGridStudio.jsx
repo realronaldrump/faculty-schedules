@@ -26,6 +26,7 @@ import {
 import ExportModal from "../ExportModal";
 import Badge from "../../shared/Badge";
 import ConfirmDialog from "../../shared/ConfirmDialog";
+import SelectDropdown from "../../SelectDropdown";
 import {
   DEFAULT_STUDIO_VISIBILITY,
   STUDIO_DAYS,
@@ -281,19 +282,27 @@ const LayoutPanel = ({ document, onPatch }) => {
         title="Page and layout"
         description="Set the physical output first, then tune the density for the room schedule."
       />
-      <FieldLabel label="Page size">
-        <select
+      <div>
+        <span
+          id="studio-page-size-label"
+          className="mb-1.5 block text-sm font-semibold text-gray-700"
+        >
+          Page size
+        </span>
+        <SelectDropdown
+          id="studio-page-size"
+          aria-labelledby="studio-page-size-label"
           value={layout.preset}
           onChange={(event) => applyPreset(event.target.value)}
-          className="form-select w-full"
+          className="w-full"
         >
           {STUDIO_PAGE_PRESETS.map((preset) => (
             <option key={preset.id} value={preset.id}>
               {preset.label}
             </option>
           ))}
-        </select>
-      </FieldLabel>
+        </SelectDropdown>
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <FieldLabel label="Width" hint="Inches">
           <input
@@ -346,19 +355,27 @@ const LayoutPanel = ({ document, onPatch }) => {
           />
         </FieldLabel>
       </div>
-      <FieldLabel label="Time guides">
-        <select
+      <div>
+        <span
+          id="studio-time-guides-label"
+          className="mb-1.5 block text-sm font-semibold text-gray-700"
+        >
+          Time guides
+        </span>
+        <SelectDropdown
+          id="studio-time-guides"
+          aria-labelledby="studio-time-guides-label"
           value={layout.timeStep}
           onChange={(event) =>
             onPatch({ timeStep: Number(event.target.value) })
           }
-          className="form-select w-full"
+          className="w-full"
         >
           <option value="30">Every 30 minutes</option>
           <option value="60">Every hour</option>
           <option value="120">Every 2 hours</option>
-        </select>
-      </FieldLabel>
+        </SelectDropdown>
+      </div>
       <RangeField
         label="Class text size"
         value={layout.textScale}
@@ -404,18 +421,26 @@ const LayoutPanel = ({ document, onPatch }) => {
         suffix="%"
         onChange={(value) => onPatch({ gridOpacity: value / 100 })}
       />
-      <FieldLabel label="Instructor names">
-        <select
+      <div>
+        <span
+          id="studio-instructor-format-label"
+          className="mb-1.5 block text-sm font-semibold text-gray-700"
+        >
+          Instructor names
+        </span>
+        <SelectDropdown
+          id="studio-instructor-format"
+          aria-labelledby="studio-instructor-format-label"
           value={layout.instructorFormat}
           onChange={(event) =>
             onPatch({ instructorFormat: event.target.value })
           }
-          className="form-select w-full"
+          className="w-full"
         >
           <option value="full">Full name</option>
           <option value="last">Last name only</option>
-        </select>
-      </FieldLabel>
+        </SelectDropdown>
+      </div>
       <div className="grid grid-cols-2 gap-3">
         {[
           ["accentColor", "Header"],
@@ -700,20 +725,28 @@ const EntryEditor = ({
           />
         </FieldLabel>
       </div>
-      <FieldLabel
-        label="Block detail"
-        hint="Detailed mode can wrap longer names when there is room."
-      >
-        <select
+      <div>
+        <span
+          id="studio-block-detail-label"
+          className="mb-1.5 block text-sm font-semibold text-gray-700"
+        >
+          Block detail
+        </span>
+        <SelectDropdown
+          id="studio-block-detail"
+          aria-labelledby="studio-block-detail-label"
           value={entry.detailLevel}
           onChange={(event) => onPatch({ detailLevel: event.target.value })}
-          className="form-select w-full"
+          className="w-full"
         >
           <option value="auto">Automatic</option>
           <option value="compact">Compact</option>
           <option value="detailed">Detailed / wrap text</option>
-        </select>
-      </FieldLabel>
+        </SelectDropdown>
+        <span className="mt-1 block text-xs text-gray-500">
+          Detailed mode can wrap longer names when there is room.
+        </span>
+      </div>
       <div className="grid grid-cols-[minmax(0,1fr)_54px] gap-3">
         <FieldLabel label="Note">
           <input

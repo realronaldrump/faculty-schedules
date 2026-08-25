@@ -46,6 +46,7 @@ import {
   resolveScheduleSpaces,
 } from "../utils/spaceUtils";
 import { splitMultiRoom } from "../utils/locationService";
+import { assignMeetingPatternSpaces } from "../utils/meetingPatternUtils";
 
 // Import new contexts
 import { usePeople } from "./PeopleContext";
@@ -301,14 +302,49 @@ export const DataProvider = ({ children }) => {
       };
 
       if (schedule.meetingPatterns && schedule.meetingPatterns.length > 0) {
-        schedule.meetingPatterns.forEach((pattern, idx) => {
+        const assignedPatterns = assignMeetingPatternSpaces(
+          schedule.meetingPatterns,
+          {
+            spaceIds: schedule.spaceIds || [],
+            spaceDisplayNames: schedule.spaceDisplayNames || [],
+          },
+        );
+        assignedPatterns.forEach((pattern, idx) => {
+          const patternSpaceIds = Array.isArray(pattern.spaceIds)
+            ? pattern.spaceIds
+            : schedule.spaceIds || [];
+          const patternSpaceDisplayNames = Array.isArray(
+            pattern.spaceDisplayNames,
+          )
+            ? pattern.spaceDisplayNames
+            : schedule.spaceDisplayNames || [];
+          const scopedPatterns = assignedPatterns.filter((candidate) => {
+            const sameTime =
+              candidate.startTime === pattern.startTime &&
+              candidate.endTime === pattern.endTime;
+            const sameIds = JSON.stringify(
+              [...(candidate.spaceIds || [])].sort(),
+            ) === JSON.stringify([...patternSpaceIds].sort());
+            const sameLabels = JSON.stringify(
+              [...(candidate.spaceDisplayNames || [])].sort(),
+            ) === JSON.stringify([...patternSpaceDisplayNames].sort());
+            return sameTime && sameIds && sameLabels;
+          });
+          const scopedSchedule = {
+            ...schedule,
+            spaceIds: patternSpaceIds,
+            spaceDisplayNames: patternSpaceDisplayNames,
+          };
           flattened.push({
             ...commonProps,
             id: `${schedule.id}-${idx}`,
+            spaceIds: patternSpaceIds,
+            spaceDisplayNames: patternSpaceDisplayNames,
+            meetingPatterns: scopedPatterns,
             Day: pattern.day,
             "Start Time": pattern.startTime,
             "End Time": pattern.endTime,
-            Room: getRoomDisplay(schedule),
+            Room: getRoomDisplay(scopedSchedule),
           });
         });
       } else {

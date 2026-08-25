@@ -9,6 +9,7 @@ import {
   Eye,
   EyeOff,
   Library,
+  ListPlus,
   Plus,
   Redo2,
   RotateCcw,
@@ -39,7 +40,10 @@ import {
   studioHistoryReducer,
 } from "../../../utils/scheduleGridStudio";
 import ScheduleGridLibraryModal from "./ScheduleGridLibraryModal";
+import ScheduleClassPickerModal from "./ScheduleClassPickerModal";
 import ScheduleGridStudioPreview from "./ScheduleGridStudioPreview";
+
+const EMPTY_LIST = Object.freeze([]);
 
 const EDITOR_TABS = [
   { id: "details", label: "Details", icon: Settings2 },
@@ -752,7 +756,11 @@ const EntryEditor = ({
 const ScheduleGridStudio = ({
   initialDocument,
   initialTemplateId = "",
-  templates = [],
+  templates = EMPTY_LIST,
+  availableClasses = EMPTY_LIST,
+  availableSemesters = EMPTY_LIST,
+  catalogSemester = "",
+  isLoadingClassCatalog = false,
   isLoadingTemplates = false,
   canSave = false,
   onBack,
@@ -761,6 +769,7 @@ const ScheduleGridStudio = ({
   onDeleteTemplate,
   onDuplicateTemplate,
   onToggleFavoriteTemplate,
+  onLoadClassCatalog,
 }) => {
   const [history, dispatch] = useReducer(
     studioHistoryReducer,
@@ -781,6 +790,7 @@ const ScheduleGridStudio = ({
   );
   const [isSaving, setIsSaving] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [isClassPickerOpen, setIsClassPickerOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [pendingExit, setPendingExit] = useState(false);
   const [pendingTemplate, setPendingTemplate] = useState(null);
@@ -836,6 +846,16 @@ const ScheduleGridStudio = ({
     });
     dispatch({ type: "add_entry", entry });
     setSelectedEntryId(entry.id);
+  };
+
+  const addExistingEntries = (entries) => {
+    if (!entries?.length) return;
+    dispatch({ type: "add_entries", entries });
+    setSelectedEntryId(entries[0].id);
+    setNotice({
+      type: "success",
+      text: `${entries.length} existing class${entries.length === 1 ? "" : "es"} added to the grid.`,
+    });
   };
 
   const duplicateEntry = (id) => {
@@ -1208,7 +1228,7 @@ const ScheduleGridStudio = ({
         </main>
 
         <aside className="university-card order-3 min-w-0 self-start xl:sticky xl:top-4">
-          <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
             <div>
               <h2 className="!mb-0 !text-lg !font-semibold !text-gray-900">
                 Schedule items
@@ -1217,10 +1237,24 @@ const ScheduleGridStudio = ({
                 {document.entries.length} class{document.entries.length === 1 ? "" : "es"}
               </p>
             </div>
-            <button type="button" onClick={addEntry} className="btn-primary px-3 py-2 text-xs">
-              <Plus className="mr-1.5 h-4 w-4" />
-              Add class
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setIsClassPickerOpen(true)}
+                className="btn-primary px-3 py-2 text-xs"
+              >
+                <ListPlus className="mr-1.5 h-4 w-4" />
+                From schedule
+              </button>
+              <button
+                type="button"
+                onClick={addEntry}
+                className="btn-secondary px-3 py-2 text-xs"
+              >
+                <Plus className="mr-1.5 h-4 w-4" />
+                Blank class
+              </button>
+            </div>
           </div>
 
           <div className="max-h-[calc(100vh-15rem)] space-y-4 overflow-y-auto p-4">
@@ -1229,7 +1263,7 @@ const ScheduleGridStudio = ({
                 <div className="rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 p-5 text-center">
                   <p className="text-sm font-semibold text-gray-700">No classes yet</p>
                   <p className="mt-1 text-xs text-gray-500">
-                    Add the first class to begin building this schedule.
+                    Choose existing schedule data or add a blank class to begin.
                   </p>
                 </div>
               ) : (
@@ -1257,6 +1291,21 @@ const ScheduleGridStudio = ({
           </div>
         </aside>
       </div>
+
+      <ScheduleClassPickerModal
+        isOpen={isClassPickerOpen}
+        onClose={() => setIsClassPickerOpen(false)}
+        classes={availableClasses}
+        existingEntries={document.entries}
+        currentBuilding={document.building}
+        currentRoom={document.room}
+        availableSemesters={availableSemesters}
+        catalogSemester={catalogSemester}
+        preferredSemester={document.semester}
+        isLoading={isLoadingClassCatalog}
+        onLoadSemester={onLoadClassCatalog}
+        onAdd={addExistingEntries}
+      />
 
       <ScheduleGridLibraryModal
         isOpen={isLibraryOpen}

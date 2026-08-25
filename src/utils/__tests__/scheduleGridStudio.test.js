@@ -5,6 +5,8 @@ import {
   createStudioDocumentFromSchedule,
   createStudioEntry,
   createStudioHistory,
+  createStudioCatalogEntry,
+  getStudioEntryIdentity,
   layoutStudioEntriesForDay,
   normalizeMeetingDays,
   parseMeetingTimeRange,
@@ -81,6 +83,42 @@ describe("scheduleGridStudio model", () => {
 
     history = studioHistoryReducer(history, { type: "redo" });
     expect(history.present.entries[0].instructor).toBe("Avery Johnson");
+  });
+
+  it("bulk-adds catalog classes as one undoable edit with stable duplicate identities", () => {
+    const first = createStudioCatalogEntry({
+      building: "Mary Gibbs Jones",
+      room: "207",
+      class: "NUTR 2288",
+      section: "01",
+      professor: "Stanley Wilfong",
+      days: "MWF",
+      time: "8:00 am - 8:50 am",
+    });
+    const sameClassAnotherRoom = createStudioCatalogEntry({
+      building: "Cashion",
+      room: "101",
+      class: "NUTR 2288",
+      section: "01",
+      professor: "Stanley Wilfong",
+      days: "MWF",
+      time: "8:00 am - 8:50 am",
+    });
+    expect(first.id).not.toBe(sameClassAnotherRoom.id);
+    expect(getStudioEntryIdentity(first.entry)).toBe(
+      getStudioEntryIdentity(sameClassAnotherRoom.entry),
+    );
+
+    let history = createStudioHistory(createBlankStudioDocument());
+    history = studioHistoryReducer(history, {
+      type: "add_entries",
+      entries: [first.entry, sameClassAnotherRoom.entry],
+    });
+    expect(history.present.entries).toHaveLength(2);
+    expect(history.past).toHaveLength(1);
+
+    history = studioHistoryReducer(history, { type: "undo" });
+    expect(history.present.entries).toHaveLength(0);
   });
 
   it("places overlapping classes into separate lanes but keeps back-to-back classes full width", () => {

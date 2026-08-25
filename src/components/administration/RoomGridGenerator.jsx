@@ -89,6 +89,7 @@ const RoomGridGenerator = () => {
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
   const [dashboardSchedules, setDashboardSchedules] = useState(null);
   const [loadedTerm, setLoadedTerm] = useState("");
+  const [processedTerm, setProcessedTerm] = useState("");
 
   // Dialog states
   const [alertDialog, setAlertDialog] = useState({
@@ -181,6 +182,7 @@ const RoomGridGenerator = () => {
       setSelectedBuilding("");
       setSelectedBuildings([]);
       setSelectedDayType("WEEK");
+      setProcessedTerm("");
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -197,6 +199,9 @@ const RoomGridGenerator = () => {
   const loadDashboardData = useCallback(
     async (targetSemester = "") => {
       setIsLoadingDashboard(true);
+      setAllClassData([]);
+      setBuildings({});
+      setProcessedTerm("");
       try {
         const termLabel =
           targetSemester ||
@@ -206,7 +211,7 @@ const RoomGridGenerator = () => {
           "";
         if (!termLabel) {
           showMessage("Select a semester to load dashboard data.");
-          return;
+          return null;
         }
         if (!semester) {
           setSemester(termLabel);
@@ -222,9 +227,11 @@ const RoomGridGenerator = () => {
           `Loaded ${schedules.length} schedules for ${termLabel}.`,
           "success",
         );
+        return schedules;
       } catch (error) {
         console.error("Error loading dashboard data:", error);
         showMessage("Failed to load dashboard data. " + error.message);
+        return null;
       } finally {
         setIsLoadingDashboard(false);
       }
@@ -235,7 +242,15 @@ const RoomGridGenerator = () => {
   // Transform dashboard schedules to allClassData format (matching CSV processing output)
   const processDashboardData = useCallback(
     (targetSemester) => {
-      if (!dashboardSchedules || dashboardSchedules.length === 0) return;
+      if (!dashboardSchedules) return;
+
+      if (dashboardSchedules.length === 0) {
+        setAllClassData([]);
+        setBuildings({});
+        setProcessedTerm(targetSemester);
+        showMessage(`No classes with room assignments found for ${targetSemester}.`);
+        return;
+      }
 
       const semesterSchedules = Array.isArray(dashboardSchedules)
         ? dashboardSchedules
@@ -332,6 +347,7 @@ const RoomGridGenerator = () => {
       }, {});
 
       setBuildings(newBuildings);
+      setProcessedTerm(targetSemester);
 
       if (Object.keys(newBuildings).length === 0) {
         showMessage(
@@ -355,10 +371,21 @@ const RoomGridGenerator = () => {
   }, [dataMode, semester, loadedTerm, loadDashboardData]);
 
   useEffect(() => {
-    if (dataMode === "auto" && dashboardSchedules && semester) {
+    if (
+      dataMode === "auto" &&
+      dashboardSchedules &&
+      semester &&
+      semester === loadedTerm
+    ) {
       processDashboardData(semester);
     }
-  }, [dataMode, semester, dashboardSchedules, processDashboardData]);
+  }, [
+    dataMode,
+    semester,
+    loadedTerm,
+    dashboardSchedules,
+    processDashboardData,
+  ]);
 
   useEffect(() => {
     if (dataMode === "auto" && !semester && availableSemesters.length > 0) {
@@ -1241,6 +1268,19 @@ const RoomGridGenerator = () => {
     });
   };
 
+  const loadStudioClassCatalog = useCallback(
+    async (targetSemester) => {
+      setDataMode("auto");
+      setSemester(targetSemester);
+      const schedules = await loadDashboardData(targetSemester);
+      if (schedules === null) {
+        setProcessedTerm(loadedTerm);
+        throw new Error(`Could not load schedule classes for ${targetSemester}.`);
+      }
+    },
+    [loadDashboardData, loadedTerm],
+  );
+
   const loadGrid = (grid) => {
     if (!grid) return;
     if (grid.kind === "studio" && grid.studio) {
@@ -1356,6 +1396,19 @@ const RoomGridGenerator = () => {
           initialDocument={studioSession.document}
           initialTemplateId={studioSession.templateId}
           templates={studioTemplates}
+          availableClasses={
+            dataMode === "auto" && processedTerm !== loadedTerm
+              ? []
+              : allClassData
+          }
+          availableSemesters={availableSemesters}
+          catalogSemester={dataMode === "auto" ? loadedTerm : semester}
+          isLoadingClassCatalog={
+            isLoadingDashboard ||
+            (dataMode === "auto" &&
+              Boolean(loadedTerm) &&
+              processedTerm !== loadedTerm)
+          }
           isLoadingTemplates={isLoadingSaved}
           canSave={canEditHere}
           onBack={() => {
@@ -1367,6 +1420,7 @@ const RoomGridGenerator = () => {
           onDeleteTemplate={deleteStudioTemplate}
           onDuplicateTemplate={duplicateStudioTemplate}
           onToggleFavoriteTemplate={toggleFavoriteStudioTemplate}
+          onLoadClassCatalog={loadStudioClassCatalog}
         />
       </Suspense>
     );

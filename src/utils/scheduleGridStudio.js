@@ -233,6 +233,31 @@ export const createStudioEntry = (overrides = {}) => {
   };
 };
 
+export const getStudioEntryIdentity = (value = {}) => {
+  const entry = createStudioEntry({ ...value, id: "identity" });
+  return [
+    entry.course.toLowerCase(),
+    entry.section.toLowerCase(),
+    entry.instructor.toLowerCase(),
+    entry.days.join(""),
+    entry.start,
+    entry.end,
+  ].join("|");
+};
+
+export const createStudioCatalogEntry = (value = {}) => {
+  const identity = getStudioEntryIdentity(value);
+  const building = String(value.building || "").trim();
+  const room = String(value.room || "").trim();
+  return {
+    id: `catalog|${building.toLowerCase()}|${room.toLowerCase()}|${identity}`,
+    building,
+    room,
+    entry: createStudioEntry({ ...value, id: createStudioClientId("class") }),
+    identity,
+  };
+};
+
 const mergeLayout = (layout = {}) => ({
   ...DEFAULT_STUDIO_LAYOUT,
   ...layout,
@@ -350,6 +375,14 @@ export const studioDocumentReducer = (state, action) => {
         ...state,
         entries: [...state.entries, createStudioEntry(action.entry)],
       };
+    case "add_entries": {
+      const additions = (action.entries || []).map(createStudioEntry);
+      if (additions.length === 0) return state;
+      return {
+        ...state,
+        entries: [...state.entries, ...additions],
+      };
+    }
     case "update_entry":
       return {
         ...state,

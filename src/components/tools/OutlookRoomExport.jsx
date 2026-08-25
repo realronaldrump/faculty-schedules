@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Calendar,
   Download,
@@ -761,9 +762,15 @@ const OutlookRoomExport = () => {
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex gap-2">
                 <AlertCircle className="w-5 h-5 flex-shrink-0" />
                 <p>
-                  Semester dates come from App Settings so they stay consistent
-                  across the app. Holiday exceptions are shared with other
-                  users.
+                  Semester dates come from{" "}
+                  <Link
+                    to="/admin/settings"
+                    className="rounded-sm font-medium underline underline-offset-2 hover:text-amber-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 focus-visible:ring-offset-amber-50"
+                  >
+                    App Settings
+                  </Link>{" "}
+                  so they stay consistent across the app. Holiday exceptions
+                  are shared with other users.
                 </p>
               </div>
             </div>

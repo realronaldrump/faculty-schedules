@@ -21,28 +21,13 @@ import {
 import { formatPhoneNumber, validateDirectoryEntry } from '../../utils/directoryUtils';
 import { buildCourseSectionKey } from '../../utils/courseUtils';
 import { normalizeTermLabel, termCodeFromLabel } from '../../utils/termUtils';
+import { buildCSVContent, downloadTextFile } from '../../utils/csvUtils';
 
 import SelectDropdown from "../SelectDropdown";
 const canUseWindow = typeof window !== 'undefined';
 
-const escapeCSVCell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
-
-const buildCSVContent = (headers = [], rows = []) => (
-  [headers, ...rows]
-    .map((row) => row.map(escapeCSVCell).join(','))
-    .join('\n')
-);
-
 const triggerCSVDownload = (csvContent, filename) => {
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  link.setAttribute('href', url);
-  link.setAttribute('download', filename);
-  link.style.visibility = 'hidden';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  downloadTextFile(csvContent, filename, 'text/csv;charset=utf-8;');
 };
 
 const normalizeCourseField = (value) => {
@@ -495,19 +480,10 @@ const exportStaffCSV = (records = []) => {
     staff.isRemote ? 'Yes' : 'No'
   ]);
 
-  const csvContent = [headers, ...rows]
-    .map((row) => row.map((cell) => `"${cell}"`).join(','))
-    .join('\n');
-
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  link.setAttribute('href', url);
-  link.setAttribute('download', `staff-directory-export-${new Date().toISOString().split('T')[0]}.csv`);
-  link.style.visibility = 'hidden';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  triggerCSVDownload(
+    buildCSVContent(headers, rows),
+    `staff-directory-export-${new Date().toISOString().split('T')[0]}.csv`,
+  );
 };
 
 const exportAdjunctCSV = (records = [], selectedColumns = DEFAULT_ADJUNCT_EXPORT_COLUMNS) => {

@@ -106,7 +106,7 @@ export const formatDate = (value) => {
 export const formatDateTime = (value) => {
   const parsed = toDateObject(value);
   if (!parsed) return "";
-  return parsed.toLocaleString();
+  return parsed.toISOString();
 };
 
 export const formatCurrency = (value) => {
@@ -199,7 +199,14 @@ export const buildBulkExportFileName = ({ termScopeInfo } = {}) => {
   return `hsd-operational-export-${scopePart}-${getTodayTag()}.xlsx`;
 };
 
-export const buildIndividualFileName = ({ label = "export" } = {}) => {
+export const buildIndividualFileName = ({
+  label = "export",
+  termScopeInfo,
+} = {}) => {
   const tag = slugifyForFileName(label);
-  return `hsd-${tag}-export-${getTodayTag()}.xlsx`;
+  const scopePart =
+    termScopeInfo?.scope === "selected"
+      ? slugifyForFileName(termScopeInfo.termLabel || termScopeInfo.termCode)
+      : "all";
+  return `hsd-${tag}-export-${scopePart}-${getTodayTag()}.xlsx`;
 };

@@ -28,6 +28,7 @@ import {
   matchesDirectorFilter,
 } from "../../utils/directorAssignments";
 import DirectorRoleBadge from "../shared/DirectorRoleBadge";
+import { downloadTextFile } from "../../utils/csvUtils";
 
 import SelectDropdown from "../SelectDropdown";
 const EmailLists = ({ embedded = false }) => {
@@ -723,13 +724,11 @@ const EmailLists = ({ embedded = false }) => {
 
     if (activeTab === "student-workers") {
       const csvContent = buildStudentWorkersCsv(peopleToExport);
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `student-workers-list-${new Date().toISOString().split("T")[0]}.csv`;
-      link.click();
-      window.URL.revokeObjectURL(url);
+      downloadTextFile(
+        csvContent,
+        `student-workers-list-${new Date().toISOString().split("T")[0]}.csv`,
+        "text/csv;charset=utf-8;",
+      );
       showNotification(`CSV downloaded with ${peopleToExport.length} students`);
       return;
     }
@@ -738,13 +737,11 @@ const EmailLists = ({ embedded = false }) => {
       resolveOfficeDetails(person, spacesByKey).buildingName,
     );
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `directory-email-list-${new Date().toISOString().split("T")[0]}.csv`;
-    link.click();
-    window.URL.revokeObjectURL(url);
+    downloadTextFile(
+      csvContent,
+      `directory-email-list-${new Date().toISOString().split("T")[0]}.csv`,
+      "text/csv;charset=utf-8;",
+    );
 
     showNotification(`CSV downloaded with ${peopleToExport.length} contacts`);
   };

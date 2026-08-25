@@ -48,6 +48,7 @@ describe("whatsNew releases", () => {
       "Schedule Grid Studio",
       "Reusable in-app templates",
       "More reliable room calendars",
+      "Complete, safer exports",
     ]);
   });
 });

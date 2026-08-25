@@ -18,6 +18,7 @@ import { usePeopleOperations } from "../../hooks";
 import { useUI } from "../../contexts/UIContext";
 import { usePermissions } from "../../utils/permissions";
 import { hasRole } from "../../utils/peopleUtils";
+import { downloadCSVFile } from "../../utils/csvUtils";
 
 const getDisplayRoleLabels = (person) => {
   const labels = [];
@@ -129,24 +130,11 @@ const BaylorIDManager = ({ embedded = false }) => {
       getBaylorId(person),
     ]);
 
-    const csvContent = [headers, ...rows]
-      .map((row) =>
-        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","),
-      )
-      .join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute(
-      "download",
+    downloadCSVFile(
       `baylor-id-export-${new Date().toISOString().split("T")[0]}.csv`,
+      headers,
+      rows,
     );
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   const startEdit = useCallback((person) => {

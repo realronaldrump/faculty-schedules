@@ -66,6 +66,12 @@ export const RELEASES = [
         description:
           "Room Calendar Export now loads the selected semester, keeps multi-room meeting times with the right rooms, honors shared no-class dates, and avoids empty or conflicting calendar files.",
       },
+      {
+        icon: Download,
+        title: "Complete, safer exports",
+        description:
+          "Data exports now include current scheduling and operational records, preserve semester-specific student jobs, and produce safer Excel-ready files.",
+      },
     ],
   },
   {

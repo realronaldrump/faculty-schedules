@@ -1,4 +1,5 @@
 import { toDate } from "../../../utils/activityAnalytics";
+import { downloadCSVFile } from "../../../utils/csvUtils";
 
 const LIVE_WINDOW_MINUTES = 2;
 const IDLE_WINDOW_MINUTES = 10;
@@ -81,20 +82,5 @@ export const humanizeActionKey = (actionKey) =>
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 export const downloadCsv = (filename, headerCells, rows) => {
-  const escapeCell = (value) => {
-    const text = String(value ?? "");
-    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-  };
-  const lines = [headerCells, ...rows].map((cells) =>
-    cells.map(escapeCell).join(","),
-  );
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  downloadCSVFile(filename, headerCells, rows);
 };

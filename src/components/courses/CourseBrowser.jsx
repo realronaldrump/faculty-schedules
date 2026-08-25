@@ -12,6 +12,7 @@ import { getMaxEnrollment } from "../../utils/enrollmentUtils";
 import { useData } from "../../contexts/DataContext";
 import { useAppConfig } from "../../contexts/AppConfigContext";
 import ResponsiveTableScroll from "../shared/ResponsiveTableScroll";
+import { buildCSVContent, downloadTextFile } from "../../utils/csvUtils";
 
 const COURSE_ROW_HEIGHT = 58;
 const COURSE_TABLE_MAX_HEIGHT = 560;
@@ -431,18 +432,11 @@ const CourseBrowser = ({ embedded = false }) => {
         item.Room || "",
         getMaxEnrollment(item) ?? "",
       ]);
-      const escapeCell = (value) =>
-        `"${String(value ?? "").replace(/"/g, '""')}"`;
-      const csvContent = [headers, ...rows]
-        .map((row) => row.map(escapeCell).join(","))
-        .join("\n");
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `course-browse-${new Date().toISOString().split("T")[0]}.csv`;
-      link.click();
-      window.URL.revokeObjectURL(url);
+      downloadTextFile(
+        buildCSVContent(headers, rows),
+        `course-browse-${new Date().toISOString().split("T")[0]}.csv`,
+        "text/csv;charset=utf-8;",
+      );
     } finally {
       setIsCsvExporting(false);
     }

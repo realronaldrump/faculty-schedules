@@ -66,6 +66,13 @@ import {
   resolveIdealRangeForSpaceType,
 } from "../../utils/temperatureRangeUtils";
 import { emitTemperatureDataRefresh } from "../../utils/temperatureEvents";
+import { buildCSVContent, downloadTextFile } from "../../utils/csvUtils";
+import {
+  buildTemperatureRawExportRows,
+  buildTemperatureSnapshotExportRows,
+  TEMPERATURE_RAW_EXPORT_HEADERS,
+  TEMPERATURE_SNAPSHOT_EXPORT_HEADERS,
+} from "../../utils/temperatureExport";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import { ACTION_TABS, DATA_VIEW_TABS, DEFAULT_TIMEZONE } from "./monitoring/constants";
 import {
@@ -75,7 +82,6 @@ import {
   getSpaceLabel,
   isValidTimeZone,
   sortRooms,
-  toCsvSafe,
 } from "./monitoring/helpers";
 import Toolbar from "./monitoring/Toolbar";
 import ViewTabs from "./monitoring/ViewTabs";
@@ -3051,54 +3057,21 @@ const TemperatureMonitoring = () => {
           }
           return true;
         });
-      const headers = [
-        "Building",
-        "Room",
-        "Date",
-        "Snapshot Time",
-        "Temperature F",
-        "Temperature C",
-        "Humidity",
-        "Status",
-        "Timezone",
-        "Delta Minutes",
-        "Source Local Timestamp",
-        "Source UTC Timestamp",
-        "Device Label",
-      ];
-      const rows = filtered.map((docData) => {
-        const spaceKey = docData.spaceKey;
-        return [
-          docData.buildingName || selectedBuildingName || selectedBuilding,
-          getSpaceLabel(roomLookup[spaceKey] || { id: spaceKey }, spacesByKey) ||
-            docData.spaceLabel ||
-            "",
-          docData.dateLocal || "",
-          docData.snapshotLabel || "",
-          docData.temperatureF ?? "",
-          docData.temperatureC ?? "",
-          docData.humidity ?? "",
-          docData.status || "",
-          docData.timezone || buildingSettings?.timezone || DEFAULT_TIMEZONE,
-          docData.deltaMinutes ?? "",
-          docData.sourceReadingLocal || "",
-          docData.sourceReadingUtc?.toDate
-            ? docData.sourceReadingUtc.toDate().toISOString()
+      const rows = buildTemperatureSnapshotExportRows({
+        records: filtered,
+        fallbackBuildingCode: selectedBuilding,
+        fallbackBuildingName: selectedBuildingName,
+        fallbackTimezone: buildingSettings?.timezone || DEFAULT_TIMEZONE,
+        resolveSpaceLabel: (spaceKey) =>
+          spaceKey
+            ? getSpaceLabel(roomLookup[spaceKey] || { id: spaceKey }, spacesByKey)
             : "",
-          docData.sourceDeviceLabel || "",
-        ];
       });
-      const csvContent = [
-        headers.map(toCsvSafe).join(","),
-        ...rows.map((row) => row.map(toCsvSafe).join(",")),
-      ].join("\n");
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `temperature-snapshots-${selectedBuilding}-${exportStart}-to-${exportEnd}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
+      downloadTextFile(
+        buildCSVContent(TEMPERATURE_SNAPSHOT_EXPORT_HEADERS, rows),
+        `temperature-snapshots-${selectedBuilding}-${exportStart}-to-${exportEnd}.csv`,
+        "text/csv;charset=utf-8;",
+      );
       showNotification(
         "success",
         "Export Ready",
@@ -3143,54 +3116,23 @@ const TemperatureMonitoring = () => {
           where("dateLocal", "<=", exportEnd),
         ],
       });
-      const rows = [];
-      docs.forEach((docSnap) => {
-        const data = docSnap.data();
-        const device = deviceDocs[data.deviceId] || {};
-        const spaceKey = normalizeSingleSpaceKey(
-          device?.mapping?.spaceKey || device?.spaceKey || "",
-        );
-        if (exportSpaceSet.size > 0) {
-          if (!spaceKey || !exportSpaceSet.has(spaceKey)) return;
-        }
-        const spaceLabel = spaceKey
-          ? getSpaceLabel(roomLookup[spaceKey] || { id: spaceKey }, spacesByKey)
-          : "";
-        const samples = data.samples || {};
-        Object.values(samples).forEach((sample) => {
-          rows.push([
-            buildingName || selectedBuilding,
-            spaceLabel,
-            device.label || data.deviceId,
-            sample.rawLocal || "",
-            buildingSettings?.timezone || DEFAULT_TIMEZONE,
-            sample.temperatureF ?? "",
-            sample.temperatureC ?? "",
-            sample.humidity ?? "",
-          ]);
-        });
+      const rows = buildTemperatureRawExportRows({
+        records: docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })),
+        deviceDocs,
+        selectedSpaceKeys: [...exportSpaceSet],
+        fallbackBuildingCode: selectedBuilding,
+        fallbackBuildingName: buildingName,
+        fallbackTimezone: buildingSettings?.timezone || DEFAULT_TIMEZONE,
+        resolveSpaceLabel: (spaceKey) =>
+          spaceKey
+            ? getSpaceLabel(roomLookup[spaceKey] || { id: spaceKey }, spacesByKey)
+            : "",
       });
-      const headers = [
-        "Building",
-        "Room",
-        "Device Label",
-        "Local Timestamp",
-        "Timezone",
-        "Temperature F",
-        "Temperature C",
-        "Humidity",
-      ];
-      const csvContent = [
-        headers.map(toCsvSafe).join(","),
-        ...rows.map((row) => row.map(toCsvSafe).join(",")),
-      ].join("\n");
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `temperature-raw-${selectedBuilding}-${exportStart}-to-${exportEnd}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
+      downloadTextFile(
+        buildCSVContent(TEMPERATURE_RAW_EXPORT_HEADERS, rows),
+        `temperature-raw-${selectedBuilding}-${exportStart}-to-${exportEnd}.csv`,
+        "text/csv;charset=utf-8;",
+      );
       showNotification(
         "success",
         "Export Ready",
@@ -4444,7 +4386,10 @@ const TemperatureMonitoring = () => {
                 <div className="font-medium text-gray-800">
                   Raw Readings Export
                 </div>
-                <div>Full daily readings with local timestamps.</div>
+                <div>
+                  Full daily readings with record, device, room, local, and UTC
+                  identifiers.
+                </div>
               </div>
             </div>
             <button

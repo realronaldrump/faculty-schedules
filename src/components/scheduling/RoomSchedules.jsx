@@ -30,6 +30,7 @@ import { useTutorial } from "../../contexts/TutorialContext";
 import { useAppConfig } from "../../contexts/AppConfigContext";
 import { useSchedules } from "../../contexts/ScheduleContext";
 import { parseTermDate } from "../../utils/termUtils";
+import { downloadCSVFile } from "../../utils/csvUtils";
 
 import SelectDropdown from "../SelectDropdown";
 const RoomSchedules = ({ embedded = false }) => {
@@ -419,16 +420,11 @@ const RoomSchedules = ({ embedded = false }) => {
       });
     });
 
-    const csvContent = csvData
-      .map((row) => row.map((cell) => `"${cell}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${roomPart}${buildingPart}-${weekViewMode}-${semester}-${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+    downloadCSVFile(
+      `${roomPart}${buildingPart}-${weekViewMode}-${semester}-${new Date().toISOString().split("T")[0]}.csv`,
+      csvData[0],
+      csvData.slice(1),
+    );
   };
 
   // Print week view

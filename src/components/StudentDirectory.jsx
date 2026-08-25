@@ -52,6 +52,7 @@ import { usePeopleOperations } from "../hooks";
 import { useUI } from "../contexts/UIContext";
 import { useAppConfig } from "../contexts/AppConfigContext";
 import { useTutorial } from "../contexts/TutorialContext";
+import { buildCSVContent, downloadTextFile } from "../utils/csvUtils";
 
 import SelectDropdown from "./SelectDropdown";
 const trimValue = (value) => (typeof value === "string" ? value.trim() : value);
@@ -676,9 +677,6 @@ const StudentDirectory = () => {
       "Status",
     ];
 
-    const escapeCell = (value) =>
-      `"${String(value ?? "").replace(/"/g, '""')}"`;
-
     const rows = [];
 
     filteredAndSortedData.forEach((student) => {
@@ -718,8 +716,8 @@ const StudentDirectory = () => {
           student.email || "",
           student.hasNoPhone ? "No Phone" : formatPhoneNumber(student.phone),
           (assignment.buildings || []).join("; "),
-          student.startDate || "",
-          student.endDate || "",
+          assignment.startDate || student.startDate || "",
+          assignment.endDate || student.endDate || "",
           assignment.hourlyRateNumber
             ? assignment.hourlyRateNumber.toFixed(2)
             : "",
@@ -731,22 +729,12 @@ const StudentDirectory = () => {
       });
     });
 
-    const csvContent = [headers, ...rows]
-      .map((row) => row.map(escapeCell).join(","))
-      .join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute(
-      "download",
+    const csvContent = buildCSVContent(headers, rows);
+    downloadTextFile(
+      csvContent,
       `student-worker-directory-${new Date().toISOString().split("T")[0]}.csv`,
+      "text/csv;charset=utf-8;",
     );
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   const formatWeeklySchedule = (entries) => {

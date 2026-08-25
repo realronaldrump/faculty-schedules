@@ -211,8 +211,12 @@ guided **Data Health Check** workflow:
 ### Data Exports — NEW
 A new **Data Exports** page lets you **export operational data to clean,
 formatted Excel workbooks** for departmental use — both individual exports and a
-bulk export. (The bulk export now centers on **programs** rather than raw course
-lists.) Large exports show a confirmation warning before running.
+bulk export. The current bulk workbook includes directory data, semester-specific
+student assignments, course sections and meetings, the course catalog, programs,
+spaces/buildings/semesters, reservations, acronyms, saved email lists, calendar
+exceptions, and room-grid templates and entries. Large exports show a confirmation
+warning before running. Temperature readings retain their dedicated, filtered CSV
+exports so those much larger datasets stay bounded.
 
 ### Recent Changes — Improved
 The change log that powers **Recent Changes** now records **who made each change,**

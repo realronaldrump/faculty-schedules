@@ -46,11 +46,6 @@ export const getSpaceLabel = (room, spacesByKey) => {
   return key || room.id || "Unknown";
 };
 
-export const toCsvSafe = (value) => {
-  const str = value == null ? "" : String(value);
-  return `"${str.replace(/"/g, '""')}"`;
-};
-
 export const isValidTimeZone = (timeZone) => {
   if (!timeZone) return false;
   try {

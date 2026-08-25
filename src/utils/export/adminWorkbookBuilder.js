@@ -3,7 +3,7 @@ import {
   getSheetDefinition,
   SHEET_IDS,
   SHEET_ORDER,
-} from "./adminExportSchemas";
+} from "./adminExportSchemas.js";
 
 export const toColumnLetter = (columnNumber) => {
   let temp = columnNumber;

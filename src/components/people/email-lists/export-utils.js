@@ -1,29 +1,41 @@
 import { formatDirectorAssignmentList } from "../../../utils/directorAssignments";
-
-const csvQuote = (value) => `"${value || ""}"`;
+import { buildCSVContent } from "../../../utils/csvUtils";
 
 const rowsToCsv = (headers, rows) => {
-  return [
-    headers.join(","),
-    ...rows.map((row) =>
-      Object.values(row)
-        .map((val) => csvQuote(val))
-        .join(","),
-    ),
-  ].join("\n");
+  return buildCSVContent(
+    headers,
+    rows.map((row) => headers.map((header) => row[header] ?? "")),
+  );
 };
 
+const getUniqueEmailContacts = (peopleData = []) => {
+  const seen = new Set();
+  return peopleData.flatMap((person) => {
+    const email = String(person?.email || "").trim();
+    if (!email) return [];
+    const key = email.toLowerCase();
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{ ...person, email }];
+  });
+};
+
+const quoteEmailDisplayName = (value) =>
+  `"${String(value || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')}"`;
+
 export const buildOutlookEmailFormat = (peopleData = []) => {
-  return peopleData
-    .filter((person) => person.email && person.email.trim() !== "")
-    .map((person) => `"${person.name}" <${person.email}>`)
+  return getUniqueEmailContacts(peopleData)
+    .map((person) => {
+      const name = String(person?.name || "").trim();
+      return name ? `${quoteEmailDisplayName(name)} <${person.email}>` : person.email;
+    })
     .join("; ");
 };
 
 export const buildGmailEmailFormat = (peopleData = [], mode = "new") => {
-  const emails = peopleData
-    .filter((person) => person.email && person.email.trim() !== "")
-    .map((person) => person.email);
+  const emails = getUniqueEmailContacts(peopleData).map((person) => person.email);
   const separator = mode === "old" ? "; " : ", ";
   return emails.join(separator);
 };

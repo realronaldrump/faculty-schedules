@@ -144,7 +144,12 @@ const AdminDataExportsPage = () => {
 
       const fileName = isBulk
         ? getBulkFileName({ termScopeInfo: exportPackage.termScopeInfo })
-        : getIndividualFileName({ label: exportLabel });
+        : getIndividualFileName({
+            label: exportLabel,
+            termScopeInfo: exportPackage.termScopeApplied
+              ? exportPackage.termScopeInfo
+              : null,
+          });
 
       await executeWorkbookDownload({
         exportPackage,
@@ -215,7 +220,7 @@ const AdminDataExportsPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Data Exports"
-        subtitle="Export operational data to clean Excel workbooks for departmental administration."
+        subtitle="Export current departmental data to clean, traceable Excel workbooks."
         className="mb-0"
       />
 
@@ -289,12 +294,25 @@ const AdminDataExportsPage = () => {
             ) : (
               <FileSpreadsheet className="h-4 w-4" />
             )}
-            Export Everything (Workbook)
+            Export All Operational Data
           </button>
         </div>
 
-        <div className="text-xs text-gray-500">
-          Large-export warning threshold: {LARGE_EXPORT_ROW_THRESHOLD.toLocaleString()} rows.
+        <div className="space-y-1 text-xs text-gray-500">
+          <p>
+            Includes people, student assignments, sections and meetings, courses,
+            programs, spaces, buildings, semesters, reservations, acronyms, saved
+            email lists, calendar exceptions, and room-grid templates and entries.
+          </p>
+          <p>
+            Temperature readings stay in Facilities → Temperature Monitoring so
+            building and date filters can keep those much larger exports bounded.
+            Access settings, activity telemetry, and internal audit/maintenance
+            records are not included in this operational workbook.
+          </p>
+          <p>
+            Large-export warning threshold: {LARGE_EXPORT_ROW_THRESHOLD.toLocaleString()} rows.
+          </p>
         </div>
 
         {pageError && (

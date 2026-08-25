@@ -20,12 +20,16 @@ import {
   getStudentAssignments,
   getStudentStatusForSemester,
   parseHourlyRate,
+  applySemesterSchedule,
 } from "../studentWorkers";
 import { normalizeSpaceRecord } from "../spaceUtils";
 import { assignMeetingPatternSpaces } from "../meetingPatternUtils";
+import { getIgnitePersonNumber } from "../pafUtils";
+import { normalizeTermLabel } from "../termUtils";
 import {
   BULK_EXPORT_SHEET_IDS,
   getSheetDefinition,
+  isTermScopedSheet,
   SHEET_IDS,
   SHEET_ORDER,
 } from "./adminExportSchemas";
@@ -57,12 +61,16 @@ const COLLECTIONS = {
   courses: "courses",
   spaces: "rooms",
   terms: "terms",
+  reservations: "reservations",
+  baylorAcronyms: "baylorAcronyms",
+  emailListPresets: "emailListPresets",
+  calendarExceptions: "outlookExceptions",
   roomGrids: "roomGrids",
 };
 
 const SHEET_DEPENDENCIES = {
   [SHEET_IDS.people]: ["people", "programs", "spaces"],
-  [SHEET_IDS.studentWorkerAssignments]: ["people"],
+  [SHEET_IDS.studentWorkerAssignments]: ["people", "terms"],
   [SHEET_IDS.courseSections]: ["schedules", "people", "spaces"],
   [SHEET_IDS.sectionMeetings]: ["schedules", "people", "spaces"],
   [SHEET_IDS.courses]: ["courses"],
@@ -70,14 +78,19 @@ const SHEET_DEPENDENCIES = {
   [SHEET_IDS.spaces]: ["spaces", "schedules", "people"],
   [SHEET_IDS.buildings]: ["spaces"],
   [SHEET_IDS.terms]: ["terms", "schedules"],
+  [SHEET_IDS.roomReservations]: ["reservations", "terms"],
+  [SHEET_IDS.baylorAcronyms]: ["baylorAcronyms"],
+  [SHEET_IDS.emailListPresets]: ["emailListPresets", "people"],
+  [SHEET_IDS.calendarExceptions]: ["calendarExceptions"],
   [SHEET_IDS.roomGrids]: ["roomGrids"],
+  [SHEET_IDS.roomGridEntries]: ["roomGrids"],
 };
 
 const ROLE_STUDENT = "student";
 
 const getCollectionDocs = async (collectionName) => {
   const snapshot = await getDocs(collection(db, collectionName));
-  return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+  return snapshot.docs.map((docSnap) => ({ ...docSnap.data(), id: docSnap.id }));
 };
 
 const getRequiredDependencies = (sheetIds = []) => {
@@ -112,28 +125,35 @@ const fetchSchedulesForScope = async (termScopeInfo) => {
     snapshot.docs.forEach((docSnap) => {
       if (!seenIds.has(docSnap.id)) {
         seenIds.add(docSnap.id);
-        items.push({ id: docSnap.id, ...docSnap.data() });
+        items.push({ ...docSnap.data(), id: docSnap.id });
       }
     });
   };
 
+  const requests = [];
   if (termScopeInfo.termCode) {
-    await appendQuery(
-      query(
-        collection(db, COLLECTIONS.schedules),
-        where("termCode", "==", termScopeInfo.termCode),
+    requests.push(
+      appendQuery(
+        query(
+          collection(db, COLLECTIONS.schedules),
+          where("termCode", "==", termScopeInfo.termCode),
+        ),
       ),
     );
   }
 
-  if (items.length === 0 && termScopeInfo.termLabel) {
-    await appendQuery(
-      query(
-        collection(db, COLLECTIONS.schedules),
-        where("term", "==", termScopeInfo.termLabel),
+  if (termScopeInfo.termLabel) {
+    requests.push(
+      appendQuery(
+        query(
+          collection(db, COLLECTIONS.schedules),
+          where("term", "==", termScopeInfo.termLabel),
+        ),
       ),
     );
   }
+
+  await Promise.all(requests);
 
   return items;
 };
@@ -154,6 +174,15 @@ const toDisplayNumber = (value) => {
   if (value === undefined || value === null || value === "") return "";
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : "";
+};
+
+const toJson = (value) => {
+  if (!value || typeof value !== "object") return "";
+  try {
+    return JSON.stringify(value);
+  } catch (_error) {
+    return "";
+  }
 };
 
 const normalizeSpaceKey = (value) => {
@@ -241,9 +270,57 @@ const resolveInstructorNames = (schedule = {}, peopleIndex = null) => {
   return joinValues(names);
 };
 
+const resolveInstructorIds = (schedule = {}, peopleIndex = null) => {
+  const ids = [
+    ...(Array.isArray(schedule.instructorIds) ? schedule.instructorIds : []),
+    ...(Array.isArray(schedule.instructorAssignments)
+      ? schedule.instructorAssignments.map(
+          (assignment) => assignment?.personId || assignment?.instructorId,
+        )
+      : []),
+    schedule.instructorId,
+  ]
+    .filter(Boolean)
+    .map((personId) => peopleIndex?.resolvePersonId(personId) || personId);
+  return Array.from(new Set(ids));
+};
+
+const formatInstructorAssignments = (schedule = {}, peopleIndex = null) => {
+  if (!Array.isArray(schedule.instructorAssignments)) return "";
+  return joinValues(
+    schedule.instructorAssignments.map((assignment) => {
+      const rawId = assignment?.personId || assignment?.instructorId || "";
+      const canonicalId = peopleIndex?.resolvePersonId(rawId) || rawId;
+      const person = canonicalId
+        ? peopleIndex?.peopleById?.get(canonicalId)
+        : null;
+      const name = person ? getPersonDisplayName(person) : canonicalId;
+      const details = [];
+      if (
+        assignment?.percentage !== undefined &&
+        assignment?.percentage !== null &&
+        assignment?.percentage !== "" &&
+        Number.isFinite(Number(assignment.percentage))
+      ) {
+        details.push(`${Number(assignment.percentage)}%`);
+      }
+      if (assignment?.isPrimary) details.push("primary");
+      return details.length > 0 ? `${name} (${details.join(", ")})` : name;
+    }),
+  );
+};
+
 const resolvePrimaryInstructorName = (schedule = {}, peopleIndex = null) => {
-  if (schedule.instructorId && peopleIndex) {
-    const canonicalId = peopleIndex.resolvePersonId(schedule.instructorId);
+  const primaryAssignment = Array.isArray(schedule.instructorAssignments)
+    ? schedule.instructorAssignments.find((assignment) => assignment?.isPrimary)
+    : null;
+  const primaryId =
+    schedule.instructorId ||
+    primaryAssignment?.personId ||
+    primaryAssignment?.instructorId ||
+    "";
+  if (primaryId && peopleIndex) {
+    const canonicalId = peopleIndex.resolvePersonId(primaryId);
     const person = peopleIndex.peopleById.get(canonicalId);
     if (person) return getPersonDisplayName(person);
   }
@@ -259,8 +336,39 @@ const statusFromTermRecord = (term = {}) => {
   return "active";
 };
 
-const buildPeopleRows = ({ canonicalPeople = [], programsById = new Map(), spacesByKey = new Map() }) => {
-  const directorIndex = buildDirectorIndex(Array.from(programsById.values()));
+const buildCanonicalDirectorIndex = (programs = [], peopleIndex) => {
+  const rawIndex = buildDirectorIndex(programs);
+  const canonicalIndex = new Map();
+  rawIndex.forEach((assignments, personId) => {
+    const canonicalId = peopleIndex?.resolvePersonId(personId) || personId;
+    const existing = canonicalIndex.get(canonicalId) || [];
+    const seen = new Set(
+      existing.map(
+        (assignment) =>
+          `${assignment.programId || ""}:${assignment.role || ""}`,
+      ),
+    );
+    assignments.forEach((assignment) => {
+      const key = `${assignment.programId || ""}:${assignment.role || ""}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      existing.push(assignment);
+    });
+    canonicalIndex.set(canonicalId, existing);
+  });
+  return canonicalIndex;
+};
+
+const buildPeopleRows = ({
+  canonicalPeople = [],
+  peopleIndex,
+  programsById = new Map(),
+  spacesByKey = new Map(),
+}) => {
+  const directorIndex = buildCanonicalDirectorIndex(
+    Array.from(programsById.values()),
+    peopleIndex,
+  );
   return canonicalPeople
     .map((person) => {
       const roles = normalizeRoleList(person.roles);
@@ -274,9 +382,14 @@ const buildPeopleRows = ({ canonicalPeople = [], programsById = new Map(), space
         return space?.displayName || space?.spaceKey || String(spaceId);
       });
 
-      const program = person.programId ? programsById.get(person.programId) : null;
+      const program = person.programId
+        ? programsById.get(person.programId)
+        : person.program && typeof person.program === "object"
+          ? person.program
+          : null;
 
       return {
+        recordId: person.id || "",
         name: getPersonDisplayName(person),
         firstName: person.firstName || "",
         lastName: person.lastName || "",
@@ -284,24 +397,42 @@ const buildPeopleRows = ({ canonicalPeople = [], programsById = new Map(), space
         status: getActiveStatusLabel(person.isActive),
         inactiveReason: person.inactiveReason || "",
         email: person.email || "",
+        alternateEmails: joinValues(
+          (person.externalIds?.emails || []).filter(
+            (email) =>
+              String(email || "").trim().toLowerCase() !==
+              String(person.email || "").trim().toLowerCase(),
+          ),
+        ),
         phone: person.phone || "",
         baylorId: getPersonBaylorId(person),
         clssInstructorId: getPersonClssInstructorId(person),
+        ignitePersonNumber: getIgnitePersonNumber(person),
         title: person.title || "",
         jobTitle: person.jobTitle || "",
         department: person.department || "",
         program: program?.name || "",
+        programCode: program?.code || "",
         office: person.office || joinValues(person.offices || []),
         officeSpaces: joinValues(officeSpaces),
+        primaryBuildings: joinValues(person.primaryBuildings || []),
         isAdjunct: getBooleanStatusLabel(person.isAdjunct === true),
         directorRoles: formatDirectorAssignmentList(
           getDirectorAssignments(directorIndex, person.id),
         ),
         isFullTime: getBooleanStatusLabel(person.isFullTime !== false),
         isTenured: getBooleanStatusLabel(person.isTenured === true),
+        hasPhD: getBooleanStatusLabel(person.hasPhD === true),
         isRemote: getBooleanStatusLabel(person.isRemote === true),
+        isAlsoFaculty: getBooleanStatusLabel(person.isAlsoFaculty === true),
+        isAlsoStaff: getBooleanStatusLabel(person.isAlsoStaff === true),
         hasNoPhone: getBooleanStatusLabel(person.hasNoPhone === true),
         hasNoOffice: getBooleanStatusLabel(person.hasNoOffice === true),
+        inactiveAt: formatDateTime(person.inactiveAt),
+        startDate: formatDate(person.startDate),
+        endDate: formatDate(person.endDate),
+        createdAt: formatDateTime(person.createdAt),
+        updatedAt: formatDateTime(person.updatedAt),
       };
     })
     .sort((a, b) => {
@@ -311,61 +442,159 @@ const buildPeopleRows = ({ canonicalPeople = [], programsById = new Map(), space
     });
 };
 
+const findTermMeta = ({ terms = [], term = "", termCode = "" } = {}) => {
+  const normalizedLabel = normalizeTermLabel(term) || String(term || "").trim();
+  return (
+    terms.find((item) => {
+      const itemCode = String(item?.termCode || "").trim();
+      const itemLabel =
+        normalizeTermLabel(item?.term || "") || String(item?.term || "").trim();
+      return Boolean(
+        (termCode && itemCode && String(termCode) === itemCode) ||
+          (normalizedLabel && itemLabel && normalizedLabel === itemLabel),
+      );
+    }) || null
+  );
+};
+
+const getStudentSemesterProjections = ({
+  student,
+  termScopeInfo,
+  selectedTermMeta,
+}) => {
+  if (termScopeInfo.scope === "selected") {
+    const selectedValue =
+      termScopeInfo.termLabel || termScopeInfo.termCode || selectedTermMeta?.term || "";
+    return [
+      {
+        student: selectedValue
+          ? applySemesterSchedule(student, selectedValue)
+          : student,
+        term: termScopeInfo.termLabel || selectedTermMeta?.term || "",
+        termCode: termScopeInfo.termCode || selectedTermMeta?.termCode || "",
+      },
+    ];
+  }
+
+  const semesterSchedules =
+    student?.semesterSchedules && typeof student.semesterSchedules === "object"
+      ? student.semesterSchedules
+      : student?.termSchedules && typeof student.termSchedules === "object"
+        ? student.termSchedules
+        : {};
+  const entries = Object.entries(semesterSchedules);
+  if (entries.length === 0) {
+    return [{ student, term: "", termCode: "" }];
+  }
+
+  return entries
+    .map(([key, entry]) => {
+      const safeEntry = entry && typeof entry === "object" ? entry : {};
+      const term = safeEntry.semester || safeEntry.term || "";
+      const normalized = toNormalizedTermScope({
+        termScope: "selected",
+        selectedTerm: term || key,
+        selectedTermMeta: {
+          term,
+          termCode: safeEntry.semesterCode || safeEntry.termCode || "",
+        },
+      });
+      return {
+        student: {
+          ...student,
+          ...safeEntry,
+          jobs: Array.isArray(safeEntry.jobs) ? safeEntry.jobs : [],
+        },
+        term: normalized.termLabel || term || key,
+        termCode:
+          safeEntry.semesterCode ||
+          safeEntry.termCode ||
+          normalized.termCode ||
+          "",
+      };
+    })
+    .sort((a, b) => (a.termCode || a.term).localeCompare(b.termCode || b.term));
+};
+
 const buildStudentAssignmentRows = ({
   canonicalPeople = [],
   peopleIndex,
   termScopeInfo,
   selectedTermMeta,
+  terms = [],
 }) => {
-  const peopleById = new Map(canonicalPeople.map((person) => [person.id, person]));
-
   const students = canonicalPeople.filter((person) => {
     const roles = normalizeRoleList(person.roles);
     return roles.includes(ROLE_STUDENT);
   });
 
-  const termMetaForStatus = termScopeInfo.scope === "selected" ? selectedTermMeta : null;
-
   const rows = [];
   students.forEach((student) => {
-    const studentStatus = getStudentStatusForSemester(student, termMetaForStatus).status;
-    const assignments = getStudentAssignments(student);
+    const projections = getStudentSemesterProjections({
+      student,
+      termScopeInfo,
+      selectedTermMeta,
+    });
 
-    assignments.forEach((assignment) => {
-      const supervisorId = assignment?.supervisorId || "";
-      const canonicalSupervisorId = supervisorId
-        ? peopleIndex.resolvePersonId(supervisorId)
-        : "";
-      const supervisorRecord = canonicalSupervisorId
-        ? peopleById.get(canonicalSupervisorId)
-        : null;
-
-      const assignmentStatus = getAssignmentStatusForSemester(
-        assignment,
-        student,
+    projections.forEach((projection) => {
+      const termMetaForStatus =
+        termScopeInfo.scope === "selected" && selectedTermMeta
+          ? selectedTermMeta
+          : findTermMeta({
+              terms,
+              term: projection.term,
+              termCode: projection.termCode,
+            });
+      const studentStatus = getStudentStatusForSemester(
+        projection.student,
         termMetaForStatus,
       ).status;
+      const assignments = getStudentAssignments(projection.student);
 
-      const hourlyRate = formatCurrency(
-        assignment?.hourlyRateNumber ?? parseHourlyRate(assignment?.hourlyRate),
-      );
+      assignments.forEach((assignment) => {
+        const supervisorId = assignment?.supervisorId || "";
+        const canonicalSupervisorId = supervisorId
+          ? peopleIndex.resolvePersonId(supervisorId)
+          : "";
+        const supervisorRecord = canonicalSupervisorId
+          ? peopleIndex.peopleById.get(canonicalSupervisorId)
+          : null;
 
-      rows.push({
-        studentName: getPersonDisplayName(student),
-        studentEmail: student.email || "",
-        studentStatus,
-        assignmentStatus,
-        jobTitle: assignment?.jobTitle || "",
-        supervisor:
-          assignment?.supervisor ||
-          (supervisorRecord ? getPersonDisplayName(supervisorRecord) : ""),
-        supervisorEmail: supervisorRecord?.email || "",
-        hourlyRate,
-        startDate: formatDate(assignment?.startDate || student?.startDate),
-        endDate: formatDate(assignment?.endDate || student?.endDate),
-        weeklyHours: toDisplayNumber(assignment?.weeklyHours),
-        weeklySchedule: formatWeeklySchedule(assignment?.schedule),
-        buildings: joinValues(assignment?.buildings || []),
+        const assignmentStatus = getAssignmentStatusForSemester(
+          assignment,
+          projection.student,
+          termMetaForStatus,
+        ).status;
+
+        const hourlyRate = formatCurrency(
+          assignment?.hourlyRateNumber ?? parseHourlyRate(assignment?.hourlyRate),
+        );
+
+        rows.push({
+          studentId: student.id || "",
+          studentName: getPersonDisplayName(student),
+          studentEmail: student.email || "",
+          term: projection.term,
+          termCode: projection.termCode,
+          studentStatus,
+          assignmentId: assignment?.id || "",
+          assignmentStatus,
+          jobTitle: assignment?.jobTitle || "",
+          supervisorId: canonicalSupervisorId || supervisorId,
+          supervisor:
+            assignment?.supervisor ||
+            (supervisorRecord ? getPersonDisplayName(supervisorRecord) : ""),
+          supervisorEmail: supervisorRecord?.email || "",
+          hourlyRate,
+          startDate: formatDate(
+            assignment?.startDate || projection.student?.startDate,
+          ),
+          endDate: formatDate(assignment?.endDate || projection.student?.endDate),
+          weeklyHours: toDisplayNumber(assignment?.weeklyHours),
+          weeklyPay: formatCurrency(assignment?.weeklyPay),
+          weeklySchedule: formatWeeklySchedule(assignment?.schedule),
+          buildings: joinValues(assignment?.buildings || []),
+        });
       });
     });
   });
@@ -373,6 +602,8 @@ const buildStudentAssignmentRows = ({
   return rows.sort((a, b) => {
     const byName = a.studentName.localeCompare(b.studentName);
     if (byName !== 0) return byName;
+    const byTerm = (a.termCode || a.term).localeCompare(b.termCode || b.term);
+    if (byTerm !== 0) return byTerm;
     return a.jobTitle.localeCompare(b.jobTitle);
   });
 };
@@ -386,31 +617,51 @@ const buildCourseSectionRows = ({
   return schedules
     .filter((schedule) => scheduleMatchesTermScope(schedule, termScopeInfo))
     .map((schedule) => ({
+      recordId: schedule.id || "",
       term: schedule.term || "",
       termCode: schedule.termCode || "",
+      academicYear: toDisplayNumber(schedule.academicYear),
       courseCode: schedule.courseCode || "",
+      subjectCode: schedule.subjectCode || schedule.subject || "",
+      catalogNumber: schedule.catalogNumber || "",
+      courseLevel: toDisplayNumber(schedule.courseLevel),
       courseTitle: schedule.courseTitle || schedule.title || "",
       section: schedule.section || "",
       crn: schedule.crn || "",
+      clssId: schedule.clssId || "",
       status: schedule.status || "Active",
       program: schedule.program || schedule.subjectCode || schedule.subject || "",
+      departmentCode: schedule.departmentCode || "",
       credits: toDisplayNumber(schedule.credits),
+      instructorIds: joinValues(resolveInstructorIds(schedule, peopleIndex)),
       instructors: resolveInstructorNames(schedule, peopleIndex),
       primaryInstructor: resolvePrimaryInstructorName(schedule, peopleIndex),
+      instructorAssignments: formatInstructorAssignments(schedule, peopleIndex),
       instructionMethod: schedule.instructionMethod || "",
       scheduleType: schedule.scheduleType || "",
+      isOnline: getBooleanStatusLabel(schedule.isOnline === true),
+      onlineMode: schedule.onlineMode || "",
       locationType: schedule.locationType || "",
+      spaceIds: joinValues(getScheduleSpaceKeys(schedule)),
       locations: resolveLocationDisplay(schedule, spacesByKey),
       meetingPatternSummary: formatMeetingPatternSummary(schedule.meetingPatterns),
       enrollment: toDisplayNumber(schedule.enrollment),
       maxEnrollment: toDisplayNumber(
         schedule.maxEnrollment ?? schedule.maximumEnrollment ?? schedule.MaxEnrollment,
       ),
+      openSeats: toDisplayNumber(schedule.openSeats),
       waitCap: toDisplayNumber(schedule.waitCap),
       waitCurrent: toDisplayNumber(schedule.waitTotal),
+      waitAvailable: toDisplayNumber(schedule.waitAvailable),
+      reservedSeats: toDisplayNumber(schedule.reservedSeats),
+      reservedSeatsEnrollment: toDisplayNumber(schedule.reservedSeatsEnrollment),
+      crossListCrns: joinValues(schedule.crossListCrns || []),
       partOfTerm: schedule.partOfTerm || "",
       customStartDate: formatDate(schedule.customStartDate),
       customEndDate: formatDate(schedule.customEndDate),
+      linkGroupId: schedule.linkGroupId || "",
+      createdAt: formatDateTime(schedule.createdAt),
+      updatedAt: formatDateTime(schedule.updatedAt),
     }))
     .sort((a, b) => {
       const byTerm = (a.termCode || a.term).localeCompare(b.termCode || b.term);
@@ -440,8 +691,18 @@ const buildSectionMeetingRows = ({
             })
           : [null];
 
-      meetingPatterns.forEach((pattern) => {
+      meetingPatterns.forEach((pattern, meetingIndex) => {
+        const scopedSchedule = pattern
+          ? {
+              ...schedule,
+              spaceIds: pattern.spaceIds || schedule.spaceIds || [],
+              spaceDisplayNames:
+                pattern.spaceDisplayNames || schedule.spaceDisplayNames || [],
+            }
+          : schedule;
         rows.push({
+          scheduleId: schedule.id || "",
+          meetingIndex: meetingIndex + 1,
           term: schedule.term || "",
           termCode: schedule.termCode || "",
           courseCode: schedule.courseCode || "",
@@ -451,19 +712,11 @@ const buildSectionMeetingRows = ({
           day: pattern?.day || "",
           startTime: pattern?.startTime || "",
           endTime: pattern?.endTime || "",
-          locations: resolveLocationDisplay(
-            pattern
-              ? {
-                  ...schedule,
-                  spaceIds: pattern.spaceIds || schedule.spaceIds || [],
-                  spaceDisplayNames:
-                    pattern.spaceDisplayNames ||
-                    schedule.spaceDisplayNames ||
-                    [],
-                }
-              : schedule,
-            spacesByKey,
-          ),
+          startDate: formatDate(pattern?.startDate),
+          endDate: formatDate(pattern?.endDate),
+          spaceIds: joinValues(getScheduleSpaceKeys(scopedSchedule)),
+          locations: resolveLocationDisplay(scopedSchedule, spacesByKey),
+          instructorIds: joinValues(resolveInstructorIds(schedule, peopleIndex)),
           instructors: resolveInstructorNames(schedule, peopleIndex),
         });
       });
@@ -485,24 +738,28 @@ const buildSectionMeetingRows = ({
 const buildCourseRows = ({ courses = [] }) => {
   return courses
     .map((course) => ({
+      recordId: course.id || "",
       courseCode: course.courseCode || course.code || course.id || "",
       courseTitle: course.title || course.courseTitle || "",
       subjectCode: course.subjectCode || course.subject || "",
       catalogNumber: course.catalogNumber || "",
+      courseLevel: toDisplayNumber(course.courseLevel),
       credits: toDisplayNumber(course.credits ?? course.creditHours),
       program: course.program || course.subjectCode || "",
       department: course.department || course.departmentCode || "",
       status: getActiveStatusLabel(course.isActive),
+      createdAt: formatDateTime(course.createdAt),
+      updatedAt: formatDateTime(course.updatedAt),
     }))
     .sort((a, b) => a.courseCode.localeCompare(b.courseCode));
 };
 
-const buildProgramRows = ({ programs = [], canonicalPeople = [] }) => {
-  const peopleById = new Map(canonicalPeople.map((person) => [person.id, person]));
+const buildProgramRows = ({ programs = [], peopleIndex }) => {
   const directorNamesForRole = (program, role) =>
     getProgramDirectors(program, role)
       .map(({ personId }) => {
-        const person = peopleById.get(personId);
+        const canonicalId = peopleIndex?.resolvePersonId(personId) || personId;
+        const person = peopleIndex?.peopleById?.get(canonicalId);
         return person ? getPersonDisplayName(person) : "";
       })
       .filter(Boolean)
@@ -514,13 +771,31 @@ const buildProgramRows = ({ programs = [], canonicalPeople = [] }) => {
       const gpdNames = directorNamesForRole(program, DIRECTOR_ROLES.GPD);
 
       return {
+        recordId: program.id || "",
         programName: program.name || "",
         programCode: program.code || "",
         updNames: joinValues(updNames),
         updCount: updNames.length,
         gpdNames: joinValues(gpdNames),
         gpdCount: gpdNames.length,
+        updIds: joinValues(
+          getProgramDirectors(program, DIRECTOR_ROLES.UPD).map(
+            ({ personId }) => peopleIndex?.resolvePersonId(personId) || personId,
+          ),
+        ),
+        gpdIds: joinValues(
+          getProgramDirectors(program, DIRECTOR_ROLES.GPD).map(
+            ({ personId }) => peopleIndex?.resolvePersonId(personId) || personId,
+          ),
+        ),
+        directorIds: joinValues(
+          getProgramDirectors(program).map(
+            ({ personId }) => peopleIndex?.resolvePersonId(personId) || personId,
+          ),
+        ),
         status: getActiveStatusLabel(program.isActive),
+        createdAt: formatDateTime(program.createdAt),
+        updatedAt: formatDateTime(program.updatedAt),
       };
     })
     .sort((a, b) => a.programName.localeCompare(b.programName));
@@ -567,6 +842,7 @@ const buildSpaceRows = ({
       const assignedOfficesCount = officeCountsBySpace.get(spaceKey) || 0;
 
       return {
+        recordId: space.id || "",
         spaceKey,
         displayName: normalized.displayName || "",
         buildingCode: normalized.buildingCode || "",
@@ -576,9 +852,14 @@ const buildSpaceRows = ({
         capacity: toDisplayNumber(normalized.capacity),
         equipment: joinValues(normalized.equipment || []),
         status: getActiveStatusLabel(normalized.isActive),
+        isReservable: getBooleanStatusLabel(normalized.isReservable === true),
         scheduledSectionsCount,
         assignedOfficesCount,
         notes: normalized.notes || "",
+        createdBy: space.createdBy || "",
+        deletedAt: formatDateTime(space.deletedAt),
+        createdAt: formatDateTime(space.createdAt),
+        updatedAt: formatDateTime(space.updatedAt),
       };
     })
     .sort((a, b) => {
@@ -608,6 +889,7 @@ const buildBuildingRows = ({ buildings = [], spaces = [] }) => {
     .map((building) => {
       const code = (building.code || "").toUpperCase();
       return {
+        recordId: building.id || building.code || "",
         code,
         displayName: building.displayName || "",
         aliases: joinValues(building.aliases || []),
@@ -615,6 +897,8 @@ const buildBuildingRows = ({ buildings = [], spaces = [] }) => {
         address: building.address || "",
         status: getActiveStatusLabel(building.isActive),
         activeSpaceCount: activeSpaceCountByBuilding.get(code) || 0,
+        createdAt: formatDateTime(building.createdAt),
+        updatedAt: formatDateTime(building.updatedAt),
       };
     })
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
@@ -653,6 +937,7 @@ const buildTermRows = ({ terms = [], schedules = [], termScopeInfo }) => {
     const status = statusFromTermRecord(term);
 
     return {
+      recordId: term.id || termCode || termLabel,
       term: termLabel,
       termCode,
       status,
@@ -660,6 +945,8 @@ const buildTermRows = ({ terms = [], schedules = [], termScopeInfo }) => {
       startDate: formatDate(term.startDate),
       endDate: formatDate(term.endDate),
       sectionCount: sectionCountByKey.get(key) || 0,
+      createdAt: formatDateTime(term.createdAt),
+      updatedAt: formatDateTime(term.updatedAt),
     };
   });
 
@@ -670,6 +957,7 @@ const buildTermRows = ({ terms = [], schedules = [], termScopeInfo }) => {
   // Fallback if terms collection has not been populated.
   return Array.from(sectionCountByKey.entries())
     .map(([key, count]) => ({
+      recordId: key,
       term: key,
       termCode: key,
       status: "active",
@@ -677,40 +965,242 @@ const buildTermRows = ({ terms = [], schedules = [], termScopeInfo }) => {
       startDate: "",
       endDate: "",
       sectionCount: count,
+      createdAt: "",
+      updatedAt: "",
     }))
     .sort((a, b) => (b.termCode || b.term).localeCompare(a.termCode || a.term));
 };
 
-const buildRoomGridRows = ({ roomGrids = [] }) => {
-  return roomGrids
-    .map((grid) => ({
-      title: grid.title || "",
-      building: grid.building || "",
-      room: grid.room || "",
-      dayPattern: grid.dayType || "",
-      semester: grid.semester || "",
-      createdAt: formatDateTime(grid.createdAt),
-      hasTemplate: getBooleanStatusLabel(
-        Boolean((grid.html || "").toString().trim() || grid.studio),
-      ),
+const getSelectedTermMeta = ({
+  termScopeInfo,
+  selectedTermMeta,
+  terms = [],
+}) => {
+  if (termScopeInfo.scope !== "selected") return null;
+  return (
+    selectedTermMeta ||
+    findTermMeta({
+      terms,
+      term: termScopeInfo.termLabel,
+      termCode: termScopeInfo.termCode,
+    })
+  );
+};
+
+const buildRoomReservationRows = ({
+  reservations = [],
+  termScopeInfo,
+  selectedTermMeta,
+  terms = [],
+}) => {
+  const termMeta = getSelectedTermMeta({
+    termScopeInfo,
+    selectedTermMeta,
+    terms,
+  });
+  const rangeStart = formatDate(termMeta?.startDate);
+  const rangeEnd = formatDate(termMeta?.endDate);
+
+  return reservations
+    .filter((reservation) => {
+      if (termScopeInfo.scope !== "selected") return true;
+      if (!rangeStart || !rangeEnd) return false;
+      const date = formatDate(reservation.date);
+      if (!date) return false;
+      if (rangeStart && date < rangeStart) return false;
+      if (rangeEnd && date > rangeEnd) return false;
+      return true;
+    })
+    .map((reservation) => ({
+      recordId: reservation.id || "",
+      status: reservation.status || "confirmed",
+      date: formatDate(reservation.date),
+      startTime: reservation.startTime || "",
+      endTime: reservation.endTime || "",
+      startMinutes: toDisplayNumber(reservation.startMinutes),
+      endMinutes: toDisplayNumber(reservation.endMinutes),
+      title: reservation.title || "",
+      purpose: reservation.purpose || "",
+      headcount: toDisplayNumber(reservation.headcount),
+      spaceKey: reservation.spaceKey || "",
+      roomDisplay: reservation.roomDisplay || "",
+      buildingCode: reservation.buildingCode || "",
+      buildingDisplayName: reservation.buildingDisplayName || "",
+      requesterName: reservation.requesterName || "",
+      requesterEmail: reservation.requesterEmail || "",
+      createdBy: reservation.createdBy || "",
+      createdAt: formatDateTime(reservation.createdAt),
     }))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    .sort((a, b) => {
+      const byDate = a.date.localeCompare(b.date);
+      if (byDate !== 0) return byDate;
+      const byStart = Number(a.startMinutes || 0) - Number(b.startMinutes || 0);
+      if (byStart !== 0) return byStart;
+      return a.roomDisplay.localeCompare(b.roomDisplay);
+    });
+};
+
+const buildBaylorAcronymRows = ({ baylorAcronyms = [] }) =>
+  baylorAcronyms
+    .map((item) => ({
+      recordId: item.id || "",
+      acronym: item.acronym || "",
+      standsFor: item.standsFor || "",
+      category: item.category || "",
+      description: item.description || "",
+    }))
+    .sort(
+      (a, b) =>
+        a.category.localeCompare(b.category) || a.acronym.localeCompare(b.acronym),
+    );
+
+const buildEmailListPresetRows = ({ emailListPresets = [], peopleIndex }) =>
+  emailListPresets
+    .map((preset) => {
+      const personIds = Array.isArray(preset.personIds) ? preset.personIds : [];
+      const people = personIds
+        .map((personId) => peopleIndex?.resolvePerson(personId))
+        .filter(Boolean);
+      return {
+        recordId: preset.id || "",
+        name: preset.name || "",
+        personIds: joinValues(personIds),
+        people: joinValues(people.map(getPersonDisplayName)),
+        emails: joinValues(people.map((person) => person.email).filter(Boolean)),
+        personCount: personIds.length,
+        createdBy: preset.createdBy || "",
+        updatedBy: preset.updatedBy || "",
+        createdAt: formatDateTime(preset.createdAt),
+        updatedAt: formatDateTime(preset.updatedAt),
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+const buildCalendarExceptionRows = ({
+  calendarExceptions = [],
+  termScopeInfo,
+}) => {
+  const rows = [];
+  calendarExceptions.forEach((record) => {
+    const byTerm =
+      record?.termExceptions && typeof record.termExceptions === "object"
+        ? record.termExceptions
+        : {};
+    Object.entries(byTerm).forEach(([term, exceptions]) => {
+      if (!scheduleMatchesTermScope({ term }, termScopeInfo)) return;
+      (Array.isArray(exceptions) ? exceptions : []).forEach((exception) => {
+        rows.push({
+          recordId: record.id || "",
+          term,
+          date: formatDate(exception?.date),
+          label: exception?.label || "",
+          updatedAt: formatDateTime(record.updatedAt),
+        });
+      });
+    });
+  });
+  return rows.sort(
+    (a, b) =>
+      a.term.localeCompare(b.term) ||
+      a.date.localeCompare(b.date) ||
+      a.label.localeCompare(b.label),
+  );
+};
+
+const roomGridMatchesTermScope = (grid, termScopeInfo) =>
+  scheduleMatchesTermScope(
+    {
+      term: grid?.studio?.semester || grid?.semester || "",
+      termCode: grid?.studio?.termCode || grid?.termCode || "",
+    },
+    termScopeInfo,
+  );
+
+const buildRoomGridRows = ({ roomGrids = [], termScopeInfo }) => {
+  return roomGrids
+    .filter((grid) => roomGridMatchesTermScope(grid, termScopeInfo))
+    .map((grid) => {
+      const studio = grid?.studio && typeof grid.studio === "object" ? grid.studio : {};
+      return {
+        recordId: grid.id || "",
+        title: grid.title || studio.name || "",
+        kind: grid.kind || studio.kind || (grid.html ? "legacy" : ""),
+        schemaVersion: toDisplayNumber(grid.schemaVersion ?? studio.schemaVersion),
+        building: studio.building || grid.building || "",
+        room: studio.room || grid.room || "",
+        dayPattern: grid.dayType || "",
+        semester: studio.semester || grid.semester || "",
+        folder: studio.folder || "",
+        tags: joinValues(studio.tags || []),
+        favorite: getBooleanStatusLabel(studio.favorite === true),
+        source: studio.source || "",
+        entryCount: Array.isArray(studio.entries) ? studio.entries.length : 0,
+        layout: toJson(studio.layout),
+        visibility: toJson(studio.visibility),
+        createdAt: formatDateTime(grid.createdAt),
+        updatedAt: formatDateTime(grid.updatedAt),
+        hasTemplate: getBooleanStatusLabel(
+          Boolean((grid.html || "").toString().trim() || grid.studio),
+        ),
+      };
+    })
+    .sort((a, b) => {
+      const byUpdated = b.updatedAt.localeCompare(a.updatedAt);
+      if (byUpdated !== 0) return byUpdated;
+      return a.title.localeCompare(b.title);
+    });
+};
+
+const buildRoomGridEntryRows = ({ roomGrids = [], termScopeInfo }) => {
+  const rows = [];
+  roomGrids
+    .filter((grid) => roomGridMatchesTermScope(grid, termScopeInfo))
+    .forEach((grid) => {
+      const studio = grid?.studio && typeof grid.studio === "object" ? grid.studio : {};
+      (Array.isArray(studio.entries) ? studio.entries : []).forEach((entry) => {
+        rows.push({
+          gridId: grid.id || "",
+          gridTitle: grid.title || studio.name || "",
+          entryId: entry?.id || "",
+          course: entry?.course || "",
+          section: entry?.section || "",
+          instructor: entry?.instructor || "",
+          days: joinValues(entry?.days || []),
+          start: entry?.start || "",
+          end: entry?.end || "",
+          hidden: getBooleanStatusLabel(entry?.hidden === true),
+          detailLevel: entry?.detailLevel || "",
+          blockColor: entry?.blockColor || "",
+          note: entry?.note || "",
+        });
+      });
+    });
+  return rows.sort(
+    (a, b) =>
+      a.gridTitle.localeCompare(b.gridTitle) ||
+      a.course.localeCompare(b.course) ||
+      a.start.localeCompare(b.start),
+  );
 };
 
 const buildSummaryRows = ({
   sheetIds,
   rowsBySheetId,
   termScopeInfo,
+  termScopeApplied,
+  scopeNotices = [],
   totalRows,
 }) => {
+  const scopeSummary = !termScopeApplied
+    ? "Not applicable to the included global sheets"
+    : termScopeInfo.scope === "selected"
+      ? `Selected: ${termScopeInfo.termLabel || termScopeInfo.termCode || "Unknown"}`
+      : "All semesters";
   const rows = [
     { metric: "Generated At", value: formatDateTime(new Date()) },
     {
       metric: "Semester Scope",
-      value:
-        termScopeInfo.scope === "selected"
-          ? `Selected: ${termScopeInfo.termLabel || termScopeInfo.termCode || "Unknown"}`
-          : "All semesters",
+      value: scopeSummary,
     },
     {
       metric: "Included Sheets",
@@ -728,6 +1218,10 @@ const buildSummaryRows = ({
       metric: `${definition?.name || sheetId} Rows`,
       value: String((rowsBySheetId[sheetId] || []).length),
     });
+  });
+
+  scopeNotices.forEach((notice) => {
+    rows.push({ metric: "Scope Notice", value: notice });
   });
 
   rows.push({ metric: "Total Export Rows", value: String(totalRows) });
@@ -752,6 +1246,10 @@ const loadSourceData = async ({ dependencies, termScopeInfo, buildingConfig }) =
   const needsCourses = dependencies.has("courses");
   const needsSpaces = dependencies.has("spaces");
   const needsTerms = dependencies.has("terms");
+  const needsReservations = dependencies.has("reservations");
+  const needsBaylorAcronyms = dependencies.has("baylorAcronyms");
+  const needsEmailListPresets = dependencies.has("emailListPresets");
+  const needsCalendarExceptions = dependencies.has("calendarExceptions");
   const needsRoomGrids = dependencies.has("roomGrids");
   const needsBuildings = dependencies.has("buildings");
 
@@ -762,6 +1260,10 @@ const loadSourceData = async ({ dependencies, termScopeInfo, buildingConfig }) =
     courses: [],
     spaces: [],
     terms: [],
+    reservations: [],
+    baylorAcronyms: [],
+    emailListPresets: [],
+    calendarExceptions: [],
     roomGrids: [],
     buildings: [],
   };
@@ -814,6 +1316,40 @@ const loadSourceData = async ({ dependencies, termScopeInfo, buildingConfig }) =
     );
   }
 
+  if (needsReservations) {
+    tasks.push(
+      getCollectionDocs(COLLECTIONS.reservations).then((reservations) => {
+        payload.reservations = reservations;
+      }),
+    );
+  }
+
+  if (needsBaylorAcronyms) {
+    tasks.push(
+      getCollectionDocs(COLLECTIONS.baylorAcronyms).then((baylorAcronyms) => {
+        payload.baylorAcronyms = baylorAcronyms;
+      }),
+    );
+  }
+
+  if (needsEmailListPresets) {
+    tasks.push(
+      getCollectionDocs(COLLECTIONS.emailListPresets).then((emailListPresets) => {
+        payload.emailListPresets = emailListPresets;
+      }),
+    );
+  }
+
+  if (needsCalendarExceptions) {
+    tasks.push(
+      getCollectionDocs(COLLECTIONS.calendarExceptions).then(
+        (calendarExceptions) => {
+          payload.calendarExceptions = calendarExceptions;
+        },
+      ),
+    );
+  }
+
   if (needsRoomGrids) {
     tasks.push(
       getCollectionDocs(COLLECTIONS.roomGrids).then((roomGrids) => {
@@ -843,8 +1379,10 @@ export const buildAdminExportPackage = async ({
   selectedTerm = "",
   selectedTermMeta = null,
   buildingConfig = null,
+  sourceData = null,
 } = {}) => {
   const requestedSheetIds = getExportSheetIds(sheetIds);
+  const termScopeApplied = requestedSheetIds.some(isTermScopedSheet);
   const termScopeInfo = toNormalizedTermScope({
     termScope,
     selectedTerm,
@@ -857,11 +1395,27 @@ export const buildAdminExportPackage = async ({
     dependencies.add("buildings");
   }
 
-  const source = await loadSourceData({
-    dependencies,
-    termScopeInfo,
-    buildingConfig,
-  });
+  const source = sourceData
+    ? {
+        people: [],
+        schedules: [],
+        programs: [],
+        courses: [],
+        spaces: [],
+        terms: [],
+        reservations: [],
+        baylorAcronyms: [],
+        emailListPresets: [],
+        calendarExceptions: [],
+        roomGrids: [],
+        buildings: [],
+        ...sourceData,
+      }
+    : await loadSourceData({
+        dependencies,
+        termScopeInfo,
+        buildingConfig,
+      });
 
   const peopleIndex = buildPeopleIndex(source.people || []);
   const canonicalPeople = peopleIndex.canonicalPeople || [];
@@ -882,6 +1436,7 @@ export const buildAdminExportPackage = async ({
     [SHEET_IDS.people]: () =>
       buildPeopleRows({
         canonicalPeople,
+        peopleIndex,
         programsById,
         spacesByKey,
       }),
@@ -891,6 +1446,7 @@ export const buildAdminExportPackage = async ({
         peopleIndex,
         termScopeInfo,
         selectedTermMeta,
+        terms: source.terms || [],
       }),
     [SHEET_IDS.courseSections]: () =>
       buildCourseSectionRows({
@@ -910,7 +1466,7 @@ export const buildAdminExportPackage = async ({
     [SHEET_IDS.programs]: () =>
       buildProgramRows({
         programs: source.programs || [],
-        canonicalPeople,
+        peopleIndex,
       }),
     [SHEET_IDS.spaces]: () =>
       buildSpaceRows({
@@ -929,7 +1485,35 @@ export const buildAdminExportPackage = async ({
         schedules,
         termScopeInfo,
       }),
-    [SHEET_IDS.roomGrids]: () => buildRoomGridRows({ roomGrids: source.roomGrids || [] }),
+    [SHEET_IDS.roomReservations]: () =>
+      buildRoomReservationRows({
+        reservations: source.reservations || [],
+        termScopeInfo,
+        selectedTermMeta,
+        terms: source.terms || [],
+      }),
+    [SHEET_IDS.baylorAcronyms]: () =>
+      buildBaylorAcronymRows({ baylorAcronyms: source.baylorAcronyms || [] }),
+    [SHEET_IDS.emailListPresets]: () =>
+      buildEmailListPresetRows({
+        emailListPresets: source.emailListPresets || [],
+        peopleIndex,
+      }),
+    [SHEET_IDS.calendarExceptions]: () =>
+      buildCalendarExceptionRows({
+        calendarExceptions: source.calendarExceptions || [],
+        termScopeInfo,
+      }),
+    [SHEET_IDS.roomGrids]: () =>
+      buildRoomGridRows({
+        roomGrids: source.roomGrids || [],
+        termScopeInfo,
+      }),
+    [SHEET_IDS.roomGridEntries]: () =>
+      buildRoomGridEntryRows({
+        roomGrids: source.roomGrids || [],
+        termScopeInfo,
+      }),
   };
 
   requestedSheetIds.forEach((sheetId) => {
@@ -938,10 +1522,31 @@ export const buildAdminExportPackage = async ({
   });
 
   const totalRows = estimateTotalRows(rowsBySheetId, requestedSheetIds);
+  const scopeNotices = [];
+  if (
+    requestedSheetIds.includes(SHEET_IDS.roomReservations) &&
+    termScopeInfo.scope === "selected"
+  ) {
+    const reservationTermMeta = getSelectedTermMeta({
+      termScopeInfo,
+      selectedTermMeta,
+      terms: source.terms || [],
+    });
+    if (
+      !formatDate(reservationTermMeta?.startDate) ||
+      !formatDate(reservationTermMeta?.endDate)
+    ) {
+      scopeNotices.push(
+        "Room Reservations were omitted because the selected semester does not have both a start date and an end date.",
+      );
+    }
+  }
   const summaryRows = buildSummaryRows({
     sheetIds: requestedSheetIds,
     rowsBySheetId,
     termScopeInfo,
+    termScopeApplied,
+    scopeNotices,
     totalRows,
   });
 
@@ -951,11 +1556,12 @@ export const buildAdminExportPackage = async ({
     summaryRows,
     totalRows,
     termScopeInfo,
+    termScopeApplied,
   };
 };
 
 export const getBulkFileName = ({ termScopeInfo } = {}) =>
   buildBulkExportFileName({ termScopeInfo });
 
-export const getIndividualFileName = ({ label } = {}) =>
-  buildIndividualFileName({ label });
+export const getIndividualFileName = ({ label, termScopeInfo } = {}) =>
+  buildIndividualFileName({ label, termScopeInfo });

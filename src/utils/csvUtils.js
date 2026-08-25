@@ -62,3 +62,90 @@ export const parseCSVRecords = (text) => {
   return rows;
 };
 
+const FORMULA_PREFIX_PATTERN = /^[\t\r\n ]*[=+\-@]/;
+
+/**
+ * Keep text cells from being interpreted as formulas when a CSV is opened in a
+ * spreadsheet application. Numeric JavaScript values remain numeric text; only
+ * user-provided strings receive the leading apostrophe.
+ */
+export const neutralizeSpreadsheetFormula = (value) => {
+  if (typeof value !== "string" || !FORMULA_PREFIX_PATTERN.test(value)) {
+    return value;
+  }
+  return `'${value}`;
+};
+
+export const serializeCSVValue = (value) => {
+  if (value === undefined || value === null) return "";
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? "" : value.toISOString();
+  }
+  if (typeof value?.toDate === "function") {
+    const date = value.toDate();
+    return date instanceof Date && !Number.isNaN(date.getTime())
+      ? date.toISOString()
+      : "";
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((item) =>
+        item && typeof item === "object" ? JSON.stringify(item) : String(item ?? ""),
+      )
+      .join("; ");
+  }
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch (_error) {
+      return "";
+    }
+  }
+  return value;
+};
+
+export const escapeCSVCell = (value) => {
+  const serialized = serializeCSVValue(value);
+  const safeValue = neutralizeSpreadsheetFormula(serialized);
+  return `"${String(safeValue ?? "").replace(/"/g, '""')}"`;
+};
+
+/** Build an Excel-friendly UTF-8 CSV with deterministic CRLF line endings. */
+export const buildCSVContent = (
+  headers = [],
+  rows = [],
+  { includeBom = true } = {},
+) => {
+  const lines = [headers, ...rows].map((row) =>
+    (Array.isArray(row) ? row : []).map(escapeCSVCell).join(","),
+  );
+  return `${includeBom ? "\ufeff" : ""}${lines.join("\r\n")}`;
+};
+
+export const downloadTextFile = (
+  content,
+  filename,
+  mimeType = "text/plain;charset=utf-8;",
+) => {
+  const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+
+  try {
+    link.click();
+  } finally {
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+};
+
+export const downloadCSVFile = (filename, headers = [], rows = []) =>
+  downloadTextFile(
+    buildCSVContent(headers, rows),
+    filename,
+    "text/csv;charset=utf-8;",
+  );

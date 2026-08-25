@@ -51,6 +51,7 @@ import {
   normalizeEnrollmentInput,
   resolveScheduleTermKey,
 } from "./course-management/helpers";
+import { buildCSVContent, downloadTextFile } from "../../utils/csvUtils";
 
 import SelectDropdown from "../SelectDropdown";
 const CourseManagement = ({ embedded = false }) => {
@@ -413,7 +414,7 @@ const CourseManagement = ({ embedded = false }) => {
     });
     const fields = Array.from(allKeys)
       .filter(
-        (field) => field !== "Schedule Type" && !MAX_ENROLLMENT_FIELD_KEYS.has(field),
+        (field) => !MAX_ENROLLMENT_FIELD_KEYS.has(field),
       )
       .sort();
     fields.push(MAX_ENROLLMENT_EXPORT_KEY);
@@ -1100,21 +1101,13 @@ const CourseManagement = ({ embedded = false }) => {
       return val;
     };
     const rows = filteredAndSortedData.map((row) =>
-      selectedExportFields
-        .map((field) => {
-          const val = resolveExportValue(row, field);
-          return `"${String(val).replace(/"/g, '""')}"`;
-        })
-        .join(","),
+      selectedExportFields.map((field) => resolveExportValue(row, field)),
     );
-    const csvContent = [headers.join(","), ...rows].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `course-export-${new Date().toISOString().split("T")[0]}.csv`;
-    link.click();
-    window.URL.revokeObjectURL(url);
+    downloadTextFile(
+      buildCSVContent(headers, rows),
+      `course-export-${new Date().toISOString().split("T")[0]}.csv`,
+      "text/csv;charset=utf-8;",
+    );
     setExportModalOpen(false);
   };
 

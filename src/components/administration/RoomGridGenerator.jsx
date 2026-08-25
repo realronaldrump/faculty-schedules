@@ -1,12 +1,42 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import DOMPurify from "dompurify";
 import Papa from "papaparse";
-import { Upload, X, FileText, Download, Save as SaveIcon, Database, ArrowLeft, ChevronDown, ChevronUp, RotateCcw, Info } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  Database,
+  Download,
+  FileText,
+  Info,
+  LayoutTemplate,
+  RotateCcw,
+  Save as SaveIcon,
+  Upload,
+  X,
+} from "lucide-react";
 import ExportModal from "./ExportModal";
 import ExportableRoomSchedule from "./ExportableRoomSchedule";
 import { db } from "../../firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, limit } from "firebase/firestore";
-import { logCreate, logDelete } from "../../utils/changeLogger";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  updateDoc,
+} from "firebase/firestore";
+import { logCreate, logDelete, logUpdate } from "../../utils/changeLogger";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import { usePermissions } from "../../utils/permissions";
 import { fetchSchedulesByTerm } from "../../utils/dataImportUtils";
@@ -16,8 +46,18 @@ import {
   splitMultiRoom,
 } from "../../utils/locationService";
 import { useSchedules } from "../../contexts/ScheduleContext";
+import {
+  createBlankStudioDocument,
+  createStudioDocumentFromSchedule,
+  normalizeStudioDocument,
+} from "../../utils/scheduleGridStudio";
 
 import SelectDropdown from "../SelectDropdown";
+
+const ScheduleGridStudio = lazy(() =>
+  import("./schedule-grid-studio/ScheduleGridStudio"),
+);
+
 const RoomGridGenerator = () => {
   const { canEdit } = usePermissions();
   const canEditHere = canEdit("scheduling/rooms");
@@ -42,6 +82,7 @@ const RoomGridGenerator = () => {
   const [multiRoomMode, setMultiRoomMode] = useState(false);
   const [selectedBuildings, setSelectedBuildings] = useState([]);
   const [generatedSchedules, setGeneratedSchedules] = useState([]);
+  const [studioSession, setStudioSession] = useState(null);
 
   // Mode selection: null = wizard, 'auto' = dashboard data, 'csv' = CLSS import
   const [dataMode, setDataMode] = useState(null);
@@ -733,7 +774,7 @@ const RoomGridGenerator = () => {
     setGeneratedSchedules([]);
     setScheduleHtml(""); // Clear the old HTML-based schedule
     showMessage(
-      "Weekly schedule generated. Click Export to save as PNG.",
+      "Weekly schedule generated. Click Export to create a PDF.",
       "success",
     );
   };
@@ -994,7 +1035,7 @@ const RoomGridGenerator = () => {
     setIsLoadingSaved(true);
     try {
       const gridsRef = collection(db, "roomGrids");
-      const q = query(gridsRef, orderBy("createdAt", "desc"), limit(25));
+      const q = query(gridsRef, orderBy("createdAt", "desc"), limit(100));
       const snap = await getDocs(q);
       const results = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setSavedGrids(results);
@@ -1055,8 +1096,157 @@ const RoomGridGenerator = () => {
     }
   };
 
+  const buildStudioGridPayload = (studioDocument) => {
+    const studio = normalizeStudioDocument(studioDocument);
+    return {
+      title: studio.name,
+      building: studio.building,
+      room: studio.room,
+      dayType: "STUDIO",
+      semester: studio.semester,
+      kind: "studio",
+      schemaVersion: studio.schemaVersion,
+      studio,
+      updatedAt: Date.now(),
+    };
+  };
+
+  const saveStudioTemplate = async (
+    studioDocument,
+    { templateId = "", asCopy = false } = {},
+  ) => {
+    if (!canEditHere) {
+      throw new Error("You do not have permission to save schedule templates.");
+    }
+
+    const studio = normalizeStudioDocument(studioDocument);
+    if (asCopy) {
+      studio.name = `${studio.name} copy`;
+      studio.favorite = false;
+    }
+    const payload = buildStudioGridPayload(studio);
+    const existing = savedGrids.find((grid) => grid.id === templateId);
+
+    if (templateId && !asCopy) {
+      await updateDoc(doc(db, "roomGrids", templateId), payload);
+      logUpdate(
+        `Schedule Grid Studio - ${payload.title}`,
+        "roomGrids",
+        templateId,
+        payload,
+        existing || null,
+        "RoomGridGenerator.jsx - saveStudioTemplate",
+      ).catch(() => { });
+      await fetchSavedGrids();
+      return { id: templateId, studio };
+    }
+
+    const createPayload = { ...payload, createdAt: Date.now() };
+    const createdRef = await addDoc(collection(db, "roomGrids"), createPayload);
+    logCreate(
+      `Schedule Grid Studio - ${payload.title}`,
+      "roomGrids",
+      createdRef.id,
+      createPayload,
+      "RoomGridGenerator.jsx - saveStudioTemplate",
+    ).catch(() => { });
+    await fetchSavedGrids();
+    return { id: createdRef.id, studio };
+  };
+
+  const duplicateStudioTemplate = async (template) => {
+    if (!template?.studio) return null;
+    const studio = normalizeStudioDocument({
+      ...template.studio,
+      name: `${template.studio.name || template.title || "Schedule"} copy`,
+      favorite: false,
+    });
+    return saveStudioTemplate(studio, { asCopy: false });
+  };
+
+  const toggleFavoriteStudioTemplate = async (template) => {
+    if (!canEditHere) {
+      throw new Error("You do not have permission to organize schedule templates.");
+    }
+    if (!template?.id || !template?.studio) return;
+    const studio = normalizeStudioDocument({
+      ...template.studio,
+      favorite: !template.studio.favorite,
+    });
+    const payload = buildStudioGridPayload(studio);
+    await updateDoc(doc(db, "roomGrids", template.id), payload);
+    logUpdate(
+      `Schedule Grid Studio - ${payload.title}`,
+      "roomGrids",
+      template.id,
+      { favorite: studio.favorite },
+      template,
+      "RoomGridGenerator.jsx - toggleStudioFavorite",
+    ).catch(() => { });
+    await fetchSavedGrids();
+    return { id: template.id, studio };
+  };
+
+  const deleteStudioTemplate = async (template) => {
+    if (!canEditHere) {
+      throw new Error("You do not have permission to delete schedule templates.");
+    }
+    if (!template?.id) return;
+    await deleteDoc(doc(db, "roomGrids", template.id));
+    logDelete(
+      `Schedule Grid Studio - ${template.title}`,
+      "roomGrids",
+      template.id,
+      template,
+      "RoomGridGenerator.jsx - deleteStudioTemplate",
+    ).catch(() => { });
+    await fetchSavedGrids();
+  };
+
+  const openBlankStudio = () => {
+    setStudioSession({
+      key: `blank-${Date.now()}`,
+      templateId: "",
+      document: createBlankStudioDocument(),
+    });
+  };
+
+  const openCurrentRoomInStudio = () => {
+    if (!selectedBuilding || !selectedRoom) {
+      showMessage("Select a building and room before opening the Studio.");
+      return;
+    }
+    const classes = allClassData.filter(
+      (item) =>
+        item.building === selectedBuilding && item.room === selectedRoom,
+    );
+    setStudioSession({
+      key: `schedule-${selectedBuilding}-${selectedRoom}-${Date.now()}`,
+      templateId: "",
+      document: createStudioDocumentFromSchedule({
+        classes,
+        building: selectedBuilding,
+        room: selectedRoom,
+        semester,
+      }),
+    });
+  };
+
+  const openSavedStudio = (grid) => {
+    if (!grid?.studio) return;
+    setStudioSession({
+      key: `saved-${grid.id}-${Date.now()}`,
+      templateId: grid.id,
+      document: normalizeStudioDocument(grid.studio),
+    });
+  };
+
   const loadGrid = (grid) => {
     if (!grid) return;
+    if (grid.kind === "studio" && grid.studio) {
+      openSavedStudio(grid);
+      return;
+    }
     setMultiRoomMode(false);
     setSelectedBuildings([]);
     setGeneratedSchedules([]);
@@ -1147,15 +1337,48 @@ const RoomGridGenerator = () => {
   const exportNeedsSizing = hasGeneratedSchedules
     ? generatedSchedules.some((schedule) => schedule.kind === "table")
     : !showExportableWeek;
+  const studioTemplates = savedGrids.filter(
+    (grid) => grid.kind === "studio" && grid.studio,
+  );
+
+  if (studioSession) {
+    return (
+      <Suspense
+        fallback={
+          <div className="university-card flex min-h-72 items-center justify-center p-8 text-gray-600">
+            <RotateCcw className="mr-3 h-5 w-5 animate-spin text-baylor-green" />
+            Loading Schedule Grid Studio…
+          </div>
+        }
+      >
+        <ScheduleGridStudio
+          key={studioSession.key}
+          initialDocument={studioSession.document}
+          initialTemplateId={studioSession.templateId}
+          templates={studioTemplates}
+          isLoadingTemplates={isLoadingSaved}
+          canSave={canEditHere}
+          onBack={() => {
+            setStudioSession(null);
+            fetchSavedGrids();
+          }}
+          onSaveTemplate={saveStudioTemplate}
+          onRefreshTemplates={fetchSavedGrids}
+          onDeleteTemplate={deleteStudioTemplate}
+          onDuplicateTemplate={duplicateStudioTemplate}
+          onToggleFavoriteTemplate={toggleFavoriteStudioTemplate}
+        />
+      </Suspense>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <div className="university-header rounded-xl p-8 mb-8">
         <h1 className="university-title">Room Grid Generator</h1>
         <p className="university-subtitle">
-          Create printable room schedules for door signage. Select a semester,
-          choose a building and room, then generate a visual grid showing when
-          classes meet.
+          Quickly generate printable door schedules or use the Schedule Grid
+          Studio to build, customize, save, and organize reusable designs.
         </p>
       </div>
 
@@ -1164,13 +1387,14 @@ const RoomGridGenerator = () => {
         <div className="university-card mb-8">
           <div className="university-card-content">
             <h3 className="text-lg font-semibold text-baylor-green mb-4">
-              Select Data Source
+              Choose how to create the grid
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
               {/* Auto-Populate Option */}
-              <div
+              <button
+                type="button"
                 onClick={() => handleModeChange("auto")}
-                className="border-2 border-gray-200 rounded-xl p-6 cursor-pointer hover:border-baylor-green hover:bg-green-50 transition-all duration-200 group"
+                className="group rounded-xl border-2 border-gray-200 p-6 text-left transition-all duration-200 hover:border-baylor-green hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-baylor-green focus:ring-offset-2"
               >
                 <div className="flex items-center mb-3">
                   <Database className="w-8 h-8 text-baylor-green mr-3" />
@@ -1185,12 +1409,34 @@ const RoomGridGenerator = () => {
                 <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-baylor-green text-white">
                   Recommended
                 </span>
-              </div>
+              </button>
+
+              {/* Studio Option */}
+              <button
+                type="button"
+                onClick={openBlankStudio}
+                className="group rounded-xl border-2 border-baylor-green/30 bg-baylor-green/5 p-6 text-left transition-all duration-200 hover:border-baylor-green hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-baylor-green focus:ring-offset-2"
+              >
+                <div className="mb-3 flex items-center">
+                  <LayoutTemplate className="mr-3 h-8 w-8 text-baylor-green" />
+                  <h4 className="text-lg font-semibold text-gray-900 group-hover:text-baylor-green">
+                    Schedule Grid Studio
+                  </h4>
+                </div>
+                <p className="mb-3 text-sm text-gray-600">
+                  Build a custom grid from scratch, control every visible field,
+                  and save reusable templates inside the dashboard.
+                </p>
+                <span className="inline-flex items-center rounded-full bg-baylor-gold/20 px-3 py-1 text-xs font-semibold text-baylor-green">
+                  Custom design
+                </span>
+              </button>
 
               {/* CSV Import Option */}
-              <div
+              <button
+                type="button"
                 onClick={() => handleModeChange("csv")}
-                className="border-2 border-gray-200 rounded-xl p-6 cursor-pointer hover:border-baylor-green hover:bg-green-50 transition-all duration-200 group"
+                className="group rounded-xl border-2 border-gray-200 p-6 text-left transition-all duration-200 hover:border-baylor-green hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-baylor-green focus:ring-offset-2"
               >
                 <div className="flex items-center mb-3">
                   <Upload className="w-8 h-8 text-baylor-gold mr-3" />
@@ -1206,7 +1452,7 @@ const RoomGridGenerator = () => {
                 <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-700">
                   Manual Upload
                 </span>
-              </div>
+              </button>
             </div>
           </div>
         </div>
@@ -1514,6 +1760,26 @@ const RoomGridGenerator = () => {
                   </button>
 
                   <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={openCurrentRoomInStudio}
+                      disabled={
+                        multiRoomMode || !selectedBuilding || !selectedRoom
+                      }
+                      className="btn-secondary"
+                      title={
+                        multiRoomMode
+                          ? "Choose a single room to customize it in the Studio."
+                          : "Open this room's schedule in the visual editor."
+                      }
+                    >
+                      <LayoutTemplate
+                        className="mr-2 h-4 w-4"
+                        aria-hidden="true"
+                      />
+                      Customize in Studio
+                    </button>
+
                     {/* Generate Button with contextual disabled state */}
                     <div className="relative group">
                       <button
@@ -1586,9 +1852,13 @@ const RoomGridGenerator = () => {
           <div>
             <h2 className="university-card-title">Schedule Preview</h2>
             <p className="university-card-subtitle">
-              {scheduleHtml || showExportableWeek || hasGeneratedSchedules
+              {scheduleHtml ||
+              (hasGeneratedSchedules &&
+                generatedSchedules.every((schedule) => schedule.kind === "table"))
                 ? "Click any text to edit before exporting"
-                : "Generate a schedule to see the preview"}
+                : showExportableWeek || hasGeneratedSchedules
+                  ? "Use Customize in Studio to edit content, sizing, and visible fields"
+                  : "Generate a schedule to see the preview"}
             </p>
           </div>
           {/* Export button - show for either old HTML schedules or new exportable component */}
@@ -1596,7 +1866,7 @@ const RoomGridGenerator = () => {
             <button
               onClick={() => setIsExportModalOpen(true)}
               className="btn-primary"
-              aria-label="Export schedule as image"
+              aria-label="Export schedule as PDF"
             >
               <Download className="w-4 h-4 mr-2" aria-hidden="true" />
               {exportButtonLabel}
@@ -1756,7 +2026,13 @@ const RoomGridGenerator = () => {
                         <td className="table-cell">{g.building}</td>
                         <td className="table-cell">{g.room}</td>
                         <td className="table-cell">
-                          {g.dayType === "WEEK" ? "Full Week" : g.dayType === "MWF" ? "Mon/Wed/Fri" : "Tue/Thu"}
+                          {g.kind === "studio" || g.dayType === "STUDIO"
+                            ? "Studio"
+                            : g.dayType === "WEEK"
+                              ? "Full Week"
+                              : g.dayType === "MWF"
+                                ? "Mon/Wed/Fri"
+                                : "Tue/Thu"}
                         </td>
                         <td className="table-cell">{g.semester}</td>
                         <td className="table-cell text-gray-600">
@@ -1770,7 +2046,7 @@ const RoomGridGenerator = () => {
                             className="btn-secondary text-sm py-1 px-3"
                             aria-label={`Load ${g.title}`}
                           >
-                            Load
+                            {g.kind === "studio" ? "Open Studio" : "Load"}
                           </button>
                           <button
                             onClick={() => deleteSavedGrid(g)}

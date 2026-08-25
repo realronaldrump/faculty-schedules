@@ -41,12 +41,12 @@ describe("whatsNew releases", () => {
     expect(formatReleaseTimestamp(LATEST_RELEASE.date)).toContain("2026");
   });
 
-  it("announces the responsive layout improvements", () => {
-    expect(LATEST_RELEASE.version).toBe(11);
-    expect(LATEST_RELEASE.title).toBe("Better on every screen");
+  it("announces Schedule Grid Studio", () => {
+    expect(LATEST_RELEASE.version).toBe(12);
+    expect(LATEST_RELEASE.title).toBe("Design room grids your way");
     expect(LATEST_RELEASE.highlights.map(({ title }) => title)).toEqual([
-      "Cleaner mobile layouts",
-      "Easier controls and tables",
+      "Schedule Grid Studio",
+      "Reusable in-app templates",
     ]);
   });
 });

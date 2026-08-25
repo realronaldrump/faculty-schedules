@@ -674,7 +674,9 @@ const buildRoomGridRows = ({ roomGrids = [] }) => {
       dayPattern: grid.dayType || "",
       semester: grid.semester || "",
       createdAt: formatDateTime(grid.createdAt),
-      hasTemplate: getBooleanStatusLabel(Boolean((grid.html || "").toString().trim())),
+      hasTemplate: getBooleanStatusLabel(
+        Boolean((grid.html || "").toString().trim() || grid.studio),
+      ),
     }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 };

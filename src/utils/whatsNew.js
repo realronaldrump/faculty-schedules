@@ -22,6 +22,7 @@ import {
   ChartNoAxesCombined,
   ClipboardCheck,
   Download,
+  FolderOpen,
   GraduationCap,
   History,
   IdCard,
@@ -40,6 +41,27 @@ import {
 export const WHATS_NEW_STORAGE_KEY = "whatsNewLastSeenVersion";
 
 export const RELEASES = [
+  {
+    version: 12,
+    date: "2026-08-25T11:13:04-05:00",
+    title: "Design room grids your way",
+    summary:
+      "Schedule Grid Studio keeps custom door schedules editable, reusable, organized, and exportable inside the dashboard.",
+    highlights: [
+      {
+        icon: LayoutDashboard,
+        title: "Schedule Grid Studio",
+        description:
+          "Start with dashboard schedule data or a blank grid, then edit classes, sizing, colors, time ranges, and visible fields in a live preview.",
+      },
+      {
+        icon: FolderOpen,
+        title: "Reusable in-app templates",
+        description:
+          "Save, update, duplicate, favorite, tag, search, and organize schedule templates before exporting a correctly sized PDF.",
+      },
+    ],
+  },
   {
     version: 11,
     date: "2026-07-30T12:00:00-06:00",

@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { trackFailure } from '../utils/activityTracking';
 
 const enforceAdjunctTenureRule = (record) => {
     if (!record?.isAdjunct) return record;
@@ -72,6 +73,7 @@ function useDirectoryHandlers({
             return true;
         } catch (error) {
             console.error('Error saving record:', error);
+            trackFailure('directory_save', error);
             setErrors({ general: 'Failed to save. Please try again.' });
             return false;
         }
@@ -159,6 +161,7 @@ function useDirectoryHandlers({
             return true;
         } catch (error) {
             console.error('Error creating record:', error);
+            trackFailure('directory_save', error);
             setErrors({ general: 'Failed to create. Please try again.' });
             return false;
         }

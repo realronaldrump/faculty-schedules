@@ -17,7 +17,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { parseTermDate } from "../../utils/termUtils";
 import { formatMinutesToTime, formatMinutesToLabel } from "../../utils/timeUtils";
 import { buildSingleEventICS, downloadICS, sanitizeForFile } from "../../utils/icsUtils";
-import { trackAction } from "../../utils/activityTracking";
+import { trackAction, trackFailure } from "../../utils/activityTracking";
 import { isSpaceReservable } from "../../utils/spaceUtils";
 import {
   checkConflicts,
@@ -237,6 +237,7 @@ const RoomReservations = () => {
       setForm((prev) => ({ ...prev, title: "", purpose: "", headcount: "" }));
     } catch (error) {
       console.error("Failed to create reservation", error);
+      trackFailure("reservation_save", error);
       showNotification?.(
         "error",
         "Booking failed",
@@ -251,9 +252,11 @@ const RoomReservations = () => {
     if (!canManage) return;
     try {
       await deleteReservation(reservation.id);
+      trackAction("room_reservation_cancelled");
       showNotification?.("success", "Reservation cancelled", "");
     } catch (error) {
       console.error("Failed to cancel reservation", error);
+      trackFailure("reservation_cancel", error);
       showNotification?.("error", "Cancel failed", "Please try again.");
     }
   };

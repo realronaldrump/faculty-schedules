@@ -1,6 +1,7 @@
 import { Component, Suspense, lazy } from "react";
 import ProtectedContent from "../ProtectedContent.jsx";
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import { trackFailure } from "../../utils/activityTracking";
 
 const Dashboard = lazy(() => import("../Dashboard"));
 const FacultyHub = lazy(() => import("../scheduling/FacultyHub.jsx"));
@@ -100,6 +101,7 @@ class RouteErrorBoundary extends Component {
 
   componentDidCatch(error, errorInfo) {
     console.error("Route failed to render:", error, errorInfo);
+    trackFailure("page_load", error, this.props.pageId);
   }
 
   render() {
@@ -119,7 +121,7 @@ const getRouteBoundaryKey = (pageId, componentProps) => {
 };
 
 const renderProtectedPage = (pageId, PageComponent, componentProps = {}) => (
-  <RouteErrorBoundary resetKey={getRouteBoundaryKey(pageId, componentProps)}>
+  <RouteErrorBoundary pageId={pageId} resetKey={getRouteBoundaryKey(pageId, componentProps)}>
     <ProtectedContent pageId={pageId}>
       <Suspense fallback={<RouteLoadingState />}>
         <PageComponent {...componentProps} />

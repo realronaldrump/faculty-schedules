@@ -27,7 +27,7 @@ import { usePeople } from "../../contexts/PeopleContext";
 import { useUI } from "../../contexts/UIContext";
 import { normalizeTermLabel, termCodeFromLabel } from "../../utils/termUtils";
 import { hashString, hashRecord } from "../../utils/hashUtils";
-import { trackAction } from "../../utils/activityTracking";
+import { trackAction, trackFailure } from "../../utils/activityTracking";
 
 const PREVIEW_ROW_LIMIT = 100;
 
@@ -487,6 +487,7 @@ const ImportWizard = ({ embedded = false }) => {
       }
     } catch (e) {
       console.error("Commit error:", e);
+      trackFailure("schedule_import", e);
       showNotification?.(
         "error",
         "Import Failed",

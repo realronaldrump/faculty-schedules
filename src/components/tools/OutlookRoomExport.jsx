@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { trackAction, trackFailure } from "../../utils/activityTracking";
 import {
   Calendar,
   Download,
@@ -364,7 +365,9 @@ const OutlookRoomExport = () => {
           `Downloaded ${result.calendars.length} room calendar${result.calendars.length === 1 ? "" : "s"} with ${result.totalEventCount} recurring event${result.totalEventCount === 1 ? "" : "s"}.${skippedRoomMessage}`,
         );
       }
+      trackAction("room_calendars_generated", { calendars: result.calendars.length, events: result.totalEventCount });
     } catch (error) {
+      trackFailure("calendar_export", error);
       console.error("Failed to generate ICS export", error);
       showNotification?.(
         "error",

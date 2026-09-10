@@ -1,194 +1,455 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const getDocsMock = vi.fn();
-const syncActivityRollupsMock = vi.fn();
-const loadActivitySummariesMock = vi.fn();
-const loadTodayActivitySummaryMock = vi.fn();
-
+const mocks = vi.hoisted(() => ({
+  getDocs: vi.fn(),
+  sync: vi.fn(),
+  summaries: vi.fn(),
+  today: vi.fn(),
+  history: vi.fn(),
+  owner: true,
+}));
 vi.mock("../../../contexts/AuthContext.jsx", () => ({
-  useAuth: () => ({ isActivityOwner: true }),
+  useAuth: () => ({ isActivityOwner: mocks.owner, user: { uid: "owner" } }),
 }));
-
-vi.mock("../../../firebase", () => ({
-  db: {},
-}));
-
+vi.mock("../../../firebase", () => ({ db: {} }));
 vi.mock("firebase/firestore", () => ({
-  collection: vi.fn((...args) => ({ type: "collection", args })),
-  getDocs: (...args) => getDocsMock(...args),
-  limit: vi.fn((value) => ({ type: "limit", value })),
-  orderBy: vi.fn((field, direction) => ({ type: "orderBy", field, direction })),
-  query: vi.fn((...args) => ({ type: "query", args })),
+  collection: (_db, name) => name,
+  getDocs: (...args) => mocks.getDocs(...args),
+  limit: (value) => ({ limit: value }),
+  orderBy: (field, direction) => ({ field, direction }),
+  query: (...args) => args,
 }));
-
 vi.mock("../../../utils/activitySync", () => ({
-  SUMMARY_LOOKBACK_DAYS: 90,
-  syncActivityRollups: (...args) => syncActivityRollupsMock(...args),
-  loadActivitySummaries: (...args) => loadActivitySummariesMock(...args),
-  loadTodayActivitySummary: (...args) => loadTodayActivitySummaryMock(...args),
+  syncActivityRollups: (...args) => mocks.sync(...args),
+  loadActivitySummaries: (...args) => mocks.summaries(...args),
+  loadTodayActivitySummary: (...args) => mocks.today(...args),
 }));
-
+vi.mock("../../../utils/activityHistory", () => ({
+  loadActivityHistoryPage: (...args) => mocks.history(...args),
+}));
 import UserActivityPage from "../UserActivityPage";
 import {
   formatDateKeyInTimeZone,
   getDateKeyDaysAgo,
 } from "../../../utils/activityAnalytics";
-
-// The page builds its model against the real current date, so fixtures must
-// use live dateKeys to fall inside the selected range.
 const todayDateKey = formatDateKeyInTimeZone(new Date());
 const yesterdayDateKey = getDateKeyDaysAgo(1);
-
-const emptySummaries = {
+const staffPage = {
+  pageId: "scheduling/room-grids",
+  pageLabel: "Room Grids",
+  sectionLabel: "Scheduling",
+  pageEnterCount: 4,
+  totalMinutesApprox: 12,
+  topActions: [{ actionKey: "schedule_pdf_exported", count: 1 }],
+};
+const staffRow = {
+  uid: "staff",
+  displayName: "Staff User",
+  email: "staff@example.com",
+  dateKey: yesterdayDateKey,
+  pageEnterCount: 4,
+  totalMinutesApprox: 12,
+  lastSeenAt: `${yesterdayDateKey}T14:00:00Z`,
+  topPagesDetailed: [staffPage],
+  topActions: [],
+  monitoringVersion: 1,
+};
+const summaries = {
   todayDateKey,
   analyticsRows: [],
   pageDailyRows: [],
-  userDailyRows: [],
-};
-
-const populatedSummaries = {
-  todayDateKey,
-  analyticsRows: [
-    {
-      dateKey: yesterdayDateKey,
-      uniqueUsers: 1,
-      sessionCount: 2,
-      pageEnterCount: 6,
-      semanticEventCount: 3,
-      totalMinutesApprox: 42,
-      hourlyBuckets: [],
-      topActions: [],
-      topTransitions: [],
-    },
-  ],
-  pageDailyRows: [
-    {
-      dateKey: yesterdayDateKey,
-      pageId: "dashboard",
-      pageLabel: "Dashboard",
-      sectionLabel: "Home",
-      uniqueUsers: 1,
-      pageEnterCount: 6,
-      totalMinutesApprox: 42,
-    },
-  ],
   userDailyRows: [
+    staffRow,
     {
-      dateKey: yesterdayDateKey,
-      uid: "staffer",
-      email: "staff@example.com",
-      displayName: "Staff User",
-      role: "staff",
-      sessionCount: 2,
-      totalMinutesApprox: 42,
-      pagesVisitedCount: 3,
-      pageEnterCount: 6,
-      topPagesDetailed: [],
-      topActions: [],
-      hourlyBuckets: [],
+      ...staffRow,
+      uid: "owner",
+      displayName: "Owner",
+      pageEnterCount: 90,
+      topPagesDetailed: [
+        {
+          ...staffPage,
+          pageId: "admin/user-activity",
+          pageLabel: "User Activity",
+          pageEnterCount: 90,
+        },
+      ],
     },
   ],
 };
+const events = [
+  {
+    id: "event-1",
+    uid: "staff",
+    displayName: "Staff User",
+    sessionId: "session",
+    timestamp: `${yesterdayDateKey}T14:00:00Z`,
+    eventType: "page_enter",
+    pageId: "dashboard",
+  },
+  {
+    id: "event-2",
+    uid: "staff",
+    displayName: "Staff User",
+    sessionId: "session",
+    timestamp: `${yesterdayDateKey}T14:02:00Z`,
+    eventType: "action",
+    actionKey: "schedule_pdf_exported",
+    pageId: "scheduling/room-grids",
+  },
+];
+const Location = () => (
+  <output data-testid="location">{useLocation().search}</output>
+);
+const renderPage = (search = "") =>
+  render(
+    <MemoryRouter
+      initialEntries={[`/admin/user-activity${search}`]}
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+    >
+      <UserActivityPage />
+      <Location />
+    </MemoryRouter>,
+  );
+const ready = () => screen.findByText(/Summaries refreshed/);
 
-describe("UserActivityPage", () => {
+describe("UserActivityPage connected exploration", () => {
   beforeEach(() => {
-    getDocsMock.mockReset();
-    getDocsMock.mockResolvedValue({ docs: [] });
-    syncActivityRollupsMock.mockReset();
-    syncActivityRollupsMock.mockResolvedValue({
-      mode: "none",
-      rolledDayCount: 0,
-      eventCount: 0,
-      prunedCount: 0,
-      coveredThroughDateKey: "2026-03-10",
-      lastSyncAt: null,
+    mocks.owner = true;
+    localStorage.clear();
+    Object.values(mocks)
+      .filter((mock) => typeof mock?.mockReset === "function")
+      .forEach((mock) => mock.mockReset());
+    mocks.getDocs.mockResolvedValue({ docs: [] });
+    mocks.sync.mockResolvedValue({ mode: "none" });
+    mocks.summaries.mockResolvedValue(summaries);
+    mocks.today.mockResolvedValue({
+      todayDateKey,
+      userDailyRows: [],
+      analyticsRows: [],
+      pageDailyRows: [],
     });
-    loadActivitySummariesMock.mockReset();
-    loadActivitySummariesMock.mockResolvedValue(emptySummaries);
-    loadTodayActivitySummaryMock.mockReset();
-    loadTodayActivitySummaryMock.mockResolvedValue(emptySummaries);
+    mocks.history.mockResolvedValue({
+      rows: events,
+      cursor: null,
+      hasMore: false,
+    });
   });
-
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
   });
 
-  it("loads bounded summaries automatically on open and reports up-to-date status", async () => {
-    render(<UserActivityPage />);
-
-    await waitFor(() => {
-      expect(syncActivityRollupsMock).toHaveBeenCalledTimes(1);
-    });
-    await waitFor(() => {
-      expect(loadActivitySummariesMock).toHaveBeenCalledTimes(1);
-    });
-
-    expect(await screen.findByText(/Up to date · today is live/i)).toBeInTheDocument();
+  it("shows a useful overview excluding the owner, with honest monitoring status", async () => {
+    renderPage();
+    await ready();
     expect(
-      await screen.findByText(/No activity recorded in this range yet/i),
+      screen.getByRole("button", { name: /People using the app 1/ }),
     ).toBeInTheDocument();
-    // No manual rebuild affordance anywhere.
-    expect(screen.queryByText(/rebuild/i)).not.toBeInTheDocument();
-  });
-
-  it("still loads stored summaries when the status check fails", async () => {
-    syncActivityRollupsMock.mockRejectedValue(
-      Object.assign(new Error("Missing or insufficient permissions."), {
-        code: "permission-denied",
-      }),
+    expect(
+      screen.getByRole("button", { name: /Features used 1/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: "Exclude my activity" }),
+    ).toBeChecked();
+    expect(
+      screen.getByText("No failures recorded in this period"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/This is not an uptime check/)).toBeInTheDocument();
+    expect(screen.queryByText("Owner")).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Exclude my activity" }),
     );
-    loadActivitySummariesMock.mockResolvedValue(populatedSummaries);
-
-    render(<UserActivityPage />);
-
     expect(
-      await screen.findByText(/Summary status could not be checked/i),
+      screen.getByRole("button", { name: /People using the app 2/ }),
     ).toBeInTheDocument();
-    // Overview still renders from the stored summaries.
-    expect(await screen.findByText(/Usage trend/i)).toBeInTheDocument();
   });
 
-  it("shows the users table with filters on the Users tab", async () => {
-    loadActivitySummariesMock.mockResolvedValue(populatedSummaries);
-    render(<UserActivityPage />);
+  it("connects person details to feature details and filtered activity", async () => {
+    renderPage("?view=usage&group=people");
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Staff User" }));
+    let dialog = screen.getByRole("dialog", { name: "Staff User" });
+    expect(within(dialog).getByText("Features they use")).toBeInTheDocument();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /Room Grids 1 person/ }),
+    );
+    dialog = screen.getByRole("dialog", { name: "Room Grids" });
+    expect(
+      within(dialog).getByText("People using this feature"),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "All activity" }),
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("location").textContent).toContain(
+      "feature=scheduling%2Froom-grids",
+    );
+    expect(screen.getByText("Follow their visits")).toBeInTheDocument();
+    expect(
+      screen.getByText("Opened the PDF print dialog", { selector: "p" }),
+    ).toBeInTheDocument();
+  });
 
-    await screen.findByText(/Up to date · today is live/i);
-    fireEvent.click(screen.getByRole("button", { name: /^Users$/i }));
-
-    expect(await screen.findByText("Staff User")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/Search name or email/i)).toBeInTheDocument();
-
-    fireEvent.change(screen.getByPlaceholderText(/Search name or email/i), {
+  it("preserves search and scope when switching views and returning", async () => {
+    renderPage("?view=usage&group=people&person=staff&range=7");
+    await ready();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search usage" }), {
       target: { value: "nobody" },
     });
     expect(
-      await screen.findByText(/No users match the current filters/i),
+      screen.getByText("No people match the current filters."),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Activity", exact: true }),
+    );
+    expect(
+      screen.getByRole("searchbox", { name: "Search activity" }),
+    ).toHaveValue("nobody");
+    expect(screen.getByTestId("location").textContent).toContain(
+      "person=staff",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Usage", exact: true }));
+    expect(screen.getByRole("searchbox", { name: "Search usage" })).toHaveValue(
+      "nobody",
+    );
+  });
+
+  it("makes unloaded history explicit and finds older matching visits after pagination", async () => {
+    const cursor = { id: "cursor" };
+    mocks.history
+      .mockResolvedValueOnce({
+        rows: [{ ...events[0], uid: "other", displayName: "Someone Else" }],
+        cursor,
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({ rows: events, cursor: null, hasMore: false });
+    renderPage("?view=activity&person=staff");
+    await ready();
+    expect(
+      await screen.findByText(
+        /No matching visits in the history loaded so far/,
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load older activity" }),
+    );
+    expect(
+      await screen.findByText("Opened the PDF print dialog", { selector: "p" }),
+    ).toBeInTheDocument();
+    expect(mocks.history).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cursor }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Load older activity" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still shows available summaries when a sync status check fails", async () => {
+    mocks.sync.mockRejectedValue(
+      Object.assign(new Error("denied"), { code: "permission-denied" }),
+    );
+    renderPage();
+    await ready();
+    expect(
+      screen.getByText(/Summary status could not be checked/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /People using the app 1/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("No failures recorded in this period"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps independent data available when a presence read fails", async () => {
+    mocks.getDocs.mockImplementation((query) =>
+      Array.isArray(query)
+        ? Promise.reject(new Error("offline"))
+        : Promise.resolve({ docs: [] }),
+    );
+    renderPage();
+    await ready();
+    expect(screen.getByRole("alert")).toHaveTextContent("Current presence");
+    expect(
+      screen.getByRole("button", { name: /People using the app 1/ }),
     ).toBeInTheDocument();
   });
 
-  it("refreshes today's summary rows each minute without reloading history", async () => {
-    let minuteTick;
+  it("refreshes today without reloading history summaries each minute", async () => {
+    const ticks = [];
     vi.spyOn(globalThis, "setInterval").mockImplementation((callback) => {
-      minuteTick = callback;
-      return 1;
+      ticks.push(callback);
+      return ticks.length;
     });
     vi.spyOn(globalThis, "clearInterval").mockImplementation(() => {});
-    render(<UserActivityPage />);
-
-    await waitFor(() => {
-      expect(loadActivitySummariesMock).toHaveBeenCalledTimes(1);
+    renderPage();
+    await ready();
+    await act(async () => {
+      ticks.forEach((tick) => tick());
     });
-    expect(minuteTick).toBeTypeOf("function");
+    await waitFor(() => expect(mocks.today).toHaveBeenCalledTimes(1));
+    expect(mocks.summaries).toHaveBeenCalledTimes(1);
+  });
 
-    await minuteTick();
-
-    await waitFor(() => {
-      expect(loadTodayActivitySummaryMock).toHaveBeenCalledTimes(1);
+  it("keeps reviewed separate from resolved and opens the issue's evidence", async () => {
+    mocks.summaries.mockResolvedValue({
+      ...summaries,
+      userDailyRows: [
+        {
+          ...staffRow,
+          failureCounts: {
+            failure: {
+              workflow: "pdf_export",
+              pageId: "scheduling/room-grids",
+              errorCode: "unexpected",
+              count: 3,
+              lastSeenAt: `${yesterdayDateKey}T14:00:00Z`,
+            },
+          },
+        },
+      ],
     });
-    expect(loadActivitySummariesMock).toHaveBeenCalledTimes(1);
+    renderPage();
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Mark reviewed" }));
+    expect(screen.getByText("Reviewed", { exact: true })).toBeInTheDocument();
+    expect(
+      screen.queryByText("Resolved", { exact: true }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View activity" }));
+    expect(screen.getByTestId("location").textContent).toContain("kind=errors");
+  });
+
+  it("restores keyboard focus when closing a person panel", async () => {
+    renderPage("?view=usage&group=people");
+    await ready();
+    const trigger = screen.getByRole("button", { name: "Staff User" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole("heading", { name: "Staff User" })).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("does not fetch private data for a non-owner", async () => {
+    mocks.owner = false;
+    renderPage();
+    expect(
+      screen.getByText(/only available to the configured activity owner/),
+    ).toBeInTheDocument();
+    expect(mocks.summaries).not.toHaveBeenCalled();
+    expect(mocks.history).not.toHaveBeenCalled();
+  });
+
+  it("ignores a late history response from the previous date range", async () => {
+    let resolveOld;
+    mocks.history
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOld = resolve;
+          }),
+      )
+      .mockResolvedValue({ rows: events, cursor: null, hasMore: false });
+    renderPage("?view=activity");
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Activity period" }));
+    fireEvent.click(screen.getByRole("option", { name: "Last 7 days" }));
+    await waitFor(() => expect(mocks.history).toHaveBeenCalledTimes(2));
+    await screen.findByText("Opened the PDF print dialog", { selector: "p" });
+    await act(async () =>
+      resolveOld({
+        rows: [
+          {
+            ...events[0],
+            id: "stale",
+            uid: "stale",
+            displayName: "Stale Person",
+          },
+        ],
+        cursor: null,
+        hasMore: false,
+      }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Stale Person" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Opened the PDF print dialog", { selector: "p" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not race the head refresh against an in-flight older page", async () => {
+    const ticks = [];
+    vi.spyOn(globalThis, "setInterval").mockImplementation((callback) => {
+      ticks.push(callback);
+      return ticks.length;
+    });
+    vi.spyOn(globalThis, "clearInterval").mockImplementation(() => {});
+    let resolveMore;
+    mocks.history
+      .mockResolvedValueOnce({
+        rows: events,
+        cursor: { id: "cursor" },
+        hasMore: true,
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveMore = resolve;
+          }),
+      );
+    renderPage("?view=activity");
+    await ready();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Load older activity" }),
+    );
+    await act(async () => ticks.forEach((tick) => tick()));
+    expect(mocks.history).toHaveBeenCalledTimes(2);
+    await act(async () =>
+      resolveMore({ rows: [], cursor: null, hasMore: false }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Load older activity" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Opened the PDF print dialog", { selector: "p" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the previous-visit boundary stable while recording this check-in", async () => {
+    const previous = `${yesterdayDateKey}T14:01:00Z`;
+    localStorage.setItem(
+      "activity-console:v1:owner",
+      JSON.stringify({ lastVisit: previous }),
+    );
+    renderPage("?view=activity&range=since");
+    await ready();
+    expect(
+      screen.getByText(/Daily totals include the day of your last visit/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Opened the PDF print dialog", { selector: "p" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Dashboard", exact: true }),
+    ).not.toBeInTheDocument();
+    expect(
+      JSON.parse(localStorage.getItem("activity-console:v1:owner")).lastVisit,
+    ).not.toBe(previous);
+    expect(mocks.history.mock.calls[0][0].startDateKey).toBe(yesterdayDateKey);
   });
 });

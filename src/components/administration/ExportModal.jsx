@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { FileText, AlertTriangle } from "lucide-react";
 import Modal from "../shared/Modal";
-import { trackAction } from "../../utils/activityTracking";
+import { trackAction, trackFailure } from "../../utils/activityTracking";
 
 const resolveExportTargets = (root) => {
   if (!root) return [];
@@ -147,6 +147,7 @@ const ExportModal = ({
       onClose();
     } catch (err) {
       console.error("PDF export failed:", err);
+      trackFailure("pdf_export", err);
       setExportError("PDF export failed. Please try again.");
     }
   };

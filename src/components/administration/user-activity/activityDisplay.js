@@ -21,6 +21,7 @@ export const formatDateTime = (value) => {
   const date = toDate(value);
   if (!date) return "Unknown time";
   return date.toLocaleString("en-US", {
+    timeZone: "America/Chicago",
     month: "short",
     day: "numeric",
     hour: "numeric",

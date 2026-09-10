@@ -1,445 +1,596 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
-import {
-  Activity,
-  AlertTriangle,
-  CheckCircle2,
-  FileText,
-  GraduationCap,
-  LayoutDashboard,
-  Radio,
-  RefreshCw,
-  Users,
-} from "lucide-react";
-import { db } from "../../firebase";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Activity, LayoutDashboard, RefreshCw, Users } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext.jsx";
-import HubTabs from "../shared/HubTabs";
+import SelectDropdown from "../SelectDropdown";
+import useActivityExplorerData from "../../hooks/useActivityExplorerData";
 import {
-  ACTIVITY_RANGE_OPTIONS,
-  buildActivityAnalyticsModel,
-  formatDateKeyInTimeZone,
-} from "../../utils/activityAnalytics";
+  buildUsageModel,
+  buildVisits,
+  filterVisits,
+  getExplorerWindow,
+  isOwnerActivity,
+  timestampMs,
+  WORKFLOW_LABELS,
+} from "../../utils/activityExplorer";
 import {
-  SUMMARY_LOOKBACK_DAYS,
-  loadActivitySummaries,
-  loadTodayActivitySummary,
-  syncActivityRollups,
-} from "../../utils/activitySync";
+  readActivityPreferences,
+  saveActivityPreferences,
+} from "../../utils/activityConsoleStorage";
 import { getNavigationMeta } from "../../utils/navigationMeta";
-import OverviewTab from "./user-activity/OverviewTab";
-import UsersTab from "./user-activity/UsersTab";
-import PagesTab from "./user-activity/PagesTab";
-import LiveTab from "./user-activity/LiveTab";
-import TutorialsTab from "./user-activity/TutorialsTab";
-import { formatTimeAgo, getActivityStatus } from "./user-activity/activityDisplay";
+import { formatDateTime } from "./user-activity/activityDisplay";
+import ExplorerOverview, {
+  AttentionSection,
+} from "./user-activity/ExplorerOverview";
+import ExplorerUsage from "./user-activity/ExplorerUsage";
+import ActivityDetailPanel from "./user-activity/ActivityDetailPanel";
+import { ExplorerCard, VisitList } from "./user-activity/ExplorerWidgets";
+import "./user-activity/activityExplorer.css";
 
-const LIVE_REFRESH_INTERVAL_MS = 60 * 1000;
-const TIMELINE_LIMIT = 60;
-const PRESENCE_LIMIT = 120;
-
-const replaceDateRows = (rows, replacementRows, dateKey) => [
-  ...rows.filter((row) => row.dateKey !== dateKey),
-  ...replacementRows,
-];
-
-const TABS = [
+const VIEWS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "users", label: "Users", icon: Users },
-  { id: "pages", label: "Pages", icon: FileText },
-  { id: "live", label: "Live", icon: Radio },
-  { id: "tutorials", label: "Tutorials", icon: GraduationCap },
+  { id: "usage", label: "Usage", icon: Users },
+  { id: "activity", label: "Activity", icon: Activity },
 ];
-
-const isPermissionError = (error) =>
-  error?.code === "permission-denied" ||
-  /missing or insufficient permissions/i.test(String(error?.message || ""));
-
-const formatLoadError = (error) => {
-  if (isPermissionError(error)) {
-    return "Activity data is blocked by Firestore rules. Deploy the latest rules, then refresh.";
-  }
-  return (
-    String(error?.message || "").trim() ||
-    "Could not load activity analytics right now."
-  );
-};
-
-const formatSyncError = (error) => {
-  if (isPermissionError(error)) {
-    return "Summary status could not be checked: Firestore rules block activity summary reads.";
-  }
-  if (
-    error?.code === "resource-exhausted" ||
-    /quota|resource-exhausted/i.test(String(error?.message || ""))
-  ) {
-    return "Summary status could not be checked: the free-tier Firestore quota is exhausted. Stored activity will resume automatically after the daily reset.";
-  }
-  return (
-    String(error?.message || "").trim() ||
-    "Summary status could not be checked right now — showing the latest stored data."
-  );
-};
-
-const SyncStatus = ({ syncState }) => {
-  if (syncState.status === "syncing") {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-white/80">
-        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-        Updating summaries…
-      </span>
-    );
-  }
-  if (syncState.status === "error") {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-baylor-gold">
-        <AlertTriangle className="h-3.5 w-3.5" />
-        Summaries may be stale
-      </span>
-    );
-  }
-  const { info } = syncState;
-  const detail =
-    info?.mode === "event-summaries"
-      ? "Daily summaries update automatically as users use the app"
-      : info?.mode && info.mode !== "none"
-      ? `Rolled up ${info.rolledDayCount} day${info.rolledDayCount === 1 ? "" : "s"} just now`
-      : info?.lastSyncAt
-        ? `Last rollup ${formatTimeAgo(info.lastSyncAt)}`
-        : "";
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 text-xs text-white/80"
-      title={detail || undefined}
-    >
-      <CheckCircle2 className="h-3.5 w-3.5" />
-      Up to date · today is live
-    </span>
-  );
-};
 
 const UserActivityPage = () => {
-  const { isActivityOwner } = useAuth();
-  const [activeTab, setActiveTab] = useState("overview");
-  const [rangeDays, setRangeDays] = useState(30);
-  const [summaries, setSummaries] = useState({
-    todayDateKey: "",
-    analyticsRows: [],
-    pageDailyRows: [],
-    userDailyRows: [],
+  const { isActivityOwner, user } = useAuth();
+  const [params, setParams] = useSearchParams();
+  const [preferences, setPreferences] = useState(() =>
+    readActivityPreferences(user?.uid),
+  );
+  const [previousVisit] = useState(preferences.lastVisit);
+  const [copied, setCopied] = useState("");
+  const [storageError, setStorageError] = useState("");
+  const [visibleVisitCount, setVisibleVisitCount] = useState(20);
+  const recordedVisit = useRef(false);
+  const view = VIEWS.some((item) => item.id === params.get("view"))
+    ? params.get("view")
+    : "overview";
+  const pageRef = useRef(null);
+  const previousViewRef = useRef(view);
+  useEffect(() => {
+    if (previousViewRef.current !== view)
+      pageRef.current?.scrollIntoView?.({ block: "start" });
+    previousViewRef.current = view;
+  }, [view]);
+  const group = params.get("group") === "people" ? "people" : "features";
+  const range = ["7", "30", "90", "since"].includes(params.get("range"))
+    ? params.get("range")
+    : "30";
+  const excludeOwner = params.has("mine")
+    ? params.get("mine") !== "include"
+    : preferences.excludeOwner;
+  const person = params.get("person") || "";
+  const feature = params.get("feature") || "";
+  const kind = ["actions", "navigation", "errors"].includes(params.get("kind"))
+    ? params.get("kind")
+    : "all";
+  const search = params.get("search") || "";
+  const issue = params.get("issue") || "";
+  const detailKind = ["person", "feature"].includes(params.get("detail"))
+    ? params.get("detail")
+    : "";
+  const detailId = params.get("id") || "";
+  const window = getExplorerWindow(range, previousVisit);
+  const data = useActivityExplorerData({
+    enabled: isActivityOwner,
+    startDateKey: window.startDateKey,
+    endDateKey: window.endDateKey,
   });
-  const [summaryLoading, setSummaryLoading] = useState(true);
-  const [liveLoading, setLiveLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [syncState, setSyncState] = useState({ status: "syncing", info: null, error: "" });
-  const [errorMessage, setErrorMessage] = useState("");
-  const [presenceRows, setPresenceRows] = useState([]);
-  const [eventRows, setEventRows] = useState([]);
-  const [tutorialProgressRows, setTutorialProgressRows] = useState([]);
-
-  const loadLiveData = useCallback(async () => {
-    if (!isActivityOwner) return;
-    const [presenceSnap, eventsSnap] = await Promise.all([
-      getDocs(
-        query(
-          collection(db, "userPresence"),
-          orderBy("updatedAt", "desc"),
-          limit(PRESENCE_LIMIT),
-        ),
-      ),
-      getDocs(
-        query(
-          collection(db, "userActivityEvents"),
-          orderBy("timestamp", "desc"),
-          limit(TIMELINE_LIMIT),
-        ),
-      ),
-    ]);
-    setPresenceRows(
-      presenceSnap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })),
+  const update = (patch, replace = false) =>
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        Object.entries(patch).forEach(([key, value]) =>
+          value ? next.set(key, value) : next.delete(key),
+        );
+        return next;
+      },
+      { replace, preventScrollReset: true },
     );
-    setEventRows(
-      eventsSnap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })),
-    );
-  }, [isActivityOwner]);
+  const savePreferences = (patch) => {
+    const saved = saveActivityPreferences(user?.uid, patch);
+    setPreferences((current) => ({ ...current, ...patch }));
+    if (!saved)
+      setStorageError(
+        "Browser storage is unavailable. Preferences and review markers will last only for this visit.",
+      );
+  };
 
-  const loadTutorialProgress = useCallback(async () => {
-    if (!isActivityOwner) return;
-    const snapshot = await getDocs(collection(db, "tutorialProgress"));
-    setTutorialProgressRows(
-      snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })),
-    );
-  }, [isActivityOwner]);
+  useEffect(() => {
+    if (!isActivityOwner || !data.updatedAt || recordedVisit.current) return;
+    recordedVisit.current = true;
+    if (
+      !saveActivityPreferences(user?.uid, {
+        lastVisit: new Date().toISOString(),
+      })
+    )
+      setStorageError("This browser cannot save the last-visit marker.");
+  }, [isActivityOwner, user?.uid, data.updatedAt]);
 
-  const refreshTodaySummary = useCallback(async () => {
-    if (!isActivityOwner) return;
-    const today = await loadTodayActivitySummary();
-    setSummaries((current) => ({
-      todayDateKey: today.todayDateKey,
-      analyticsRows: replaceDateRows(
-        current.analyticsRows,
-        today.analyticsRows,
-        today.todayDateKey,
-      ),
-      pageDailyRows: replaceDateRows(
-        current.pageDailyRows,
-        today.pageDailyRows,
-        today.todayDateKey,
-      ),
-      userDailyRows: replaceDateRows(
-        current.userDailyRows,
-        today.userDailyRows,
-        today.todayDateKey,
-      ),
-    }));
-  }, [isActivityOwner]);
-
-  // The whole pipeline is automatic: activity writes maintain daily summaries,
-  // while this page only reloads those bounded summaries and live presence.
-  const initialize = useCallback(
-    async ({ silent = false } = {}) => {
-      if (!isActivityOwner) return;
-      if (silent) {
-        setRefreshing(true);
-      } else {
-        setSummaryLoading(true);
-        setLiveLoading(true);
-      }
-      setErrorMessage("");
-
-      setSyncState((current) => ({ ...current, status: "syncing", error: "" }));
-      try {
-        const info = await syncActivityRollups();
-        setSyncState({ status: "ready", info, error: "" });
-      } catch (error) {
-        console.error("Automatic activity rollup sync failed:", error);
-        setSyncState({ status: "error", info: null, error: formatSyncError(error) });
-      }
-
-      try {
-        const [loaded] = await Promise.all([
-          loadActivitySummaries(),
-          loadLiveData(),
-          loadTutorialProgress(),
-        ]);
-        setSummaries(loaded);
-      } catch (error) {
-        console.error("Failed to load user activity analytics:", error);
-        setErrorMessage(formatLoadError(error));
-      } finally {
-        setSummaryLoading(false);
-        setLiveLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [isActivityOwner, loadLiveData, loadTutorialProgress],
+  const baseOptions = useMemo(
+    () => ({
+      rows: data.summaries.userDailyRows,
+      events: data.history.rows,
+      startDateKey: window.startDateKey,
+      endDateKey: window.endDateKey,
+      ownerUid: user?.uid,
+      excludeOwner,
+    }),
+    [
+      data.summaries.userDailyRows,
+      data.history.rows,
+      window.startDateKey,
+      window.endDateKey,
+      user?.uid,
+      excludeOwner,
+    ],
   );
-
-  useEffect(() => {
-    if (!isActivityOwner) return;
-    void initialize();
-  }, [initialize, isActivityOwner]);
-
-  // Live data and today's bounded summary refresh each minute while visible. If
-  // the local day rolls over, reload the complete bounded history once.
-  useEffect(() => {
-    if (!isActivityOwner || typeof document === "undefined") return undefined;
-
-    const tick = () => {
-      if (document.visibilityState !== "visible") return;
-      if (
-        summaries.todayDateKey &&
-        formatDateKeyInTimeZone(new Date()) !== summaries.todayDateKey
-      ) {
-        void initialize({ silent: true });
-        return;
-      }
-      void loadLiveData().catch((error) => {
-        console.error("Failed to refresh live activity:", error);
-      });
-      void refreshTodaySummary().catch((error) => {
-        console.error("Failed to refresh today's activity summary:", error);
-      });
-    };
-
-    const intervalId = setInterval(tick, LIVE_REFRESH_INTERVAL_MS);
-    document.addEventListener("visibilitychange", tick);
-    return () => {
-      clearInterval(intervalId);
-      document.removeEventListener("visibilitychange", tick);
-    };
-  }, [
-    initialize,
-    isActivityOwner,
-    loadLiveData,
-    refreshTodaySummary,
-    summaries.todayDateKey,
-  ]);
-
+  const baseModel = useMemo(() => buildUsageModel(baseOptions), [baseOptions]);
   const model = useMemo(
+    () => buildUsageModel({ ...baseOptions, person, feature }),
+    [baseOptions, person, feature],
+  );
+  const visits = useMemo(
     () =>
-      buildActivityAnalyticsModel({
-        appDailyRows: summaries.analyticsRows,
-        pageDailyRows: summaries.pageDailyRows,
-        userDailyRows: summaries.userDailyRows,
-        rangeDays,
-        lookbackDays: SUMMARY_LOOKBACK_DAYS,
+      buildVisits(data.history.rows, {
+        ...baseOptions,
+        sinceMs: window.sinceMs,
+        hasMore: data.history.hasMore,
       }),
-    [rangeDays, summaries],
+    [data.history.rows, data.history.hasMore, baseOptions, window.sinceMs],
   );
-
-  const liveUsers = useMemo(
+  const visibleVisits = useMemo(
     () =>
-      presenceRows
-        .map((presence) => {
-          const pageMeta = getNavigationMeta(presence.currentPageId);
-          const lastActiveAt = presence.updatedAt || presence.enteredAt;
-          return {
-            ...presence,
-            displayName:
-              presence.displayName || presence.email || presence.uid || "Unknown User",
-            pageLabel: presence.currentPageLabel || pageMeta.pageLabel,
-            sectionLabel: presence.currentSectionLabel || pageMeta.sectionLabel,
-            lastActiveAt,
-            status: getActivityStatus(lastActiveAt),
-          };
-        })
-        .sort(
-          (left, right) =>
-            left.status.rank - right.status.rank ||
-            left.displayName.localeCompare(right.displayName),
-        ),
-    [presenceRows],
+      filterVisits(visits, {
+        person,
+        feature,
+        kind: view === "activity" ? kind : "all",
+        search,
+        issue: view === "activity" ? issue : "",
+      }),
+    [visits, person, feature, kind, search, issue, view],
   );
-
-  const timelineRows = useMemo(() => {
-    return eventRows.map((event) => {
-      const pageMeta = getNavigationMeta(event.pageId);
-      return {
-        ...event,
-        actorName: event.displayName || event.email || event.uid || "Unknown User",
-        pageLabel: event.pageLabel || pageMeta.pageLabel,
-        sectionLabel: event.sectionLabel || pageMeta.sectionLabel,
-      };
+  const detailPerson = detailKind === "person" ? detailId : person;
+  const detailFeature = detailKind === "feature" ? detailId : feature;
+  const detailModel = useMemo(
+    () =>
+      buildUsageModel({
+        ...baseOptions,
+        person: detailPerson,
+        feature: detailFeature,
+      }),
+    [baseOptions, detailPerson, detailFeature],
+  );
+  const detailVisits = useMemo(
+    () =>
+      filterVisits(visits, { person: detailPerson, feature: detailFeature }),
+    [visits, detailPerson, detailFeature],
+  );
+  const detailTitle =
+    detailKind === "person"
+      ? baseModel.people.find((row) => row.id === detailId)?.label ||
+        data.presence.find((row) => row.uid === detailId)?.displayName ||
+        "Person"
+      : baseModel.features.find((row) => row.id === detailId)?.label ||
+        getNavigationMeta(detailId).pageLabel;
+  const onPerson = (id) => update({ detail: "person", id });
+  const onFeature = (id) => update({ detail: "feature", id });
+  const onNavigate = (nextView, nextGroup) =>
+    update({
+      view: nextView,
+      ...(nextGroup ? { group: nextGroup } : {}),
+      detail: "",
+      id: "",
+      kind: "",
+      issue: "",
     });
-  }, [eventRows]);
-
-  const liveActiveCount = useMemo(
-    () => liveUsers.filter((user) => user.status.rank === 0).length,
-    [liveUsers],
+  const presence = data.presence.filter(
+    (row) =>
+      timestampMs(row.updatedAt) >= Date.now() - 10 * 60 * 1000 &&
+      (!excludeOwner || !isOwnerActivity(row, user?.uid)) &&
+      (!person || row.uid === person) &&
+      (!feature || row.currentPageId === feature),
+  );
+  const historyNote = !data.history.loaded
+    ? "Activity history has not loaded yet."
+    : data.errors.history
+      ? "Activity history could not refresh. Loaded visits may be incomplete."
+      : data.history.hasMore
+        ? `Recent events loaded${data.oldestEvent ? ` back to ${formatDateTime(data.oldestEvent)}` : ""}. Older activity is available.`
+        : `All available recorded events for ${window.startDateKey} through ${window.endDateKey} are loaded.`;
+  const filtered = Boolean(
+    person ||
+      feature ||
+      search ||
+      (view === "activity" && (kind !== "all" || issue)),
   );
 
-  if (!isActivityOwner) {
+  const copyIssue = async (item) => {
+    const text = `${WORKFLOW_LABELS[item.workflow] || "Task"} failed on ${getNavigationMeta(item.pageId).pageLabel}\nPeriod: ${window.startDateKey} through ${window.endDateKey} (Central)\nRecorded failures: ${item.count}\nPeople affected: ${item.people.size}\nLatest: ${formatDateTime(item.lastSeenAt)}\nCategory: ${item.errorCode}\nReview surrounding activity before deciding whether the issue is resolved.`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(item.id);
+    } catch {
+      setStorageError(
+        "Could not copy to the clipboard. The issue details are available on this page.",
+      );
+    }
+  };
+
+  if (!isActivityOwner)
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-6 text-gray-700">
+      <div className="activity-empty">
         This page is only available to the configured activity owner account.
       </div>
     );
-  }
 
   return (
-    <div className="space-y-6">
-      <div className="university-header rounded-xl p-8">
-        <div className="flex flex-wrap items-start justify-between gap-6">
-          <div className="university-brand">
-            <div className="university-logo">
-              <Activity className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="university-title">User Activity</h1>
-              <p className="university-subtitle">
-                Who uses the app, where time goes, and what gets done
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col items-start gap-2.5 sm:items-end">
-            <div className="flex items-center gap-2">
-              <div className="inline-flex rounded-lg bg-white/10 p-1">
-                {ACTIVITY_RANGE_OPTIONS.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setRangeDays(option)}
-                    className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-                      rangeDays === option
-                        ? "bg-white font-semibold text-baylor-green shadow-sm"
-                        : "font-medium text-white/80 hover:text-white"
-                    }`}
-                  >
-                    {option}d
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={() => void initialize({ silent: true })}
-                disabled={refreshing}
-                className="rounded-lg bg-white/10 p-2 text-white/80 transition-colors hover:bg-white/20 hover:text-white disabled:opacity-60"
-                title="Refresh now (data also refreshes automatically)"
-                aria-label="Refresh activity data"
-              >
-                <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-              </button>
-            </div>
-            <SyncStatus syncState={syncState} />
-          </div>
+    <div className="activity-console" ref={pageRef}>
+      <header className="activity-page-header">
+        <div>
+          <p className="activity-eyebrow">Your remote check-in</p>
+          <h1>User Activity</h1>
+          <p>
+            See what’s happening, follow their workflows, and find anything that
+            needs a closer look.
+          </p>
         </div>
+        <button
+          className="activity-icon-button"
+          onClick={data.refresh}
+          aria-label="Refresh activity data"
+          disabled={data.loading || data.historyLoading}
+        >
+          <RefreshCw size={18} className={data.loading ? "animate-spin" : ""} />
+        </button>
+      </header>
+      <div className="activity-toolbar">
+        <label htmlFor="activity-range">Period</label>
+        <div className="activity-select">
+          <SelectDropdown
+            id="activity-range"
+            aria-label="Activity period"
+            value={range}
+            onChange={(event) => update({ range: event.target.value })}
+          >
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="since" disabled={!timestampMs(previousVisit)}>
+              Since my last visit
+            </option>
+          </SelectDropdown>
+        </div>
+        <label>
+          <input
+            type="checkbox"
+            checked={excludeOwner}
+            onChange={(event) => {
+              update({ mine: event.target.checked ? "exclude" : "include" });
+              savePreferences({ excludeOwner: event.target.checked });
+            }}
+          />
+          Exclude my activity
+        </label>
+        <span className="activity-muted" role="status">
+          {data.loading
+            ? "Refreshing summaries…"
+            : data.updatedAt
+              ? `Summaries refreshed ${formatDateTime(data.updatedAt)}`
+              : "Summaries have not loaded"}
+        </span>
       </div>
-
-      {errorMessage && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {errorMessage}
+      <p className="activity-range-note">
+        {window.startDateKey} – {window.endDateKey} · Central time · Activity
+        across all semesters
+        {window.since &&
+          !window.clipped &&
+          ` · Daily totals include the day of your last visit; events start ${formatDateTime(previousVisit)}.`}
+        {window.clipped &&
+          " Only the latest 90 days of summaries are available."}
+      </p>
+      {Object.entries(data.errors)
+        .filter(([, message]) => message)
+        .map(([key, message]) => (
+          <div
+            className="activity-notice activity-notice-warning"
+            role="alert"
+            key={key}
+          >
+            <strong>
+              {key === "history"
+                ? "Activity history"
+                : key === "presence"
+                  ? "Current presence"
+                  : key === "tutorials"
+                    ? "Tutorial progress"
+                    : "Daily summaries"}
+              :
+            </strong>{" "}
+            {message}
+            <button className="activity-text-button" onClick={data.refresh}>
+              Retry
+            </button>
+          </div>
+        ))}
+      {storageError && (
+        <p className="activity-notice" role="status">
+          {storageError}
+        </p>
+      )}
+      <nav className="activity-tabs" aria-label="Activity views">
+        {VIEWS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            aria-pressed={view === id}
+            onClick={() => update({ view: id })}
+          >
+            <Icon size={17} aria-hidden="true" />
+            {label}
+          </button>
+        ))}
+      </nav>
+      <div className="activity-filters">
+        <div>
+          <SelectDropdown
+            aria-label="Filter by person"
+            value={person}
+            onChange={(event) => update({ person: event.target.value })}
+          >
+            <option value="">All people</option>
+            {baseModel.people.map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.label}
+              </option>
+            ))}
+          </SelectDropdown>
+        </div>
+        <div>
+          <SelectDropdown
+            aria-label="Filter by feature"
+            value={feature}
+            onChange={(event) => update({ feature: event.target.value })}
+          >
+            <option value="">All features</option>
+            {baseModel.features.map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.label}
+              </option>
+            ))}
+          </SelectDropdown>
+        </div>
+        {view !== "overview" && (
+          <div>
+            <input
+              type="search"
+              aria-label={view === "usage" ? "Search usage" : "Search activity"}
+              placeholder={
+                view === "usage"
+                  ? "Search people or features"
+                  : "Search names, features, actions"
+              }
+              value={search}
+              onChange={(event) => update({ search: event.target.value }, true)}
+            />
+          </div>
+        )}
+        {view === "activity" && (
+          <div>
+            <SelectDropdown
+              aria-label="Filter activity type"
+              value={kind}
+              onChange={(event) =>
+                update({ kind: event.target.value, issue: "" })
+              }
+            >
+              <option value="all">All activity</option>
+              <option value="actions">Actions</option>
+              <option value="navigation">Page visits</option>
+              <option value="errors">Recorded failures</option>
+            </SelectDropdown>
+          </div>
+        )}
+        {filtered && (
+          <button
+            className="activity-text-button"
+            onClick={() =>
+              update({
+                person: "",
+                feature: "",
+                search: "",
+                kind: "",
+                issue: "",
+              })
+            }
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+      {filtered && (
+        <div className="activity-filter-chips">
+          <span>Showing filtered activity</span>
+          {person && (
+            <button onClick={() => update({ person: "" })}>
+              {baseModel.people.find((row) => row.id === person)?.label ||
+                "Selected person"}{" "}
+              ×
+            </button>
+          )}
+          {feature && (
+            <button onClick={() => update({ feature: "" })}>
+              {getNavigationMeta(feature).pageLabel} ×
+            </button>
+          )}
+          {search && (
+            <button onClick={() => update({ search: "" })}>
+              Search: {search} ×
+            </button>
+          )}
+          {issue && (
+            <button onClick={() => update({ issue: "" })}>
+              Selected issue ×
+            </button>
+          )}
         </div>
       )}
-      {syncState.status === "error" && (
-        <div className="rounded-lg border border-baylor-gold/40 bg-baylor-gold/10 px-4 py-3 text-sm text-baylor-green">
-          {syncState.error}
+      {model.detailMissing && (
+        <p className="activity-notice">
+          Some older summaries do not contain feature details. Feature counts
+          may be incomplete for this period.
+        </p>
+      )}
+      {data.loading && !data.updatedAt ? (
+        <div className="activity-empty" role="status">
+          Loading usage and recent activity…
         </div>
+      ) : (
+        <>
+          {view === "overview" && (
+            <ExplorerOverview
+              model={model}
+              visits={visibleVisits}
+              onPerson={onPerson}
+              onFeature={onFeature}
+              onNavigate={onNavigate}
+              historyNote={historyNote}
+              presence={presence}
+              attention={
+                <AttentionSection
+                  model={model}
+                  reviewed={preferences.reviewed}
+                  error={data.errors.summaries || data.errors.sync}
+                  copied={copied}
+                  onCopy={copyIssue}
+                  onIssue={(item) =>
+                    update({
+                      view: "activity",
+                      feature: item.pageId,
+                      kind: "errors",
+                      issue: item.id,
+                      search: "",
+                    })
+                  }
+                  onReview={(item, reviewed) =>
+                    savePreferences({
+                      reviewed: {
+                        ...preferences.reviewed,
+                        [item.id]: reviewed ? timestampMs(item.lastSeenAt) : 0,
+                      },
+                    })
+                  }
+                />
+              }
+            />
+          )}
+          {view === "usage" && (
+            <ExplorerUsage
+              model={model}
+              group={group}
+              onGroup={(value) => update({ group: value })}
+              onPerson={onPerson}
+              onFeature={onFeature}
+              search={search}
+              startDateKey={window.startDateKey}
+              endDateKey={window.endDateKey}
+            />
+          )}
+          {view === "activity" && (
+            <ExplorerCard
+              title="Follow their visits"
+              description="See the pages and actions that make up each visit."
+            >
+              <p className="activity-footnote mb-4">
+                {historyNote}{" "}
+                {data.history.updatedAt &&
+                  `History refreshed ${formatDateTime(data.history.updatedAt)}.`}{" "}
+                {filtered &&
+                  "Filters match visits; expand one to see its surrounding steps."}
+              </p>
+              <VisitList
+                visits={visibleVisits}
+                onPerson={onPerson}
+                onFeature={onFeature}
+                limit={visibleVisitCount}
+                emptyText={
+                  data.historyLoading
+                    ? "Loading recorded visits…"
+                    : data.errors.history
+                      ? "Activity history is unavailable. Retry before drawing conclusions about this period."
+                      : data.history.hasMore
+                        ? "No matching visits in the history loaded so far. Load older activity to continue searching."
+                        : "No matching visits in the available recorded history for this period."
+                }
+              />
+              <div className="activity-history-footer">
+                <span className="activity-muted">
+                  {visibleVisits.length} matching{" "}
+                  {visibleVisits.length === 1 ? "visit" : "visits"} in{" "}
+                  {data.history.rows.length} loaded events
+                </span>
+                {visibleVisitCount < visibleVisits.length && (
+                  <button
+                    className="activity-button"
+                    onClick={() => setVisibleVisitCount((count) => count + 20)}
+                  >
+                    Show more visits
+                  </button>
+                )}
+                {data.history.hasMore && (
+                  <button
+                    className="activity-button"
+                    onClick={data.loadMore}
+                    disabled={data.loadingMore || data.historyLoading}
+                  >
+                    {data.loadingMore
+                      ? "Loading older activity…"
+                      : "Load older activity"}
+                  </button>
+                )}
+              </div>
+              <details className="activity-definitions">
+                <summary>How visits are grouped</summary>
+                <p>
+                  A visit groups recorded events for the same person and browser
+                  session. A gap of 30 minutes without an event, or a new
+                  Central calendar day, starts a separate visit. The time
+                  between events does not measure active work. Page visits and
+                  actions are recorded separately from visible-tab time.
+                </p>
+              </details>
+            </ExplorerCard>
+          )}
+        </>
       )}
-
-      <HubTabs
-        tabs={TABS}
-        activeTab={activeTab}
-        onChange={setActiveTab}
-        dataTutorialPrefix="user-activity-tab-"
-      />
-
-      {activeTab === "overview" && (
-        <OverviewTab
-          model={model}
-          liveActiveCount={liveActiveCount}
-          rangeDays={rangeDays}
-          loading={summaryLoading}
-        />
-      )}
-      {activeTab === "users" && (
-        <UsersTab
-          model={model}
-          userDailyRows={summaries.userDailyRows}
-          rangeDays={rangeDays}
-          loading={summaryLoading}
-          todayDateKey={summaries.todayDateKey}
-        />
-      )}
-      {activeTab === "pages" && (
-        <PagesTab
-          model={model}
-          pageDailyRows={summaries.pageDailyRows}
-          rangeDays={rangeDays}
-          loading={summaryLoading}
-          todayDateKey={summaries.todayDateKey}
-        />
-      )}
-      {activeTab === "live" && (
-        <LiveTab
-          liveUsers={liveUsers}
-          timelineRows={timelineRows}
-          loading={liveLoading}
-        />
-      )}
-      {activeTab === "tutorials" && (
-        <TutorialsTab
-          tutorialProgressRows={tutorialProgressRows}
-          loading={summaryLoading}
+      {detailKind && detailId && (
+        <ActivityDetailPanel
+          kind={detailKind}
+          id={detailId}
+          title={detailTitle}
+          model={detailModel}
+          visits={detailVisits}
+          onClose={() => update({ detail: "", id: "" })}
+          onPerson={onPerson}
+          onFeature={onFeature}
+          onActivity={() =>
+            update({
+              view: "activity",
+              person: detailPerson,
+              feature: detailFeature,
+              detail: "",
+              id: "",
+              search: "",
+              kind: "",
+              issue: "",
+            })
+          }
+          tutorials={data.tutorials}
+          historyNote={historyNote}
+          hasMore={data.history.hasMore}
+          loadingMore={data.loadingMore || data.historyLoading}
+          loadMore={data.loadMore}
         />
       )}
     </div>

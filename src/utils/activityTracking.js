@@ -101,7 +101,8 @@ const sanitizeMetadata = (metadata) => {
   }
 
   return Object.entries(metadata).reduce((accumulator, [key, value]) => {
-    if (accumulator && Object.keys(accumulator).length >= 12) return accumulator;
+    if (accumulator && Object.keys(accumulator).length >= 12)
+      return accumulator;
     if (typeof key !== "string" || !key.trim()) return accumulator;
 
     if (
@@ -152,14 +153,16 @@ const buildDailySummaryUpdate = ({
 }) => {
   const isPageEnter = eventPayload.eventType === "page_enter";
   const isDuration = eventPayload.eventType === DURATION_EVENT_TYPE;
-  const isSemanticAction = !isPageEnter && !isDuration;
+  const isFailure = eventPayload.eventType === "error";
+  const isSemanticAction = !isPageEnter && !isDuration && !isFailure;
   const pageEnterDelta = isPageEnter ? 1 : 0;
   const semanticDelta = isSemanticAction ? 1 : 0;
   const minutesDelta = Number.isFinite(durationMinutes) ? durationMinutes : 0;
   const dateKey = formatDateKeyInTimeZone(now, ACTIVITY_TIME_ZONE);
   const hour = getActivityHour(now);
   const pageKey = safeMapKey(pageMeta.pageId);
-  const actionKey = eventPayload.actionKey || eventPayload.eventType || "action";
+  const actionKey =
+    eventPayload.actionKey || eventPayload.eventType || "action";
   const actionMapKey = safeMapKey(actionKey);
   const isTransition =
     isPageEnter &&
@@ -206,6 +209,7 @@ const buildDailySummaryUpdate = ({
     ref: doc(db, "userActivityDaily", `${dateKey}_${actor.uid}`),
     data: {
       schemaVersion: 3,
+      monitoringVersion: 1,
       dateKey,
       uid: actor.uid,
       email: actor.email,
@@ -252,6 +256,21 @@ const buildDailySummaryUpdate = ({
                 toPageId: pageMeta.pageId,
                 toPageLabel: pageMeta.pageLabel,
                 count: increment(1),
+              },
+            },
+          }
+        : {}),
+      ...(isFailure
+        ? {
+            failureCounts: {
+              [safeMapKey(
+                `${pageMeta.pageId}:${eventPayload.metadata.workflow}:${eventPayload.metadata.errorCode}`,
+              )]: {
+                pageId: pageMeta.pageId,
+                workflow: eventPayload.metadata.workflow,
+                errorCode: eventPayload.metadata.errorCode,
+                count: increment(1),
+                lastSeenAt: serverTimestamp(),
               },
             },
           }
@@ -322,6 +341,31 @@ export const trackAction = (actionKey, metadata = {}) => {
   });
 };
 
+// Report known workflow failures without storing input values, filenames,
+// database error messages, or stack traces. Telemetry must never block the task.
+export const trackFailure = (workflow, error, pageId = "") => {
+  const { actor, currentPage } = activityContext;
+  if (!actor?.uid || !(pageId || currentPage)) return;
+  const allowed = new Set([
+    "permission-denied",
+    "unauthenticated",
+    "unavailable",
+    "resource-exhausted",
+    "deadline-exceeded",
+    "not-found",
+    "failed-precondition",
+    "cancelled",
+  ]);
+  const code = String(error?.code || "").replace(/^firestore\//, "");
+  return logUserActivityEvent({
+    actor,
+    currentPage: pageId || currentPage,
+    eventType: "error",
+    actionKey: `${workflow}_failed`,
+    metadata: { workflow, errorCode: allowed.has(code) ? code : "unexpected" },
+  }).catch((failure) => warnWriteFailureOnce("failure report", failure));
+};
+
 // Throttled variant for high-frequency sources (e.g. bulk imports logging one
 // audit row per record): at most one activity event per actionKey per window.
 const lastTrackedAtMs = new Map();
@@ -349,10 +393,14 @@ export const logUserActivityEvent = async ({
   if (!actor?.uid || !currentPage) return null;
 
   const pageMeta = getNavigationMeta(currentPage);
-  const previousPageMeta = previousPage ? getNavigationMeta(previousPage) : null;
+  const previousPageMeta = previousPage
+    ? getNavigationMeta(previousPage)
+    : null;
   const sessionId = getActivitySessionId(actor.uid);
   const normalizedEventType =
-    typeof eventType === "string" && eventType.trim() ? eventType.trim() : "action";
+    typeof eventType === "string" && eventType.trim()
+      ? eventType.trim()
+      : "action";
   const normalizedActionKey =
     typeof actionKey === "string" && actionKey.trim()
       ? actionKey.trim()
@@ -411,22 +459,22 @@ export const logUserActivityEvent = async ({
   }
 
   if (includePresence) {
-    writes.push(
-      {
-        label: "presence",
-        promise: setDoc(
-          doc(db, "userPresence", actor.uid),
-          {
-            ...buildPresenceBase(actor, pageMeta, sessionId),
-            enteredAt: serverTimestamp(),
-          },
-          { merge: true },
-        ),
-      },
-    );
+    writes.push({
+      label: "presence",
+      promise: setDoc(
+        doc(db, "userPresence", actor.uid),
+        {
+          ...buildPresenceBase(actor, pageMeta, sessionId),
+          enteredAt: serverTimestamp(),
+        },
+        { merge: true },
+      ),
+    });
   }
 
-  const results = await Promise.allSettled(writes.map((write) => write.promise));
+  const results = await Promise.allSettled(
+    writes.map((write) => write.promise),
+  );
   results.forEach((result, index) => {
     if (result.status === "rejected") {
       warnWriteFailureOnce(writes[index].label, result.reason);

@@ -6,14 +6,24 @@ import { formatHourLabel, formatMinutes } from "./activityDisplay";
 const BRAND_GREEN = "#154734";
 const BRAND_GOLD = "#FFB81C";
 
-export const SectionCard = ({ title, subtitle, actions, children, className = "" }) => (
+export const SectionCard = ({
+  title,
+  subtitle,
+  actions,
+  children,
+  className = "",
+}) => (
   <div className={`university-card ${className}`}>
     <div className="university-card-header flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0">
         <h3 className="text-base font-semibold text-baylor-green">{title}</h3>
         {subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
       </div>
-      {actions && <div className="flex min-w-0 max-w-full items-center gap-2 shrink-0">{actions}</div>}
+      {actions && (
+        <div className="flex min-w-0 max-w-full items-center gap-2 shrink-0">
+          {actions}
+        </div>
+      )}
     </div>
     <div className="p-5">{children}</div>
   </div>
@@ -44,13 +54,20 @@ const DeltaChip = ({ value, compareLabel }) => {
   );
 };
 
-export const MetricCard = ({ label, value, hint, icon: Icon, delta, compareLabel }) => (
+export const MetricCard = ({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  delta,
+  compareLabel,
+}) => (
   <div className="university-card p-5">
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
         <p className="metric-label">{label}</p>
         <p className="metric-value mt-1">{value}</p>
-        {hint && <p className="metric-subtitle truncate">{hint}</p>}
+        {hint && <p className="metric-subtitle">{hint}</p>}
       </div>
       <div className="flex flex-col items-end gap-2 shrink-0">
         {Icon && (
@@ -80,7 +97,12 @@ export const LoadingBlock = ({ label = "Loading…" }) => (
  * Dependency-free daily trend chart: area + line in brand green, with today's
  * in-progress point highlighted in gold.
  */
-export const TrendChart = ({ rows, dataKey, formatter = (value) => value, height = 210 }) => {
+export const TrendChart = ({
+  rows,
+  dataKey,
+  formatter = (value) => value,
+  height = 210,
+}) => {
   if (!rows?.length) {
     return <EmptyState>No activity recorded in this range yet.</EmptyState>;
   }
@@ -91,41 +113,69 @@ export const TrendChart = ({ rows, dataKey, formatter = (value) => value, height
   const maxValue = Math.max(...values, 1);
   const usableWidth = width - padding.left - padding.right;
   const usableHeight = height - padding.top - padding.bottom;
+  const dates = rows.map((row) => Date.parse(`${row.dateKey}T12:00:00Z`));
+  const dateSpan = dates[dates.length - 1] - dates[0];
   const xScale = (index) =>
-    padding.left + (rows.length === 1 ? usableWidth / 2 : (index / (rows.length - 1)) * usableWidth);
-  const yScale = (value) => padding.top + usableHeight - (value / maxValue) * usableHeight;
+    padding.left +
+    (rows.length === 1
+      ? usableWidth / 2
+      : Number.isFinite(dateSpan) && dateSpan > 0
+        ? ((dates[index] - dates[0]) / dateSpan) * usableWidth
+        : (index / (rows.length - 1)) * usableWidth);
+  const yScale = (value) =>
+    padding.top + usableHeight - (value / maxValue) * usableHeight;
 
   const linePath = rows
-    .map((row, index) => `${index === 0 ? "M" : "L"} ${xScale(index)} ${yScale(Number(row[dataKey] || 0))}`)
+    .map(
+      (row, index) =>
+        `${index === 0 ? "M" : "L"} ${xScale(index)} ${yScale(Number(row[dataKey] || 0))}`,
+    )
     .join(" ");
   const areaPath = `${linePath} L ${xScale(rows.length - 1)} ${yScale(0)} L ${xScale(0)} ${yScale(0)} Z`;
   const labelEvery = Math.max(1, Math.ceil(rows.length / 8));
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full" role="img" aria-label="Daily trend chart">
-      {[0.25, 0.5, 0.75, 1].map((step) => (
-        <g key={step}>
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className="w-full"
+      role="img"
+      aria-label="Daily trend chart"
+    >
+      {[
+        ...new Set([
+          0,
+          ...[0.25, 0.5, 0.75, 1].map((step) => Math.round(maxValue * step)),
+        ]),
+      ].map((tick) => (
+        <g key={tick}>
           <line
             x1={padding.left}
             x2={width - padding.right}
-            y1={yScale(maxValue * step)}
-            y2={yScale(maxValue * step)}
+            y1={yScale(tick)}
+            y2={yScale(tick)}
             stroke="#e5e7eb"
             strokeDasharray="3 5"
           />
           <text
             x={padding.left - 8}
-            y={yScale(maxValue * step) + 4}
+            y={yScale(tick) + 4}
             fontSize="11"
             fill="#6b7280"
             textAnchor="end"
           >
-            {formatter(Math.round(maxValue * step))}
+            {formatter(tick)}
           </text>
         </g>
       ))}
       <path d={areaPath} fill={BRAND_GREEN} opacity="0.07" />
-      <path d={linePath} fill="none" stroke={BRAND_GREEN} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d={linePath}
+        fill="none"
+        stroke={BRAND_GREEN}
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
       {rows.map((row, index) => (
         <g key={row.dateKey}>
           <circle
@@ -137,7 +187,13 @@ export const TrendChart = ({ rows, dataKey, formatter = (value) => value, height
             <title>{`${row.label}: ${formatter(Number(row[dataKey] || 0))}${row.isPartial ? " (today, in progress)" : ""}`}</title>
           </circle>
           {(index % labelEvery === 0 || index === rows.length - 1) && (
-            <text x={xScale(index)} y={height - 8} fontSize="11" fill="#6b7280" textAnchor="middle">
+            <text
+              x={xScale(index)}
+              y={height - 8}
+              fontSize="11"
+              fill="#6b7280"
+              textAnchor="middle"
+            >
               {row.label}
             </text>
           )}
@@ -159,7 +215,10 @@ export const WeekHourHeatmap = ({ grid }) => {
 
   return (
     <div>
-      <div className="grid gap-[3px]" style={{ gridTemplateColumns: "2.25rem repeat(24, minmax(0, 1fr))" }}>
+      <div
+        className="grid gap-[3px]"
+        style={{ gridTemplateColumns: "2.25rem repeat(24, minmax(0, 1fr))" }}
+      >
         {grid.map((hours, weekday) => (
           <div key={WEEKDAY_LABELS[weekday]} className="contents">
             <div className="flex items-center text-2xs font-medium text-gray-500">
@@ -209,7 +268,10 @@ export const WeekHourHeatmap = ({ grid }) => {
  * Compact 24-hour profile used inside drilldowns.
  */
 export const HourBars = ({ rows }) => {
-  const maxValue = Math.max(...rows.map((row) => row.totalMinutesApprox || 0), 1);
+  const maxValue = Math.max(
+    ...rows.map((row) => row.totalMinutesApprox || 0),
+    1,
+  );
   const hasData = rows.some((row) => (row.totalMinutesApprox || 0) > 0);
   if (!hasData) {
     return <EmptyState>No hourly pattern yet.</EmptyState>;
@@ -251,7 +313,10 @@ export const RankedList = ({
   if (!rows?.length) {
     return <EmptyState>{emptyText}</EmptyState>;
   }
-  const maxValue = Math.max(...rows.map((row) => Number(row[valueKey] || 0)), 1);
+  const maxValue = Math.max(
+    ...rows.map((row) => Number(row[valueKey] || 0)),
+    1,
+  );
   return (
     <div className="space-y-3">
       {rows.map((row, index) => {
@@ -260,13 +325,17 @@ export const RankedList = ({
         const content = (
           <>
             <div className="mb-1 flex items-center justify-between gap-3 text-sm">
-              <span className="truncate font-medium text-gray-800">{row[labelKey]}</span>
-              <span className="shrink-0 text-gray-500">{valueFormatter(value)}</span>
+              <span className="truncate font-medium text-gray-800">
+                {row[labelKey]}
+              </span>
+              <span className="shrink-0 text-gray-500">
+                {valueFormatter(value)}
+              </span>
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
               <div
                 className="h-full rounded-full bg-baylor-green"
-                style={{ width: `${Math.max(6, (value / maxValue) * 100)}%` }}
+                style={{ width: `${(value / maxValue) * 100}%` }}
               />
             </div>
           </>

@@ -7,6 +7,7 @@
 
 import { useCallback, useMemo } from "react";
 import { db } from "../firebase";
+import { trackFailure } from "../utils/activityTracking";
 import {
   doc,
   updateDoc,
@@ -651,6 +652,7 @@ const useScheduleOperations = () => {
         }
       } catch (error) {
         console.error("❌ Error updating schedule:", error);
+        trackFailure("schedule_save", error);
         showNotification(
           "error",
           "Update Failed",

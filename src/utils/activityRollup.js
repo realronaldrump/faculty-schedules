@@ -156,7 +156,7 @@ const normalizeActionKey = (eventType, actionKey) => {
 };
 
 const isSemanticActionEvent = (event) =>
-  event?.eventType !== "page_enter" && Boolean(event?.actionKey);
+  !["page_enter", "duration", "error"].includes(event?.eventType) && Boolean(event?.actionKey);
 
 const normalizeEvent = (event) => {
   const timestampDate = asDate(event?.timestamp);

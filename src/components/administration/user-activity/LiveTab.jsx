@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { MousePointerClick, Navigation, RefreshCw } from "lucide-react";
+import SelectDropdown from "../../SelectDropdown";
 import Badge from "../../shared/Badge";
 import { EmptyState, LoadingBlock, SectionCard } from "./ActivityWidgets";
 import {
@@ -102,10 +103,9 @@ const LiveTab = ({ liveUsers, timelineRows, loading }) => {
                 {filter.label}
               </button>
             ))}
-            <select
+            <SelectDropdown
               value={userFilter}
               onChange={(event) => setUserFilter(event.target.value)}
-              className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs focus:border-baylor-green focus:outline-none focus:ring-2 focus:ring-baylor-green/20"
               aria-label="Filter timeline by user"
             >
               <option value="all">All users</option>
@@ -114,7 +114,7 @@ const LiveTab = ({ liveUsers, timelineRows, loading }) => {
                   {name}
                 </option>
               ))}
-            </select>
+            </SelectDropdown>
           </div>
         }
       >

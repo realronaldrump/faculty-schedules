@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Clock3, Download, Search, Users } from "lucide-react";
+import SelectDropdown from "../../SelectDropdown";
 import Badge from "../../shared/Badge";
 import Modal from "../../shared/Modal";
 import SortableHeader from "../../shared/SortableHeader";
@@ -205,10 +206,9 @@ const UsersTab = ({ model, userDailyRows, rangeDays, loading, todayDateKey }) =>
               className="w-52 rounded-lg border border-gray-300 py-2 pl-8 pr-3 text-sm focus:border-baylor-green focus:outline-none focus:ring-2 focus:ring-baylor-green/20"
             />
           </div>
-          <select
+          <SelectDropdown
             value={roleFilter}
             onChange={(event) => setRoleFilter(event.target.value)}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-baylor-green focus:outline-none focus:ring-2 focus:ring-baylor-green/20"
             aria-label="Filter by role"
           >
             <option value="all">All roles</option>
@@ -217,7 +217,7 @@ const UsersTab = ({ model, userDailyRows, rangeDays, loading, todayDateKey }) =>
                 {role}
               </option>
             ))}
-          </select>
+          </SelectDropdown>
           <button
             type="button"
             onClick={exportCsv}

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Clock3, Download, Eye, Search } from "lucide-react";
+import SelectDropdown from "../../SelectDropdown";
 import Badge from "../../shared/Badge";
 import Modal from "../../shared/Modal";
 import SortableHeader from "../../shared/SortableHeader";
@@ -211,10 +212,9 @@ const PagesTab = ({ model, pageDailyRows, rangeDays, loading, todayDateKey }) =>
               className="w-48 rounded-lg border border-gray-300 py-2 pl-8 pr-3 text-sm focus:border-baylor-green focus:outline-none focus:ring-2 focus:ring-baylor-green/20"
             />
           </div>
-          <select
+          <SelectDropdown
             value={sectionFilter}
             onChange={(event) => setSectionFilter(event.target.value)}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-baylor-green focus:outline-none focus:ring-2 focus:ring-baylor-green/20"
             aria-label="Filter by section"
           >
             <option value="all">All sections</option>
@@ -223,7 +223,7 @@ const PagesTab = ({ model, pageDailyRows, rangeDays, loading, todayDateKey }) =>
                 {section}
               </option>
             ))}
-          </select>
+          </SelectDropdown>
           <button
             type="button"
             onClick={exportCsv}

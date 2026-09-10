@@ -32,6 +32,17 @@ export default [
       ...react.configs.flat["jsx-runtime"].rules,
       ...reactHooks.configs.recommended.rules,
       "no-alert": "error",
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "JSXOpeningElement[name.name='select']",
+          message: "Use SelectDropdown or MultiSelectDropdown for app-styled menus.",
+        },
+        {
+          selector: "JSXOpeningElement[name.name='datalist']",
+          message: "Use ComboboxDropdown for app-styled editable suggestions.",
+        },
+      ],
       "no-unused-vars": [
         "error",
         {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { db } from "../../firebase";
 import PageHeader from "../shared/PageHeader";
+import ComboboxDropdown from "../ComboboxDropdown";
 import {
   collection,
   getDocs,
@@ -340,20 +341,17 @@ const BaylorAcronyms = () => {
             placeholder="Description/Context"
             className="input-style md:col-span-2 lg:col-span-1"
           />
-          <input
-            type="text"
+          <ComboboxDropdown
             name="category"
+            aria-label="Category"
             value={newAcronym.category}
-            onChange={handleInputChange}
+            onChange={(category) =>
+              setNewAcronym((current) => ({ ...current, category }))
+            }
+            options={categories}
             placeholder="Category (e.g., Academic)"
-            className="input-style col-span-1"
-            list="categories-datalist"
+            emptyMessage="Type a new category."
           />
-          <datalist id="categories-datalist">
-            {categories.map((cat) => (
-              <option key={cat} value={cat} />
-            ))}
-          </datalist>
           <button
             onClick={handleAddAcronym}
             disabled={isSubmitting}

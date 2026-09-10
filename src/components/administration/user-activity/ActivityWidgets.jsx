@@ -13,7 +13,7 @@ export const SectionCard = ({ title, subtitle, actions, children, className = ""
         <h3 className="text-base font-semibold text-baylor-green">{title}</h3>
         {subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+      {actions && <div className="flex min-w-0 max-w-full items-center gap-2 shrink-0">{actions}</div>}
     </div>
     <div className="p-5">{children}</div>
   </div>

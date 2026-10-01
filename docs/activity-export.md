@@ -17,7 +17,7 @@ The export reuses the console's loaded summaries, presence, tutorial progress, a
 
 The export makes no database writes, does not invoke rollup synchronization or pruning, and does not send data to an external analysis service. The normal console's loading, refresh, sync, and tracking behavior still applies. The reserved document limits are a conservative query budget, not an exact bill or a measurement of the project's remaining daily quota. Empty queries and access-rule reads can also consume quota. See [Firestore quotas](https://firebase.google.com/docs/firestore/quotas) and [billing](https://firebase.google.com/docs/firestore/pricing).
 
-The console currently loads 90 days of summaries, up to 120 latest presence documents, and the latest tutorial-progress documents. Raw event pruning uses a configured 180-day retention window. A requested export includes only the selected console period, and available telemetry may cover less. The manifest records these limitations; no download claims complete observation of user behavior.
+The console currently loads 90 days of summaries, up to 120 latest presence documents, and the latest tutorial-progress documents. Raw event pruning uses a configured 365-day retention window. A requested export includes only the selected console period, and available telemetry may cover less. The manifest records these limitations; no download claims complete observation of user behavior.
 
 ## Measurement and repeated review
 
